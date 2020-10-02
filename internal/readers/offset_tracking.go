@@ -3,7 +3,7 @@ package readers
 import (
 	"io"
 
-	"github.com/segmentio/centrifuge-traces/parquet/internal/debug"
+	"github.com/segmentio/parquet/internal/debug"
 )
 
 // OffsetTracking is a wrapper around an io.ReadSeeker that tracks the current

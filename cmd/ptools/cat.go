@@ -18,10 +18,10 @@ import (
 	"runtime/pprof"
 	"strconv"
 
-	"github.com/segmentio/centrifuge-traces/parquet"
-	"github.com/segmentio/centrifuge-traces/parquet/internal/buffers"
-	"github.com/segmentio/centrifuge-traces/parquet/internal/debug"
-	pthrift "github.com/segmentio/centrifuge-traces/parquet/internal/gen-go/parquet"
+	"github.com/segmentio/parquet"
+	"github.com/segmentio/parquet/internal/buffers"
+	"github.com/segmentio/parquet/internal/debug"
+	pthrift "github.com/segmentio/parquet/internal/gen-go/parquet"
 )
 
 type catFlags struct {

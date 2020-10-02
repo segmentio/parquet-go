@@ -7,9 +7,9 @@ import (
 	"io"
 	"math/bits"
 
-	"github.com/segmentio/centrifuge-traces/parquet/internal/debug"
-	pthrift "github.com/segmentio/centrifuge-traces/parquet/internal/gen-go/parquet"
-	"github.com/segmentio/centrifuge-traces/parquet/internal/thrift"
+	"github.com/segmentio/parquet/internal/debug"
+	pthrift "github.com/segmentio/parquet/internal/gen-go/parquet"
+	"github.com/segmentio/parquet/internal/thrift"
 )
 
 // ColumnIterator iterates over all the values of a given column across all

@@ -7,8 +7,8 @@ import (
 	"path"
 	"testing"
 
-	pthrift "github.com/segmentio/centrifuge-traces/parquet/internal/gen-go/parquet"
-	"github.com/segmentio/centrifuge-traces/parquet/internal/test"
+	pthrift "github.com/segmentio/parquet/internal/gen-go/parquet"
+	"github.com/segmentio/parquet/internal/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	localref "github.com/xitongsys/parquet-go-source/local"

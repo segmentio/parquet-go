@@ -5,7 +5,7 @@ import (
 	"reflect"
 
 	"github.com/iancoleman/strcase"
-	pthrift "github.com/segmentio/centrifuge-traces/parquet/internal/gen-go/parquet"
+	pthrift "github.com/segmentio/parquet/internal/gen-go/parquet"
 )
 
 // FromValue builds a schema tree by reflecting on a provided value v.

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	pthrift "github.com/segmentio/centrifuge-traces/parquet/internal/gen-go/parquet"
+	pthrift "github.com/segmentio/parquet/internal/gen-go/parquet"
 )
 
 // Schema represents a node in the schema tree of Parquet.

@@ -4,7 +4,7 @@ import (
 	"log"
 	"path"
 
-	"github.com/segmentio/centrifuge-traces/parquet"
+	"github.com/segmentio/parquet"
 )
 
 type actionType int

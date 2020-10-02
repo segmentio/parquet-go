@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	pthrift "github.com/segmentio/centrifuge-traces/parquet/internal/gen-go/parquet"
+	pthrift "github.com/segmentio/parquet/internal/gen-go/parquet"
 )
 
 var overflow = errors.New("binary: varint overflows a 64-bit integer")

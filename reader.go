@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/segmentio/centrifuge-traces/parquet/internal/debug"
-	pthrift "github.com/segmentio/centrifuge-traces/parquet/internal/gen-go/parquet"
-	"github.com/segmentio/centrifuge-traces/parquet/internal/thrift"
+	"github.com/segmentio/parquet/internal/debug"
+	pthrift "github.com/segmentio/parquet/internal/gen-go/parquet"
+	"github.com/segmentio/parquet/internal/thrift"
 )
 
 const magicBoundary uint32 = 0x31524150 // PAR1 in little endian

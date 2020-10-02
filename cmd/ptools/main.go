@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	color "github.com/logrusorgru/aurora"
-	"github.com/segmentio/centrifuge-traces/parquet/internal/debug"
+	"github.com/segmentio/parquet/internal/debug"
 	"github.com/segmentio/cli"
 )
 

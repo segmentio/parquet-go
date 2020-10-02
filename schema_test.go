@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/segmentio/centrifuge-traces/parquet"
+	"github.com/segmentio/parquet"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

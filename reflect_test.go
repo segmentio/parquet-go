@@ -3,9 +3,9 @@ package parquet_test
 import (
 	"testing"
 
-	"github.com/segmentio/centrifuge-traces/parquet"
+	"github.com/segmentio/parquet"
 
-	pthrift "github.com/segmentio/centrifuge-traces/parquet/internal/gen-go/parquet"
+	pthrift "github.com/segmentio/parquet/internal/gen-go/parquet"
 	"github.com/stretchr/testify/assert"
 )
 

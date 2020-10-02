@@ -7,8 +7,8 @@ import (
 	"path"
 	"testing"
 
-	"github.com/segmentio/centrifuge-traces/parquet/internal/readers"
-	"github.com/segmentio/centrifuge-traces/parquet/internal/test"
+	"github.com/segmentio/parquet/internal/readers"
+	"github.com/segmentio/parquet/internal/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

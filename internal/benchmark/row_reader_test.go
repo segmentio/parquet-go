@@ -5,8 +5,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/segmentio/centrifuge-traces/parquet"
-	pthrift "github.com/segmentio/centrifuge-traces/parquet/internal/gen-go/parquet"
+	"github.com/segmentio/parquet"
+	pthrift "github.com/segmentio/parquet/internal/gen-go/parquet"
 	parquetgolocal "github.com/xitongsys/parquet-go-source/local"
 	parquetgoreader "github.com/xitongsys/parquet-go/reader"
 	parquetgosource "github.com/xitongsys/parquet-go/source"

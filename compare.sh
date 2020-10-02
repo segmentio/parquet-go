@@ -3,7 +3,7 @@
 
 set -ex
 
-go build github.com/segmentio/centrifuge-traces/parquet/cmd/ptools
+go build github.com/segmentio/parquet/cmd/ptools
 
 time ./ptools cat "$@" > /tmp/ptools.out
 time parquet-tools cat "$@" > /tmp/parquet-tools.out

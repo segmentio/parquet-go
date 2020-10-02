@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	"github.com/pmezard/go-difflib/difflib"
-	"github.com/segmentio/centrifuge-traces/parquet/internal/test"
+	"github.com/segmentio/parquet/internal/test"
 	"github.com/stretchr/testify/assert"
 	localref "github.com/xitongsys/parquet-go-source/local"
 	writerref "github.com/xitongsys/parquet-go/writer"

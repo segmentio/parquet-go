@@ -6,8 +6,8 @@ import (
 
 	"github.com/apache/thrift/lib/go/thrift"
 	gothrift "github.com/apache/thrift/lib/go/thrift"
-	"github.com/segmentio/centrifuge-traces/parquet/internal/debug"
-	"github.com/segmentio/centrifuge-traces/parquet/internal/readers"
+	"github.com/segmentio/parquet/internal/debug"
+	"github.com/segmentio/parquet/internal/readers"
 )
 
 // Reader is a ReadSeeker that allows both unmarshalling Thrift structures and
