@@ -1,0 +1,157 @@
+package parquet_test
+
+import (
+	"fmt"
+	"os"
+	"strings"
+	"testing"
+
+	"github.com/segmentio/centrifuge-traces/parquet"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestNodeDelete(t *testing.T) {
+	a := &parquet.Schema{Name: "a"}
+	b := &parquet.Schema{Name: "b"}
+
+	root := &parquet.Schema{
+		Name: "root",
+		Root: true,
+		Kind: parquet.GroupKind,
+	}
+
+	root.Add(a)
+	root.Add(b)
+
+	root.Get("a").Remove()
+
+	assert.Equal(t, []*parquet.Schema{b}, root.Children)
+}
+
+func TestNodeStageDelete(t *testing.T) {
+	file, err := os.Open("./examples/stage-small.parquet")
+	require.NoError(t, err)
+	defer file.Close()
+	pf, err := parquet.OpenFile(file)
+	require.NoError(t, err)
+	root := pf.Metadata().Schema
+
+	original := readableFlatTree(root)
+	expected := `parquet_go_root
+.kafka_partition
+.kafka_offset
+.timestamp_ms
+.trace_id
+.span_id
+.parent_span_id
+.next_trace_id
+.parent_trace_ids
+..list
+...element
+.baggage
+..list
+...element
+....name
+....value
+.tags
+..list
+...element
+....name
+....value
+.message_id
+.user_id
+.event_type
+.source_id
+.destination_id
+.workspace_id
+.name
+.span_time
+.span_duration
+.exchange_time
+.exchange_duration
+.exchange_request_method
+.exchange_request_url
+.exchange_request_headers
+..key_value
+...key
+...value
+.exchange_request_body
+.exchange_response_status_code
+.exchange_response_status_text
+.exchange_response_headers
+..key_value
+...key
+...value
+.exchange_response_body
+.exchange_error_type
+.exchange_error_message
+`
+
+	require.Equal(t, expected, original)
+
+	// remove a top-level physical column
+	root.Get("name").Remove()
+
+	// remove a group => remove all nodes under it.
+	root.Get("exchange_response_headers").Remove()
+
+	// remove intermediate node => remove everything under it and up to the parent group
+	root.Get("baggage", "list").Remove()
+
+	result := readableFlatTree(root)
+	expected = `parquet_go_root
+.kafka_partition
+.kafka_offset
+.timestamp_ms
+.trace_id
+.span_id
+.parent_span_id
+.next_trace_id
+.parent_trace_ids
+..list
+...element
+.tags
+..list
+...element
+....name
+....value
+.message_id
+.user_id
+.event_type
+.source_id
+.destination_id
+.workspace_id
+.span_time
+.span_duration
+.exchange_time
+.exchange_duration
+.exchange_request_method
+.exchange_request_url
+.exchange_request_headers
+..key_value
+...key
+...value
+.exchange_request_body
+.exchange_response_status_code
+.exchange_response_status_text
+.exchange_response_body
+.exchange_error_type
+.exchange_error_message
+`
+
+	require.Equal(t, expected, result)
+}
+
+func readableFlatTree(root *parquet.Schema) string {
+	var b strings.Builder
+	err := parquet.Walk(root, func(n *parquet.Schema) error {
+		b.WriteString(fmt.Sprintf("%s%s", strings.Repeat(".", len(n.Path)), n.Name))
+		b.WriteRune('\n')
+		return nil
+	})
+	if err != nil {
+		panic("should not happen")
+	}
+	return b.String()
+}
