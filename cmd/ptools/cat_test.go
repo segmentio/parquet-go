@@ -24,25 +24,28 @@ import (
 	writerref "github.com/xitongsys/parquet-go/writer"
 )
 
-const parquetToolsBinary string = "parquet-tools"
+func parquetToolsBinary() string {
+	bin := os.Getenv("PARQUET_TOOLS_BIN")
+	if bin == "" {
+		bin = "parquet-tools"
+	}
+	return bin
+}
 
 func isParquetToolsMissing() bool {
-	_, err := exec.LookPath(parquetToolsBinary)
+	_, err := exec.LookPath(parquetToolsBinary())
 	return err != nil
 }
 
-func refcat(p string) {
-	cmd := exec.Command(parquetToolsBinary, "cat", p)
+func refcat(p string) error {
+	cmd := exec.Command(parquetToolsBinary(), "cat", p)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	err := cmd.Run()
-	if err != nil {
-		panic(err)
-	}
+	return cmd.Run()
 }
 
 func refdump(p string) {
-	cmd := exec.Command(parquetToolsBinary, "dump", p)
+	cmd := exec.Command(parquetToolsBinary(), "dump", p)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	err := cmd.Run()
@@ -52,7 +55,7 @@ func refdump(p string) {
 }
 
 func refmeta(p string) {
-	cmd := exec.Command(parquetToolsBinary, "meta", p)
+	cmd := exec.Command(parquetToolsBinary(), "meta", p)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	err := cmd.Run()
@@ -244,12 +247,16 @@ func TestStageFile(t *testing.T) {
 
 func diffWithParquetTools(t *testing.T, path string) {
 	mycat := captureStdout(t, func() {
-		catCommand(catFlags{Debug: true}, path)
+		catCommand(catFlags{}, path)
 	})
 
+	var err error
 	thecat := captureStdout(t, func() {
-		refcat(path)
+		err = refcat(path)
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	out, err := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
 		A: difflib.SplitLines(mycat),
