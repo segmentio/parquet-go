@@ -173,7 +173,7 @@ func schemaFromFlatElements(elements []*pthrift.SchemaElement) (*Schema, error) 
 
 	consumed := flatThriftSchemaToTreeRecurse(root, elements)
 	if consumed != len(elements) {
-		panic(fmt.Errorf("should have consumed %d elements but got %d instead", len(elements), consumed))
+		return nil, fmt.Errorf("should have consumed %d elements but got %d instead", len(elements), consumed)
 	}
 
 	return root, nil
