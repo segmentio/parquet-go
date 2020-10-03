@@ -24,7 +24,7 @@ import (
 // Only exported fields are considered.
 func SchemaOf(v interface{}) *Schema {
 	t := reflect.TypeOf(v)
-	t = unwrap(t)
+	t = derefence(t)
 
 	root := fromStruct(t)
 	root.Name = "root"
@@ -59,7 +59,7 @@ func fromStruct(t reflect.Type) *Schema {
 // fromAny creates a schema tree for any type (does the dispatch to the right
 // from* method).
 func fromAny(t reflect.Type) *Schema {
-	t = unwrap(t)
+	t = derefence(t)
 
 	switch t.Kind() {
 	case reflect.Struct:
@@ -98,12 +98,12 @@ func assertKind(t reflect.Type, expected reflect.Kind) {
 	}
 }
 
-// recursively unwrap a pointer type to a non pointer type
-func unwrap(t reflect.Type) reflect.Type {
+// recursively derefence a pointer type to a non pointer type
+func derefence(t reflect.Type) reflect.Type {
 	if t.Kind() != reflect.Ptr {
 		return t
 	}
-	return unwrap(t.Elem())
+	return derefence(t.Elem())
 }
 
 func normalizeName(name string) string {
