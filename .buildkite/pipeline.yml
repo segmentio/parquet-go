@@ -1,0 +1,16 @@
+steps:
+  - label: 'Test'
+    env:
+      SEGMENT_BUILDKITE_IMAGE: 'buildkite-agent-golang1.15'
+    agents:
+      queue: v1
+    commands: |
+      go test ./...
+  - label: 'Snyk'
+    env:
+      SEGMENT_CONTEXTS: "snyk"
+      SEGMENT_BUILDKITE_IMAGE: 'buildkite-agent-golang1.15'
+    agents:
+      queue: v1
+    commands: |
+      bk-snyk
