@@ -98,7 +98,7 @@ func OpenFile(r io.ReadSeeker) (*File, error) {
 	f.metadata.rowGroups = rawMetadata.GetRowGroups()
 	f.metadata.columnOrders = rawMetadata.GetColumnOrders()
 	// TODO: do this lazily
-	f.metadata.Schema, err = NewFromFlatSchema(rawMetadata.GetSchema())
+	f.metadata.Schema, err = schemaFromFlatElements(rawMetadata.GetSchema())
 	if err != nil {
 		return nil, err
 	}

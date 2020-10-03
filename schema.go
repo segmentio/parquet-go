@@ -160,9 +160,9 @@ type WalkFn func(n *Schema) error
 
 var errEmptySchema = errors.New("empty schema")
 
-// NewFromFlatSchema builds a schema tree from a list of SchemaElements. Parquet
+// schemaFromFlatElements builds a schema tree from a list of SchemaElements. Parquet
 // serializes the schema tree by laying out its nodes in a depth-first order.
-func NewFromFlatSchema(elements []*pthrift.SchemaElement) (*Schema, error) {
+func schemaFromFlatElements(elements []*pthrift.SchemaElement) (*Schema, error) {
 	if len(elements) == 0 {
 		return nil, errEmptySchema
 	}
