@@ -19,7 +19,6 @@ import (
 	"strconv"
 
 	"github.com/segmentio/parquet"
-	"github.com/segmentio/parquet/internal/buffers"
 	"github.com/segmentio/parquet/internal/debug"
 	pthrift "github.com/segmentio/parquet/internal/gen-go/parquet"
 )
@@ -176,7 +175,7 @@ func (p *prettyPrinter) Primitive(s *parquet.Schema, d parquet.Decoder) error {
 		if err != nil {
 			return err
 		}
-		p.scratch = buffers.Ensure(p.scratch, 20) // digits of max uint64 base 10
+		p.scratch = p.ensure(p.scratch, 20) // digits of max uint64 base 10
 		b := strconv.AppendInt(p.scratch[:0], int64(v), 10)
 		_, _ = p.writer.Write(b)
 	case pthrift.Type_INT64:
@@ -184,7 +183,7 @@ func (p *prettyPrinter) Primitive(s *parquet.Schema, d parquet.Decoder) error {
 		if err != nil {
 			return err
 		}
-		p.scratch = buffers.Ensure(p.scratch, 20) // digits of max uint64 base 10
+		p.scratch = p.ensure(p.scratch, 20) // digits of max uint64 base 10
 		b := strconv.AppendInt(p.scratch[:0], v, 10)
 		_, _ = p.writer.Write(b)
 	case pthrift.Type_BYTE_ARRAY:
@@ -254,7 +253,7 @@ func (p *prettyPrinter) writeString(s string) {
 
 func (p *prettyPrinter) writeBase64(b []byte) {
 	size := base64.StdEncoding.EncodedLen(len(b))
-	p.b64 = buffers.Ensure(p.b64, size)
+	p.b64 = p.ensure(p.b64, size)
 	base64.StdEncoding.Encode(p.b64, b)
 	_, _ = p.writer.Write(p.b64)
 }
@@ -271,4 +270,11 @@ func (p *prettyPrinter) writeGroupPrefix(s *parquet.Schema) {
 		p.writeString(c)
 		p.writeString(":\n")
 	}
+}
+
+func (p *prettyPrinter) ensure(b []byte, size int) []byte {
+	if cap(b) < size {
+		return make([]byte, size)
+	}
+	return b[:size]
 }
