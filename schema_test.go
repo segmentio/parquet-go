@@ -24,7 +24,7 @@ func TestNodeDelete(t *testing.T) {
 	root.Add(a)
 	root.Add(b)
 
-	root.Get("a").Remove()
+	root.At("a").Remove()
 
 	assert.Equal(t, []*parquet.Schema{b}, root.Children)
 }
@@ -91,13 +91,13 @@ func TestNodeStageDelete(t *testing.T) {
 	require.Equal(t, expected, original)
 
 	// remove a top-level physical column
-	root.Get("name").Remove()
+	root.At("name").Remove()
 
 	// remove a group => remove all nodes under it.
-	root.Get("exchange_response_headers").Remove()
+	root.At("exchange_response_headers").Remove()
 
 	// remove intermediate node => remove everything under it and up to the parent group
-	root.Get("baggage", "list").Remove()
+	root.At("baggage", "list").Remove()
 
 	result := readableFlatTree(root)
 	expected = `parquet_go_root

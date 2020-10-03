@@ -47,15 +47,15 @@ func (sn *Schema) Parent() *Schema {
 	return sn.parent
 }
 
-// Get walks the tree following Names to retrieve the node the end of the path.
+// At walks the tree following Names to retrieve the node the end of the path.
 // Returns nil if no node is found.
-func (sn *Schema) Get(path ...string) *Schema {
+func (sn *Schema) At(path ...string) *Schema {
 	if len(path) == 0 {
 		return sn
 	}
 	for _, child := range sn.Children {
 		if child.Name == path[0] {
-			return child.Get(path[1:]...)
+			return child.At(path[1:]...)
 		}
 	}
 	return nil

@@ -518,7 +518,7 @@ func newKvReader(s *Schema) *kvReader {
 
 	// The key field encodes the map's key type. This field must have
 	// repetition required and must always be present.
-	key := keyValue.Get("key")
+	key := keyValue.At("key")
 	if key == nil {
 		panic("MAP's key_value must have a child named 'key'")
 	}
@@ -530,7 +530,7 @@ func newKvReader(s *Schema) *kvReader {
 	// The value field encodes the map's value type and repetition. This field
 	// can be required, optional, or omitted.
 
-	value := keyValue.Get("value")
+	value := keyValue.At("value")
 	if value == nil {
 		panic("MAP's key_value must have a child named 'value")
 	}

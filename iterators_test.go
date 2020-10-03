@@ -74,7 +74,7 @@ func TestPageIterator(t *testing.T) {
 
 		it := PageReader{
 			r:                reader.thrift,
-			schema:           reader.metadata.Schema.Get("a"),
+			schema:           reader.metadata.Schema.At("a"),
 			compressionCodec: &snappyCodec{},
 		}
 		require.NotNil(t, it.schema)
@@ -122,7 +122,7 @@ func TestPageIteratorLevels(t *testing.T) {
 
 		it := PageReader{
 			r:                reader.thrift,
-			schema:           reader.metadata.Schema.Get("a"),
+			schema:           reader.metadata.Schema.At("a"),
 			compressionCodec: &snappyCodec{},
 		}
 		require.NotNil(t, it.schema)
@@ -174,7 +174,7 @@ func TestRowGroupColumnIterator(t *testing.T) {
 		it := RowGroupColumnReader{
 			r:      reader.thrift,
 			md:     md,
-			schema: reader.metadata.Schema.Get("a"),
+			schema: reader.metadata.Schema.At("a"),
 		}
 		require.NotNil(t, it.schema)
 
