@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestFromValue(t *testing.T) {
+func TestSchemaOf(t *testing.T) {
 	type Record struct {
 		Col     int32
 		ignored int32
@@ -27,7 +27,7 @@ func TestFromValue(t *testing.T) {
 		Path:         []string{"col"},
 	})
 
-	result := parquet.FromValue(new(Record))
+	result := parquet.SchemaOf(new(Record))
 
 	assert.Equal(t, expected, result)
 }

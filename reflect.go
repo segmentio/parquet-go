@@ -8,7 +8,7 @@ import (
 	pthrift "github.com/segmentio/parquet/internal/gen-go/parquet"
 )
 
-// FromValue builds a schema tree by reflecting on a provided value v.
+// SchemaOf builds a schema tree by reflecting on a provided value v.
 //
 // It uses the following mapping between Go values and Parquet
 // schema:
@@ -22,7 +22,7 @@ import (
 // annotation.
 //
 // Only exported fields are considered.
-func FromValue(v interface{}) *Schema {
+func SchemaOf(v interface{}) *Schema {
 	t := reflect.TypeOf(v)
 	t = unwrap(t)
 
