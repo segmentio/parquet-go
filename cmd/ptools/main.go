@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	color "github.com/logrusorgru/aurora"
+	color "github.com/logrusorgru/aurora/v3"
 	"github.com/segmentio/parquet/internal/debug"
 	"github.com/segmentio/cli"
 )
