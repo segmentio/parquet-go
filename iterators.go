@@ -105,18 +105,14 @@ type RowGroup struct {
 
 // Construct a ColumnIterator for the column at path in schema.
 // returns nil if the column does not exist in the schema.
-func (rg *RowGroup) Column(path []string) *RowGroupColumnReader {
-	s := rg.r.metadata.Schema.At(path...)
-	if s == nil {
-		return nil
-	}
-	md := rg.metadataForColumn(path)
+func (rg *RowGroup) Column(schema *Schema) *RowGroupColumnReader {
+	md := rg.metadataForColumn(schema.Path)
 	if md == nil {
 		return nil
 	}
 	return &RowGroupColumnReader{
 		r:      rg.r.thrift.Fork(),
-		schema: s,
+		schema: schema,
 		md:     md,
 	}
 }

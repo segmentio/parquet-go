@@ -343,9 +343,14 @@ type primitiveReader struct {
 	next *Raw
 }
 
-func (r *primitiveReader) String() string          { return "PrimaryReader " + r.schema.Name }
-func (r *primitiveReader) Peek() (Levels, error)   { return r.it.Peek() }
-func (r *primitiveReader) Bind(rg *RowGroup)       { r.it = rg.Column(r.schema.Path) }
+func (r *primitiveReader) String() string        { return "PrimaryReader " + r.schema.Name }
+func (r *primitiveReader) Peek() (Levels, error) { return r.it.Peek() }
+func (r *primitiveReader) Bind(rg *RowGroup) {
+	r.it = rg.Column(r.schema)
+	if r.it == nil { // TODO: proper error handling
+		panic(fmt.Errorf("could not find a column at %s for reader %s", r.schema.Path, r.String()))
+	}
+}
 func (r *primitiveReader) Skip() error             { return r.it.Read(theVoidBuilder) }
 func (r *primitiveReader) Read(b RowBuilder) error { return r.it.Read(b) }
 

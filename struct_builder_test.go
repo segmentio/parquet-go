@@ -1,7 +1,6 @@
 package parquet_test
 
 import (
-	"fmt"
 	"os"
 	"path"
 	"testing"
@@ -20,11 +19,17 @@ func TestStructBuilderSimple(t *testing.T) {
 	// away when we have our own writer.
 	type RecordParquetGo struct {
 		Name string `parquet:"name=name, type=UTF8"`
-		Foo  int32  `parquet:"name=bar, type=INT_32"`
+		Foo  int32  `parquet:"name=foo, type=INT_32"`
 	}
 	type Record struct {
 		Name string
-		Foo  int32 `parquet:"bar"`
+		Foo  int32
+	}
+
+	expected := []Record{
+		{Name: "name1", Foo: 1},
+		{Name: "name2", Foo: 2},
+		{Name: "name3", Foo: 3},
 	}
 
 	test.WithTestDir(t, func(dir string) {
@@ -33,9 +38,9 @@ func TestStructBuilderSimple(t *testing.T) {
 		require.NoError(t, err)
 		writer, err := writerref.NewParquetWriter(dst, new(RecordParquetGo), 1)
 		require.NoError(t, err)
-		require.NoError(t, writer.Write(Record{Name: "name1", Foo: 1}))
-		require.NoError(t, writer.Write(Record{Name: "name2", Foo: 2}))
-		require.NoError(t, writer.Write(Record{Name: "name3", Foo: 3}))
+		for _, record := range expected {
+			require.NoError(t, writer.Write(record))
+		}
 		require.NoError(t, writer.WriteStop())
 		require.NoError(t, dst.Close())
 
@@ -47,19 +52,23 @@ func TestStructBuilderSimple(t *testing.T) {
 		require.NoError(t, err)
 
 		// TODO: this is a lot of ceremony
-		record := &Record{}
-		planner := parquet.StructPlannerOf(record)
+		planner := parquet.StructPlannerOf(new(Record))
 		builder := planner.Builder()
 		plan := planner.Plan()
 		rowReader := parquet.NewRowReader(plan, pf)
 
+		var records []Record
+
 		for {
-			err := rowReader.Read(builder)
+			record := &Record{}
+			err := rowReader.Read(builder.To(record))
 			if err == parquet.EOF {
 				break
 			}
 			require.NoError(t, err)
-			fmt.Printf("record: %#v\n", record)
+			records = append(records, *record)
 		}
+
+		require.Equal(t, expected, records)
 	})
 }

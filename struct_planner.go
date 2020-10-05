@@ -12,6 +12,7 @@ import (
 // RowBuilder that maps to the struct.
 type StructPlanner struct {
 	blueprint *blueprint
+	index     map[*Schema]*blueprint
 }
 
 // StructPlanOf builds a StructPlanner using v's type as a basis.
@@ -21,19 +22,19 @@ type StructPlanner struct {
 // (format: Go -> parquet primitive type [| annotation])
 //
 //   bool    -> BOOLEAN
-//   Int     -> INT64 | INT(bits=64, signed=true)
-//   Int8    -> INT32 | INT(bits=8, signed=true)
-//   Int16   -> INT32 | INT(bits=16, signed=true)
-//   Int32   -> INT32 | INT(bits=32, signed=true)
-//   Int64   -> INT64 | INT(bits=64, signed=true)
-//   Uint    -> INT32 | INT(bits=64, signed=false)
-//   Uint8   -> INT32 | INT(bits=8, signed=false)
-//   Uint16  -> INT32 | INT(bits=16, signed=false)
-//   Uint32  -> INT32 | INT(bits=32, signed=false)
-//   Uint64  -> INT64 | INT(bits=64, signed=false)
-//   Float32 -> FLOAT
-//   Float64 -> DOUBLE
-//   String  -> BYTE_ARRAY | STRING
+//   int     -> INT64 | INT(bits=64, signed=true)
+//   int8    -> INT32 | INT(bits=8,  signed=true)
+//   int16   -> INT32 | INT(bits=16, signed=true)
+//   int32   -> INT32 | INT(bits=32, signed=true)
+//   int64   -> INT64 | INT(bits=64, signed=true)
+//   uint    -> INT32 | INT(bits=64, signed=false)
+//   uint8   -> INT32 | INT(bits=8,  signed=false)
+//   uint16  -> INT32 | INT(bits=16, signed=false)
+//   uint32  -> INT32 | INT(bits=32, signed=false)
+//   uint64  -> INT64 | INT(bits=64, signed=false)
+//   float32 -> FLOAT
+//   float64 -> DOUBLE
+//   string  -> BYTE_ARRAY | STRING
 //
 // Go composite types:
 //
@@ -57,6 +58,11 @@ type StructPlanner struct {
 //        fields...
 //     }
 //
+// Special cases:
+//
+//   Byte array/slice: []byte -> BYTE_ARRAY
+//   Timestamp: time.Time -> INT64 | TIMESTAMP(isAdjustedToUTC=true, precision=NANOS)
+//
 // All pointers are treated as optional.
 //
 // Types not listed here are not supported.
@@ -68,13 +74,19 @@ func StructPlannerOf(v interface{}) *StructPlanner {
 	root.schema.Name = "root"
 	root.schema.Root = true
 
+	index := map[*Schema]*blueprint{}
+	root.register(index)
+
 	return &StructPlanner{
 		blueprint: root,
+		index:     index,
 	}
 }
 
 func (sp *StructPlanner) Builder() *StructBuilder {
-	return &StructBuilder{}
+	return &StructBuilder{
+		index: sp.index,
+	}
 }
 
 func (sp *StructPlanner) Plan() *Plan {
@@ -89,6 +101,14 @@ type blueprint struct {
 	schema   *Schema
 	t        reflect.Type
 	children []*blueprint
+	idx      int // field index
+}
+
+func (bp *blueprint) register(index map[*Schema]*blueprint) {
+	index[bp.schema] = bp
+	for _, c := range bp.children {
+		c.register(index)
+	}
 }
 
 func bpFromStruct(t reflect.Type) *blueprint {
@@ -111,6 +131,7 @@ func bpFromStruct(t reflect.Type) *blueprint {
 			continue
 		}
 		child := bpFromAny(field.Type)
+		child.idx = i
 		child.schema.Name = normalizeName(field.Name)
 		node.Add(child.schema)
 		bp.children = append(bp.children, child)
