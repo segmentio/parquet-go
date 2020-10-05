@@ -15,16 +15,9 @@ import (
 )
 
 func TestStructBuilderSimple(t *testing.T) {
-	// We have to declare two different structs because the annotations are
-	// different between this library and parquet-go. This should all go
-	// away when we have our own writer.
-	type RecordParquetGo struct {
+	type Record struct {
 		Name string `parquet:"name=name, type=UTF8"`
 		Foo  int32  `parquet:"name=foo, type=INT_32"`
-	}
-	type Record struct {
-		Name string
-		Foo  int32
 	}
 
 	expected := []interface{}{
@@ -33,10 +26,13 @@ func TestStructBuilderSimple(t *testing.T) {
 		&Record{Name: "name3", Foo: 3},
 	}
 
-	structBuilderTest(t, new(RecordParquetGo), new(Record), expected)
+	structBuilderTest(t, new(Record), new(Record), expected)
 }
 
 func structBuilderTest(t *testing.T, recordPgo, record interface{}, expected []interface{}) {
+	// We have to pass two different structs because the annotations are
+	// different between this library and parquet-go. This should all go
+	// away when we have our own writer.
 	test.WithTestDir(t, func(dir string) {
 		p := path.Join(dir, "test.parquet")
 		dst, err := localref.NewLocalFileWriter(p)
