@@ -71,7 +71,7 @@ func catCommand(flags catFlags, path string) {
 	}
 
 	printer := newPrettyPrinter(os.Stdout)
-	rowReader := parquet.NewRowReader(f)
+	rowReader := parquet.NewRowReader(parquet.DefaultPlan, f)
 
 	for {
 		err := rowReader.Read(printer)

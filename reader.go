@@ -288,12 +288,6 @@ func (r *RowReader) Read(b RowBuilder) error {
 	return nil
 }
 
-// WithSchema instructs the RowReader to follow the provided schema instead of
-// the one described in the Parquet file.
-func (r *RowReader) WithSchema(s *Schema) {
-	r.schema = s
-}
-
 func (r *RowReader) nextRowGroup() bool {
 	if !r.rowGroups.Next() {
 		return false
@@ -304,14 +298,22 @@ func (r *RowReader) nextRowGroup() bool {
 	return true
 }
 
-// NewRowReader builds a RowReader using data from r and calling back b.
-func NewRowReader(r *File) *RowReader {
+// NewRowReader builds a RowReader using data from r and following the plan p.
+func NewRowReader(p *Plan, r *File) *RowReader {
+	schema := p.schema()
+	if schema == nil {
+		// use the file's schema if the plan is not providing one
+		//
+		// TODO: do not parse the file's schema if the plan already
+		// provides one.
+		schema = r.metadata.Schema
+	}
 	return &RowReader{
 		// The root of a schema has to define a group.
-		root:      newGroupReader(r.metadata.Schema),
+		root:      newGroupReader(schema),
 		reader:    r,
 		rowGroups: r.RowGroups(),
-		schema:    r.metadata.Schema,
+		schema:    schema,
 	}
 }
 

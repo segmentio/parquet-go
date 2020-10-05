@@ -1,5 +1,9 @@
 package parquet
 
+import (
+	"github.com/segmentio/parquet/internal/debug"
+)
+
 // StructBuilder implements the RowBuilder interface.
 // See NewStructBuilder for details.
 type StructBuilder struct {
@@ -54,15 +58,8 @@ func NewStructBuilder(s *Schema) *StructBuilder {
 	panic("implement me")
 }
 
-// To changes the target of the struct builder.
-// The target has to be of the same type as the one used to create the struct
-// builder, or this function will panic.
-func (sb *StructBuilder) To(v interface{}) *StructBuilder {
-	panic("implement me")
-}
-
 func (sb *StructBuilder) Begin() {
-	panic("implement me")
+	debug.Format("StructBuilder - Begin")
 }
 
 func (sb *StructBuilder) Primitive(s *Schema, d Decoder) error {
@@ -98,5 +95,5 @@ func (sb *StructBuilder) KVEnd(node *Schema) {
 }
 
 func (sb *StructBuilder) End() {
-	panic("implement me")
+	debug.Format("StructBuilder - End")
 }
