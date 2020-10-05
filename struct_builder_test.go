@@ -3,6 +3,7 @@ package parquet_test
 import (
 	"os"
 	"path"
+	"reflect"
 	"testing"
 
 	"github.com/segmentio/parquet"
@@ -26,17 +27,21 @@ func TestStructBuilderSimple(t *testing.T) {
 		Foo  int32
 	}
 
-	expected := []Record{
-		{Name: "name1", Foo: 1},
-		{Name: "name2", Foo: 2},
-		{Name: "name3", Foo: 3},
+	expected := []interface{}{
+		&Record{Name: "name1", Foo: 1},
+		&Record{Name: "name2", Foo: 2},
+		&Record{Name: "name3", Foo: 3},
 	}
 
+	structBuilderTest(t, new(RecordParquetGo), new(Record), expected)
+}
+
+func structBuilderTest(t *testing.T, recordPgo, record interface{}, expected []interface{}) {
 	test.WithTestDir(t, func(dir string) {
 		p := path.Join(dir, "test.parquet")
 		dst, err := localref.NewLocalFileWriter(p)
 		require.NoError(t, err)
-		writer, err := writerref.NewParquetWriter(dst, new(RecordParquetGo), 1)
+		writer, err := writerref.NewParquetWriter(dst, recordPgo, 1)
 		require.NoError(t, err)
 		for _, record := range expected {
 			require.NoError(t, writer.Write(record))
@@ -52,23 +57,23 @@ func TestStructBuilderSimple(t *testing.T) {
 		require.NoError(t, err)
 
 		// TODO: this is a lot of ceremony
-		planner := parquet.StructPlannerOf(new(Record))
+		planner := parquet.StructPlannerOf(record)
 		builder := planner.Builder()
 		plan := planner.Plan()
 		rowReader := parquet.NewRowReader(plan, pf)
 
-		var records []Record
+		var actual []interface{}
 
 		for {
-			record := &Record{}
-			err := rowReader.Read(builder.To(record))
+			target := reflect.New(reflect.TypeOf(record).Elem()).Interface()
+			err := rowReader.Read(builder.To(target))
 			if err == parquet.EOF {
 				break
 			}
 			require.NoError(t, err)
-			records = append(records, *record)
+			actual = append(actual, target)
 		}
 
-		require.Equal(t, expected, records)
+		require.Equal(t, expected, actual)
 	})
 }
