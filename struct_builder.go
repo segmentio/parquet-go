@@ -12,14 +12,26 @@ import (
 // StructBuilder implements the RowBuilder interface.
 // See NewStructBuilder for details.
 type StructBuilder struct {
-	index   map[*Schema]*blueprint
-	target  reflect.Value
-	current reflect.Value
+	index  map[*Schema]*blueprint
+	target reflect.Value
+	stack  []reflect.Value
+}
+
+func (sb *StructBuilder) push(v reflect.Value) {
+	sb.stack = append(sb.stack, v)
+}
+
+func (sb *StructBuilder) pop() {
+	sb.stack = sb.stack[:len(sb.stack)-1]
+}
+
+func (sb *StructBuilder) current() reflect.Value {
+	return sb.stack[len(sb.stack)-1]
 }
 
 func (sb *StructBuilder) Begin() {
 	debug.Format("StructBuilder - Begin")
-	sb.current = sb.target
+	sb.push(sb.target)
 }
 
 func (sb *StructBuilder) Primitive(s *Schema, d Decoder) error {
@@ -27,7 +39,7 @@ func (sb *StructBuilder) Primitive(s *Schema, d Decoder) error {
 	if !ok {
 		panic("entry in schema not found")
 	}
-	f := sb.current.Elem().Field(bp.idx)
+	f := sb.current().Elem().Field(bp.idx)
 	switch s.PhysicalType {
 	case pthrift.Type_INT32:
 		v, err := d.Int32()
@@ -57,18 +69,19 @@ func (sb *StructBuilder) PrimitiveNil(s *Schema) error {
 
 func (sb *StructBuilder) GroupBegin(s *Schema) {
 	if s.Root {
+		// TODO: maybe support current being nil and create the top level structure?
 		return
 	}
 
 	// only works if the group is part of a struct
 	bp := sb.index[s]
-	f := sb.current.Elem().Field(bp.idx)
+	f := sb.current().Elem().Field(bp.idx)
 	f.Set(reflect.Zero(bp.t))
-	sb.current = f.Addr()
+	sb.push(f.Addr())
 }
 
 func (sb *StructBuilder) GroupEnd(node *Schema) {
-	// not much to do when a group ends
+	sb.pop()
 }
 
 func (sb *StructBuilder) RepeatedBegin(s *Schema) {

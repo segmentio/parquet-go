@@ -47,6 +47,28 @@ func TestStructBuilderNestedStructs(t *testing.T) {
 	structBuilderTest(t, new(Record), new(Record), expected)
 }
 
+func TestStructBuilderTwoNestedStructs(t *testing.T) {
+	type Inner struct {
+		Bar int32 `parquet:"name=bar, type=INT_32"`
+	}
+	type InnerTwo struct {
+		Bartwo int32 `parquet:"name=bartwo, type=INT_32"`
+	}
+	type Record struct {
+		Foo      int32    `parquet:"name=foo, type=INT_32"`
+		Inner    Inner    `parquet:"name=inner"`
+		InnerTwo InnerTwo `parquet:"name=inner_two"`
+	}
+
+	expected := []interface{}{
+		&Record{Foo: 1, Inner: Inner{Bar: 11}, InnerTwo: InnerTwo{Bartwo: 111}},
+		&Record{Foo: 2, Inner: Inner{Bar: 22}, InnerTwo: InnerTwo{Bartwo: 222}},
+		&Record{Foo: 3, Inner: Inner{Bar: 33}, InnerTwo: InnerTwo{Bartwo: 333}},
+	}
+
+	structBuilderTest(t, new(Record), new(Record), expected)
+}
+
 func structBuilderTest(t *testing.T, recordPgo, record interface{}, expected []interface{}) {
 	// We have to pass two different structs because the annotations are
 	// different between this library and parquet-go. This should all go
