@@ -7,27 +7,8 @@ import (
 	"testing"
 
 	"github.com/segmentio/parquet"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-func TestNodeDelete(t *testing.T) {
-	a := &parquet.Schema{Name: "a"}
-	b := &parquet.Schema{Name: "b"}
-
-	root := &parquet.Schema{
-		Name: "root",
-		Root: true,
-		Kind: parquet.GroupKind,
-	}
-
-	root.Add(a)
-	root.Add(b)
-
-	root.At("a").Remove()
-
-	assert.Equal(t, []*parquet.Schema{b}, root.Children)
-}
 
 func TestNodeStageDelete(t *testing.T) {
 	file, err := os.Open("./examples/stage-small.parquet")

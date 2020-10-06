@@ -56,7 +56,15 @@ func (sb *StructBuilder) PrimitiveNil(s *Schema) error {
 }
 
 func (sb *StructBuilder) GroupBegin(s *Schema) {
-	// when a group begins, it is assumed that the struct has already been initialized.
+	if s.Root {
+		return
+	}
+
+	// only works if the group is part of a struct
+	bp := sb.index[s]
+	f := sb.current.Elem().Field(bp.idx)
+	f.Set(reflect.Zero(bp.t))
+	sb.current = f.Addr()
 }
 
 func (sb *StructBuilder) GroupEnd(node *Schema) {

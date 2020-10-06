@@ -127,14 +127,10 @@ func (sn *Schema) traverse(path []string, f func(node *Schema)) error {
 }
 
 // Add a node as a direct child of this node.
-// It updates the parent/children relationships, and the path of the provided
-// node.
+// It updates the parent/children relationships.
 func (sn *Schema) Add(node *Schema) {
 	sn.Children = append(sn.Children, node)
 	node.parent = sn
-	node.Path = make([]string, len(sn.Path), len(sn.Path)+1)
-	copy(node.Path, sn.Path)
-	node.Path = append(node.Path, node.Name)
 }
 
 // Walk the schema tree depth-first, calling walkFn for every node visited.

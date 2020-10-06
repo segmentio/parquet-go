@@ -367,7 +367,7 @@ func (p *PageReader) ensureReady() error {
 	// Repetition levels are skipped when the column is not nested
 	// (path = 1). In that case, p.repetitionLevels stays nil, and 0
 	// will always be provided to the callback.
-	if len(p.schema.Path) > 1 {
+	if p.schema.RepetitionLevel > 0 {
 		// we need to figure out what is the maximum possible
 		// level of repetition so that we can know how many bits
 		// at most are required to express repetitions level.
@@ -389,7 +389,7 @@ func (p *PageReader) ensureReady() error {
 	// (if encoded, it will always have the value of the max
 	// definition level). In that case, p.definitionLevels stays
 	// nil, and 0 will always be provided to the callback.
-	if p.schema.DefinitionLevel >= 1 {
+	if p.schema.DefinitionLevel > 0 {
 		bitWidth := bits.Len32(p.schema.DefinitionLevel)
 		p.definitionLevels = make([]uint32, p.numValues)
 		p.definitionLevelDecoder.prepare(p.reader)

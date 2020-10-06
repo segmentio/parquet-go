@@ -70,7 +70,10 @@ func StructPlannerOf(v interface{}) *StructPlanner {
 	t := reflect.TypeOf(v)
 	t = derefence(t)
 
-	root := bpFromStruct(t)
+	root := &blueprint{
+		schema: &Schema{},
+	}
+	bpFromStruct(root, t)
 	root.schema.Name = "root"
 	root.schema.Root = true
 
@@ -111,17 +114,11 @@ func (bp *blueprint) register(index map[*Schema]*blueprint) {
 	}
 }
 
-func bpFromStruct(t reflect.Type) *blueprint {
+func bpFromStruct(p *blueprint, t reflect.Type) {
 	assertKind(t, reflect.Struct)
 
-	node := &Schema{
-		Kind: GroupKind,
-	}
-
-	bp := &blueprint{
-		schema: node,
-		t:      t,
-	}
+	p.schema.Kind = GroupKind
+	p.t = t
 
 	n := t.NumField()
 	for i := 0; i < n; i++ {
@@ -130,24 +127,35 @@ func bpFromStruct(t reflect.Type) *blueprint {
 			// ignore non-exported fields
 			continue
 		}
-		child := bpFromAny(field.Type)
-		child.idx = i
-		child.schema.Name = normalizeName(field.Name)
-		node.Add(child.schema)
-		bp.children = append(bp.children, child)
+		name := normalizeName(field.Name)
+		child := &blueprint{
+			idx: i,
+			schema: &Schema{
+				Name: name,
+				Path: newPath(p.schema.Path, name),
+			},
+		}
+		bpFromAny(child, field.Type)
+		p.schema.Add(child.schema)
+		p.children = append(p.children, child)
 	}
-
-	return bp
 }
 
-func bpFromAny(t reflect.Type) *blueprint {
+func newPath(path []string, name string) []string {
+	newPath := make([]string, len(path)+1)
+	copy(newPath, path)
+	newPath[len(path)] = name
+	return newPath
+}
+
+func bpFromAny(p *blueprint, t reflect.Type) {
 	t = derefence(t)
 
 	switch t.Kind() {
 	case reflect.Struct:
-		return bpFromStruct(t)
+		bpFromStruct(p, t)
 	case reflect.Int32, reflect.String:
-		return bpFromPrimitive(t)
+		bpFromPrimitive(p, t)
 	default:
 		panic(fmt.Errorf("unhandled kind: %s", t.Kind()))
 	}
@@ -155,34 +163,19 @@ func bpFromAny(t reflect.Type) *blueprint {
 
 // fromPrimitive creates a schema leaf for a Go type that maps directly to a
 // Parquet primitive type.
-func bpFromPrimitive(t reflect.Type) *blueprint {
-	var physicalType pthrift.Type
-	var convertedType *pthrift.ConvertedType
-	var logicalType *pthrift.LogicalType
-
+func bpFromPrimitive(p *blueprint, t reflect.Type) {
 	// TODO: having to repeat the same case as in fromAny is not great.
+	p.t = t
 	switch t.Kind() {
 	case reflect.Int32:
-		physicalType = pthrift.Type_INT32
+		p.schema.PhysicalType = pthrift.Type_INT32
 	case reflect.String:
-		physicalType = pthrift.Type_BYTE_ARRAY
-		convertedType = pthrift.ConvertedTypePtr(pthrift.ConvertedType_UTF8)
-		logicalType = pthrift.NewLogicalType()
-		logicalType.STRING = pthrift.NewStringType()
+		p.schema.PhysicalType = pthrift.Type_BYTE_ARRAY
+		p.schema.ConvertedType = pthrift.ConvertedTypePtr(pthrift.ConvertedType_UTF8)
+		p.schema.LogicalType = pthrift.NewLogicalType()
+		p.schema.LogicalType.STRING = pthrift.NewStringType()
 	default:
 		panic(fmt.Errorf("unhandled kind: %s", t.Kind()))
-	}
-
-	node := &Schema{
-		Kind:          PrimitiveKind,
-		PhysicalType:  physicalType,
-		ConvertedType: convertedType,
-		LogicalType:   logicalType,
-	}
-
-	return &blueprint{
-		t:      t,
-		schema: node,
 	}
 }
 
