@@ -69,6 +69,20 @@ func TestStructBuilderTwoNestedStructs(t *testing.T) {
 	structBuilderTest(t, new(Record), new(Record), expected)
 }
 
+func TestStructBuilderList(t *testing.T) {
+	type Record struct {
+		Foo []int32 `parquet:"name=foo, type=LIST, valuetype=INT32"`
+	}
+
+	expected := []interface{}{
+		&Record{Foo: []int32{1, 2}},
+		&Record{Foo: nil},
+		&Record{Foo: []int32{3}},
+	}
+
+	structBuilderTest(t, new(Record), new(Record), expected)
+}
+
 func structBuilderTest(t *testing.T, recordPgo, record interface{}, expected []interface{}) {
 	// We have to pass two different structs because the annotations are
 	// different between this library and parquet-go. This should all go

@@ -39,23 +39,39 @@ func (sb *StructBuilder) Primitive(s *Schema, d Decoder) error {
 	if !ok {
 		panic("entry in schema not found")
 	}
-	f := sb.current().Elem().Field(bp.idx)
+	// TODO: all that info is known at planning time. Move there.
 	switch s.PhysicalType {
 	case pthrift.Type_INT32:
 		v, err := d.Int32()
 		if err != nil {
 			return err
 		}
-		f.SetInt(int64(v)) // suspicious
+		if sb.current().Kind() == reflect.Slice {
+			slice := sb.current()
+			sb.pop()
+			slice = reflect.Append(slice, reflect.ValueOf(v))
+
+			// does not work in all cases
+			sb.current().Elem().Field(bp.parent.idx).Set(slice)
+
+			sb.push(slice)
+		} else if sb.current().Elem().Kind() == reflect.Struct {
+			f := sb.current().Elem().Field(bp.idx)
+			f.SetInt(int64(v)) // suspicious
+		}
 	case pthrift.Type_BYTE_ARRAY:
 		b, err := d.ByteArray(nil) // alloc
 		if err != nil {
 			return err
 		}
-		if s.ConvertedType != nil && *s.ConvertedType == pthrift.ConvertedType_UTF8 {
-			f.SetString(string(b))
-		} else {
-			f.Set(reflect.ValueOf(b))
+
+		if sb.current().Elem().Kind() == reflect.Struct {
+			f := sb.current().Elem().Field(bp.idx)
+			if s.ConvertedType != nil && *s.ConvertedType == pthrift.ConvertedType_UTF8 {
+				f.SetString(string(b))
+			} else {
+				f.Set(reflect.ValueOf(b))
+			}
 		}
 	default:
 		panic(fmt.Errorf("unsupported physical type: %s", s.PhysicalType.String()))
@@ -85,11 +101,15 @@ func (sb *StructBuilder) GroupEnd(node *Schema) {
 }
 
 func (sb *StructBuilder) RepeatedBegin(s *Schema) {
-	panic("implement me")
+	bp := sb.index[s]
+	// only works if the repeated group is part of a struct
+	f := sb.current().Elem().Field(bp.idx)
+	f.Set(reflect.Zero(bp.t))
+	sb.push(f)
 }
 
 func (sb *StructBuilder) RepeatedEnd(node *Schema) {
-	panic("implement me")
+	sb.pop()
 }
 
 func (sb *StructBuilder) KVBegin(node *Schema) {

@@ -103,8 +103,14 @@ func (sp *StructPlanner) Plan() *Plan {
 type blueprint struct {
 	schema   *Schema
 	t        reflect.Type
+	parent   *blueprint
 	children []*blueprint
 	idx      int // field index
+}
+
+func (bp *blueprint) add(child *blueprint) {
+	bp.children = append(bp.children, child)
+	child.parent = bp
 }
 
 func (bp *blueprint) register(index map[*Schema]*blueprint) {
@@ -115,8 +121,6 @@ func (bp *blueprint) register(index map[*Schema]*blueprint) {
 }
 
 func bpFromStruct(p *blueprint, t reflect.Type) {
-	assertKind(t, reflect.Struct)
-
 	p.schema.Kind = GroupKind
 	p.t = t
 
@@ -137,8 +141,40 @@ func bpFromStruct(p *blueprint, t reflect.Type) {
 		}
 		bpFromAny(child, field.Type)
 		p.schema.Add(child.schema)
-		p.children = append(p.children, child)
+		p.add(child)
 	}
+}
+
+func bpFromSlice(p *blueprint, t reflect.Type) {
+	p.t = t
+	p.schema.Kind = RepeatedKind
+	p.schema.ConvertedType = pthrift.ConvertedTypePtr(pthrift.ConvertedType_LIST)
+	p.schema.Repetition = pthrift.FieldRepetitionType_REQUIRED
+
+	list := &Schema{
+		Name:            "list",
+		Kind:            RepeatedKind,
+		Repetition:      pthrift.FieldRepetitionType_REPEATED,
+		RepetitionLevel: p.schema.RepetitionLevel + 1,
+		DefinitionLevel: p.schema.DefinitionLevel + 1,
+		Path:            newPath(p.schema.Path, "list"),
+	}
+	p.schema.Add(list)
+
+	element := &Schema{
+		Name:            "element",
+		Path:            newPath(list.Path, "element"),
+		RepetitionLevel: list.RepetitionLevel,
+		DefinitionLevel: list.DefinitionLevel,
+	}
+	list.Add(element)
+
+	ebp := &blueprint{
+		schema: element,
+	}
+	p.add(ebp)
+
+	bpFromAny(ebp, t.Elem())
 }
 
 func newPath(path []string, name string) []string {
@@ -156,6 +192,8 @@ func bpFromAny(p *blueprint, t reflect.Type) {
 		bpFromStruct(p, t)
 	case reflect.Int32, reflect.String:
 		bpFromPrimitive(p, t)
+	case reflect.Slice:
+		bpFromSlice(p, t)
 	default:
 		panic(fmt.Errorf("unhandled kind: %s", t.Kind()))
 	}
@@ -166,6 +204,7 @@ func bpFromAny(p *blueprint, t reflect.Type) {
 func bpFromPrimitive(p *blueprint, t reflect.Type) {
 	// TODO: having to repeat the same case as in fromAny is not great.
 	p.t = t
+	p.schema.Kind = PrimitiveKind
 	switch t.Kind() {
 	case reflect.Int32:
 		p.schema.PhysicalType = pthrift.Type_INT32
@@ -176,12 +215,6 @@ func bpFromPrimitive(p *blueprint, t reflect.Type) {
 		p.schema.LogicalType.STRING = pthrift.NewStringType()
 	default:
 		panic(fmt.Errorf("unhandled kind: %s", t.Kind()))
-	}
-}
-
-func assertKind(t reflect.Type, expected reflect.Kind) {
-	if t.Kind() != expected {
-		panic(fmt.Errorf("kind should be %s, not %s", expected, t.Kind()))
 	}
 }
 

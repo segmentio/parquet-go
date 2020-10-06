@@ -636,13 +636,13 @@ func newRepeatedReader(s *Schema) *repeatedReader {
 		panic(fmt.Errorf("LIST's child must be named 'list' (not '%s')", list.Name))
 	}
 	if list.Kind != RepeatedKind {
-		panic("LIST's list child must be a group")
+		panic("LIST's child must be repeated")
 	}
 	if list.Repetition != pthrift.FieldRepetitionType_REPEATED {
-		panic(fmt.Errorf("LIST's list child but be repeated, not %s", list.Repetition))
+		panic(fmt.Errorf("LIST's child but be repeated, not %s", list.Repetition))
 	}
 	if len(list.Children) != 1 {
-		panic("LIST's list child must have exactly one child")
+		panic("LIST's child must have exactly one child")
 	}
 
 	//	The element field encodes the list's element type and repetition.
