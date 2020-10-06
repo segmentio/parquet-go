@@ -101,8 +101,12 @@ func (sp *StructPlanner) Plan() *Plan {
 // blueprint is a structure that parallels a schema, providing the information
 // to build the actual Go types.
 type blueprint struct {
-	schema   *Schema
-	t        reflect.Type
+	schema *Schema
+	t      reflect.Type
+	// call this function to decode the value from readers
+	read func(d Decoder) (reflect.Value, error)
+	// call this function to set the value
+	set      func(container reflect.Value, value reflect.Value)
 	parent   *blueprint
 	children []*blueprint
 	idx      int // field index
@@ -208,11 +212,25 @@ func bpFromPrimitive(p *blueprint, t reflect.Type) {
 	switch t.Kind() {
 	case reflect.Int32:
 		p.schema.PhysicalType = pthrift.Type_INT32
+		p.read = func(d Decoder) (reflect.Value, error) {
+			v, err := d.Int32()
+			if err != nil {
+				return reflect.Value{}, err
+			}
+			return reflect.ValueOf(v), nil
+		}
 	case reflect.String:
 		p.schema.PhysicalType = pthrift.Type_BYTE_ARRAY
 		p.schema.ConvertedType = pthrift.ConvertedTypePtr(pthrift.ConvertedType_UTF8)
 		p.schema.LogicalType = pthrift.NewLogicalType()
 		p.schema.LogicalType.STRING = pthrift.NewStringType()
+		p.read = func(d Decoder) (reflect.Value, error) {
+			b, err := d.ByteArray(nil)
+			if err != nil {
+				return reflect.Value{}, err
+			}
+			return reflect.ValueOf(string(b)), nil
+		}
 	default:
 		panic(fmt.Errorf("unhandled kind: %s", t.Kind()))
 	}

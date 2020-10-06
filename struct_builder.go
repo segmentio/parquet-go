@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"reflect"
 
-	pthrift "github.com/segmentio/parquet/internal/gen-go/parquet"
-
 	"github.com/segmentio/parquet/internal/debug"
 )
 
@@ -40,41 +38,24 @@ func (sb *StructBuilder) Primitive(s *Schema, d Decoder) error {
 		panic("entry in schema not found")
 	}
 	// TODO: all that info is known at planning time. Move there.
-	switch s.PhysicalType {
-	case pthrift.Type_INT32:
-		v, err := d.Int32()
-		if err != nil {
-			return err
-		}
-		if sb.current().Kind() == reflect.Slice {
-			slice := sb.current()
-			sb.pop()
-			slice = reflect.Append(slice, reflect.ValueOf(v))
 
-			// does not work in all cases
-			sb.current().Elem().Field(bp.parent.idx).Set(slice)
+	v, err := bp.read(d)
+	if err != nil {
+		return err
+	}
 
-			sb.push(slice)
-		} else if sb.current().Elem().Kind() == reflect.Struct {
-			f := sb.current().Elem().Field(bp.idx)
-			f.SetInt(int64(v)) // suspicious
-		}
-	case pthrift.Type_BYTE_ARRAY:
-		b, err := d.ByteArray(nil) // alloc
-		if err != nil {
-			return err
-		}
+	if sb.current().Kind() == reflect.Slice {
+		slice := sb.current()
+		sb.pop()
+		slice = reflect.Append(slice, v)
 
-		if sb.current().Elem().Kind() == reflect.Struct {
-			f := sb.current().Elem().Field(bp.idx)
-			if s.ConvertedType != nil && *s.ConvertedType == pthrift.ConvertedType_UTF8 {
-				f.SetString(string(b))
-			} else {
-				f.Set(reflect.ValueOf(b))
-			}
-		}
-	default:
-		panic(fmt.Errorf("unsupported physical type: %s", s.PhysicalType.String()))
+		// does not work in all cases
+		sb.current().Elem().Field(bp.parent.idx).Set(slice)
+
+		sb.push(slice)
+	} else if sb.current().Elem().Kind() == reflect.Struct {
+		f := sb.current().Elem().Field(bp.idx)
+		f.Set(v)
 	}
 	return nil
 }
