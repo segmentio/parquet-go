@@ -98,6 +98,9 @@ func (sp *StructPlanner) Plan() *Plan {
 	}
 }
 
+// setFn is a function executed by the StructBuilder when setting a value on a
+// container (struct field, slice, map entry).
+// The function should return an addressable version of the value that was set.
 type setFn func(stack *valueStack, value reflect.Value) reflect.Value
 
 // blueprint is a structure that parallels a schema, providing the information

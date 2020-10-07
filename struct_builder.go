@@ -3,8 +3,6 @@ package parquet
 import (
 	"fmt"
 	"reflect"
-
-	"github.com/segmentio/parquet/internal/debug"
 )
 
 // StructBuilder implements the RowBuilder interface.
@@ -16,7 +14,6 @@ type StructBuilder struct {
 }
 
 func (sb *StructBuilder) Begin() {
-	debug.Format("StructBuilder - Begin")
 	sb.stack.push(sb.target.Elem())
 }
 
@@ -72,7 +69,7 @@ func (sb *StructBuilder) KVEnd(node *Schema) {
 }
 
 func (sb *StructBuilder) End() {
-	debug.Format("StructBuilder - End")
+	// nothing to do
 }
 
 func (sb *StructBuilder) To(v interface{}) *StructBuilder {
