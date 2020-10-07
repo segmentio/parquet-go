@@ -25,15 +25,11 @@ func (sb *StructBuilder) Primitive(s *Schema, d Decoder) error {
 	if !ok {
 		panic("entry in schema not found")
 	}
-	// TODO: all that info is known at planning time. Move there.
-
 	v, err := bp.read(d)
 	if err != nil {
 		return err
 	}
-
 	bp.set(&sb.stack, v)
-
 	return nil
 }
 
