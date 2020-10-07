@@ -75,7 +75,7 @@ func StructPlannerOf(v interface{}) *StructPlanner {
 	}
 	bpFromStruct(root, t)
 	root.schema.Name = "root"
-	root.schema.Root = true
+	root.schema.Compute()
 
 	index := map[*Schema]*blueprint{}
 	root.register(index)
@@ -98,7 +98,7 @@ func (sp *StructPlanner) Plan() *Plan {
 	}
 }
 
-type setFn func(stack *valueStack, value reflect.Value)
+type setFn func(stack *valueStack, value reflect.Value) reflect.Value
 
 // blueprint is a structure that parallels a schema, providing the information
 // to build the actual Go types.
@@ -143,7 +143,6 @@ func bpFromStruct(p *blueprint, t reflect.Type) {
 		child := &blueprint{
 			schema: &Schema{
 				Name: name,
-				Path: newPath(p.schema.Path, name),
 			},
 			fieldPath: newFieldPath(p.fieldPath, i),
 		}
@@ -156,9 +155,9 @@ func bpFromStruct(p *blueprint, t reflect.Type) {
 }
 
 func makeSetStructFieldFn(p *blueprint) setFn {
-	return func(stack *valueStack, value reflect.Value) {
-		// The expectation is that the top of the stack contains the struct.
+	return func(stack *valueStack, value reflect.Value) reflect.Value {
 		stack.view(len(p.fieldPath) - 1).top().FieldByIndex(p.fieldPath).Set(value)
+		return value
 	}
 }
 
@@ -170,20 +169,12 @@ func bpFromSlice(p *blueprint, t reflect.Type) {
 
 	list := &Schema{
 		Name:       "list",
-		Kind:       RepeatedKind,
 		Repetition: pthrift.FieldRepetitionType_REPEATED,
-		// TODO: write some functions to manipulate Schema that keep these invariants.
-		RepetitionLevel: p.schema.RepetitionLevel + 1,
-		DefinitionLevel: p.schema.DefinitionLevel + 1,
-		Path:            newPath(p.schema.Path, "list"),
 	}
 	p.schema.Add(list)
 
 	element := &Schema{
-		Name:            "element",
-		Path:            newPath(list.Path, "element"),
-		RepetitionLevel: list.RepetitionLevel,
-		DefinitionLevel: list.DefinitionLevel,
+		Name: "element",
 	}
 	list.Add(element)
 
@@ -196,21 +187,18 @@ func bpFromSlice(p *blueprint, t reflect.Type) {
 }
 
 func makeSetSliceFn(p *blueprint) setFn {
-	return func(stack *valueStack, value reflect.Value) {
+	return func(stack *valueStack, value reflect.Value) reflect.Value {
 		// Expect top of stack to be the slice.
+		idx := stack.top().Len()
 		slice := reflect.Append(stack.top(), value)
 		stack.replace(slice)
+
 		// Re-set the stack on the parent as it may have been reallocated.
 		view := stack.view(1)
 		p.parent.set(view, slice)
-	}
-}
 
-func newPath(path []string, name string) []string {
-	newPath := make([]string, len(path)+1)
-	copy(newPath, path)
-	newPath[len(path)] = name
-	return newPath
+		return slice.Index(idx)
+	}
 }
 
 func newFieldPath(path []int, i int) []int {

@@ -83,6 +83,24 @@ func TestStructBuilderList(t *testing.T) {
 	structBuilderTest(t, new(Record), new(Record), expected)
 }
 
+func TestStructBuilderStructListStruct(t *testing.T) {
+	type Tag struct {
+		Key   string `parquet:"name=key, type=UTF8"`
+		Value string `parquet:"name=value, type=UTF8"`
+	}
+	type Record struct {
+		Tags []Tag `parquet:"name=tags, type=LIST"`
+	}
+
+	expected := []interface{}{
+		&Record{Tags: []Tag{{Key: "one", Value: "un"}, {Key: "two", Value: "deux"}}},
+		&Record{},
+		&Record{[]Tag{{Key: "three", Value: "trois"}}},
+	}
+
+	structBuilderTest(t, new(Record), new(Record), expected)
+}
+
 func structBuilderTest(t *testing.T, recordPgo, record interface{}, expected []interface{}) {
 	// We have to pass two different structs because the annotations are
 	// different between this library and parquet-go. This should all go

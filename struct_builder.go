@@ -44,8 +44,8 @@ func (sb *StructBuilder) GroupBegin(s *Schema) {
 	}
 	bp := sb.index[s]
 	v := reflect.Zero(bp.t)
-	bp.set(&sb.stack, v)
-	sb.stack.push(v)
+	n := bp.set(&sb.stack, v)
+	sb.stack.push(n)
 }
 
 func (sb *StructBuilder) GroupEnd(node *Schema) {

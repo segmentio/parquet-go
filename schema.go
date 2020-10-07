@@ -9,21 +9,27 @@ import (
 
 // Schema represents a node in the schema tree of Parquet.
 type Schema struct {
-	ID              int32
-	Name            string
-	Kind            Kind
-	PhysicalType    pthrift.Type
-	ConvertedType   *pthrift.ConvertedType
-	LogicalType     *pthrift.LogicalType
-	Repetition      pthrift.FieldRepetitionType
-	Scale           int32
-	Precision       int32
+	// User-definable attributes
+	ID            int32
+	Name          string
+	PhysicalType  pthrift.Type
+	ConvertedType *pthrift.ConvertedType
+	LogicalType   *pthrift.LogicalType
+	Repetition    pthrift.FieldRepetitionType
+	Scale         int32
+	Precision     int32
+
+	// Computed attributes (parquets spec)
 	RepetitionLevel uint32
 	DefinitionLevel uint32
 	Path            []string
-	Root            bool
-	parent          *Schema
-	Children        []*Schema
+	// Computed attributes (segmentio/parquet)
+	Root bool
+	Kind Kind
+
+	// Tree structure
+	parent   *Schema
+	Children []*Schema
 }
 
 // Kind indicates the kind of structure a schema node (and its descendent in
@@ -133,6 +139,53 @@ func (sn *Schema) Add(node *Schema) {
 	node.parent = sn
 }
 
+// Compute walks the Schema and update all computed attributes.
+func (sn *Schema) Compute() {
+	if sn.parent == nil {
+		sn.Root = true
+	}
+
+	if sn.parent != nil {
+		sn.RepetitionLevel = sn.parent.RepetitionLevel
+		sn.DefinitionLevel = sn.parent.DefinitionLevel
+		sn.Path = newPath(sn.parent.Path, sn.Name)
+	}
+
+	if sn.Repetition == pthrift.FieldRepetitionType_REPEATED {
+		sn.RepetitionLevel++
+	}
+	if sn.Repetition != pthrift.FieldRepetitionType_REQUIRED {
+		sn.DefinitionLevel++
+	}
+
+	sn.Kind = computeKind(sn)
+
+	for _, c := range sn.Children {
+		c.Compute()
+	}
+}
+
+func computeKind(s *Schema) Kind {
+	if len(s.Children) == 0 {
+		return PrimitiveKind
+	}
+
+	if s.ConvertedType != nil {
+		switch *s.ConvertedType {
+		case pthrift.ConvertedType_MAP, pthrift.ConvertedType_MAP_KEY_VALUE:
+			return MapKind
+		case pthrift.ConvertedType_LIST:
+			return RepeatedKind
+		}
+	}
+
+	if s.Repetition == pthrift.FieldRepetitionType_REPEATED {
+		return RepeatedKind
+	}
+
+	return GroupKind
+}
+
 // Walk the schema tree depth-first, calling walkFn for every node visited.
 // If walk fn returns an error, the walk stops.
 // It is recommended to not modify the tree while walking it.
@@ -172,6 +225,8 @@ func schemaFromFlatElements(elements []*pthrift.SchemaElement) (*Schema, error) 
 		return nil, fmt.Errorf("should have consumed %d elements but got %d instead", len(elements), consumed)
 	}
 
+	root.Compute()
+
 	return root, nil
 }
 
@@ -194,18 +249,6 @@ func flatThriftSchemaToTreeRecurse(current *Schema, left []*pthrift.SchemaElemen
 	current.Scale = el.GetScale()
 	current.Precision = el.GetPrecision()
 	current.Children = make([]*Schema, el.GetNumChildren())
-	current.Kind = kindFromSchemaElement(el)
-	if !current.Root {
-		current.Path = append(current.Path, el.GetName())
-	}
-
-	if current.Repetition == pthrift.FieldRepetitionType_REPEATED {
-		current.RepetitionLevel++
-	}
-
-	if current.Repetition != pthrift.FieldRepetitionType_REQUIRED {
-		current.DefinitionLevel++
-	}
 
 	offset := 1
 	for i := int32(0); i < el.GetNumChildren(); i++ {
@@ -222,23 +265,9 @@ func flatThriftSchemaToTreeRecurse(current *Schema, left []*pthrift.SchemaElemen
 	return offset
 }
 
-func kindFromSchemaElement(el *pthrift.SchemaElement) Kind {
-	if el.GetNumChildren() == 0 {
-		return PrimitiveKind
-	}
-
-	if el.ConvertedType != nil {
-		switch *el.ConvertedType {
-		case pthrift.ConvertedType_MAP, pthrift.ConvertedType_MAP_KEY_VALUE:
-			return MapKind
-		case pthrift.ConvertedType_LIST:
-			return RepeatedKind
-		}
-	}
-
-	if el.GetRepetitionType() == pthrift.FieldRepetitionType_REPEATED {
-		return RepeatedKind
-	}
-
-	return GroupKind
+func newPath(path []string, name string) []string {
+	newPath := make([]string, len(path)+1)
+	copy(newPath, path)
+	newPath[len(path)] = name
+	return newPath
 }
