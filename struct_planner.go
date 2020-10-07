@@ -107,7 +107,6 @@ type setFn func(stack *valueStack, value reflect.Value) reflect.Value
 // to build the actual Go types.
 type blueprint struct {
 	schema *Schema
-	t      reflect.Type
 	// Call this function to decode the value from readers.
 	read func(d Decoder) (reflect.Value, error)
 	// Call this function to set the value on the parent container.
@@ -135,7 +134,6 @@ func (bp *blueprint) register(index map[*Schema]*blueprint) {
 
 func bpFromStruct(p *blueprint, t reflect.Type) {
 	p.schema.Kind = GroupKind
-	p.t = t
 	p.create = func() reflect.Value {
 		return reflect.Zero(t)
 	}
@@ -170,7 +168,6 @@ func makeSetStructFieldFn(p *blueprint) setFn {
 }
 
 func bpFromMap(p *blueprint, t reflect.Type) {
-	p.t = t
 	p.schema.ConvertedType = pthrift.ConvertedTypePtr(pthrift.ConvertedType_MAP)
 	p.schema.Repetition = pthrift.FieldRepetitionType_REQUIRED
 	p.create = func() reflect.Value {
@@ -220,7 +217,6 @@ func bpFromMap(p *blueprint, t reflect.Type) {
 }
 
 func bpFromSlice(p *blueprint, t reflect.Type) {
-	p.t = t
 	p.schema.ConvertedType = pthrift.ConvertedTypePtr(pthrift.ConvertedType_LIST)
 	p.schema.Repetition = pthrift.FieldRepetitionType_REQUIRED
 	p.create = func() reflect.Value {
@@ -286,7 +282,6 @@ func bpFromAny(p *blueprint, t reflect.Type) {
 // fromPrimitive creates a schema leaf for a Go type that maps directly to a
 // Parquet primitive type.
 func bpFromPrimitive(p *blueprint, t reflect.Type) {
-	p.t = t
 	p.schema.Kind = PrimitiveKind
 	switch t.Kind() {
 	case reflect.Int32:
