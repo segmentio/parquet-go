@@ -2,7 +2,6 @@ package parquet
 
 import (
 	"fmt"
-	"log"
 	"reflect"
 
 	"github.com/iancoleman/strcase"
@@ -150,7 +149,6 @@ func bpFromStruct(p *blueprint, t reflect.Type) {
 			continue
 		}
 		name := normalizeName(field.Name)
-		log.Println("struct: field", name, "idx:", i)
 		child := &blueprint{
 			schema: &Schema{
 				Name: name,
@@ -293,12 +291,6 @@ func normalizeName(name string) string {
 
 type valueStack struct {
 	stack []reflect.Value
-}
-
-func (s *valueStack) dump() {
-	for _, x := range s.stack {
-		log.Println("->", x.String())
-	}
 }
 
 func (s *valueStack) push(v reflect.Value) {
