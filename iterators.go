@@ -193,7 +193,7 @@ func (i *RowGroupColumnReader) ensureReady() error {
 	return nil
 }
 
-// Ensures the current pageIterator has at least one row available, or asks for
+// Ensures the top pageIterator has at least one row available, or asks for
 // the next page.
 // Returns EOF if all the records have been read.
 func (i *RowGroupColumnReader) ensurePageAvailable() error {

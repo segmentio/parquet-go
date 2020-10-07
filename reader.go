@@ -230,7 +230,7 @@ var theVoidBuilder = &voidBuilder{}
 //
 // This is the high-level interface for reading parquet files. RowReader
 // presents an iterator interface. Call Next to advance the reader, Value to
-// retrieve the current value, and finally check for errors with Error when you
+// retrieve the top value, and finally check for errors with Error when you
 // are done.
 //
 // Example:

@@ -12,24 +12,12 @@ import (
 type StructBuilder struct {
 	index  map[*Schema]*blueprint
 	target reflect.Value
-	stack  []reflect.Value
-}
-
-func (sb *StructBuilder) push(v reflect.Value) {
-	sb.stack = append(sb.stack, v)
-}
-
-func (sb *StructBuilder) pop() {
-	sb.stack = sb.stack[:len(sb.stack)-1]
-}
-
-func (sb *StructBuilder) current() reflect.Value {
-	return sb.stack[len(sb.stack)-1]
+	stack  valueStack
 }
 
 func (sb *StructBuilder) Begin() {
 	debug.Format("StructBuilder - Begin")
-	sb.push(sb.target)
+	sb.stack.push(sb.target.Elem())
 }
 
 func (sb *StructBuilder) Primitive(s *Schema, d Decoder) error {
@@ -44,19 +32,8 @@ func (sb *StructBuilder) Primitive(s *Schema, d Decoder) error {
 		return err
 	}
 
-	if sb.current().Kind() == reflect.Slice {
-		slice := sb.current()
-		sb.pop()
-		slice = reflect.Append(slice, v)
+	bp.set(&sb.stack, v)
 
-		// does not work in all cases
-		sb.current().Elem().Field(bp.parent.idx).Set(slice)
-
-		sb.push(slice)
-	} else if sb.current().Elem().Kind() == reflect.Struct {
-		f := sb.current().Elem().Field(bp.idx)
-		f.Set(v)
-	}
 	return nil
 }
 
@@ -66,31 +43,28 @@ func (sb *StructBuilder) PrimitiveNil(s *Schema) error {
 
 func (sb *StructBuilder) GroupBegin(s *Schema) {
 	if s.Root {
-		// TODO: maybe support current being nil and create the top level structure?
+		// TODO: maybe support top being nil and create the top level structure?
 		return
 	}
-
-	// only works if the group is part of a struct
 	bp := sb.index[s]
-	f := sb.current().Elem().Field(bp.idx)
-	f.Set(reflect.Zero(bp.t))
-	sb.push(f.Addr())
+	v := reflect.Zero(bp.t)
+	bp.set(&sb.stack, v)
+	sb.stack.push(v)
 }
 
 func (sb *StructBuilder) GroupEnd(node *Schema) {
-	sb.pop()
+	sb.stack.pop()
 }
 
 func (sb *StructBuilder) RepeatedBegin(s *Schema) {
 	bp := sb.index[s]
-	// only works if the repeated group is part of a struct
-	f := sb.current().Elem().Field(bp.idx)
-	f.Set(reflect.Zero(bp.t))
-	sb.push(f)
+	v := reflect.Zero(bp.t)
+	bp.set(&sb.stack, v)
+	sb.stack.push(v)
 }
 
 func (sb *StructBuilder) RepeatedEnd(node *Schema) {
-	sb.pop()
+	sb.stack.pop()
 }
 
 func (sb *StructBuilder) KVBegin(node *Schema) {

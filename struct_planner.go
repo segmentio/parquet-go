@@ -2,6 +2,7 @@ package parquet
 
 import (
 	"fmt"
+	"log"
 	"reflect"
 
 	"github.com/iancoleman/strcase"
@@ -68,7 +69,7 @@ type StructPlanner struct {
 // Types not listed here are not supported.
 func StructPlannerOf(v interface{}) *StructPlanner {
 	t := reflect.TypeOf(v)
-	t = derefence(t)
+	t = dereference(t)
 
 	root := &blueprint{
 		schema: &Schema{},
@@ -98,18 +99,27 @@ func (sp *StructPlanner) Plan() *Plan {
 	}
 }
 
+type setFn func(stack *valueStack, value reflect.Value)
+
 // blueprint is a structure that parallels a schema, providing the information
 // to build the actual Go types.
 type blueprint struct {
 	schema *Schema
 	t      reflect.Type
-	// call this function to decode the value from readers
+	// Call this function to decode the value from readers.
 	read func(d Decoder) (reflect.Value, error)
-	// call this function to set the value
-	set      func(container reflect.Value, value reflect.Value)
+	// Call this function to set the value on the parent container.
+	set setFn
+	// Call this function to enter a new container. The function is responsible
+	// to create and initialize any intermediate structure if necessary.
+	enter func(stack *valueStack)
+	// Call this function to leave a container. Likely just a stack update.
+	leave func(stack *valueStack)
+
 	parent   *blueprint
 	children []*blueprint
-	idx      int // field index
+
+	fieldPath []int // path to a field in nested strings
 }
 
 func (bp *blueprint) add(child *blueprint) {
@@ -127,6 +137,10 @@ func (bp *blueprint) register(index map[*Schema]*blueprint) {
 func bpFromStruct(p *blueprint, t reflect.Type) {
 	p.schema.Kind = GroupKind
 	p.t = t
+	p.enter = func(stack *valueStack) {
+		newStruct := reflect.Zero(t)
+		p.parent.set(stack, newStruct)
+	}
 
 	n := t.NumField()
 	for i := 0; i < n; i++ {
@@ -136,16 +150,26 @@ func bpFromStruct(p *blueprint, t reflect.Type) {
 			continue
 		}
 		name := normalizeName(field.Name)
+		log.Println("struct: field", name, "idx:", i)
 		child := &blueprint{
-			idx: i,
 			schema: &Schema{
 				Name: name,
 				Path: newPath(p.schema.Path, name),
 			},
+			fieldPath: newFieldPath(p.fieldPath, i),
 		}
+		child.set = makeSetStructFieldFn(child)
+
 		bpFromAny(child, field.Type)
 		p.schema.Add(child.schema)
 		p.add(child)
+	}
+}
+
+func makeSetStructFieldFn(p *blueprint) setFn {
+	return func(stack *valueStack, value reflect.Value) {
+		// The expectation is that the top of the stack contains the struct.
+		stack.view(len(p.fieldPath) - 1).top().FieldByIndex(p.fieldPath).Set(value)
 	}
 }
 
@@ -156,9 +180,10 @@ func bpFromSlice(p *blueprint, t reflect.Type) {
 	p.schema.Repetition = pthrift.FieldRepetitionType_REQUIRED
 
 	list := &Schema{
-		Name:            "list",
-		Kind:            RepeatedKind,
-		Repetition:      pthrift.FieldRepetitionType_REPEATED,
+		Name:       "list",
+		Kind:       RepeatedKind,
+		Repetition: pthrift.FieldRepetitionType_REPEATED,
+		// TODO: write some functions to manipulate Schema that keep these invariants.
 		RepetitionLevel: p.schema.RepetitionLevel + 1,
 		DefinitionLevel: p.schema.DefinitionLevel + 1,
 		Path:            newPath(p.schema.Path, "list"),
@@ -177,8 +202,19 @@ func bpFromSlice(p *blueprint, t reflect.Type) {
 		schema: element,
 	}
 	p.add(ebp)
-
 	bpFromAny(ebp, t.Elem())
+	ebp.set = makeSetSliceFn(ebp)
+}
+
+func makeSetSliceFn(p *blueprint) setFn {
+	return func(stack *valueStack, value reflect.Value) {
+		// Expect top of stack to be the slice.
+		slice := reflect.Append(stack.top(), value)
+		stack.replace(slice)
+		// Re-set the stack on the parent as it may have been reallocated.
+		view := stack.view(1)
+		p.parent.set(view, slice)
+	}
 }
 
 func newPath(path []string, name string) []string {
@@ -188,8 +224,15 @@ func newPath(path []string, name string) []string {
 	return newPath
 }
 
+func newFieldPath(path []int, i int) []int {
+	newPath := make([]int, len(path)+1)
+	copy(newPath, path)
+	newPath[len(path)] = i
+	return newPath
+}
+
 func bpFromAny(p *blueprint, t reflect.Type) {
-	t = derefence(t)
+	t = dereference(t)
 
 	switch t.Kind() {
 	case reflect.Struct:
@@ -236,14 +279,46 @@ func bpFromPrimitive(p *blueprint, t reflect.Type) {
 	}
 }
 
-// recursively derefence a pointer type to a non pointer type
-func derefence(t reflect.Type) reflect.Type {
+// recursively dereference a pointer type to a non pointer type
+func dereference(t reflect.Type) reflect.Type {
 	if t.Kind() != reflect.Ptr {
 		return t
 	}
-	return derefence(t.Elem())
+	return dereference(t.Elem())
 }
 
 func normalizeName(name string) string {
 	return strcase.ToSnake(name)
+}
+
+type valueStack struct {
+	stack []reflect.Value
+}
+
+func (s *valueStack) dump() {
+	for _, x := range s.stack {
+		log.Println("->", x.String())
+	}
+}
+
+func (s *valueStack) push(v reflect.Value) {
+	s.stack = append(s.stack, v)
+}
+
+func (s *valueStack) pop() {
+	s.stack = s.stack[:len(s.stack)-1]
+}
+
+func (s *valueStack) replace(value reflect.Value) {
+	s.stack[len(s.stack)-1] = value
+}
+
+func (s *valueStack) top() reflect.Value {
+	return s.stack[len(s.stack)-1]
+}
+
+// view(0) is the same as the stack itself
+func (s *valueStack) view(offset int) *valueStack {
+	// TODO: that's on the hot path. not great
+	return &valueStack{stack: s.stack[:len(s.stack)-offset]}
 }
