@@ -109,11 +109,6 @@ type blueprint struct {
 	read func(d Decoder) (reflect.Value, error)
 	// Call this function to set the value on the parent container.
 	set setFn
-	// Call this function to enter a new container. The function is responsible
-	// to create and initialize any intermediate structure if necessary.
-	enter func(stack *valueStack)
-	// Call this function to leave a container. Likely just a stack update.
-	leave func(stack *valueStack)
 
 	parent   *blueprint
 	children []*blueprint
@@ -136,10 +131,6 @@ func (bp *blueprint) register(index map[*Schema]*blueprint) {
 func bpFromStruct(p *blueprint, t reflect.Type) {
 	p.schema.Kind = GroupKind
 	p.t = t
-	p.enter = func(stack *valueStack) {
-		newStruct := reflect.Zero(t)
-		p.parent.set(stack, newStruct)
-	}
 
 	n := t.NumField()
 	for i := 0; i < n; i++ {
@@ -235,19 +226,16 @@ func bpFromAny(p *blueprint, t reflect.Type) {
 	switch t.Kind() {
 	case reflect.Struct:
 		bpFromStruct(p, t)
-	case reflect.Int32, reflect.String:
-		bpFromPrimitive(p, t)
 	case reflect.Slice:
 		bpFromSlice(p, t)
 	default:
-		panic(fmt.Errorf("unhandled kind: %s", t.Kind()))
+		bpFromPrimitive(p, t)
 	}
 }
 
 // fromPrimitive creates a schema leaf for a Go type that maps directly to a
 // Parquet primitive type.
 func bpFromPrimitive(p *blueprint, t reflect.Type) {
-	// TODO: having to repeat the same case as in fromAny is not great.
 	p.t = t
 	p.schema.Kind = PrimitiveKind
 	switch t.Kind() {
@@ -289,6 +277,8 @@ func normalizeName(name string) string {
 	return strcase.ToSnake(name)
 }
 
+// Because StructBuilder gets called back from the reads it needs to keep track
+// of where it's at in the structure it is building.
 type valueStack struct {
 	stack []reflect.Value
 }
