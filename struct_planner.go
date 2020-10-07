@@ -284,10 +284,33 @@ func bpFromAny(p *blueprint, t reflect.Type) {
 func bpFromPrimitive(p *blueprint, t reflect.Type) {
 	p.schema.Kind = PrimitiveKind
 	switch t.Kind() {
+	case reflect.Uint16:
+		p.schema.PhysicalType = pthrift.Type_INT32
+		p.schema.ConvertedType = pthrift.ConvertedTypePtr(pthrift.ConvertedType_UINT_16)
+		p.schema.LogicalType = pthrift.NewLogicalType()
+		p.schema.LogicalType.INTEGER = pthrift.NewIntType()
+		p.schema.LogicalType.INTEGER.BitWidth = 16
+		p.schema.LogicalType.INTEGER.IsSigned = false
+		p.read = func(d Decoder) (reflect.Value, error) {
+			v, err := d.Int32()
+			if err != nil {
+				return reflect.Value{}, err
+			}
+			return reflect.ValueOf(uint16(v)), nil
+		}
 	case reflect.Int32:
 		p.schema.PhysicalType = pthrift.Type_INT32
 		p.read = func(d Decoder) (reflect.Value, error) {
 			v, err := d.Int32()
+			if err != nil {
+				return reflect.Value{}, err
+			}
+			return reflect.ValueOf(v), nil
+		}
+	case reflect.Int64:
+		p.schema.PhysicalType = pthrift.Type_INT64
+		p.read = func(d Decoder) (reflect.Value, error) {
+			v, err := d.Int64()
 			if err != nil {
 				return reflect.Value{}, err
 			}
