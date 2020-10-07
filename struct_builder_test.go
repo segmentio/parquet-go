@@ -14,6 +14,10 @@ import (
 	writerref "github.com/xitongsys/parquet-go/writer"
 )
 
+// All the tests in this file use parquet-go and its annotations to generate
+// the test parquet files.
+// This should be rewritten when we have our own writer.
+
 func TestStructBuilderSimple(t *testing.T) {
 	type Record struct {
 		Name string `parquet:"name=name, type=UTF8"`
@@ -96,6 +100,20 @@ func TestStructBuilderStructListStruct(t *testing.T) {
 		&Record{Tags: []Tag{{Key: "one", Value: "un"}, {Key: "two", Value: "deux"}}},
 		&Record{},
 		&Record{[]Tag{{Key: "three", Value: "trois"}}},
+	}
+
+	structBuilderTest(t, new(Record), new(Record), expected)
+}
+
+func TestStructBuilderMap(t *testing.T) {
+	type Record struct {
+		Map map[string]string `parquet:"name=map, type=MAP, keytype=UTF8, valuetype=UTF8"`
+	}
+
+	expected := []interface{}{
+		&Record{Map: map[string]string{"one": "un", "two": "deux"}},
+		&Record{Map: map[string]string{}},
+		&Record{Map: map[string]string{"three": "trois"}},
 	}
 
 	structBuilderTest(t, new(Record), new(Record), expected)

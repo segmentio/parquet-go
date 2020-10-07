@@ -6,7 +6,7 @@ import (
 )
 
 // StructBuilder implements the RowBuilder interface.
-// See NewStructBuilder for details.
+// It executes the plan constructed by StructPlanner.
 type StructBuilder struct {
 	index  map[*Schema]*blueprint
 	target reflect.Value
@@ -40,7 +40,7 @@ func (sb *StructBuilder) GroupBegin(s *Schema) {
 		return
 	}
 	bp := sb.index[s]
-	v := reflect.Zero(bp.t)
+	v := bp.create()
 	n := bp.set(&sb.stack, v)
 	sb.stack.push(n)
 }
@@ -51,7 +51,7 @@ func (sb *StructBuilder) GroupEnd(node *Schema) {
 
 func (sb *StructBuilder) RepeatedBegin(s *Schema) {
 	bp := sb.index[s]
-	v := reflect.Zero(bp.t)
+	v := bp.create()
 	bp.set(&sb.stack, v)
 	sb.stack.push(v)
 }
@@ -61,11 +61,11 @@ func (sb *StructBuilder) RepeatedEnd(node *Schema) {
 }
 
 func (sb *StructBuilder) KVBegin(node *Schema) {
-	panic("implement me")
+	// nothing to do
 }
 
 func (sb *StructBuilder) KVEnd(node *Schema) {
-	panic("implement me")
+	// nothing to do
 }
 
 func (sb *StructBuilder) End() {

@@ -112,6 +112,8 @@ type blueprint struct {
 	read func(d Decoder) (reflect.Value, error)
 	// Call this function to set the value on the parent container.
 	set setFn
+	// Call this function create the initial value of this container.
+	create func() reflect.Value
 
 	parent   *blueprint
 	children []*blueprint
@@ -134,6 +136,9 @@ func (bp *blueprint) register(index map[*Schema]*blueprint) {
 func bpFromStruct(p *blueprint, t reflect.Type) {
 	p.schema.Kind = GroupKind
 	p.t = t
+	p.create = func() reflect.Value {
+		return reflect.Zero(t)
+	}
 
 	n := t.NumField()
 	for i := 0; i < n; i++ {
@@ -164,11 +169,63 @@ func makeSetStructFieldFn(p *blueprint) setFn {
 	}
 }
 
+func bpFromMap(p *blueprint, t reflect.Type) {
+	p.t = t
+	p.schema.ConvertedType = pthrift.ConvertedTypePtr(pthrift.ConvertedType_MAP)
+	p.schema.Repetition = pthrift.FieldRepetitionType_REQUIRED
+	p.create = func() reflect.Value {
+		return reflect.MakeMap(t)
+	}
+
+	keyValue := &Schema{
+		Name:       "key_value",
+		Repetition: pthrift.FieldRepetitionType_REPEATED,
+	}
+	p.schema.Add(keyValue)
+
+	key := &Schema{
+		Name:       "key",
+		Repetition: pthrift.FieldRepetitionType_REQUIRED,
+	}
+	keyValue.Add(key)
+
+	keyBp := &blueprint{
+		schema: key,
+	}
+	p.add(keyBp)
+	bpFromAny(keyBp, t.Key())
+	keyBp.set = func(stack *valueStack, value reflect.Value) reflect.Value {
+		stack.push(value) // push the value on the stack to remember for the value set
+		return value
+	}
+
+	value := &Schema{
+		Name: "value",
+	}
+	keyValue.Add(value)
+
+	valueBp := &blueprint{
+		schema: value,
+	}
+	p.add(valueBp)
+	bpFromAny(valueBp, t.Elem())
+	valueBp.set = func(stack *valueStack, value reflect.Value) reflect.Value {
+		// Top of the stack is the key.
+		key := stack.top()
+		stack.pop()
+		// Second to the top is the actual map.
+		stack.top().SetMapIndex(key, value)
+		return value
+	}
+}
+
 func bpFromSlice(p *blueprint, t reflect.Type) {
 	p.t = t
-	p.schema.Kind = RepeatedKind
 	p.schema.ConvertedType = pthrift.ConvertedTypePtr(pthrift.ConvertedType_LIST)
 	p.schema.Repetition = pthrift.FieldRepetitionType_REQUIRED
+	p.create = func() reflect.Value {
+		return reflect.Zero(t)
+	}
 
 	list := &Schema{
 		Name:       "list",
@@ -219,6 +276,8 @@ func bpFromAny(p *blueprint, t reflect.Type) {
 		bpFromStruct(p, t)
 	case reflect.Slice:
 		bpFromSlice(p, t)
+	case reflect.Map:
+		bpFromMap(p, t)
 	default:
 		bpFromPrimitive(p, t)
 	}
