@@ -134,7 +134,6 @@ func (bp *blueprint) register(index map[*Schema]*blueprint) {
 }
 
 func bpFromStruct(p *blueprint, t reflect.Type) {
-	p.schema.Kind = GroupKind
 	p.create = func() reflect.Value {
 		return reflect.Zero(t)
 	}
@@ -283,7 +282,6 @@ func bpFromAny(p *blueprint, t reflect.Type) {
 // fromPrimitive creates a schema leaf for a Go type that maps directly to a
 // Parquet primitive type.
 func bpFromPrimitive(p *blueprint, t reflect.Type) {
-	p.schema.Kind = PrimitiveKind
 	switch t.Kind() {
 	case reflect.Uint16:
 		p.schema.PhysicalType = pthrift.Type_INT32
