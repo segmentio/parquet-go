@@ -3,8 +3,9 @@ package parquet
 import (
 	"fmt"
 	"reflect"
+	"strings"
+	"unicode"
 
-	"github.com/iancoleman/strcase"
 	pthrift "github.com/segmentio/parquet/internal/gen-go/parquet"
 )
 
@@ -342,7 +343,21 @@ func dereference(t reflect.Type) reflect.Type {
 }
 
 func normalizeName(name string) string {
-	return strcase.ToSnake(name)
+	// TODO: cache
+	var b strings.Builder
+	prevUpper := false
+	for i, c := range name {
+		if unicode.IsUpper(c) {
+			if !prevUpper && i > 0 {
+				b.WriteRune('_')
+			}
+			prevUpper = true
+		} else {
+			prevUpper = false
+		}
+		b.WriteRune(unicode.ToLower(c))
+	}
+	return b.String()
 }
 
 // Because StructBuilder gets called back from the reads it needs to keep track
