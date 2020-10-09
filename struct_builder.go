@@ -20,7 +20,7 @@ func (sb *StructBuilder) Begin() {
 func (sb *StructBuilder) Primitive(s *Schema, d Decoder) error {
 	bp, ok := sb.index[s]
 	if !ok {
-		panic("entry in s not found")
+		panic("entry in schema not found")
 	}
 	v, err := bp.read(d)
 	if err != nil {

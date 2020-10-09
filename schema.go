@@ -186,7 +186,7 @@ func computeKind(s *Schema) kind {
 	return groupKind
 }
 
-var errEmptySchema = errors.New("empty s")
+var errEmptySchema = errors.New("empty schema")
 
 // schemaFromFlatElements builds a schema tree from a list of SchemaElements. Parquet
 // serializes the schema tree by laying out its nodes in a depth-first order.
