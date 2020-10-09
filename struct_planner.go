@@ -9,7 +9,7 @@ import (
 	pthrift "github.com/segmentio/parquet/internal/gen-go/parquet"
 )
 
-// StructPlanner acts a factory for StructBuilder, and generates a Plan for
+// StructPlanner is a factory for StructBuilder, and generates a Plan for
 // RowBuilder that maps to the struct.
 type StructPlanner struct {
 	blueprint *blueprint

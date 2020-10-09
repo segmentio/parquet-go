@@ -53,7 +53,7 @@ func BenchmarkStageSmall(b *testing.B) {
 		b.ResetTimer()
 
 		for i := 0; i < b.N; i++ {
-			rowReader := parquet.NewRowReader(parquet.DefaultPlan, f)
+			rowReader := parquet.NewRowReader(f)
 
 			for {
 				err := rowReader.Read(builder)

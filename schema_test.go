@@ -126,7 +126,7 @@ func TestNodeStageDelete(t *testing.T) {
 
 func readableFlatTree(root *parquet.Schema) string {
 	var b strings.Builder
-	err := parquet.Walk(root, func(n *parquet.Schema) error {
+	err := walk(root, func(n *parquet.Schema) error {
 		b.WriteString(fmt.Sprintf("%s%s", strings.Repeat(".", len(n.Path)), n.Name))
 		b.WriteRune('\n')
 		return nil
@@ -135,4 +135,19 @@ func readableFlatTree(root *parquet.Schema) string {
 		panic("should not happen")
 	}
 	return b.String()
+}
+
+func walk(n *parquet.Schema, walkFn func(n *parquet.Schema) error) error {
+	err := walkFn(n)
+	if err != nil {
+		return err
+	}
+	for _, c := range n.Children {
+		err := walk(c, walkFn)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
