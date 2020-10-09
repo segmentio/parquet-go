@@ -6,6 +6,8 @@ steps:
       queue: v1
     commands: |
       env
+      export PATH=`pwd`:$PATH
+      env
       parquet-tools meta `pwd`/examples/stage-small.parquet
       go test ./...
   - label: 'Snyk'
