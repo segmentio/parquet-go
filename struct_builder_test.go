@@ -31,7 +31,7 @@ func TestStructBuilderSimple(t *testing.T) {
 		&Record{Name: "name3", Foo: 3},
 	}
 
-	structBuilderTest(t, new(Record), new(Record), expected)
+	structBuilderTest(t, new(Record), new(Record), expected, expected)
 }
 
 func TestStructBuilderNestedStructs(t *testing.T) {
@@ -49,7 +49,7 @@ func TestStructBuilderNestedStructs(t *testing.T) {
 		&Record{Foo: 3, Inner: Inner{Bar: 33}},
 	}
 
-	structBuilderTest(t, new(Record), new(Record), expected)
+	structBuilderTest(t, new(Record), new(Record), expected, expected)
 }
 
 func TestStructBuilderTwoNestedStructs(t *testing.T) {
@@ -71,7 +71,7 @@ func TestStructBuilderTwoNestedStructs(t *testing.T) {
 		&Record{Foo: 3, Inner: Inner{Bar: 33}, InnerTwo: InnerTwo{Bartwo: 333}},
 	}
 
-	structBuilderTest(t, new(Record), new(Record), expected)
+	structBuilderTest(t, new(Record), new(Record), expected, expected)
 }
 
 func TestStructBuilderList(t *testing.T) {
@@ -85,7 +85,7 @@ func TestStructBuilderList(t *testing.T) {
 		&Record{Foo: []int32{3}},
 	}
 
-	structBuilderTest(t, new(Record), new(Record), expected)
+	structBuilderTest(t, new(Record), new(Record), expected, expected)
 }
 
 func TestStructBuilderStructListStruct(t *testing.T) {
@@ -103,7 +103,7 @@ func TestStructBuilderStructListStruct(t *testing.T) {
 		&Record{[]Tag{{Key: "three", Value: "trois"}}},
 	}
 
-	structBuilderTest(t, new(Record), new(Record), expected)
+	structBuilderTest(t, new(Record), new(Record), expected, expected)
 }
 
 func TestStructBuilderMap(t *testing.T) {
@@ -117,7 +117,65 @@ func TestStructBuilderMap(t *testing.T) {
 		&Record{Map: map[string]string{"three": "trois"}},
 	}
 
-	structBuilderTest(t, new(Record), new(Record), expected)
+	structBuilderTest(t, new(Record), new(Record), expected, expected)
+}
+
+func TestStructBuilderAnonymousStruct(t *testing.T) {
+	type Record struct {
+		Inner struct {
+			Value int32 `parquet:"name=value, type=INT_32"`
+		} `parquet:"name=inner"`
+	}
+
+	expected := []interface{}{
+		&Record{Inner: struct {
+			Value int32 `parquet:"name=value, type=INT_32"`
+		}{Value: 42}},
+	}
+
+	structBuilderTest(t, new(Record), new(Record), expected, expected)
+}
+
+func TestStructBuilderAnonymousField(t *testing.T) {
+	type Anon struct {
+		Avalue int32 `parquet:"name=avalue, type=INT_32"`
+	}
+	type Record struct {
+		Anon  `parquet:"name=anon"`
+		Value int32 `parquet:"name=value, type=INT_32"`
+	}
+
+	expected := []interface{}{
+		&Record{
+			Anon:  Anon{Avalue: 1},
+			Value: 2,
+		},
+	}
+
+	structBuilderTest(t, new(Record), new(Record), expected, expected)
+}
+
+func TestStructBuilderIgnoreNonExported(t *testing.T) {
+	type Record struct {
+		ignored int32
+		Value   int32 `parquet:"name=value, type=INT_32"`
+	}
+
+	records := []interface{}{
+		&Record{
+			ignored: 1,
+			Value:   2,
+		},
+	}
+
+	expected := []interface{}{
+		&Record{
+			ignored: 0,
+			Value:   2,
+		},
+	}
+
+	structBuilderTest(t, new(Record), new(Record), expected, records)
 }
 
 func TestStructBuilderTraces(t *testing.T) {
@@ -173,10 +231,10 @@ func TestStructBuilderTraces(t *testing.T) {
 		},
 	}
 
-	structBuilderTest(t, new(benchmark.Trace), new(benchmark.Trace), expected)
+	structBuilderTest(t, new(benchmark.Trace), new(benchmark.Trace), expected, expected)
 }
 
-func structBuilderTest(t *testing.T, recordPgo, record interface{}, expected []interface{}) {
+func structBuilderTest(t *testing.T, recordPgo, record interface{}, expected []interface{}, records []interface{}) {
 	// We have to pass two different structs because the annotations are
 	// different between this library and parquet-go. This should all go
 	// away when we have our own writer.
@@ -186,7 +244,7 @@ func structBuilderTest(t *testing.T, recordPgo, record interface{}, expected []i
 		require.NoError(t, err)
 		writer, err := writerref.NewParquetWriter(dst, recordPgo, 1)
 		require.NoError(t, err)
-		for _, record := range expected {
+		for _, record := range records {
 			require.NoError(t, writer.Write(record))
 		}
 		require.NoError(t, writer.WriteStop())

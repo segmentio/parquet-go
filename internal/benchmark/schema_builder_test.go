@@ -5,12 +5,11 @@ import (
 	"os"
 	"testing"
 
-	"github.com/xitongsys/parquet-go-source/local"
-	"github.com/xitongsys/parquet-go/reader"
-
 	"github.com/segmentio/parquet"
 	"github.com/segmentio/parquet/internal/benchmark"
 	"github.com/stretchr/testify/require"
+	"github.com/xitongsys/parquet-go-source/local"
+	"github.com/xitongsys/parquet-go/reader"
 )
 
 func BenchmarkReflectReadRow(b *testing.B) {
