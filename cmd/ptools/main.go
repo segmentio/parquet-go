@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	color "github.com/logrusorgru/aurora/v3"
-	"github.com/segmentio/parquet/internal/debug"
 	"github.com/segmentio/cli"
+	"github.com/segmentio/parquet/internal/debug"
 )
 
 func main() {

@@ -26,7 +26,7 @@ func BenchmarkReflectReadRow(b *testing.B) {
 
 		pf, err := parquet.OpenFile(f)
 		require.NoError(b, err)
-		rowReader := parquet.NewRowReader(plan, pf)
+		rowReader := parquet.NewRowReaderWithPlan(plan, pf)
 
 		for {
 			target := &benchmark.Trace{}

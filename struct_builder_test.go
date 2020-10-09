@@ -261,7 +261,7 @@ func structBuilderTest(t *testing.T, recordPgo, record interface{}, expected []i
 		planner := parquet.StructPlannerOf(record)
 		builder := planner.Builder()
 		plan := planner.Plan()
-		rowReader := parquet.NewRowReader(plan, pf)
+		rowReader := parquet.NewRowReaderWithPlan(plan, pf)
 
 		var actual []interface{}
 

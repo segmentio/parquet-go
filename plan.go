@@ -2,13 +2,13 @@ package parquet
 
 // Plan describes how a RowReader should behave. It describes which columns
 // should be read, and the predicates to apply. The empty value is a plan that
-// considers all the columns in the file's schema a do not filter any row. Can
+// considers all the columns in the file's s a do not filter any row. Can
 // be used concurrently, and by multiple RowReaders.
 type Plan struct {
 	s *Schema
 }
 
-var DefaultPlan = &Plan{}
+var defaultPlan = &Plan{}
 
 // schema returns the Schema needed by the Plan.
 //

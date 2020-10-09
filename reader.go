@@ -106,9 +106,9 @@ func OpenFile(r io.ReadSeeker) (*File, error) {
 	return f, nil
 }
 
-// RowGroups returns an iterator over all the File's row groups.
-func (f *File) RowGroups() *RowGroupIterator {
-	return &RowGroupIterator{r: f}
+// rowGroups returns an iterator over all the File's row groups.
+func (f *File) rowGroups() *rowGroupIterator {
+	return &rowGroupIterator{r: f}
 }
 
 // Return a pointer to the File's metadata.
@@ -139,28 +139,20 @@ func (f *File) checkMagicBoundary() error {
 	return nil
 }
 
-// Field is a value read from a parquet file and a pointer to its schema node.
-type Field struct {
-	Schema *Schema
-	// Value is either a *Raw for a leaf node, or a []Field of any other
-	// node.
-	Value interface{}
-}
-
 type reader interface {
-	// Read returns the next value.
+	// read returns the next value.
 	// Expected to return (nil, EOF) when all values have been consumed.
-	Read(b RowBuilder) error
+	read(b RowBuilder) error
 
 	// Advance the reader without calling back a builder.
-	Skip() error
+	skip() error
 
 	// Peek returns repetition and definition levels for the next value.
-	Peek() (Levels, error)
+	peek() (levels, error)
 
 	// Bind resets the state of the root and adjust any relevant parameter
-	// based on the RowGroup header.
-	Bind(rg *RowGroup)
+	// based on the rowGroup header.
+	bind(rg *rowGroup)
 }
 
 // RowBuilder interface needs to be implemented to interpret the results of the
@@ -171,7 +163,7 @@ type RowBuilder interface {
 
 	// Called when a primitive field is read.
 	// It is up to this function to call the right method on the decoder based
-	// on the the schema of the field.
+	// on the the s of the field.
 	//
 	// Returning an error stops the parsing of the whole file.
 	Primitive(s *Schema, d Decoder) error
@@ -229,34 +221,37 @@ var theVoidBuilder = &voidBuilder{}
 // RowReader reads a parquet file, assembling rows as it goes.
 //
 // This is the high-level interface for reading parquet files. RowReader
-// presents an iterator interface. Call Next to advance the reader, Value to
-// retrieve the top value, and finally check for errors with Error when you
-// are done.
+// calls back methods on a RowBuilder interface as it assemble rows.
+// Call Read() to assemble the next row. It returns EOF when the file has been
+// fully processed.
 //
 // Example:
 //
 // 	rowReader := parquet.NewRowReader(file)
-//	for rowReader.Next() {
-//		v := rowReader.Value()
-//		fmt.Println(v)
+//	for {
+//		// builder implements RowBuilder.
+// 		err := rowReader.Read(builder)
+//		if err == parquet.EOF {
+//			break
+// 		}
+//		// Do something with err or whatever builder does.
 //	}
-//	err = rowReader.Error()
-//	if err != nil {
-//  	panic(err)
-//	}
+//
+// See StructPlanner to create a RowBuilder that constructs Go structures for
+// each row.
 type RowReader struct {
 	reader    *File
 	schema    *Schema
 	root      reader
-	rowGroups *RowGroupIterator
+	rowGroups *rowGroupIterator
 
 	// state
-	rowGroup *RowGroup
+	rowGroup *rowGroup
 }
 
-// Next assembles the next row, calling back the RowBuilder.
+// next assembles the next row, calling back the RowBuilder.
 // Returns true if a row was assembled.
-// Use Value to retrieve the row, and Error to check whether something went
+// Use value to retrieve the row, and Error to check whether something went
 // wrong.
 func (r *RowReader) Read(b RowBuilder) error {
 	if r.rowGroup == nil {
@@ -265,12 +260,12 @@ func (r *RowReader) Read(b RowBuilder) error {
 		}
 	}
 
-	_, err := r.root.Peek()
+	_, err := r.root.peek()
 	if err == EOF {
 		if !r.nextRowGroup() {
 			return EOF
 		}
-		_, err = r.root.Peek()
+		_, err = r.root.peek()
 	}
 	if err != nil {
 		return err
@@ -278,7 +273,7 @@ func (r *RowReader) Read(b RowBuilder) error {
 
 	b.Begin()
 
-	err = r.root.Read(b)
+	err = r.root.read(b)
 	if err != nil {
 		return err
 	}
@@ -289,45 +284,52 @@ func (r *RowReader) Read(b RowBuilder) error {
 }
 
 func (r *RowReader) nextRowGroup() bool {
-	if !r.rowGroups.Next() {
+	if !r.rowGroups.next() {
 		return false
 	}
 	debug.Format("-- New row group")
-	r.rowGroup = r.rowGroups.Value()
-	r.root.Bind(r.rowGroup)
+	r.rowGroup = r.rowGroups.value()
+	r.root.bind(r.rowGroup)
 	return true
 }
 
-// NewRowReader builds a RowReader using data from r and following the plan p.
-func NewRowReader(p *Plan, r *File) *RowReader {
+// NewRowReaderWithPlan builds a RowReader using data from f and following the plan p.
+func NewRowReaderWithPlan(p *Plan, f *File) *RowReader {
 	schema := p.schema()
 	if schema == nil {
-		// use the file's schema if the plan is not providing one
+		// use the file's s if the plan is not providing one
 		//
-		// TODO: do not parse the file's schema if the plan already
+		// TODO: do not parse the file's s if the plan already
 		// provides one.
-		schema = r.metadata.Schema
+		schema = f.metadata.Schema
 	}
 	return &RowReader{
-		// The root of a schema has to define a group.
+		// The root of a s has to define a group.
 		root:      newGroupReader(schema),
-		reader:    r,
-		rowGroups: r.RowGroups(),
+		reader:    f,
+		rowGroups: f.rowGroups(),
 		schema:    schema,
 	}
+}
+
+// NewRowReader constructs a RowReader to read rows from f.
+//
+// Use NewRowReaderWithPlan to process rows more finely with a Plan.
+func NewRowReader(f *File) *RowReader {
+	return NewRowReaderWithPlan(defaultPlan, f)
 }
 
 // newReader builds the appropriate reader for s.
 func newReader(s *Schema) reader {
 	// TODO: handle optionals
 	switch s.Kind {
-	case PrimitiveKind:
+	case primitiveKind:
 		return newPrimitiveReader(s)
-	case MapKind:
+	case mapKind:
 		return newKvReader(s)
-	case RepeatedKind:
+	case repeatedKind:
 		return newRepeatedReader(s)
-	case GroupKind:
+	case groupKind:
 		return newGroupReader(s)
 	default:
 		panic("unhandled group kind")
@@ -339,20 +341,19 @@ type primitiveReader struct {
 	schema *Schema
 
 	// will be bound at read time
-	it   *RowGroupColumnReader
-	next *Raw
+	it *rowGroupColumnReader
 }
 
 func (r *primitiveReader) String() string        { return "PrimaryReader " + r.schema.Name }
-func (r *primitiveReader) Peek() (Levels, error) { return r.it.Peek() }
-func (r *primitiveReader) Bind(rg *RowGroup) {
+func (r *primitiveReader) peek() (levels, error) { return r.it.peek() }
+func (r *primitiveReader) bind(rg *rowGroup) {
 	r.it = rg.Column(r.schema)
 	if r.it == nil { // TODO: proper error handling
 		panic(fmt.Errorf("could not find a column at %s for reader %s", r.schema.Path, r.String()))
 	}
 }
-func (r *primitiveReader) Skip() error             { return r.it.Read(theVoidBuilder) }
-func (r *primitiveReader) Read(b RowBuilder) error { return r.it.Read(b) }
+func (r *primitiveReader) skip() error             { return r.it.read(theVoidBuilder) }
+func (r *primitiveReader) read(b RowBuilder) error { return r.it.read(b) }
 
 func newPrimitiveReader(s *Schema) *primitiveReader {
 	return &primitiveReader{schema: s}
@@ -365,19 +366,19 @@ type groupReader struct {
 }
 
 func (r *groupReader) String() string { return "GroupReader " + r.schema.Name }
-func (r *groupReader) Peek() (Levels, error) {
-	return r.readers[0].Peek()
+func (r *groupReader) peek() (levels, error) {
+	return r.readers[0].peek()
 }
-func (r *groupReader) Bind(rg *RowGroup) {
+func (r *groupReader) bind(rg *rowGroup) {
 	for _, reader := range r.readers {
-		reader.Bind(rg)
+		reader.bind(rg)
 	}
 }
 
-func (r *groupReader) Read(b RowBuilder) error {
+func (r *groupReader) read(b RowBuilder) error {
 	b.GroupBegin(r.schema)
 	for _, reader := range r.readers {
-		err := reader.Read(b)
+		err := reader.read(b)
 		if err != nil {
 			return err
 		}
@@ -386,9 +387,9 @@ func (r *groupReader) Read(b RowBuilder) error {
 	return nil
 }
 
-func (r *groupReader) Skip() error {
+func (r *groupReader) skip() error {
 	for _, reader := range r.readers {
-		err := reader.Skip()
+		err := reader.skip()
 		if err != nil {
 			return err
 		}
@@ -416,25 +417,25 @@ type kvReader struct {
 }
 
 func (r *kvReader) String() string { return "KVReader " + r.schema.Name }
-func (r *kvReader) Bind(rg *RowGroup) {
-	r.keyReader.Bind(rg)
-	r.valueReader.Bind(rg)
+func (r *kvReader) bind(rg *rowGroup) {
+	r.keyReader.bind(rg)
+	r.valueReader.bind(rg)
 }
 
-func (r *kvReader) Peek() (Levels, error) {
-	return r.keyReader.Peek()
+func (r *kvReader) peek() (levels, error) {
+	return r.keyReader.peek()
 }
 
-func (r *kvReader) Skip() error {
-	err := r.keyReader.Skip()
+func (r *kvReader) skip() error {
+	err := r.keyReader.skip()
 	if err != nil {
 		return err
 	}
-	return r.valueReader.Skip()
+	return r.valueReader.skip()
 }
 
-func (r *kvReader) Read(b RowBuilder) error {
-	_, err := r.Peek()
+func (r *kvReader) read(b RowBuilder) error {
+	_, err := r.peek()
 	if err != nil {
 		return err
 	}
@@ -442,42 +443,42 @@ func (r *kvReader) Read(b RowBuilder) error {
 	b.RepeatedBegin(r.schema)
 
 	for {
-		levels, err := r.Peek()
+		levels, err := r.peek()
 		if err != nil {
 			return err
 		}
 
-		if levels.Definition > r.schema.DefinitionLevel {
+		if levels.definition > r.schema.DefinitionLevel {
 			b.KVBegin(r.schema.Children[0])
-			err = r.keyReader.Read(b)
+			err = r.keyReader.read(b)
 			if err != nil {
 				return err
 			}
-			err = r.valueReader.Read(b)
+			err = r.valueReader.read(b)
 			if err != nil {
 				return err
 			}
 			b.KVEnd(r.schema.Children[0])
 		} else {
-			err = r.keyReader.Skip()
+			err = r.keyReader.skip()
 			if err != nil {
 				return err
 			}
-			err = r.valueReader.Skip()
+			err = r.valueReader.skip()
 			if err != nil {
 				return err
 			}
 			break
 		}
 
-		levels, err = r.Peek()
+		levels, err = r.peek()
 		if err == EOF {
 			break
 		}
 		if err != nil {
 			return err
 		}
-		if levels.Repetition <= r.schema.RepetitionLevel {
+		if levels.repetition <= r.schema.RepetitionLevel {
 			break
 		}
 	}
@@ -556,12 +557,12 @@ type repeatedReader struct {
 }
 
 func (r *repeatedReader) String() string        { return "RepeatedReader " + r.schema.Name }
-func (r *repeatedReader) Bind(rg *RowGroup)     { r.reader.Bind(rg) }
-func (r *repeatedReader) Peek() (Levels, error) { return r.reader.Peek() }
-func (r *repeatedReader) Skip() error           { return r.reader.Skip() }
-func (r *repeatedReader) Read(b RowBuilder) error {
+func (r *repeatedReader) bind(rg *rowGroup)     { r.reader.bind(rg) }
+func (r *repeatedReader) peek() (levels, error) { return r.reader.peek() }
+func (r *repeatedReader) skip() error           { return r.reader.skip() }
+func (r *repeatedReader) read(b RowBuilder) error {
 	// check for EOF
-	_, err := r.Peek()
+	_, err := r.peek()
 	if err != nil {
 		return err
 	}
@@ -569,26 +570,26 @@ func (r *repeatedReader) Read(b RowBuilder) error {
 	b.RepeatedBegin(r.schema)
 
 	for {
-		levels, err := r.Peek()
+		levels, err := r.peek()
 		if err != nil {
 			return err
 		}
 
-		if levels.Definition > r.schema.DefinitionLevel {
-			err = r.reader.Read(b)
+		if levels.definition > r.schema.DefinitionLevel {
+			err = r.reader.read(b)
 			if err != nil {
 				return err
 			}
 		} else {
 			// this is an empty list
-			err = r.reader.Skip()
+			err = r.reader.skip()
 			if err != nil {
 				return err
 			}
 			break
 		}
 
-		levels, err = r.Peek()
+		levels, err = r.peek()
 		if err == EOF {
 			break
 		}
@@ -597,7 +598,7 @@ func (r *repeatedReader) Read(b RowBuilder) error {
 		}
 
 		// next level will be part of a different row
-		if levels.Repetition <= r.schema.RepetitionLevel {
+		if levels.repetition <= r.schema.RepetitionLevel {
 			break
 		}
 	}
@@ -635,7 +636,7 @@ func newRepeatedReader(s *Schema) *repeatedReader {
 	if list.Name != "list" {
 		panic(fmt.Errorf("LIST's child must be named 'list' (not '%s')", list.Name))
 	}
-	if list.Kind != RepeatedKind {
+	if list.Kind != repeatedKind {
 		panic("LIST's child must be repeated")
 	}
 	if list.Repetition != pthrift.FieldRepetitionType_REPEATED {

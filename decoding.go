@@ -47,14 +47,6 @@ type Decoder interface {
 	ByteArray(dst []byte) ([]byte, error)
 }
 
-type EmptyDecoder struct{}
-
-func (e *EmptyDecoder) prepare(r io.Reader)                     {}
-func (e *EmptyDecoder) Int32() (int32, error)                   { return 0, nil }
-func (e *EmptyDecoder) Int64() (int64, error)                   { return 0, nil }
-func (e *EmptyDecoder) Uint32(bitWidth int, out []uint32) error { return nil }
-func (e *EmptyDecoder) ByteArray() ([]byte, error)              { return nil, nil }
-
 // Construct a Decoder for a given encoding.
 // Technically, not all encoding work everywhere. Let's say good-enough for now.
 func decoderFor(enc pthrift.Encoding) (Decoder, error) {

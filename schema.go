@@ -25,28 +25,28 @@ type Schema struct {
 	Path            []string
 	// Computed attributes (segmentio/parquet)
 	Root bool
-	Kind Kind
+	Kind kind
 
 	// Tree structure
 	parent   *Schema
 	Children []*Schema
 }
 
-// Kind indicates the kind of structure a schema node (and its descendent in
+// kind indicates the kind of structure a schema node (and its descendent in
 // the tree) represent.
-type Kind int
+type kind int
 
 const (
-	// PrimitiveKind nodes are terminal nodes that map to actual columns in
+	// primitiveKind nodes are terminal nodes that map to actual columns in
 	// the parquet files.
-	PrimitiveKind Kind = iota
-	// GroupKind nodes represent compound objects mad of multiple nodes.
-	GroupKind
-	// MapKind nodes are follow the MAP structure.
-	MapKind
-	// RepeatedKind nodes are nodes that are expected to be repeated and not
+	primitiveKind kind = iota
+	// groupKind nodes represent compound objects made of multiple nodes.
+	groupKind
+	// mapKind nodes are follow the MAP structure.
+	mapKind
+	// repeatedKind nodes are nodes that are expected to be repeated and not
 	// following the MAP structure.
-	RepeatedKind
+	repeatedKind
 )
 
 func (sn *Schema) Parent() *Schema {
@@ -73,7 +73,7 @@ func (sn *Schema) At(path ...string) *Schema {
 // Panics if called on the root of the schema.
 func (sn *Schema) Remove() {
 	if sn.Root {
-		panic("tried to remove the root of the schema")
+		panic("tried to remove the root of the s")
 	}
 	p := sn.Parent()
 	for i := range p.Children {
@@ -85,7 +85,7 @@ func (sn *Schema) Remove() {
 		}
 	}
 
-	if p.Kind != GroupKind {
+	if p.Kind != groupKind {
 		p.Remove()
 	}
 }
@@ -165,47 +165,26 @@ func (sn *Schema) Compute() {
 	}
 }
 
-func computeKind(s *Schema) Kind {
+func computeKind(s *Schema) kind {
 	if len(s.Children) == 0 {
-		return PrimitiveKind
+		return primitiveKind
 	}
 
 	if s.ConvertedType != nil {
 		switch *s.ConvertedType {
 		case pthrift.ConvertedType_MAP, pthrift.ConvertedType_MAP_KEY_VALUE:
-			return MapKind
+			return mapKind
 		case pthrift.ConvertedType_LIST:
-			return RepeatedKind
+			return repeatedKind
 		}
 	}
 
 	if s.Repetition == pthrift.FieldRepetitionType_REPEATED {
-		return RepeatedKind
+		return repeatedKind
 	}
 
-	return GroupKind
+	return groupKind
 }
-
-// Walk the schema tree depth-first, calling walkFn for every node visited.
-// If walk fn returns an error, the walk stops.
-// It is recommended to not modify the tree while walking it.
-func Walk(n *Schema, walkFn WalkFn) error {
-	err := walkFn(n)
-	if err != nil {
-		return err
-	}
-	for _, c := range n.Children {
-		err := Walk(c, walkFn)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// WalkFn is the type of functions called for each node visited by Walk.
-type WalkFn func(n *Schema) error
 
 var errEmptySchema = errors.New("empty schema")
 

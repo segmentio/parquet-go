@@ -68,7 +68,7 @@ func (tr *Reader) Fork() *Reader {
 // Read implements the io.Reader interface, forwarding the call to the
 // underlying Thrift protocol Reader.
 func (tr *Reader) Read(p []byte) (int, error) {
-	debug.Format("thrift: Reader: Read %d", len(p))
+	debug.Format("thrift: Reader: read %d", len(p))
 	return tr.protocol.Transport().Read(p)
 }
 
