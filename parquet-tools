@@ -1,0 +1,9 @@
+#!/bin/bash
+#
+# This is a wrapper around the parquet-tools docker image to be able to run
+# parquet-tools in CI without having to do build too convoluted docker images.
+
+cmd=$1
+path=$2
+
+exec docker run -ti -v $(dirname $path):/data ghcr.io/pelletier/parquet-tools:latest meta /data/$(basename $path)
