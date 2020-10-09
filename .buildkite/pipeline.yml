@@ -3,10 +3,7 @@ steps:
     agents:
       queue: v1
     commands: |
-      env
-      ln -s `pwd`/parquet-tools /home/buildkite-agent/.local/bin/parquet-tools
-      parquet-tools meta `pwd`/examples/stage-small.parquet
-      go test ./...
+      make buildkite
   - label: 'Snyk'
     env:
       SEGMENT_CONTEXTS: "snyk"
