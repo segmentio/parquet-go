@@ -6,8 +6,7 @@ steps:
       queue: v1
     commands: |
       env
-      export PATH=`pwd`:$PATH
-      env
+      ln -s `pwd`/parquet-tools /home/buildkite-agent/.local/bin/parquet-tools
       parquet-tools meta `pwd`/examples/stage-small.parquet
       go test ./...
   - label: 'Snyk'
