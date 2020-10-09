@@ -5,6 +5,7 @@ steps:
     agents:
       queue: v1
     commands: |
+      env
       parquet-tools meta `pwd`/examples/stage-small.parquet
       go test ./...
   - label: 'Snyk'
