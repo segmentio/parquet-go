@@ -5,7 +5,7 @@ steps:
     agents:
       queue: v1
     commands: |
-      docker run -ti -v /home/thomas/src/github.com/segmentio/parquet/examples/:/data ghcr.io/pelletier/parquet-tools:latest meta /data/stage-small.parquet
+      parquet-tools meta `pwd`/examples/stage-small.parquet
       go test ./...
   - label: 'Snyk'
     env:
