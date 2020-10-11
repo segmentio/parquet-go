@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/segmentio/parquet/internal/debug"
 	pthrift "github.com/segmentio/parquet/internal/gen-go/parquet"
 	"github.com/segmentio/parquet/internal/thrift"
 )
@@ -285,7 +284,6 @@ func (r *RowReader) nextRowGroup() bool {
 	if !r.rowGroups.next() {
 		return false
 	}
-	debug.Format("-- New row group")
 	r.rowGroup = r.rowGroups.value()
 	r.root.bind(r.rowGroup)
 	return true
