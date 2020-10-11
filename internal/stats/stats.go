@@ -27,25 +27,25 @@ func (c *Counter) Add(n int64) {
 type Duration struct {
 	t     time.Time
 	mutex sync.Mutex
+	once  sync.Once
 }
 
 func (d *Duration) Init() {
-	if !d.t.IsZero() {
-		return
-	}
-	d.mutex.Lock()
-	if !d.t.IsZero() {
-		return
-	}
-	d.t = time.Now()
-	d.mutex.Unlock()
+	d.once.Do(func() {
+		d.mutex.Lock()
+		defer d.mutex.Unlock()
+		if !d.t.IsZero() {
+			return
+		}
+		d.t = time.Now()
+	})
 }
 
 func (d *Duration) Snapshot() time.Duration {
 	d.mutex.Lock()
+	defer d.mutex.Unlock()
 	now := time.Now()
 	delta := now.Sub(d.t)
 	d.t = now
-	d.mutex.Unlock()
 	return delta
 }
