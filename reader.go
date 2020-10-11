@@ -249,10 +249,8 @@ type RowReader struct {
 	rowGroup *rowGroup
 }
 
-// next assembles the next row, calling back the RowBuilder.
-// Returns true if a row was assembled.
-// Use value to retrieve the row, and Error to check whether something went
-// wrong.
+// Read assembles the next row, calling back the RowBuilder.
+// Returns EOF when all rows have been read.
 func (r *RowReader) Read(b RowBuilder) error {
 	if r.rowGroup == nil {
 		if !r.nextRowGroup() {
