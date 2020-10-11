@@ -18,6 +18,7 @@ import (
 	"runtime/pprof"
 	"strconv"
 
+	"github.com/segmentio/cli/human"
 	"github.com/segmentio/parquet"
 	"github.com/segmentio/parquet/internal/debug"
 	pthrift "github.com/segmentio/parquet/internal/gen-go/parquet"
@@ -28,6 +29,7 @@ type catFlags struct {
 	Debug      bool     `flag:"--debug" help:"Display debugging logs" default:"false"`
 	CPUProfile string   `flag:"--cpu-profile" help:"Record a pprof CPU profile to the given file" default:"-"`
 	MemProfile string   `flag:"--mem-profile" help:"Record a pprof memory profile to the given file" default:"-"`
+	Stats      bool     `flag:"--stats" help:"Write some stats about the process to stderr" default:"false"`
 }
 
 func catCommand(flags catFlags, path string) {
@@ -81,6 +83,20 @@ func catCommand(flags catFlags, path string) {
 		if err != nil {
 			perrorf("error: %s", err)
 		}
+	}
+
+	if flags.Stats {
+		stats := rowReader.Stats()
+		printf("Statistics ==============================")
+		printf("Duration: %v", human.Duration(stats.Duration))
+		printf("Rows: %d", stats.Rows)
+		printf("Bytes: %d", stats.ReaderBytes)
+		printf("Reads: %d", stats.ReaderReads)
+		printf("Seeks: %d", stats.ReaderSeeks)
+		bytesThroughput := float64(stats.ReaderBytes) / stats.Duration.Seconds()
+		printf("Bytes throughput: %b/s", human.Bytes(bytesThroughput))
+		rowsThroughput := float64(stats.Rows) / stats.Duration.Seconds()
+		printf("Rows throughput: %d rows/s", int64(rowsThroughput))
 	}
 
 	if flags.MemProfile != "" {

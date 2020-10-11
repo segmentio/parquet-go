@@ -17,10 +17,14 @@ func main() {
 }
 
 func perrorf(format string, args ...interface{}) {
+	printf(color.Red(format).String(), args...)
+}
+
+func printf(format string, args ...interface{}) {
 	if !strings.HasSuffix(format, "\n") {
 		format += "\n"
 	}
-	_, _ = fmt.Fprintf(os.Stderr, color.Red(format).String(), args...)
+	_, _ = fmt.Fprintf(os.Stderr, format, args...)
 }
 
 func pdebugf(format string, args ...interface{}) {

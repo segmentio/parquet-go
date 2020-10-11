@@ -12,3 +12,6 @@ internal/gen-go/parquet/parquet.go: Dockerfile.thrift
 buildkite:
 	docker build . -f Dockerfile.buildkite -t parquet-buildkite
 	docker run -ti parquet-buildkite go test -race ./...
+
+ptools:
+	go build ./cmd/ptools

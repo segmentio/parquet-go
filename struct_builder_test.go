@@ -276,5 +276,6 @@ func structBuilderTest(t *testing.T, recordPgo, record interface{}, expected []i
 		}
 
 		require.Equal(t, expected, actual)
+		require.Equal(t, int64(len(expected)), rowReader.Stats().Rows)
 	})
 }

@@ -16,6 +16,10 @@ type Shared struct {
 	r *OffsetTracking
 }
 
+func (s *Shared) Stats() *ReaderStats {
+	return s.r.Stats()
+}
+
 // NewShared creates a new Shared io.ReadSeeker
 func NewShared(r io.ReadSeeker) *Shared {
 	return &Shared{r: NewOffsetTracking(r)}

@@ -4,8 +4,10 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"time"
 
 	pthrift "github.com/segmentio/parquet/internal/gen-go/parquet"
+	"github.com/segmentio/parquet/internal/stats"
 	"github.com/segmentio/parquet/internal/thrift"
 )
 
@@ -246,11 +248,18 @@ type RowReader struct {
 
 	// state
 	rowGroup *rowGroup
+	stats    *rowReaderStats
+}
+
+type rowReaderStats struct {
+	duration stats.Duration
+	rows     stats.Counter
 }
 
 // Read assembles the next row, calling back the RowBuilder.
 // Returns EOF when all rows have been read.
 func (r *RowReader) Read(b RowBuilder) error {
+	r.stats.duration.Init()
 	if r.rowGroup == nil {
 		if !r.nextRowGroup() {
 			return EOF
@@ -274,10 +283,45 @@ func (r *RowReader) Read(b RowBuilder) error {
 	if err != nil {
 		return err
 	}
+	r.stats.rows.Inc()
 
 	b.End()
 
 	return nil
+}
+
+// RowReaderStats is a data structure returned by RowReader.Stats() that
+// contains metrics about the Reader's actions.
+type RowReaderStats struct {
+	// Time duration since the last Stats() call, or beginning for first
+	// Read(), whichever is last.
+	Duration time.Duration
+
+	// Number of rows that have been read.
+	Rows int64
+
+	// Number of bytes read by the underlying reader.
+	ReaderBytes int64
+	// Number of times the underlying reader was asked to read.
+	ReaderReads int64
+	// Number of times the underlying reader was asked to seek.
+	ReaderSeeks int64
+	// Number of times the underlying reader was asked to fork.
+	ReaderForks int64
+}
+
+// Stats returns a snapshot of the RowReader's stats since the the RowReader
+// was created, or since the last time the method was called.
+func (r *RowReader) Stats() RowReaderStats {
+	readerStats := r.reader.thrift.Stats()
+	return RowReaderStats{
+		Duration:    r.stats.duration.Snapshot(),
+		Rows:        r.stats.rows.Snapshot(),
+		ReaderBytes: readerStats.Bytes.Snapshot(),
+		ReaderReads: readerStats.Reads.Snapshot(),
+		ReaderSeeks: readerStats.Seeks.Snapshot(),
+		ReaderForks: readerStats.Forks.Snapshot(),
+	}
 }
 
 func (r *RowReader) nextRowGroup() bool {
@@ -305,6 +349,8 @@ func NewRowReaderWithPlan(p *Plan, f *File) *RowReader {
 		reader:    f,
 		rowGroups: f.rowGroups(),
 		schema:    schema,
+
+		stats: &rowReaderStats{},
 	}
 }
 

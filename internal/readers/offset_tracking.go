@@ -11,12 +11,18 @@ import (
 type OffsetTracking struct {
 	r      io.ReadSeeker
 	offset int64
+	stats  *ReaderStats
+}
+
+func (otr *OffsetTracking) Stats() *ReaderStats {
+	return otr.stats
 }
 
 // NewOffsetTracking creates a new OffsetTracking ReadSeeker.
 func NewOffsetTracking(r io.ReadSeeker) *OffsetTracking {
 	return &OffsetTracking{
-		r: r,
+		r:     r,
+		stats: &ReaderStats{},
 	}
 }
 
@@ -31,7 +37,10 @@ func (otr *OffsetTracking) Offset() int64 {
 func (otr *OffsetTracking) Read(p []byte) (int, error) {
 	oldOffset := otr.offset
 	n, err := otr.r.Read(p)
-	otr.offset += int64(n)
+	n64 := int64(n)
+	otr.offset += n64
+	otr.stats.Bytes.Add(n64)
+	otr.stats.Reads.Inc()
 	debug.Format("otr: read: %d at %d (> %d)", len(p), oldOffset, otr.offset)
 	return n, err
 }
@@ -42,14 +51,17 @@ func (otr *OffsetTracking) Seek(offset int64, whence int) (int64, error) {
 	n, err := otr.r.Seek(offset, whence)
 	debug.Format("otr: seek: %d > %d", otr.offset, n)
 	otr.offset = n
+	otr.stats.Seeks.Inc()
 	return n, err
 }
 
 // Fork returns a new OffsetTracking reader using the same underlying
 // io.ReadSeeker. The new reader is initialize with its parent's offset.
 func (otr *OffsetTracking) Fork() ForkReadSeeker {
+	otr.stats.Forks.Inc()
 	return &OffsetTracking{
 		r:      otr.r,
 		offset: otr.Offset(),
+		stats:  otr.stats,
 	}
 }
