@@ -9,38 +9,44 @@ import (
 
 // Schema represents a node in the schema tree of Parquet.
 type Schema struct {
-	ID              int32
-	Name            string
-	Kind            Kind
-	PhysicalType    pthrift.Type
-	ConvertedType   *pthrift.ConvertedType
-	LogicalType     *pthrift.LogicalType
-	Repetition      pthrift.FieldRepetitionType
-	Scale           int32
-	Precision       int32
+	// User-definable attributes
+	ID            int32
+	Name          string
+	PhysicalType  pthrift.Type
+	ConvertedType *pthrift.ConvertedType
+	LogicalType   *pthrift.LogicalType
+	Repetition    pthrift.FieldRepetitionType
+	Scale         int32
+	Precision     int32
+
+	// Computed attributes (parquets spec)
 	RepetitionLevel uint32
 	DefinitionLevel uint32
 	Path            []string
-	Root            bool
-	parent          *Schema
-	Children        []*Schema
+	// Computed attributes (segmentio/parquet)
+	Root bool
+	Kind kind
+
+	// Tree structure
+	parent   *Schema
+	Children []*Schema
 }
 
-// Kind indicates the kind of structure a schema node (and its descendent in
+// kind indicates the kind of structure a schema node (and its descendent in
 // the tree) represent.
-type Kind int
+type kind int
 
 const (
-	// PrimitiveKind nodes are terminal nodes that map to actual columns in
+	// primitiveKind nodes are terminal nodes that map to actual columns in
 	// the parquet files.
-	PrimitiveKind Kind = iota
-	// GroupKind nodes represent compound objects mad of multiple nodes.
-	GroupKind
-	// MapKind nodes are follow the MAP structure.
-	MapKind
-	// RepeatedKind nodes are nodes that are expected to be repeated and not
+	primitiveKind kind = iota
+	// groupKind nodes represent compound objects made of multiple nodes.
+	groupKind
+	// mapKind nodes are follow the MAP structure.
+	mapKind
+	// repeatedKind nodes are nodes that are expected to be repeated and not
 	// following the MAP structure.
-	RepeatedKind
+	repeatedKind
 )
 
 func (sn *Schema) Parent() *Schema {
@@ -67,7 +73,7 @@ func (sn *Schema) At(path ...string) *Schema {
 // Panics if called on the root of the schema.
 func (sn *Schema) Remove() {
 	if sn.Root {
-		panic("tried to remove the root of the schema")
+		panic("tried to remove the root of the s")
 	}
 	p := sn.Parent()
 	for i := range p.Children {
@@ -79,7 +85,7 @@ func (sn *Schema) Remove() {
 		}
 	}
 
-	if p.Kind != GroupKind {
+	if p.Kind != groupKind {
 		p.Remove()
 	}
 }
@@ -127,36 +133,58 @@ func (sn *Schema) traverse(path []string, f func(node *Schema)) error {
 }
 
 // Add a node as a direct child of this node.
-// It updates the parent/children relationships, and the path of the provided
-// node.
+// It updates the parent/children relationships.
 func (sn *Schema) Add(node *Schema) {
 	sn.Children = append(sn.Children, node)
 	node.parent = sn
-	node.Path = make([]string, len(sn.Path), len(sn.Path)+1)
-	copy(node.Path, sn.Path)
-	node.Path = append(node.Path, node.Name)
 }
 
-// Walk the schema tree depth-first, calling walkFn for every node visited.
-// If walk fn returns an error, the walk stops.
-// It is recommended to not modify the tree while walking it.
-func Walk(n *Schema, walkFn WalkFn) error {
-	err := walkFn(n)
-	if err != nil {
-		return err
+// Compute walks the Schema and update all computed attributes.
+func (sn *Schema) Compute() {
+	if sn.parent == nil {
+		sn.Root = true
 	}
-	for _, c := range n.Children {
-		err := Walk(c, walkFn)
-		if err != nil {
-			return err
+
+	if sn.parent != nil {
+		sn.RepetitionLevel = sn.parent.RepetitionLevel
+		sn.DefinitionLevel = sn.parent.DefinitionLevel
+		sn.Path = newPath(sn.parent.Path, sn.Name)
+	}
+
+	if sn.Repetition == pthrift.FieldRepetitionType_REPEATED {
+		sn.RepetitionLevel++
+	}
+	if sn.Repetition != pthrift.FieldRepetitionType_REQUIRED {
+		sn.DefinitionLevel++
+	}
+
+	sn.Kind = computeKind(sn)
+
+	for _, c := range sn.Children {
+		c.Compute()
+	}
+}
+
+func computeKind(s *Schema) kind {
+	if len(s.Children) == 0 {
+		return primitiveKind
+	}
+
+	if s.ConvertedType != nil {
+		switch *s.ConvertedType {
+		case pthrift.ConvertedType_MAP, pthrift.ConvertedType_MAP_KEY_VALUE:
+			return mapKind
+		case pthrift.ConvertedType_LIST:
+			return repeatedKind
 		}
 	}
 
-	return nil
-}
+	if s.Repetition == pthrift.FieldRepetitionType_REPEATED {
+		return repeatedKind
+	}
 
-// WalkFn is the type of functions called for each node visited by Walk.
-type WalkFn func(n *Schema) error
+	return groupKind
+}
 
 var errEmptySchema = errors.New("empty schema")
 
@@ -175,6 +203,8 @@ func schemaFromFlatElements(elements []*pthrift.SchemaElement) (*Schema, error) 
 	if consumed != len(elements) {
 		return nil, fmt.Errorf("should have consumed %d elements but got %d instead", len(elements), consumed)
 	}
+
+	root.Compute()
 
 	return root, nil
 }
@@ -198,18 +228,6 @@ func flatThriftSchemaToTreeRecurse(current *Schema, left []*pthrift.SchemaElemen
 	current.Scale = el.GetScale()
 	current.Precision = el.GetPrecision()
 	current.Children = make([]*Schema, el.GetNumChildren())
-	current.Kind = kindFromSchemaElement(el)
-	if !current.Root {
-		current.Path = append(current.Path, el.GetName())
-	}
-
-	if current.Repetition == pthrift.FieldRepetitionType_REPEATED {
-		current.RepetitionLevel++
-	}
-
-	if current.Repetition != pthrift.FieldRepetitionType_REQUIRED {
-		current.DefinitionLevel++
-	}
 
 	offset := 1
 	for i := int32(0); i < el.GetNumChildren(); i++ {
@@ -226,23 +244,9 @@ func flatThriftSchemaToTreeRecurse(current *Schema, left []*pthrift.SchemaElemen
 	return offset
 }
 
-func kindFromSchemaElement(el *pthrift.SchemaElement) Kind {
-	if el.GetNumChildren() == 0 {
-		return PrimitiveKind
-	}
-
-	if el.ConvertedType != nil {
-		switch *el.ConvertedType {
-		case pthrift.ConvertedType_MAP, pthrift.ConvertedType_MAP_KEY_VALUE:
-			return MapKind
-		case pthrift.ConvertedType_LIST:
-			return RepeatedKind
-		}
-	}
-
-	if el.GetRepetitionType() == pthrift.FieldRepetitionType_REPEATED {
-		return RepeatedKind
-	}
-
-	return GroupKind
+func newPath(path []string, name string) []string {
+	newPath := make([]string, len(path)+1)
+	copy(newPath, path)
+	newPath[len(path)] = name
+	return newPath
 }

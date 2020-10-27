@@ -7,27 +7,8 @@ import (
 	"testing"
 
 	"github.com/segmentio/parquet"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-func TestNodeDelete(t *testing.T) {
-	a := &parquet.Schema{Name: "a"}
-	b := &parquet.Schema{Name: "b"}
-
-	root := &parquet.Schema{
-		Name: "root",
-		Root: true,
-		Kind: parquet.GroupKind,
-	}
-
-	root.Add(a)
-	root.Add(b)
-
-	root.At("a").Remove()
-
-	assert.Equal(t, []*parquet.Schema{b}, root.Children)
-}
 
 func TestNodeStageDelete(t *testing.T) {
 	file, err := os.Open("./examples/stage-small.parquet")
@@ -145,7 +126,7 @@ func TestNodeStageDelete(t *testing.T) {
 
 func readableFlatTree(root *parquet.Schema) string {
 	var b strings.Builder
-	err := parquet.Walk(root, func(n *parquet.Schema) error {
+	err := walk(root, func(n *parquet.Schema) error {
 		b.WriteString(fmt.Sprintf("%s%s", strings.Repeat(".", len(n.Path)), n.Name))
 		b.WriteRune('\n')
 		return nil
@@ -154,4 +135,19 @@ func readableFlatTree(root *parquet.Schema) string {
 		panic("should not happen")
 	}
 	return b.String()
+}
+
+func walk(n *parquet.Schema, walkFn func(n *parquet.Schema) error) error {
+	err := walkFn(n)
+	if err != nil {
+		return err
+	}
+	for _, c := range n.Children {
+		err := walk(c, walkFn)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

@@ -19,9 +19,12 @@ func readUvarint(r io.Reader) (uint64, uint32, error) {
 	var read uint32
 	buff := []byte{0}
 	for i := 0; ; i++ {
-		_, err := r.Read(buff)
+		n, err := r.Read(buff)
 		if err != nil {
 			return x, read, err
+		}
+		if n != len(buff) {
+			panic("was supposed to read 1 byte")
 		}
 		b := buff[0]
 		read++
@@ -43,14 +46,6 @@ type Decoder interface {
 	Uint32(bitWidth int, out []uint32) error
 	ByteArray(dst []byte) ([]byte, error)
 }
-
-type EmptyDecoder struct{}
-
-func (e *EmptyDecoder) prepare(r io.Reader)                     {}
-func (e *EmptyDecoder) Int32() (int32, error)                   { return 0, nil }
-func (e *EmptyDecoder) Int64() (int64, error)                   { return 0, nil }
-func (e *EmptyDecoder) Uint32(bitWidth int, out []uint32) error { return nil }
-func (e *EmptyDecoder) ByteArray() ([]byte, error)              { return nil, nil }
 
 // Construct a Decoder for a given encoding.
 // Technically, not all encoding work everywhere. Let's say good-enough for now.
@@ -84,9 +79,12 @@ func (d *rleDecoder) prepare(r io.Reader) {
 // All those values fit in uint32.
 func (d *rleDecoder) Uint32(bitWidth int, out []uint32) error {
 	b := d.buff[:]
-	_, err := d.r.Read(b)
+	n, err := d.r.Read(b)
 	if err != nil {
 		return err
+	}
+	if n != len(b) {
+		panic("not enough bytes")
 	}
 
 	size := binary.LittleEndian.Uint32(b)
@@ -115,16 +113,10 @@ func (d *rleDecoder) Uint32(bitWidth int, out []uint32) error {
 				bytesInBuffer = 4
 			}
 
-			if len(d.scratch) < bytesInBuffer {
-				v := bytesInBuffer
-				v--
-				v |= v >> 1
-				v |= v >> 2
-				v |= v >> 4
-				v |= v >> 8
-				v |= v >> 16
-				v++
-				d.scratch = make([]byte, v)
+			if cap(d.scratch) < bytesInBuffer {
+				d.scratch = make([]byte, bytesInBuffer)
+			} else {
+				d.scratch = d.scratch[:bytesInBuffer]
 			}
 
 			data := d.scratch[:bytesInRLE]

@@ -72,7 +72,7 @@ func TestPageIterator(t *testing.T) {
 		_, err = reader.thrift.Seek(reader.metadata.rowGroups[0].Columns[0].GetMetaData().GetDataPageOffset(), io.SeekStart)
 		require.NoError(t, err)
 
-		it := PageReader{
+		it := pageReader{
 			r:                reader.thrift,
 			schema:           reader.metadata.Schema.At("a"),
 			compressionCodec: &snappyCodec{},
@@ -80,13 +80,13 @@ func TestPageIterator(t *testing.T) {
 		require.NotNil(t, it.schema)
 		b := &testBuilder{}
 
-		err = it.Read(b)
+		err = it.read(b)
 		assert.NoError(t, err)
 		assert.Equal(t, int32(1), b.last)
-		err = it.Read(b)
+		err = it.read(b)
 		assert.NoError(t, err)
 		assert.Equal(t, int32(2), b.last)
-		err = it.Read(b)
+		err = it.read(b)
 		assert.NoError(t, err)
 		assert.Equal(t, int32(3), b.last)
 	})
@@ -120,7 +120,7 @@ func TestPageIteratorLevels(t *testing.T) {
 		_, err = reader.thrift.Seek(reader.metadata.rowGroups[0].Columns[0].GetMetaData().GetDataPageOffset(), io.SeekStart)
 		require.NoError(t, err)
 
-		it := PageReader{
+		it := pageReader{
 			r:                reader.thrift,
 			schema:           reader.metadata.Schema.At("a"),
 			compressionCodec: &snappyCodec{},
@@ -129,13 +129,13 @@ func TestPageIteratorLevels(t *testing.T) {
 
 		b := &testBuilder{}
 
-		err = it.Read(b)
+		err = it.read(b)
 		assert.NoError(t, err)
 		assert.Equal(t, int32(1), b.last)
-		err = it.Read(b)
+		err = it.read(b)
 		assert.NoError(t, err)
 		assert.Equal(t, nil, b.last)
-		err = it.Read(b)
+		err = it.read(b)
 		assert.NoError(t, err)
 		assert.Equal(t, int32(3), b.last)
 	})
@@ -171,18 +171,18 @@ func TestRowGroupColumnIterator(t *testing.T) {
 		_, err = reader.thrift.Seek(md.GetDataPageOffset(), io.SeekStart)
 		require.NoError(t, err)
 
-		it := RowGroupColumnReader{
-			r:      reader.thrift,
-			md:     md,
-			schema: reader.metadata.Schema.At("a"),
+		it := rowGroupColumnReader{
+			r:  reader.thrift,
+			md: md,
+			s:  reader.metadata.Schema.At("a"),
 		}
-		require.NotNil(t, it.schema)
+		require.NotNil(t, it.s)
 
 		b := &testBuilder{}
 
 		for i := 0; i < recordsCount; i++ {
 			t.Log("testing record", i)
-			err = it.Read(b)
+			err = it.read(b)
 			assert.NoError(t, err)
 			assert.Equal(t, int32(i), b.last)
 		}
@@ -256,13 +256,13 @@ func TestRowGroupColumnIterator(t *testing.T) {
 //		}
 //
 //		for i := 0; i < recordsCount; i++ {
-//			notLast := it.Next()
+//			notLast := it.next()
 //			require.NoError(t, it.Error(), "record %d: error", i)
 //			require.Equal(t, i < recordsCount-1, notLast, "record %d: not last", i)
 //			assert.Equal(t, Raw{
-//				Value:  int32(i),
-//				Levels: Levels{0, 0},
-//			}, *it.Value())
+//				value:  int32(i),
+//				levels: levels{0, 0},
+//			}, *it.value())
 //		}
 //		require.NoError(t, it.Error())
 //	})
@@ -327,12 +327,12 @@ func TestRowGroupColumnIterator(t *testing.T) {
 //		}
 //
 //		for i := 0; i < recordsCount; i++ {
-//			notLast := it1.Next()
+//			notLast := it1.next()
 //			require.NoError(t, it1.Error(), "record %d: error", i)
 //			require.Equal(t, i < recordsCount-1, notLast, "record %d: not last", i)
 //			require.Equal(t, int32(i), value1, "record %d: incorrect value", i)
 //
-//			notLast = it2.Next()
+//			notLast = it2.next()
 //			require.NoError(t, it2.Error(), "record %d: error", i)
 //			require.Equal(t, i < recordsCount-1, notLast, "record %d: not last", i)
 //			require.Equal(t, 10000+int32(i), value2, "record %d: incorrect value", i)

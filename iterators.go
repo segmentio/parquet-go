@@ -20,35 +20,35 @@ import (
 //	callback PageCallbackFn //TODO leaky
 //
 //	err                    error
-//	rowGroupIterator       *RowGroupIterator
-//	rowGroupColumnIterator *RowGroupColumnReader
+//	rowGroupIterator       *rowGroupIterator
+//	rowGroupColumnIterator *rowGroupColumnReader
 //}
 //
-//func (c *ColumnIterator) Next() bool {
+//func (c *ColumnIterator) next() bool {
 //	if c.err != nil {
 //		return false
 //	}
 //	if c.rowGroupIterator == nil {
-//		c.rowGroupIterator = &RowGroupIterator{
+//		c.rowGroupIterator = &rowGroupIterator{
 //			r: c.r,
 //		}
-//		c.rowGroupIterator.Next()
+//		c.rowGroupIterator.next()
 //	}
-//	if c.rowGroupIterator.Value() == nil {
+//	if c.rowGroupIterator.value() == nil {
 //		return false
 //	}
 //	if c.rowGroupColumnIterator == nil {
-//		c.rowGroupColumnIterator = c.rowGroupIterator.Value().Column(c.path, c.callback)
+//		c.rowGroupColumnIterator = c.rowGroupIterator.value().Column(c.path, c.callback)
 //		if c.rowGroupColumnIterator == nil {
 //			c.err = fmt.Errorf("column not found in row group: %s", c.path)
 //			return false
 //		}
 //	}
-//	if !c.rowGroupColumnIterator.Next() {
+//	if !c.rowGroupColumnIterator.next() {
 //		c.rowGroupColumnIterator = nil
-//		return c.rowGroupIterator.Next()
+//		return c.rowGroupIterator.next()
 //	}
-//	return c.rowGroupIterator.Value() != nil
+//	return c.rowGroupIterator.value() != nil
 //}
 //
 //func (c *ColumnIterator) Error() error {
@@ -73,20 +73,26 @@ import (
 //	return combined
 //}
 
+// levels represent repetition and definition levels for a given field.
+type levels struct {
+	repetition uint32
+	definition uint32
+}
+
 // Iterator that goes over each row group of the file.
-type RowGroupIterator struct {
+type rowGroupIterator struct {
 	r *File
 
-	rowGroup *RowGroup
+	rowGroup *rowGroup
 	index    int
 }
 
-func (i *RowGroupIterator) Next() bool {
+func (i *rowGroupIterator) next() bool {
 	if i.index >= len(i.r.metadata.rowGroups) {
 		i.rowGroup = nil
 		return false
 	}
-	i.rowGroup = &RowGroup{
+	i.rowGroup = &rowGroup{
 		r:   i.r,
 		raw: i.r.metadata.rowGroups[i.index],
 	}
@@ -94,34 +100,30 @@ func (i *RowGroupIterator) Next() bool {
 	return true
 }
 
-func (i *RowGroupIterator) Value() *RowGroup {
+func (i *rowGroupIterator) value() *rowGroup {
 	return i.rowGroup
 }
 
-type RowGroup struct {
+type rowGroup struct {
 	r   *File
 	raw *pthrift.RowGroup
 }
 
-// Construct a ColumnIterator for the column at path in schema.
-// returns nil if the column does not exist in the schema.
-func (rg *RowGroup) Column(path []string) *RowGroupColumnReader {
-	s := rg.r.metadata.Schema.At(path...)
-	if s == nil {
-		return nil
-	}
-	md := rg.metadataForColumn(path)
+// Construct a ColumnIterator for the column at path in s.
+// returns nil if the column does not exist in the s.
+func (rg *rowGroup) Column(schema *Schema) *rowGroupColumnReader {
+	md := rg.metadataForColumn(schema.Path)
 	if md == nil {
 		return nil
 	}
-	return &RowGroupColumnReader{
-		r:      rg.r.thrift.Fork(),
-		schema: s,
-		md:     md,
+	return &rowGroupColumnReader{
+		r:  rg.r.thrift.Fork(),
+		s:  schema,
+		md: md,
 	}
 }
 
-func (rg *RowGroup) metadataForColumn(path []string) *pthrift.ColumnMetaData {
+func (rg *rowGroup) metadataForColumn(path []string) *pthrift.ColumnMetaData {
 	// TODO: build a hashmap of column path -> metadata?
 columns:
 	for _, col := range rg.raw.Columns {
@@ -141,36 +143,36 @@ columns:
 }
 
 // Iterator that goes over every value for a given column across all pages for a
-// given RowGroup. Look at ColumnIterator if you want to iterate for all values
+// given rowGroup. Look at ColumnIterator if you want to iterate for all values
 // of a column across rowGroups.
-type RowGroupColumnReader struct {
-	r      *thrift.Reader
-	schema *Schema
-	md     *pthrift.ColumnMetaData
+type rowGroupColumnReader struct {
+	r  *thrift.Reader
+	s  *Schema
+	md *pthrift.ColumnMetaData
 
 	ready        bool
 	totalRows    int64
 	rowsRead     int64
-	pageIterator *PageReader
+	pageIterator *pageReader
 }
 
-func (i *RowGroupColumnReader) Schema() *Schema { return i.schema }
+func (i *rowGroupColumnReader) schema() *Schema { return i.s }
 
-func (i *RowGroupColumnReader) Peek() (Levels, error) {
+func (i *rowGroupColumnReader) peek() (levels, error) {
 	err := i.ensurePageAvailable()
 	if err != nil {
-		return Levels{}, err
+		return levels{}, err
 	}
-	return i.pageIterator.Peek()
+	return i.pageIterator.peek()
 }
 
-func (i *RowGroupColumnReader) Read(b RowBuilder) error {
+func (i *rowGroupColumnReader) read(b RowBuilder) error {
 	err := i.ensurePageAvailable()
 	if err != nil {
 		return err
 	}
 
-	err = i.pageIterator.Read(b)
+	err = i.pageIterator.read(b)
 	if err != nil {
 		return err
 	}
@@ -180,7 +182,7 @@ func (i *RowGroupColumnReader) Read(b RowBuilder) error {
 }
 
 // Ensures that the reader has seeked to the beginning of the first page.
-func (i *RowGroupColumnReader) ensureReady() error {
+func (i *rowGroupColumnReader) ensureReady() error {
 	if i.ready {
 		return nil
 	}
@@ -197,10 +199,10 @@ func (i *RowGroupColumnReader) ensureReady() error {
 	return nil
 }
 
-// Ensures the current pageIterator has at least one row available, or asks for
+// Ensures the top pageIterator has at least one row available, or asks for
 // the next page.
 // Returns EOF if all the records have been read.
-func (i *RowGroupColumnReader) ensurePageAvailable() error {
+func (i *rowGroupColumnReader) ensurePageAvailable() error {
 	err := i.ensureReady()
 	if err != nil {
 		return err
@@ -210,11 +212,11 @@ func (i *RowGroupColumnReader) ensurePageAvailable() error {
 		return EOF
 	}
 
-	if i.pageIterator != nil && i.pageIterator.Done() {
+	if i.pageIterator != nil && i.pageIterator.done() {
 		i.pageIterator = nil
 	}
 
-	// TODO: that seems odd, why does the PageReader need to be recreated?
+	// TODO: that seems odd, why does the pageReader need to be recreated?
 	if i.pageIterator == nil {
 		codecName := i.md.GetCodec()
 		var codec compressionCodec
@@ -224,9 +226,9 @@ func (i *RowGroupColumnReader) ensurePageAvailable() error {
 		default:
 			return fmt.Errorf("unknown codec: %s", codecName)
 		}
-		i.pageIterator = &PageReader{
+		i.pageIterator = &pageReader{
 			r:                i.r,
-			schema:           i.schema,
+			schema:           i.s,
 			compressionCodec: codec,
 		}
 	}
@@ -236,13 +238,8 @@ func (i *RowGroupColumnReader) ensurePageAvailable() error {
 // EOF indicates the end of the data stream.
 var EOF = errors.New("EOF")
 
-type Raw struct {
-	Value  interface{}
-	Levels Levels
-}
-
-// PageReader lazily iterates over values of one page.
-type PageReader struct {
+// pageReader lazily iterates over values of one page.
+type pageReader struct {
 	r                *thrift.Reader
 	compressionCodec compressionCodec
 	schema           *Schema
@@ -259,49 +256,49 @@ type PageReader struct {
 	ready                  bool
 }
 
-func (p *PageReader) Done() bool {
+func (p *pageReader) done() bool {
 	return p.valuesRead >= p.numValues
 }
 
-// Peek returns error, repetitionLevel, definitionLevel of the next value.
+// peek returns error, repetitionLevel, definitionLevel of the next value.
 // Returns EOF if there is no more value to read.
 // Return any other error encountered during opening the page.
-func (p *PageReader) Peek() (Levels, error) {
-	levels := Levels{}
+func (p *pageReader) peek() (levels, error) {
+	levels := levels{}
 	err := p.ensureReady()
 	if err != nil {
 		return levels, err
 	}
-	if p.Done() {
+	if p.done() {
 		return levels, EOF
 	}
 
 	if p.repetitionLevels != nil {
-		levels.Repetition = p.repetitionLevels[p.valuesRead]
+		levels.repetition = p.repetitionLevels[p.valuesRead]
 	}
 	if p.definitionLevels != nil {
-		levels.Definition = p.definitionLevels[p.valuesRead]
+		levels.definition = p.definitionLevels[p.valuesRead]
 	}
 
 	return levels, nil
 }
 
-func (p *PageReader) Read(b RowBuilder) error {
+func (p *pageReader) read(b RowBuilder) error {
 	err := p.ensureReady()
 	if err != nil {
 		return err
 	}
 
-	if p.Done() {
+	if p.done() {
 		return EOF
 	}
 
-	levels, err := p.Peek()
+	levels, err := p.peek()
 	if err != nil {
 		return err
 	}
 
-	if levels.Definition < p.schema.DefinitionLevel {
+	if levels.definition < p.schema.DefinitionLevel {
 		err = b.PrimitiveNil(p.schema)
 	} else {
 		err = b.Primitive(p.schema, p.valueDecoder)
@@ -310,7 +307,7 @@ func (p *PageReader) Read(b RowBuilder) error {
 	return err
 }
 
-func (p *PageReader) ensureReady() error {
+func (p *pageReader) ensureReady() error {
 	if p.ready {
 		return nil
 	}
@@ -368,10 +365,10 @@ func (p *PageReader) ensureReady() error {
 
 	// 2. maybe parse repetition levels.
 	//
-	// Repetition levels are skipped when the column is not nested
+	// repetition levels are skipped when the column is not nested
 	// (path = 1). In that case, p.repetitionLevels stays nil, and 0
 	// will always be provided to the callback.
-	if len(p.schema.Path) > 1 {
+	if p.schema.RepetitionLevel > 0 {
 		// we need to figure out what is the maximum possible
 		// level of repetition so that we can know how many bits
 		// at most are required to express repetitions level.
@@ -393,7 +390,7 @@ func (p *PageReader) ensureReady() error {
 	// (if encoded, it will always have the value of the max
 	// definition level). In that case, p.definitionLevels stays
 	// nil, and 0 will always be provided to the callback.
-	if p.schema.DefinitionLevel >= 1 {
+	if p.schema.DefinitionLevel > 0 {
 		bitWidth := bits.Len32(p.schema.DefinitionLevel)
 		p.definitionLevels = make([]uint32, p.numValues)
 		p.definitionLevelDecoder.prepare(p.reader)

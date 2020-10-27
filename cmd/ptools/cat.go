@@ -152,12 +152,10 @@ func (p *prettyPrinter) prefix() int {
 }
 
 func (p *prettyPrinter) Begin() {
-	debug.Format("BEGIN")
 	p.stackClear()
 }
 
 func (p *prettyPrinter) Primitive(s *parquet.Schema, d parquet.Decoder) error {
-	debug.Format("PRIMITIVE: %s", s.Path)
 	valueDepth := p.depth()
 	for _, c := range s.Path[p.prefix() : len(s.Path)-1] {
 		p.writeDepth(valueDepth)
