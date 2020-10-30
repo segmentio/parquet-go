@@ -6,7 +6,7 @@ import "io"
 type ForkReadSeeker interface {
 	io.ReadSeeker
 
-	// Fork returns a copy of the reader, using the same underlying reader, but
+	// Fork returns a copy of the writer, using the same underlying writer, but
 	// with its own state, which should be initialized to a copy of its
 	// parent's state.
 	Fork() ForkReadSeeker

@@ -244,6 +244,46 @@ func flatThriftSchemaToTreeRecurse(current *Schema, left []*pthrift.SchemaElemen
 	return offset
 }
 
+// schemaFromFlatElements builds a schema tree from a list of SchemaElements. Parquet
+// serializes the schema tree by laying out its nodes in a depth-first order.
+func schemaTreeToFlatElements(schema *Schema) ([]*pthrift.SchemaElement, error) {
+	if schema.Root != true {
+		return nil, errors.New("Initial schema must be root")
+	}
+	elements := make([]*pthrift.SchemaElement, 0)
+	flattenTreeRecurse(schema, elements)
+
+	return elements, nil
+}
+
+func flattenTreeRecurse(schema *Schema, elems []*pthrift.SchemaElement) error {
+	if len(schema.Children) == 0 {
+		return nil
+	}
+
+	for _, child := range schema.Children {
+		flattenTreeRecurse(child, elems)
+	}
+
+	pschema := new(pthrift.SchemaElement)
+	pschema.FieldID = &schema.ID
+	pschema.Name = schema.Name
+
+	pschema.Type = &schema.PhysicalType
+	pschema.ConvertedType = schema.ConvertedType
+	pschema.LogicalType = schema.LogicalType
+	pschema.RepetitionType = &schema.Repetition
+	pschema.Scale = &schema.Scale
+	pschema.Precision = &schema.Precision
+
+	numChildren := new(int32)
+	*numChildren = int32(len(schema.Children))
+	pschema.NumChildren = numChildren
+
+	elems = append(elems, pschema)
+	return nil
+}
+
 func newPath(path []string, name string) []string {
 	newPath := make([]string, len(path)+1)
 	copy(newPath, path)
