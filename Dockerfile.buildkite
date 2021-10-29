@@ -1,9 +1,0 @@
-FROM ghcr.io/pelletier/parquet-tools:1.11.1
-
-RUN apt-get update && apt-get install -y curl gcc
-RUN curl https://dl.google.com/go/go1.15.2.linux-amd64.tar.gz > go.tar.gz
-RUN tar -C /usr/local -xzf go.tar.gz
-ENV PATH="/usr/local/go/bin/:$PATH"
-COPY . /src/
-WORKDIR /src
-ENTRYPOINT []
