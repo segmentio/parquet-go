@@ -690,7 +690,7 @@ type ColumnChunk struct {
 	FileOffset int64 `thrift:"2,required"`
 
 	// Column metadata for this chunk. This is the same content as what is at
-	// file_path/file_offset.  Having it here has it replicated in the file
+	// file_path/file_offset. Having it here has it replicated in the file
 	// metadata.
 	MetaData ColumnMetaData `thrift:"3,optional"`
 

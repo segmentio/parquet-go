@@ -14,6 +14,7 @@ type Column struct {
 	schema  *schema.SchemaElement
 	order   *schema.ColumnOrder
 	columns []*Column
+	chunks  []*schema.ColumnChunk
 }
 
 // Type returns the Go value type of the column. If c is not a leaf column, the
@@ -118,37 +119,74 @@ func (c *Column) Column(name string) *Column {
 	return nil
 }
 
-func openColumns(file *File, schemaIndex, columnOrderIndex int) (*Column, int, int, error) {
-	c := &Column{
-		file:   file,
-		schema: &file.metadata.Schema[schemaIndex],
+func openColumns(file *File) (*Column, error) {
+	cl := columnLoader{}
+
+	c, err := cl.open(file)
+	if err != nil {
+		return nil, err
 	}
 
-	schemaIndex++
+	// Validate that there aren't extra entries in the row group columns,
+	// which would otherwise indicate that there are dangling data pages
+	// in the file.
+	for index, rowGroup := range file.metadata.RowGroups {
+		if cl.rowGroupColumnIndex != len(rowGroup.Columns) {
+			return nil, fmt.Errorf("row group at index %d contains %d columns but %d were referenced by the column schemas",
+				index, len(rowGroup.Columns), cl.rowGroupColumnIndex)
+		}
+	}
+
+	return c, nil
+}
+
+type columnLoader struct {
+	schemaIndex         int
+	columnOrderIndex    int
+	rowGroupColumnIndex int
+}
+
+func (cl *columnLoader) open(file *File) (*Column, error) {
+	c := &Column{
+		file:   file,
+		schema: &file.metadata.Schema[cl.schemaIndex],
+	}
+
+	cl.schemaIndex++
 	numChildren := int(c.schema.NumChildren)
 
 	if numChildren == 0 {
-		if columnOrderIndex < len(file.metadata.ColumnOrders) {
-			c.order = &file.metadata.ColumnOrders[columnOrderIndex]
-			columnOrderIndex++
+		if cl.columnOrderIndex < len(file.metadata.ColumnOrders) {
+			c.order = &file.metadata.ColumnOrders[cl.columnOrderIndex]
+			cl.columnOrderIndex++
 		}
-		return c, schemaIndex, columnOrderIndex, nil
+
+		c.chunks = make([]*schema.ColumnChunk, 0, len(file.metadata.RowGroups))
+		for index, rowGroup := range file.metadata.RowGroups {
+			if cl.rowGroupColumnIndex >= len(rowGroup.Columns) {
+				return nil, fmt.Errorf("row group at index %d does not have enough columns", index)
+			}
+			c.chunks = append(c.chunks, &rowGroup.Columns[cl.rowGroupColumnIndex])
+		}
+		cl.rowGroupColumnIndex++
+
+		return c, nil
 	}
 
 	c.columns = make([]*Column, numChildren)
 
 	for i := range c.columns {
-		if schemaIndex >= len(file.metadata.Schema) {
-			return nil, schemaIndex, columnOrderIndex,
-				fmt.Errorf("column %q has more children than there are schemas in the file: %d > %d", c.schema.Name, schemaIndex+1, len(file.metadata.Schema))
+		if cl.schemaIndex >= len(file.metadata.Schema) {
+			return nil, fmt.Errorf("column %q has more children than there are schemas in the file: %d > %d",
+				c.schema.Name, cl.schemaIndex+1, len(file.metadata.Schema))
 		}
 
 		var err error
-		c.columns[i], schemaIndex, columnOrderIndex, err = openColumns(file, schemaIndex, columnOrderIndex)
+		c.columns[i], err = cl.open(file)
 		if err != nil {
-			return nil, schemaIndex, columnOrderIndex, fmt.Errorf("%s: %w", c.schema.Name, err)
+			return nil, fmt.Errorf("%s: %w", c.schema.Name, err)
 		}
 	}
 
-	return c, schemaIndex, columnOrderIndex, nil
+	return c, nil
 }
