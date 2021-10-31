@@ -41,11 +41,18 @@ func TestOpenFile(t *testing.T) {
 	}
 }
 
-func printColumns(t *testing.T, root *parquet.Column, indent string) {
-	t.Logf("%s%s", indent, root)
+func printColumns(t *testing.T, col *parquet.Column, indent string) {
+	t.Logf("%s%s", indent, col)
 	indent += ". "
 
-	for _, child := range root.Columns() {
+	chunks := col.Chunks()
+	for chunks.Next() {
+	}
+	if err := chunks.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, child := range col.Columns() {
 		printColumns(t, child, indent)
 	}
 }

@@ -548,7 +548,7 @@ type PageHeader struct {
 	UncompressedPageSize int32 `thrift:"2,required"`
 
 	// Compressed (and potentially encrypted) page size in bytes, not including
-	// this header
+	// this header.
 	CompressedPageSize int32 `thrift:"3,required"`
 
 	// The 32bit CRC for the page, to be be calculated as follows:

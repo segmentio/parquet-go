@@ -1,9 +1,12 @@
 package parquet
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"sort"
 
+	"github.com/segmentio/encoding/thrift"
 	"github.com/segmentio/parquet/schema"
 )
 
@@ -83,8 +86,18 @@ func (c *Column) Column(name string) *Column {
 
 // Scan returns a row iterator which can be used to scan through rows of
 // of the column.
-func (c *Column) Scan() *ColumnRows {
-	return &ColumnRows{column: c}
+//func (c *Column) Scan() *ColumnRows {
+//	return &ColumnRows{column: c}
+//}
+
+// Chunks returns an iterator over the column chunks that compose this column.
+func (c *Column) Chunks() *ColumnChunks {
+	return &ColumnChunks{
+		file:   c.file,
+		size:   c.file.Size(),
+		chunks: c.chunks,
+		index:  -1,
+	}
 }
 
 func openColumns(file *File) (*Column, error) {
@@ -157,4 +170,148 @@ func (cl *columnLoader) open(file *File) (*Column, error) {
 	}
 
 	return c, nil
+}
+
+/*
+// ColumnRows is an iterator type exposing rows of a column.
+type ColumnRows struct {
+	column *Column
+	err    error
+}
+
+func (cr *ColumnRows) Close() error {
+	return nil
+}
+
+func (cr *ColumnRows) Err() error {
+	return cr.err
+}
+
+func (cr *ColumnRows) Next(dst interface{}) bool {
+	return false
+}
+*/
+
+// ColumnChunks is an iterator type exposing chunks of a column within a parquet
+// file.
+type ColumnChunks struct {
+	file   io.ReaderAt
+	size   int64
+	index  int
+	chunks []*schema.ColumnChunk
+
+	// protocol thrift.CompactProtocol
+	// decoder  thrift.Decoder
+	// reader   *io.SectionReader
+	// buffer   *bufio.Reader
+	metadata *schema.ColumnMetaData
+
+	err error
+}
+
+// Close closes the iterator, positionning it at the end of the column chunk
+// sequence, and returns the last error it ecountered.
+func (c *ColumnChunks) Close() error {
+	c.index = len(c.chunks)
+	return c.err
+}
+
+// Seek positions the iterator at the given index. The program must still call
+// Next after calling Seek, otherwise the
+func (c *ColumnChunks) Seek(index int) {
+	c.index = index - 1
+	c.metadata = nil
+}
+
+// Next advances the iterator to the next chunk.
+func (c *ColumnChunks) Next() bool {
+	c.metadata = nil
+
+	if c.index++; c.index >= len(c.chunks) {
+		return false
+	}
+	chunk := c.chunks[c.index]
+
+	if chunk.FilePath == "" {
+		c.metadata = &chunk.MetaData
+		return true
+	}
+
+	c.setError(fmt.Errorf("remote column data are not supported: %s", chunk.FilePath))
+	return false
+
+	/*
+		if c.reader == nil {
+			c.reader = io.NewSectionReader(c.file, 0, c.size)
+			c.buffer = bufio.NewReaderSize(c.reader, defaultBufferSize)
+			c.decoder.Reset(c.protocol.NewReader(c.buffer))
+		}
+
+		if _, err := c.reader.Seek(chunk.FileOffset, io.SeekStart); err != nil {
+			c.setError(err)
+			return false
+		}
+
+		c.buffer.Reset(c.reader)
+		metadata := new(schema.ColumnMetaData)
+
+		if err := c.decoder.Decode(metadata); err != nil {
+			c.setError(err)
+			return false
+		}
+
+		c.metadata = metadata
+		return true
+	*/
+}
+
+// Chunk returns the schema for the chunk that the iterator is currently
+// positioned at. The method returns nil after the iterator reached the end or
+// encountered an error.
+func (c *ColumnChunks) Chunk() *schema.ColumnChunk {
+	if c.index >= 0 && c.index < len(c.chunks) {
+		return c.chunks[c.index]
+	}
+	return nil
+}
+
+// MetaData returns the column metadata for the chunk that the iterator is
+// currently positioned at. The method returns nil after the iterator reached
+// the end or encountered an error.
+func (c *ColumnChunks) MetaData() *schema.ColumnMetaData {
+	return c.metadata
+}
+
+func (c *ColumnChunks) Pages() *ColumnPages {
+	return nil
+}
+
+func (c *ColumnChunks) setError(err error) {
+	c.index = len(c.chunks)
+	c.err = err
+}
+
+type ColumnPages struct {
+	reader   *io.SectionReader
+	buffer   *bufio.Reader
+	protocol thrift.CompactProtocol
+	decoder  thrift.Decoder
+	metadata *schema.ColumnMetaData
+	header   schema.PageHeader
+	err      error
+}
+
+func (c *ColumnPages) Close() error {
+	return nil
+}
+
+func (c *ColumnPages) Next() bool {
+	return false
+}
+
+func (c *ColumnPages) Header() *schema.PageHeader {
+	if c.err != nil {
+		return nil
+	}
+	return &c.header
 }

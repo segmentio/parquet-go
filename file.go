@@ -11,6 +11,10 @@ import (
 	"github.com/segmentio/parquet/schema"
 )
 
+const (
+	defaultBufferSize = 4096
+)
+
 var (
 	ErrMissingRootColumn = errors.New("parquet file is missing a root column")
 )
@@ -48,7 +52,7 @@ func OpenFile(r io.ReaderAt, size int64) (*File, error) {
 	footerData := io.NewSectionReader(r, size-(footerSize+8), footerSize)
 
 	decoder := thrift.NewDecoder(
-		f.protocol.NewReader(bufio.NewReaderSize(footerData, 4096)),
+		f.protocol.NewReader(bufio.NewReaderSize(footerData, defaultBufferSize)),
 	)
 
 	if err := decoder.Decode(&f.metadata); err != nil {
@@ -81,15 +85,18 @@ func (f *File) ReadAt(b []byte, off int64) (int, error) {
 		return 0, io.EOF
 	}
 
-	if limit := f.size - off; limit > int64(len(b)) {
+	if limit := f.size - off; limit < int64(len(b)) {
 		n, err := f.reader.ReadAt(b[:limit], off)
 		if err == nil {
 			err = io.EOF
 		}
+		fmt.Printf("read: %x\n", b[:n])
 		return n, err
 	}
 
-	return f.reader.ReadAt(b, off)
+	n, err := f.reader.ReadAt(b, off)
+	fmt.Printf("read: %x\n", b[:n])
+	return n, err
 }
 
 func (f *File) MetaData() *schema.FileMetaData {
