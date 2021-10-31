@@ -60,7 +60,7 @@ func OpenFile(r io.ReaderAt, size int64) (*File, error) {
 		return nil, ErrMissingRootColumn
 	}
 
-	root, _, err := openColumns(f, 0)
+	root, _, _, err := openColumns(f, 0, 0)
 	if err != nil {
 		return nil, fmt.Errorf("opening parquet file columns: %w", err)
 	}

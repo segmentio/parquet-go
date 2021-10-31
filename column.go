@@ -10,6 +10,7 @@ import (
 type Column struct {
 	file    *File
 	schema  *schema.SchemaElement
+	order   *schema.ColumnOrder
 	columns []*Column
 }
 
@@ -31,31 +32,37 @@ func (c *Column) Column(name string) *Column {
 	return nil
 }
 
-func openColumns(file *File, index int) (*Column, int, error) {
+func openColumns(file *File, schemaIndex, columnOrderIndex int) (*Column, int, int, error) {
 	c := &Column{
 		file:   file,
-		schema: &file.Schema[index],
+		schema: &file.Schema[schemaIndex],
 	}
+
+	schemaIndex++
 
 	if c.schema.Type != 0 {
-		return c, index + 1, nil
+		if columnOrderIndex < len(file.ColumnOrders) {
+			c.order = &file.ColumnOrders[columnOrderIndex]
+			columnOrderIndex++
+		}
+		return c, schemaIndex, columnOrderIndex, nil
 	}
 
-	index++
 	numChildren := int(c.schema.NumChildren)
 	c.columns = make([]*Column, numChildren)
 
 	for i := range c.columns {
-		if index >= len(file.Schema) {
-			return nil, index, fmt.Errorf("column %q has more children than there are columns in the file: %d > %d", c.schema.Name, index+1, len(file.Schema))
+		if schemaIndex >= len(file.Schema) {
+			return nil, schemaIndex, columnOrderIndex,
+				fmt.Errorf("column %q has more children than there are schemas in the file: %d > %d", c.schema.Name, schemaIndex+1, len(file.Schema))
 		}
-		child, nextIndex, err := openColumns(file, index)
+
+		var err error
+		c.columns[i], schemaIndex, columnOrderIndex, err = openColumns(file, schemaIndex, columnOrderIndex)
 		if err != nil {
-			return nil, nextIndex, fmt.Errorf("%s: %w", c.schema.Name, err)
+			return nil, schemaIndex, columnOrderIndex, fmt.Errorf("%s: %w", c.schema.Name, err)
 		}
-		index = nextIndex
-		c.columns[i] = child
 	}
 
-	return c, index, nil
+	return c, schemaIndex, columnOrderIndex, nil
 }
