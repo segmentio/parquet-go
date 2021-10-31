@@ -121,15 +121,15 @@ func (c *Column) Column(name string) *Column {
 func openColumns(file *File, schemaIndex, columnOrderIndex int) (*Column, int, int, error) {
 	c := &Column{
 		file:   file,
-		schema: &file.Schema[schemaIndex],
+		schema: &file.metadata.Schema[schemaIndex],
 	}
 
 	schemaIndex++
 	numChildren := int(c.schema.NumChildren)
 
 	if numChildren == 0 {
-		if columnOrderIndex < len(file.ColumnOrders) {
-			c.order = &file.ColumnOrders[columnOrderIndex]
+		if columnOrderIndex < len(file.metadata.ColumnOrders) {
+			c.order = &file.metadata.ColumnOrders[columnOrderIndex]
 			columnOrderIndex++
 		}
 		return c, schemaIndex, columnOrderIndex, nil
@@ -138,9 +138,9 @@ func openColumns(file *File, schemaIndex, columnOrderIndex int) (*Column, int, i
 	c.columns = make([]*Column, numChildren)
 
 	for i := range c.columns {
-		if schemaIndex >= len(file.Schema) {
+		if schemaIndex >= len(file.metadata.Schema) {
 			return nil, schemaIndex, columnOrderIndex,
-				fmt.Errorf("column %q has more children than there are schemas in the file: %d > %d", c.schema.Name, schemaIndex+1, len(file.Schema))
+				fmt.Errorf("column %q has more children than there are schemas in the file: %d > %d", c.schema.Name, schemaIndex+1, len(file.metadata.Schema))
 		}
 
 		var err error

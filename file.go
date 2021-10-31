@@ -16,8 +16,7 @@ var (
 )
 
 type File struct {
-	schema.FileMetaData
-
+	metadata schema.FileMetaData
 	protocol thrift.CompactProtocol
 	reader   io.ReaderAt
 	size     int64
@@ -52,11 +51,11 @@ func OpenFile(r io.ReaderAt, size int64) (*File, error) {
 		f.protocol.NewReader(bufio.NewReaderSize(footerData, 4096)),
 	)
 
-	if err := decoder.Decode(&f.FileMetaData); err != nil {
+	if err := decoder.Decode(&f.metadata); err != nil {
 		return nil, fmt.Errorf("reading parquet file metadata: %w", err)
 	}
 
-	if len(f.Schema) == 0 {
+	if len(f.metadata.Schema) == 0 {
 		return nil, ErrMissingRootColumn
 	}
 
@@ -91,4 +90,8 @@ func (f *File) ReadAt(b []byte, off int64) (int, error) {
 	}
 
 	return f.reader.ReadAt(b, off)
+}
+
+func (f *File) MetaData() *schema.FileMetaData {
+	return &f.metadata
 }
