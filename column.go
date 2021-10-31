@@ -2,59 +2,21 @@ package parquet
 
 import (
 	"fmt"
-	"reflect"
 	"sort"
 
 	"github.com/segmentio/parquet/schema"
 )
 
 // Column represents a column in a parquet file.
+//
+// Methods of Column values are safe to call concurrently from multiple
+// goroutines.
 type Column struct {
 	file    *File
 	schema  *schema.SchemaElement
 	order   *schema.ColumnOrder
 	columns []*Column
 	chunks  []*schema.ColumnChunk
-}
-
-// Type returns the Go value type of the column. If c is not a leaf column, the
-// method returns nil.
-//
-// The returned type will be one of those:
-//
-//	BOOLEAN              → bool
-//	INT32                → int32
-//	INT64                → int64
-//	INT96                → [12]byte
-//	FLOAT                → float32
-//	DOUBLE               → float64
-//	BYTE_ARRAY           → []byte
-//	FIXED_LEN_BYTE_ARRAY → [?]byte
-//
-func (c *Column) Type() reflect.Type {
-	if c.columns != nil {
-		return nil
-	}
-	switch c.schema.Type {
-	case schema.Boolean:
-		return reflect.TypeOf(false)
-	case schema.Int32:
-		return reflect.TypeOf(int32(0))
-	case schema.Int64:
-		return reflect.TypeOf(int64(0))
-	case schema.Int96:
-		return reflect.ArrayOf(12, reflect.TypeOf(byte(0)))
-	case schema.Float:
-		return reflect.TypeOf(float32(0))
-	case schema.Double:
-		return reflect.TypeOf(float64(0))
-	case schema.ByteArray:
-		return reflect.TypeOf(([]byte)(nil))
-	case schema.FixedLenByteArray:
-		return reflect.ArrayOf(int(c.schema.TypeLength), reflect.TypeOf(byte(0)))
-	default:
-		panic(fmt.Errorf("cannot convert parquet type %#x to a go valuue type", c.schema.Type))
-	}
 }
 
 // Required returns true if the column is required.
@@ -117,6 +79,12 @@ func (c *Column) Column(name string) *Column {
 		return c.columns[i]
 	}
 	return nil
+}
+
+// Scan returns a row iterator which can be used to scan through rows of
+// of the column.
+func (c *Column) Scan() *ColumnRows {
+	return &ColumnRows{column: c}
 }
 
 func openColumns(file *File) (*Column, error) {
