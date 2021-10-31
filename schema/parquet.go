@@ -175,27 +175,29 @@ type BsonType struct{}
 // SchemaElement must also set the corresponding ConvertedType (if any)
 // from the following table.
 type LogicalType struct {
-	String  StringType  `thrift:"1,optional"` // use ConvertedType UTF8
-	Map     MapType     `thrift:"2,optional"` // use ConvertedType Map
-	List    ListType    `thrift:"3,optional"` // use ConvertedType List
-	Enum    EnumType    `thrift:"4,optional"` // use ConvertedType Enum
-	Decimal DecimalType `thrift:"5,optional"` // use ConvertedType Decimal + SchemaElement.{Scale, Precision}
-	Date    DateType    `thrift:"6,optional"` // use ConvertedType Date
+	String  StringType  `thrift:"1"` // use ConvertedType UTF8
+	Map     MapType     `thrift:"2"` // use ConvertedType Map
+	List    ListType    `thrift:"3"` // use ConvertedType List
+	Enum    EnumType    `thrift:"4"` // use ConvertedType Enum
+	Decimal DecimalType `thrift:"5"` // use ConvertedType Decimal + SchemaElement.{Scale, Precision}
+	Date    DateType    `thrift:"6"` // use ConvertedType Date
 
 	// use ConvertedType TimeMicros for Time{IsAdjustedToUTC: *, Unit: Micros}
 	// use ConvertedType TimeMillis for Time{IsAdjustedToUTC: *, Unit: Millis}
-	Time TimeType `thrift:"7,optional"`
+	Time TimeType `thrift:"7"`
 
 	// use ConvertedType TimestampMicros for Timestamp{IsAdjustedToUTC: *, Unit: Micros}
 	// use ConvertedType TimestampMillis for Timestamp{IsAdjustedToUTC: *, Unit: Millis}
-	Timestamp TimestampType `thrift:"8,optional"`
+	Timestamp TimestampType `thrift:"8"`
 
 	// 9: reserved for Interval
-	Integer IntType  `thrift:"10,optional"` // use ConvertedType Int* or Uint*
-	Unknown NullType `thrift:"11,optional"` // no compatible ConvertedType
-	Json    JsonType `thrift:"12,optional"` // use ConvertedType JSON
-	Bson    BsonType `thrift:"13,optional"` // use ConvertedType BSON
-	UUID    UUIDType `thrift:"14,optional"` // no compatible ConvertedType
+	Integer IntType  `thrift:"10"` // use ConvertedType Int* or Uint*
+	Unknown NullType `thrift:"11"` // no compatible ConvertedType
+	Json    JsonType `thrift:"12"` // use ConvertedType JSON
+	Bson    BsonType `thrift:"13"` // use ConvertedType BSON
+	UUID    UUIDType `thrift:"14"` // no compatible ConvertedType
+
+	Union interface{} `thrift:",union"`
 }
 
 // Represents a element inside a schema definition.
@@ -931,7 +933,7 @@ type FileMetaData struct {
 	FooterSigningKeyMetadata []byte `thrift:"9,optional"`
 }
 
-// Crypto metadata for files with encrypted footer
+// Crypto metadata for files with encrypted footer.
 type FileCryptoMetaData struct {
 	// Encryption algorithm. This field is only used for files
 	// with encrypted footer. Files with plaintext footer store algorithm id

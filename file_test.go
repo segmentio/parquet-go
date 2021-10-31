@@ -42,7 +42,7 @@ func TestOpenFile(t *testing.T) {
 }
 
 func printColumns(t *testing.T, root *parquet.Column, indent string) {
-	t.Logf("%s%s", indent, root.Name())
+	t.Logf("%s%s", indent, root)
 	indent += ". "
 
 	for _, child := range root.Columns() {

@@ -14,6 +14,40 @@ type Column struct {
 	columns []*Column
 }
 
+func (c *Column) Required() bool {
+	return c.schema.RepetitionType == schema.Required
+}
+
+func (c *Column) Optional() bool {
+	return c.schema.RepetitionType == schema.Optional
+}
+
+func (c *Column) Repeated() bool {
+	return c.schema.RepetitionType == schema.Repeated
+}
+
+func (c *Column) String() string {
+	switch {
+	case c.columns != nil:
+		return fmt.Sprintf("%s{%s}",
+			c.schema.Name,
+			c.schema.RepetitionType)
+
+	case c.schema.Type == schema.FixedLenByteArray:
+		return fmt.Sprintf("%s{%s(%d),%s}",
+			c.schema.Name,
+			c.schema.Type,
+			c.schema.TypeLength,
+			c.schema.RepetitionType)
+
+	default:
+		return fmt.Sprintf("%s{%s,%s}",
+			c.schema.Name,
+			c.schema.Type,
+			c.schema.RepetitionType)
+	}
+}
+
 func (c *Column) Name() string {
 	return c.schema.Name
 }
@@ -39,8 +73,9 @@ func openColumns(file *File, schemaIndex, columnOrderIndex int) (*Column, int, i
 	}
 
 	schemaIndex++
+	numChildren := int(c.schema.NumChildren)
 
-	if c.schema.Type != 0 {
+	if numChildren == 0 {
 		if columnOrderIndex < len(file.ColumnOrders) {
 			c.order = &file.ColumnOrders[columnOrderIndex]
 			columnOrderIndex++
@@ -48,7 +83,6 @@ func openColumns(file *File, schemaIndex, columnOrderIndex int) (*Column, int, i
 		return c, schemaIndex, columnOrderIndex, nil
 	}
 
-	numChildren := int(c.schema.NumChildren)
 	c.columns = make([]*Column, numChildren)
 
 	for i := range c.columns {
