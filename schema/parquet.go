@@ -208,7 +208,7 @@ type LogicalType struct {
 //
 // The nodes are listed in depth first traversal order.
 type SchemaElement struct {
-	// Data type for this field. Not set if the current element is a non-leaf node
+	// Data type for this field. Not set if the current element is a non-leaf node.
 	Type Type `thrift:"1,optional"`
 
 	// If type is FixedLenByteArray, this is the byte length of the vales.
@@ -218,10 +218,10 @@ type SchemaElement struct {
 	TypeLength int32 `thrift:"2,optional"`
 
 	// repetition of the field. The root of the schema does not have a repetition_type.
-	// All other nodes must have one
+	// All other nodes must have one.
 	RepetitionType FieldRepetitionType `thrift:"3,optional"`
 
-	// Name of the field in the schema
+	// Name of the field in the schema.
 	Name string `thrift:"4,required"`
 
 	// Nested fields.  Since thrift does not support nested fields,
@@ -244,7 +244,7 @@ type SchemaElement struct {
 	Precision int32 `thrift:"8,optional"`
 
 	// When the original schema supports field ids, this will save the
-	// original field id in the parquet schema
+	// original field id in the parquet schema.
 	FieldID int32 `thrift:"9,optional"`
 
 	// The logical type of this SchemaElement
@@ -724,7 +724,7 @@ type RowGroup struct {
 
 	// If set, specifies a sort ordering of the rows in this RowGroup.
 	// The sorting columns can be a subset of all the columns.
-	SortingColumns []SortingColumn `thrift:"4,required"`
+	SortingColumns []SortingColumn `thrift:"4,optional"`
 
 	// Byte offset from beginning of file to first page (data or dictionary)
 	// in this row group
@@ -857,7 +857,7 @@ type AesGcmV1 struct {
 
 	// In files encrypted with AAD prefix without storing it,
 	// readers must supply the prefix.
-	SupplyAadPrefix bool `thrift:"1,optional"`
+	SupplyAadPrefix bool `thrift:"3,optional"`
 }
 
 type AesGcmCtrV1 struct {
@@ -865,7 +865,7 @@ type AesGcmCtrV1 struct {
 	AadPrefix []byte `thrift:"1,optional"`
 
 	// Unique file identifier part of AAD suffix.
-	AadFileUnique []byte `thrift:"2,optinal"`
+	AadFileUnique []byte `thrift:"2,optional"`
 
 	// In files encrypted with AAD prefix without storing it,
 	// readers must supply the prefix.
@@ -903,7 +903,7 @@ type FileMetaData struct {
 	// String for application that wrote this file.  This should be in the format
 	// <Application> version <App Version> (build <App Build Hash>).
 	// e.g. impala version 1.0 (build 6cf94d29b2b7115df4de2c06e2ab4326d721eb55)
-	CreatedBy string `thrift:"4,optional"`
+	CreatedBy string `thrift:"6,optional"`
 
 	// Sort order used for the min_value and max_value fields in the Statistics
 	// objects and the min_values and max_values fields in the ColumnIndex
