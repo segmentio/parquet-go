@@ -90,13 +90,10 @@ func (f *File) ReadAt(b []byte, off int64) (int, error) {
 		if err == nil {
 			err = io.EOF
 		}
-		fmt.Printf("read: %x\n", b[:n])
 		return n, err
 	}
 
-	n, err := f.reader.ReadAt(b, off)
-	fmt.Printf("read: %x\n", b[:n])
-	return n, err
+	return f.reader.ReadAt(b, off)
 }
 
 func (f *File) MetaData() *schema.FileMetaData {

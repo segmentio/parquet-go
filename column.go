@@ -2,8 +2,10 @@ package parquet
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"sort"
 
 	"github.com/segmentio/encoding/thrift"
@@ -200,19 +202,20 @@ type ColumnChunks struct {
 	index  int
 	chunks []*schema.ColumnChunk
 
-	// protocol thrift.CompactProtocol
-	// decoder  thrift.Decoder
 	// reader   *io.SectionReader
 	// buffer   *bufio.Reader
+	// protocol thrift.CompactProtocol
+	// decoder  thrift.Decoder
 	metadata *schema.ColumnMetaData
 
 	err error
 }
 
-// Close closes the iterator, positionning it at the end of the column chunk
+// Close closes the iterator, positioning it at the end of the column chunk
 // sequence, and returns the last error it ecountered.
 func (c *ColumnChunks) Close() error {
 	c.index = len(c.chunks)
+	c.metadata = nil
 	return c.err
 }
 
@@ -282,7 +285,16 @@ func (c *ColumnChunks) MetaData() *schema.ColumnMetaData {
 	return c.metadata
 }
 
-func (c *ColumnChunks) Pages() *ColumnPages {
+// DataPages returns an iterator over the data pages in the column chunk that
+// the iterator is currently positioned at.
+func (c *ColumnChunks) DataPages() *ColumnPages {
+	if c.metadata != nil {
+		return &ColumnPages{
+			file:     c.file,
+			size:     c.size,
+			metadata: c.metadata,
+		}
+	}
 	return nil
 }
 
@@ -292,26 +304,89 @@ func (c *ColumnChunks) setError(err error) {
 }
 
 type ColumnPages struct {
+	file     io.ReaderAt
+	size     int64
+	metadata *schema.ColumnMetaData
+	header   *schema.PageHeader
+
 	reader   *io.SectionReader
 	buffer   *bufio.Reader
 	protocol thrift.CompactProtocol
 	decoder  thrift.Decoder
-	metadata *schema.ColumnMetaData
-	header   schema.PageHeader
-	err      error
+
+	data io.LimitedReader
+	page *compressedPageReader
+
+	err error
 }
 
 func (c *ColumnPages) Close() error {
-	return nil
+	c.header = nil
+
+	if c.page != nil {
+		releaseCompressedPageReader(c.page)
+		c.page = nil
+	}
+
+	switch {
+	case c.err == nil, errors.Is(c.err, io.EOF):
+		return nil
+	default:
+		return c.err
+	}
 }
 
 func (c *ColumnPages) Next() bool {
-	return false
+	if c.err != nil {
+		return false
+	}
+
+	if c.reader == nil {
+		c.reader = io.NewSectionReader(c.file, c.metadata.DataPageOffset, c.metadata.TotalCompressedSize)
+		c.buffer = bufio.NewReaderSize(c.reader, defaultBufferSize)
+		c.decoder.Reset(c.protocol.NewReader(c.buffer))
+	}
+
+	if c.data.N > 0 {
+		if _, err := io.Copy(ioutil.Discard, &c.data); err != nil {
+			c.setError(err)
+			return false
+		}
+	}
+
+	header := new(schema.PageHeader)
+	if err := c.decoder.Decode(header); err != nil {
+		c.setError(err)
+		return false
+	}
+
+	c.header = header
+	c.data.R = c.buffer
+	c.data.N = int64(header.CompressedPageSize)
+
+	if c.page == nil {
+		c.page = acquireCompressedPageReader(c.metadata.Codec, &c.data)
+	} else {
+		c.page.Reset(&c.data)
+	}
+
+	return true
 }
 
 func (c *ColumnPages) Header() *schema.PageHeader {
-	if c.err != nil {
-		return nil
-	}
-	return &c.header
+	return c.header
+}
+
+func (c *ColumnPages) setError(err error) {
+	c.header, c.err = nil, err
+}
+
+type debugReader struct {
+	r io.Reader
+}
+
+func (d *debugReader) Read(b []byte) (int, error) {
+	n, err := d.r.Read(b)
+	fmt.Printf("Read: %[1]x %08[1]b\n", b[:n])
+	return n, err
 }

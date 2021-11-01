@@ -47,6 +47,12 @@ func printColumns(t *testing.T, col *parquet.Column, indent string) {
 
 	chunks := col.Chunks()
 	for chunks.Next() {
+		pages := chunks.DataPages()
+		for pages.Next() {
+		}
+		if err := pages.Close(); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := chunks.Close(); err != nil {
 		t.Fatal(err)
