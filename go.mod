@@ -8,5 +8,3 @@ require (
 	github.com/pierrec/lz4/v4 v4.1.9
 	github.com/segmentio/encoding v0.2.24-0.20211101013219-efdf202c8f02
 )
-
-replace github.com/segmentio/encoding => ../encoding

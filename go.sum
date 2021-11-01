@@ -6,3 +6,5 @@ github.com/klauspost/cpuid/v2 v2.0.6/go.mod h1:FInQzS24/EEf25PyTYn52gqo7WaD8xa02
 github.com/pierrec/lz4/v4 v4.1.9 h1:xkrjwpOP5xg1k4Nn4GX4a4YFGhscyQL/3EddJ1Xxqm8=
 github.com/pierrec/lz4/v4 v4.1.9/go.mod h1:gZWDp/Ze/IJXGXf23ltt2EXimqmTUXEy0GFuRQyBid4=
 github.com/segmentio/asm v1.1.0/go.mod h1:4EUJGaKsB8ImLUwOGORVsNd9vTRDeh44JGsY4aKp5I4=
+github.com/segmentio/encoding v0.2.24-0.20211101013219-efdf202c8f02 h1:u4gPOP0xv6MeZCZ6teBMNFDf+4CEYlf2uadIeDg3q1k=
+github.com/segmentio/encoding v0.2.24-0.20211101013219-efdf202c8f02/go.mod h1:waft2p6XI4z2pk07M0YzZV4wEiqaRvsBSyWNHxVx4gU=
