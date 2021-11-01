@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/segmentio/parquet"
+	"github.com/segmentio/parquet/schema"
 )
 
 var fixtureFiles = [...]string{
@@ -49,6 +50,18 @@ func printColumns(t *testing.T, col *parquet.Column, indent string) {
 	for chunks.Next() {
 		pages := chunks.DataPages()
 		for pages.Next() {
+			p := pages.Header()
+			//t.Logf(">> %s", p.Type)
+
+			switch p.Type {
+			case schema.DataPage:
+				//t.Logf(". >> %v %v %v %v", p.DataPageHeader.NumValues, p.DataPageHeader.Encoding, p.DataPageHeader.DefinitionLevelEncoding, p.DataPageHeader.RepetitionLevelEncoding)
+			case schema.IndexPage:
+			case schema.DictionaryPage:
+			case schema.DataPageV2:
+			default:
+				t.Fatalf("unsupported page type: %d", p.Type)
+			}
 		}
 		if err := pages.Close(); err != nil {
 			t.Fatal(err)
