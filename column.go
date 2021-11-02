@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math/bits"
 	"sort"
 
 	"github.com/segmentio/encoding/thrift"
@@ -23,6 +24,9 @@ type Column struct {
 	order   *schema.ColumnOrder
 	columns []*Column
 	chunks  []*schema.ColumnChunk
+
+	maxDefinitionLevel uint32
+	maxRepetitionLevel uint32
 }
 
 // Required returns true if the column is required.
@@ -96,10 +100,12 @@ func (c *Column) Column(name string) *Column {
 // Chunks returns an iterator over the column chunks that compose this column.
 func (c *Column) Chunks() *ColumnChunks {
 	return &ColumnChunks{
-		file:   c.file,
-		size:   c.file.Size(),
-		chunks: c.chunks,
-		index:  -1,
+		file:               c.file,
+		size:               c.file.Size(),
+		chunks:             c.chunks,
+		index:              -1,
+		maxDefinitionLevel: c.maxDefinitionLevel,
+		maxRepetitionLevel: c.maxRepetitionLevel,
 	}
 }
 
@@ -121,7 +127,21 @@ func openColumns(file *File) (*Column, error) {
 		}
 	}
 
+	setMaxLevels(c, 0)
 	return c, nil
+}
+
+func setMaxLevels(col *Column, level uint32) {
+	col.maxRepetitionLevel = level
+	col.maxDefinitionLevel = level
+
+	if col.schema.RepetitionType != schema.Required {
+		level++
+	}
+
+	for _, c := range col.columns {
+		setMaxLevels(c, level)
+	}
 }
 
 type columnLoader struct {
@@ -188,6 +208,9 @@ type ColumnChunks struct {
 	// protocol thrift.CompactProtocol
 	// decoder  thrift.Decoder
 	metadata *schema.ColumnMetaData
+
+	maxDefinitionLevel uint32
+	maxRepetitionLevel uint32
 
 	err error
 }
@@ -271,9 +294,11 @@ func (c *ColumnChunks) MetaData() *schema.ColumnMetaData {
 func (c *ColumnChunks) DataPages() *ColumnPages {
 	if c.metadata != nil {
 		return &ColumnPages{
-			file:     c.file,
-			size:     c.size,
-			metadata: c.metadata,
+			file:               c.file,
+			size:               c.size,
+			metadata:           c.metadata,
+			maxDefinitionLevel: c.maxDefinitionLevel,
+			maxRepetitionLevel: c.maxRepetitionLevel,
 		}
 	}
 	return nil
@@ -298,6 +323,9 @@ type ColumnPages struct {
 	data io.LimitedReader
 	page *compressedPageReader
 
+	maxDefinitionLevel uint32
+	maxRepetitionLevel uint32
+
 	definitionLevelDecoder encoding.Int32Decoder
 	repetitionLevelDecoder encoding.Int32Decoder
 
@@ -313,8 +341,8 @@ type ColumnPages struct {
 func (c *ColumnPages) Close() error {
 	c.header = nil
 
-	closeInt32DecoderIfNotNil(c.definitionLevelDecoder)
-	closeInt32DecoderIfNotNil(c.repetitionLevelDecoder)
+	closeLevelDecoderIfNotNil(c.definitionLevelDecoder)
+	closeLevelDecoderIfNotNil(c.repetitionLevelDecoder)
 	c.definitionLevelDecoder = nil
 	c.repetitionLevelDecoder = nil
 
@@ -365,18 +393,25 @@ func (c *ColumnPages) Next() bool {
 		c.page.Reset(&c.data)
 	}
 
-	c.definitionLevelDecoder = resetInt32Decoder(c.page, c.definitionLevelDecoder, c.definitionLevelEncoding, header.DataPageHeader.DefinitionLevelEncoding)
-	c.repetitionLevelDecoder = resetInt32Decoder(c.page, c.repetitionLevelDecoder, c.repetitionLevelEncoding, header.DataPageHeader.RepetitionLevelEncoding)
+	//r := &debugReader{c.page}
+	r := io.Reader(c.page)
+
+	c.definitionLevelDecoder = resetLevelDecoder(r, c.definitionLevelDecoder, c.definitionLevelEncoding, header.DataPageHeader.DefinitionLevelEncoding)
+	c.repetitionLevelDecoder = resetLevelDecoder(r, c.repetitionLevelDecoder, c.repetitionLevelEncoding, header.DataPageHeader.RepetitionLevelEncoding)
 	c.definitionLevelEncoding = header.DataPageHeader.DefinitionLevelEncoding
 	c.repetitionLevelEncoding = header.DataPageHeader.RepetitionLevelEncoding
-	c.definitionLevels = resizeInt32Slice(c.definitionLevels, int(header.DataPageHeader.NumValues))
-	c.repetitionLevels = resizeInt32Slice(c.repetitionLevels, int(header.DataPageHeader.NumValues))
+	c.definitionLevels = resizeLevels(c.definitionLevels, int(header.DataPageHeader.NumValues))
+	c.repetitionLevels = resizeLevels(c.repetitionLevels, int(header.DataPageHeader.NumValues))
+	var err error
 
-	if err := decodeInt32Slice(c.repetitionLevelDecoder, c.repetitionLevels); err != nil {
+	c.repetitionLevels, err = decodeLevels(c.repetitionLevelDecoder, c.repetitionLevels, c.maxDefinitionLevel)
+	if err != nil {
 		c.setError(fmt.Errorf("decoding repetition levels: %w", err))
 		return false
 	}
-	if err := decodeInt32Slice(c.definitionLevelDecoder, c.definitionLevels); err != nil {
+
+	c.definitionLevels, err = decodeLevels(c.definitionLevelDecoder, c.definitionLevels, c.maxRepetitionLevel)
+	if err != nil {
 		c.setError(fmt.Errorf("decoding definition levels: %w", err))
 		return false
 	}
@@ -402,27 +437,22 @@ func (d *debugReader) Read(b []byte) (int, error) {
 	return n, err
 }
 
-func closeInt32DecoderIfNotNil(decoder encoding.Int32Decoder) {
+func closeLevelDecoderIfNotNil(decoder encoding.Int32Decoder) {
 	if decoder != nil {
 		decoder.Close()
 	}
 }
 
-func decodeInt32Slice(decoder encoding.Int32Decoder, slice []int32) error {
-	n, err := decoder.DecodeInt32(slice)
-	if err != nil {
-		if err == io.EOF {
-			err = io.ErrUnexpectedEOF
-		}
-		return err
+func decodeLevels(decoder encoding.Int32Decoder, levels []int32, maxLevel uint32) ([]int32, error) {
+	decoder.SetBitWidth(bits.Len32(maxLevel))
+	n, err := decoder.DecodeInt32(levels)
+	if err != nil && err != io.EOF {
+		return levels[:0], err
 	}
-	if n < len(slice) {
-		return io.ErrNoProgress
-	}
-	return nil
+	return levels[:n], nil
 }
 
-func resetInt32Decoder(r io.Reader, decoder encoding.Int32Decoder, oldEncoding, newEncoding schema.Encoding) encoding.Int32Decoder {
+func resetLevelDecoder(r io.Reader, decoder encoding.Int32Decoder, oldEncoding, newEncoding schema.Encoding) encoding.Int32Decoder {
 	switch {
 	case decoder == nil:
 		return lookupEncoding(newEncoding).NewInt32Decoder(r)
@@ -435,7 +465,7 @@ func resetInt32Decoder(r io.Reader, decoder encoding.Int32Decoder, oldEncoding, 
 	}
 }
 
-func resizeInt32Slice(slice []int32, size int) []int32 {
+func resizeLevels(slice []int32, size int) []int32 {
 	if cap(slice) < size {
 		return make([]int32, size)
 	} else {

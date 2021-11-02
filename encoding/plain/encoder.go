@@ -52,6 +52,10 @@ func (e *primitiveEncoder) EncodeFixedLenByteArray(size int, data []byte) error 
 	return err
 }
 
+func (e *primitiveEncoder) SetBitWidth(int) {
+	// see (*primitiveDecoder).SetBitWidth
+}
+
 type byteArrayEncoder struct {
 	w io.Writer
 	b [4]byte

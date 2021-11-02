@@ -50,33 +50,43 @@ type BooleanEncoder interface {
 	EncodeBoolean(data []bool) error
 }
 
-type Int32Decoder interface {
+type IntDecoder interface {
 	Decoder
+	SetBitWidth(bitWidth int)
+}
+
+type IntEncoder interface {
+	Encoder
+	SetBitWidth(bitWidth int)
+}
+
+type Int32Decoder interface {
+	IntDecoder
 	DecodeInt32(data []int32) (int, error)
 }
 
 type Int32Encoder interface {
-	Encoder
+	IntEncoder
 	EncodeInt32(data []int32) error
 }
 
 type Int64Decoder interface {
-	Decoder
+	IntDecoder
 	DecodeInt64(data []int64) (int, error)
 }
 
 type Int64Encoder interface {
-	Encoder
+	IntEncoder
 	EncodeInt64(data []int64) error
 }
 
 type Int96Decoder interface {
-	Decoder
+	IntDecoder
 	DecodeInt96(data [][12]byte) (int, error)
 }
 
 type Int96Encoder interface {
-	Encoder
+	IntEncoder
 	EncodeInt96(data [][12]byte) error
 }
 

@@ -35,10 +35,7 @@ func (e *booleanEncoder) Close() error {
 			if _, err := e.w.Write(e.buf[:n]); err != nil {
 				return err
 			}
-			r := int(run) / 64
-			if (run % 64) != 0 {
-				r++
-			}
+			r := (int(run) + 63) / 64
 			u := e.bits[offset : offset+r]
 			b := unsafe.Slice(*(**byte)(unsafe.Pointer(&u)), 8*len(u))
 			if _, err := e.w.Write(b); err != nil {
@@ -85,14 +82,15 @@ func (e *booleanEncoder) EncodeBoolean(data []bool) error {
 
 type intRun struct {
 	count uint32
+	width uint32
 	value [12]byte
-	width int
 }
 
 type intEncoder struct {
-	w    io.Writer
-	buf  [12 + binary.MaxVarintLen32]byte
-	data []byte
+	w     io.Writer
+	buf   [12 + binary.MaxVarintLen32]byte
+	width uint32
+	data  []byte
 }
 
 func (e *intEncoder) Close() error {
@@ -110,6 +108,10 @@ func (e *intEncoder) Reset(w io.Writer) {
 	e.data = e.data[:0]
 }
 
+func (e *intEncoder) SetBitWidth(bitWidth int) {
+	e.width = uint32(bitWidth+7) / 8
+}
+
 func (e *intEncoder) EncodeInt32(data []int32) error {
 	for i := 0; i < len(data); {
 		j := i + 1
@@ -120,7 +122,7 @@ func (e *intEncoder) EncodeInt32(data []int32) error {
 
 		run := intRun{
 			count: uint32(j - i),
-			width: 4,
+			width: coalesceUint32(e.width, 4),
 		}
 		binary.LittleEndian.PutUint32(run.value[:4], uint32(data[i]))
 		e.encodeRun(run)
@@ -139,7 +141,7 @@ func (e *intEncoder) EncodeInt64(data []int64) error {
 
 		run := intRun{
 			count: uint32(j - i),
-			width: 8,
+			width: coalesceUint32(e.width, 8),
 		}
 		binary.LittleEndian.PutUint64(run.value[:8], uint64(data[i]))
 		e.encodeRun(run)
@@ -158,8 +160,8 @@ func (e *intEncoder) EncodeInt96(data [][12]byte) error {
 
 		e.encodeRun(intRun{
 			count: uint32(j - i),
+			width: coalesceUint32(e.width, 12),
 			value: data[i],
-			width: 12,
 		})
 		i = j
 	}
@@ -177,12 +179,14 @@ func (e *intEncoder) encodeRun(run intRun) {
 
 	n := binary.PutUvarint(e.buf[:], uint64(run.count)<<1)
 
-	if (cap(e.data) - len(e.data)) < (run.width + n) {
+	if (cap(e.data) - len(e.data)) < (int(run.width) + n) {
 		data := make([]byte, len(e.data), 2*cap(e.data))
 		copy(data, e.data)
 		e.data = data
 	}
 
 	e.data = append(e.data, e.buf[:n]...)
-	e.data = append(e.data, run.value[:run.width]...)
+	if run.count > 0 {
+		e.data = append(e.data, run.value[:run.width]...)
+	}
 }

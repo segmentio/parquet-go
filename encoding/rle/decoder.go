@@ -2,18 +2,20 @@ package rle
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
 
 	"github.com/segmentio/parquet/encoding"
 )
 
 type decoder struct {
-	data io.LimitedReader
-	init bool
-	buf  [binary.MaxVarintLen32]byte
-	dec  hybridDecoder
-	run  runLengthDecoder
-	bit  bitPackDecoder
+	data  io.LimitedReader
+	width uint32
+	init  bool
+	buf   [binary.MaxVarintLen32]byte
+	dec   hybridDecoder
+	run   runLengthDecoder
+	bit   bitPackDecoder
 }
 
 func newDecoder(r io.Reader) *decoder {
@@ -22,6 +24,10 @@ func newDecoder(r io.Reader) *decoder {
 
 func (d *decoder) Close() error {
 	return nil
+}
+
+func (d *decoder) SetBitWidth(bitWidth int) {
+	d.width = uint32(bitWidth+7) / 8
 }
 
 func (d *decoder) Reset(r io.Reader) {
@@ -60,13 +66,14 @@ func (d *decoder) DecodeInt96(data [][12]byte) (int, error) {
 	})
 }
 
-func (d *decoder) decode(length, bitwidth int, decode func(r io.Reader, offset, length int) (int, error)) (int, error) {
+func (d *decoder) decode(length int, bitwidth uint32, decode func(r io.Reader, offset, length int) (int, error)) (int, error) {
+	width := coalesceUint32(d.width, bitwidth/8)
 	offset := 0
 
 	if !d.init {
 		_, err := io.ReadFull(&d.data, d.buf[:4])
 		if err != nil {
-			return 0, err
+			return 0, fmt.Errorf("decoding RLE length: %w", err)
 		}
 		d.data.N = int64(binary.LittleEndian.Uint32(d.buf[:4]))
 		d.init = true
@@ -76,6 +83,9 @@ func (d *decoder) decode(length, bitwidth int, decode func(r io.Reader, offset, 
 		if d.dec == nil {
 			u, err := binary.ReadUvarint(d)
 			if err != nil {
+				if err != io.EOF {
+					err = fmt.Errorf("decoding RLE run length: %w", err)
+				}
 				return offset, err
 			}
 
@@ -87,9 +97,13 @@ func (d *decoder) decode(length, bitwidth int, decode func(r io.Reader, offset, 
 				d.dec = &d.bit
 			} else {
 				d.run.count = count
-				_, err := io.ReadFull(&d.data, d.run.value[:bitwidth/8])
-				if err != nil {
-					return offset, err
+				if count == 0 {
+					d.run.value = [12]byte{}
+				} else {
+					_, err := io.ReadFull(&d.data, d.run.value[:width])
+					if err != nil {
+						return offset, fmt.Errorf("decoding RLE repeated value after count=%d: %w", count, err)
+					}
 				}
 				d.dec = &d.run
 			}
@@ -100,7 +114,7 @@ func (d *decoder) decode(length, bitwidth int, decode func(r io.Reader, offset, 
 			if err == io.EOF {
 				d.dec = nil
 			} else {
-				return offset + n, err
+				return offset + n, fmt.Errorf("decoding RLE values: %w", err)
 			}
 		}
 

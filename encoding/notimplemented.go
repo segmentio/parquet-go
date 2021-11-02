@@ -117,6 +117,9 @@ func (notImplementedDecoder) DecodeFixedLenByteArray(size int, data []byte) (int
 	return 0, NotImplementedError("FIXED_LEN_BYTE_ARRAY")
 }
 
+func (notImplementedDecoder) SetBitWidth(int) {
+}
+
 type notImplementedEncoder struct{}
 
 func (notImplementedEncoder) Close() error {
@@ -156,6 +159,9 @@ func (notImplementedEncoder) EncodeByteArray([][]byte) error {
 
 func (notImplementedEncoder) EncodeFixedLenByteArray(int, []byte) error {
 	return NotImplementedError("FIXED_LEN_BYTE_ARRAY")
+}
+
+func (notImplementedEncoder) SetBitWidth(int) {
 }
 
 func NotImplementedError(typ string) error {

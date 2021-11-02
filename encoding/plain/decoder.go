@@ -45,6 +45,11 @@ func (d *primitiveDecoder) DecodeFixedLenByteArray(size int, data []byte) (int, 
 	return readFull(d.r, size, data)
 }
 
+func (d *primitiveDecoder) SetBitWidth(bitWidth int) {
+	// The plain encoding does not vary based on the bit-width of values,
+	// which is why this method does nothing.
+}
+
 func readFull(r io.Reader, scale int, data []byte) (int, error) {
 	n, err := io.ReadFull(r, data)
 	if err == io.ErrUnexpectedEOF && (n%scale) == 0 {
