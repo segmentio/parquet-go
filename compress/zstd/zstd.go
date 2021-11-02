@@ -19,7 +19,7 @@ func (c *Codec) NewReader(r io.Reader) (compress.Reader, error) {
 }
 
 func (c *Codec) NewWriter(w io.Writer) (compress.Writer, error) {
-	z, err := zstd.NewWriter(w,
+	z, err := zstd.NewWriter(nonNilWriter(w),
 		zstd.WithEncoderConcurrency(1),
 		zstd.WithEncoderLevel(zstd.SpeedFastest),
 		zstd.WithZeroFrames(true),
@@ -38,4 +38,11 @@ func (r reader) Close() error { r.Decoder.Close(); return nil }
 type writer struct{ *zstd.Encoder }
 
 func (w writer) Close() error             { w.Encoder.Close(); return nil }
-func (w writer) Reset(ww io.Writer) error { w.Encoder.Reset(ww); return nil }
+func (w writer) Reset(ww io.Writer) error { w.Encoder.Reset(nonNilWriter(ww)); return nil }
+
+func nonNilWriter(w io.Writer) io.Writer {
+	if w == nil {
+		w = io.Discard
+	}
+	return w
+}

@@ -25,5 +25,4 @@ func (r reader) Reset(rr io.Reader) error { r.Reader.Reset(rr); return nil }
 
 type writer struct{ *lz4.Writer }
 
-func (w writer) Flush() error             { return w.Close() }
 func (w writer) Reset(ww io.Writer) error { w.Writer.Reset(ww); return nil }

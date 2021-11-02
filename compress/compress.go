@@ -13,7 +13,6 @@ type Reader interface {
 type Writer interface {
 	io.Writer
 	io.Closer
-	Flush() error
 	Reset(io.Writer) error
 }
 

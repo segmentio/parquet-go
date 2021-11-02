@@ -9,6 +9,7 @@ import (
 	"sort"
 
 	"github.com/segmentio/encoding/thrift"
+	"github.com/segmentio/parquet/encoding"
 	"github.com/segmentio/parquet/schema"
 )
 
@@ -174,26 +175,6 @@ func (cl *columnLoader) open(file *File) (*Column, error) {
 	return c, nil
 }
 
-/*
-// ColumnRows is an iterator type exposing rows of a column.
-type ColumnRows struct {
-	column *Column
-	err    error
-}
-
-func (cr *ColumnRows) Close() error {
-	return nil
-}
-
-func (cr *ColumnRows) Err() error {
-	return cr.err
-}
-
-func (cr *ColumnRows) Next(dst interface{}) bool {
-	return false
-}
-*/
-
 // ColumnChunks is an iterator type exposing chunks of a column within a parquet
 // file.
 type ColumnChunks struct {
@@ -317,11 +298,25 @@ type ColumnPages struct {
 	data io.LimitedReader
 	page *compressedPageReader
 
+	definitionLevelDecoder encoding.Int32Decoder
+	repetitionLevelDecoder encoding.Int32Decoder
+
+	definitionLevelEncoding schema.Encoding
+	repetitionLevelEncoding schema.Encoding
+
+	definitionLevels []int32
+	repetitionLevels []int32
+
 	err error
 }
 
 func (c *ColumnPages) Close() error {
 	c.header = nil
+
+	closeInt32DecoderIfNotNil(c.definitionLevelDecoder)
+	closeInt32DecoderIfNotNil(c.repetitionLevelDecoder)
+	c.definitionLevelDecoder = nil
+	c.repetitionLevelDecoder = nil
 
 	if c.page != nil {
 		releaseCompressedPageReader(c.page)
@@ -349,14 +344,14 @@ func (c *ColumnPages) Next() bool {
 
 	if c.data.N > 0 {
 		if _, err := io.Copy(ioutil.Discard, &c.data); err != nil {
-			c.setError(err)
+			c.setError(fmt.Errorf("skipping unread page data: %w", err))
 			return false
 		}
 	}
 
 	header := new(schema.PageHeader)
 	if err := c.decoder.Decode(header); err != nil {
-		c.setError(err)
+		c.setError(fmt.Errorf("decoding page header: %w", err))
 		return false
 	}
 
@@ -368,6 +363,22 @@ func (c *ColumnPages) Next() bool {
 		c.page = acquireCompressedPageReader(c.metadata.Codec, &c.data)
 	} else {
 		c.page.Reset(&c.data)
+	}
+
+	c.definitionLevelDecoder = resetInt32Decoder(c.page, c.definitionLevelDecoder, c.definitionLevelEncoding, header.DataPageHeader.DefinitionLevelEncoding)
+	c.repetitionLevelDecoder = resetInt32Decoder(c.page, c.repetitionLevelDecoder, c.repetitionLevelEncoding, header.DataPageHeader.RepetitionLevelEncoding)
+	c.definitionLevelEncoding = header.DataPageHeader.DefinitionLevelEncoding
+	c.repetitionLevelEncoding = header.DataPageHeader.RepetitionLevelEncoding
+	c.definitionLevels = resizeInt32Slice(c.definitionLevels, int(header.DataPageHeader.NumValues))
+	c.repetitionLevels = resizeInt32Slice(c.repetitionLevels, int(header.DataPageHeader.NumValues))
+
+	if err := decodeInt32Slice(c.repetitionLevelDecoder, c.repetitionLevels); err != nil {
+		c.setError(fmt.Errorf("decoding repetition levels: %w", err))
+		return false
+	}
+	if err := decodeInt32Slice(c.definitionLevelDecoder, c.definitionLevels); err != nil {
+		c.setError(fmt.Errorf("decoding definition levels: %w", err))
+		return false
 	}
 
 	return true
@@ -389,4 +400,45 @@ func (d *debugReader) Read(b []byte) (int, error) {
 	n, err := d.r.Read(b)
 	fmt.Printf("Read: %[1]x %08[1]b\n", b[:n])
 	return n, err
+}
+
+func closeInt32DecoderIfNotNil(decoder encoding.Int32Decoder) {
+	if decoder != nil {
+		decoder.Close()
+	}
+}
+
+func decodeInt32Slice(decoder encoding.Int32Decoder, slice []int32) error {
+	n, err := decoder.DecodeInt32(slice)
+	if err != nil {
+		if err == io.EOF {
+			err = io.ErrUnexpectedEOF
+		}
+		return err
+	}
+	if n < len(slice) {
+		return io.ErrNoProgress
+	}
+	return nil
+}
+
+func resetInt32Decoder(r io.Reader, decoder encoding.Int32Decoder, oldEncoding, newEncoding schema.Encoding) encoding.Int32Decoder {
+	switch {
+	case decoder == nil:
+		return lookupEncoding(newEncoding).NewInt32Decoder(r)
+	case oldEncoding != newEncoding:
+		decoder.Close()
+		return lookupEncoding(newEncoding).NewInt32Decoder(r)
+	default:
+		decoder.Reset(r)
+		return decoder
+	}
+}
+
+func resizeInt32Slice(slice []int32, size int) []int32 {
+	if cap(slice) < size {
+		return make([]int32, size)
+	} else {
+		return slice[:size]
+	}
 }
