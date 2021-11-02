@@ -2,11 +2,13 @@ package encoding_test
 
 import (
 	"bytes"
+	"errors"
 	"math"
 	"testing"
 
 	"github.com/segmentio/parquet/encoding"
 	"github.com/segmentio/parquet/encoding/plain"
+	"github.com/segmentio/parquet/encoding/rle"
 )
 
 var booleanTests = [...][]bool{
@@ -74,8 +76,13 @@ func TestEncoding(t *testing.T) {
 		encoding encoding.Encoding
 	}{
 		{
-			scenario: "plain",
+			scenario: "PLAIN",
 			encoding: new(plain.Encoding),
+		},
+
+		{
+			scenario: "RLE",
+			encoding: new(rle.Encoding),
 		},
 	} {
 		t.Run(test.scenario, func(t *testing.T) { testEncoding(t, test.encoding) })
@@ -85,12 +92,12 @@ func TestEncoding(t *testing.T) {
 func testEncoding(t *testing.T, e encoding.Encoding) {
 	for _, test := range [...]struct {
 		scenario string
-		function func(*testing.T, encoding.Encoder, encoding.Decoder, func())
+		function func(*testing.T, encoding.Encoding)
 	}{
-		// {
-		// 	scenario: "boolean",
-		// 	function: testBooleanEncoding,
-		// },
+		{
+			scenario: "boolean",
+			function: testBooleanEncoding,
+		},
 
 		{
 			scenario: "int32",
@@ -127,27 +134,26 @@ func testEncoding(t *testing.T, e encoding.Encoding) {
 			function: testFixedLenByteArrayEncoding,
 		},
 	} {
-		t.Run(test.scenario, func(t *testing.T) {
-			buf := new(bytes.Buffer)
-			enc := e.NewEncoder(buf)
-			dec := e.NewDecoder(buf)
-
-			test.function(t, enc, dec, func() {
-				buf.Reset()
-				enc.Reset(buf)
-				dec.Reset(buf)
-			})
-		})
+		t.Run(test.scenario, func(t *testing.T) { test.function(t, e) })
 	}
 }
 
-func testBooleanEncoding(t *testing.T, enc encoding.Encoder, dec encoding.Decoder, reset func()) {
+func testBooleanEncoding(t *testing.T, e encoding.Encoding) {
+	buf := new(bytes.Buffer)
+	enc := e.NewBooleanEncoder(buf)
+	dec := e.NewBooleanDecoder(buf)
 	tmp := [1]bool{}
 
 	for _, test := range booleanTests {
 		t.Run("", func(t *testing.T) {
 			if err := enc.EncodeBoolean(test); err != nil {
+				if errors.Is(err, encoding.ErrNotImplemented) {
+					t.Skip(err)
+				}
 				t.Fatal("encode:", err)
+			}
+			if err := enc.Close(); err != nil {
+				t.Fatal("close:", err)
 			}
 
 			for i := range test {
@@ -162,19 +168,30 @@ func testBooleanEncoding(t *testing.T, enc encoding.Encoder, dec encoding.Decode
 					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, test[i], tmp[i])
 				}
 			}
-		})
 
-		reset()
+			buf.Reset()
+			enc.Reset(buf)
+			dec.Reset(buf)
+		})
 	}
 }
 
-func testInt32Encoding(t *testing.T, enc encoding.Encoder, dec encoding.Decoder, reset func()) {
+func testInt32Encoding(t *testing.T, e encoding.Encoding) {
+	buf := new(bytes.Buffer)
+	enc := e.NewInt32Encoder(buf)
+	dec := e.NewInt32Decoder(buf)
 	tmp := [1]int32{}
 
 	for _, test := range int32Tests {
 		t.Run("", func(t *testing.T) {
 			if err := enc.EncodeInt32(test); err != nil {
+				if errors.Is(err, encoding.ErrNotImplemented) {
+					t.Skip(err)
+				}
 				t.Fatal("encode:", err)
+			}
+			if err := enc.Close(); err != nil {
+				t.Fatal("close:", err)
 			}
 
 			for i := range test {
@@ -189,19 +206,30 @@ func testInt32Encoding(t *testing.T, enc encoding.Encoder, dec encoding.Decoder,
 					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, test[i], tmp[i])
 				}
 			}
-		})
 
-		reset()
+			buf.Reset()
+			enc.Reset(buf)
+			dec.Reset(buf)
+		})
 	}
 }
 
-func testInt64Encoding(t *testing.T, enc encoding.Encoder, dec encoding.Decoder, reset func()) {
+func testInt64Encoding(t *testing.T, e encoding.Encoding) {
+	buf := new(bytes.Buffer)
+	enc := e.NewInt64Encoder(buf)
+	dec := e.NewInt64Decoder(buf)
 	tmp := [1]int64{}
 
 	for _, test := range int64Tests {
 		t.Run("", func(t *testing.T) {
 			if err := enc.EncodeInt64(test); err != nil {
+				if errors.Is(err, encoding.ErrNotImplemented) {
+					t.Skip(err)
+				}
 				t.Fatal("encode:", err)
+			}
+			if err := enc.Close(); err != nil {
+				t.Fatal("close:", err)
 			}
 
 			for i := range test {
@@ -216,19 +244,30 @@ func testInt64Encoding(t *testing.T, enc encoding.Encoder, dec encoding.Decoder,
 					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, test[i], tmp[i])
 				}
 			}
-		})
 
-		reset()
+			buf.Reset()
+			enc.Reset(buf)
+			dec.Reset(buf)
+		})
 	}
 }
 
-func testInt96Encoding(t *testing.T, enc encoding.Encoder, dec encoding.Decoder, reset func()) {
+func testInt96Encoding(t *testing.T, e encoding.Encoding) {
+	buf := new(bytes.Buffer)
+	enc := e.NewInt96Encoder(buf)
+	dec := e.NewInt96Decoder(buf)
 	tmp := [1][12]byte{}
 
 	for _, test := range int96Tests {
 		t.Run("", func(t *testing.T) {
 			if err := enc.EncodeInt96(test); err != nil {
+				if errors.Is(err, encoding.ErrNotImplemented) {
+					t.Skip(err)
+				}
 				t.Fatal("encode:", err)
+			}
+			if err := enc.Close(); err != nil {
+				t.Fatal("close:", err)
 			}
 
 			for i := range test {
@@ -243,19 +282,30 @@ func testInt96Encoding(t *testing.T, enc encoding.Encoder, dec encoding.Decoder,
 					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, test[i], tmp[i])
 				}
 			}
-		})
 
-		reset()
+			buf.Reset()
+			enc.Reset(buf)
+			dec.Reset(buf)
+		})
 	}
 }
 
-func testFloatEncoding(t *testing.T, enc encoding.Encoder, dec encoding.Decoder, reset func()) {
+func testFloatEncoding(t *testing.T, e encoding.Encoding) {
+	buf := new(bytes.Buffer)
+	enc := e.NewFloatEncoder(buf)
+	dec := e.NewFloatDecoder(buf)
 	tmp := [1]float32{}
 
 	for _, test := range floatTests {
 		t.Run("", func(t *testing.T) {
 			if err := enc.EncodeFloat(test); err != nil {
+				if errors.Is(err, encoding.ErrNotImplemented) {
+					t.Skip(err)
+				}
 				t.Fatal("encode:", err)
+			}
+			if err := enc.Close(); err != nil {
+				t.Fatal("close:", err)
 			}
 
 			for i := range test {
@@ -270,19 +320,30 @@ func testFloatEncoding(t *testing.T, enc encoding.Encoder, dec encoding.Decoder,
 					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, test[i], tmp[i])
 				}
 			}
-		})
 
-		reset()
+			buf.Reset()
+			enc.Reset(buf)
+			dec.Reset(buf)
+		})
 	}
 }
 
-func testDoubleEncoding(t *testing.T, enc encoding.Encoder, dec encoding.Decoder, reset func()) {
+func testDoubleEncoding(t *testing.T, e encoding.Encoding) {
+	buf := new(bytes.Buffer)
+	enc := e.NewDoubleEncoder(buf)
+	dec := e.NewDoubleDecoder(buf)
 	tmp := [1]float64{}
 
 	for _, test := range doubleTests {
 		t.Run("", func(t *testing.T) {
 			if err := enc.EncodeDouble(test); err != nil {
+				if errors.Is(err, encoding.ErrNotImplemented) {
+					t.Skip(err)
+				}
 				t.Fatal("encode:", err)
+			}
+			if err := enc.Close(); err != nil {
+				t.Fatal("close:", err)
 			}
 
 			for i := range test {
@@ -297,19 +358,30 @@ func testDoubleEncoding(t *testing.T, enc encoding.Encoder, dec encoding.Decoder
 					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, test[i], tmp[i])
 				}
 			}
-		})
 
-		reset()
+			buf.Reset()
+			enc.Reset(buf)
+			dec.Reset(buf)
+		})
 	}
 }
 
-func testByteArrayEncoding(t *testing.T, enc encoding.Encoder, dec encoding.Decoder, reset func()) {
+func testByteArrayEncoding(t *testing.T, e encoding.Encoding) {
+	buf := new(bytes.Buffer)
+	enc := e.NewByteArrayEncoder(buf)
+	dec := e.NewByteArrayDecoder(buf)
 	tmp := [1][]byte{}
 
 	for _, test := range byteArrayTests {
 		t.Run("", func(t *testing.T) {
 			if err := enc.EncodeByteArray(test); err != nil {
+				if errors.Is(err, encoding.ErrNotImplemented) {
+					t.Skip(err)
+				}
 				t.Fatal("encode:", err)
+			}
+			if err := enc.Close(); err != nil {
+				t.Fatal("close:", err)
 			}
 
 			for i := range test {
@@ -324,19 +396,31 @@ func testByteArrayEncoding(t *testing.T, enc encoding.Encoder, dec encoding.Deco
 					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, test[i], tmp[i])
 				}
 			}
-		})
 
-		reset()
+			buf.Reset()
+			enc.Reset(buf)
+			dec.Reset(buf)
+		})
 	}
 }
 
-func testFixedLenByteArrayEncoding(t *testing.T, enc encoding.Encoder, dec encoding.Decoder, reset func()) {
+func testFixedLenByteArrayEncoding(t *testing.T, e encoding.Encoding) {
+	buf := new(bytes.Buffer)
+	enc := e.NewFixedLenByteArrayEncoder(buf)
+	dec := e.NewFixedLenByteArrayDecoder(buf)
+
 	for _, test := range fixedLenByteArrayTests {
 		t.Run("", func(t *testing.T) {
 			tmp := make([]byte, test.size)
 
 			if err := enc.EncodeFixedLenByteArray(test.size, test.data); err != nil {
+				if errors.Is(err, encoding.ErrNotImplemented) {
+					t.Skip(err)
+				}
 				t.Fatal("encode:", err)
+			}
+			if err := enc.Close(); err != nil {
+				t.Fatal("close:", err)
 			}
 
 			for i := 0; i < (len(test.data) / test.size); i++ {
@@ -352,8 +436,10 @@ func testFixedLenByteArrayEncoding(t *testing.T, enc encoding.Encoder, dec encod
 					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, want, tmp)
 				}
 			}
-		})
 
-		reset()
+			buf.Reset()
+			enc.Reset(buf)
+			dec.Reset(buf)
+		})
 	}
 }
