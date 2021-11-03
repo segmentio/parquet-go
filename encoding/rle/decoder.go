@@ -138,58 +138,57 @@ type hybridDecoder interface {
 	decodeInt96(io.Reader, uint32, [][12]byte) (int, error)
 }
 
+// large enougth to contain 8 x int96
+const bitBufferSize = 96
+
 type bitPackDecoder struct {
 	remain int
 	offset int
 	length int
-	buffer [96]byte // large enougth to contain 8 x int96
+	buffer [bitBufferSize]byte
 }
 
 func (d *bitPackDecoder) decodeBoolean(r io.Reader, data []bool) (int, error) {
-	return d.decode(r, 1, 1, unsafeBoolToBytes(data))
+	return d.decode(r, 1, 1, bits.BoolToBytes(data))
 }
 
 func (d *bitPackDecoder) decodeInt32(r io.Reader, bitWidth uint32, data []int32) (int, error) {
-	return d.decode(r, bitWidth, 32, unsafeInt32ToBytes(data))
+	return d.decode(r, bitWidth, 32, bits.Int32ToBytes(data))
 }
 
 func (d *bitPackDecoder) decodeInt64(r io.Reader, bitWidth uint32, data []int64) (int, error) {
-	return d.decode(r, bitWidth, 64, unsafeInt64ToBytes(data))
+	return d.decode(r, bitWidth, 64, bits.Int64ToBytes(data))
 }
 
 func (d *bitPackDecoder) decodeInt96(r io.Reader, bitWidth uint32, data [][12]byte) (int, error) {
-	return d.decode(r, bitWidth, 96, unsafeInt96ToBytes(data))
+	return d.decode(r, bitWidth, 96, bits.Int96ToBytes(data))
 }
 
 func (d *bitPackDecoder) decode(r io.Reader, bitWidth, wordWidth uint32, data []byte) (int, error) {
-	if bitWidth == wordSize {
+	if bitWidth == wordWidth {
 		return io.ReadFull(r, data)
 	}
 
-	remainedBefore := d.remain
-	wordSize := int(wordWidth) / 8
-	wordOffset := 0
-	wordLength := 8 * len(data)
-
+	remained := d.remain
 	for {
 		if d.length == d.offset {
 			// We know that bit-pack data is encoded in chunks of 8 since the
 			// bit length is divided by 8. We look for the multiple of 8
 			// to maximize buffer utilization.
-			chunkSizeBits := 8 * int(bitWidth)
-			numberOfChunks := (8 * len(d.buffer)) / chunkSizeBits
-			numberOfBytes := (numberOfChunks * chunkSizeBits) / 8
+			chunkSizeBits := 8 * uint(bitWidth)
+			numberOfChunks := bits.BitCount(len(d.buffer)) / chunkSizeBits
+			numberOfBytes := bits.ByteCount(numberOfChunks * chunkSizeBits)
 			// We limit the read to the number of bytes that remain to be read
 			// from the underlying io.Reader, otherwise we would read beyond the
 			// end of the bit-packed run.
-			remainingBytes := ((d.remain * int(bitWidth)) + 7) / 8
+			remainingBytes := bits.ByteCount(uint(d.remain) * uint(bitWidth))
 			if remainingBytes < numberOfBytes {
 				numberOfBytes = remainingBytes
 			}
 
 			n, err := io.ReadFull(r, d.buffer[:numberOfBytes])
 			if err != nil {
-				return remainedBefore - d.remain, err
+				return remained - d.remain, err
 			}
 
 			// At this point we have the guarantee that the number of bytes read
@@ -199,16 +198,22 @@ func (d *bitPackDecoder) decode(r io.Reader, bitWidth, wordWidth uint32, data []
 			d.length = 8 * n
 		}
 
-		for d.remain > 0 && d.offset < d.length && len(data) >= wordSize {
-			index, shift := d.offset/8, d.offset%8
-			bits.Copy(data, d.buffer[index:], uint(shift), uint(bitWidth))
-			d.offset += int(bitWidth)
-			d.remain--
-			data = data[wordSize:]
+		unpacked := bits.Unpack(data, uint(wordWidth), d.buffer[d.offset:d.length], uint(bitWidth))
+
+		if d.offset += unpacked * int(bitWidth); d.offset < d.length {
+			bitShift := unpacked * int(bitWidth)
+			bitCount := d.length - d.offset
+			tmp := d.buffer                  // copy
+			d.buffer = [bitBufferSize]byte{} // clear
+			d.offset = 0
+			d.length = bits.Copy(d.buffer[:], tmp[:], uint(bitShift), uint(bitCount))
 		}
 
-		if d.remain == 0 || len(data) < wordSize {
-			return remainedBefore - d.remain, nil
+		d.remain -= unpacked
+		data = data[:(unpacked*int(wordWidth))/8]
+
+		if d.remain == 0 {
+			return remained - d.remain, nil
 		}
 	}
 }

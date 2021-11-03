@@ -26,6 +26,60 @@ func TestUnpack(t *testing.T) {
 		},
 
 		{
+			scenario: "1 bit words into 1 bit words",
+			src: []byte{
+				0b01010101, 0b10101010, 0b00001111, 0b11110000,
+			},
+			dst: []byte{
+				0b01010101, 0b10101010, 0b00001111, 0b11110000,
+			},
+			unpacked: 32,
+			dstWidth: 1,
+			srcWidth: 1,
+		},
+
+		{
+			scenario: "2 bits words into 2 bit words",
+			src: []byte{
+				0b01010101, 0b10101010, 0b00001111, 0b11110000,
+			},
+			dst: []byte{
+				0b01010101, 0b10101010, 0b00001111, 0b11110000,
+			},
+			unpacked: 16,
+			dstWidth: 2,
+			srcWidth: 2,
+		},
+
+		{
+			scenario: "4 bits words into 4 bit words",
+			src: []byte{
+				0b01010101, 0b10101010, 0b00001111, 0b11110000,
+			},
+			dst: []byte{
+				0b01010101, 0b10101010, 0b00001111, 0b11110000,
+			},
+			unpacked: 8,
+			dstWidth: 4,
+			srcWidth: 4,
+		},
+
+		{
+			scenario: "8 bits words into 8 bit words",
+			src: []byte{
+				0b01010101, 0b10101010, 0b00001111, 0b11110000,
+				0b00000000, 0b11111111, 0b11110000, 0b00001111,
+			},
+			dst: []byte{
+				0b01010101, 0b10101010, 0b00001111, 0b11110000,
+				0b00000000, 0b11111111, 0b11110000, 0b00001111,
+			},
+			unpacked: 8,
+			dstWidth: 8,
+			srcWidth: 8,
+		},
+
+		{
 			scenario: "3 bits words into 8 bits words",
 			src: []byte{
 				0b01010101, 0b00101010,
@@ -37,6 +91,21 @@ func TestUnpack(t *testing.T) {
 			unpacked: 5,
 			dstWidth: 8,
 			srcWidth: 3,
+		},
+
+		{
+			scenario: "5 bits words into 16 bits words",
+			src: []byte{
+				0b00011111, 0b11110101,
+			},
+			dst: []byte{
+				0b00011111, 0b00000000,
+				0b00001000, 0b00000000,
+				0b00011101, 0b00000000,
+			},
+			unpacked: 3,
+			dstWidth: 16,
+			srcWidth: 5,
 		},
 
 		{
@@ -114,13 +183,14 @@ func BenchmarkUnpack(b *testing.B) {
 		0b00010000, 0b00100000, 0b01000000, 0b10000000,
 	}
 
-	dst := make([]byte, 2*len(src))
+	const extraSpace = 10
+	dst := make([]byte, 2*len(src)+extraSpace)
 
 	for i := 0; i < b.N; i++ {
 		n := bits.Unpack(dst, 8, src, 4)
 
-		if n != len(dst) {
-			b.Errorf("wrong number of words unpacked: want=%d got=%d", len(dst), n)
+		if n != 2*len(src) {
+			b.Errorf("wrong number of words unpacked: want=%d got=%d", 2*len(src), n)
 		}
 	}
 
