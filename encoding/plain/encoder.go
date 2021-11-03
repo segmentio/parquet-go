@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"math"
+
+	"github.com/segmentio/parquet/internal/bits"
 )
 
 type primitiveEncoder struct {
@@ -20,27 +22,27 @@ func (e *primitiveEncoder) Reset(w io.Writer) {
 }
 
 func (e *primitiveEncoder) EncodeInt32(data []int32) error {
-	_, err := e.w.Write(unsafeInt32ToBytes(data))
+	_, err := e.w.Write(bits.Int32ToBytes(data))
 	return err
 }
 
 func (e *primitiveEncoder) EncodeInt64(data []int64) error {
-	_, err := e.w.Write(unsafeInt64ToBytes(data))
+	_, err := e.w.Write(bits.Int64ToBytes(data))
 	return err
 }
 
 func (e *primitiveEncoder) EncodeInt96(data [][12]byte) error {
-	_, err := e.w.Write(unsafeInt96ToBytes(data))
+	_, err := e.w.Write(bits.Int96ToBytes(data))
 	return err
 }
 
 func (e *primitiveEncoder) EncodeFloat(data []float32) error {
-	_, err := e.w.Write(unsafeFloat32ToBytes(data))
+	_, err := e.w.Write(bits.Float32ToBytes(data))
 	return err
 }
 
 func (e *primitiveEncoder) EncodeDouble(data []float64) error {
-	_, err := e.w.Write(unsafeFloat64ToBytes(data))
+	_, err := e.w.Write(bits.Float64ToBytes(data))
 	return err
 }
 

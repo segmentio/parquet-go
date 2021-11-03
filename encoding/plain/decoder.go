@@ -4,6 +4,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+
+	"github.com/segmentio/parquet/internal/bits"
 )
 
 type primitiveDecoder struct {
@@ -19,23 +21,23 @@ func (d *primitiveDecoder) Reset(r io.Reader) {
 }
 
 func (d *primitiveDecoder) DecodeInt32(data []int32) (int, error) {
-	return readFull(d.r, 4, unsafeInt32ToBytes(data))
+	return readFull(d.r, 4, bits.Int32ToBytes(data))
 }
 
 func (d *primitiveDecoder) DecodeInt64(data []int64) (int, error) {
-	return readFull(d.r, 8, unsafeInt64ToBytes(data))
+	return readFull(d.r, 8, bits.Int64ToBytes(data))
 }
 
 func (d *primitiveDecoder) DecodeInt96(data [][12]byte) (int, error) {
-	return readFull(d.r, 12, unsafeInt96ToBytes(data))
+	return readFull(d.r, 12, bits.Int96ToBytes(data))
 }
 
 func (d *primitiveDecoder) DecodeFloat(data []float32) (int, error) {
-	return readFull(d.r, 4, unsafeFloat32ToBytes(data))
+	return readFull(d.r, 4, bits.Float32ToBytes(data))
 }
 
 func (d *primitiveDecoder) DecodeDouble(data []float64) (int, error) {
-	return readFull(d.r, 8, unsafeFloat64ToBytes(data))
+	return readFull(d.r, 8, bits.Float64ToBytes(data))
 }
 
 func (d *primitiveDecoder) DecodeFixedLenByteArray(size int, data []byte) (int, error) {

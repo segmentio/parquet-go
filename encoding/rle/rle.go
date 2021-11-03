@@ -23,7 +23,7 @@ func (e *Encoding) NewInt32Decoder(r io.Reader) encoding.Int32Decoder {
 }
 
 func (e *Encoding) NewInt32Encoder(w io.Writer) encoding.Int32Encoder {
-	return &intEncoder{w: w}
+	return newEncoder(w)
 }
 
 func (e *Encoding) NewInt64Decoder(r io.Reader) encoding.Int64Decoder {
@@ -31,7 +31,7 @@ func (e *Encoding) NewInt64Decoder(r io.Reader) encoding.Int64Decoder {
 }
 
 func (e *Encoding) NewInt64Encoder(w io.Writer) encoding.Int64Encoder {
-	return &intEncoder{w: w}
+	return newEncoder(w)
 }
 
 func (e *Encoding) NewInt96Decoder(r io.Reader) encoding.Int96Decoder {
@@ -39,7 +39,7 @@ func (e *Encoding) NewInt96Decoder(r io.Reader) encoding.Int96Decoder {
 }
 
 func (e *Encoding) NewInt96Encoder(w io.Writer) encoding.Int96Encoder {
-	return &intEncoder{w: w}
+	return newEncoder(w)
 }
 
 func coalesceUint32(a, b uint32) uint32 {

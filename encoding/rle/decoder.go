@@ -5,17 +5,19 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/segmentio/parquet/encoding"
+	"github.com/segmentio/parquet/internal/bits"
 )
 
 type decoder struct {
-	data  io.LimitedReader
-	width uint32
-	init  bool
-	buf   [binary.MaxVarintLen32]byte
-	dec   hybridDecoder
-	run   runLengthDecoder
-	bit   bitPackDecoder
+	data io.LimitedReader
+	init bool
+	buf  [binary.MaxVarintLen32]byte
+	dec  hybridDecoder
+	run  runLengthDecoder
+	bit  bitPackDecoder
+
+	width    uint32
+	bitWidth uint32
 }
 
 func newDecoder(r io.Reader) *decoder {
@@ -28,6 +30,7 @@ func (d *decoder) Close() error {
 
 func (d *decoder) SetBitWidth(bitWidth int) {
 	d.width = uint32(bitWidth+7) / 8
+	d.bitWidth = uint32(bitWidth)
 }
 
 func (d *decoder) Reset(r io.Reader) {
@@ -43,31 +46,34 @@ func (d *decoder) ReadByte() (byte, error) {
 }
 
 func (d *decoder) DecodeBoolean(data []bool) (int, error) {
-	return d.decode(len(data), 8, func(r io.Reader, offset, length int) (int, error) {
+	return d.decode(len(data), 1, func(r io.Reader, offset, length int) (int, error) {
 		return d.dec.decodeBoolean(r, data[offset:offset+length])
 	})
 }
 
 func (d *decoder) DecodeInt32(data []int32) (int, error) {
-	return d.decode(len(data), 32, func(r io.Reader, offset, length int) (int, error) {
-		return d.dec.decodeInt32(r, data[offset:offset+length])
+	bitWidth := coalesceUint32(d.bitWidth, 32)
+	return d.decode(len(data), bitWidth, func(r io.Reader, offset, length int) (int, error) {
+		return d.dec.decodeInt32(r, bitWidth, data[offset:offset+length])
 	})
 }
 
 func (d *decoder) DecodeInt64(data []int64) (int, error) {
-	return d.decode(len(data), 64, func(r io.Reader, offset, length int) (int, error) {
-		return d.dec.decodeInt64(r, data[offset:offset+length])
+	bitWidth := coalesceUint32(d.bitWidth, 64)
+	return d.decode(len(data), bitWidth, func(r io.Reader, offset, length int) (int, error) {
+		return d.dec.decodeInt64(r, bitWidth, data[offset:offset+length])
 	})
 }
 
 func (d *decoder) DecodeInt96(data [][12]byte) (int, error) {
-	return d.decode(len(data), 96, func(r io.Reader, offset, length int) (int, error) {
-		return d.dec.decodeInt96(r, data[offset:offset+length])
+	bitWidth := coalesceUint32(d.bitWidth, 96)
+	return d.decode(len(data), bitWidth, func(r io.Reader, offset, length int) (int, error) {
+		return d.dec.decodeInt96(r, bitWidth, data[offset:offset+length])
 	})
 }
 
-func (d *decoder) decode(length int, bitwidth uint32, decode func(r io.Reader, offset, length int) (int, error)) (int, error) {
-	width := coalesceUint32(d.width, bitwidth/8)
+func (d *decoder) decode(length int, bitWidth uint32, decode func(r io.Reader, offset, length int) (int, error)) (int, error) {
+	width := coalesceUint32(d.width, bitWidth/8)
 	offset := 0
 
 	if !d.init {
@@ -91,7 +97,7 @@ func (d *decoder) decode(length int, bitwidth uint32, decode func(r io.Reader, o
 
 			count, bitpack := uint32(u>>1), (u&1) != 0
 			if bitpack {
-				d.bit.remain = int(count)
+				d.bit.remain = int(count * 8)
 				d.bit.offset = 0
 				d.bit.length = 0
 				d.dec = &d.bit
@@ -127,73 +133,84 @@ func (d *decoder) decode(length int, bitwidth uint32, decode func(r io.Reader, o
 
 type hybridDecoder interface {
 	decodeBoolean(io.Reader, []bool) (int, error)
-	decodeInt32(io.Reader, []int32) (int, error)
-	decodeInt64(io.Reader, []int64) (int, error)
-	decodeInt96(io.Reader, [][12]byte) (int, error)
+	decodeInt32(io.Reader, uint32, []int32) (int, error)
+	decodeInt64(io.Reader, uint32, []int64) (int, error)
+	decodeInt96(io.Reader, uint32, [][12]byte) (int, error)
 }
 
 type bitPackDecoder struct {
 	remain int
 	offset int
 	length int
-	buffer [64]byte
+	buffer [96]byte // large enougth to contain 8 x int96
 }
 
 func (d *bitPackDecoder) decodeBoolean(r io.Reader, data []bool) (int, error) {
-	count := 0
+	return d.decode(r, 1, 1, unsafeBoolToBytes(data))
+}
 
-	for len(data) != 0 {
-		if d.remain == 0 {
-			return count, io.EOF
-		}
+func (d *bitPackDecoder) decodeInt32(r io.Reader, bitWidth uint32, data []int32) (int, error) {
+	return d.decode(r, bitWidth, 32, unsafeInt32ToBytes(data))
+}
 
-		if d.offset == d.length {
-			n, err := io.ReadFull(r, d.buffer[:])
-			if err != nil && (n == 0 || (n%8) != 0) {
-				if err == io.EOF {
-					err = io.ErrUnexpectedEOF
-				}
-				return 0, err
-			}
-			d.offset = 0
-			d.length = n * 8
-		}
+func (d *bitPackDecoder) decodeInt64(r io.Reader, bitWidth uint32, data []int64) (int, error) {
+	return d.decode(r, bitWidth, 64, unsafeInt64ToBytes(data))
+}
 
-		limit := d.remain
-		avail := d.length - d.offset
-		if avail < limit {
-			limit = avail
-		}
-		if len(data) < limit {
-			limit = len(data)
-		}
+func (d *bitPackDecoder) decodeInt96(r io.Reader, bitWidth uint32, data [][12]byte) (int, error) {
+	return d.decode(r, bitWidth, 96, unsafeInt96ToBytes(data))
+}
 
-		for i := range data[:limit] {
-			j := d.offset + i
-			x := j / 8
-			y := j % 8
-			data[i] = (d.buffer[x] & byte(1<<y)) != 0
-		}
-
-		d.remain -= limit
-		d.offset += limit
-		count += limit
-		data = data[limit:]
+func (d *bitPackDecoder) decode(r io.Reader, bitWidth, wordWidth uint32, data []byte) (int, error) {
+	if bitWidth == wordSize {
+		return io.ReadFull(r, data)
 	}
 
-	return count, nil
-}
+	remainedBefore := d.remain
+	wordSize := int(wordWidth) / 8
+	wordOffset := 0
+	wordLength := 8 * len(data)
 
-func (d *bitPackDecoder) decodeInt32(r io.Reader, data []int32) (int, error) {
-	return 0, encoding.NotImplementedError("INT32")
-}
+	for {
+		if d.length == d.offset {
+			// We know that bit-pack data is encoded in chunks of 8 since the
+			// bit length is divided by 8. We look for the multiple of 8
+			// to maximize buffer utilization.
+			chunkSizeBits := 8 * int(bitWidth)
+			numberOfChunks := (8 * len(d.buffer)) / chunkSizeBits
+			numberOfBytes := (numberOfChunks * chunkSizeBits) / 8
+			// We limit the read to the number of bytes that remain to be read
+			// from the underlying io.Reader, otherwise we would read beyond the
+			// end of the bit-packed run.
+			remainingBytes := ((d.remain * int(bitWidth)) + 7) / 8
+			if remainingBytes < numberOfBytes {
+				numberOfBytes = remainingBytes
+			}
 
-func (d *bitPackDecoder) decodeInt64(r io.Reader, data []int64) (int, error) {
-	return 0, encoding.NotImplementedError("INT64")
-}
+			n, err := io.ReadFull(r, d.buffer[:numberOfBytes])
+			if err != nil {
+				return remainedBefore - d.remain, err
+			}
 
-func (d *bitPackDecoder) decodeInt96(r io.Reader, data [][12]byte) (int, error) {
-	return 0, encoding.NotImplementedError("INT96")
+			// At this point we have the guarantee that the number of bytes read
+			// is a multiple of the bit-width, the data ends at the end of a
+			// byte, there will not be partial trailing words.
+			d.offset = 0
+			d.length = 8 * n
+		}
+
+		for d.remain > 0 && d.offset < d.length && len(data) >= wordSize {
+			index, shift := d.offset/8, d.offset%8
+			bits.Copy(data, d.buffer[index:], uint(shift), uint(bitWidth))
+			d.offset += int(bitWidth)
+			d.remain--
+			data = data[wordSize:]
+		}
+
+		if d.remain == 0 || len(data) < wordSize {
+			return remainedBefore - d.remain, nil
+		}
+	}
 }
 
 type runLengthDecoder struct {
@@ -208,54 +225,43 @@ func (d *runLengthDecoder) decodeBoolean(r io.Reader, data []bool) (int, error) 
 	if len(data) > int(d.count) {
 		data = data[:d.count]
 	}
-	v := d.value[0] != 0
-	for i := range data {
-		data[i] = v
-	}
+	bits.Fill(bits.BoolToBytes(data), d.value[:1])
 	d.count -= uint32(len(data))
 	return len(data), nil
 }
 
-func (d *runLengthDecoder) decodeInt32(r io.Reader, data []int32) (int, error) {
+func (d *runLengthDecoder) decodeInt32(r io.Reader, bitWidth uint32, data []int32) (int, error) {
 	if d.count == 0 {
 		return 0, io.EOF
 	}
 	if len(data) > int(d.count) {
 		data = data[:d.count]
 	}
-	v := int32(binary.LittleEndian.Uint32(d.value[:4]))
-	for i := range data {
-		data[i] = v
-	}
+	bits.Fill(bits.Int32ToBytes(data), d.value[:4])
 	d.count -= uint32(len(data))
 	return len(data), nil
 }
 
-func (d *runLengthDecoder) decodeInt64(r io.Reader, data []int64) (int, error) {
+func (d *runLengthDecoder) decodeInt64(r io.Reader, bitWidth uint32, data []int64) (int, error) {
 	if d.count == 0 {
 		return 0, io.EOF
 	}
 	if len(data) > int(d.count) {
 		data = data[:d.count]
 	}
-	v := int64(binary.LittleEndian.Uint64(d.value[:8]))
-	for i := range data {
-		data[i] = v
-	}
+	bits.Fill(bits.Int64ToBytes(data), d.value[:8])
 	d.count -= uint32(len(data))
 	return len(data), nil
 }
 
-func (d *runLengthDecoder) decodeInt96(r io.Reader, data [][12]byte) (int, error) {
+func (d *runLengthDecoder) decodeInt96(r io.Reader, bitWidth uint32, data [][12]byte) (int, error) {
 	if d.count == 0 {
 		return 0, io.EOF
 	}
 	if len(data) > int(d.count) {
 		data = data[:d.count]
 	}
-	for i := range data {
-		data[i] = d.value
-	}
+	bits.Fill(bits.Int96ToBytes(data), d.value[:])
 	d.count -= uint32(len(data))
 	return len(data), nil
 }
