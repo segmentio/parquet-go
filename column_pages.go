@@ -8,10 +8,8 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"math/bits"
 
 	"github.com/segmentio/encoding/thrift"
-	"github.com/segmentio/parquet/encoding"
 	"github.com/segmentio/parquet/schema"
 )
 
@@ -35,11 +33,6 @@ type ColumnPages struct {
 
 func (c *ColumnPages) Close() error {
 	c.header = nil
-
-	// closeLevelDecoderIfNotNil(c.definitionLevelDecoder)
-	// closeLevelDecoderIfNotNil(c.repetitionLevelDecoder)
-	// c.definitionLevelDecoder = nil
-	// c.repetitionLevelDecoder = nil
 
 	if c.page != nil {
 		releaseCompressedPageReader(c.page)
@@ -88,7 +81,7 @@ func (c *ColumnPages) Next() bool {
 		c.page.Reset(&c.data)
 	}
 
-	var r = io.Reader(&debugReader{c.page})
+	var r = io.Reader(c.page)
 	var err error
 
 	switch header.Type {
@@ -132,51 +125,6 @@ func (c *ColumnPages) readDataPageV1(r io.Reader) error {
 		}
 	}
 	return nil
-}
-
-type debugReader struct {
-	r io.Reader
-}
-
-func (d *debugReader) Read(b []byte) (int, error) {
-	n, err := d.r.Read(b)
-	return n, err
-}
-
-func closeLevelDecoderIfNotNil(decoder encoding.Int32Decoder) {
-	if decoder != nil {
-		decoder.Close()
-	}
-}
-
-func decodeLevels(decoder encoding.Int32Decoder, levels []int32, maxLevel uint32) ([]int32, error) {
-	decoder.SetBitWidth(bits.Len32(maxLevel))
-	n, err := decoder.DecodeInt32(levels)
-	if err != nil && err != io.EOF {
-		return levels[:0], err
-	}
-	return levels[:n], nil
-}
-
-func resetLevelDecoder(r io.Reader, decoder encoding.Int32Decoder, oldEncoding, newEncoding schema.Encoding) encoding.Int32Decoder {
-	switch {
-	case decoder == nil:
-		return lookupEncoding(newEncoding).NewInt32Decoder(r)
-	case oldEncoding != newEncoding:
-		decoder.Close()
-		return lookupEncoding(newEncoding).NewInt32Decoder(r)
-	default:
-		decoder.Reset(r)
-		return decoder
-	}
-}
-
-func resizeLevels(slice []int32, size int) []int32 {
-	if cap(slice) < size {
-		return make([]int32, size)
-	} else {
-		return slice[:size]
-	}
 }
 
 type columnLevel struct {

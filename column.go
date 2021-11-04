@@ -85,12 +85,6 @@ func (c *Column) Column(name string) *Column {
 	return nil
 }
 
-// Scan returns a row iterator which can be used to scan through rows of
-// of the column.
-//func (c *Column) Scan() *ColumnRows {
-//	return &ColumnRows{column: c}
-//}
-
 // Chunks returns an iterator over the column chunks that compose this column.
 func (c *Column) Chunks() *ColumnChunks {
 	return &ColumnChunks{

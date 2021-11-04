@@ -53,6 +53,8 @@ func (c *ColumnChunks) Next() bool {
 	c.setError(fmt.Errorf("remote column data are not supported: %s", chunk.FilePath))
 	return false
 
+	// This is a sketch of what the code would look like when we support
+	// reading data from remote files.
 	/*
 		if c.reader == nil {
 			c.reader = io.NewSectionReader(c.file, 0, c.size)
