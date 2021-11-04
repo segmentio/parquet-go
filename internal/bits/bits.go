@@ -29,37 +29,28 @@ func IndexShift64(bitIndex uint) (index, shift uint) {
 	return bitIndex / 64, bitIndex % 64
 }
 
-func MinLeadingZeros32(data []int32) int {
-	if len(data) == 0 {
-		return 0
-	}
-	min := 32
+func MaxLen32(data []int32) int {
+	max := 0
 	for _, v := range data {
-		if n := bits.LeadingZeros32(uint32(v)); n < min {
-			min = n
+		if n := bits.Len32(uint32(v)); n > max {
+			max = n
 		}
 	}
-	return min
+	return max
 }
 
-func MinLeadingZeros64(data []int64) int {
-	if len(data) == 0 {
-		return 0
-	}
-	min := 64
+func MaxLen64(data []int64) int {
+	max := 0
 	for _, v := range data {
-		if n := bits.LeadingZeros64(uint64(v)); n < min {
-			min = n
+		if n := bits.Len64(uint64(v)); n > max {
+			max = n
 		}
 	}
-	return min
+	return max
 }
 
-func MinLeadingZeros96(data [][12]byte) int {
-	if len(data) == 0 {
-		return 0
-	}
-	min := 96
+func MaxLen96(data [][12]byte) int {
+	max := 0
 	for i := range data {
 		p := unsafe.Pointer(&data[i][0])
 		// assume little endian
@@ -67,14 +58,35 @@ func MinLeadingZeros96(data [][12]byte) int {
 		lo := *(*uint32)(p)
 		switch {
 		case hi != 0:
-			if n := bits.LeadingZeros64(hi); n < min {
-				min = n
+			if n := bits.Len64(hi) + 32; n > max {
+				max = n
 			}
 		case lo != 0:
-			if n := 64 + bits.LeadingZeros32(lo); n < min {
-				min = n
+			if n := bits.Len32(lo); n > max {
+				max = n
 			}
 		}
 	}
-	return min
+	return max
+}
+
+func MinLeadingZeros32(data []int32) int {
+	if len(data) == 0 {
+		return 0
+	}
+	return 32 - MaxLen32(data)
+}
+
+func MinLeadingZeros64(data []int64) int {
+	if len(data) == 0 {
+		return 0
+	}
+	return 64 - MaxLen64(data)
+}
+
+func MinLeadingZeros96(data [][12]byte) int {
+	if len(data) == 0 {
+		return 0
+	}
+	return 96 - MaxLen96(data)
 }

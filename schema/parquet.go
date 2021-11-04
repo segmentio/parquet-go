@@ -557,7 +557,7 @@ type PageHeader struct {
 	//   hereby refers to the concatenation of the repetition levels, the
 	//   definition levels and the column value, in this exact order.
 	// - On the encoded versions of the repetition levels, definition levels and
-	//   column values
+	//   column values.
 	// - On the compressed versions of the repetition levels, definition levels
 	//   and column values where possible;
 	//   - For v1 data pages, the repetition levels, definition levels and column

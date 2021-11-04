@@ -117,7 +117,7 @@ func (d *decoder) decode(data []byte, dstWidth, srcWidth uint) (int, error) {
 			if err == io.EOF {
 				d.decoder = nil
 			} else {
-				return decoded, fmt.Errorf("decoding RLE values: %w", err)
+				return decoded, fmt.Errorf("decoding RLE values from %s encoded run: %w", d.decoder, err)
 			}
 		}
 
@@ -151,6 +151,8 @@ type bitPackDecoder struct {
 	// from the io.Reader.
 	buffer [bitBufferSize]byte
 }
+
+func (d *bitPackDecoder) String() string { return "BIT_PACK" }
 
 func (d *bitPackDecoder) decode(r io.Reader, data []byte, dstWidth, srcWidth uint) (int, error) {
 	wordSize := bits.ByteCount(dstWidth)
@@ -215,6 +217,8 @@ type runLengthDecoder struct {
 	count uint32
 	value [12]byte
 }
+
+func (d *runLengthDecoder) String() string { return "RUN_LENGTH" }
 
 func (d *runLengthDecoder) decode(r io.Reader, data []byte, dstWidth, srcWidth uint) (int, error) {
 	if d.count == 0 {

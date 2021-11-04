@@ -253,7 +253,7 @@ func testInt32Encoding(t *testing.T, e encoding.Encoding) {
 
 	for _, test := range int32Tests {
 		t.Run("", func(t *testing.T) {
-			bitWidth := 32 - bits.MinLeadingZeros32(test)
+			bitWidth := bits.MaxLen32(test)
 			enc.SetBitWidth(bitWidth)
 			dec.SetBitWidth(bitWidth)
 
@@ -297,7 +297,7 @@ func testInt64Encoding(t *testing.T, e encoding.Encoding) {
 
 	for _, test := range int64Tests {
 		t.Run("", func(t *testing.T) {
-			bitWidth := 64 - bits.MinLeadingZeros64(test)
+			bitWidth := bits.MaxLen64(test)
 			enc.SetBitWidth(bitWidth)
 			dec.SetBitWidth(bitWidth)
 
@@ -341,7 +341,7 @@ func testInt96Encoding(t *testing.T, e encoding.Encoding) {
 
 	for _, test := range int96Tests {
 		t.Run("", func(t *testing.T) {
-			bitWidth := 96 - bits.MinLeadingZeros96(test)
+			bitWidth := bits.MaxLen96(test)
 			enc.SetBitWidth(bitWidth)
 			dec.SetBitWidth(bitWidth)
 
