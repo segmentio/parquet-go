@@ -1,19 +1,20 @@
 package bits
 
-// Unpack copies words of size srcWidth (in bits) from the src buffer to words
+// Pack copies words of size srcWidth (in bits) from the src buffer to words
 // of size dstWidth (in bits) in the dst buffer, returning the number of words
-// that were unpacked.
+// that were packed.
 //
 // When dstWidth is greater than srcWidth, the upper bits of the destination
 // word are set to zero.
 //
+// When srcWidth is greater than dstWith, the upper bits of the source are
+// discarded.
+//
 // The function always writes full bytes to dst, if the last word written does
 // not end on a byte boundary, the remaining bits are set to zero.
 //
-// The behavior is undefined if srcWidth is greater than dstWidth.
-//
 // The source and destination buffers must not overlap.
-func Unpack(dst []byte, dstWidth uint, src []byte, srcWidth uint) int {
+func Pack(dst []byte, dstWidth uint, src []byte, srcWidth uint) int {
 	srcWords := BitCount(len(src)) / srcWidth
 	dstWords := BitCount(len(dst)) / dstWidth
 	wordCount := srcWords
@@ -35,12 +36,16 @@ func Unpack(dst []byte, dstWidth uint, src []byte, srcWidth uint) int {
 
 	steps := 1
 	srcBitsPerStep := srcWidth
+	if dstWidth < srcWidth {
+		srcBitsPerStep = dstWidth
+	}
 	if srcBitsPerStep > 8 {
+		steps = ByteCount(srcBitsPerStep)
 		srcBitsPerStep = 8
-		steps = ByteCount(srcWidth)
 	}
 
 	for n := wordCount; n != 0; n-- {
+		nextSrcBitIndex := si + srcWidth
 		nextDstBitIndex := di + dstWidth
 
 		for i := steps; i != 0; i-- {
@@ -50,6 +55,7 @@ func Unpack(dst []byte, dstWidth uint, src []byte, srcWidth uint) int {
 			di += srcBitsPerStep
 		}
 
+		si = nextSrcBitIndex
 		di = nextDstBitIndex
 	}
 

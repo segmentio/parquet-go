@@ -183,7 +183,7 @@ func (d *bitPackDecoder) decode(r io.Reader, data []byte, dstWidth, srcWidth uin
 			d.length = n
 		}
 
-		unpacked := bits.Unpack(data, dstWidth, d.buffer[d.offset:d.length], srcWidth)
+		unpacked := bits.Pack(data, dstWidth, d.buffer[d.offset:d.length], srcWidth)
 		unpackedBits := uint(unpacked) * srcWidth
 
 		if (unpackedBits % 8) == 0 { // on a byte boundary?

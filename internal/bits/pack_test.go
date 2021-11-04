@@ -7,12 +7,12 @@ import (
 	"github.com/segmentio/parquet/internal/bits"
 )
 
-func TestUnpack(t *testing.T) {
+func TestPack(t *testing.T) {
 	tests := [...]struct {
 		scenario string
 		src      []byte
 		dst      []byte
-		unpacked int
+		packed   int
 		srcWidth uint
 		dstWidth uint
 	}{
@@ -20,7 +20,7 @@ func TestUnpack(t *testing.T) {
 			scenario: "zero bits",
 			src:      nil,
 			dst:      nil,
-			unpacked: 0,
+			packed:   0,
 			dstWidth: 4,
 			srcWidth: 1,
 		},
@@ -33,7 +33,7 @@ func TestUnpack(t *testing.T) {
 			dst: []byte{
 				0b01010101, 0b10101010, 0b00001111, 0b11110000,
 			},
-			unpacked: 32,
+			packed:   32,
 			dstWidth: 1,
 			srcWidth: 1,
 		},
@@ -46,7 +46,7 @@ func TestUnpack(t *testing.T) {
 			dst: []byte{
 				0b01010101, 0b10101010, 0b00001111, 0b11110000,
 			},
-			unpacked: 16,
+			packed:   16,
 			dstWidth: 2,
 			srcWidth: 2,
 		},
@@ -59,7 +59,7 @@ func TestUnpack(t *testing.T) {
 			dst: []byte{
 				0b01010101, 0b10101010, 0b00001111, 0b11110000,
 			},
-			unpacked: 8,
+			packed:   8,
 			dstWidth: 4,
 			srcWidth: 4,
 		},
@@ -74,7 +74,7 @@ func TestUnpack(t *testing.T) {
 				0b01010101, 0b10101010, 0b00001111, 0b11110000,
 				0b00000000, 0b11111111, 0b11110000, 0b00001111,
 			},
-			unpacked: 8,
+			packed:   8,
 			dstWidth: 8,
 			srcWidth: 8,
 		},
@@ -88,7 +88,7 @@ func TestUnpack(t *testing.T) {
 				0b00000101, 0b00000010, 0b00000001, 0b00000101,
 				0b00000010,
 			},
-			unpacked: 5,
+			packed:   5,
 			dstWidth: 8,
 			srcWidth: 3,
 		},
@@ -103,7 +103,7 @@ func TestUnpack(t *testing.T) {
 				0b00001000, 0b00000000,
 				0b00011101, 0b00000000,
 			},
-			unpacked: 3,
+			packed:   3,
 			dstWidth: 16,
 			srcWidth: 5,
 		},
@@ -124,7 +124,7 @@ func TestUnpack(t *testing.T) {
 				0b00000011, 0b00000000, 0b00000000, 0b00000000,
 				0b00000011, 0b00000000, 0b00000000, 0b00000000,
 			},
-			unpacked: 8,
+			packed:   8,
 			dstWidth: 32,
 			srcWidth: 2,
 		},
@@ -133,22 +133,46 @@ func TestUnpack(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.scenario, func(t *testing.T) {
 			buffer := make([]byte, len(test.dst))
-			unpacked := bits.Unpack(buffer, test.dstWidth, test.src, test.srcWidth)
+			packed := bits.Pack(buffer, test.dstWidth, test.src, test.srcWidth)
 
-			if unpacked != test.unpacked {
-				t.Errorf("wrong number of words unpacked: want=%d got=%d", test.unpacked, unpacked)
+			if packed != test.packed {
+				t.Errorf("wrong number of words packed: want=%d got=%d", test.packed, packed)
 			}
 
 			if !bytes.Equal(buffer, test.dst) {
-				t.Error("contents mismatch")
-				t.Logf("want:\n%08b", test.dst)
-				t.Logf("got:\n%08b", buffer)
+				t.Errorf("contents mismatch\nwant: %08b\ngot:  %08b", test.dst, buffer)
+			} else {
+				// Allocate the inverse buffer to the full buffer size to verify
+				// that no extra bits get written at the end.
+				inverse := make([]byte, len(buffer))
+				inverted := bits.Pack(inverse, test.srcWidth, buffer, test.dstWidth)
+
+				if inverted != test.packed {
+					t.Errorf("wrong number of words inverted: want=%d got=%d", test.packed, inverted)
+				}
+
+				length := bits.ByteCount(uint(inverted) * test.srcWidth)
+				inverse = inverse[:length]
+
+				if (test.dstWidth % test.srcWidth) != 0 {
+					// The source width is not a multiple of the destination
+					// width, we copy the upper bits of the last byte of the
+					// source to ensure the comparison does not fail due to
+					// bytes that were not copied from the original input.
+					mask := (1 << (test.srcWidth % 8)) - 1
+					last := len(inverse) - 1
+					inverse[last] |= test.src[last] & ^byte(mask)
+				}
+
+				if !bytes.Equal(inverse, test.src) {
+					t.Errorf("contents mismatch\nwant: %08b\ngot:  %08b", test.src, inverse)
+				}
 			}
 		})
 	}
 }
 
-func BenchmarkUnpack(b *testing.B) {
+func BenchmarkPack(b *testing.B) {
 	src := []byte{
 		// 0:8
 		0b00000001, 0b00000010, 0b00000100, 0b00001000,
@@ -187,10 +211,10 @@ func BenchmarkUnpack(b *testing.B) {
 	dst := make([]byte, 2*len(src)+extraSpace)
 
 	for i := 0; i < b.N; i++ {
-		n := bits.Unpack(dst, 8, src, 4)
+		n := bits.Pack(dst, 8, src, 4)
 
 		if n != 2*len(src) {
-			b.Errorf("wrong number of words unpacked: want=%d got=%d", 2*len(src), n)
+			b.Errorf("wrong number of words packed: want=%d got=%d", 2*len(src), n)
 		}
 	}
 
