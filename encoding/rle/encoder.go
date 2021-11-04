@@ -38,6 +38,7 @@ func (e *encoder) Close() error {
 func (e *encoder) Reset(w io.Writer) {
 	e.w = w
 	e.data = e.data[:4]
+	*(*[4]byte)(e.data) = [4]byte{}
 }
 
 func (e *encoder) EncodeBoolean(data []bool) error {
@@ -83,8 +84,9 @@ func (e *encoder) encodeBitPack(count int, data []byte, dstWidth, srcWidth uint)
 	n := binary.PutUvarint(e.buffer[:], (uint64(count/8)<<1)|1)
 	e.data = append(e.data, e.buffer[:n]...)
 
+	wordSize := bits.ByteCount(srcWidth)
 	offset := len(e.data)
-	length := bits.ByteCount(bits.BitCount(len(data)) * dstWidth)
+	length := bits.ByteCount(uint(len(data)/wordSize) * dstWidth)
 
 	if (cap(e.data) - offset) >= length {
 		e.data = e.data[:offset+length]

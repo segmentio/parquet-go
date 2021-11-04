@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"errors"
 	"math"
-	"math/bits"
 	"testing"
 
 	"github.com/segmentio/parquet/encoding"
 	"github.com/segmentio/parquet/encoding/plain"
 	"github.com/segmentio/parquet/encoding/rle"
+	"github.com/segmentio/parquet/internal/bits"
 )
 
 var booleanTests = [...][]bool{
@@ -17,6 +17,27 @@ var booleanTests = [...][]bool{
 	{true},
 	{false},
 	{true, false, true, false, true, true, true, false, false, true},
+	{ // repeating 32x
+		true, true, true, true, true, true, true, true,
+		true, true, true, true, true, true, true, true,
+		true, true, true, true, true, true, true, true,
+		true, true, true, true, true, true, true, true,
+	},
+	{ // repeating 33x
+		true, true, true, true, true, true, true, true,
+		true, true, true, true, true, true, true, true,
+		true, true, true, true, true, true, true, true,
+		true, true, true, true, true, true, true, true,
+		true,
+	},
+	{ // alternating 15x
+		false, true, false, true, false, true, false, true,
+		false, true, false, true, false, true, false,
+	},
+	{ // alternating 16x
+		false, true, false, true, false, true, false, true,
+		false, true, false, true, false, true, false, true,
+	},
 }
 
 var int32Tests = [...][]int32{
@@ -187,6 +208,8 @@ func testBooleanEncoding(t *testing.T, e encoding.Encoding) {
 	enc := e.NewBooleanEncoder(buf)
 	dec := e.NewBooleanDecoder(buf)
 	tmp := [1]bool{}
+	defer enc.Close()
+	defer dec.Close()
 
 	for _, test := range booleanTests {
 		t.Run("", func(t *testing.T) {
@@ -225,10 +248,12 @@ func testInt32Encoding(t *testing.T, e encoding.Encoding) {
 	enc := e.NewInt32Encoder(buf)
 	dec := e.NewInt32Decoder(buf)
 	tmp := [1]int32{}
+	defer enc.Close()
+	defer dec.Close()
 
 	for _, test := range int32Tests {
 		t.Run("", func(t *testing.T) {
-			bitWidth := minBitWidth32(test)
+			bitWidth := 32 - bits.MinLeadingZeros32(test)
 			enc.SetBitWidth(bitWidth)
 			dec.SetBitWidth(bitWidth)
 
@@ -267,10 +292,12 @@ func testInt64Encoding(t *testing.T, e encoding.Encoding) {
 	enc := e.NewInt64Encoder(buf)
 	dec := e.NewInt64Decoder(buf)
 	tmp := [1]int64{}
+	defer enc.Close()
+	defer dec.Close()
 
 	for _, test := range int64Tests {
 		t.Run("", func(t *testing.T) {
-			bitWidth := minBitWidth64(test)
+			bitWidth := 64 - bits.MinLeadingZeros64(test)
 			enc.SetBitWidth(bitWidth)
 			dec.SetBitWidth(bitWidth)
 
@@ -309,9 +336,15 @@ func testInt96Encoding(t *testing.T, e encoding.Encoding) {
 	enc := e.NewInt96Encoder(buf)
 	dec := e.NewInt96Decoder(buf)
 	tmp := [1][12]byte{}
+	defer enc.Close()
+	defer dec.Close()
 
 	for _, test := range int96Tests {
 		t.Run("", func(t *testing.T) {
+			bitWidth := 96 - bits.MinLeadingZeros96(test)
+			enc.SetBitWidth(bitWidth)
+			dec.SetBitWidth(bitWidth)
+
 			if err := enc.EncodeInt96(test); err != nil {
 				if errors.Is(err, encoding.ErrNotImplemented) {
 					t.Skip(err)
@@ -347,6 +380,8 @@ func testFloatEncoding(t *testing.T, e encoding.Encoding) {
 	enc := e.NewFloatEncoder(buf)
 	dec := e.NewFloatDecoder(buf)
 	tmp := [1]float32{}
+	defer enc.Close()
+	defer dec.Close()
 
 	for _, test := range floatTests {
 		t.Run("", func(t *testing.T) {
@@ -385,6 +420,8 @@ func testDoubleEncoding(t *testing.T, e encoding.Encoding) {
 	enc := e.NewDoubleEncoder(buf)
 	dec := e.NewDoubleDecoder(buf)
 	tmp := [1]float64{}
+	defer enc.Close()
+	defer dec.Close()
 
 	for _, test := range doubleTests {
 		t.Run("", func(t *testing.T) {
@@ -423,6 +460,8 @@ func testByteArrayEncoding(t *testing.T, e encoding.Encoding) {
 	enc := e.NewByteArrayEncoder(buf)
 	dec := e.NewByteArrayDecoder(buf)
 	tmp := [1][]byte{}
+	defer enc.Close()
+	defer dec.Close()
 
 	for _, test := range byteArrayTests {
 		t.Run("", func(t *testing.T) {
@@ -460,6 +499,8 @@ func testFixedLenByteArrayEncoding(t *testing.T, e encoding.Encoding) {
 	buf := new(bytes.Buffer)
 	enc := e.NewFixedLenByteArrayEncoder(buf)
 	dec := e.NewFixedLenByteArrayDecoder(buf)
+	defer enc.Close()
+	defer dec.Close()
 
 	for _, test := range fixedLenByteArrayTests {
 		t.Run("", func(t *testing.T) {
@@ -494,28 +535,4 @@ func testFixedLenByteArrayEncoding(t *testing.T, e encoding.Encoding) {
 			dec.Reset(buf)
 		})
 	}
-}
-
-func minBitWidth32(data []int32) (min int) {
-	min = 32
-
-	for _, v := range data {
-		if n := 32 - bits.LeadingZeros32(uint32(v)); n < min {
-			min = n
-		}
-	}
-
-	return min
-}
-
-func minBitWidth64(data []int64) (min int) {
-	min = 64
-
-	for _, v := range data {
-		if n := 64 - bits.LeadingZeros64(uint64(v)); n < min {
-			min = n
-		}
-	}
-
-	return min
 }
