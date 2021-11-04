@@ -11,7 +11,7 @@ import (
 type decoder struct {
 	data io.LimitedReader
 	init bool
-	buf  [binary.MaxVarintLen32]byte
+	buf  [4]byte
 	dec  hybridDecoder
 	run  runLengthDecoder
 	bit  bitPackDecoder
@@ -108,7 +108,7 @@ func (d *decoder) decode(length int, bitWidth uint32, decode func(r io.Reader, o
 				} else {
 					_, err := io.ReadFull(&d.data, d.run.value[:width])
 					if err != nil {
-						return offset, fmt.Errorf("decoding RLE repeated value after count=%d: %w", count, err)
+						return offset, fmt.Errorf("decoding RLE repeated value of size %d after count=%d: %w", width, count, err)
 					}
 				}
 				d.dec = &d.run

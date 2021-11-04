@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"math"
+	"math/bits"
 	"testing"
 
 	"github.com/segmentio/parquet/encoding"
@@ -23,6 +24,24 @@ var int32Tests = [...][]int32{
 	{0},
 	{1},
 	{-1, 0, 1, 0, 2, 3, 4, 5, 6, math.MaxInt32, math.MaxInt32, 0},
+	{ // repeating 24x
+		42, 42, 42, 42, 42, 42, 42, 42,
+		42, 42, 42, 42, 42, 42, 42, 42,
+		42, 42, 42, 42, 42, 42, 42, 42,
+	},
+	{ // never repeating
+		0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+		0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
+		0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+		0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F,
+	},
+	{ // strakes of repeating values
+		0, 0, 0, 0, 1, 1, 1, 1,
+		2, 2, 2, 2, 3, 3, 3, 3,
+		4, 4, 4, 4, 5, 5, 5, 5,
+		6, 6, 6, 7, 7, 7, 8, 8,
+		8, 9, 9, 9,
+	},
 }
 
 var int64Tests = [...][]int64{
@@ -30,6 +49,31 @@ var int64Tests = [...][]int64{
 	{0},
 	{1},
 	{-1, 0, 1, 0, 2, 3, 4, 5, 6, math.MaxInt64, math.MaxInt64, 0},
+	{ // repeating 24x
+		42, 42, 42, 42, 42, 42, 42, 42,
+		42, 42, 42, 42, 42, 42, 42, 42,
+		42, 42, 42, 42, 42, 42, 42, 42,
+	},
+	{ // never repeating
+		0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+		0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
+		0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+		0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F,
+	},
+	{ // strakes of repeating values
+		0, 0, 0, 0, 1, 1, 1, 1,
+		2, 2, 2, 2, 3, 3, 3, 3,
+		4, 4, 4, 4, 5, 5, 5, 5,
+		6, 6, 6, 7, 7, 7, 8, 8,
+		8, 9, 9, 9,
+	},
+	{ // strakes of repeating values
+		0, 0, 0, 0, 1, 1, 1, 1,
+		2, 2, 2, 2, 3, 3, 3, 3,
+		4, 4, 4, 4, 5, 5, 5, 5,
+		6, 6, 6, 7, 7, 7, 8, 8,
+		8, 9, 9, 9,
+	},
 }
 
 var int96Tests = [...][][12]byte{
@@ -184,6 +228,10 @@ func testInt32Encoding(t *testing.T, e encoding.Encoding) {
 
 	for _, test := range int32Tests {
 		t.Run("", func(t *testing.T) {
+			bitWidth := minBitWidth32(test)
+			enc.SetBitWidth(bitWidth)
+			dec.SetBitWidth(bitWidth)
+
 			if err := enc.EncodeInt32(test); err != nil {
 				if errors.Is(err, encoding.ErrNotImplemented) {
 					t.Skip(err)
@@ -222,6 +270,10 @@ func testInt64Encoding(t *testing.T, e encoding.Encoding) {
 
 	for _, test := range int64Tests {
 		t.Run("", func(t *testing.T) {
+			bitWidth := minBitWidth64(test)
+			enc.SetBitWidth(bitWidth)
+			dec.SetBitWidth(bitWidth)
+
 			if err := enc.EncodeInt64(test); err != nil {
 				if errors.Is(err, encoding.ErrNotImplemented) {
 					t.Skip(err)
@@ -442,4 +494,28 @@ func testFixedLenByteArrayEncoding(t *testing.T, e encoding.Encoding) {
 			dec.Reset(buf)
 		})
 	}
+}
+
+func minBitWidth32(data []int32) (min int) {
+	min = 32
+
+	for _, v := range data {
+		if n := 32 - bits.LeadingZeros32(uint32(v)); n < min {
+			min = n
+		}
+	}
+
+	return min
+}
+
+func minBitWidth64(data []int64) (min int) {
+	min = 64
+
+	for _, v := range data {
+		if n := 64 - bits.LeadingZeros64(uint64(v)); n < min {
+			min = n
+		}
+	}
+
+	return min
 }
