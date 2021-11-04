@@ -41,10 +41,3 @@ func (e *Encoding) NewInt96Decoder(r io.Reader) encoding.Int96Decoder {
 func (e *Encoding) NewInt96Encoder(w io.Writer) encoding.Int96Encoder {
 	return newEncoder(w)
 }
-
-func coalesceUint32(a, b uint32) uint32 {
-	if a != 0 {
-		return a
-	}
-	return b
-}

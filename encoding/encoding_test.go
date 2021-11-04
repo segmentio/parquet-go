@@ -251,7 +251,7 @@ func testInt32Encoding(t *testing.T, e encoding.Encoding) {
 					t.Fatalf("decoder decoded the wrong number of items: %d", n)
 				}
 				if tmp[0] != test[i] {
-					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, test[i], tmp[i])
+					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, test[i], tmp[0])
 				}
 			}
 
@@ -293,7 +293,7 @@ func testInt64Encoding(t *testing.T, e encoding.Encoding) {
 					t.Fatalf("decoder decoded the wrong number of items: %d", n)
 				}
 				if tmp[0] != test[i] {
-					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, test[i], tmp[i])
+					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, test[i], tmp[0])
 				}
 			}
 

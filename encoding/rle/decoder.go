@@ -9,18 +9,22 @@ import (
 )
 
 type decoder struct {
-	data io.LimitedReader
-	init bool
-	buf  [4]byte
-	dec  hybridDecoder
-	run  runLengthDecoder
-	bit  bitPackDecoder
-
-	bitWidth uint
+	data      io.LimitedReader
+	init      bool
+	buffer    [4]byte
+	bitWidth  uint
+	decoder   hybridDecoder
+	runLength runLengthDecoder
+	bitPack   bitPackDecoder
 }
 
 func newDecoder(r io.Reader) *decoder {
-	return &decoder{data: io.LimitedReader{R: r, N: 4}}
+	return &decoder{
+		data: io.LimitedReader{
+			R: r,
+			N: 4,
+		},
+	}
 }
 
 func (d *decoder) Close() error {
@@ -35,12 +39,12 @@ func (d *decoder) Reset(r io.Reader) {
 	d.data.R = r
 	d.data.N = 4
 	d.init = false
-	d.dec = nil
+	d.decoder = nil
 }
 
 func (d *decoder) ReadByte() (byte, error) {
-	_, err := d.data.Read(d.buf[:1])
-	return d.buf[0], err
+	_, err := d.data.Read(d.buffer[:1])
+	return d.buffer[0], err
 }
 
 func (d *decoder) DecodeBoolean(data []bool) (int, error) {
@@ -67,16 +71,16 @@ func (d *decoder) decode(data []byte, dstWidth, srcWidth uint) (int, error) {
 	}
 
 	if !d.init {
-		_, err := io.ReadFull(&d.data, d.buf[:4])
+		_, err := io.ReadFull(&d.data, d.buffer[:4])
 		if err != nil {
 			return 0, fmt.Errorf("decoding RLE length: %w", err)
 		}
-		d.data.N = int64(binary.LittleEndian.Uint32(d.buf[:4]))
+		d.data.N = int64(binary.LittleEndian.Uint32(d.buffer[:4]))
 		d.init = true
 	}
 
 	for len(data) > 0 {
-		if d.dec == nil {
+		if d.decoder == nil {
 			u, err := binary.ReadUvarint(d)
 			if err != nil {
 				if err != io.EOF {
@@ -87,31 +91,31 @@ func (d *decoder) decode(data []byte, dstWidth, srcWidth uint) (int, error) {
 
 			count, bitpack := uint32(u>>1), (u&1) != 0
 			if bitpack {
-				d.bit.remain = int(count * 8)
-				d.bit.offset = 0
-				d.bit.length = 0
-				d.dec = &d.bit
+				d.bitPack.remain = int(count * 8)
+				d.bitPack.offset = 0
+				d.bitPack.length = 0
+				d.decoder = &d.bitPack
 			} else {
-				d.run.count = count
+				d.runLength.count = count
 				if count == 0 {
-					d.run.value = [12]byte{}
+					d.runLength.value = [12]byte{}
 				} else {
 					length := bits.ByteCount(srcWidth)
-					_, err := io.ReadFull(&d.data, d.run.value[:length])
+					_, err := io.ReadFull(&d.data, d.runLength.value[:length])
 					if err != nil {
 						return decoded, fmt.Errorf("decoding RLE repeated value of length %d after count=%d: %w", length, count, err)
 					}
 				}
-				d.dec = &d.run
+				d.decoder = &d.runLength
 			}
 		}
 
-		n, err := d.dec.decode(&d.data, data, dstWidth, srcWidth)
+		n, err := d.decoder.decode(&d.data, data, dstWidth, srcWidth)
 		decoded += n / wordSize
 
 		if err != nil {
 			if err == io.EOF {
-				d.dec = nil
+				d.decoder = nil
 			} else {
 				return decoded, fmt.Errorf("decoding RLE values: %w", err)
 			}
