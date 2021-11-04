@@ -15,7 +15,7 @@ func (e *Encoding) NewBooleanDecoder(r io.Reader) encoding.BooleanDecoder {
 }
 
 func (e *Encoding) NewBooleanEncoder(w io.Writer) encoding.BooleanEncoder {
-	return &booleanEncoder{w: w}
+	return newEncoder(w)
 }
 
 func (e *Encoding) NewInt32Decoder(r io.Reader) encoding.Int32Decoder {

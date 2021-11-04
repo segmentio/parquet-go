@@ -156,7 +156,7 @@ func testBooleanEncoding(t *testing.T, e encoding.Encoding) {
 				t.Fatal("close:", err)
 			}
 
-			for i := range test {
+			for i, want := range test {
 				n, err := dec.DecodeBoolean(tmp[:])
 				if err != nil {
 					t.Fatal("decode:", err)
@@ -164,8 +164,8 @@ func testBooleanEncoding(t *testing.T, e encoding.Encoding) {
 				if n != 1 {
 					t.Fatalf("decoder decoded the wrong number of items: %d", n)
 				}
-				if tmp[0] != test[i] {
-					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, test[i], tmp[i])
+				if got := tmp[0]; got != want {
+					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, want, got)
 				}
 			}
 

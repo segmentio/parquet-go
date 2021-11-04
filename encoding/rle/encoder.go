@@ -2,10 +2,7 @@ package rle
 
 import (
 	"encoding/binary"
-	"fmt"
 	"io"
-	"math"
-	"unsafe"
 )
 
 type encoder struct {
@@ -45,9 +42,7 @@ func (e *encoder) Reset(w io.Writer) {
 }
 
 func (e *encoder) EncodeBoolean(data []bool) error {
-	if len(data) >= 8 && preferBitPack(len(data), 1, func(i, j int) bool {
-		return data[i] == data[j]
-	}) {
+	if len(data) >= 8 {
 		bits := data[:(len(data)/8)*8]
 		e.encodeBooleanBitPack(bits)
 		data = data[len(bits):]
@@ -251,76 +246,4 @@ func preferBitPack(n int, bitWidth uint32, eq func(i, j int) bool) bool {
 	estimatedSizeOfBitPack := numberOfItems * sizeOfItems
 	estimatedSizeOfRunLength := (numberOfRuns * (8 + sizeOfItems)) + ((numberOfItems - numberOfItemsInRuns) * sizeOfItems)
 	return estimatedSizeOfBitPack < estimatedSizeOfRunLength
-}
-
-type booleanEncoder struct {
-	w    io.Writer
-	buf  [binary.MaxVarintLen32]byte
-	runs []uint32
-	bits []uint64
-}
-
-func (e *booleanEncoder) Close() error {
-	if len(e.runs) > 0 {
-		defer e.Reset(e.w)
-		offset := 0
-		length := 8 * len(e.bits)
-
-		for _, run := range e.runs {
-			length += binary.PutUvarint(e.buf[:], uint64(run<<1)|1)
-		}
-
-		binary.LittleEndian.PutUint32(e.buf[:4], uint32(length))
-		if _, err := e.w.Write(e.buf[:4]); err != nil {
-			return err
-		}
-
-		for _, run := range e.runs {
-			n := binary.PutUvarint(e.buf[:], uint64(run<<1)|1)
-			if _, err := e.w.Write(e.buf[:n]); err != nil {
-				return err
-			}
-			r := (int(run) + 63) / 64
-			u := e.bits[offset : offset+r]
-			b := unsafe.Slice(*(**byte)(unsafe.Pointer(&u)), 8*len(u))
-			if _, err := e.w.Write(b); err != nil {
-				return err
-			}
-			offset += r
-		}
-	}
-	return nil
-}
-
-func (e *booleanEncoder) Reset(w io.Writer) {
-	e.w = w
-	e.runs = e.runs[:0]
-	e.bits = e.bits[:0]
-}
-
-func (e *booleanEncoder) EncodeBoolean(data []bool) error {
-	if len(data) > math.MaxInt32 {
-		return fmt.Errorf("boolean run is too long to be represented by the bitpack encoding: %d", len(data))
-	}
-
-	i := 0
-	u := uint64(0)
-
-	for _, b := range data {
-		if b {
-			u |= 1 << i
-		}
-
-		if i = (i + 1) % 64; i == 0 {
-			e.bits = append(e.bits, u)
-			u = 0
-		}
-	}
-
-	if i > 0 {
-		e.bits = append(e.bits, u)
-	}
-
-	e.runs = append(e.runs, uint32(len(data)))
-	return nil
 }

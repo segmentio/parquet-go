@@ -46,7 +46,7 @@ func (d *decoder) ReadByte() (byte, error) {
 }
 
 func (d *decoder) DecodeBoolean(data []bool) (int, error) {
-	return d.decode(len(data), 1, func(r io.Reader, offset, length int) (int, error) {
+	return d.decode(len(data), 8, func(r io.Reader, offset, length int) (int, error) {
 		return d.dec.decodeBoolean(r, data[offset:offset+length])
 	})
 }
@@ -54,21 +54,21 @@ func (d *decoder) DecodeBoolean(data []bool) (int, error) {
 func (d *decoder) DecodeInt32(data []int32) (int, error) {
 	bitWidth := coalesceUint32(d.bitWidth, 32)
 	return d.decode(len(data), bitWidth, func(r io.Reader, offset, length int) (int, error) {
-		return d.dec.decodeInt32(r, bitWidth, data[offset:offset+length])
+		return d.dec.decodeInt32(r, data[offset:offset+length], uint(bitWidth))
 	})
 }
 
 func (d *decoder) DecodeInt64(data []int64) (int, error) {
 	bitWidth := coalesceUint32(d.bitWidth, 64)
 	return d.decode(len(data), bitWidth, func(r io.Reader, offset, length int) (int, error) {
-		return d.dec.decodeInt64(r, bitWidth, data[offset:offset+length])
+		return d.dec.decodeInt64(r, data[offset:offset+length], uint(bitWidth))
 	})
 }
 
 func (d *decoder) DecodeInt96(data [][12]byte) (int, error) {
 	bitWidth := coalesceUint32(d.bitWidth, 96)
 	return d.decode(len(data), bitWidth, func(r io.Reader, offset, length int) (int, error) {
-		return d.dec.decodeInt96(r, bitWidth, data[offset:offset+length])
+		return d.dec.decodeInt96(r, data[offset:offset+length], uint(bitWidth))
 	})
 }
 
@@ -133,9 +133,9 @@ func (d *decoder) decode(length int, bitWidth uint32, decode func(r io.Reader, o
 
 type hybridDecoder interface {
 	decodeBoolean(io.Reader, []bool) (int, error)
-	decodeInt32(io.Reader, uint32, []int32) (int, error)
-	decodeInt64(io.Reader, uint32, []int64) (int, error)
-	decodeInt96(io.Reader, uint32, [][12]byte) (int, error)
+	decodeInt32(io.Reader, []int32, uint) (int, error)
+	decodeInt64(io.Reader, []int64, uint) (int, error)
+	decodeInt96(io.Reader, [][12]byte, uint) (int, error)
 }
 
 // large enougth to contain 8 x int96
@@ -149,39 +149,39 @@ type bitPackDecoder struct {
 }
 
 func (d *bitPackDecoder) decodeBoolean(r io.Reader, data []bool) (int, error) {
-	return d.decode(r, 1, 1, bits.BoolToBytes(data))
+	return d.decode(r, bits.BoolToBytes(data), 8, 1)
 }
 
-func (d *bitPackDecoder) decodeInt32(r io.Reader, bitWidth uint32, data []int32) (int, error) {
-	return d.decode(r, bitWidth, 32, bits.Int32ToBytes(data))
+func (d *bitPackDecoder) decodeInt32(r io.Reader, data []int32, bitWidth uint) (int, error) {
+	return d.decode(r, bits.Int32ToBytes(data), 32, bitWidth)
 }
 
-func (d *bitPackDecoder) decodeInt64(r io.Reader, bitWidth uint32, data []int64) (int, error) {
-	return d.decode(r, bitWidth, 64, bits.Int64ToBytes(data))
+func (d *bitPackDecoder) decodeInt64(r io.Reader, data []int64, bitWidth uint) (int, error) {
+	return d.decode(r, bits.Int64ToBytes(data), 64, bitWidth)
 }
 
-func (d *bitPackDecoder) decodeInt96(r io.Reader, bitWidth uint32, data [][12]byte) (int, error) {
-	return d.decode(r, bitWidth, 96, bits.Int96ToBytes(data))
+func (d *bitPackDecoder) decodeInt96(r io.Reader, data [][12]byte, bitWidth uint) (int, error) {
+	return d.decode(r, bits.Int96ToBytes(data), 96, bitWidth)
 }
 
-func (d *bitPackDecoder) decode(r io.Reader, bitWidth, wordWidth uint32, data []byte) (int, error) {
-	if bitWidth == wordWidth {
-		return io.ReadFull(r, data)
+func (d *bitPackDecoder) decode(r io.Reader, data []byte, dstWidth, srcWidth uint) (int, error) {
+	remained := d.remain
+	if remained == 0 {
+		return 0, io.EOF
 	}
 
-	remained := d.remain
 	for {
-		if d.length == d.offset {
+		if d.offset == d.length {
 			// We know that bit-pack data is encoded in chunks of 8 since the
 			// bit length is divided by 8. We look for the multiple of 8
 			// to maximize buffer utilization.
-			chunkSizeBits := 8 * uint(bitWidth)
+			chunkSizeBits := 8 * srcWidth
 			numberOfChunks := bits.BitCount(len(d.buffer)) / chunkSizeBits
 			numberOfBytes := bits.ByteCount(numberOfChunks * chunkSizeBits)
 			// We limit the read to the number of bytes that remain to be read
 			// from the underlying io.Reader, otherwise we would read beyond the
 			// end of the bit-packed run.
-			remainingBytes := bits.ByteCount(uint(d.remain) * uint(bitWidth))
+			remainingBytes := bits.ByteCount(uint(d.remain) * srcWidth)
 			if remainingBytes < numberOfBytes {
 				numberOfBytes = remainingBytes
 			}
@@ -195,24 +195,28 @@ func (d *bitPackDecoder) decode(r io.Reader, bitWidth, wordWidth uint32, data []
 			// is a multiple of the bit-width, the data ends at the end of a
 			// byte, there will not be partial trailing words.
 			d.offset = 0
-			d.length = 8 * n
+			d.length = n
 		}
 
-		unpacked := bits.Unpack(data, uint(wordWidth), d.buffer[d.offset:d.length], uint(bitWidth))
+		unpacked := bits.Unpack(data, dstWidth, d.buffer[d.offset:d.length], srcWidth)
+		unpackedBits := uint(unpacked) * srcWidth
 
-		if d.offset += unpacked * int(bitWidth); d.offset < d.length {
-			bitShift := unpacked * int(bitWidth)
-			bitCount := d.length - d.offset
+		if (unpackedBits % 8) == 0 { // on a byte boundary?
+			d.offset += bits.ByteCount(unpackedBits)
+		} else { // move remaining bits to the beginning of the buffer
+			bitShift := uint(unpackedBits)
+			bitCount := bits.BitCount(d.length) - (bits.BitCount(d.offset) + unpackedBits)
 			tmp := d.buffer                  // copy
 			d.buffer = [bitBufferSize]byte{} // clear
 			d.offset = 0
-			d.length = bits.Copy(d.buffer[:], tmp[:], uint(bitShift), uint(bitCount))
+			d.length = bits.Copy(d.buffer[:], tmp[:], bitShift, bitCount)
+			d.length = bits.ByteCount(uint(d.length))
 		}
 
 		d.remain -= unpacked
-		data = data[:(unpacked*int(wordWidth))/8]
+		data = data[bits.ByteCount(uint(unpacked)*dstWidth):]
 
-		if d.remain == 0 {
+		if d.remain == 0 || len(data) == 0 {
 			return remained - d.remain, nil
 		}
 	}
@@ -235,7 +239,7 @@ func (d *runLengthDecoder) decodeBoolean(r io.Reader, data []bool) (int, error) 
 	return len(data), nil
 }
 
-func (d *runLengthDecoder) decodeInt32(r io.Reader, bitWidth uint32, data []int32) (int, error) {
+func (d *runLengthDecoder) decodeInt32(r io.Reader, data []int32, _ uint) (int, error) {
 	if d.count == 0 {
 		return 0, io.EOF
 	}
@@ -247,7 +251,7 @@ func (d *runLengthDecoder) decodeInt32(r io.Reader, bitWidth uint32, data []int3
 	return len(data), nil
 }
 
-func (d *runLengthDecoder) decodeInt64(r io.Reader, bitWidth uint32, data []int64) (int, error) {
+func (d *runLengthDecoder) decodeInt64(r io.Reader, data []int64, _ uint) (int, error) {
 	if d.count == 0 {
 		return 0, io.EOF
 	}
@@ -259,7 +263,7 @@ func (d *runLengthDecoder) decodeInt64(r io.Reader, bitWidth uint32, data []int6
 	return len(data), nil
 }
 
-func (d *runLengthDecoder) decodeInt96(r io.Reader, bitWidth uint32, data [][12]byte) (int, error) {
+func (d *runLengthDecoder) decodeInt96(r io.Reader, data [][12]byte, _ uint) (int, error) {
 	if d.count == 0 {
 		return 0, io.EOF
 	}

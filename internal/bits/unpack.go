@@ -17,7 +17,7 @@ func Unpack(dst []byte, dstWidth uint, src []byte, srcWidth uint) int {
 	srcWords := BitCount(len(src)) / srcWidth
 	dstWords := BitCount(len(dst)) / dstWidth
 	wordCount := srcWords
-	if dstWidth < srcWidth {
+	if dstWords < srcWords {
 		wordCount = dstWords
 	}
 	if wordCount == 0 {
