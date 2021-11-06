@@ -188,7 +188,7 @@ func (c *ColumnPages) DecodeBoolean(repetitions, definitions []int32, values []b
 	return c.decode(schema.Boolean, repetitions, definitions, func(d decoding) error {
 		_, err := c.values.DecodeBoolean(values[:d.numValues])
 		if err != nil {
-			return dontExpectEOF(err)
+			return err
 		}
 		if len(d.definitions) != d.numValues {
 			decodeNulls(d.definitions, d.numValues, d.maxDefinitionLevel, func(i, j int) {
@@ -203,7 +203,7 @@ func (c *ColumnPages) DecodeInt32(repetitions, definitions []int32, values []int
 	return c.decode(schema.Int32, repetitions, definitions, func(d decoding) error {
 		_, err := c.values.DecodeInt32(values[:d.numValues])
 		if err != nil {
-			return dontExpectEOF(err)
+			return err
 		}
 		if len(d.definitions) != d.numValues {
 			decodeNulls(d.definitions, d.numValues, d.maxDefinitionLevel, func(i, j int) {
@@ -218,7 +218,7 @@ func (c *ColumnPages) DecodeInt64(repetitions, definitions []int32, values []int
 	return c.decode(schema.Int64, repetitions, definitions, func(d decoding) error {
 		_, err := c.values.DecodeInt64(values[:d.numValues])
 		if err != nil {
-			return dontExpectEOF(err)
+			return err
 		}
 		if len(d.definitions) != d.numValues {
 			decodeNulls(d.definitions, d.numValues, d.maxDefinitionLevel, func(i, j int) {
@@ -233,7 +233,7 @@ func (c *ColumnPages) DecodeInt96(repetitions, definitions []int32, values [][12
 	return c.decode(schema.Int96, repetitions, definitions, func(d decoding) error {
 		_, err := c.values.DecodeInt96(values[:d.numValues])
 		if err != nil {
-			return dontExpectEOF(err)
+			return err
 		}
 		if len(d.definitions) != d.numValues {
 			decodeNulls(d.definitions, d.numValues, d.maxDefinitionLevel, func(i, j int) {
@@ -248,7 +248,7 @@ func (c *ColumnPages) DecodeFloat(repetitions, definitions []int32, values []flo
 	return c.decode(schema.Float, repetitions, definitions, func(d decoding) error {
 		_, err := c.values.DecodeFloat(values[:d.numValues])
 		if err != nil {
-			return dontExpectEOF(err)
+			return err
 		}
 		if len(d.definitions) != d.numValues {
 			decodeNulls(d.definitions, d.numValues, d.maxDefinitionLevel, func(i, j int) {
@@ -263,7 +263,7 @@ func (c *ColumnPages) DecodeDouble(repetitions, definitions []int32, values []fl
 	return c.decode(schema.Double, repetitions, definitions, func(d decoding) error {
 		_, err := c.values.DecodeDouble(values[:d.numValues])
 		if err != nil {
-			return dontExpectEOF(err)
+			return err
 		}
 		if len(d.definitions) != d.numValues {
 			decodeNulls(d.definitions, d.numValues, d.maxDefinitionLevel, func(i, j int) {
@@ -278,7 +278,7 @@ func (c *ColumnPages) DecodeByteArray(repetitions, definitions []int32, values [
 	return c.decode(schema.ByteArray, repetitions, definitions, func(d decoding) error {
 		_, err := c.values.DecodeByteArray(values[:d.numValues])
 		if err != nil {
-			return dontExpectEOF(err)
+			return err
 		}
 		if len(d.definitions) != d.numValues {
 			decodeNulls(d.definitions, d.numValues, d.maxDefinitionLevel, func(i, j int) {
@@ -293,7 +293,7 @@ func (c *ColumnPages) DecodeFixedLenByteArray(repetitions, definitions []int32, 
 	return c.decode(schema.FixedLenByteArray, repetitions, definitions, func(d decoding) error {
 		_, err := c.values.DecodeFixedLenByteArray(c.column.TypeLength(), values[:d.numValues])
 		if err != nil {
-			return dontExpectEOF(err)
+			return err
 		}
 		if len(d.definitions) != d.numValues {
 			size := c.column.TypeLength()
@@ -429,7 +429,7 @@ func (c *ColumnPages) decode(valueType schema.Type, repetitions, definitions []i
 			valueType,
 			strings.ToLower(c.column.schema.RepetitionType.String()),
 			strings.Join(c.metadata.PathInSchema, "."),
-			err)
+			dontExpectEOF(err))
 	}
 	return len(definitions), err
 }
@@ -453,6 +453,13 @@ func decodeNulls(definitions []int32, numValues, maxDefinitionLevel int, move fu
 			j--
 		}
 	}
+}
+
+func dontExpectEOF(err error) error {
+	if err == io.EOF {
+		err = io.ErrUnexpectedEOF
+	}
+	return err
 }
 
 func (c *ColumnPages) resetDataPageV1(r io.Reader) error {
@@ -547,13 +554,6 @@ func (lvl *dataPageLevelV2) reset() {
 
 func (lvl *dataPageLevelV2) setDataPageV2Section(file *File, dataPageOffset, dataPageLength int64) {
 	lvl.SectionReader = *io.NewSectionReader(file, dataPageOffset, dataPageLength)
-}
-
-func dontExpectEOF(err error) error {
-	if err == io.EOF {
-		err = io.ErrUnexpectedEOF
-	}
-	return err
 }
 
 // This implementation of io.Reader is used to keep track of the current page
