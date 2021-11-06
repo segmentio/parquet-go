@@ -23,9 +23,14 @@ type Column struct {
 	maxDefinitionLevel int32
 }
 
-// Schema returns the underlying schema element of the column.
+// Schema returns the underlying schema element of c.
 func (c *Column) Schema() *schema.SchemaElement {
 	return c.schema
+}
+
+// Order returns the underlying column order of c.
+func (c *Column) Order() *schema.ColumnOrder {
+	return c.order
 }
 
 // Type returns the type of the column.
