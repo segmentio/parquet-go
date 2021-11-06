@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/segmentio/parquet"
-	"github.com/segmentio/parquet/schema"
 )
 
 var fixtureFiles = [...]string{
@@ -57,23 +56,24 @@ func printColumns(t *testing.T, col *parquet.Column, indent string) {
 
 			var n int
 			var err error
-			switch col.Type() {
-			case schema.Boolean:
+			var typ = col.Type()
+			switch typ.Kind() {
+			case parquet.Boolean:
 				n, err = pages.DecodeBoolean(repetitions, definitions, make([]bool, numValues))
-			case schema.Int32:
+			case parquet.Int32:
 				n, err = pages.DecodeInt32(repetitions, definitions, make([]int32, numValues))
-			case schema.Int64:
+			case parquet.Int64:
 				n, err = pages.DecodeInt64(repetitions, definitions, make([]int64, numValues))
-			case schema.Int96:
+			case parquet.Int96:
 				n, err = pages.DecodeInt96(repetitions, definitions, make([][12]byte, numValues))
-			case schema.Float:
+			case parquet.Float:
 				n, err = pages.DecodeFloat(repetitions, definitions, make([]float32, numValues))
-			case schema.Double:
+			case parquet.Double:
 				n, err = pages.DecodeDouble(repetitions, definitions, make([]float64, numValues))
-			case schema.ByteArray:
+			case parquet.ByteArray:
 				n, err = pages.DecodeByteArray(repetitions, definitions, make([][]byte, numValues))
-			case schema.FixedLenByteArray:
-				n, err = pages.DecodeFixedLenByteArray(repetitions, definitions, make([]byte, col.TypeLength()*numValues))
+			case parquet.FixedLenByteArray:
+				n, err = pages.DecodeFixedLenByteArray(repetitions, definitions, make([]byte, typ.Length()*numValues))
 			}
 
 			if err != nil {

@@ -31,15 +31,8 @@ func (c *Column) Schema() *schema.SchemaElement {
 // Type returns the type of the column.
 //
 // The returned value is unspecified if c is not a leaf column.
-func (c *Column) Type() schema.Type {
-	return c.schema.Type
-}
-
-// TypeLength returns the size of values if c has a fixed-length data type.
-//
-// The returned value is unspecified if c is not a leaf column.
-func (c *Column) TypeLength() int {
-	return int(c.schema.TypeLength)
+func (c *Column) Type() Type {
+	return schemaElementType{c.schema}
 }
 
 // Required returns true if the column is required.

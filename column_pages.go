@@ -291,12 +291,12 @@ func (c *ColumnPages) DecodeByteArray(repetitions, definitions []int32, values [
 
 func (c *ColumnPages) DecodeFixedLenByteArray(repetitions, definitions []int32, values []byte) (int, error) {
 	return c.decode(schema.FixedLenByteArray, repetitions, definitions, func(d decoding) error {
-		_, err := c.values.DecodeFixedLenByteArray(c.column.TypeLength(), values[:d.numValues])
+		_, err := c.values.DecodeFixedLenByteArray(int(c.column.schema.TypeLength), values[:d.numValues])
 		if err != nil {
 			return err
 		}
 		if len(d.definitions) != d.numValues {
-			size := c.column.TypeLength()
+			size := int(c.column.schema.TypeLength)
 			zero := make([]byte, size)
 			decodeNulls(d.definitions, d.numValues, d.maxDefinitionLevel, func(i, j int) {
 				vi := values[i*size : i*size+size]
@@ -318,7 +318,7 @@ type decoding struct {
 }
 
 func (c *ColumnPages) decode(valueType schema.Type, repetitions, definitions []int32, decode func(decoding) error) (int, error) {
-	if columnType := c.column.Type(); columnType != valueType {
+	if columnType := c.column.schema.Type; columnType != valueType {
 		return 0, fmt.Errorf("cannot decode %s column into values of type %s", columnType, valueType)
 	}
 
@@ -377,7 +377,7 @@ func (c *ColumnPages) decode(valueType schema.Type, repetitions, definitions []i
 		}
 
 		c.values = lookupEncoding(enc).NewDecoder(c.page)
-		c.values.SetBitWidth(c.column.TypeLength())
+		c.values.SetBitWidth(int(c.column.schema.TypeLength))
 	}
 
 	depth := c.column.depth
