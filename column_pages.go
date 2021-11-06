@@ -4,7 +4,10 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
+	"hash"
+	"hash/crc32"
 	"io"
 	"io/ioutil"
 	"math/bits"
@@ -15,11 +18,19 @@ import (
 	"github.com/segmentio/parquet/schema"
 )
 
+var (
+	// Corrupted is an error returned by the Err method of ColumnPages instances
+	// when they encountered a mismatch between the CRC checksum recorded in a
+	// page header and the one computed while reading the page data.
+	Corrupted = errors.New("corrupted")
+)
+
 type ColumnPages struct {
 	column   *Column
 	metadata *schema.ColumnMetaData
 	header   *schema.PageHeader
 	reader   dataPageReader
+	crc32    crc32Reader
 	protocol thrift.CompactProtocol
 	decoder  thrift.Decoder
 	buffer   [4]byte
@@ -39,6 +50,11 @@ type ColumnPages struct {
 	v2 struct {
 		repetitions dataPageLevelV2
 		definitions dataPageLevelV2
+	}
+
+	lastPage struct {
+		headerChecksum uint32
+		readerChecksum uint32
 	}
 
 	err error
@@ -75,6 +91,16 @@ func (c *ColumnPages) Close() error {
 	}
 }
 
+func (c *ColumnPages) Err() error {
+	if c.err != nil {
+		return c.err
+	}
+	if c.lastPage.headerChecksum != c.lastPage.readerChecksum {
+		return fmt.Errorf("crc32 checksum mismatch: 0x%08X != 0x%08X: %w", c.lastPage.headerChecksum, c.lastPage.readerChecksum, Corrupted)
+	}
+	return nil
+}
+
 func (c *ColumnPages) Next() bool {
 	if c.err != nil {
 		return false
@@ -90,6 +116,12 @@ func (c *ColumnPages) Next() bool {
 			c.err = fmt.Errorf("skipping unread page data: %w", err)
 			return false
 		}
+	}
+
+	if c.crc32.hash != nil {
+		c.lastPage.headerChecksum = uint32(c.header.CRC)
+		c.lastPage.readerChecksum = c.crc32.hash.Sum32()
+		c.crc32.hash.Reset()
 	}
 
 	if c.reader.reader == nil {
@@ -109,8 +141,17 @@ func (c *ColumnPages) Next() bool {
 		return false
 	}
 
+	reader := io.Reader(&c.reader)
+	if header.CRC != 0 {
+		if c.crc32.hash == nil {
+			c.crc32.reader = reader
+			c.crc32.hash = crc32.NewIEEE()
+		}
+		reader = &c.crc32
+	}
+
 	c.header = header
-	c.data.R = &c.reader
+	c.data.R = reader
 	c.data.N = int64(header.CompressedPageSize)
 	return true
 }
@@ -528,5 +569,16 @@ type dataPageReader struct {
 func (r *dataPageReader) Read(b []byte) (int, error) {
 	n, err := r.reader.Read(b)
 	r.offset += int64(n)
+	return n, err
+}
+
+type crc32Reader struct {
+	reader io.Reader
+	hash   hash.Hash32
+}
+
+func (r *crc32Reader) Read(b []byte) (int, error) {
+	n, err := r.reader.Read(b)
+	r.hash.Write(b[:n])
 	return n, err
 }

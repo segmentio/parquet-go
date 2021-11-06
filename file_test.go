@@ -81,6 +81,10 @@ func printColumns(t *testing.T, col *parquet.Column, indent string) {
 			} else if n != numValues {
 				t.Fatalf("wrong number of values decoded: want=%d got=%d", numValues, n)
 			}
+
+			if err := pages.Err(); err != nil {
+				t.Error(err)
+			}
 		}
 		if err := pages.Close(); err != nil {
 			t.Fatal(err)
