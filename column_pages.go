@@ -19,7 +19,7 @@ type ColumnPages struct {
 	column   *Column
 	metadata *schema.ColumnMetaData
 	header   *schema.PageHeader
-	reader   *bufio.Reader
+	reader   dataPageReader
 	protocol thrift.CompactProtocol
 	decoder  thrift.Decoder
 	buffer   [4]byte
@@ -34,6 +34,11 @@ type ColumnPages struct {
 	v1 struct {
 		repetitions dataPageLevelV1
 		definitions dataPageLevelV1
+	}
+
+	v2 struct {
+		repetitions dataPageLevelV2
+		definitions dataPageLevelV2
 	}
 
 	err error
@@ -87,10 +92,12 @@ func (c *ColumnPages) Next() bool {
 		}
 	}
 
-	if c.reader == nil {
-		section := io.NewSectionReader(c.column.file, c.metadata.DataPageOffset, c.metadata.TotalCompressedSize)
-		c.reader = bufio.NewReaderSize(section, defaultBufferSize)
-		c.decoder.Reset(c.protocol.NewReader(c.reader))
+	if c.reader.reader == nil {
+		dataPageOffset := c.metadata.DataPageOffset
+		section := io.NewSectionReader(c.column.file, dataPageOffset, c.metadata.TotalCompressedSize)
+		c.reader.reader = bufio.NewReaderSize(section, defaultBufferSize)
+		c.reader.offset = dataPageOffset
+		c.decoder.Reset(c.protocol.NewReader(&c.reader))
 	}
 
 	header := new(schema.PageHeader)
@@ -103,7 +110,7 @@ func (c *ColumnPages) Next() bool {
 	}
 
 	c.header = header
-	c.data.R = c.reader
+	c.data.R = &c.reader
 	c.data.N = int64(header.CompressedPageSize)
 	return true
 }
@@ -285,20 +292,45 @@ func (c *ColumnPages) decode(valueType schema.Type, repetitions, definitions []i
 		var enc schema.Encoding
 		var err error
 
-		switch c.header.Type {
+		switch h := c.header; h.Type {
 		case schema.DataPage:
 			if c.page == nil {
 				c.page = acquireCompressedPageReader(c.metadata.Codec, &c.data)
 			} else {
 				c.page.Reset(&c.data)
 			}
-			enc = c.header.DataPageHeader.Encoding
+			enc = h.DataPageHeader.Encoding
 			err = c.resetDataPageV1(c.page)
+
 		case schema.DataPageV2:
-			panic("data page v2 not implemented")
+			enc = schema.RLE
+			repetitionsLength := int64(h.DataPageHeaderV2.RepetitionLevelsByteLength)
+			definitionsLength := int64(h.DataPageHeaderV2.DefinitionLevelsByteLength)
+			c.v2.repetitions.setDataPageV2Section(c.column.file, c.reader.offset, repetitionsLength)
+			c.v2.definitions.setDataPageV2Section(c.column.file, c.reader.offset+repetitionsLength, definitionsLength)
+			// Skip the levels, we do this instead of positioning the reader at
+			// the beginning of the data so the CRC32 gets computed.
+			remainLength := c.data.N
+			levelsLength := repetitionsLength + definitionsLength
+			c.data.N = levelsLength
+			_, err = io.Copy(io.Discard, &c.data)
+			c.data.N = remainLength - levelsLength
+			if err == nil {
+				codec := schema.Uncompressed
+				if h.DataPageHeaderV2.IsCompressed == nil || *h.DataPageHeaderV2.IsCompressed {
+					codec = c.metadata.Codec
+				}
+				if c.page == nil {
+					c.page = acquireCompressedPageReader(codec, &c.data)
+				} else {
+					c.page.Reset(&c.data)
+				}
+			}
+
 		default:
 			err = fmt.Errorf("cannot decode page of type %s", c.header.Type)
 		}
+
 		if err != nil {
 			return 0, err
 		}
@@ -464,9 +496,37 @@ func (lvl *dataPageLevelV1) readDataPageV1Level(r io.Reader, buf *[4]byte, typ s
 	return nil
 }
 
+type dataPageLevelV2 struct {
+	io.SectionReader
+}
+
+func (lvl *dataPageLevelV2) reset() {
+	lvl.SectionReader = *io.NewSectionReader(nil, 0, 0)
+}
+
+func (lvl *dataPageLevelV2) setDataPageV2Section(file *File, dataPageOffset, dataPageLength int64) {
+	lvl.SectionReader = *io.NewSectionReader(file, dataPageOffset, dataPageLength)
+}
+
 func dontExpectEOF(err error) error {
 	if err == io.EOF {
 		err = io.ErrUnexpectedEOF
 	}
 	return err
+}
+
+// This implementation of io.Reader is used to keep track of the current page
+// offset. This is useful to be able to create section readers for data page v2,
+// which avoid loading the repetition and definition levels in memory.
+type dataPageReader struct {
+	// This could be an io.Reader but we specialize it since dataPageReader is
+	// only used internally with a bufio.Reader.
+	reader *bufio.Reader
+	offset int64
+}
+
+func (r *dataPageReader) Read(b []byte) (int, error) {
+	n, err := r.reader.Read(b)
+	r.offset += int64(n)
+	return n, err
 }
