@@ -51,31 +51,29 @@ func printColumns(t *testing.T, col *parquet.Column, indent string) {
 		pages := chunks.DataPages()
 
 		for pages.Next() {
-			numValues, numNulls := pages.NumValues(), pages.NumNulls()
+			numValues := pages.NumValues()
 			repetitions := make([]int32, numValues)
 			definitions := make([]int32, numValues)
-			//fmt.Println("num values =", numValues)
-			//fmt.Println("num nulls  =", numNulls)
 
 			var n int
 			var err error
 			switch col.Type() {
 			case schema.Boolean:
-				n, err = pages.DecodeBoolean(repetitions, definitions, make([]bool, numValues-numNulls))
+				n, err = pages.DecodeBoolean(repetitions, definitions, make([]bool, numValues))
 			case schema.Int32:
-				n, err = pages.DecodeInt32(repetitions, definitions, make([]int32, numValues-numNulls))
+				n, err = pages.DecodeInt32(repetitions, definitions, make([]int32, numValues))
 			case schema.Int64:
-				n, err = pages.DecodeInt64(repetitions, definitions, make([]int64, numValues-numNulls))
+				n, err = pages.DecodeInt64(repetitions, definitions, make([]int64, numValues))
 			case schema.Int96:
-				n, err = pages.DecodeInt96(repetitions, definitions, make([][12]byte, numValues-numNulls))
+				n, err = pages.DecodeInt96(repetitions, definitions, make([][12]byte, numValues))
 			case schema.Float:
-				n, err = pages.DecodeFloat(repetitions, definitions, make([]float32, numValues-numNulls))
+				n, err = pages.DecodeFloat(repetitions, definitions, make([]float32, numValues))
 			case schema.Double:
-				n, err = pages.DecodeDouble(repetitions, definitions, make([]float64, numValues-numNulls))
+				n, err = pages.DecodeDouble(repetitions, definitions, make([]float64, numValues))
 			case schema.ByteArray:
-				n, err = pages.DecodeByteArray(repetitions, definitions, make([][]byte, numValues-numNulls))
+				n, err = pages.DecodeByteArray(repetitions, definitions, make([][]byte, numValues))
 			case schema.FixedLenByteArray:
-				n, err = pages.DecodeFixedLenByteArray(repetitions, definitions, make([]byte, col.TypeLength()*(numValues-numNulls)))
+				n, err = pages.DecodeFixedLenByteArray(repetitions, definitions, make([]byte, col.TypeLength()*numValues))
 			}
 
 			if err != nil {

@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -43,20 +42,28 @@ type ColumnPages struct {
 func (c *ColumnPages) Close() error {
 	c.header = nil
 
-	closeDecoderIfNotNil(c.repetitions)
-	closeDecoderIfNotNil(c.definitions)
-	closeDecoderIfNotNil(c.values)
-	c.repetitions = nil
-	c.definitions = nil
-	c.values = nil
+	if c.repetitions != nil {
+		c.repetitions.Close()
+		c.repetitions = nil
+	}
+
+	if c.definitions != nil {
+		c.definitions.Close()
+		c.definitions = nil
+	}
+
+	if c.values != nil {
+		c.values.Close()
+		c.values = nil
+	}
 
 	if c.page != nil {
 		releaseCompressedPageReader(c.page)
 		c.page = nil
 	}
 
-	switch {
-	case c.err == nil, errors.Is(c.err, io.EOF):
+	switch c.err {
+	case nil, io.EOF:
 		return nil
 	default:
 		return c.err
@@ -68,9 +75,14 @@ func (c *ColumnPages) Next() bool {
 		return false
 	}
 
+	if c.values != nil {
+		c.values.Close()
+		c.values = nil
+	}
+
 	if c.data.N > 0 {
 		if _, err := io.Copy(ioutil.Discard, &c.data); err != nil {
-			c.setError(fmt.Errorf("skipping unread page data: %w", err))
+			c.err = fmt.Errorf("skipping unread page data: %w", err)
 			return false
 		}
 	}
@@ -83,20 +95,17 @@ func (c *ColumnPages) Next() bool {
 
 	header := new(schema.PageHeader)
 	if err := c.decoder.Decode(header); err != nil {
-		c.setError(fmt.Errorf("decoding page header: %w", err))
+		if err != io.EOF {
+			err = fmt.Errorf("decoding page header: %w", err)
+		}
+		c.err = err
 		return false
 	}
 
 	c.header = header
 	c.data.R = c.reader
 	c.data.N = int64(header.CompressedPageSize)
-	closeDecoderIfNotNil(c.values)
-	c.values = nil
 	return true
-}
-
-func (c *ColumnPages) setError(err error) {
-	c.header, c.err = nil, err
 }
 
 func (c *ColumnPages) Header() *schema.PageHeader {
@@ -110,18 +119,6 @@ func (c *ColumnPages) NumValues() int {
 			return int(h.DataPageHeader.NumValues)
 		case schema.DataPageV2:
 			return int(h.DataPageHeaderV2.NumValues)
-		}
-	}
-	return 0
-}
-
-func (c *ColumnPages) NumNulls() int {
-	if h := c.header; h != nil {
-		switch h.Type {
-		case schema.DataPage:
-			return 0 // TODO
-		case schema.DataPageV2:
-			return int(h.DataPageHeaderV2.NumNulls)
 		}
 	}
 	return 0
@@ -296,7 +293,7 @@ func (c *ColumnPages) decode(valueType schema.Type, repetitions, definitions []i
 				c.page.Reset(&c.data)
 			}
 			enc = c.header.DataPageHeader.Encoding
-			err = c.resetDataPageV1(&debugReader{c.page})
+			err = c.resetDataPageV1(c.page)
 		case schema.DataPageV2:
 			panic("data page v2 not implemented")
 		default:
@@ -306,7 +303,7 @@ func (c *ColumnPages) decode(valueType schema.Type, repetitions, definitions []i
 			return 0, err
 		}
 
-		c.values = lookupEncoding(enc).NewDecoder(&debugReader{c.page})
+		c.values = lookupEncoding(enc).NewDecoder(c.page)
 		c.values.SetBitWidth(c.column.TypeLength())
 	}
 
@@ -467,27 +464,9 @@ func (lvl *dataPageLevelV1) readDataPageV1Level(r io.Reader, buf *[4]byte, typ s
 	return nil
 }
 
-func closeDecoderIfNotNil(d encoding.Decoder) {
-	if d != nil {
-		d.Close()
-	}
-}
-
-func errorDecodingValues(err error, typ schema.Type) error {
-	return fmt.Errorf("decoding %s values: %w", typ, err)
-}
-
 func dontExpectEOF(err error) error {
 	if err == io.EOF {
 		err = io.ErrUnexpectedEOF
 	}
 	return err
-}
-
-type debugReader struct{ r io.Reader }
-
-func (d *debugReader) Read(b []byte) (int, error) {
-	n, err := d.r.Read(b)
-	//fmt.Printf("Read(%d) => (%d, %v) % 2x\n", len(b), n, err, b[:n])
-	return n, err
 }
