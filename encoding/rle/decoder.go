@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/segmentio/parquet/encoding"
 	"github.com/segmentio/parquet/internal/bits"
 )
 
-type decoder struct {
+type Decoder struct {
+	encoding.NotImplementedDecoder
 	data      io.LimitedReader
 	init      bool
 	buffer    [4]byte
@@ -18,8 +20,8 @@ type decoder struct {
 	bitPack   bitPackDecoder
 }
 
-func newDecoder(r io.Reader) *decoder {
-	return &decoder{
+func NewDecoder(r io.Reader) *Decoder {
+	return &Decoder{
 		data: io.LimitedReader{
 			R: r,
 			N: 4,
@@ -27,43 +29,43 @@ func newDecoder(r io.Reader) *decoder {
 	}
 }
 
-func (d *decoder) Close() error {
+func (d *Decoder) Close() error {
 	return nil
 }
 
-func (d *decoder) SetBitWidth(bitWidth int) {
+func (d *Decoder) SetBitWidth(bitWidth int) {
 	d.bitWidth = uint(bitWidth)
 }
 
-func (d *decoder) Reset(r io.Reader) {
+func (d *Decoder) Reset(r io.Reader) {
 	d.data.R = r
 	d.data.N = 4
 	d.init = false
 	d.decoder = nil
 }
 
-func (d *decoder) ReadByte() (byte, error) {
+func (d *Decoder) ReadByte() (byte, error) {
 	_, err := d.data.Read(d.buffer[:1])
 	return d.buffer[0], err
 }
 
-func (d *decoder) DecodeBoolean(data []bool) (int, error) {
+func (d *Decoder) DecodeBoolean(data []bool) (int, error) {
 	return d.decode(bits.BoolToBytes(data), 8, 1)
 }
 
-func (d *decoder) DecodeInt32(data []int32) (int, error) {
+func (d *Decoder) DecodeInt32(data []int32) (int, error) {
 	return d.decode(bits.Int32ToBytes(data), 32, d.bitWidth)
 }
 
-func (d *decoder) DecodeInt64(data []int64) (int, error) {
+func (d *Decoder) DecodeInt64(data []int64) (int, error) {
 	return d.decode(bits.Int64ToBytes(data), 64, d.bitWidth)
 }
 
-func (d *decoder) DecodeInt96(data [][12]byte) (int, error) {
+func (d *Decoder) DecodeInt96(data [][12]byte) (int, error) {
 	return d.decode(bits.Int96ToBytes(data), 96, d.bitWidth)
 }
 
-func (d *decoder) decode(data []byte, dstWidth, srcWidth uint) (int, error) {
+func (d *Decoder) decode(data []byte, dstWidth, srcWidth uint) (int, error) {
 	wordSize := bits.ByteCount(dstWidth)
 	decoded := 0
 	if srcWidth == 0 {

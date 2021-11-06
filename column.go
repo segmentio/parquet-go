@@ -19,8 +19,27 @@ type Column struct {
 	chunks  []*schema.ColumnChunk
 
 	depth              int32
-	maxDefinitionLevel int32
 	maxRepetitionLevel int32
+	maxDefinitionLevel int32
+}
+
+// Schema returns the underlying schema element of the column.
+func (c *Column) Schema() *schema.SchemaElement {
+	return c.schema
+}
+
+// Type returns the type of the column.
+//
+// The returned value is unspecified if c is not a leaf column.
+func (c *Column) Type() schema.Type {
+	return c.schema.Type
+}
+
+// TypeLength returns the size of values if c has a fixed-length data type.
+//
+// The returned value is unspecified if c is not a leaf column.
+func (c *Column) TypeLength() int {
+	return int(c.schema.TypeLength)
 }
 
 // Required returns true if the column is required.
@@ -38,26 +57,37 @@ func (c *Column) Repeated() bool {
 	return c.schema.RepetitionType == schema.Repeated
 }
 
+// Lead returns true if c is a leaf column.
+func (c *Column) Leaf() bool {
+	return len(c.columns) == 0
+}
+
 // String returns a human-redable string representation of the oclumn.
 func (c *Column) String() string {
 	switch {
 	case c.columns != nil:
-		return fmt.Sprintf("%s{%s}",
+		return fmt.Sprintf("%s{%s,max{repetition=%d,definition=%d}}",
 			c.schema.Name,
-			c.schema.RepetitionType)
+			c.schema.RepetitionType,
+			c.maxRepetitionLevel,
+			c.maxDefinitionLevel)
 
 	case c.schema.Type == schema.FixedLenByteArray:
-		return fmt.Sprintf("%s{%s(%d),%s}",
+		return fmt.Sprintf("%s{%s(%d),%s,max{repetition=%d,definition=%d}}",
 			c.schema.Name,
 			c.schema.Type,
 			c.schema.TypeLength,
-			c.schema.RepetitionType)
+			c.schema.RepetitionType,
+			c.maxRepetitionLevel,
+			c.maxDefinitionLevel)
 
 	default:
-		return fmt.Sprintf("%s{%s,%s}",
+		return fmt.Sprintf("%s{%s,%s,max{repetition=%d,definition=%d}}",
 			c.schema.Name,
 			c.schema.Type,
-			c.schema.RepetitionType)
+			c.schema.RepetitionType,
+			c.maxRepetitionLevel,
+			c.maxDefinitionLevel)
 	}
 }
 
@@ -93,6 +123,18 @@ func (c *Column) Chunks() *ColumnChunks {
 	}
 }
 
+func (c *Column) Depth() int {
+	return int(c.depth)
+}
+
+func (c *Column) MaxRepetitionLevel() int {
+	return int(c.maxRepetitionLevel)
+}
+
+func (c *Column) MaxDefinitionLevel() int {
+	return int(c.maxDefinitionLevel)
+}
+
 func openColumns(file *File) (*Column, error) {
 	cl := columnLoader{}
 
@@ -116,16 +158,16 @@ func openColumns(file *File) (*Column, error) {
 }
 
 func setMaxLevels(col *Column, depth, repetition, definition int32) {
-	col.depth = depth
-	col.maxRepetitionLevel = repetition
-	col.maxDefinitionLevel = definition
-	depth++
 	switch col.schema.RepetitionType {
 	case schema.Optional:
 		definition++
 	case schema.Repeated:
 		repetition++
 	}
+	col.depth = depth
+	col.maxRepetitionLevel = repetition
+	col.maxDefinitionLevel = definition
+	depth++
 	for _, c := range col.columns {
 		setMaxLevels(c, depth, repetition, definition)
 	}

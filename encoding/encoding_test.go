@@ -205,8 +205,8 @@ func testEncoding(t *testing.T, e encoding.Encoding) {
 
 func testBooleanEncoding(t *testing.T, e encoding.Encoding) {
 	buf := new(bytes.Buffer)
-	enc := e.NewBooleanEncoder(buf)
-	dec := e.NewBooleanDecoder(buf)
+	enc := e.NewEncoder(buf)
+	dec := e.NewDecoder(buf)
 	tmp := [1]bool{}
 	defer enc.Close()
 	defer dec.Close()
@@ -245,8 +245,8 @@ func testBooleanEncoding(t *testing.T, e encoding.Encoding) {
 
 func testInt32Encoding(t *testing.T, e encoding.Encoding) {
 	buf := new(bytes.Buffer)
-	enc := e.NewInt32Encoder(buf)
-	dec := e.NewInt32Decoder(buf)
+	enc := e.NewEncoder(buf)
+	dec := e.NewDecoder(buf)
 	tmp := [1]int32{}
 	defer enc.Close()
 	defer dec.Close()
@@ -289,8 +289,8 @@ func testInt32Encoding(t *testing.T, e encoding.Encoding) {
 
 func testInt64Encoding(t *testing.T, e encoding.Encoding) {
 	buf := new(bytes.Buffer)
-	enc := e.NewInt64Encoder(buf)
-	dec := e.NewInt64Decoder(buf)
+	enc := e.NewEncoder(buf)
+	dec := e.NewDecoder(buf)
 	tmp := [1]int64{}
 	defer enc.Close()
 	defer dec.Close()
@@ -333,8 +333,8 @@ func testInt64Encoding(t *testing.T, e encoding.Encoding) {
 
 func testInt96Encoding(t *testing.T, e encoding.Encoding) {
 	buf := new(bytes.Buffer)
-	enc := e.NewInt96Encoder(buf)
-	dec := e.NewInt96Decoder(buf)
+	enc := e.NewEncoder(buf)
+	dec := e.NewDecoder(buf)
 	tmp := [1][12]byte{}
 	defer enc.Close()
 	defer dec.Close()
@@ -377,8 +377,8 @@ func testInt96Encoding(t *testing.T, e encoding.Encoding) {
 
 func testFloatEncoding(t *testing.T, e encoding.Encoding) {
 	buf := new(bytes.Buffer)
-	enc := e.NewFloatEncoder(buf)
-	dec := e.NewFloatDecoder(buf)
+	enc := e.NewEncoder(buf)
+	dec := e.NewDecoder(buf)
 	tmp := [1]float32{}
 	defer enc.Close()
 	defer dec.Close()
@@ -417,8 +417,8 @@ func testFloatEncoding(t *testing.T, e encoding.Encoding) {
 
 func testDoubleEncoding(t *testing.T, e encoding.Encoding) {
 	buf := new(bytes.Buffer)
-	enc := e.NewDoubleEncoder(buf)
-	dec := e.NewDoubleDecoder(buf)
+	enc := e.NewEncoder(buf)
+	dec := e.NewDecoder(buf)
 	tmp := [1]float64{}
 	defer enc.Close()
 	defer dec.Close()
@@ -457,8 +457,8 @@ func testDoubleEncoding(t *testing.T, e encoding.Encoding) {
 
 func testByteArrayEncoding(t *testing.T, e encoding.Encoding) {
 	buf := new(bytes.Buffer)
-	enc := e.NewByteArrayEncoder(buf)
-	dec := e.NewByteArrayDecoder(buf)
+	enc := e.NewEncoder(buf)
+	dec := e.NewDecoder(buf)
 	tmp := [1][]byte{}
 	defer enc.Close()
 	defer dec.Close()
@@ -497,8 +497,8 @@ func testByteArrayEncoding(t *testing.T, e encoding.Encoding) {
 
 func testFixedLenByteArrayEncoding(t *testing.T, e encoding.Encoding) {
 	buf := new(bytes.Buffer)
-	enc := e.NewFixedLenByteArrayEncoder(buf)
-	dec := e.NewFixedLenByteArrayDecoder(buf)
+	enc := e.NewEncoder(buf)
+	dec := e.NewDecoder(buf)
 	defer enc.Close()
 	defer dec.Close()
 

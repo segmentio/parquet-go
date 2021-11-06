@@ -4,28 +4,34 @@ import (
 	"encoding/binary"
 	"io"
 
+	"github.com/segmentio/parquet/encoding"
 	"github.com/segmentio/parquet/internal/bits"
 )
 
-type encoder struct {
+const (
+	defaultBufferSize = 1024
+)
+
+type Encoder struct {
+	encoding.NotImplementedEncoder
 	w        io.Writer
 	buffer   [binary.MaxVarintLen32]byte
 	data     []byte
 	bitWidth uint
 }
 
-func newEncoder(w io.Writer) *encoder {
-	return &encoder{
+func NewEncoder(w io.Writer) *Encoder {
+	return &Encoder{
 		w:    w,
-		data: make([]byte, 4, 1024),
+		data: make([]byte, 4, defaultBufferSize),
 	}
 }
 
-func (e *encoder) SetBitWidth(bitWidth int) {
+func (e *Encoder) SetBitWidth(bitWidth int) {
 	e.bitWidth = uint(bitWidth)
 }
 
-func (e *encoder) Close() error {
+func (e *Encoder) Close() error {
 	if len(e.data) > 4 {
 		defer e.Reset(e.w)
 		binary.LittleEndian.PutUint32(e.data[:4], uint32(len(e.data)-4))
@@ -35,29 +41,34 @@ func (e *encoder) Close() error {
 	return nil
 }
 
-func (e *encoder) Reset(w io.Writer) {
+func (e *Encoder) Reset(w io.Writer) {
 	e.w = w
-	e.data = e.data[:4]
-	*(*[4]byte)(e.data) = [4]byte{}
+
+	if cap(e.data) == 0 {
+		e.data = make([]byte, 4, defaultBufferSize)
+	} else {
+		e.data = e.data[:4]
+		*(*[4]byte)(e.data) = [4]byte{}
+	}
 }
 
-func (e *encoder) EncodeBoolean(data []bool) error {
+func (e *Encoder) EncodeBoolean(data []bool) error {
 	return e.encode(bits.BoolToBytes(data), 1, 8, equalBool)
 }
 
-func (e *encoder) EncodeInt32(data []int32) error {
+func (e *Encoder) EncodeInt32(data []int32) error {
 	return e.encode(bits.Int32ToBytes(data), uint(e.bitWidth), 32, equalInt32)
 }
 
-func (e *encoder) EncodeInt64(data []int64) error {
+func (e *Encoder) EncodeInt64(data []int64) error {
 	return e.encode(bits.Int64ToBytes(data), uint(e.bitWidth), 64, equalInt64)
 }
 
-func (e *encoder) EncodeInt96(data [][12]byte) error {
+func (e *Encoder) EncodeInt96(data [][12]byte) error {
 	return e.encode(bits.Int96ToBytes(data), uint(e.bitWidth), 96, equalInt96)
 }
 
-func (e *encoder) encode(data []byte, dstWidth, srcWidth uint, eq func(a, b []byte) bool) error {
+func (e *Encoder) encode(data []byte, dstWidth, srcWidth uint, eq func(a, b []byte) bool) error {
 	wordSize := bits.ByteCount(srcWidth)
 	if dstWidth == 0 {
 		dstWidth = srcWidth
@@ -80,7 +91,7 @@ func (e *encoder) encode(data []byte, dstWidth, srcWidth uint, eq func(a, b []by
 	return nil
 }
 
-func (e *encoder) encodeBitPack(count int, data []byte, dstWidth, srcWidth uint) int {
+func (e *Encoder) encodeBitPack(count int, data []byte, dstWidth, srcWidth uint) int {
 	n := binary.PutUvarint(e.buffer[:], (uint64(count/8)<<1)|1)
 	e.data = append(e.data, e.buffer[:n]...)
 
@@ -103,7 +114,7 @@ func (e *encoder) encodeBitPack(count int, data []byte, dstWidth, srcWidth uint)
 	return bits.Pack(e.data[offset:], dstWidth, data, srcWidth)
 }
 
-func (e *encoder) encodeRunLength(count int, data []byte) {
+func (e *Encoder) encodeRunLength(count int, data []byte) {
 	n := binary.PutUvarint(e.buffer[:], uint64(count)<<1)
 	e.data = append(e.data, e.buffer[:n]...)
 

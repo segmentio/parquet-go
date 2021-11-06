@@ -28,8 +28,8 @@ type ColumnPages struct {
 	data io.LimitedReader
 	page *compressedPageReader
 
-	repetitions encoding.Int32Decoder
-	definitions encoding.Int32Decoder
+	repetitions encoding.Decoder
+	definitions encoding.Decoder
 	values      encoding.Decoder
 
 	v1 struct {
@@ -43,9 +43,9 @@ type ColumnPages struct {
 func (c *ColumnPages) Close() error {
 	c.header = nil
 
-	closeIfNotNil(c.repetitions)
-	closeIfNotNil(c.definitions)
-	closeIfNotNil(c.values)
+	closeDecoderIfNotNil(c.repetitions)
+	closeDecoderIfNotNil(c.definitions)
+	closeDecoderIfNotNil(c.values)
 	c.repetitions = nil
 	c.definitions = nil
 	c.values = nil
@@ -60,12 +60,6 @@ func (c *ColumnPages) Close() error {
 		return nil
 	default:
 		return c.err
-	}
-}
-
-func closeIfNotNil(c io.Closer) {
-	if c != nil {
-		c.Close()
 	}
 }
 
@@ -96,7 +90,7 @@ func (c *ColumnPages) Next() bool {
 	c.header = header
 	c.data.R = c.reader
 	c.data.N = int64(header.CompressedPageSize)
-	closeIfNotNil(c.values)
+	closeDecoderIfNotNil(c.values)
 	c.values = nil
 	return true
 }
@@ -121,6 +115,18 @@ func (c *ColumnPages) NumValues() int {
 	return 0
 }
 
+func (c *ColumnPages) NumNulls() int {
+	if h := c.header; h != nil {
+		switch h.Type {
+		case schema.DataPage:
+			return 0 // TODO
+		case schema.DataPageV2:
+			return int(h.DataPageHeaderV2.NumNulls)
+		}
+	}
+	return 0
+}
+
 func (c *ColumnPages) Statistics() *schema.Statistics {
 	if h := c.header; h != nil {
 		switch h.Type {
@@ -134,8 +140,6 @@ func (c *ColumnPages) Statistics() *schema.Statistics {
 }
 
 func (c *ColumnPages) Decode(repetitions, definitions []int32, values interface{}) (int, error) {
-	typ := c.column.schema.Type
-
 	switch {
 	case len(repetitions) < len(definitions):
 		definitions = definitions[:len(repetitions)]
@@ -156,8 +160,8 @@ func (c *ColumnPages) Decode(repetitions, definitions []int32, values interface{
 			}
 			enc = c.header.DataPageHeader.Encoding
 			err = c.resetDataPageV1(c.page)
-		//case schema.DataPageV2:
-		// TODO
+		case schema.DataPageV2:
+			panic("data page v2 not implemented")
 		default:
 			err = fmt.Errorf("cannot decode page of type %s", c.header.Type)
 		}
@@ -165,138 +169,234 @@ func (c *ColumnPages) Decode(repetitions, definitions []int32, values interface{
 			return 0, err
 		}
 
-		c.values = newDecoder(c.page, typ, enc)
+		c.values = lookupEncoding(enc).NewDecoder(c.page)
 	}
 
+	depth := c.column.depth
+	maxRepetitionLevel := c.column.maxRepetitionLevel
+	maxDefinitionLevel := c.column.maxDefinitionLevel
+	numValues := int32(0)
+
+	if maxRepetitionLevel == 0 {
+		for i := range repetitions {
+			repetitions[i] = 0
+		}
+		numValues = int32(len(repetitions))
+	} else if n, err := c.decodeLevels(c.repetitions, repetitions, "repetition"); err != nil {
+		return 0, err
+	} else {
+		repetitions = repetitions[:n]
+		numValues = int32(n)
+	}
+
+	if maxDefinitionLevel == 0 {
+		for i := range definitions {
+			definitions[i] = depth
+		}
+		numValues = int32(len(definitions))
+	} else if n, err := c.decodeLevels(c.definitions, definitions, "definition"); err != nil {
+		return 0, err
+	} else {
+		definitions = definitions[:n]
+
+		for _, def := range definitions {
+			if def == depth {
+				numValues++
+			}
+		}
+	}
+
+	typ := c.column.Type()
 	switch typ {
 	case schema.Boolean:
 		if v, ok := values.([]bool); ok {
-			return c.decodeBoolean(repetitions, definitions, v)
+			return c.decodeBoolean(repetitions, definitions, v[:len(definitions)], numValues, maxDefinitionLevel)
 		}
 	case schema.Int32:
 		if v, ok := values.([]int32); ok {
-			return c.decodeInt32(repetitions, definitions, v)
+			return c.decodeInt32(repetitions, definitions, v[:len(definitions)], numValues, maxDefinitionLevel)
 		}
 	case schema.Int64:
 		if v, ok := values.([]int64); ok {
-			return c.decodeInt64(repetitions, definitions, v)
+			return c.decodeInt64(repetitions, definitions, v[:len(definitions)], numValues, maxDefinitionLevel)
 		}
 	case schema.Int96:
 		if v, ok := values.([][12]byte); ok {
-			return c.decodeInt96(repetitions, definitions, v)
+			return c.decodeInt96(repetitions, definitions, v[:len(definitions)], numValues, maxDefinitionLevel)
 		}
 	case schema.Float:
 		if v, ok := values.([]float32); ok {
-			return c.decodeFloat(repetitions, definitions, v)
+			return c.decodeFloat(repetitions, definitions, v[:len(definitions)], numValues, maxDefinitionLevel)
 		}
 	case schema.Double:
 		if v, ok := values.([]float64); ok {
-			return c.decodeDouble(repetitions, definitions, v)
+			return c.decodeDouble(repetitions, definitions, v[:len(definitions)], numValues, maxDefinitionLevel)
 		}
 	case schema.ByteArray:
 		if v, ok := values.([][]byte); ok {
-			return c.decodeByteArray(repetitions, definitions, v)
+			return c.decodeByteArray(repetitions, definitions, v[:len(definitions)], numValues, maxDefinitionLevel)
 		}
 	case schema.FixedLenByteArray:
 		if v, ok := values.([]byte); ok {
-			size := int(c.column.schema.TypeLength)
-			return c.decodeFixedLenByteArray(repetitions, definitions, size, v)
+			size := c.column.TypeLength()
+			return c.decodeFixedLenByteArray(repetitions, definitions, size, v[:len(definitions)], numValues, maxDefinitionLevel)
 		}
 	}
 
-	return 0, fmt.Errorf("cannot decode %s into values of type %s", typ, reflect.TypeOf(values))
+	return 0, fmt.Errorf("cannot decode %s column into values of type %s", typ, reflect.TypeOf(values))
 }
 
-func (c *ColumnPages) decodeRepetitionsAndDefinitions(repetitions, definitions []int32) (int, error) {
-	return 0, nil
-}
-
-func (c *ColumnPages) decodeBoolean(repetitions, definitions []int32, values []bool) (int, error) {
-	if len(repetitions) < len(values) {
-		values = values[:len(repetitions)]
+func (c *ColumnPages) decodeLevels(dec encoding.Decoder, levels []int32, typ string) (int, error) {
+	switch n, err := dec.DecodeInt32(levels); err {
+	case nil, io.EOF:
+		if n != len(levels) {
+			return n, fmt.Errorf("not enough value were read from the %s levels; expected %d but only %d were decoded", typ, len(levels), n)
+		}
+		return n, nil
+	default:
+		return n, fmt.Errorf("decoding %s levels: %w", typ, err)
 	}
-	n, err := c.values.(encoding.BooleanDecoder).DecodeBoolean(values)
+}
+
+func (c *ColumnPages) decodeBoolean(repetitions, definitions []int32, values []bool, numValues, maxDefinitionLevel int32) (int, error) {
+	n, err := c.values.DecodeBoolean(values[:numValues])
 	if err != nil {
-		return n, err
+		if n != 0 && err == io.EOF {
+			err = errorDecodingValues(io.ErrUnexpectedEOF, schema.Boolean)
+		}
+		return 0, err
 	}
-	return c.decodeRepetitionsAndDefinitions(repetitions[:n], definitions[:n])
+	if len(definitions) != int(numValues) {
+		decodeNulls(definitions, numValues, maxDefinitionLevel, func(i, j int) {
+			values[i], values[j] = values[j], false
+		})
+	}
+	return n, err
 }
 
-func (c *ColumnPages) decodeInt32(repetitions, definitions []int32, values []int32) (int, error) {
-	if len(repetitions) < len(values) {
-		values = values[:len(repetitions)]
-	}
-	n, err := c.values.(encoding.Int32Decoder).DecodeInt32(values)
+func (c *ColumnPages) decodeInt32(repetitions, definitions []int32, values []int32, numValues, maxDefinitionLevel int32) (int, error) {
+	n, err := c.values.DecodeInt32(values[:numValues])
 	if err != nil {
-		return n, err
+		if n != 0 && err == io.EOF {
+			err = errorDecodingValues(io.ErrUnexpectedEOF, schema.Int32)
+		}
+		return 0, err
 	}
-	return c.decodeRepetitionsAndDefinitions(repetitions, definitions)
+	if len(definitions) != int(numValues) {
+		decodeNulls(definitions, numValues, maxDefinitionLevel, func(i, j int) {
+			values[i], values[j] = values[j], 0
+		})
+	}
+	return n, err
 }
 
-func (c *ColumnPages) decodeInt64(repetitions, definitions []int32, values []int64) (int, error) {
-	if len(repetitions) < len(values) {
-		values = values[:len(repetitions)]
-	}
-	n, err := c.values.(encoding.Int64Decoder).DecodeInt64(values)
+func (c *ColumnPages) decodeInt64(repetitions, definitions []int32, values []int64, numValues, maxDefinitionLevel int32) (int, error) {
+	n, err := c.values.DecodeInt64(values[:numValues])
 	if err != nil {
-		return n, err
+		if n != 0 && err == io.EOF {
+			err = errorDecodingValues(io.ErrUnexpectedEOF, schema.Int64)
+		}
+		return 0, err
 	}
-	return c.decodeRepetitionsAndDefinitions(repetitions, definitions)
+	if len(definitions) != int(numValues) {
+		decodeNulls(definitions, numValues, maxDefinitionLevel, func(i, j int) {
+			values[i], values[j] = values[j], 0
+		})
+	}
+	return n, err
 }
 
-func (c *ColumnPages) decodeInt96(repetitions, definitions []int32, values [][12]byte) (int, error) {
-	if len(repetitions) < len(values) {
-		values = values[:len(repetitions)]
-	}
-	n, err := c.values.(encoding.Int96Decoder).DecodeInt96(values)
+func (c *ColumnPages) decodeInt96(repetitions, definitions []int32, values [][12]byte, numValues, maxDefinitionLevel int32) (int, error) {
+	n, err := c.values.DecodeInt96(values[:numValues])
 	if err != nil {
-		return n, err
+		if n != 0 && err == io.EOF {
+			err = errorDecodingValues(io.ErrUnexpectedEOF, schema.Int96)
+		}
+		return 0, err
 	}
-	return c.decodeRepetitionsAndDefinitions(repetitions, definitions)
+	if len(definitions) != int(numValues) {
+		decodeNulls(definitions, numValues, maxDefinitionLevel, func(i, j int) {
+			values[i], values[j] = values[j], [12]byte{}
+		})
+	}
+	return n, err
 }
 
-func (c *ColumnPages) decodeFloat(repetitions, definitions []int32, values []float32) (int, error) {
-	if len(repetitions) < len(values) {
-		values = values[:len(repetitions)]
-	}
-	n, err := c.values.(encoding.FloatDecoder).DecodeFloat(values)
+func (c *ColumnPages) decodeFloat(repetitions, definitions []int32, values []float32, numValues, maxDefinitionLevel int32) (int, error) {
+	n, err := c.values.DecodeFloat(values[:numValues])
 	if err != nil {
-		return n, err
+		if n != 0 && err == io.EOF {
+			err = errorDecodingValues(io.ErrUnexpectedEOF, schema.Float)
+		}
+		return 0, err
 	}
-	return c.decodeRepetitionsAndDefinitions(repetitions, definitions)
+	if len(definitions) != int(numValues) {
+		decodeNulls(definitions, numValues, maxDefinitionLevel, func(i, j int) {
+			values[i], values[j] = values[j], 0
+		})
+	}
+	return n, err
 }
 
-func (c *ColumnPages) decodeDouble(repetitions, definitions []int32, values []float64) (int, error) {
-	if len(repetitions) < len(values) {
-		values = values[:len(repetitions)]
-	}
-	n, err := c.values.(encoding.DoubleDecoder).DecodeDouble(values)
+func (c *ColumnPages) decodeDouble(repetitions, definitions []int32, values []float64, numValues, maxDefinitionLevel int32) (int, error) {
+	n, err := c.values.DecodeDouble(values[:numValues])
 	if err != nil {
-		return n, err
+		if n != 0 && err == io.EOF {
+			err = errorDecodingValues(io.ErrUnexpectedEOF, schema.Double)
+		}
+		return 0, err
 	}
-	return c.decodeRepetitionsAndDefinitions(repetitions, definitions)
+	if len(definitions) != int(numValues) {
+		decodeNulls(definitions, numValues, maxDefinitionLevel, func(i, j int) {
+			values[i], values[j] = values[j], 0
+		})
+	}
+	return n, err
 }
 
-func (c *ColumnPages) decodeByteArray(repetitions, definitions []int32, values [][]byte) (int, error) {
-	if len(repetitions) < len(values) {
-		values = values[:len(repetitions)]
-	}
-	n, err := c.values.(encoding.ByteArrayDecoder).DecodeByteArray(values)
+func (c *ColumnPages) decodeByteArray(repetitions, definitions []int32, values [][]byte, numValues, maxDefinitionLevel int32) (int, error) {
+	n, err := c.values.DecodeByteArray(values[:numValues])
 	if err != nil {
-		return n, err
+		if n != 0 && err == io.EOF {
+			err = errorDecodingValues(io.ErrUnexpectedEOF, schema.ByteArray)
+		}
+		return 0, err
 	}
-	return c.decodeRepetitionsAndDefinitions(repetitions, definitions)
+	if len(definitions) != int(numValues) {
+		decodeNulls(definitions, numValues, maxDefinitionLevel, func(i, j int) {
+			values[i], values[j] = values[j], nil
+		})
+	}
+	return n, err
 }
 
-func (c *ColumnPages) decodeFixedLenByteArray(repetitions, definitions []int32, size int, values []byte) (int, error) {
-	if len(repetitions) < len(values) {
-		values = values[:len(repetitions)]
-	}
-	n, err := c.values.(encoding.FixedLenByteArrayDecoder).DecodeFixedLenByteArray(size, values)
+func (c *ColumnPages) decodeFixedLenByteArray(repetitions, definitions []int32, size int, values []byte, numValues, maxDefinitionLevel int32) (int, error) {
+	n, err := c.values.DecodeFixedLenByteArray(size, values[:numValues])
 	if err != nil {
-		return n, err
+		if n != 0 && err == io.EOF {
+			err = errorDecodingValues(io.ErrUnexpectedEOF, schema.FixedLenByteArray)
+		}
+		return 0, err
 	}
-	return c.decodeRepetitionsAndDefinitions(repetitions, definitions)
+	if len(definitions) != int(numValues) {
+		zero := make([]byte, size)
+		decodeNulls(definitions, numValues, maxDefinitionLevel, func(i, j int) {
+			vi := values[i*size : i*size+size]
+			vj := values[j*size : j*size+size]
+			copy(vi, vj)
+			copy(vj, zero)
+		})
+	}
+	return n, err
+}
+
+func decodeNulls(definitions []int32, numValues, maxDefinitionLevel int32, move func(int, int)) {
+	for i, j := len(definitions)-1, int(numValues); i >= 0 && i > j; i-- {
+		if definitions[i] == maxDefinitionLevel {
+			j--
+			move(i, j)
+		}
+	}
 }
 
 func (c *ColumnPages) resetDataPageV1(r io.Reader) error {
@@ -325,9 +425,9 @@ func (c *ColumnPages) resetDataPageV1(r io.Reader) error {
 	return nil
 }
 
-func resetLevelDecoder(d encoding.Int32Decoder, r io.Reader, encoding schema.Encoding) encoding.Int32Decoder {
+func resetLevelDecoder(d encoding.Decoder, r io.Reader, encoding schema.Encoding) encoding.Decoder {
 	if d == nil {
-		d = lookupEncoding(encoding).NewInt32Decoder(r)
+		d = lookupEncoding(encoding).NewDecoder(r)
 	} else {
 		d.Reset(r)
 	}
@@ -370,7 +470,7 @@ func (lvl *dataPageLevelV1) readDataPageV1Level(r io.Reader, buf *[4]byte, typ s
 		lvl.data = lvl.data[:n]
 	}
 
-	if rn, err := io.ReadFull(r, lvl.data); err != nil {
+	if rn, err := io.ReadFull(r, lvl.data[4:]); err != nil {
 		return fmt.Errorf("reading %d/%d bytes %s levels: %w", rn, m, typ, err)
 	}
 
@@ -378,5 +478,16 @@ func (lvl *dataPageLevelV1) readDataPageV1Level(r io.Reader, buf *[4]byte, typ s
 	// datagram remains valid to RLE decoders.
 	binary.LittleEndian.PutUint32(lvl.data[:4], m)
 	lvl.Reader.Reset(lvl.data)
+	fmt.Printf("%s levels = %08b\n", typ, lvl.data)
 	return nil
+}
+
+func closeDecoderIfNotNil(d encoding.Decoder) {
+	if d != nil {
+		d.Close()
+	}
+}
+
+func errorDecodingValues(err error, typ schema.Type) error {
+	return fmt.Errorf("decoding %s values: %w", typ, err)
 }

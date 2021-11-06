@@ -49,18 +49,39 @@ func printColumns(t *testing.T, col *parquet.Column, indent string) {
 	chunks := col.Chunks()
 	for chunks.Next() {
 		pages := chunks.DataPages()
-		for pages.Next() {
-			p := pages.Header()
-			//t.Logf(">> %s", p.Type)
 
-			switch p.Type {
-			case schema.DataPage:
-				//t.Logf(". >> %v %v %v %v", p.DataPageHeader.NumValues, p.DataPageHeader.Encoding, p.DataPageHeader.DefinitionLevelEncoding, p.DataPageHeader.RepetitionLevelEncoding)
-			case schema.IndexPage:
-			case schema.DictionaryPage:
-			case schema.DataPageV2:
-			default:
-				t.Fatalf("unsupported page type: %d", p.Type)
+		for pages.Next() {
+			numValues, numNulls := pages.NumValues(), pages.NumNulls()
+			repetitions := make([]int32, numValues)
+			definitions := make([]int32, numValues)
+			//fmt.Println("num values =", numValues)
+			//fmt.Println("num nulls  =", numNulls)
+
+			var n int
+			var err error
+			switch col.Type() {
+			case schema.Boolean:
+				n, err = pages.Decode(repetitions, definitions, make([]bool, numValues-numNulls))
+			case schema.Int32:
+				n, err = pages.Decode(repetitions, definitions, make([]int32, numValues-numNulls))
+			case schema.Int64:
+				n, err = pages.Decode(repetitions, definitions, make([]int64, numValues-numNulls))
+			case schema.Int96:
+				n, err = pages.Decode(repetitions, definitions, make([][12]byte, numValues-numNulls))
+			case schema.Float:
+				n, err = pages.Decode(repetitions, definitions, make([]float32, numValues-numNulls))
+			case schema.Double:
+				n, err = pages.Decode(repetitions, definitions, make([]float64, numValues-numNulls))
+			case schema.ByteArray:
+				n, err = pages.Decode(repetitions, definitions, make([][]byte, numValues-numNulls))
+			case schema.FixedLenByteArray:
+				n, err = pages.Decode(repetitions, definitions, make([]byte, col.TypeLength()*(numValues-numNulls)))
+			}
+
+			if err != nil {
+				t.Fatalf("unexpected error decoding values: %v", err)
+			} else if n != numValues {
+				t.Fatalf("wrong number of values decoded: want=%d got=%d", numValues, n)
 			}
 		}
 		if err := pages.Close(); err != nil {
