@@ -98,7 +98,7 @@ type Statistics struct {
 
 // Empty structs to use as logical type annotations.
 type StringType struct{} // allowed for BINARY, must be encoded with UTF-8
-type UUIDType struct{}   // allowed for FIXED[16], must encoded raw UUID bytes
+type UUIDType struct{}   // allowed for FIXED[16], must encode raw UUID bytes
 type MapType struct{}    // see see LogicalTypes.md
 type ListType struct{}   // see LogicalTypes.md
 type EnumType struct{}   // allowed for BINARY, must be encoded with UTF-8
@@ -213,7 +213,7 @@ type SchemaElement struct {
 	// Data type for this field. Not set if the current element is a non-leaf node.
 	Type Type `thrift:"1,optional"`
 
-	// If type is FixedLenByteArray, this is the byte length of the vales.
+	// If type is FixedLenByteArray, this is the byte length of the values.
 	// Otherwise, if specified, this is the maximum bit length to store any of the values.
 	// (e.g. a low cardinality INT col could have this set to 3).  Note that this is
 	// in the schema, and therefore fixed for the entire file.
@@ -494,7 +494,7 @@ type DataPageHeaderV2 struct {
 	// definition_levels_byte_length + repetition_levels_byte_length + 1 and compressed_page_size (included)
 	// is compressed with the compression_codec.
 	// If missing it is considered compressed.
-	IsCompressed bool `thrift:"7,optional"`
+	IsCompressed *bool `thrift:"7,optional"`
 
 	// Optional statistics for the data in this page.
 	Statistics Statistics `thrift:"8,optional"`

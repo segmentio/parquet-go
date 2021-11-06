@@ -61,21 +61,21 @@ func printColumns(t *testing.T, col *parquet.Column, indent string) {
 			var err error
 			switch col.Type() {
 			case schema.Boolean:
-				n, err = pages.Decode(repetitions, definitions, make([]bool, numValues-numNulls))
+				n, err = pages.DecodeBoolean(repetitions, definitions, make([]bool, numValues-numNulls))
 			case schema.Int32:
-				n, err = pages.Decode(repetitions, definitions, make([]int32, numValues-numNulls))
+				n, err = pages.DecodeInt32(repetitions, definitions, make([]int32, numValues-numNulls))
 			case schema.Int64:
-				n, err = pages.Decode(repetitions, definitions, make([]int64, numValues-numNulls))
+				n, err = pages.DecodeInt64(repetitions, definitions, make([]int64, numValues-numNulls))
 			case schema.Int96:
-				n, err = pages.Decode(repetitions, definitions, make([][12]byte, numValues-numNulls))
+				n, err = pages.DecodeInt96(repetitions, definitions, make([][12]byte, numValues-numNulls))
 			case schema.Float:
-				n, err = pages.Decode(repetitions, definitions, make([]float32, numValues-numNulls))
+				n, err = pages.DecodeFloat(repetitions, definitions, make([]float32, numValues-numNulls))
 			case schema.Double:
-				n, err = pages.Decode(repetitions, definitions, make([]float64, numValues-numNulls))
+				n, err = pages.DecodeDouble(repetitions, definitions, make([]float64, numValues-numNulls))
 			case schema.ByteArray:
-				n, err = pages.Decode(repetitions, definitions, make([][]byte, numValues-numNulls))
+				n, err = pages.DecodeByteArray(repetitions, definitions, make([][]byte, numValues-numNulls))
 			case schema.FixedLenByteArray:
-				n, err = pages.Decode(repetitions, definitions, make([]byte, col.TypeLength()*(numValues-numNulls)))
+				n, err = pages.DecodeFixedLenByteArray(repetitions, definitions, make([]byte, col.TypeLength()*(numValues-numNulls)))
 			}
 
 			if err != nil {

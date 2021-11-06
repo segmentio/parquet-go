@@ -66,14 +66,14 @@ func (c *Column) Leaf() bool {
 func (c *Column) String() string {
 	switch {
 	case c.columns != nil:
-		return fmt.Sprintf("%s{%s,max{repetition=%d,definition=%d}}",
+		return fmt.Sprintf("%s{%s,R=%d,D=%d}",
 			c.schema.Name,
 			c.schema.RepetitionType,
 			c.maxRepetitionLevel,
 			c.maxDefinitionLevel)
 
 	case c.schema.Type == schema.FixedLenByteArray:
-		return fmt.Sprintf("%s{%s(%d),%s,max{repetition=%d,definition=%d}}",
+		return fmt.Sprintf("%s{%s(%d),%s,R=%d,D=%d}",
 			c.schema.Name,
 			c.schema.Type,
 			c.schema.TypeLength,
@@ -82,7 +82,7 @@ func (c *Column) String() string {
 			c.maxDefinitionLevel)
 
 	default:
-		return fmt.Sprintf("%s{%s,%s,max{repetition=%d,definition=%d}}",
+		return fmt.Sprintf("%s{%s,%s,R=%d,D=%d}",
 			c.schema.Name,
 			c.schema.Type,
 			c.schema.RepetitionType,
@@ -163,6 +163,7 @@ func setMaxLevels(col *Column, depth, repetition, definition int32) {
 		definition++
 	case schema.Repeated:
 		repetition++
+		definition++
 	}
 	col.depth = depth
 	col.maxRepetitionLevel = repetition
@@ -202,7 +203,6 @@ func (cl *columnLoader) open(file *File) (*Column, error) {
 			c.chunks = append(c.chunks, &rowGroup.Columns[cl.rowGroupColumnIndex])
 		}
 		cl.rowGroupColumnIndex++
-
 		return c, nil
 	}
 
