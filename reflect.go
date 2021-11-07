@@ -56,6 +56,8 @@ type MessageType interface {
 type FieldType interface {
 	Name() string
 
+	Path() []string
+
 	NumField() int
 
 	Field(index int) FieldType
@@ -96,11 +98,7 @@ func formatMessageType(s io.StringWriter, m MessageType) {
 }
 
 func formatFieldType(s io.StringWriter, f FieldType, indent int) {
-	spaces := "                "
-	if indent > len(spaces) {
-		spaces = strings.Repeat(" ", indent)
-	}
-	s.WriteString(spaces[:indent])
+	writeIndent(s, indent)
 
 	switch {
 	case f.Optional():
@@ -146,14 +144,25 @@ func formatFieldType(s io.StringWriter, f FieldType, indent int) {
 			s.WriteString("\n")
 		}
 
+		indent += 2
 		for i := 0; i < n; i++ {
-			formatFieldType(s, f.Field(i), indent+2)
+			formatFieldType(s, f.Field(i), indent)
+			s.WriteString("\n")
 		}
 
+		writeIndent(s, indent-2)
 		s.WriteString("}")
 	} else {
 		s.WriteString(";")
 	}
+}
+
+func writeIndent(s io.StringWriter, indent int) {
+	spaces := "                "
+	if indent > len(spaces) {
+		spaces = strings.Repeat(" ", indent)
+	}
+	s.WriteString(spaces[:indent])
 }
 
 func MessageTypeOf(t reflect.Type) MessageType {
@@ -166,26 +175,26 @@ func MessageTypeOf(t reflect.Type) MessageType {
 	fields := make([]FieldType, t.NumField())
 	return &messageType{
 		name:   t.Name(),
-		fields: appendStructFieldTypes(fields[:0], t, nil, make(map[reflect.Type]FieldType)),
+		fields: appendStructFieldTypes(fields[:0], t, nil, nil, make(map[reflect.Type]FieldType)),
 	}
 }
 
-func appendStructFieldTypes(fields []FieldType, t reflect.Type, index []int, seen map[reflect.Type]FieldType) []FieldType {
+func appendStructFieldTypes(fields []FieldType, t reflect.Type, path []string, index []int, seen map[reflect.Type]FieldType) []FieldType {
 	for i, n := 0, t.NumField(); i < n; i++ {
 		if f := t.Field(i); f.IsExported() {
 			if f.Anonymous {
 				fieldIndex := index[:len(index):len(index)]
 				fieldIndex = append(fieldIndex, i)
-				fields = appendStructFieldTypes(fields, f.Type, fieldIndex, seen)
+				fields = appendStructFieldTypes(fields, f.Type, path, fieldIndex, seen)
 			} else {
-				fields = append(fields, makeStructFieldType(f, index, seen))
+				fields = append(fields, makeStructFieldType(f, path, index, seen))
 			}
 		}
 	}
 	return fields
 }
 
-func makeStructFieldType(f reflect.StructField, index []int, seen map[reflect.Type]FieldType) FieldType {
+func makeStructFieldType(f reflect.StructField, path []string, index []int, seen map[reflect.Type]FieldType) FieldType {
 	name, optional := f.Name, false
 
 	s := &structFieldType{
@@ -207,65 +216,74 @@ func makeStructFieldType(f reflect.StructField, index []int, seen map[reflect.Ty
 		}
 	}
 
-	s.FieldType = makeFieldType(s.typ, name, optional, false, seen)
+	path = path[:len(path):len(path)]
+	path = append(path, name)
+	s.FieldType = makeFieldType(s.typ, path, index, optional, false, seen)
 	return s
 }
 
-func makeFieldType(t reflect.Type, name string, optional, repeated bool, seen map[reflect.Type]FieldType) FieldType {
+func makeFieldType(t reflect.Type, path []string, index []int, optional, repeated bool, seen map[reflect.Type]FieldType) FieldType {
 	if f := seen[t]; f != nil {
 		return f
 	}
 	switch t.Kind() {
 	case reflect.Struct:
 		f := &groupType{
-			name:     name,
+			path:     path,
 			optional: optional,
 			repeated: repeated,
 			fields:   make([]FieldType, 0, t.NumField()),
 		}
 		seen[t] = f
-		f.fields = appendStructFieldTypes(f.fields, t, nil, seen)
+		f.fields = appendStructFieldTypes(f.fields, t, path, index, seen)
 		return f
 	case reflect.Slice:
-		return makeFieldType(t.Elem(), name, false, true, seen)
+		return makeFieldType(t.Elem(), path, index, false, true, seen)
 	case reflect.Ptr:
-		return makeFieldType(t.Elem(), name, true, false, seen)
+		return makeFieldType(t.Elem(), path, index, true, false, seen)
 	case reflect.Bool:
-		return makePrimitiveFieldType(name, optional, repeated, &primitiveType{
+		return makePrimitiveFieldType(path, optional, repeated, &primitiveType{
 			kind:   Boolean,
 			length: 1,
 		})
-	case reflect.Int32:
-		return makePrimitiveFieldType(name, optional, repeated, &primitiveType{
+	case reflect.Int32, reflect.Int16, reflect.Int8, reflect.Int:
+		return makePrimitiveFieldType(path, optional, repeated, &primitiveType{
 			kind:   Int32,
 			length: 32,
 		})
 	case reflect.Int64:
-		return makePrimitiveFieldType(name, optional, repeated, &primitiveType{
+		return makePrimitiveFieldType(path, optional, repeated, &primitiveType{
 			kind:   Int64,
 			length: 64,
 		})
 	case reflect.Float32:
-		return makePrimitiveFieldType(name, optional, repeated, &primitiveType{
+		return makePrimitiveFieldType(path, optional, repeated, &primitiveType{
 			kind:   Float,
 			length: 32,
 		})
 	case reflect.Float64:
-		return makePrimitiveFieldType(name, optional, repeated, &primitiveType{
+		return makePrimitiveFieldType(path, optional, repeated, &primitiveType{
 			kind:   Double,
 			length: 64,
 		})
 	case reflect.String:
-		return makePrimitiveFieldType(name, optional, repeated, &primitiveType{
+		return makePrimitiveFieldType(path, optional, repeated, &primitiveType{
 			kind: ByteArray,
 		})
+	case reflect.Array:
+		if t.Elem().Kind() == reflect.Uint8 {
+			return makePrimitiveFieldType(path, optional, repeated, &primitiveType{
+				kind:   FixedLenByteArray,
+				length: t.Len(),
+			})
+		}
 	}
 	panic("cannot construct parquet field from go type " + t.Name())
 }
 
-func makePrimitiveFieldType(name string, optional, repeated bool, typ Type) FieldType {
+func makePrimitiveFieldType(path []string, optional, repeated bool, typ Type) FieldType {
 	return &fieldType{
-		name:     name,
+		path:     path,
 		typ:      typ,
 		optional: optional,
 		repeated: repeated,
@@ -273,15 +291,16 @@ func makePrimitiveFieldType(name string, optional, repeated bool, typ Type) Fiel
 }
 
 type fieldType struct {
-	name     string
+	path     []string
 	typ      Type
 	optional bool
 	repeated bool
 }
 
-func (t *fieldType) Name() string        { return t.name }
-func (t *fieldType) NumField() int       { panic("NumField called on parquet field: " + t.name) }
-func (t *fieldType) Field(int) FieldType { panic("NumField called on parquet field: " + t.name) }
+func (t *fieldType) Name() string        { return t.path[len(t.path)-1] }
+func (t *fieldType) Path() []string      { return t.path }
+func (t *fieldType) NumField() int       { panic("NumField called on parquet field: " + path(t)) }
+func (t *fieldType) Field(int) FieldType { panic("NumField called on parquet field: " + path(t)) }
 func (t *fieldType) Optional() bool      { return t.optional }
 func (t *fieldType) Repeated() bool      { return t.repeated }
 func (t *fieldType) Required() bool      { return !t.optional && !t.repeated }
@@ -289,20 +308,21 @@ func (t *fieldType) Group() bool         { return false }
 func (t *fieldType) Type() Type          { return t.typ }
 
 type groupType struct {
-	name     string
+	path     []string
 	fields   []FieldType
 	optional bool
 	repeated bool
 }
 
-func (t *groupType) Name() string          { return t.name }
+func (t *groupType) Name() string          { return t.path[len(t.path)-1] }
+func (t *groupType) Path() []string        { return t.path }
 func (t *groupType) NumField() int         { return len(t.fields) }
 func (t *groupType) Field(i int) FieldType { return t.fields[i] }
 func (t *groupType) Optional() bool        { return t.optional }
 func (t *groupType) Repeated() bool        { return t.repeated }
 func (t *groupType) Required() bool        { return !t.optional && !t.repeated }
-func (t *groupType) Group() bool           { return false }
-func (t *groupType) Type() Type            { panic("Type called on parquet group: " + t.name) }
+func (t *groupType) Group() bool           { return true }
+func (t *groupType) Type() Type            { panic("Type called on parquet group: " + path(t)) }
 
 type messageType struct {
 	name   string
@@ -326,4 +346,8 @@ func split(s string) (head, tail string) {
 		head, tail = s[:i], s[i+1:]
 	}
 	return
+}
+
+func path(f FieldType) string {
+	return strings.Join(f.Path(), ".")
 }

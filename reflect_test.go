@@ -10,8 +10,16 @@ import (
 type Empty struct{}
 
 type Person struct {
-	FirstName string `parquet:"firstName"`
-	LastName  string `parquet:"lastName"`
+	ID        [16]byte `parquet:"id"`
+	FirstName string   `parquet:"firstName"`
+	LastName  string   `parquet:"lastName"`
+	Age       int      `parquet:"age,optional"`
+	Surnames  []string `parquet:"surnames"`
+	Objects   []Object `parquet:"objects"`
+}
+
+type Object struct {
+	Rare bool `parquet:"rare,optional"`
 }
 
 func TestMessageTypeOf(t *testing.T) {
@@ -27,8 +35,14 @@ func TestMessageTypeOf(t *testing.T) {
 		{
 			gotype: Person{},
 			format: `message Person {
+  required fixed_len_byte_array id;
   required binary firstName;
   required binary lastName;
+  optional int32 age;
+  repeated binary surnames;
+  repeated group objects {
+    optional boolean rare;
+  }
 }`,
 		},
 	}
