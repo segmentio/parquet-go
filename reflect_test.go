@@ -19,7 +19,9 @@ type Person struct {
 }
 
 type Object struct {
-	Rare bool `parquet:"rare,optional"`
+	Rare   bool    `parquet:"rare,optional"`
+	Angle  float32 `parquet:"angle"`
+	Weight float64 `parquet:"weight"`
 }
 
 func TestMessageTypeOf(t *testing.T) {
@@ -42,6 +44,8 @@ func TestMessageTypeOf(t *testing.T) {
   repeated binary surnames;
   repeated group objects {
     optional boolean rare;
+    required float angle;
+    required double weight;
   }
 }`,
 		},
