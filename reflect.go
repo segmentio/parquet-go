@@ -181,14 +181,12 @@ func MessageTypeOf(t reflect.Type) MessageType {
 
 func appendStructFieldTypes(fields []FieldType, t reflect.Type, path []string, index []int, seen map[reflect.Type]FieldType) []FieldType {
 	for i, n := 0, t.NumField(); i < n; i++ {
-		if f := t.Field(i); f.IsExported() {
-			if f.Anonymous {
-				fieldIndex := index[:len(index):len(index)]
-				fieldIndex = append(fieldIndex, i)
-				fields = appendStructFieldTypes(fields, f.Type, path, fieldIndex, seen)
-			} else {
-				fields = append(fields, makeStructFieldType(f, path, index, seen))
-			}
+		if f := t.Field(i); f.Anonymous {
+			fieldIndex := index[:len(index):len(index)]
+			fieldIndex = append(fieldIndex, i)
+			fields = appendStructFieldTypes(fields, f.Type, path, fieldIndex, seen)
+		} else if f.IsExported() {
+			fields = append(fields, makeStructFieldType(f, path, index, seen))
 		}
 	}
 	return fields
