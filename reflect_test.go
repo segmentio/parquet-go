@@ -11,8 +11,8 @@ type Empty struct{}
 
 type Person struct {
 	ID        [16]byte `parquet:"id"`
-	FirstName string   `parquet:"firstName"`
-	LastName  string   `parquet:"lastName"`
+	FirstName string   `parquet:"first_name"`
+	LastName  string   `parquet:"last_name"`
 	Age       int      `parquet:"age,optional"`
 	Surnames  []string `parquet:"surnames"`
 	Objects   []Object `parquet:"objects"`
@@ -38,8 +38,8 @@ func TestMessageTypeOf(t *testing.T) {
 			gotype: Person{},
 			format: `message Person {
   required fixed_len_byte_array id;
-  required binary firstName;
-  required binary lastName;
+  required binary first_name;
+  required binary last_name;
   optional int32 age;
   repeated binary surnames;
   repeated group objects {
