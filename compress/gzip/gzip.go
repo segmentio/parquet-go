@@ -1,10 +1,10 @@
 package gzip
 
 import (
-	"compress/gzip"
 	"io"
 	"strings"
 
+	"github.com/klauspost/compress/gzip"
 	"github.com/segmentio/parquet/compress"
 )
 
@@ -12,7 +12,16 @@ const (
 	emptyGzip = "\x1f\x8b\b\x00\x00\x00\x00\x00\x02\xff\x01\x00\x00\xff\xff\x00\x00\x00\x00\x00\x00\x00\x00"
 )
 
+const (
+	NoCompression      = gzip.NoCompression
+	BestSpeed          = gzip.BestSpeed
+	BestCompression    = gzip.BestCompression
+	DefaultCompression = gzip.DefaultCompression
+	HuffmanOnly        = gzip.HuffmanOnly
+)
+
 type Codec struct {
+	Level int
 }
 
 func (c *Codec) NewReader(r io.Reader) (compress.Reader, error) {
@@ -30,7 +39,11 @@ func (c *Codec) NewWriter(w io.Writer) (compress.Writer, error) {
 	if w == nil {
 		w = io.Discard
 	}
-	return writer{gzip.NewWriter(w)}, nil
+	z, err := gzip.NewWriterLevel(w, c.Level)
+	if err != nil {
+		return nil, err
+	}
+	return writer{z}, nil
 }
 
 type reader struct{ *gzip.Reader }

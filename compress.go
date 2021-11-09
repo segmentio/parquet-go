@@ -17,14 +17,42 @@ import (
 )
 
 var (
+	UncompressedCodec = uncompressed.Codec{
+		// ?
+	}
+
+	GzipCodec = gzip.Codec{
+		Level: gzip.DefaultCompression,
+	}
+
+	SnappyCodec = snappy.Codec{
+		// ?
+	}
+
+	BrotliCodec = brotli.Codec{
+		Quality: brotli.DefaultQuality,
+		LGWin:   brotli.DefaultLGWin,
+	}
+
+	ZstdCodec = zstd.Codec{
+		Level:       zstd.DefaultLevel,
+		Concurrency: zstd.DefaultConcurrency,
+	}
+
+	Lz4RawCodec = lz4.Codec{
+		BlockSize:   lz4.DefaultBlockSize,
+		Level:       lz4.DefaultLevel,
+		Concurrency: lz4.DefaultConcurrency,
+	}
+
 	compressedPageReaders = [8]sync.Pool{}
 	compressionCodecs     = [8]compress.Codec{
-		schema.Uncompressed: new(uncompressed.Codec),
-		schema.Gzip:         new(gzip.Codec),
-		schema.Snappy:       new(snappy.Codec),
-		schema.Brotli:       new(brotli.Codec),
-		schema.Zstd:         new(zstd.Codec),
-		schema.Lz4Raw:       new(lz4.Codec),
+		schema.Uncompressed: &UncompressedCodec,
+		schema.Gzip:         &GzipCodec,
+		schema.Snappy:       &SnappyCodec,
+		schema.Brotli:       &BrotliCodec,
+		schema.Zstd:         &ZstdCodec,
+		schema.Lz4Raw:       &Lz4RawCodec,
 	}
 )
 
