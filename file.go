@@ -8,7 +8,7 @@ import (
 	"io"
 
 	"github.com/segmentio/encoding/thrift"
-	"github.com/segmentio/parquet/schema"
+	"github.com/segmentio/parquet/format"
 )
 
 const (
@@ -20,7 +20,7 @@ var (
 )
 
 type File struct {
-	metadata schema.FileMetaData
+	metadata format.FileMetaData
 	protocol thrift.CompactProtocol
 	reader   io.ReaderAt
 	size     int64
@@ -96,6 +96,6 @@ func (f *File) ReadAt(b []byte, off int64) (int, error) {
 	return f.reader.ReadAt(b, off)
 }
 
-func (f *File) MetaData() *schema.FileMetaData {
+func (f *File) MetaData() *format.FileMetaData {
 	return &f.metadata
 }

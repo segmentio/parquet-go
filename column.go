@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/segmentio/parquet/schema"
+	"github.com/segmentio/parquet/deprecated"
+	"github.com/segmentio/parquet/format"
 )
 
 // Column represents a column in a parquet file.
@@ -13,10 +14,10 @@ import (
 // goroutines.
 type Column struct {
 	file    *File
-	schema  *schema.SchemaElement
-	order   *schema.ColumnOrder
+	schema  *format.SchemaElement
+	order   *format.ColumnOrder
 	columns []*Column
-	chunks  []*schema.ColumnChunk
+	chunks  []*format.ColumnChunk
 
 	depth              int32
 	maxRepetitionLevel int32
@@ -24,12 +25,12 @@ type Column struct {
 }
 
 // Schema returns the underlying schema element of c.
-func (c *Column) Schema() *schema.SchemaElement {
+func (c *Column) Schema() *format.SchemaElement {
 	return c.schema
 }
 
 // Order returns the underlying column order of c.
-func (c *Column) Order() *schema.ColumnOrder {
+func (c *Column) Order() *format.ColumnOrder {
 	return c.order
 }
 
@@ -42,17 +43,17 @@ func (c *Column) Type() Type {
 
 // Required returns true if the column is required.
 func (c *Column) Required() bool {
-	return c.schema.RepetitionType == schema.Required
+	return c.schema.RepetitionType == format.Required
 }
 
 // Optional returns true if the column is optional.
 func (c *Column) Optional() bool {
-	return c.schema.RepetitionType == schema.Optional
+	return c.schema.RepetitionType == format.Optional
 }
 
 // Repeated returns true if the column may repeat.
 func (c *Column) Repeated() bool {
-	return c.schema.RepetitionType == schema.Repeated
+	return c.schema.RepetitionType == format.Repeated
 }
 
 // Lead returns true if c is a leaf column.
@@ -70,7 +71,7 @@ func (c *Column) String() string {
 			c.maxRepetitionLevel,
 			c.maxDefinitionLevel)
 
-	case c.schema.Type == schema.FixedLenByteArray:
+	case c.schema.Type == format.FixedLenByteArray:
 		return fmt.Sprintf("%s{%s(%d),%s,R=%d,D=%d}",
 			c.schema.Name,
 			c.schema.Type,
@@ -157,9 +158,9 @@ func openColumns(file *File) (*Column, error) {
 
 func setMaxLevels(col *Column, depth, repetition, definition int32) {
 	switch col.schema.RepetitionType {
-	case schema.Optional:
+	case format.Optional:
 		definition++
-	case schema.Repeated:
+	case format.Repeated:
 		repetition++
 		definition++
 	}
@@ -193,7 +194,7 @@ func (cl *columnLoader) open(file *File) (*Column, error) {
 			cl.columnOrderIndex++
 		}
 
-		c.chunks = make([]*schema.ColumnChunk, 0, len(file.metadata.RowGroups))
+		c.chunks = make([]*format.ColumnChunk, 0, len(file.metadata.RowGroups))
 		for index, rowGroup := range file.metadata.RowGroups {
 			if cl.rowGroupColumnIndex >= len(rowGroup.Columns) {
 				return nil, fmt.Errorf("row group at index %d does not have enough columns", index)
@@ -220,4 +221,28 @@ func (cl *columnLoader) open(file *File) (*Column, error) {
 	}
 
 	return c, nil
+}
+
+type schemaElementType struct {
+	*format.SchemaElement
+}
+
+func (t schemaElementType) Kind() Kind {
+	return Kind(t.Type)
+}
+
+func (t schemaElementType) Length() int {
+	return int(t.TypeLength)
+}
+
+func (t schemaElementType) Annotation() string {
+	return t.SchemaElement.LogicalType.String()
+}
+
+func (t schemaElementType) LogicalType() format.LogicalType {
+	return t.SchemaElement.LogicalType
+}
+
+func (t schemaElementType) ConvertedType() deprecated.ConvertedType {
+	return t.SchemaElement.ConvertedType
 }

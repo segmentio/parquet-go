@@ -13,7 +13,7 @@ import (
 	"github.com/segmentio/parquet/compress/snappy"
 	"github.com/segmentio/parquet/compress/uncompressed"
 	"github.com/segmentio/parquet/compress/zstd"
-	"github.com/segmentio/parquet/schema"
+	"github.com/segmentio/parquet/format"
 )
 
 var (
@@ -47,16 +47,16 @@ var (
 
 	compressedPageReaders = [8]sync.Pool{}
 	compressionCodecs     = [8]compress.Codec{
-		schema.Uncompressed: &UncompressedCodec,
-		schema.Gzip:         &GzipCodec,
-		schema.Snappy:       &SnappyCodec,
-		schema.Brotli:       &BrotliCodec,
-		schema.Zstd:         &ZstdCodec,
-		schema.Lz4Raw:       &Lz4RawCodec,
+		format.Uncompressed: &UncompressedCodec,
+		format.Gzip:         &GzipCodec,
+		format.Snappy:       &SnappyCodec,
+		format.Brotli:       &BrotliCodec,
+		format.Zstd:         &ZstdCodec,
+		format.Lz4Raw:       &Lz4RawCodec,
 	}
 )
 
-func lookupCompressionCodec(codec schema.CompressionCodec) compress.Codec {
+func lookupCompressionCodec(codec format.CompressionCodec) compress.Codec {
 	if codec >= 0 && int(codec) < len(compressionCodecs) {
 		if c := compressionCodecs[codec]; c != nil {
 			return c
@@ -65,7 +65,7 @@ func lookupCompressionCodec(codec schema.CompressionCodec) compress.Codec {
 	return &unsupported{codec}
 }
 
-func acquireCompressedPageReader(codec schema.CompressionCodec, page io.Reader) *compressedPageReader {
+func acquireCompressedPageReader(codec format.CompressionCodec, page io.Reader) *compressedPageReader {
 	r, _ := compressedPageReaders[codec].Get().(*compressedPageReader)
 	if r == nil {
 		r = &compressedPageReader{codec: codec}
@@ -83,7 +83,7 @@ func releaseCompressedPageReader(r *compressedPageReader) {
 }
 
 type compressedPageReader struct {
-	codec  schema.CompressionCodec
+	codec  format.CompressionCodec
 	reader compress.Reader
 	err    error
 }
@@ -103,7 +103,7 @@ func (r *compressedPageReader) Reset(page io.Reader) {
 	r.err = r.reader.Reset(page)
 }
 
-type unsupported struct{ codec schema.CompressionCodec }
+type unsupported struct{ codec format.CompressionCodec }
 
 func (u *unsupported) NewReader(r io.Reader) (compress.Reader, error) {
 	return unsupportedReader{u}, nil

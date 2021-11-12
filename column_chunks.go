@@ -3,7 +3,7 @@ package parquet
 import (
 	"fmt"
 
-	"github.com/segmentio/parquet/schema"
+	"github.com/segmentio/parquet/format"
 )
 
 // ColumnChunks is an iterator type exposing chunks of a column within a parquet
@@ -16,7 +16,7 @@ type ColumnChunks struct {
 	// buffer   *bufio.Reader
 	// protocol thrift.CompactProtocol
 	// decoder  thrift.Decoder
-	metadata *schema.ColumnMetaData
+	metadata *format.ColumnMetaData
 
 	err error
 }
@@ -68,7 +68,7 @@ func (c *ColumnChunks) Next() bool {
 		}
 
 		c.buffer.Reset(c.reader)
-		metadata := new(schema.ColumnMetaData)
+		metadata := new(format.ColumnMetaData)
 
 		if err := c.decoder.Decode(metadata); err != nil {
 			c.setError(err)
@@ -83,7 +83,7 @@ func (c *ColumnChunks) Next() bool {
 // Chunk returns the schema for the chunk that the iterator is currently
 // positioned at. The method returns nil after the iterator reached the end or
 // encountered an error.
-func (c *ColumnChunks) Chunk() *schema.ColumnChunk {
+func (c *ColumnChunks) Chunk() *format.ColumnChunk {
 	if c.index >= 0 && c.index < len(c.column.chunks) {
 		return c.column.chunks[c.index]
 	}
@@ -93,7 +93,7 @@ func (c *ColumnChunks) Chunk() *schema.ColumnChunk {
 // MetaData returns the column metadata for the chunk that the iterator is
 // currently positioned at. The method returns nil after the iterator reached
 // the end or encountered an error.
-func (c *ColumnChunks) MetaData() *schema.ColumnMetaData {
+func (c *ColumnChunks) MetaData() *format.ColumnMetaData {
 	return c.metadata
 }
 

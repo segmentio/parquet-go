@@ -1,6 +1,8 @@
-package schema
+package format
 
 import (
+	"fmt"
+
 	"github.com/segmentio/parquet/deprecated"
 )
 
@@ -104,12 +106,21 @@ type ListType struct{}   // see LogicalTypes.md
 type EnumType struct{}   // allowed for BINARY, must be encoded with UTF-8
 type DateType struct{}   // allowed for INT32
 
+func (*StringType) String() string { return "UTF8" }
+func (*UUIDType) String() string   { return "UUID" }
+func (*MapType) String() string    { return "MAP" }
+func (*ListType) String() string   { return "LIST" }
+func (*EnumType) String() string   { return "ENUM" }
+func (*DateType) String() string   { return "DATE" }
+
 // Logical type to annotate a column that is always null.
 //
 // Sometimes when discovering the schema of existing data, values are always
 // null and the physical type can't be determined. This annotation signals
 // the case where the physical type was guessed from all null values.
 type NullType struct{}
+
+func (*NullType) String() string { return "NULL" }
 
 // Decimal logical type annotation
 //
@@ -122,15 +133,36 @@ type DecimalType struct {
 	Precision int32 `thrift:"2,required"`
 }
 
+func (t *DecimalType) String() string {
+	return fmt.Sprintf("DECIMAL(%d,%d)", t.Scale, t.Precision)
+}
+
 // Time units for logical types.
 type MilliSeconds struct{}
 type MicroSeconds struct{}
 type NanoSeconds struct{}
-type TimeUnit struct {
-	Millis MilliSeconds `thrift:"1"`
-	Micros MicroSeconds `thrift:"2"`
-	Nanos  NanoSeconds  `thrift:"3"`
-	Union  interface{}  `thrift:",union"`
+
+func (*MilliSeconds) String() string { return "MILLIS" }
+func (*MicroSeconds) String() string { return "MICROS" }
+func (*NanoSeconds) String() string  { return "NANOS" }
+
+type TimeUnit struct { // union
+	Millis *MilliSeconds `thrift:"1"`
+	Micros *MicroSeconds `thrift:"2"`
+	Nanos  *NanoSeconds  `thrift:"3"`
+}
+
+func (u *TimeUnit) String() string {
+	switch {
+	case u.Millis != nil:
+		return u.Millis.String()
+	case u.Micros != nil:
+		return u.Micros.String()
+	case u.Nanos != nil:
+		return u.Nanos.String()
+	default:
+		return ""
+	}
 }
 
 // Timestamp logical type annotation
@@ -141,12 +173,20 @@ type TimestampType struct {
 	Unit            TimeUnit `thrift:"2,required"`
 }
 
+func (t *TimestampType) String() string {
+	return fmt.Sprintf("TIMESTAMP(isAdjustedToUTC=%t,unit=%s)", t.IsAdjustedToUTC, &t.Unit)
+}
+
 // Time logical type annotation
 //
 // Allowed for physical types: INT32 (millis), INT64 (micros, nanos)
 type TimeType struct {
 	IsAdjustedToUTC bool     `thrift:"1,required"`
 	Unit            TimeUnit `thrift:"2,required"`
+}
+
+func (t *TimeType) String() string {
+	return fmt.Sprintf("TIME(isAdjustedToUTC=%t,unit=%s)", t.IsAdjustedToUTC, &t.Unit)
 }
 
 // Integer logical type annotation
@@ -159,45 +199,84 @@ type IntType struct {
 	IsSigned bool `thrift:"2,required"`
 }
 
+func (t *IntType) String() string {
+	return fmt.Sprintf("INT(%d,%t)", t.BitWidth, t.IsSigned)
+}
+
 // Embedded JSON logical type annotation
 //
 // Allowed for physical types: BINARY
 type JsonType struct{}
+
+func (t *JsonType) String() string { return "JSON" }
 
 // Embedded BSON logical type annotation
 //
 // Allowed for physical types: BINARY
 type BsonType struct{}
 
+func (t *BsonType) String() string { return "BSON" }
+
 // LogicalType annotations to replace ConvertedType.
 //
 // To maintain compatibility, implementations using LogicalType for a
 // SchemaElement must also set the corresponding ConvertedType (if any)
 // from the following table.
-type LogicalType struct {
-	String  StringType  `thrift:"1"` // use ConvertedType UTF8
-	Map     MapType     `thrift:"2"` // use ConvertedType Map
-	List    ListType    `thrift:"3"` // use ConvertedType List
-	Enum    EnumType    `thrift:"4"` // use ConvertedType Enum
-	Decimal DecimalType `thrift:"5"` // use ConvertedType Decimal + SchemaElement.{Scale, Precision}
-	Date    DateType    `thrift:"6"` // use ConvertedType Date
+type LogicalType struct { // union
+	UTF8    *StringType  `thrift:"1"` // use ConvertedType UTF8
+	Map     *MapType     `thrift:"2"` // use ConvertedType Map
+	List    *ListType    `thrift:"3"` // use ConvertedType List
+	Enum    *EnumType    `thrift:"4"` // use ConvertedType Enum
+	Decimal *DecimalType `thrift:"5"` // use ConvertedType Decimal + SchemaElement.{Scale, Precision}
+	Date    *DateType    `thrift:"6"` // use ConvertedType Date
 
 	// use ConvertedType TimeMicros for Time{IsAdjustedToUTC: *, Unit: Micros}
 	// use ConvertedType TimeMillis for Time{IsAdjustedToUTC: *, Unit: Millis}
-	Time TimeType `thrift:"7"`
+	Time *TimeType `thrift:"7"`
 
 	// use ConvertedType TimestampMicros for Timestamp{IsAdjustedToUTC: *, Unit: Micros}
 	// use ConvertedType TimestampMillis for Timestamp{IsAdjustedToUTC: *, Unit: Millis}
-	Timestamp TimestampType `thrift:"8"`
+	Timestamp *TimestampType `thrift:"8"`
 
 	// 9: reserved for Interval
-	Integer IntType  `thrift:"10"` // use ConvertedType Int* or Uint*
-	Unknown NullType `thrift:"11"` // no compatible ConvertedType
-	Json    JsonType `thrift:"12"` // use ConvertedType JSON
-	Bson    BsonType `thrift:"13"` // use ConvertedType BSON
-	UUID    UUIDType `thrift:"14"` // no compatible ConvertedType
+	Integer *IntType  `thrift:"10"` // use ConvertedType Int* or Uint*
+	Unknown *NullType `thrift:"11"` // no compatible ConvertedType
+	Json    *JsonType `thrift:"12"` // use ConvertedType JSON
+	Bson    *BsonType `thrift:"13"` // use ConvertedType BSON
+	UUID    *UUIDType `thrift:"14"` // no compatible ConvertedType
+}
 
-	Union interface{} `thrift:",union"`
+func (t *LogicalType) String() string {
+	switch {
+	case t.UTF8 != nil:
+		return t.UTF8.String()
+	case t.Map != nil:
+		return t.Map.String()
+	case t.List != nil:
+		return t.List.String()
+	case t.Enum != nil:
+		return t.Enum.String()
+	case t.Decimal != nil:
+		return t.Decimal.String()
+	case t.Date != nil:
+		return t.Date.String()
+	case t.Time != nil:
+		return t.Time.String()
+	case t.Timestamp != nil:
+		return t.Timestamp.String()
+	case t.Integer != nil:
+		return t.Integer.String()
+	case t.Unknown != nil:
+		return t.Unknown.String()
+	case t.Json != nil:
+		return t.Json.String()
+	case t.Bson != nil:
+		return t.Bson.String()
+	case t.UUID != nil:
+		return t.UUID.String()
+	default:
+		return ""
+	}
 }
 
 // Represents a element inside a schema definition.
@@ -504,9 +583,8 @@ type DataPageHeaderV2 struct {
 type SplitBlockAlgorithm struct{}
 
 // The algorithm used in Bloom filter.
-type BloomFilterAlgorithm struct {
-	Block SplitBlockAlgorithm `thrift:"1"`
-	Union interface{}         `thrift:",union"`
+type BloomFilterAlgorithm struct { // union
+	Block *SplitBlockAlgorithm `thrift:"1"`
 }
 
 // Hash strategy type annotation. xxHash is an extremely fast non-cryptographic
@@ -515,16 +593,14 @@ type XxHash struct{}
 
 // The hash function used in Bloom filter. This function takes the hash of a
 // column value using plain encoding.
-type BloomFilterHash struct {
-	XxHash XxHash      `thrift:"1"`
-	Union  interface{} `thrift:",union"`
+type BloomFilterHash struct { // union
+	XxHash *XxHash `thrift:"1"`
 }
 
 // The compression used in the Bloom filter.
 type BloomFilterUncompressed struct{}
-type BloomFilterCompression struct {
-	Uncompressed BloomFilterUncompressed `thrift:"1"`
-	Union        interface{}             `thrift:",union"`
+type BloomFilterCompression struct { // union
+	Uncompressed *BloomFilterUncompressed `thrift:"1"`
 }
 
 // Bloom filter header is stored at beginning of Bloom filter data of each column
@@ -676,9 +752,8 @@ type EncryptionWithColumnKey struct {
 }
 
 type ColumnCryptoMetaData struct {
-	EncryptionWithFooterKey EncryptionWithFooterKey `thrift:"1"`
-	EncryptionWithColumnKey EncryptionWithColumnKey `thrift:"2"`
-	Union                   interface{}             `thrift:",union"`
+	EncryptionWithFooterKey *EncryptionWithFooterKey `thrift:"1"`
+	EncryptionWithColumnKey *EncryptionWithColumnKey `thrift:"2"`
 }
 
 type ColumnChunk struct {
@@ -754,7 +829,7 @@ type TypeDefinedOrder struct{}
 //
 // If the reader does not support the value of this union, min and max stats
 // for this column should be ignored.
-type ColumnOrder struct {
+type ColumnOrder struct { // union
 	// The sort orders for logical types are:
 	//   UTF8 - unsigned byte-wise comparison
 	//   INT8 - signed comparison
@@ -796,8 +871,7 @@ type ColumnOrder struct {
 	//     - If the min is +0, the row group may contain -0 values as well.
 	//     - If the max is -0, the row group may contain +0 values as well.
 	//     - When looking for NaN values, min and max should be ignored.
-	TypeOrder TypeDefinedOrder `thrift:"1"`
-	Union     interface{}      `thrift:",union"`
+	TypeOrder *TypeDefinedOrder `thrift:"1"`
 }
 
 type PageLocation struct {
@@ -874,10 +948,9 @@ type AesGcmCtrV1 struct {
 	SupplyAadPrefix bool `thrift:"3,optional"`
 }
 
-type EncryptionAlgorithm struct {
-	AesGcmV1    AesGcmV1    `thrift:"1"`
-	AesGcmCtrV1 AesGcmCtrV1 `thrift:"2"`
-	Union       interface{} `thrift:",union"`
+type EncryptionAlgorithm struct { // union
+	AesGcmV1    *AesGcmV1    `thrift:"1"`
+	AesGcmCtrV1 *AesGcmCtrV1 `thrift:"2"`
 }
 
 // Description for file metadata.

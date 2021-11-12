@@ -4,15 +4,21 @@ import (
 	"github.com/segmentio/parquet/encoding"
 	"github.com/segmentio/parquet/encoding/plain"
 	"github.com/segmentio/parquet/encoding/rle"
-	"github.com/segmentio/parquet/schema"
+	"github.com/segmentio/parquet/format"
 )
 
-var encodings = [10]encoding.Encoding{
-	schema.Plain: new(plain.Encoding),
-	schema.RLE:   new(rle.Encoding),
-}
+var (
+	Plain plain.Encoding
 
-func lookupEncoding(enc schema.Encoding) encoding.Encoding {
+	RLE rle.Encoding
+
+	encodings = [10]encoding.Encoding{
+		format.Plain: &Plain,
+		format.RLE:   &RLE,
+	}
+)
+
+func lookupEncoding(enc format.Encoding) encoding.Encoding {
 	if enc >= 0 && int(enc) < len(encodings) {
 		if e := encodings[enc]; e != nil {
 			return e

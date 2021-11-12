@@ -1,23 +1,23 @@
-package schema_test
+package format_test
 
 import (
 	"reflect"
 	"testing"
 
 	"github.com/segmentio/encoding/thrift"
-	"github.com/segmentio/parquet/schema"
+	"github.com/segmentio/parquet/format"
 )
 
 func TestMarshalUnmarshalSchemaMetadata(t *testing.T) {
 	protocol := &thrift.CompactProtocol{}
-	metadata := &schema.FileMetaData{
+	metadata := &format.FileMetaData{
 		Version: 1,
-		Schema: []schema.SchemaElement{
+		Schema: []format.SchemaElement{
 			{
 				Name: "hello",
 			},
 		},
-		RowGroups: []schema.RowGroup{},
+		RowGroups: []format.RowGroup{},
 	}
 
 	b, err := thrift.Marshal(protocol, metadata)
@@ -25,7 +25,7 @@ func TestMarshalUnmarshalSchemaMetadata(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	decoded := &schema.FileMetaData{}
+	decoded := &format.FileMetaData{}
 	if err := thrift.Unmarshal(protocol, b, &decoded); err != nil {
 		t.Fatal(err)
 	}
