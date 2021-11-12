@@ -12,10 +12,13 @@ import (
 //
 // Methods of Column values are safe to call concurrently from multiple
 // goroutines.
+//
+// Column instances satisfy the Node interface.
 type Column struct {
 	file    *File
 	schema  *format.SchemaElement
 	order   *format.ColumnOrder
+	names   []string
 	columns []*Column
 	chunks  []*format.ColumnChunk
 
@@ -25,41 +28,74 @@ type Column struct {
 }
 
 // Schema returns the underlying schema element of c.
-func (c *Column) Schema() *format.SchemaElement {
-	return c.schema
-}
+func (c *Column) Schema() *format.SchemaElement { return c.schema }
 
 // Order returns the underlying column order of c.
-func (c *Column) Order() *format.ColumnOrder {
-	return c.order
-}
+func (c *Column) Order() *format.ColumnOrder { return c.order }
 
 // Type returns the type of the column.
 //
 // The returned value is unspecified if c is not a leaf column.
-func (c *Column) Type() Type {
-	return schemaElementType{c.schema}
-}
+func (c *Column) Type() Type { return schemaElementType{c.schema} }
 
 // Required returns true if the column is required.
-func (c *Column) Required() bool {
-	return c.schema.RepetitionType == format.Required
-}
+func (c *Column) Required() bool { return c.schema.RepetitionType == format.Required }
 
 // Optional returns true if the column is optional.
-func (c *Column) Optional() bool {
-	return c.schema.RepetitionType == format.Optional
-}
+func (c *Column) Optional() bool { return c.schema.RepetitionType == format.Optional }
 
 // Repeated returns true if the column may repeat.
-func (c *Column) Repeated() bool {
-	return c.schema.RepetitionType == format.Repeated
+func (c *Column) Repeated() bool { return c.schema.RepetitionType == format.Repeated }
+
+// NumChildren returns the number of child columns.
+//
+// This method contributes to satisfying the Node interface.
+func (c *Column) NumChildren() int { return len(c.columns) }
+
+// Children returns the names of child columns.
+//
+// This method contributes to satisfying the Node interface.
+func (c *Column) Children() []string { return c.names }
+
+// ChildByName returns a Node value representing the child column matching the
+// name passed as argument.
+//
+// This method contributes to satisfying the Node interface.
+func (c *Column) ChildByName(name string) Node { return c.Column(name) }
+
+// Name returns the column name.
+func (c *Column) Name() string { return c.schema.Name }
+
+// Columns returns the list of child columns.
+//
+// The method returns the same slice across multiple calls, the program must
+// treat it as a read-only value.
+func (c *Column) Columns() []*Column { return c.columns }
+
+// Column returns the child column matching the given name.
+func (c *Column) Column(name string) *Column {
+	i := sort.Search(len(c.columns), func(i int) bool {
+		return c.columns[i].Name() >= name
+	})
+	if i < len(c.columns) && c.columns[i].Name() == name {
+		return c.columns[i]
+	}
+	return nil
 }
 
-// Lead returns true if c is a leaf column.
-func (c *Column) Leaf() bool {
-	return len(c.columns) == 0
-}
+// Chunks returns an iterator over the column chunks that compose this column.
+func (c *Column) Chunks() *ColumnChunks { return &ColumnChunks{column: c, index: -1} }
+
+// Depth returns the position of the column relative to the root.
+func (c *Column) Depth() int { return int(c.depth) }
+
+// MaxRepetitionLevel returns the maximum value of repetition levels on this
+// column.
+func (c *Column) MaxRepetitionLevel() int { return int(c.maxRepetitionLevel) }
+
+// MaxDefinitionLevel returns the maximum value of definition levels on this
+// column.
+func (c *Column) MaxDefinitionLevel() int { return int(c.maxDefinitionLevel) }
 
 // String returns a human-redable string representation of the oclumn.
 func (c *Column) String() string {
@@ -88,50 +124,6 @@ func (c *Column) String() string {
 			c.maxRepetitionLevel,
 			c.maxDefinitionLevel)
 	}
-}
-
-// Name returns the column name.
-func (c *Column) Name() string {
-	return c.schema.Name
-}
-
-// Columns returns the list of child columns.
-//
-// The method returns the same slice across multiple calls, the program must
-// treat it as a read-only value.
-func (c *Column) Columns() []*Column {
-	return c.columns
-}
-
-// Column returns the child column matching the given name.
-func (c *Column) Column(name string) *Column {
-	i := sort.Search(len(c.columns), func(i int) bool {
-		return c.columns[i].Name() >= name
-	})
-	if i < len(c.columns) && c.columns[i].Name() == name {
-		return c.columns[i]
-	}
-	return nil
-}
-
-// Chunks returns an iterator over the column chunks that compose this column.
-func (c *Column) Chunks() *ColumnChunks {
-	return &ColumnChunks{
-		column: c,
-		index:  -1,
-	}
-}
-
-func (c *Column) Depth() int {
-	return int(c.depth)
-}
-
-func (c *Column) MaxRepetitionLevel() int {
-	return int(c.maxRepetitionLevel)
-}
-
-func (c *Column) MaxDefinitionLevel() int {
-	return int(c.maxDefinitionLevel)
 }
 
 func openColumns(file *File) (*Column, error) {
@@ -205,6 +197,7 @@ func (cl *columnLoader) open(file *File) (*Column, error) {
 		return c, nil
 	}
 
+	c.names = make([]string, numChildren)
 	c.columns = make([]*Column, numChildren)
 
 	for i := range c.columns {
@@ -220,12 +213,26 @@ func (cl *columnLoader) open(file *File) (*Column, error) {
 		}
 	}
 
+	for i, col := range c.columns {
+		c.names[i] = col.Name()
+	}
+
+	sort.Sort(columnsByName{c})
 	return c, nil
 }
 
-type schemaElementType struct {
-	*format.SchemaElement
+type columnsByName struct{ *Column }
+
+func (c columnsByName) Len() int { return len(c.names) }
+
+func (c columnsByName) Less(i, j int) bool { return c.names[i] < c.names[j] }
+
+func (c columnsByName) Swap(i, j int) {
+	c.names[i], c.names[j] = c.names[j], c.names[i]
+	c.columns[i], c.columns[j] = c.columns[j], c.columns[i]
 }
+
+type schemaElementType struct{ *format.SchemaElement }
 
 func (t schemaElementType) Kind() Kind {
 	return Kind(t.Type)
@@ -246,3 +253,7 @@ func (t schemaElementType) LogicalType() format.LogicalType {
 func (t schemaElementType) ConvertedType() deprecated.ConvertedType {
 	return t.SchemaElement.ConvertedType
 }
+
+var (
+	_ Node = (*Column)(nil)
+)

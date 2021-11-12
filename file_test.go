@@ -2,6 +2,7 @@ package parquet_test
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/segmentio/parquet"
@@ -35,6 +36,10 @@ func TestOpenFile(t *testing.T) {
 			if size := p.Size(); size != s.Size() {
 				t.Errorf("file size mismatch: want=%d got=%d", s.Size(), size)
 			}
+
+			b := new(strings.Builder)
+			parquet.Print(b, "File", p.Root())
+			t.Log(b)
 
 			printColumns(t, p.Root(), "")
 		})

@@ -633,18 +633,22 @@ func (s *Schema) String() string {
 }
 
 type structNode struct {
-	fieldNames  []string
-	fieldByName map[string]*structField
+	fields []structField
+	names  []string
 }
 
 func structNodeOf(t reflect.Type) *structNode {
-	n := t.NumField()
-	s := &structNode{
-		fieldNames:  make([]string, 0, n),
-		fieldByName: make(map[string]*structField, n),
-	}
+	s := &structNode{fields: make([]structField, 0, t.NumField())}
 	s.init(t, nil)
-	sort.Strings(s.fieldNames)
+
+	sort.Slice(s.fields, func(i, j int) bool {
+		return s.fields[i].name < s.fields[j].name
+	})
+
+	s.names = make([]string, len(s.fields))
+	for i := range s.fields {
+		s.names[i] = s.fields[i].name
+	}
 	return s
 }
 
@@ -655,9 +659,7 @@ func (s *structNode) init(t reflect.Type, index []int) {
 			subindex = append(subindex, i)
 			s.init(f.Type, subindex)
 		} else if f.IsExported() {
-			name, field := structFieldOf(f, index)
-			s.fieldNames = append(s.fieldNames, name)
-			s.fieldByName[name] = field
+			s.fields = append(s.fields, makeStructField(f, index))
 		}
 	}
 }
@@ -666,28 +668,34 @@ func (s *structNode) Type() Type         { return groupType{} }
 func (s *structNode) Optional() bool     { return false }
 func (s *structNode) Repeated() bool     { return false }
 func (s *structNode) Required() bool     { return true }
-func (s *structNode) NumChildren() int   { return len(s.fieldNames) }
-func (s *structNode) Children() []string { return s.fieldNames }
+func (s *structNode) NumChildren() int   { return len(s.fields) }
+func (s *structNode) Children() []string { return s.names }
 func (s *structNode) ChildByName(name string) Node {
-	f, ok := s.fieldByName[name]
-	if ok {
-		return f
+	i := sort.Search(len(s.fields), func(i int) bool {
+		return s.fields[i].name >= name
+	})
+	if i >= 0 && i < len(s.fields) {
+		return &s.fields[i]
 	}
 	panic("column not found in parquet schema: " + name)
 }
 
 type structField struct {
 	node     Node
+	name     string
 	optional bool
 	repeated bool
 	index    []int
 }
 
-func structFieldOf(f reflect.StructField, index []int) (string, *structField) {
-	name, field := f.Name, &structField{index: index}
+func makeStructField(f reflect.StructField, index []int) structField {
+	field := structField{
+		name:  f.Name,
+		index: index,
+	}
 
 	if tag := f.Tag.Get("parquet"); tag != "" {
-		name, tag = split(tag)
+		field.name, tag = split(tag)
 
 		for tag != "" {
 			opt := ""
@@ -719,7 +727,7 @@ func structFieldOf(f reflect.StructField, index []int) (string, *structField) {
 		field.node = nodeOf(f.Type)
 	}
 
-	return name, field
+	return field
 }
 
 func (f *structField) Type() Type                   { return f.node.Type() }
