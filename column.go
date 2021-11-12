@@ -242,10 +242,6 @@ func (t schemaElementType) Length() int {
 	return int(t.TypeLength)
 }
 
-func (t schemaElementType) Annotation() string {
-	return t.SchemaElement.LogicalType.String()
-}
-
 func (t schemaElementType) LogicalType() format.LogicalType {
 	return t.SchemaElement.LogicalType
 }

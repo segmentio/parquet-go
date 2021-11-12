@@ -33,8 +33,6 @@ type Type interface {
 
 	Length() int
 
-	Annotation() string
-
 	LogicalType() format.LogicalType
 
 	ConvertedType() deprecated.ConvertedType
@@ -42,7 +40,6 @@ type Type interface {
 
 type primitiveType struct{}
 
-func (primitiveType) Annotation() string                      { return "" }
 func (primitiveType) LogicalType() format.LogicalType         { return format.LogicalType{} }
 func (primitiveType) ConvertedType() deprecated.ConvertedType { return -1 }
 
@@ -150,25 +147,10 @@ func (g Group) ChildByName(name string) Node {
 
 type groupType struct{}
 
-func (groupType) Kind() Kind {
-	panic("cannot call Kind on parquet group type")
-}
-
-func (groupType) Length() int {
-	panic("cannot call Length on parquet group type")
-}
-
-func (groupType) Annotation() string {
-	return ""
-}
-
-func (groupType) LogicalType() format.LogicalType {
-	panic("cannot call LogicalType on parquet group type")
-}
-
-func (groupType) ConvertedType() deprecated.ConvertedType {
-	panic("cannot call ConvertedType on parquet group type")
-}
+func (groupType) Kind() Kind                              { panic("cannot call Kind on parquet group type") }
+func (groupType) Length() int                             { panic("cannot call Length on parquet group type") }
+func (groupType) LogicalType() format.LogicalType         { return format.LogicalType{} }
+func (groupType) ConvertedType() deprecated.ConvertedType { return -1 }
 
 func Optional(node Node) Node {
 	if node.Optional() {
@@ -258,8 +240,6 @@ func (t *intType) Kind() Kind {
 
 func (t *intType) Length() int { return int(t.BitWidth) }
 
-func (t *intType) Annotation() string { return (*format.IntType)(t).String() }
-
 func (t *intType) LogicalType() format.LogicalType {
 	return format.LogicalType{Integer: (*format.IntType)(t)}
 }
@@ -293,8 +273,6 @@ func (t *decimalType) Kind() Kind { return t.typ.Kind() }
 
 func (t *decimalType) Length() int { return t.typ.Length() }
 
-func (t *decimalType) Annotation() string { return t.decimal.String() }
-
 func (t *decimalType) LogicalType() format.LogicalType {
 	return format.LogicalType{Decimal: &t.decimal}
 }
@@ -308,8 +286,6 @@ type stringType format.StringType
 func (t *stringType) Kind() Kind { return ByteArray }
 
 func (t *stringType) Length() int { panic("cannot call Length on parquet string type") }
-
-func (t *stringType) Annotation() string { return (*format.StringType)(t).String() }
 
 func (t *stringType) LogicalType() format.LogicalType {
 	return format.LogicalType{UTF8: (*format.StringType)(t)}
@@ -325,8 +301,6 @@ func (t *uuidType) Kind() Kind { return FixedLenByteArray }
 
 func (t *uuidType) Length() int { return 16 }
 
-func (t *uuidType) Annotation() string { return (*format.UUIDType)(t).String() }
-
 func (t *uuidType) LogicalType() format.LogicalType {
 	return format.LogicalType{UUID: (*format.UUIDType)(t)}
 }
@@ -340,8 +314,6 @@ type enumType format.EnumType
 func (t *enumType) Kind() Kind { return ByteArray }
 
 func (t *enumType) Length() int { panic("cannot call Length on parquet enum type") }
-
-func (t *enumType) Annotation() string { return (*format.EnumType)(t).String() }
 
 func (t *enumType) LogicalType() format.LogicalType {
 	return format.LogicalType{Enum: (*format.EnumType)(t)}
@@ -357,8 +329,6 @@ func (t *jsonType) Kind() Kind { return ByteArray }
 
 func (t *jsonType) Length() int { panic("cannot call Length on parquet json type") }
 
-func (t *jsonType) Annotation() string { return (*format.JsonType)(t).String() }
-
 func (t *jsonType) LogicalType() format.LogicalType {
 	return format.LogicalType{Json: (*format.JsonType)(t)}
 }
@@ -373,8 +343,6 @@ func (t *bsonType) Kind() Kind { return ByteArray }
 
 func (t *bsonType) Length() int { panic("cannot call Length on parquet bson type") }
 
-func (t *bsonType) Annotation() string { return (*format.BsonType)(t).String() }
-
 func (t *bsonType) LogicalType() format.LogicalType {
 	return format.LogicalType{Bson: (*format.BsonType)(t)}
 }
@@ -388,8 +356,6 @@ type dateType format.DateType
 func (t *dateType) Kind() Kind { return Int32 }
 
 func (t *dateType) Length() int { return 32 }
-
-func (t *dateType) Annotation() string { return (*format.DateType)(t).String() }
 
 func (t *dateType) LogicalType() format.LogicalType {
 	return format.LogicalType{Date: (*format.DateType)(t)}
@@ -461,10 +427,6 @@ func (t *timeType) Length() int {
 	}
 }
 
-func (t *timeType) Annotation() string {
-	return (*format.TimeType)(t).String()
-}
-
 func (t *timeType) LogicalType() format.LogicalType {
 	return format.LogicalType{Time: (*format.TimeType)(t)}
 }
@@ -489,10 +451,6 @@ type timestampType format.TimestampType
 func (t *timestampType) Kind() Kind { return Int64 }
 
 func (t *timestampType) Length() int { return 64 }
-
-func (t *timestampType) Annotation() string {
-	return (*format.TimestampType)(t).String()
-}
 
 func (t *timestampType) LogicalType() format.LogicalType {
 	return format.LogicalType{Timestamp: (*format.TimestampType)(t)}
@@ -523,8 +481,6 @@ func (t *listType) Kind() Kind { panic("cannot call Kind on parquet list type") 
 
 func (t *listType) Length() int { panic("cannot call Length on parquet list type") }
 
-func (t *listType) Annotation() string { return (*format.ListType)(t).String() }
-
 func (t *listType) LogicalType() format.LogicalType {
 	return format.LogicalType{List: (*format.ListType)(t)}
 }
@@ -550,8 +506,6 @@ func (t *mapType) Kind() Kind { panic("cannot call Kind on parquet map type") }
 
 func (t *mapType) Length() int { panic("cannot call Length on parquet map type") }
 
-func (t *mapType) Annotation() string { return (*format.MapType)(t).String() }
-
 func (t *mapType) LogicalType() format.LogicalType {
 	return format.LogicalType{Map: (*format.MapType)(t)}
 }
@@ -563,8 +517,6 @@ type nullType format.NullType
 func (t *nullType) Kind() Kind { panic("cannot call Kind on null parquet type") }
 
 func (t *nullType) Length() int { panic("cannot call Length on null parquet type") }
-
-func (t *nullType) Annotation() string { return (*format.NullType)(t).String() }
 
 func (t *nullType) LogicalType() format.LogicalType {
 	return format.LogicalType{Unknown: (*format.NullType)(t)}

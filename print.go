@@ -74,7 +74,7 @@ func printWithIndent(w io.StringWriter, name string, node Node, indent *printInd
 
 		w.WriteString(name)
 
-		if annotation := node.Type().Annotation(); annotation != "" {
+		if annotation := annotationOf(node); annotation != "" {
 			w.WriteString(" (")
 			w.WriteString(annotation)
 			w.WriteString(")")
@@ -89,7 +89,7 @@ func printWithIndent(w io.StringWriter, name string, node Node, indent *printInd
 			w.WriteString(name)
 		}
 
-		if annotation := node.Type().Annotation(); annotation != "" {
+		if annotation := annotationOf(node); annotation != "" {
 			w.WriteString(" (")
 			w.WriteString(annotation)
 			w.WriteString(")")
@@ -108,6 +108,11 @@ func printWithIndent(w io.StringWriter, name string, node Node, indent *printInd
 		indent.writeTo(w)
 		w.WriteString("}")
 	}
+}
+
+func annotationOf(node Node) string {
+	logicalType := node.Type().LogicalType()
+	return logicalType.String()
 }
 
 type printIndent struct {
