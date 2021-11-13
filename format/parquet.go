@@ -655,10 +655,10 @@ type PageHeader struct {
 	CRC int32 `thrift:"4,optional"`
 
 	// Headers for page specific data. One only will be set.
-	DataPageHeader       DataPageHeader       `thrift:"5,optional"`
-	IndexPageHeader      IndexPageHeader      `thrift:"6,optional"`
-	DictionaryPageHeader DictionaryPageHeader `thrift:"7,optional"`
-	DataPageHeaderV2     DataPageHeaderV2     `thrift:"8,optional"`
+	DataPageHeader       *DataPageHeader       `thrift:"5,optional"`
+	IndexPageHeader      *IndexPageHeader      `thrift:"6,optional"`
+	DictionaryPageHeader *DictionaryPageHeader `thrift:"7,optional"`
+	DataPageHeaderV2     *DataPageHeaderV2     `thrift:"8,optional"`
 }
 
 // Wrapper struct to store key values.

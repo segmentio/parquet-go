@@ -81,10 +81,6 @@ func (d *Decoder) DecodeByteArray(data [][]byte) (int, error) {
 		}
 
 		data[i] = item
-
-		if size > 0 {
-			//fmt.Printf("(%d) %q\n", len(item), item)
-		}
 	}
 	return len(data), nil
 }

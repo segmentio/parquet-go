@@ -4,9 +4,14 @@ import (
 	"io"
 
 	"github.com/segmentio/parquet/encoding"
+	"github.com/segmentio/parquet/format"
 )
 
 type Encoding struct{}
+
+func (e *Encoding) Encoding() format.Encoding {
+	return format.Plain
+}
 
 func (e *Encoding) NewDecoder(r io.Reader) encoding.Decoder {
 	return NewDecoder(r)

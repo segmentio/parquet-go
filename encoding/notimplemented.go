@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+
+	"github.com/segmentio/parquet/format"
 )
 
 var (
@@ -11,6 +13,10 @@ var (
 )
 
 type NotImplemented struct{}
+
+func (NotImplemented) Encoding() format.Encoding {
+	return -1
+}
 
 func (NotImplemented) NewDecoder(io.Reader) Decoder {
 	return NotImplementedDecoder{}

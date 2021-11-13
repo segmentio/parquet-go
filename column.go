@@ -250,6 +250,29 @@ func (t schemaElementType) ConvertedType() deprecated.ConvertedType {
 	return t.SchemaElement.ConvertedType
 }
 
+func (t schemaElementType) NewPageBuffer(bufferSize int) PageBuffer {
+	switch t.Type {
+	case format.Boolean:
+		return newBooleanPageBuffer(t, bufferSize)
+	case format.Int32:
+		return newInt32PageBuffer(t, bufferSize)
+	case format.Int64:
+		return newInt64PageBuffer(t, bufferSize)
+	case format.Int96:
+		return newInt96PageBuffer(t, bufferSize)
+	case format.Float:
+		return newFloatPageBuffer(t, bufferSize)
+	case format.Double:
+		return newDoublePageBuffer(t, bufferSize)
+	case format.ByteArray:
+		return newByteArrayPageBuffer(t, bufferSize)
+	case format.FixedLenByteArray:
+		return newFixedLenByteArrayPageBuffer(t, bufferSize)
+	default:
+		panic("cannot create a page buffer from a schema element of unsupported type")
+	}
+}
+
 var (
 	_ Node = (*Column)(nil)
 )

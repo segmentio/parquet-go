@@ -8,3 +8,5 @@ require (
 	github.com/pierrec/lz4/v4 v4.1.9
 	github.com/segmentio/encoding v0.3.0
 )
+
+require github.com/google/uuid v1.3.0 // indirect

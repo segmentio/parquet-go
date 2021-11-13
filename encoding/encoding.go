@@ -2,9 +2,12 @@ package encoding
 
 import (
 	"io"
+
+	"github.com/segmentio/parquet/format"
 )
 
 type Encoding interface {
+	Encoding() format.Encoding
 	NewDecoder(io.Reader) Decoder
 	NewEncoder(io.Writer) Encoder
 }
