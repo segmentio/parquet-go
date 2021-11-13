@@ -309,7 +309,7 @@ func (buf *byteArrayPageBuffer) WriteValue(v Value) error {
 	if kind := v.Kind(); kind != ByteArray {
 		panic("cannot write " + kind.String() + " value to parquet column of type BYTE_ARRAY")
 	}
-	return buf.write(v.Bytes())
+	return buf.write(v.ByteArray())
 }
 
 func (buf *byteArrayPageBuffer) write(value []byte) error {
@@ -365,7 +365,7 @@ func (buf *fixedLenByteArrayPageBuffer) WriteValue(v Value) error {
 	if kind := v.Kind(); kind != FixedLenByteArray {
 		panic("cannot write " + kind.String() + " value to parquet column of type FIXED_LEN_BYTE_ARRAY")
 	}
-	b := v.Bytes()
+	b := v.ByteArray()
 	if len(b) != buf.size {
 		panic("cannot write " + v.Kind().String() + " value to parquet column with different fixed length")
 	}
@@ -409,7 +409,7 @@ func (buf uuidPageBuffer) WriteValue(v Value) error {
 	if kind := v.Kind(); kind != FixedLenByteArray {
 		panic("cannot write " + kind.String() + " value to parquet column of type UUID")
 	}
-	b := v.Bytes()
+	b := v.ByteArray()
 	if len(b) != 16 {
 		u, err := uuid.ParseBytes(b)
 		if err != nil {

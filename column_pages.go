@@ -6,8 +6,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"hash"
-	"hash/crc32"
 	"io"
 	"io/ioutil"
 	"math/bits"
@@ -118,10 +116,10 @@ func (c *ColumnPages) Next() bool {
 		}
 	}
 
-	if c.crc32.hash != nil {
+	if c.crc32.reader != nil {
 		c.lastPage.headerChecksum = uint32(c.header.CRC)
-		c.lastPage.readerChecksum = c.crc32.hash.Sum32()
-		c.crc32.hash.Reset()
+		c.lastPage.readerChecksum = c.crc32.Sum32()
+		c.crc32.Reset(nil)
 	}
 
 	if c.reader.reader == nil {
@@ -143,10 +141,7 @@ func (c *ColumnPages) Next() bool {
 
 	reader := io.Reader(&c.reader)
 	if header.CRC != 0 {
-		if c.crc32.hash == nil {
-			c.crc32.reader = reader
-			c.crc32.hash = crc32.NewIEEE()
-		}
+		c.crc32.Reset(reader)
 		reader = &c.crc32
 	}
 
@@ -569,16 +564,5 @@ type dataPageReader struct {
 func (r *dataPageReader) Read(b []byte) (int, error) {
 	n, err := r.reader.Read(b)
 	r.offset += int64(n)
-	return n, err
-}
-
-type crc32Reader struct {
-	reader io.Reader
-	hash   hash.Hash32
-}
-
-func (r *crc32Reader) Read(b []byte) (int, error) {
-	n, err := r.reader.Read(b)
-	r.hash.Write(b[:n])
 	return n, err
 }

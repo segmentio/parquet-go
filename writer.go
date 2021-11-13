@@ -4,12 +4,53 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"sync"
 
 	"github.com/segmentio/encoding/thrift"
 	"github.com/segmentio/parquet/compress"
 	"github.com/segmentio/parquet/encoding"
 	"github.com/segmentio/parquet/format"
 )
+
+type RowGroupWriter struct {
+	once    sync.Once
+	writer  io.Writer
+	schema  Node
+	columns []*rowGroupColumn
+}
+
+type rowGroupColumn struct {
+	path   []string
+	buffer bytes.Buffer
+	writer *ColumnChunkWriter
+
+	maxDefinitionLevel int32
+	maxRepetitionLevel int32
+}
+
+func NewRowGroupWriter(writer io.Writer) *RowGroupWriter {
+	return &RowGroupWriter{
+		writer: writer,
+	}
+}
+
+func (rgw *RowGroupWriter) Flush() error {
+	return nil
+}
+
+func (rgw *RowGroupWriter) WriteRow(row interface{}) error {
+	rgw.once.Do(func() {
+		rgw.schema = SchemaOf(row)
+	})
+
+	/*
+		for _, col := range rgw.columns {
+			// val := ValueOf(typ.Kind(), field)
+		}
+	*/
+
+	return nil
+}
 
 type ColumnChunkWriter struct {
 	writer      io.Writer
@@ -25,6 +66,7 @@ type ColumnChunkWriter struct {
 
 	page struct {
 		buffer       bytes.Buffer
+		checksum     crc32Writer
 		compressed   compress.Writer
 		uncompressed countWriter
 		encoder      encoding.Encoder
@@ -48,15 +90,16 @@ func NewColumnChunkWriter(writer io.Writer, compression compress.Codec, encoding
 
 func (ccw *ColumnChunkWriter) Flush() error {
 	ccw.page.buffer.Reset()
+	ccw.page.checksum.Reset(&ccw.page.buffer)
 
 	if ccw.page.compressed == nil {
-		w, err := ccw.compression.NewWriter(&ccw.page.buffer)
+		w, err := ccw.compression.NewWriter(&ccw.page.checksum)
 		if err != nil {
 			return fmt.Errorf("creating compressor for parquet column chunk writer: %w", err)
 		}
 		ccw.page.compressed = w
 	} else {
-		if err := ccw.page.compressed.Reset(&ccw.page.buffer); err != nil {
+		if err := ccw.page.compressed.Reset(&ccw.page.checksum); err != nil {
 			return fmt.Errorf("resetting compressor for parquet column chunk writer: %w", err)
 		}
 	}
@@ -81,6 +124,7 @@ func (ccw *ColumnChunkWriter) Flush() error {
 		Type:                 format.DataPageV2,
 		UncompressedPageSize: int32(ccw.page.uncompressed.length),
 		CompressedPageSize:   int32(ccw.page.buffer.Len()),
+		CRC:                  int32(ccw.page.checksum.Sum32()),
 		DataPageHeaderV2: &format.DataPageHeaderV2{
 			NumValues: ccw.numValues,
 			NumNulls:  ccw.numNulls,
