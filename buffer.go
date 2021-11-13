@@ -3,9 +3,7 @@ package parquet
 import (
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"math"
-	"reflect"
 	"unsafe"
 
 	"github.com/google/uuid"
@@ -22,14 +20,18 @@ type PageBuffer interface {
 
 	Bounds() (min, max []byte)
 
-	WriteValue(reflect.Value) error
+	WriteValue(Value) error
 
 	WriteTo(encoding.Encoder) error
 }
 
 type booleanPageBuffer struct {
-	typ    Type
-	values []bool
+	typ      Type
+	min      [1]byte
+	max      [1]byte
+	hasFalse bool
+	hasTrue  bool
+	values   []bool
 }
 
 func newBooleanPageBuffer(typ Type, bufferSize int) *booleanPageBuffer {
@@ -40,18 +42,36 @@ func newBooleanPageBuffer(typ Type, bufferSize int) *booleanPageBuffer {
 }
 
 func (buf *booleanPageBuffer) Reset() {
+	buf.hasFalse = false
+	buf.hasTrue = false
 	buf.values = buf.values[:0]
 }
 
 func (buf *booleanPageBuffer) Bounds() (min, max []byte) {
-	return nil, nil // TODO: do boolean columns have min/max?
+	buf.min[0] = 0
+	buf.max[0] = 0
+	if len(buf.values) > 0 {
+		if !buf.hasFalse {
+			buf.min[0] = 1
+		}
+		if buf.hasTrue {
+			buf.max[0] = 1
+		}
+	}
+	return buf.min[:], buf.max[:]
 }
 
-func (buf *booleanPageBuffer) WriteValue(v reflect.Value) error {
+func (buf *booleanPageBuffer) WriteValue(v Value) error {
+	if kind := v.Kind(); kind != Boolean {
+		panic("cannot write " + kind.String() + " value to parquet column of type BOOLEAN")
+	}
 	if len(buf.values) == cap(buf.values) {
 		return ErrBufferFull
 	}
-	buf.values = append(buf.values, v.Bool())
+	value := v.Boolean()
+	buf.hasFalse = buf.hasFalse || !value
+	buf.hasTrue = buf.hasTrue || value
+	buf.values = append(buf.values, value)
 	return nil
 }
 
@@ -85,11 +105,14 @@ func (buf *int32PageBuffer) Bounds() (min, max []byte) {
 	return buf.min[:], buf.max[:]
 }
 
-func (buf *int32PageBuffer) WriteValue(v reflect.Value) error {
+func (buf *int32PageBuffer) WriteValue(v Value) error {
+	if kind := v.Kind(); kind != Int32 {
+		panic("cannot write " + kind.String() + " value to parquet column of type INT32")
+	}
 	if len(buf.values) == cap(buf.values) {
 		return ErrBufferFull
 	}
-	buf.values = append(buf.values, int32(v.Int()))
+	buf.values = append(buf.values, v.Int32())
 	return nil
 }
 
@@ -128,11 +151,14 @@ func (buf *int64PageBuffer) WriteTo(enc encoding.Encoder) error {
 	return enc.EncodeInt64(buf.values)
 }
 
-func (buf *int64PageBuffer) WriteValue(v reflect.Value) error {
+func (buf *int64PageBuffer) WriteValue(v Value) error {
+	if kind := v.Kind(); kind != Int64 {
+		panic("cannot write " + kind.String() + " value to parquet column of type INT64")
+	}
 	if len(buf.values) == cap(buf.values) {
 		return ErrBufferFull
 	}
-	buf.values = append(buf.values, v.Int())
+	buf.values = append(buf.values, v.Int64())
 	return nil
 }
 
@@ -159,11 +185,14 @@ func (buf *int96PageBuffer) Bounds() (min, max []byte) {
 	return buf.min[:], buf.max[:]
 }
 
-func (buf *int96PageBuffer) WriteValue(v reflect.Value) error {
+func (buf *int96PageBuffer) WriteValue(v Value) error {
+	if kind := v.Kind(); kind != Int96 {
+		panic("cannot write " + kind.String() + " value to parquet column of type INT96")
+	}
 	if len(buf.values) == cap(buf.values) {
 		return ErrBufferFull
 	}
-	buf.values = append(buf.values, v.Interface().([12]byte)) // TODO: can we optimize this?
+	buf.values = append(buf.values, v.Int96())
 	return nil
 }
 
@@ -197,11 +226,14 @@ func (buf *floatPageBuffer) Bounds() (min, max []byte) {
 	return buf.min[:], buf.max[:]
 }
 
-func (buf *floatPageBuffer) WriteValue(v reflect.Value) error {
+func (buf *floatPageBuffer) WriteValue(v Value) error {
+	if kind := v.Kind(); kind != Float {
+		panic("cannot write " + kind.String() + " value to parquet column of type FLOAT")
+	}
 	if len(buf.values) == cap(buf.values) {
 		return ErrBufferFull
 	}
-	buf.values = append(buf.values, float32(v.Float()))
+	buf.values = append(buf.values, v.Float())
 	return nil
 }
 
@@ -235,11 +267,14 @@ func (buf *doublePageBuffer) Reset() {
 	buf.values = buf.values[:0]
 }
 
-func (buf *doublePageBuffer) WriteValue(v reflect.Value) error {
+func (buf *doublePageBuffer) WriteValue(v Value) error {
+	if kind := v.Kind(); kind != Double {
+		panic("cannot write " + kind.String() + " value to parquet column of type DOUBLE")
+	}
 	if len(buf.values) == cap(buf.values) {
 		return ErrBufferFull
 	}
-	buf.values = append(buf.values, v.Float())
+	buf.values = append(buf.values, v.Double())
 	return nil
 }
 
@@ -270,7 +305,10 @@ func (buf *byteArrayPageBuffer) Bounds() (min, max []byte) {
 	return bits.MinMaxByteArray(buf.values)
 }
 
-func (buf *byteArrayPageBuffer) WriteValue(v reflect.Value) error {
+func (buf *byteArrayPageBuffer) WriteValue(v Value) error {
+	if kind := v.Kind(); kind != ByteArray {
+		panic("cannot write " + kind.String() + " value to parquet column of type BYTE_ARRAY")
+	}
 	return buf.write(v.Bytes())
 }
 
@@ -323,15 +361,15 @@ func (buf *fixedLenByteArrayPageBuffer) Bounds() (min, max []byte) {
 	return bits.MinMaxFixedLenByteArray(buf.size, buf.data)
 }
 
-func (buf *fixedLenByteArrayPageBuffer) WriteValue(v reflect.Value) error {
-	if v.Kind() != reflect.Array {
-		panic(fmt.Sprintf("cannot write value of type %s to fixed length byte array buffer of size %d", v.Type(), buf.size))
+func (buf *fixedLenByteArrayPageBuffer) WriteValue(v Value) error {
+	if kind := v.Kind(); kind != FixedLenByteArray {
+		panic("cannot write " + kind.String() + " value to parquet column of type FIXED_LEN_BYTE_ARRAY")
 	}
-	if v.Len() != buf.size {
-		panic(fmt.Sprintf("cannot write value of size %d to fixed length byte array buffer of size %d", v.Len(), buf.size))
+	b := v.Bytes()
+	if len(b) != buf.size {
+		panic("cannot write " + v.Kind().String() + " value to parquet column with different fixed length")
 	}
-	iface := (*[2]unsafe.Pointer)(unsafe.Pointer(&v))
-	return buf.write(unsafe.Slice((*byte)(iface[1]), buf.size))
+	return buf.write(b)
 }
 
 func (buf *fixedLenByteArrayPageBuffer) write(value []byte) error {
@@ -351,50 +389,35 @@ type uint32PageBuffer struct{ *int32PageBuffer }
 
 func (buf uint32PageBuffer) Bounds() (min, max []byte) {
 	min32, max32 := bits.MinMaxUint32(bits.Int32ToUint32(buf.values))
-	binary.LittleEndian.PutUint32(buf.min[:], uint32(min32))
-	binary.LittleEndian.PutUint32(buf.max[:], uint32(max32))
+	binary.LittleEndian.PutUint32(buf.min[:], min32)
+	binary.LittleEndian.PutUint32(buf.max[:], max32)
 	return buf.min[:], buf.max[:]
-}
-
-func (buf uint32PageBuffer) WriteValue(v reflect.Value) error {
-	if len(buf.values) == cap(buf.values) {
-		return ErrBufferFull
-	}
-	buf.values = append(buf.values, int32(v.Uint()))
-	return nil
 }
 
 type uint64PageBuffer struct{ *int64PageBuffer }
 
 func (buf uint64PageBuffer) Bounds() (min, max []byte) {
 	min64, max64 := bits.MinMaxUint64(bits.Int64ToUint64(buf.values))
-	binary.LittleEndian.PutUint64(buf.min[:], uint64(min64))
-	binary.LittleEndian.PutUint64(buf.max[:], uint64(max64))
+	binary.LittleEndian.PutUint64(buf.min[:], min64)
+	binary.LittleEndian.PutUint64(buf.max[:], max64)
 	return buf.min[:], buf.max[:]
-}
-
-func (buf uint64PageBuffer) WriteValue(v reflect.Value) error {
-	if len(buf.values) == cap(buf.values) {
-		return ErrBufferFull
-	}
-	buf.values = append(buf.values, int64(v.Uint()))
-	return nil
-}
-
-type stringPageBuffer struct{ *byteArrayPageBuffer }
-
-func (buf stringPageBuffer) WriteValue(v reflect.Value) error {
-	return buf.write(unsafeStringToBytes(v.String()))
 }
 
 type uuidPageBuffer struct{ *fixedLenByteArrayPageBuffer }
 
-func (buf uuidPageBuffer) WriteValue(v reflect.Value) error {
-	u, err := uuid.Parse(v.String())
-	if err != nil {
-		return err
+func (buf uuidPageBuffer) WriteValue(v Value) error {
+	if kind := v.Kind(); kind != FixedLenByteArray {
+		panic("cannot write " + kind.String() + " value to parquet column of type UUID")
 	}
-	return buf.write(u[:])
+	b := v.Bytes()
+	if len(b) != 16 {
+		u, err := uuid.ParseBytes(b)
+		if err != nil {
+			return err
+		}
+		b = u[:]
+	}
+	return buf.write(b)
 }
 
 func unsafeStringToBytes(s string) []byte {

@@ -1,17 +1,20 @@
 package parquet
 
 import (
+	"encoding/binary"
 	"fmt"
+	"math"
 	"reflect"
 	"sort"
 	"strings"
 	"time"
+	"unsafe"
 
 	"github.com/segmentio/parquet/deprecated"
 	"github.com/segmentio/parquet/format"
 )
 
-type Kind int
+type Kind int32
 
 const (
 	Boolean           Kind = Kind(format.Boolean)
@@ -345,10 +348,12 @@ func (t *stringType) LogicalType() format.LogicalType {
 	return format.LogicalType{UTF8: (*format.StringType)(t)}
 }
 
-func (t *stringType) ConvertedType() deprecated.ConvertedType { return deprecated.UTF8 }
+func (t *stringType) ConvertedType() deprecated.ConvertedType {
+	return deprecated.UTF8
+}
 
 func (t *stringType) NewPageBuffer(bufferSize int) PageBuffer {
-	return stringPageBuffer{newByteArrayPageBuffer(t, bufferSize)}
+	return newByteArrayPageBuffer(t, bufferSize)
 }
 
 func UUID() Node { return &leafNode{typ: &uuidType{}} }
@@ -384,7 +389,7 @@ func (t *enumType) LogicalType() format.LogicalType {
 func (t *enumType) ConvertedType() deprecated.ConvertedType { return deprecated.Enum }
 
 func (t *enumType) NewPageBuffer(bufferSize int) PageBuffer {
-	return stringPageBuffer{newByteArrayPageBuffer(t, bufferSize)}
+	return newByteArrayPageBuffer(t, bufferSize)
 }
 
 func JSON() Node { return &leafNode{typ: &jsonType{}} }
@@ -636,10 +641,6 @@ func (n *leafNode) ChildByName(string) Node {
 	panic("cannot lookup child by name in leaf parquet node")
 }
 
-var (
-	_ Node = Group(nil)
-)
-
 type Schema struct {
 	name string
 	node Node
@@ -824,125 +825,186 @@ func split(s string) (head, tail string) {
 	return
 }
 
-/*
 type Value struct {
-	ptr   unsafe.Pointer
-	u64   uint64
-	u32   uint32
-	class classIndex
+	// data
+	ptr *byte
+	u64 uint64
+	u32 uint32
+	// type
+	kind Kind
+	// levels
+	definitionLevel int32
+	repetitionLevel int32
 }
 
-func (v Value) Bool() bool { return classes[v.class].bool(v) }
-
-func (v Value) Int32() int32 { return classes[v.class].int32(v) }
-
-func (v Value) Int64() int64 { return classes[v.class].int64(v) }
-
-func (v Value) Int96() [12]byte { return classes[v.class].int96(v) }
-
-func (v Value) Bytes() []byte { return classes[v.class].bytes(v) }
-
-func ValueOf(v interface{}) Value {
-	return valueOf(reflect.ValueOf(v))
+func ValueOf(k Kind, v interface{}) Value {
+	if v == nil {
+		return Value{kind: k}
+	}
+	return makeValue(k, reflect.ValueOf(v))
 }
 
-func valueOf(v reflect.Value) Value {
-	switch v.Kind() {
-	case reflect.Bool:
-		return Value{
-			u32:   boolToUint32(v.Bool()),
-			class: boolClassIndex,
+func makeValue(k Kind, v reflect.Value) Value {
+	switch k {
+	case Boolean:
+		return makeValueBoolean(k, v.Bool())
+
+	case Int32:
+		switch v.Kind() {
+		case reflect.Int8, reflect.Int16, reflect.Int32:
+			return makeValueInt32(k, int32(v.Int()))
+
+		case reflect.Uint8, reflect.Uint16, reflect.Uint32:
+			return makeValueInt32(k, int32(v.Uint()))
 		}
 
-	case reflect.Int8, reflect.Int16, reflect.Int32:
-		return Value{
-			u32:   uint32(v.Int()),
-			class: int32ClassIndex,
+	case Int64:
+		switch v.Kind() {
+		case reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Int:
+			return makeValueInt64(k, v.Int())
+
+		case reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uint, reflect.Uintptr:
+			return makeValueInt64(k, int64(v.Uint()))
 		}
 
-	case reflect.Int, reflect.Int64:
-		return Value{
-			u64:   uint64(v.Int()),
-			class: int64ClassIndex,
+	case Int96:
+		if vt := v.Type(); vt.Kind() == reflect.Array && vt.Elem().Kind() == reflect.Uint8 && vt.Len() == 12 {
+			b := v.Slice(0, v.Len()).Bytes()
+			return makeValueInt96(k, b)
 		}
 
-	case reflect.Uint8, reflect.Uint16, reflect.Uint32:
-		return Value{
-			u32:   uint32(v.Uint()),
-			class: int32ClassIndex,
+	case Float:
+		switch v.Kind() {
+		case reflect.Float32:
+			return makeValueFloat(k, float32(v.Float()))
 		}
 
-	case reflect.Uint, reflect.Uintptr, reflect.Uint64:
-		return Value{
-			u64:   v.Uint(),
-			class: int64ClassIndex,
+	case Double:
+		switch v.Kind() {
+		case reflect.Float32, reflect.Float64:
+			return makeValueDouble(k, v.Float())
 		}
 
-	case reflect.Float32:
+	case ByteArray:
+		switch vt := v.Type(); vt.Kind() {
+		case reflect.String:
+			return makeValueString(k, v.String())
 
-	default:
-		panic("cannot create parquet value from go value of type " + v.Type().String())
+		case reflect.Slice:
+			if vt.Elem().Kind() == reflect.Uint8 {
+				return makeValueBytes(k, v.Bytes())
+			}
+		}
+
+	case FixedLenByteArray:
+		switch vt := v.Type(); vt.Kind() {
+		case reflect.String: // uuid
+			return makeValueString(k, v.String())
+
+		case reflect.Array:
+			if vt.Elem().Kind() == reflect.Uint8 {
+				return makeValueByteArray(k, (*byte)(unsafe.Pointer(v.Pointer())), vt.Len())
+			}
+		}
+	}
+
+	panic("cannot create parquet value of type " + k.String() + " from go value of type " + v.Type().String())
+}
+
+func makeValueBoolean(kind Kind, value bool) Value {
+	v := Value{kind: kind}
+	if value {
+		v.u32 = 1
+	}
+	return v
+}
+
+func makeValueInt32(kind Kind, value int32) Value {
+	return Value{
+		kind: kind,
+		u32:  uint32(value),
 	}
 }
 
-type class interface {
-	bool(Value) bool
-	int32(Value) int32
-	int64(Value) int64
-	int96(Value) [12]byte
-	float32(Value) float32
-	float64(Value) float64
-	bytes(Value) []byte
-}
-
-type classIndex uint32
-
-const (
-	boolClassIndex classIndex = iota
-	int32ClassIndex
-	int64ClassIndex
-)
-
-var classes = [...]class{
-	boolClassIndex:  boolClass{},
-	int32ClassIndex: int32Class{},
-	int64ClassIndex: int64Class{},
-}
-
-type boolClass struct{}
-
-func (boolClass) bool(v Value) bool       { return v.u32 != 0 }
-func (boolClass) int32(v Value) int32     { panic("cannot convert parquet boolean value to int32") }
-func (boolClass) int64(v Value) int64     { panic("cannot convert parquet boolean value to int64") }
-func (boolClass) int96(v Value) [12]byte  { panic("cannot convert parquet boolean value to int96") }
-func (boolClass) float32(v Value) float32 { panic("cannot convert parquet boolean value to float") }
-func (boolClass) float64(v Value) float64 { panic("cannot convert parquet boolean value to double") }
-func (boolClass) bytes(v Value) []byte    { panic("cannot convert parquet boolean value ta byte array") }
-
-type int32Class struct{}
-
-func (int32Class) bool(v Value) bool       { panic("cannot convert parquet int32 value to boolean") }
-func (int32Class) int32(v Value) int32     { return int32(v.u32) }
-func (int32Class) int64(v Value) int64     { return int64(int32(v.u32)) }
-func (int32Class) int96(v Value) [12]byte  { panic("cannot convert parquet int32 value to int96") }
-func (int32Class) float32(v Value) float32 { panic("cannot convert parquet int32 value to float") }
-func (int32Class) float64(v Value) float64 { panic("cannot convert parquet int32 value to double") }
-func (int32Class) bytes(v Value) []byte    { panic("cannot convert parquet int32 value ta byte array") }
-
-type int64Class struct{}
-
-func (int64Class) bool(v Value) bool       { panic("cannot convert parquet int64 value to boolean") }
-func (int64Class) int32(v Value) int32     { panic("cannot convert parquet int64 value to int32") }
-func (int64Class) int64(v Value) int64     { return int64(v.u64) }
-func (int64Class) int96(v Value) [12]byte  { panic("cannot convert parquet int64 value ot int96") }
-func (int64Class) float32(v Value) float32 { panic("cannot convert parquet int64 value to float") }
-func (int64Class) float64(v Value) float64 { panic("cannot convert parquet int64 value to double") }
-func (int64Class) bytes(v Value) []byte    { panic("cannot convert parquet int64 value ta byte array") }
-
-func boolToUint32(b bool) uint32 {
-	if b {
-		return 1
+func makeValueInt64(kind Kind, value int64) Value {
+	return Value{
+		kind: kind,
+		u64:  uint64(value),
 	}
-	return 0
 }
-*/
+
+func makeValueInt96(kind Kind, value []byte) Value {
+	return Value{
+		kind: kind,
+		u64:  binary.LittleEndian.Uint64(value[:8]),
+		u32:  binary.LittleEndian.Uint32(value[8:]),
+	}
+}
+
+func makeValueFloat(kind Kind, value float32) Value {
+	return Value{
+		kind: kind,
+		u32:  math.Float32bits(value),
+	}
+}
+
+func makeValueDouble(kind Kind, value float64) Value {
+	return Value{
+		kind: kind,
+		u64:  math.Float64bits(value),
+	}
+}
+
+func makeValueBytes(kind Kind, value []byte) Value {
+	return Value{
+		kind: kind,
+		ptr:  *(**byte)(unsafe.Pointer(&value)),
+		u64:  uint64(len(value)),
+	}
+}
+
+func makeValueString(kind Kind, value string) Value {
+	return Value{
+		kind: kind,
+		ptr:  *(**byte)(unsafe.Pointer(&value)),
+		u64:  uint64(len(value)),
+	}
+}
+
+func makeValueByteArray(kind Kind, data *byte, size int) Value {
+	return Value{
+		kind: kind,
+		ptr:  data,
+		u64:  uint64(size),
+	}
+}
+
+func (v Value) Kind() Kind { return v.kind }
+
+func (v Value) Boolean() bool { return v.u32 != 0 }
+
+func (v Value) Int32() int32 { return int32(v.u32) }
+
+func (v Value) Int64() int64 { return int64(v.u64) }
+
+func (v Value) Int96() [12]byte { return makeInt96(v.u64, v.u32) }
+
+func (v Value) Float() float32 { return math.Float32frombits(v.u32) }
+
+func (v Value) Double() float64 { return math.Float64frombits(v.u64) }
+
+func (v Value) Bytes() []byte { return unsafe.Slice(v.ptr, int(v.u64)) }
+
+func (v Value) DefinitionLevel() int { return int(v.definitionLevel) }
+
+func (v Value) RepetitionLevel() int { return int(v.repetitionLevel) }
+
+func (v *Value) SetDefinitionLevel(level int) { v.definitionLevel = int32(level) }
+
+func (v *Value) SetRepetitionLevel(level int) { v.repetitionLevel = int32(level) }
+
+func makeInt96(lo uint64, hi uint32) (i96 [12]byte) {
+	binary.LittleEndian.PutUint64(i96[:8], uint64(lo))
+	binary.LittleEndian.PutUint32(i96[8:], uint32(hi))
+	return
+}
