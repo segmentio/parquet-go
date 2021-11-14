@@ -8,45 +8,62 @@ import (
 
 type Schema struct {
 	name string
-	node Node
+	root Node
 }
 
-func SchemaOf(v interface{}) *Schema {
-	return schemaOf(reflect.TypeOf(v))
-}
-
-func schemaOf(t reflect.Type) *Schema {
-	if t.Kind() == reflect.Ptr {
-		t = t.Elem()
-	}
-	if t.Kind() != reflect.Struct {
-		panic("cannot construct parquet schema from value of type " + t.String())
-	}
+func NewSchema(name string, root Node) *Schema {
 	return &Schema{
-		name: t.Name(),
-		node: structNodeOf(t),
+		name: name,
+		root: root,
 	}
+}
+
+func SchemaOf(model interface{}) *Schema {
+	return NamedSchemaOf(reflect.TypeOf(model).Name(), model)
+}
+
+func NamedSchemaOf(name string, model interface{}) *Schema {
+	return namedSchemaOf(name, reflect.ValueOf(model))
+}
+
+func namedSchemaOf(name string, model reflect.Value) *Schema {
+	switch t := model.Type(); t.Kind() {
+	case reflect.Struct:
+		return NewSchema(name, structNodeOf(t))
+
+	case reflect.Ptr:
+		if elem := t.Elem(); elem.Kind() == reflect.Struct {
+			return NewSchema(name, structNodeOf(elem))
+		}
+
+	case reflect.Map:
+
+	}
+
+	panic("cannot construct parquet schema from value of type " + model.Type().String())
 }
 
 func (s *Schema) Name() string { return s.name }
 
-func (s *Schema) Type() Type { return s.node.Type() }
+func (s *Schema) Type() Type { return s.root.Type() }
 
-func (s *Schema) Optional() bool { return s.node.Optional() }
+func (s *Schema) Optional() bool { return s.root.Optional() }
 
-func (s *Schema) Repeated() bool { return s.node.Repeated() }
+func (s *Schema) Repeated() bool { return s.root.Repeated() }
 
-func (s *Schema) Required() bool { return s.node.Required() }
+func (s *Schema) Required() bool { return s.root.Required() }
 
-func (s *Schema) NumChildren() int { return s.node.NumChildren() }
+func (s *Schema) NumChildren() int { return s.root.NumChildren() }
 
-func (s *Schema) ChildNames() []string { return s.node.ChildNames() }
+func (s *Schema) ChildNames() []string { return s.root.ChildNames() }
 
-func (s *Schema) ChildByName(name string) Node { return s.node.ChildByName(name) }
+func (s *Schema) ChildByName(name string) Node { return s.root.ChildByName(name) }
+
+func (s *Schema) Object(value reflect.Value) Object { return s.root.Object(value) }
 
 func (s *Schema) String() string {
 	b := new(strings.Builder)
-	Print(b, s.name, s.node)
+	Print(b, s.name, s.root)
 	return b.String()
 }
 
@@ -96,6 +113,71 @@ func (s *structNode) ChildByName(name string) Node {
 		return &s.fields[i]
 	}
 	panic("column not found in parquet schema: " + name)
+}
+
+func (s *structNode) Object(value reflect.Value) Object {
+	obj := &structObject{
+		node:   s,
+		fields: make([]Object, len(s.fields)),
+	}
+
+	structFields := s.fields
+	if value = dereference(value); value.IsValid() {
+		for i := range obj.fields {
+			f := &structFields[i]
+			obj.fields[i] = f.Object(value.FieldByIndex(f.index))
+		}
+	} else {
+		for i := range obj.fields {
+			f := &structFields[i]
+			obj.fields[i] = f.Object(reflect.Value{})
+		}
+	}
+
+	return obj
+}
+
+func dereference(value reflect.Value) reflect.Value {
+	if value.IsValid() && value.Kind() == reflect.Ptr && !value.IsNil() {
+		return value.Elem()
+	}
+	return value
+}
+
+type structObject struct {
+	node   *structNode
+	fields []Object
+}
+
+func (obj *structObject) Len() int {
+	return len(obj.fields)
+}
+
+func (obj *structObject) Index(index int) Object {
+	return obj.fields[index]
+}
+
+func (obj *structObject) Value() Value {
+	panic("cannot call Value on parquet struct object")
+}
+
+func (obj *structObject) Reset(value reflect.Value) {
+	if value = dereference(value); value.IsValid() {
+		structFields := obj.node.fields
+		for i, field := range obj.fields {
+			field.Reset(value.FieldByIndex(structFields[i].index))
+		}
+	} else {
+		for _, field := range obj.fields {
+			field.Reset(reflect.Value{})
+		}
+	}
+}
+
+func (obj *structObject) reset() {
+	for _, field := range obj.fields {
+		field.Reset(reflect.Value{})
+	}
 }
 
 type structField struct {
@@ -148,13 +230,14 @@ func makeStructField(f reflect.StructField, index []int) structField {
 	return field
 }
 
-func (f *structField) Type() Type                   { return f.node.Type() }
-func (f *structField) Optional() bool               { return f.optional }
-func (f *structField) Repeated() bool               { return f.repeated }
-func (f *structField) Required() bool               { return !f.optional && !f.repeated }
-func (f *structField) NumChildren() int             { return f.node.NumChildren() }
-func (f *structField) ChildNames() []string         { return f.node.ChildNames() }
-func (f *structField) ChildByName(name string) Node { return f.node.ChildByName(name) }
+func (f *structField) Type() Type                        { return f.node.Type() }
+func (f *structField) Optional() bool                    { return f.optional }
+func (f *structField) Repeated() bool                    { return f.repeated }
+func (f *structField) Required() bool                    { return !f.optional && !f.repeated }
+func (f *structField) NumChildren() int                  { return f.node.NumChildren() }
+func (f *structField) ChildNames() []string              { return f.node.ChildNames() }
+func (f *structField) ChildByName(name string) Node      { return f.node.ChildByName(name) }
+func (f *structField) Object(value reflect.Value) Object { return f.node.Object(value) }
 
 func nodeOf(t reflect.Type) Node {
 	switch t.Kind() {

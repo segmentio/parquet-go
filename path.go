@@ -1,5 +1,6 @@
 package parquet
 
+/*
 import (
 	"strings"
 )
@@ -44,7 +45,6 @@ func pathTo(node Node, path []string, index int) Path {
 		}
 		return &valuePath{
 			path: path,
-			kind: node.Type().Kind(),
 		}
 	}
 }
@@ -78,7 +78,6 @@ func (g *groupPath) ValueIndex(row Row, index int) Value {
 
 type valuePath struct {
 	path []string
-	kind Kind
 }
 
 func (v *valuePath) Path() []string {
@@ -94,7 +93,8 @@ func (v *valuePath) ValueIndex(row Row, index int) Value {
 	if index > 0 {
 		panic("cannot get value at non-zero index from leaf parquet node")
 	}
-	return makeValue(v.kind, row.value)
+	return Value{}
+	//return makeValue(v.kind, row.value)
 }
 
 type emptyPath struct{}
@@ -105,3 +105,4 @@ func (emptyPath) ValueIndex(Row, int) Value { panic("cannot call ValueIndex on e
 func join(path []string) string {
 	return strings.Join(path, ".")
 }
+*/

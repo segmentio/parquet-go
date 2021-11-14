@@ -2,6 +2,7 @@ package parquet
 
 import (
 	"fmt"
+	"reflect"
 	"sort"
 
 	"github.com/segmentio/parquet/deprecated"
@@ -62,6 +63,13 @@ func (c *Column) ChildNames() []string { return c.names }
 //
 // This method contributes to satisfying the Node interface.
 func (c *Column) ChildByName(name string) Node { return c.Column(name) }
+
+// Object constructs a parquet object from the Go value passed as argument.
+//
+// This method contributes to satisfying the Node interface.
+func (c *Column) Object(value reflect.Value) Object {
+	panic("NOT IMPLEMENTED (TODO)")
+}
 
 // Name returns the column name.
 func (c *Column) Name() string { return c.schema.Name }

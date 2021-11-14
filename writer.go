@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"reflect"
 	"sync"
 
 	"github.com/segmentio/encoding/thrift"
@@ -12,25 +13,110 @@ import (
 	"github.com/segmentio/parquet/format"
 )
 
+type WriterConfig struct {
+	PageBufferSize int
+
+	ColumnsConfig map[string]*WriterConfig
+}
+
+func (cfg *WriterConfig) Apply(options ...WriterOption) {
+	for _, opt := range options {
+		opt.Configure(cfg)
+	}
+}
+
+func (cfg *WriterConfig) Configure(config *WriterConfig) { *config = *cfg }
+
+func (cfg *WriterConfig) ColumnConfig(column string) *WriterConfig {
+	if columnConfig := cfg.ColumnsConfig[column]; columnConfig != nil {
+		return columnConfig
+	} else {
+		columnConfig = new(WriterConfig)
+		cfg.Configure(columnConfig)
+		columnConfig.ColumnsConfig = nil
+		return columnConfig
+	}
+}
+
+type WriterOption interface {
+	Configure(*WriterConfig)
+}
+
+type writerOption func(*WriterConfig)
+
+func (opt writerOption) Configure(config *WriterConfig) { opt(config) }
+
+func PageBufferSize(size int) WriterOption {
+	return writerOption(func(config *WriterConfig) { config.PageBufferSize = size })
+}
+
+func ColumnConfig(column string, options ...WriterOption) WriterOption {
+	return writerOption(func(config *WriterConfig) {
+		columnConfig := *config
+		columnConfig.Apply(options...)
+
+		if config.ColumnsConfig == nil {
+			config.ColumnsConfig = make(map[string]*WriterConfig)
+		}
+
+		config.ColumnsConfig[column] = &columnConfig
+	})
+}
+
 type RowGroupWriter struct {
 	once    sync.Once
 	writer  io.Writer
 	schema  Node
+	object  Object
+	row     Row
 	columns []*rowGroupColumn
 }
 
 type rowGroupColumn struct {
 	path   []string
-	buffer bytes.Buffer
+	buffer *bytes.Buffer
 	writer *ColumnChunkWriter
 
 	maxDefinitionLevel int32
 	maxRepetitionLevel int32
 }
 
-func NewRowGroupWriter(writer io.Writer) *RowGroupWriter {
-	return &RowGroupWriter{
+func NewRowGroupWriter(writer io.Writer, schema Node, options ...WriterOption) *RowGroupWriter {
+	rgw := &RowGroupWriter{
 		writer: writer,
+		schema: schema,
+		object: schema.Object(reflect.Value{}),
+	}
+	config := &WriterConfig{}
+	config.Apply(options...)
+	rgw.init(schema, nil, 0, 0, config)
+	return rgw
+}
+
+func (rgw *RowGroupWriter) init(node Node, path []string, maxRepetitionLevel, maxDefinitionLevel int32, config *WriterConfig) {
+	if !node.Required() {
+		maxDefinitionLevel++
+	}
+	if node.Repeated() {
+		maxRepetitionLevel++
+	}
+
+	if names := node.ChildNames(); len(names) > 0 {
+		base := path[:len(path):len(path)]
+
+		for _, name := range names {
+			rgw.init(node.ChildByName(name), append(base, name), maxRepetitionLevel, maxDefinitionLevel, config.ColumnConfig(name))
+		}
+	} else {
+		buffer := new(bytes.Buffer)
+
+		rgw.columns = append(rgw.columns, &rowGroupColumn{
+			path:               path,
+			buffer:             buffer,
+			writer:             NewColumnChunkWriter(buffer, &Uncompressed, &Plain, node.Type().NewPageBuffer(config.PageBufferSize)),
+			maxRepetitionLevel: maxRepetitionLevel,
+			maxDefinitionLevel: maxDefinitionLevel,
+		})
 	}
 }
 
@@ -39,15 +125,12 @@ func (rgw *RowGroupWriter) Flush() error {
 }
 
 func (rgw *RowGroupWriter) WriteRow(row interface{}) error {
-	rgw.once.Do(func() {
-		rgw.schema = SchemaOf(row)
-	})
+	rgw.object.Reset(reflect.ValueOf(row))
+	rgw.row.Reset(rgw.object)
 
-	/*
-		for _, col := range rgw.columns {
-			// val := ValueOf(typ.Kind(), field)
-		}
-	*/
+	for rgw.row.Next() {
+		rgw.columns[rgw.row.ColumnIndex()].writer.WriteValue(rgw.row.Value())
+	}
 
 	return nil
 }

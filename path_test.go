@@ -1,5 +1,6 @@
 package parquet_test
 
+/*
 import (
 	"strings"
 	"testing"
@@ -75,3 +76,4 @@ func TestPath(t *testing.T) {
 func joinPath(path []string) string {
 	return strings.Join(path, ".")
 }
+*/
