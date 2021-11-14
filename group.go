@@ -19,7 +19,7 @@ func (g Group) Required() bool { return true }
 
 func (g Group) NumChildren() int { return len(g) }
 
-func (g Group) Children() []string {
+func (g Group) ChildNames() []string {
 	names := make([]string, 0, len(g))
 	for name := range g {
 		names = append(names, name)

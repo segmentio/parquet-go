@@ -40,7 +40,7 @@ func (s *Schema) Required() bool { return s.node.Required() }
 
 func (s *Schema) NumChildren() int { return s.node.NumChildren() }
 
-func (s *Schema) Children() []string { return s.node.Children() }
+func (s *Schema) ChildNames() []string { return s.node.ChildNames() }
 
 func (s *Schema) ChildByName(name string) Node { return s.node.ChildByName(name) }
 
@@ -82,12 +82,12 @@ func (s *structNode) init(t reflect.Type, index []int) {
 	}
 }
 
-func (s *structNode) Type() Type         { return groupType{} }
-func (s *structNode) Optional() bool     { return false }
-func (s *structNode) Repeated() bool     { return false }
-func (s *structNode) Required() bool     { return true }
-func (s *structNode) NumChildren() int   { return len(s.fields) }
-func (s *structNode) Children() []string { return s.names }
+func (s *structNode) Type() Type           { return groupType{} }
+func (s *structNode) Optional() bool       { return false }
+func (s *structNode) Repeated() bool       { return false }
+func (s *structNode) Required() bool       { return true }
+func (s *structNode) NumChildren() int     { return len(s.fields) }
+func (s *structNode) ChildNames() []string { return s.names }
 func (s *structNode) ChildByName(name string) Node {
 	i := sort.Search(len(s.fields), func(i int) bool {
 		return s.fields[i].name >= name
@@ -153,7 +153,7 @@ func (f *structField) Optional() bool               { return f.optional }
 func (f *structField) Repeated() bool               { return f.repeated }
 func (f *structField) Required() bool               { return !f.optional && !f.repeated }
 func (f *structField) NumChildren() int             { return f.node.NumChildren() }
-func (f *structField) Children() []string           { return f.node.Children() }
+func (f *structField) ChildNames() []string         { return f.node.ChildNames() }
 func (f *structField) ChildByName(name string) Node { return f.node.ChildByName(name) }
 
 func nodeOf(t reflect.Type) Node {

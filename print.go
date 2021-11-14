@@ -28,7 +28,7 @@ func PrintIndent(w io.Writer, name string, node Node, pattern, newline string) e
 
 		pi.writeNewLine(pw)
 
-		for _, child := range node.Children() {
+		for _, child := range node.ChildNames() {
 			printWithIndent(pw, child, node.ChildByName(child), pi)
 			pi.writeNewLine(pw)
 		}
@@ -99,7 +99,7 @@ func printWithIndent(w io.StringWriter, name string, node Node, indent *printInd
 		indent.writeNewLine(w)
 		indent.push()
 
-		for _, child := range node.Children() {
+		for _, child := range node.ChildNames() {
 			printWithIndent(w, child, node.ChildByName(child), indent)
 			indent.writeNewLine(w)
 		}

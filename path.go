@@ -20,7 +20,7 @@ func appendPathsOf(dst []Path, root, node Node, path []string) []Path {
 	if node.NumChildren() > 0 {
 		base := path[:len(path):len(path)]
 
-		for _, name := range node.Children() {
+		for _, name := range node.ChildNames() {
 			dst = appendPathsOf(dst, root, node.ChildByName(name), append(base, name))
 		}
 	} else {

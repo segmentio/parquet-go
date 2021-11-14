@@ -55,7 +55,7 @@ func (c *Column) NumChildren() int { return len(c.columns) }
 // Children returns the names of child columns.
 //
 // This method contributes to satisfying the Node interface.
-func (c *Column) Children() []string { return c.names }
+func (c *Column) ChildNames() []string { return c.names }
 
 // ChildByName returns a Node value representing the child column matching the
 // name passed as argument.

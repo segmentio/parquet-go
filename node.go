@@ -11,7 +11,7 @@ type Node interface {
 
 	NumChildren() int
 
-	Children() []string
+	ChildNames() []string
 
 	ChildByName(name string) Node
 
@@ -59,12 +59,12 @@ func (opt *required) Required() bool { return true }
 
 type leafNode struct{ typ Type }
 
-func (n *leafNode) Type() Type         { return n.typ }
-func (n *leafNode) Optional() bool     { return false }
-func (n *leafNode) Repeated() bool     { return false }
-func (n *leafNode) Required() bool     { return true }
-func (n *leafNode) NumChildren() int   { return 0 }
-func (n *leafNode) Children() []string { return nil }
+func (n *leafNode) Type() Type           { return n.typ }
+func (n *leafNode) Optional() bool       { return false }
+func (n *leafNode) Repeated() bool       { return false }
+func (n *leafNode) Required() bool       { return true }
+func (n *leafNode) NumChildren() int     { return 0 }
+func (n *leafNode) ChildNames() []string { return nil }
 func (n *leafNode) ChildByName(string) Node {
 	panic("cannot lookup child by name in leaf parquet node")
 }
