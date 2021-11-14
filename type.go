@@ -2,7 +2,6 @@ package parquet
 
 import (
 	"fmt"
-	"sort"
 	"time"
 
 	"github.com/segmentio/parquet/deprecated"
@@ -132,110 +131,6 @@ var (
 func FixedLenByteArrayType(length int) Type {
 	return &fixedLenByteArrayType{length: length}
 }
-
-type Node interface {
-	Type() Type
-
-	Optional() bool
-
-	Repeated() bool
-
-	Required() bool
-
-	NumChildren() int
-
-	Children() []string
-
-	ChildByName(name string) Node
-
-	//PathTo(path []string) Path
-}
-
-type Group map[string]Node
-
-func (g Group) Type() Type { return groupType{} }
-
-func (g Group) Optional() bool { return false }
-
-func (g Group) Repeated() bool { return false }
-
-func (g Group) Required() bool { return true }
-
-func (g Group) NumChildren() int { return len(g) }
-
-func (g Group) Children() []string {
-	names := make([]string, 0, len(g))
-	for name := range g {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
-}
-
-func (g Group) ChildByName(name string) Node {
-	n, ok := g[name]
-	if ok {
-		return n
-	}
-	panic("column not found in parquet group: " + name)
-}
-
-/*
-func (g Group) PathTo(path []string) Path {
-	if len(path) == 0 {
-		return emptyPath{}
-	}
-
-
-}
-*/
-
-type groupType struct{}
-
-func (groupType) Kind() Kind                              { panic("cannot call Kind on parquet group type") }
-func (groupType) Length() int                             { panic("cannot call Length on parquet group type") }
-func (groupType) LogicalType() format.LogicalType         { return format.LogicalType{} }
-func (groupType) ConvertedType() deprecated.ConvertedType { return -1 }
-func (groupType) NewPageBuffer(int) PageBuffer            { panic("cannot create page buffer for parquet group") }
-
-func Optional(node Node) Node {
-	if node.Optional() {
-		return node
-	}
-	return &optional{node}
-}
-
-type optional struct{ Node }
-
-func (opt *optional) Optional() bool { return true }
-func (opt *optional) Repeated() bool { return false }
-func (opt *optional) Required() bool { return false }
-
-func Repeated(node Node) Node {
-	if node.Repeated() {
-		return node
-	}
-	return &repeated{node}
-}
-
-type repeated struct{ Node }
-
-func (opt *repeated) Optional() bool { return false }
-func (opt *repeated) Repeated() bool { return true }
-func (opt *repeated) Required() bool { return false }
-
-func Required(node Node) Node {
-	if node.Required() {
-		return node
-	}
-	return &required{node}
-}
-
-type required struct{ Node }
-
-func (opt *required) Optional() bool { return false }
-func (opt *required) Repeated() bool { return false }
-func (opt *required) Required() bool { return true }
 
 func Int(bitWidth int) Node {
 	return &leafNode{typ: integerType(bitWidth, &signedIntTypes)}
@@ -634,16 +529,4 @@ func (t *nullType) ConvertedType() deprecated.ConvertedType { return -1 }
 
 func (t *nullType) NewPageBuffer(bufferSize int) PageBuffer {
 	panic("cannot create page buffer for parquet null type")
-}
-
-type leafNode struct{ typ Type }
-
-func (n *leafNode) Type() Type         { return n.typ }
-func (n *leafNode) Optional() bool     { return false }
-func (n *leafNode) Repeated() bool     { return false }
-func (n *leafNode) Required() bool     { return true }
-func (n *leafNode) NumChildren() int   { return 0 }
-func (n *leafNode) Children() []string { return nil }
-func (n *leafNode) ChildByName(string) Node {
-	panic("cannot lookup child by name in leaf parquet node")
 }
