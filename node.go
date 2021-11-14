@@ -18,8 +18,6 @@ type Node interface {
 	ChildByName(name string) Node
 
 	Object(value reflect.Value) Object
-
-	//PathTo(path []string) Path
 }
 
 func Optional(node Node) Node {
