@@ -1,6 +1,7 @@
 package parquet_test
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -10,50 +11,101 @@ import (
 	"github.com/segmentio/parquet"
 )
 
-func TestWriterSimple(t *testing.T) {
-	type RowType struct {
-		FirstName string `parquet:"first_name"`
-		LastName  string `parquet:"last_name"`
-	}
-
+func generateParquetFile(rows ...interface{}) ([]byte, error) {
 	tmp, err := os.CreateTemp("/tmp", "*.parquet")
 	if err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
-	defer os.Remove(tmp.Name())
-
-	file := tmp //new(bytes.Buffer)
-	rows := []*RowType{
-		&RowType{
-			FirstName: "Han",
-			LastName:  "Solo",
-		},
-
-		&RowType{
-			FirstName: "Leia",
-			LastName:  "Skywalker",
-		},
-
-		&RowType{
-			FirstName: "Luke",
-			LastName:  "Skywalker",
-		},
-	}
+	path := tmp.Name()
+	defer os.Remove(path)
 
 	schema := parquet.SchemaOf(rows[0])
-	writer := parquet.NewWriter(file, schema)
+	writer := parquet.NewWriter(tmp, schema)
 
 	for _, row := range rows {
 		if err := writer.WriteRow(row); err != nil {
-			t.Fatal("writing row:", err)
+			return nil, err
 		}
 	}
 
 	if err := writer.Close(); err != nil {
-		t.Fatal("closing:", err)
+		return nil, err
 	}
 
-	dump(t, tmp.Name())
+	return ptools("dump", path)
+}
+
+type RowType struct {
+	FirstName string `parquet:"first_name"`
+	LastName  string `parquet:"last_name"`
+}
+
+var writerTests = []struct {
+	rows []interface{}
+	dump string
+}{
+	{
+		rows: []interface{}{
+			&RowType{
+				FirstName: "Han",
+				LastName:  "Solo",
+			},
+
+			&RowType{
+				FirstName: "Leia",
+				LastName:  "Skywalker",
+			},
+
+			&RowType{
+				FirstName: "Luke",
+				LastName:  "Skywalker",
+			},
+		},
+		dump: `row group 0
+--------------------------------------------------------------------------------
+first_name:  BINARY UNCOMPRESSED DO:0 FPO:4 SZ:77/77/1.00 VC:3 ENC:PLAIN [more]...
+last_name:   BINARY UNCOMPRESSED DO:0 FPO:81 SZ:100/100/1.00 VC:3 ENC:PLAIN [more]...
+
+    first_name TV=3 RL=0 DL=0
+    ----------------------------------------------------------------------------
+    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[min: Luke, max: Han, num_nu [more]... VC:3
+
+    last_name TV=3 RL=0 DL=0
+    ----------------------------------------------------------------------------
+    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[min: Solo, max: Skywalker,  [more]... VC:3
+
+BINARY first_name
+--------------------------------------------------------------------------------
+*** row group 1 of 1, values 1 to 3 ***
+value 1: R:0 D:0 V:Han
+value 2: R:0 D:0 V:Leia
+value 3: R:0 D:0 V:Luke
+
+BINARY last_name
+--------------------------------------------------------------------------------
+*** row group 1 of 1, values 1 to 3 ***
+value 1: R:0 D:0 V:Solo
+value 2: R:0 D:0 V:Skywalker
+value 3: R:0 D:0 V:Skywalker
+`,
+	},
+}
+
+func TestWriter(t *testing.T) {
+	for _, test := range writerTests {
+		t.Run("", func(t *testing.T) {
+			t.Parallel()
+
+			dump, err := generateParquetFile(test.rows...)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if string(dump) != test.dump {
+				t.Errorf("OUTPUT MISMATCH\ngot:\n%s\nwant:\n%s", string(dump), test.dump)
+			}
+		})
+	}
 }
 
 type debugWriter struct {
@@ -68,13 +120,20 @@ func (d *debugWriter) Write(b []byte) (int, error) {
 	return n, err
 }
 
-func dump(t *testing.T, path string) {
-	parquetTools := exec.Command("parquet-tools", "dump", path)
-	parquetTools.Stdin = os.Stdin
-	parquetTools.Stdout = os.Stdout
-	parquetTools.Stderr = os.Stderr
+func ptools(cmd, path string) ([]byte, error) {
+	p := exec.Command("parquet-tools", cmd, "--debug", path)
 
-	if err := parquetTools.Run(); err != nil {
-		t.Error(err)
+	output, err := p.CombinedOutput()
+	if err != nil {
+		return output, err
 	}
+
+	// parquet-tools has trailing spaces on some lines
+	lines := bytes.Split(output, []byte("\n"))
+
+	for i, line := range lines {
+		lines[i] = bytes.TrimRight(line, " ")
+	}
+
+	return bytes.Join(lines, []byte("\n")), nil
 }
