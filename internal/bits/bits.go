@@ -2,6 +2,7 @@ package bits
 
 import (
 	"bytes"
+	"encoding/binary"
 	"math/bits"
 	"unsafe"
 )
@@ -132,10 +133,10 @@ func MinMaxInt96(data [][12]byte) (min, max [12]byte) {
 		max = data[0]
 
 		for _, v := range data[1:] {
-			if bytes.Compare(v[:], min[:]) < 0 {
+			if CompareInt96(v, min) < 0 {
 				min = v
 			}
-			if bytes.Compare(v[:], max[:]) > 0 {
+			if CompareInt96(v, max) > 0 {
 				max = v
 			}
 		}
@@ -248,4 +249,28 @@ func MinMaxFixedLenByteArray(size int, data []byte) (min, max []byte) {
 		}
 	}
 	return min, max
+}
+
+func CompareInt96(v1, v2 [12]byte) int {
+	hi1 := binary.LittleEndian.Uint32(v1[8:])
+	hi2 := binary.LittleEndian.Uint32(v2[8:])
+
+	switch {
+	case hi1 < hi2:
+		return -1
+	case hi1 > hi2:
+		return +1
+	}
+
+	lo1 := binary.LittleEndian.Uint64(v1[:8])
+	lo2 := binary.LittleEndian.Uint64(v2[:8])
+
+	switch {
+	case lo1 < lo2:
+		return -1
+	case lo1 > lo2:
+		return +1
+	default:
+		return 0
+	}
 }

@@ -74,7 +74,6 @@ type rowGroupColumn struct {
 	maxRepetitionLevel int32
 
 	numValues int64
-	numNulls  int64
 }
 
 func NewRowGroupWriter(writer io.Writer, schema Node, options ...WriterOption) *RowGroupWriter {
@@ -199,11 +198,9 @@ func (rgw *RowGroupWriter) Flush() error {
 				DataPageOffset:        dataPageOffset,
 				IndexPageOffset:       0,
 				DictionaryPageOffset:  0,
-				Statistics: format.Statistics{
-					NullCount: col.numNulls,
-				},
-				EncodingStats:     col.writer.EncodingStats(),
-				BloomFilterOffset: 0,
+				Statistics:            col.writer.Statistics(),
+				EncodingStats:         col.writer.EncodingStats(),
+				BloomFilterOffset:     0,
 			},
 			OffsetIndexOffset: 0,
 			OffsetIndexLength: 0,
@@ -246,10 +243,6 @@ func (rgw *RowGroupWriter) WriteRow(row interface{}) error {
 		col := rgw.columns[rgw.row.ColumnIndex()]
 		col.writer.WriteValue(val)
 		col.numValues++
-
-		if val.IsNull() {
-			col.numNulls++
-		}
 	}
 
 	for _, col := range rgw.columns {
@@ -298,6 +291,7 @@ type ColumnChunkWriter struct {
 	totalCompressedSize   int64
 	encodings             []format.Encoding
 	encodingStats         []format.PageEncodingStats
+	statistics            format.Statistics
 }
 
 type pageTypeEncoding struct {
@@ -332,6 +326,12 @@ func (ccw *ColumnChunkWriter) EncodingStats() []format.PageEncodingStats {
 	return ccw.encodingStats
 }
 
+func (ccw *ColumnChunkWriter) Statistics() format.Statistics {
+	ccw.statistics.Min = ccw.statistics.MinValue // deprecated
+	ccw.statistics.Max = ccw.statistics.MaxValue // depreacted
+	return ccw.statistics
+}
+
 func (ccw *ColumnChunkWriter) Reset() {
 	ccw.values.Reset()
 	ccw.numValues = 0
@@ -341,6 +341,7 @@ func (ccw *ColumnChunkWriter) Reset() {
 	ccw.totalUncompressedSize = 0
 	ccw.totalCompressedSize = 0
 	ccw.encodingStats = ccw.encodingStats[:0]
+	ccw.statistics = format.Statistics{}
 }
 
 func (ccw *ColumnChunkWriter) Flush() error {
@@ -394,14 +395,22 @@ func (ccw *ColumnChunkWriter) Flush() error {
 			// RepetitionLevelsByteLength:
 			IsCompressed: &ccw.isCompressed,
 			Statistics: format.Statistics{
-				Min:      minValue, // deprecated
-				Max:      maxValue, // deprecated
-				MinValue: minValue,
-				MaxValue: maxValue,
+				Min:       minValue, // deprecated
+				Max:       maxValue, // deprecated
+				NullCount: int64(ccw.numNulls),
+				MinValue:  minValue,
+				MaxValue:  maxValue,
 			},
 		},
 	}); err != nil {
 		return err
+	}
+
+	if ccw.statistics.MinValue == nil || ccw.values.Less(minValue, ccw.statistics.MinValue) {
+		ccw.statistics.MinValue = append(ccw.statistics.MinValue[:0], minValue...)
+	}
+	if ccw.statistics.MaxValue == nil || ccw.values.Less(ccw.statistics.MaxValue, maxValue) {
+		ccw.statistics.MaxValue = append(ccw.statistics.MaxValue[:0], maxValue...)
 	}
 
 	headerSize := int64(ccw.header.buffer.Len())
@@ -436,6 +445,7 @@ func (ccw *ColumnChunkWriter) WriteValue(v Value) error {
 		case nil:
 			if v.IsNull() {
 				ccw.numNulls++
+				ccw.statistics.NullCount++
 			}
 			ccw.numValues++
 			ccw.numRows++

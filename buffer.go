@@ -108,6 +108,8 @@ type PageBuffer interface {
 
 	Bounds() (min, max []byte)
 
+	Less(v1, v2 []byte) bool
+
 	WriteValue(Value) error
 
 	WriteTo(encoding.Encoder) error
@@ -147,6 +149,10 @@ func (buf *booleanPageBuffer) Bounds() (min, max []byte) {
 		}
 	}
 	return buf.min[:], buf.max[:]
+}
+
+func (buf *booleanPageBuffer) Less(v1, v2 []byte) bool {
+	return v1[0] < v2[0]
 }
 
 func (buf *booleanPageBuffer) WriteValue(v Value) error {
@@ -193,6 +199,12 @@ func (buf *int32PageBuffer) Bounds() (min, max []byte) {
 	return buf.min[:], buf.max[:]
 }
 
+func (buf *int32PageBuffer) Less(v1, v2 []byte) bool {
+	i1 := int32(binary.LittleEndian.Uint32(v1))
+	i2 := int32(binary.LittleEndian.Uint32(v2))
+	return i1 < i2
+}
+
 func (buf *int32PageBuffer) WriteValue(v Value) error {
 	if kind := v.Kind(); kind != Int32 {
 		panic("cannot write " + kind.String() + " value to parquet column of type INT32")
@@ -234,6 +246,12 @@ func (buf *int64PageBuffer) Bounds() (min, max []byte) {
 	return buf.min[:], buf.max[:]
 }
 
+func (buf *int64PageBuffer) Less(v1, v2 []byte) bool {
+	i1 := int64(binary.LittleEndian.Uint64(v1))
+	i2 := int64(binary.LittleEndian.Uint64(v2))
+	return i1 < i2
+}
+
 func (buf *int64PageBuffer) WriteTo(enc encoding.Encoder) error {
 	enc.SetBitWidth(bits.MaxLen64(buf.values))
 	return enc.EncodeInt64(buf.values)
@@ -271,6 +289,10 @@ func (buf *int96PageBuffer) Reset() {
 func (buf *int96PageBuffer) Bounds() (min, max []byte) {
 	buf.min, buf.max = bits.MinMaxInt96(buf.values)
 	return buf.min[:], buf.max[:]
+}
+
+func (buf *int96PageBuffer) Less(v1, v2 []byte) bool {
+	return bits.CompareInt96(*(*[12]byte)(v1), *(*[12]byte)(v2)) < 0
 }
 
 func (buf *int96PageBuffer) WriteValue(v Value) error {
@@ -314,6 +336,12 @@ func (buf *floatPageBuffer) Bounds() (min, max []byte) {
 	return buf.min[:], buf.max[:]
 }
 
+func (buf *floatPageBuffer) Less(v1, v2 []byte) bool {
+	f1 := math.Float32frombits(binary.LittleEndian.Uint32(v1))
+	f2 := math.Float32frombits(binary.LittleEndian.Uint32(v2))
+	return f1 < f2
+}
+
 func (buf *floatPageBuffer) WriteValue(v Value) error {
 	if kind := v.Kind(); kind != Float {
 		panic("cannot write " + kind.String() + " value to parquet column of type FLOAT")
@@ -349,6 +377,12 @@ func (buf *doublePageBuffer) Bounds() (min, max []byte) {
 	binary.LittleEndian.PutUint64(buf.min[:], math.Float64bits(min64))
 	binary.LittleEndian.PutUint64(buf.max[:], math.Float64bits(max64))
 	return buf.min[:], buf.max[:]
+}
+
+func (buf *doublePageBuffer) Less(v1, v2 []byte) bool {
+	d1 := math.Float64frombits(binary.LittleEndian.Uint64(v1))
+	d2 := math.Float64frombits(binary.LittleEndian.Uint64(v2))
+	return d1 < d2
 }
 
 func (buf *doublePageBuffer) Reset() {
@@ -391,6 +425,10 @@ func (buf *byteArrayPageBuffer) Reset() {
 
 func (buf *byteArrayPageBuffer) Bounds() (min, max []byte) {
 	return bits.MinMaxByteArray(buf.values)
+}
+
+func (buf *byteArrayPageBuffer) Less(v1, v2 []byte) bool {
+	return bytes.Compare(v1, v2) < 0
 }
 
 func (buf *byteArrayPageBuffer) WriteValue(v Value) error {
@@ -449,6 +487,10 @@ func (buf *fixedLenByteArrayPageBuffer) Bounds() (min, max []byte) {
 	return bits.MinMaxFixedLenByteArray(buf.size, buf.data)
 }
 
+func (buf *fixedLenByteArrayPageBuffer) Less(v1, v2 []byte) bool {
+	return bytes.Compare(v1, v2) < 0
+}
+
 func (buf *fixedLenByteArrayPageBuffer) WriteValue(v Value) error {
 	if kind := v.Kind(); kind != FixedLenByteArray {
 		panic("cannot write " + kind.String() + " value to parquet column of type FIXED_LEN_BYTE_ARRAY")
@@ -482,6 +524,12 @@ func (buf uint32PageBuffer) Bounds() (min, max []byte) {
 	return buf.min[:], buf.max[:]
 }
 
+func (buf uint32PageBuffer) Less(v1, v2 []byte) bool {
+	u1 := binary.LittleEndian.Uint32(v1)
+	u2 := binary.LittleEndian.Uint32(v2)
+	return u1 < u2
+}
+
 type uint64PageBuffer struct{ *int64PageBuffer }
 
 func (buf uint64PageBuffer) Bounds() (min, max []byte) {
@@ -489,6 +537,12 @@ func (buf uint64PageBuffer) Bounds() (min, max []byte) {
 	binary.LittleEndian.PutUint64(buf.min[:], min64)
 	binary.LittleEndian.PutUint64(buf.max[:], max64)
 	return buf.min[:], buf.max[:]
+}
+
+func (buf uint64PageBuffer) Less(v1, v2 []byte) bool {
+	u1 := binary.LittleEndian.Uint64(v1)
+	u2 := binary.LittleEndian.Uint64(v2)
+	return u1 < u2
 }
 
 type uuidPageBuffer struct{ *fixedLenByteArrayPageBuffer }
