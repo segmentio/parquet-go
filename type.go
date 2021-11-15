@@ -30,8 +30,6 @@ type Type interface {
 
 	Length() int
 
-	//TypeLength() *int32
-
 	PhyiscalType() *format.Type
 
 	LogicalType() *format.LogicalType
@@ -90,6 +88,18 @@ var typeLengths = [...]int32{
 
 	0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37,
 	0x38, 0x39, 0x3A, 0x3B, 0x3C, 0x3D, 0x3E, 0x3F,
+}
+
+func typeLengthOf(t Type) *int32 {
+	switch n := t.Length(); {
+	case n == 0:
+		return nil
+	case n > 0 && n < len(typeLengths):
+		return &typeLengths[n]
+	default:
+		typeLength := int32(n)
+		return &typeLength
+	}
 }
 
 type primitiveType struct{}
@@ -601,7 +611,7 @@ type listType format.ListType
 
 func (t *listType) Kind() Kind { panic("cannot call Kind on parquet list type") }
 
-func (t *listType) Length() int { panic("cannot call Length on parquet list type") }
+func (t *listType) Length() int { return 0 }
 
 func (t *listType) PhyiscalType() *format.Type { return nil }
 
@@ -634,7 +644,7 @@ type mapType format.MapType
 
 func (t *mapType) Kind() Kind { panic("cannot call Kind on parquet map type") }
 
-func (t *mapType) Length() int { panic("cannot call Length on parquet map type") }
+func (t *mapType) Length() int { return 0 }
 
 func (t *mapType) PhyiscalType() *format.Type { return nil }
 
@@ -654,7 +664,7 @@ type nullType format.NullType
 
 func (t *nullType) Kind() Kind { panic("cannot call Kind on null parquet type") }
 
-func (t *nullType) Length() int { panic("cannot call Length on null parquet type") }
+func (t *nullType) Length() int { return 0 }
 
 func (t *nullType) PhyiscalType() *format.Type { return nil }
 

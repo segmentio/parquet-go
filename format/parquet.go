@@ -296,7 +296,7 @@ type SchemaElement struct {
 	// Otherwise, if specified, this is the maximum bit length to store any of the values.
 	// (e.g. a low cardinality INT col could have this set to 3).  Note that this is
 	// in the schema, and therefore fixed for the entire file.
-	TypeLength int32 `thrift:"2,optional"`
+	TypeLength *int32 `thrift:"2,optional"`
 
 	// repetition of the field. The root of the schema does not have a repetition_type.
 	// All other nodes must have one.

@@ -286,12 +286,13 @@ func (c *ColumnPages) DecodeByteArray(repetitions, definitions []int32, values [
 
 func (c *ColumnPages) DecodeFixedLenByteArray(repetitions, definitions []int32, values []byte) (int, error) {
 	return c.decode(FixedLenByteArray, repetitions, definitions, func(d decoding) error {
-		_, err := c.values.DecodeFixedLenByteArray(int(c.column.schema.TypeLength), values[:d.numValues])
+		typeLength := schemaElementType{c.column.schema}.Length()
+		_, err := c.values.DecodeFixedLenByteArray(typeLength, values[:d.numValues])
 		if err != nil {
 			return err
 		}
 		if len(d.definitions) != d.numValues {
-			size := int(c.column.schema.TypeLength)
+			size := typeLength
 			zero := make([]byte, size)
 			decodeNulls(d.definitions, d.numValues, d.maxDefinitionLevel, func(i, j int) {
 				vi := values[i*size : i*size+size]
@@ -372,7 +373,7 @@ func (c *ColumnPages) decode(valueType Kind, repetitions, definitions []int32, d
 		}
 
 		c.values = lookupEncoding(enc).NewDecoder(c.page)
-		c.values.SetBitWidth(int(c.column.schema.TypeLength))
+		c.values.SetBitWidth(schemaElementType{c.column.schema}.Length())
 	}
 
 	depth := c.column.depth

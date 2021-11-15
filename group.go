@@ -62,7 +62,7 @@ func (g Group) Object(value reflect.Value) Object {
 type groupType struct{}
 
 func (groupType) Kind() Kind                               { panic("cannot call Kind on parquet group type") }
-func (groupType) Length() int                              { panic("cannot call Length on parquet group type") }
+func (groupType) Length() int                              { return 0 }
 func (groupType) PhyiscalType() *format.Type               { return nil }
 func (groupType) LogicalType() *format.LogicalType         { return nil }
 func (groupType) ConvertedType() *deprecated.ConvertedType { return nil }

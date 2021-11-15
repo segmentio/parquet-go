@@ -250,7 +250,10 @@ func (t schemaElementType) Kind() Kind {
 }
 
 func (t schemaElementType) Length() int {
-	return int(t.TypeLength)
+	if t.TypeLength != nil {
+		return int(*t.TypeLength)
+	}
+	return 0
 }
 
 func (t schemaElementType) PhyiscalType() *format.Type {
