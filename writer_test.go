@@ -35,7 +35,7 @@ func generateParquetFile(rows ...interface{}) ([]byte, error) {
 	return ptools("dump", path)
 }
 
-type RowType struct {
+type firstAndLastName struct {
 	FirstName string `parquet:"first_name"`
 	LastName  string `parquet:"last_name"`
 }
@@ -46,20 +46,9 @@ var writerTests = []struct {
 }{
 	{
 		rows: []interface{}{
-			&RowType{
-				FirstName: "Han",
-				LastName:  "Solo",
-			},
-
-			&RowType{
-				FirstName: "Leia",
-				LastName:  "Skywalker",
-			},
-
-			&RowType{
-				FirstName: "Luke",
-				LastName:  "Skywalker",
-			},
+			&firstAndLastName{FirstName: "Han", LastName: "Solo"},
+			&firstAndLastName{FirstName: "Leia", LastName: "Skywalker"},
+			&firstAndLastName{FirstName: "Luke", LastName: "Skywalker"},
 		},
 		dump: `row group 0
 --------------------------------------------------------------------------------
