@@ -112,16 +112,14 @@ type PageBuffer interface {
 
 	WriteValue(Value) error
 
-	WriteTo(encoding.Encoder) error
+	WriteTo(encoding.Encoder) (numValues, distinctCount int, err error)
 }
 
 type booleanPageBuffer struct {
-	typ      Type
-	min      [1]byte
-	max      [1]byte
-	hasFalse bool
-	hasTrue  bool
-	values   []bool
+	typ    Type
+	min    [1]byte
+	max    [1]byte
+	values []bool
 }
 
 func newBooleanPageBuffer(typ Type, bufferSize int) *booleanPageBuffer {
@@ -132,22 +130,37 @@ func newBooleanPageBuffer(typ Type, bufferSize int) *booleanPageBuffer {
 }
 
 func (buf *booleanPageBuffer) Reset() {
-	buf.hasFalse = false
-	buf.hasTrue = false
 	buf.values = buf.values[:0]
+}
+
+func (buf *booleanPageBuffer) scan() (hasTrue, hasFalse bool) {
+	for _, value := range buf.values {
+		if value {
+			hasTrue = true
+		} else {
+			hasFalse = true
+		}
+		if hasTrue && hasFalse {
+			break
+		}
+	}
+	return hasTrue, hasFalse
 }
 
 func (buf *booleanPageBuffer) Bounds() (min, max []byte) {
 	buf.min[0] = 0
 	buf.max[0] = 0
+
 	if len(buf.values) > 0 {
-		if !buf.hasFalse {
+		hasTrue, hasFalse := buf.scan()
+		if !hasFalse {
 			buf.min[0] = 1
 		}
-		if buf.hasTrue {
+		if hasTrue {
 			buf.max[0] = 1
 		}
 	}
+
 	return buf.min[:], buf.max[:]
 }
 
@@ -162,16 +175,30 @@ func (buf *booleanPageBuffer) WriteValue(v Value) error {
 	if len(buf.values) == cap(buf.values) {
 		return ErrBufferFull
 	}
-	value := v.Boolean()
-	buf.hasFalse = buf.hasFalse || !value
-	buf.hasTrue = buf.hasTrue || value
-	buf.values = append(buf.values, value)
+	buf.values = append(buf.values, v.Boolean())
 	return nil
 }
 
-func (buf *booleanPageBuffer) WriteTo(enc encoding.Encoder) error {
+func (buf *booleanPageBuffer) WriteTo(enc encoding.Encoder) (int, int, error) {
+	defer buf.Reset()
+
+	hasTrue, hasFalse := buf.scan()
+	distinctCount := 0
+	if hasTrue {
+		distinctCount++
+	}
+	if hasFalse {
+		distinctCount++
+	}
+
+	values := buf.values
 	enc.SetBitWidth(1)
-	return enc.EncodeBoolean(buf.values)
+
+	if err := enc.EncodeBoolean(values); err != nil {
+		return 0, 0, err
+	}
+
+	return len(values), distinctCount, nil
 }
 
 type int32PageBuffer struct {
@@ -216,9 +243,17 @@ func (buf *int32PageBuffer) WriteValue(v Value) error {
 	return nil
 }
 
-func (buf *int32PageBuffer) WriteTo(enc encoding.Encoder) error {
-	enc.SetBitWidth(bits.MaxLen32(buf.values))
-	return enc.EncodeInt32(buf.values)
+func (buf *int32PageBuffer) WriteTo(enc encoding.Encoder) (int, int, error) {
+	defer buf.Reset()
+	values := buf.values
+	enc.SetBitWidth(bits.MaxLen32(values))
+
+	if err := enc.EncodeInt32(values); err != nil {
+		return 0, 0, err
+	}
+
+	bits.SortInt32(values)
+	return len(values), bits.CountDistinctInt32(values), nil
 }
 
 type int64PageBuffer struct {
@@ -252,9 +287,17 @@ func (buf *int64PageBuffer) Less(v1, v2 []byte) bool {
 	return i1 < i2
 }
 
-func (buf *int64PageBuffer) WriteTo(enc encoding.Encoder) error {
-	enc.SetBitWidth(bits.MaxLen64(buf.values))
-	return enc.EncodeInt64(buf.values)
+func (buf *int64PageBuffer) WriteTo(enc encoding.Encoder) (int, int, error) {
+	defer buf.Reset()
+	values := buf.values
+	enc.SetBitWidth(bits.MaxLen64(values))
+
+	if err := enc.EncodeInt64(values); err != nil {
+		return 0, 0, err
+	}
+
+	bits.SortInt64(values)
+	return len(values), bits.CountDistinctInt64(values), nil
 }
 
 func (buf *int64PageBuffer) WriteValue(v Value) error {
@@ -306,9 +349,17 @@ func (buf *int96PageBuffer) WriteValue(v Value) error {
 	return nil
 }
 
-func (buf *int96PageBuffer) WriteTo(enc encoding.Encoder) error {
-	enc.SetBitWidth(bits.MaxLen96(buf.values))
-	return enc.EncodeInt96(buf.values)
+func (buf *int96PageBuffer) WriteTo(enc encoding.Encoder) (int, int, error) {
+	defer buf.Reset()
+	values := buf.values
+	enc.SetBitWidth(bits.MaxLen96(values))
+
+	if err := enc.EncodeInt96(values); err != nil {
+		return 0, 0, err
+	}
+
+	bits.SortInt96(values)
+	return len(values), bits.CountDistinctInt96(values), nil
 }
 
 type floatPageBuffer struct {
@@ -353,9 +404,17 @@ func (buf *floatPageBuffer) WriteValue(v Value) error {
 	return nil
 }
 
-func (buf *floatPageBuffer) WriteTo(enc encoding.Encoder) error {
+func (buf *floatPageBuffer) WriteTo(enc encoding.Encoder) (int, int, error) {
+	defer buf.Reset()
+	values := buf.values
 	enc.SetBitWidth(32)
-	return enc.EncodeFloat(buf.values)
+
+	if err := enc.EncodeFloat(values); err != nil {
+		return 0, 0, err
+	}
+
+	bits.SortFloat32(values)
+	return len(values), bits.CountDistinctFloat32(values), nil
 }
 
 type doublePageBuffer struct {
@@ -372,6 +431,10 @@ func newDoublePageBuffer(typ Type, bufferSize int) *doublePageBuffer {
 	}
 }
 
+func (buf *doublePageBuffer) Reset() {
+	buf.values = buf.values[:0]
+}
+
 func (buf *doublePageBuffer) Bounds() (min, max []byte) {
 	min64, max64 := bits.MinMaxFloat64(buf.values)
 	binary.LittleEndian.PutUint64(buf.min[:], math.Float64bits(min64))
@@ -385,10 +448,6 @@ func (buf *doublePageBuffer) Less(v1, v2 []byte) bool {
 	return d1 < d2
 }
 
-func (buf *doublePageBuffer) Reset() {
-	buf.values = buf.values[:0]
-}
-
 func (buf *doublePageBuffer) WriteValue(v Value) error {
 	if kind := v.Kind(); kind != Double {
 		panic("cannot write " + kind.String() + " value to parquet column of type DOUBLE")
@@ -400,9 +459,17 @@ func (buf *doublePageBuffer) WriteValue(v Value) error {
 	return nil
 }
 
-func (buf *doublePageBuffer) WriteTo(enc encoding.Encoder) error {
+func (buf *doublePageBuffer) WriteTo(enc encoding.Encoder) (int, int, error) {
+	defer buf.Reset()
+	values := buf.values
 	enc.SetBitWidth(64)
-	return enc.EncodeDouble(buf.values)
+
+	if err := enc.EncodeDouble(values); err != nil {
+		return 0, 0, err
+	}
+
+	bits.SortFloat64(values)
+	return len(values), bits.CountDistinctFloat64(values), nil
 }
 
 type byteArrayPageBuffer struct {
@@ -460,9 +527,17 @@ func (buf *byteArrayPageBuffer) write(value []byte) error {
 	return nil
 }
 
-func (buf *byteArrayPageBuffer) WriteTo(enc encoding.Encoder) error {
+func (buf *byteArrayPageBuffer) WriteTo(enc encoding.Encoder) (int, int, error) {
+	defer buf.Reset()
+	values := buf.values
 	enc.SetBitWidth(0)
-	return enc.EncodeByteArray(buf.values)
+
+	if err := enc.EncodeByteArray(values); err != nil {
+		return 0, 0, err
+	}
+
+	bits.SortByteArray(values)
+	return len(values), bits.CountDistinctByteArray(values), nil
 }
 
 type fixedLenByteArrayPageBuffer struct {
@@ -510,9 +585,18 @@ func (buf *fixedLenByteArrayPageBuffer) write(value []byte) error {
 	return nil
 }
 
-func (buf *fixedLenByteArrayPageBuffer) WriteTo(enc encoding.Encoder) error {
+func (buf *fixedLenByteArrayPageBuffer) WriteTo(enc encoding.Encoder) (int, int, error) {
+	defer buf.Reset()
+	size := buf.size
+	data := buf.data
 	enc.SetBitWidth(0)
-	return enc.EncodeFixedLenByteArray(buf.size, buf.data)
+
+	if err := enc.EncodeFixedLenByteArray(size, data); err != nil {
+		return 0, 0, err
+	}
+
+	bits.SortFixedLenByteArray(size, data)
+	return len(data) / size, bits.CountDistinctFixedLenByteArray(size, data), nil
 }
 
 type uint32PageBuffer struct{ *int32PageBuffer }
