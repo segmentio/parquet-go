@@ -23,13 +23,14 @@ type Value struct {
 }
 
 func ValueOf(k Kind, v interface{}) Value {
-	if v == nil {
-		return Value{kind: k + 1}
-	}
 	return makeValue(k, reflect.ValueOf(v))
 }
 
 func makeValue(k Kind, v reflect.Value) Value {
+	if !v.IsValid() {
+		return Value{}
+	}
+
 	switch k {
 	case Boolean:
 		return makeValueBoolean(k, v.Bool())

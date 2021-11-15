@@ -74,12 +74,15 @@ func (n *leafNode) RowOf(reflect.Value) Row {
 	panic("cannot create row from leaf parquet node")
 }
 func (n *leafNode) Object(value reflect.Value) Object {
-	return &leafObject{value: makeValue(n.typ.Kind(), value)}
+	return &leafObject{node: n, value: makeValue(n.typ.Kind(), value)}
 }
 
-type leafObject struct{ value Value }
+type leafObject struct {
+	node  *leafNode
+	value Value
+}
 
 func (obj *leafObject) Len() int                  { return 0 }
 func (obj *leafObject) Index(int) Object          { panic("cannot call Index on leaf object") }
 func (obj *leafObject) Value() Value              { return obj.value }
-func (obj *leafObject) Reset(value reflect.Value) { obj.value = makeValue(obj.value.Kind(), value) }
+func (obj *leafObject) Reset(value reflect.Value) { obj.value = makeValue(obj.node.typ.Kind(), value) }

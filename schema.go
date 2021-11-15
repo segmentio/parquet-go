@@ -19,7 +19,11 @@ func NewSchema(name string, root Node) *Schema {
 }
 
 func SchemaOf(model interface{}) *Schema {
-	return NamedSchemaOf(reflect.TypeOf(model).Name(), model)
+	t := reflect.TypeOf(model)
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+	return NamedSchemaOf(t.Name(), model)
 }
 
 func NamedSchemaOf(name string, model interface{}) *Schema {
@@ -89,12 +93,13 @@ func structNodeOf(t reflect.Type) *structNode {
 
 func (s *structNode) init(t reflect.Type, index []int) {
 	for i, n := 0, t.NumField(); i < n; i++ {
+		fieldIndex := index[:len(index):len(index)]
+		fieldIndex = append(fieldIndex, i)
+
 		if f := t.Field(i); f.Anonymous {
-			subindex := index[:len(index):len(index)]
-			subindex = append(subindex, i)
-			s.init(f.Type, subindex)
+			s.init(f.Type, fieldIndex)
 		} else if f.IsExported() {
-			s.fields = append(s.fields, makeStructField(f, index))
+			s.fields = append(s.fields, makeStructField(f, fieldIndex))
 		}
 	}
 }
@@ -254,7 +259,7 @@ func nodeOf(t reflect.Type) Node {
 	case reflect.Float64:
 		return Decimal(0, 18, DoubleType)
 	case reflect.String:
-		return UTF8()
+		return String()
 	case reflect.Ptr:
 		return nodeOf(t.Elem())
 	case reflect.Struct:

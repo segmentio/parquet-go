@@ -106,7 +106,7 @@ type ListType struct{}   // see LogicalTypes.md
 type EnumType struct{}   // allowed for BINARY, must be encoded with UTF-8
 type DateType struct{}   // allowed for INT32
 
-func (*StringType) String() string { return "UTF8" }
+func (*StringType) String() string { return "STRING" }
 func (*UUIDType) String() string   { return "UUID" }
 func (*MapType) String() string    { return "MAP" }
 func (*ListType) String() string   { return "LIST" }

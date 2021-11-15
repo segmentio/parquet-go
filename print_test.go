@@ -18,9 +18,9 @@ func TestPrint(t *testing.T) {
 		},
 
 		{
-			node: parquet.Group{"name": parquet.UTF8()},
+			node: parquet.Group{"name": parquet.String()},
 			print: `message Test {
-	required binary name (UTF8);
+	required binary name (STRING);
 }`,
 		},
 
@@ -53,16 +53,16 @@ func TestPrint(t *testing.T) {
 		},
 
 		{
-			node: parquet.Group{"name": parquet.Optional(parquet.UTF8())},
+			node: parquet.Group{"name": parquet.Optional(parquet.String())},
 			print: `message Test {
-	optional binary name (UTF8);
+	optional binary name (STRING);
 }`,
 		},
 
 		{
-			node: parquet.Group{"name": parquet.Repeated(parquet.UTF8())},
+			node: parquet.Group{"name": parquet.Repeated(parquet.String())},
 			print: `message Test {
-	repeated binary name (UTF8);
+	repeated binary name (STRING);
 }`,
 		},
 
@@ -186,11 +186,11 @@ func TestPrint(t *testing.T) {
 		},
 
 		{
-			node: parquet.Group{"names": parquet.List(parquet.UTF8())},
+			node: parquet.Group{"names": parquet.List(parquet.String())},
 			print: `message Test {
 	required group names (LIST) {
 		repeated group list {
-			required binary element (UTF8);
+			required binary element (STRING);
 		}
 	}
 }`,
@@ -200,8 +200,8 @@ func TestPrint(t *testing.T) {
 			node: parquet.Group{
 				"keys": parquet.List(
 					parquet.Group{
-						"key":   parquet.UTF8(),
-						"value": parquet.UTF8(),
+						"key":   parquet.String(),
+						"value": parquet.String(),
 					},
 				),
 			},
@@ -209,8 +209,8 @@ func TestPrint(t *testing.T) {
 	required group keys (LIST) {
 		repeated group list {
 			required group element {
-				required binary key (UTF8);
-				required binary value (UTF8);
+				required binary key (STRING);
+				required binary value (STRING);
 			}
 		}
 	}
@@ -220,15 +220,15 @@ func TestPrint(t *testing.T) {
 		{
 			node: parquet.Group{
 				"pairs": parquet.Map(
-					parquet.UTF8(),
-					parquet.UTF8(),
+					parquet.String(),
+					parquet.String(),
 				),
 			},
 			print: `message Test {
 	required group pairs (MAP) {
 		repeated group key_value {
-			required binary key (UTF8);
-			required binary value (UTF8);
+			required binary key (STRING);
+			required binary value (STRING);
 		}
 	}
 }`,

@@ -9,7 +9,7 @@ require (
 	github.com/klauspost/compress v1.13.6
 	github.com/pierrec/lz4/v4 v4.1.9
 	github.com/segmentio/asm v1.1.1
-	github.com/segmentio/encoding v0.3.0
+	github.com/segmentio/encoding v0.3.2-0.20211115084626-61ab87969342
 )
 
 require (

@@ -2,6 +2,7 @@ package parquet
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"math"
@@ -15,9 +16,11 @@ import (
 )
 
 type WriterConfig struct {
-	PageBufferSize int
+	CreatedBy string
 
 	ColumnChunkBuffers BufferPool
+
+	PageBufferSize int
 
 	RowGroupTargetSize int64
 }
@@ -38,25 +41,104 @@ type writerOption func(*WriterConfig)
 
 func (opt writerOption) Configure(config *WriterConfig) { opt(config) }
 
-func PageBufferSize(size int) WriterOption {
-	return writerOption(func(config *WriterConfig) { config.PageBufferSize = size })
+func CreatedBy(createdBy string) WriterOption {
+	return writerOption(func(config *WriterConfig) { config.CreatedBy = createdBy })
 }
 
 func ColumnChunkBuffers(buffers BufferPool) WriterOption {
 	return writerOption(func(config *WriterConfig) { config.ColumnChunkBuffers = buffers })
 }
 
+func PageBufferSize(size int) WriterOption {
+	return writerOption(func(config *WriterConfig) { config.PageBufferSize = size })
+}
+
 func RowGroupTargetSize(size int64) WriterOption {
 	return writerOption(func(config *WriterConfig) { config.RowGroupTargetSize = size })
 }
 
+type Writer struct {
+	initialized bool
+	closed      bool
+	numRows     int64
+	rowGroups   *RowGroupWriter
+}
+
+func NewWriter(writer io.Writer, schema *Schema, options ...WriterOption) *Writer {
+	return &Writer{
+		rowGroups: NewRowGroupWriter(writer, schema, options...),
+	}
+}
+
+func (w *Writer) writeMagicHeader() error {
+	_, err := io.WriteString(w.rowGroups.writer, "PAR1")
+	return err
+}
+
+func (w *Writer) Close() error {
+	if w.closed {
+		return nil
+	}
+	w.closed = true
+
+	if !w.initialized {
+		w.initialized = true
+
+		if err := w.writeMagicHeader(); err != nil {
+			return err
+		}
+	}
+
+	if err := w.rowGroups.Close(); err != nil {
+		return err
+	}
+
+	footer, err := thrift.Marshal(new(thrift.CompactProtocol), &format.FileMetaData{
+		Version:          1,
+		Schema:           w.rowGroups.Schema(),
+		NumRows:          w.numRows,
+		RowGroups:        w.rowGroups.RowGroups(),
+		KeyValueMetadata: nil, // TODO
+		CreatedBy:        w.rowGroups.config.CreatedBy,
+		ColumnOrders:     nil, // TODOEncr
+	})
+	if err != nil {
+		return err
+	}
+
+	length := len(footer)
+	footer = append(footer, 0, 0, 0, 0)
+	footer = append(footer, "PAR1"...)
+	binary.LittleEndian.PutUint32(footer[length:], uint32(length))
+
+	_, err = w.rowGroups.writer.Write(footer)
+	return err
+}
+
+func (w *Writer) WriteRow(row interface{}) error {
+	if !w.initialized {
+		w.initialized = true
+
+		if err := w.writeMagicHeader(); err != nil {
+			return err
+		}
+	}
+
+	if err := w.rowGroups.WriteRow(row); err != nil {
+		return err
+	}
+
+	w.numRows++
+	return nil
+}
+
 type RowGroupWriter struct {
 	writer io.Writer
-	schema Node
 	object Object
 	row    Row
 
 	columns   []*rowGroupColumn
+	schema    []format.SchemaElement
 	rowGroups []format.RowGroup
 
 	numRows    int64
@@ -78,10 +160,9 @@ type rowGroupColumn struct {
 	numValues int64
 }
 
-func NewRowGroupWriter(writer io.Writer, schema Node, options ...WriterOption) *RowGroupWriter {
+func NewRowGroupWriter(writer io.Writer, schema *Schema, options ...WriterOption) *RowGroupWriter {
 	rgw := &RowGroupWriter{
 		writer: writer,
-		schema: schema,
 		object: schema.Object(reflect.Value{}),
 		// Assume this is the first row group in the file, it starts after the
 		// "PAR1" magic number.
@@ -94,17 +175,53 @@ func NewRowGroupWriter(writer io.Writer, schema Node, options ...WriterOption) *
 		rgw.config.ColumnChunkBuffers = NewBufferPool()
 	}
 
-	rgw.init(schema, nil, 0, 0)
+	if rgw.config.PageBufferSize == 0 {
+		rgw.config.PageBufferSize = 2 * 1024 * 1024
+	}
+
+	if rgw.config.RowGroupTargetSize == 0 {
+		rgw.config.RowGroupTargetSize = 128 * 1024 * 1024
+	}
+
+	rgw.init(schema, []string{schema.Name()}, 0, 0)
 	return rgw
 }
 
 func (rgw *RowGroupWriter) init(node Node, path []string, maxRepetitionLevel, maxDefinitionLevel int32) {
+	nodeType := node.Type()
+
 	if !node.Required() {
 		maxDefinitionLevel++
 	}
 	if node.Repeated() {
 		maxRepetitionLevel++
 	}
+
+	repetitionType := format.Required
+	switch {
+	case node.Optional():
+		repetitionType = format.Optional
+	case node.Repeated():
+		repetitionType = format.Repeated
+	}
+
+	schemaElementType := format.Type(0)
+	schemaElementTypeLength := int32(0)
+	numChildren := node.NumChildren()
+	if numChildren == 0 {
+		schemaElementType = format.Type(nodeType.Kind())
+		schemaElementTypeLength = int32(nodeType.Length())
+	}
+
+	rgw.schema = append(rgw.schema, format.SchemaElement{
+		Type:           schemaElementType,
+		TypeLength:     schemaElementTypeLength,
+		RepetitionType: repetitionType,
+		Name:           path[len(path)-1],
+		NumChildren:    int32(node.NumChildren()),
+		ConvertedType:  nodeType.ConvertedType(),
+		LogicalType:    nodeType.LogicalType(),
+	})
 
 	if names := node.ChildNames(); len(names) > 0 {
 		base := path[:len(path):len(path)]
@@ -113,8 +230,9 @@ func (rgw *RowGroupWriter) init(node Node, path []string, maxRepetitionLevel, ma
 			rgw.init(node.ChildByName(name), append(base, name), maxRepetitionLevel, maxDefinitionLevel)
 		}
 	} else {
+
 		column := &rowGroupColumn{
-			typ:                format.Type(node.Type().Kind()),
+			typ:                format.Type(nodeType.Kind()),
 			codec:              Uncompressed.CompressionCodec(),
 			path:               path,
 			buffer:             rgw.config.ColumnChunkBuffers.GetBuffer(),
@@ -126,7 +244,7 @@ func (rgw *RowGroupWriter) init(node Node, path []string, maxRepetitionLevel, ma
 			column.buffer,
 			&Uncompressed,
 			&Plain,
-			node.Type().NewPageBuffer(rgw.config.PageBufferSize),
+			nodeType.NewPageBuffer(rgw.config.PageBufferSize),
 		)
 
 		rgw.columns = append(rgw.columns, column)
@@ -135,6 +253,10 @@ func (rgw *RowGroupWriter) init(node Node, path []string, maxRepetitionLevel, ma
 
 func (rgw *RowGroupWriter) RowGroups() []format.RowGroup {
 	return rgw.rowGroups
+}
+
+func (rgw *RowGroupWriter) Schema() []format.SchemaElement {
+	return rgw.schema
 }
 
 func (rgw *RowGroupWriter) Close() error {
@@ -378,6 +500,9 @@ func (ccw *ColumnChunkWriter) Flush() error {
 	if err != nil {
 		return err
 	}
+	if numValues == 0 {
+		return nil
+	}
 
 	ccw.header.buffer.Reset()
 	ccw.header.encoder.Reset(ccw.header.protocol.NewWriter(&ccw.header.buffer))
@@ -428,15 +553,15 @@ func (ccw *ColumnChunkWriter) Flush() error {
 		Count:    1,
 	})
 
+	ccw.numNulls = 0
+	ccw.numRows = 0
+
 	if _, err := ccw.header.buffer.WriteTo(ccw.writer); err != nil {
 		return err
 	}
 	if _, err := ccw.page.buffer.WriteTo(ccw.writer); err != nil {
 		return err
 	}
-
-	ccw.numNulls = 0
-	ccw.numRows = 0
 	return nil
 }
 

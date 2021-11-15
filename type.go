@@ -99,7 +99,7 @@ type byteArrayType struct{ primitiveType }
 
 func (t byteArrayType) Kind() Kind { return ByteArray }
 
-func (t byteArrayType) Length() int { panic("cannot call Length on parquet binary type") }
+func (t byteArrayType) Length() int { return 0 }
 
 func (t byteArrayType) NewPageBuffer(bufferSize int) PageBuffer {
 	return newByteArrayPageBuffer(t, bufferSize)
@@ -238,13 +238,13 @@ func (t *decimalType) ConvertedType() deprecated.ConvertedType { return deprecat
 
 func (t *decimalType) NewPageBuffer(bufferSize int) PageBuffer { panic("NOT IMPLEMENTED") }
 
-func UTF8() Node { return &leafNode{typ: &stringType{}} }
+func String() Node { return &leafNode{typ: &stringType{}} }
 
 type stringType format.StringType
 
 func (t *stringType) Kind() Kind { return ByteArray }
 
-func (t *stringType) Length() int { panic("cannot call Length on parquet string type") }
+func (t *stringType) Length() int { return 0 }
 
 func (t *stringType) LogicalType() format.LogicalType {
 	return format.LogicalType{UTF8: (*format.StringType)(t)}
@@ -282,7 +282,7 @@ type enumType format.EnumType
 
 func (t *enumType) Kind() Kind { return ByteArray }
 
-func (t *enumType) Length() int { panic("cannot call Length on parquet enum type") }
+func (t *enumType) Length() int { return 0 }
 
 func (t *enumType) LogicalType() format.LogicalType {
 	return format.LogicalType{Enum: (*format.EnumType)(t)}
@@ -300,7 +300,7 @@ type jsonType format.JsonType
 
 func (t *jsonType) Kind() Kind { return ByteArray }
 
-func (t *jsonType) Length() int { panic("cannot call Length on parquet json type") }
+func (t *jsonType) Length() int { return 0 }
 
 func (t *jsonType) LogicalType() format.LogicalType {
 	return format.LogicalType{Json: (*format.JsonType)(t)}
@@ -318,7 +318,7 @@ type bsonType format.BsonType
 
 func (t *bsonType) Kind() Kind { return ByteArray }
 
-func (t *bsonType) Length() int { panic("cannot call Length on parquet bson type") }
+func (t *bsonType) Length() int { return 0 }
 
 func (t *bsonType) LogicalType() format.LogicalType {
 	return format.LogicalType{Bson: (*format.BsonType)(t)}

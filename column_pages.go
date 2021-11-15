@@ -339,7 +339,7 @@ func (c *ColumnPages) decode(valueType format.Type, repetitions, definitions []i
 			err = c.resetDataPageV1(c.page)
 
 		case format.DataPageV2:
-			enc = format.RLE
+			enc = h.DataPageHeaderV2.Encoding
 			repetitionsLength := int64(h.DataPageHeaderV2.RepetitionLevelsByteLength)
 			definitionsLength := int64(h.DataPageHeaderV2.DefinitionLevelsByteLength)
 			c.v2.repetitions.setDataPageV2Section(c.column.file, c.reader.offset, repetitionsLength)
