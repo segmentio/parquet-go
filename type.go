@@ -30,11 +30,24 @@ type Type interface {
 
 	Length() int
 
+	PhyiscalType() *format.Type
+
 	LogicalType() *format.LogicalType
 
 	ConvertedType() *deprecated.ConvertedType
 
 	NewPageBuffer(bufferSize int) PageBuffer
+}
+
+var physicalTypes = [...]format.Type{
+	0: format.Boolean,
+	1: format.Int32,
+	2: format.Int64,
+	3: format.Int96,
+	4: format.Float,
+	5: format.Double,
+	6: format.ByteArray,
+	7: format.FixedLenByteArray,
 }
 
 var convertedTypes = [...]deprecated.ConvertedType{
@@ -74,6 +87,8 @@ func (t booleanType) Kind() Kind { return Boolean }
 
 func (t booleanType) Length() int { return 1 }
 
+func (t booleanType) PhyiscalType() *format.Type { return &physicalTypes[Boolean] }
+
 func (t booleanType) NewPageBuffer(bufferSize int) PageBuffer {
 	return newBooleanPageBuffer(t, bufferSize)
 }
@@ -84,6 +99,8 @@ func (t int32Type) Kind() Kind { return Int32 }
 
 func (t int32Type) Length() int { return 32 }
 
+func (t int32Type) PhyiscalType() *format.Type { return &physicalTypes[Int32] }
+
 func (t int32Type) NewPageBuffer(bufferSize int) PageBuffer { return newInt32PageBuffer(t, bufferSize) }
 
 type int64Type struct{ primitiveType }
@@ -91,6 +108,8 @@ type int64Type struct{ primitiveType }
 func (t int64Type) Kind() Kind { return Int64 }
 
 func (t int64Type) Length() int { return 64 }
+
+func (t int64Type) PhyiscalType() *format.Type { return &physicalTypes[Int64] }
 
 func (t int64Type) NewPageBuffer(bufferSize int) PageBuffer { return newInt64PageBuffer(t, bufferSize) }
 
@@ -100,6 +119,8 @@ func (t int96Type) Kind() Kind { return Int96 }
 
 func (t int96Type) Length() int { return 96 }
 
+func (t int96Type) PhyiscalType() *format.Type { return &physicalTypes[Int96] }
+
 func (t int96Type) NewPageBuffer(bufferSize int) PageBuffer { return newInt96PageBuffer(t, bufferSize) }
 
 type floatType struct{ primitiveType }
@@ -108,6 +129,8 @@ func (t floatType) Kind() Kind { return Float }
 
 func (t floatType) Length() int { return 32 }
 
+func (t floatType) PhyiscalType() *format.Type { return &physicalTypes[Float] }
+
 func (t floatType) NewPageBuffer(bufferSize int) PageBuffer { return newFloatPageBuffer(t, bufferSize) }
 
 type doubleType struct{ primitiveType }
@@ -115,6 +138,8 @@ type doubleType struct{ primitiveType }
 func (t doubleType) Kind() Kind { return Double }
 
 func (t doubleType) Length() int { return 64 }
+
+func (t doubleType) PhyiscalType() *format.Type { return &physicalTypes[Double] }
 
 func (t doubleType) NewPageBuffer(bufferSize int) PageBuffer {
 	return newDoublePageBuffer(t, bufferSize)
@@ -125,6 +150,8 @@ type byteArrayType struct{ primitiveType }
 func (t byteArrayType) Kind() Kind { return ByteArray }
 
 func (t byteArrayType) Length() int { return 0 }
+
+func (t byteArrayType) PhyiscalType() *format.Type { return &physicalTypes[ByteArray] }
 
 func (t byteArrayType) NewPageBuffer(bufferSize int) PageBuffer {
 	return newByteArrayPageBuffer(t, bufferSize)
@@ -138,6 +165,8 @@ type fixedLenByteArrayType struct {
 func (t *fixedLenByteArrayType) Kind() Kind { return FixedLenByteArray }
 
 func (t *fixedLenByteArrayType) Length() int { return t.length }
+
+func (t *fixedLenByteArrayType) PhyiscalType() *format.Type { return &physicalTypes[FixedLenByteArray] }
 
 func (t *fixedLenByteArrayType) NewPageBuffer(bufferSize int) PageBuffer {
 	return newFixedLenByteArrayPageBuffer(t, bufferSize)
@@ -206,6 +235,14 @@ func (t *intType) Kind() Kind {
 
 func (t *intType) Length() int { return int(t.BitWidth) }
 
+func (t *intType) PhyiscalType() *format.Type {
+	if t.BitWidth == 64 {
+		return &physicalTypes[Int64]
+	} else {
+		return &physicalTypes[Int32]
+	}
+}
+
 func (t *intType) LogicalType() *format.LogicalType {
 	return &format.LogicalType{Integer: (*format.IntType)(t)}
 }
@@ -255,6 +292,8 @@ func (t *decimalType) Kind() Kind { return t.typ.Kind() }
 
 func (t *decimalType) Length() int { return t.typ.Length() }
 
+func (t *decimalType) PhyiscalType() *format.Type { return t.typ.PhyiscalType() }
+
 func (t *decimalType) LogicalType() *format.LogicalType {
 	return &format.LogicalType{Decimal: &t.decimal}
 }
@@ -272,6 +311,10 @@ type stringType format.StringType
 func (t *stringType) Kind() Kind { return ByteArray }
 
 func (t *stringType) Length() int { return 0 }
+
+func (t *stringType) PhyiscalType() *format.Type {
+	return &physicalTypes[ByteArray]
+}
 
 func (t *stringType) LogicalType() *format.LogicalType {
 	return &format.LogicalType{UTF8: (*format.StringType)(t)}
@@ -293,6 +336,10 @@ func (t *uuidType) Kind() Kind { return FixedLenByteArray }
 
 func (t *uuidType) Length() int { return 16 }
 
+func (t *uuidType) PhyiscalType() *format.Type {
+	return &physicalTypes[ByteArray]
+}
+
 func (t *uuidType) LogicalType() *format.LogicalType {
 	return &format.LogicalType{UUID: (*format.UUIDType)(t)}
 }
@@ -310,6 +357,10 @@ type enumType format.EnumType
 func (t *enumType) Kind() Kind { return ByteArray }
 
 func (t *enumType) Length() int { return 0 }
+
+func (t *enumType) PhyiscalType() *format.Type {
+	return &physicalTypes[ByteArray]
+}
 
 func (t *enumType) LogicalType() *format.LogicalType {
 	return &format.LogicalType{Enum: (*format.EnumType)(t)}
@@ -331,6 +382,10 @@ func (t *jsonType) Kind() Kind { return ByteArray }
 
 func (t *jsonType) Length() int { return 0 }
 
+func (t *jsonType) PhyiscalType() *format.Type {
+	return &physicalTypes[ByteArray]
+}
+
 func (t *jsonType) LogicalType() *format.LogicalType {
 	return &format.LogicalType{Json: (*format.JsonType)(t)}
 }
@@ -351,6 +406,10 @@ func (t *bsonType) Kind() Kind { return ByteArray }
 
 func (t *bsonType) Length() int { return 0 }
 
+func (t *bsonType) PhyiscalType() *format.Type {
+	return &physicalTypes[ByteArray]
+}
+
 func (t *bsonType) LogicalType() *format.LogicalType {
 	return &format.LogicalType{Bson: (*format.BsonType)(t)}
 }
@@ -370,6 +429,10 @@ type dateType format.DateType
 func (t *dateType) Kind() Kind { return Int32 }
 
 func (t *dateType) Length() int { return 32 }
+
+func (t *dateType) PhyiscalType() *format.Type {
+	return &physicalTypes[Int32]
+}
 
 func (t *dateType) LogicalType() *format.LogicalType {
 	return &format.LogicalType{Date: (*format.DateType)(t)}
@@ -445,6 +508,14 @@ func (t *timeType) Length() int {
 	}
 }
 
+func (t *timeType) PhyiscalType() *format.Type {
+	if t.Unit.Millis != nil {
+		return &physicalTypes[Int32]
+	} else {
+		return &physicalTypes[Int64]
+	}
+}
+
 func (t *timeType) LogicalType() *format.LogicalType {
 	return &format.LogicalType{Time: (*format.TimeType)(t)}
 }
@@ -477,6 +548,10 @@ type timestampType format.TimestampType
 func (t *timestampType) Kind() Kind { return Int64 }
 
 func (t *timestampType) Length() int { return 64 }
+
+func (t *timestampType) PhyiscalType() *format.Type {
+	return &physicalTypes[Int64]
+}
 
 func (t *timestampType) LogicalType() *format.LogicalType {
 	return &format.LogicalType{Timestamp: (*format.TimestampType)(t)}
@@ -511,6 +586,8 @@ func (t *listType) Kind() Kind { panic("cannot call Kind on parquet list type") 
 
 func (t *listType) Length() int { panic("cannot call Length on parquet list type") }
 
+func (t *listType) PhyiscalType() *format.Type { return nil }
+
 func (t *listType) LogicalType() *format.LogicalType {
 	return &format.LogicalType{List: (*format.ListType)(t)}
 }
@@ -542,6 +619,8 @@ func (t *mapType) Kind() Kind { panic("cannot call Kind on parquet map type") }
 
 func (t *mapType) Length() int { panic("cannot call Length on parquet map type") }
 
+func (t *mapType) PhyiscalType() *format.Type { return nil }
+
 func (t *mapType) LogicalType() *format.LogicalType {
 	return &format.LogicalType{Map: (*format.MapType)(t)}
 }
@@ -559,6 +638,8 @@ type nullType format.NullType
 func (t *nullType) Kind() Kind { panic("cannot call Kind on null parquet type") }
 
 func (t *nullType) Length() int { panic("cannot call Length on null parquet type") }
+
+func (t *nullType) PhyiscalType() *format.Type { return nil }
 
 func (t *nullType) LogicalType() *format.LogicalType {
 	return &format.LogicalType{Unknown: (*format.NullType)(t)}

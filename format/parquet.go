@@ -290,7 +290,7 @@ func (t *LogicalType) String() string {
 // The nodes are listed in depth first traversal order.
 type SchemaElement struct {
 	// Data type for this field. Not set if the current element is a non-leaf node.
-	Type Type `thrift:"1,optional"`
+	Type *Type `thrift:"1,optional"`
 
 	// If type is FixedLenByteArray, this is the byte length of the values.
 	// Otherwise, if specified, this is the maximum bit length to store any of the values.

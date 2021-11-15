@@ -180,7 +180,7 @@ func (c *ColumnPages) Statistics() *format.Statistics {
 }
 
 func (c *ColumnPages) DecodeBoolean(repetitions, definitions []int32, values []bool) (int, error) {
-	return c.decode(format.Boolean, repetitions, definitions, func(d decoding) error {
+	return c.decode(Boolean, repetitions, definitions, func(d decoding) error {
 		_, err := c.values.DecodeBoolean(values[:d.numValues])
 		if err != nil {
 			return err
@@ -195,7 +195,7 @@ func (c *ColumnPages) DecodeBoolean(repetitions, definitions []int32, values []b
 }
 
 func (c *ColumnPages) DecodeInt32(repetitions, definitions []int32, values []int32) (int, error) {
-	return c.decode(format.Int32, repetitions, definitions, func(d decoding) error {
+	return c.decode(Int32, repetitions, definitions, func(d decoding) error {
 		_, err := c.values.DecodeInt32(values[:d.numValues])
 		if err != nil {
 			return err
@@ -210,7 +210,7 @@ func (c *ColumnPages) DecodeInt32(repetitions, definitions []int32, values []int
 }
 
 func (c *ColumnPages) DecodeInt64(repetitions, definitions []int32, values []int64) (int, error) {
-	return c.decode(format.Int64, repetitions, definitions, func(d decoding) error {
+	return c.decode(Int64, repetitions, definitions, func(d decoding) error {
 		_, err := c.values.DecodeInt64(values[:d.numValues])
 		if err != nil {
 			return err
@@ -225,7 +225,7 @@ func (c *ColumnPages) DecodeInt64(repetitions, definitions []int32, values []int
 }
 
 func (c *ColumnPages) DecodeInt96(repetitions, definitions []int32, values [][12]byte) (int, error) {
-	return c.decode(format.Int96, repetitions, definitions, func(d decoding) error {
+	return c.decode(Int96, repetitions, definitions, func(d decoding) error {
 		_, err := c.values.DecodeInt96(values[:d.numValues])
 		if err != nil {
 			return err
@@ -240,7 +240,7 @@ func (c *ColumnPages) DecodeInt96(repetitions, definitions []int32, values [][12
 }
 
 func (c *ColumnPages) DecodeFloat(repetitions, definitions []int32, values []float32) (int, error) {
-	return c.decode(format.Float, repetitions, definitions, func(d decoding) error {
+	return c.decode(Float, repetitions, definitions, func(d decoding) error {
 		_, err := c.values.DecodeFloat(values[:d.numValues])
 		if err != nil {
 			return err
@@ -255,7 +255,7 @@ func (c *ColumnPages) DecodeFloat(repetitions, definitions []int32, values []flo
 }
 
 func (c *ColumnPages) DecodeDouble(repetitions, definitions []int32, values []float64) (int, error) {
-	return c.decode(format.Double, repetitions, definitions, func(d decoding) error {
+	return c.decode(Double, repetitions, definitions, func(d decoding) error {
 		_, err := c.values.DecodeDouble(values[:d.numValues])
 		if err != nil {
 			return err
@@ -270,7 +270,7 @@ func (c *ColumnPages) DecodeDouble(repetitions, definitions []int32, values []fl
 }
 
 func (c *ColumnPages) DecodeByteArray(repetitions, definitions []int32, values [][]byte) (int, error) {
-	return c.decode(format.ByteArray, repetitions, definitions, func(d decoding) error {
+	return c.decode(ByteArray, repetitions, definitions, func(d decoding) error {
 		_, err := c.values.DecodeByteArray(values[:d.numValues])
 		if err != nil {
 			return err
@@ -285,7 +285,7 @@ func (c *ColumnPages) DecodeByteArray(repetitions, definitions []int32, values [
 }
 
 func (c *ColumnPages) DecodeFixedLenByteArray(repetitions, definitions []int32, values []byte) (int, error) {
-	return c.decode(format.FixedLenByteArray, repetitions, definitions, func(d decoding) error {
+	return c.decode(FixedLenByteArray, repetitions, definitions, func(d decoding) error {
 		_, err := c.values.DecodeFixedLenByteArray(int(c.column.schema.TypeLength), values[:d.numValues])
 		if err != nil {
 			return err
@@ -312,8 +312,8 @@ type decoding struct {
 	maxRepetitionLevel int
 }
 
-func (c *ColumnPages) decode(valueType format.Type, repetitions, definitions []int32, decode func(decoding) error) (int, error) {
-	if columnType := c.column.schema.Type; columnType != valueType {
+func (c *ColumnPages) decode(valueType Kind, repetitions, definitions []int32, decode func(decoding) error) (int, error) {
+	if columnType := (schemaElementType{c.column.schema}).Kind(); columnType != valueType {
 		return 0, fmt.Errorf("cannot decode %s column into values of type %s", columnType, valueType)
 	}
 

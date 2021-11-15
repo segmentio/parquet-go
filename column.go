@@ -115,7 +115,7 @@ func (c *Column) String() string {
 			c.maxRepetitionLevel,
 			c.maxDefinitionLevel)
 
-	case c.schema.Type == format.FixedLenByteArray:
+	case c.Type().Kind() == FixedLenByteArray:
 		return fmt.Sprintf("%s{%s(%d),%s,R=%d,D=%d}",
 			c.schema.Name,
 			c.schema.Type,
@@ -243,11 +243,18 @@ func (c columnsByName) Swap(i, j int) {
 type schemaElementType struct{ *format.SchemaElement }
 
 func (t schemaElementType) Kind() Kind {
-	return Kind(t.Type)
+	if t.Type != nil {
+		return Kind(*t.Type)
+	}
+	return -1
 }
 
 func (t schemaElementType) Length() int {
 	return int(t.TypeLength)
+}
+
+func (t schemaElementType) PhyiscalType() *format.Type {
+	return t.SchemaElement.Type
 }
 
 func (t schemaElementType) LogicalType() *format.LogicalType {
@@ -259,22 +266,22 @@ func (t schemaElementType) ConvertedType() *deprecated.ConvertedType {
 }
 
 func (t schemaElementType) NewPageBuffer(bufferSize int) PageBuffer {
-	switch t.Type {
-	case format.Boolean:
+	switch t.Kind() {
+	case Boolean:
 		return newBooleanPageBuffer(t, bufferSize)
-	case format.Int32:
+	case Int32:
 		return newInt32PageBuffer(t, bufferSize)
-	case format.Int64:
+	case Int64:
 		return newInt64PageBuffer(t, bufferSize)
-	case format.Int96:
+	case Int96:
 		return newInt96PageBuffer(t, bufferSize)
-	case format.Float:
+	case Float:
 		return newFloatPageBuffer(t, bufferSize)
-	case format.Double:
+	case Double:
 		return newDoublePageBuffer(t, bufferSize)
-	case format.ByteArray:
+	case ByteArray:
 		return newByteArrayPageBuffer(t, bufferSize)
-	case format.FixedLenByteArray:
+	case FixedLenByteArray:
 		return newFixedLenByteArrayPageBuffer(t, bufferSize)
 	default:
 		panic("cannot create a page buffer from a schema element of unsupported type")

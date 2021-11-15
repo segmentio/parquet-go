@@ -205,16 +205,14 @@ func (rgw *RowGroupWriter) init(node Node, path []string, maxRepetitionLevel, ma
 		repetitionType = format.Repeated
 	}
 
-	schemaElementType := format.Type(0)
 	schemaElementTypeLength := int32(0)
 	numChildren := node.NumChildren()
 	if numChildren == 0 {
-		schemaElementType = format.Type(nodeType.Kind())
 		schemaElementTypeLength = int32(nodeType.Length())
 	}
 
 	rgw.schema = append(rgw.schema, format.SchemaElement{
-		Type:           schemaElementType,
+		Type:           nodeType.PhyiscalType(),
 		TypeLength:     schemaElementTypeLength,
 		RepetitionType: repetitionType,
 		Name:           path[len(path)-1],
