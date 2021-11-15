@@ -19,7 +19,7 @@ func TestSchemaOf(t *testing.T) {
 		{
 			value: new(struct{ Name string }),
 			print: `message {
-	required binary Name (UTF8);
+	required binary Name (STRING);
 }`,
 		},
 
@@ -54,8 +54,8 @@ func TestSchemaOf(t *testing.T) {
 			}),
 			print: `message {
 	optional group inner {
-		required binary first_name (UTF8);
-		required binary last_name (UTF8);
+		required binary first_name (STRING);
+		required binary last_name (STRING);
 	}
 }`,
 		},

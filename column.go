@@ -254,7 +254,7 @@ func (t schemaElementType) LogicalType() format.LogicalType {
 	return t.SchemaElement.LogicalType
 }
 
-func (t schemaElementType) ConvertedType() deprecated.ConvertedType {
+func (t schemaElementType) ConvertedType() *deprecated.ConvertedType {
 	return t.SchemaElement.ConvertedType
 }
 

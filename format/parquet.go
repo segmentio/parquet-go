@@ -315,7 +315,7 @@ type SchemaElement struct {
 	// Used to record the original type to help with cross conversion.
 	//
 	// This is superseded by logicalType.
-	ConvertedType deprecated.ConvertedType `thrift:"6,optional"`
+	ConvertedType *deprecated.ConvertedType `thrift:"6,optional"`
 
 	// DEPRECATED: Used when this column contains decimal data.
 	// See the DECIMAL converted type for more details.

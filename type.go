@@ -32,16 +32,41 @@ type Type interface {
 
 	LogicalType() format.LogicalType
 
-	ConvertedType() deprecated.ConvertedType
+	ConvertedType() *deprecated.ConvertedType
 
 	NewPageBuffer(bufferSize int) PageBuffer
+}
+
+var convertedTypes = [...]deprecated.ConvertedType{
+	0:  deprecated.UTF8,
+	1:  deprecated.Map,
+	2:  deprecated.MapKeyValue,
+	3:  deprecated.List,
+	4:  deprecated.Enum,
+	5:  deprecated.Decimal,
+	6:  deprecated.Date,
+	7:  deprecated.TimeMillis,
+	8:  deprecated.TimeMicros,
+	9:  deprecated.TimestampMillis,
+	10: deprecated.TimestampMicros,
+	11: deprecated.Uint8,
+	12: deprecated.Uint16,
+	13: deprecated.Uint32,
+	14: deprecated.Uint64,
+	15: deprecated.Int8,
+	16: deprecated.Int16,
+	17: deprecated.Int32,
+	18: deprecated.Int64,
+	19: deprecated.Json,
+	20: deprecated.Bson,
+	21: deprecated.Interval,
 }
 
 type primitiveType struct{}
 
 func (t primitiveType) LogicalType() format.LogicalType { return format.LogicalType{} }
 
-func (t primitiveType) ConvertedType() deprecated.ConvertedType { return -1 }
+func (t primitiveType) ConvertedType() *deprecated.ConvertedType { return nil }
 
 type booleanType struct{ primitiveType }
 
@@ -185,12 +210,12 @@ func (t *intType) LogicalType() format.LogicalType {
 	return format.LogicalType{Integer: (*format.IntType)(t)}
 }
 
-func (t *intType) ConvertedType() deprecated.ConvertedType {
+func (t *intType) ConvertedType() *deprecated.ConvertedType {
 	convertedType := int(deprecated.Uint8) + (int(t.BitWidth) / 8)
 	if t.IsSigned {
 		convertedType += int(deprecated.Int8)
 	}
-	return deprecated.ConvertedType(convertedType)
+	return &convertedTypes[convertedType]
 }
 
 func (t *intType) NewPageBuffer(bufferSize int) PageBuffer {
@@ -234,7 +259,9 @@ func (t *decimalType) LogicalType() format.LogicalType {
 	return format.LogicalType{Decimal: &t.decimal}
 }
 
-func (t *decimalType) ConvertedType() deprecated.ConvertedType { return deprecated.Decimal }
+func (t *decimalType) ConvertedType() *deprecated.ConvertedType {
+	return &convertedTypes[deprecated.Decimal]
+}
 
 func (t *decimalType) NewPageBuffer(bufferSize int) PageBuffer { panic("NOT IMPLEMENTED") }
 
@@ -250,8 +277,8 @@ func (t *stringType) LogicalType() format.LogicalType {
 	return format.LogicalType{UTF8: (*format.StringType)(t)}
 }
 
-func (t *stringType) ConvertedType() deprecated.ConvertedType {
-	return deprecated.UTF8
+func (t *stringType) ConvertedType() *deprecated.ConvertedType {
+	return &convertedTypes[deprecated.UTF8]
 }
 
 func (t *stringType) NewPageBuffer(bufferSize int) PageBuffer {
@@ -270,7 +297,7 @@ func (t *uuidType) LogicalType() format.LogicalType {
 	return format.LogicalType{UUID: (*format.UUIDType)(t)}
 }
 
-func (t *uuidType) ConvertedType() deprecated.ConvertedType { return -1 }
+func (t *uuidType) ConvertedType() *deprecated.ConvertedType { return nil }
 
 func (t *uuidType) NewPageBuffer(bufferSize int) PageBuffer {
 	return uuidPageBuffer{newFixedLenByteArrayPageBuffer(t, bufferSize)}
@@ -288,7 +315,9 @@ func (t *enumType) LogicalType() format.LogicalType {
 	return format.LogicalType{Enum: (*format.EnumType)(t)}
 }
 
-func (t *enumType) ConvertedType() deprecated.ConvertedType { return deprecated.Enum }
+func (t *enumType) ConvertedType() *deprecated.ConvertedType {
+	return &convertedTypes[deprecated.Enum]
+}
 
 func (t *enumType) NewPageBuffer(bufferSize int) PageBuffer {
 	return newByteArrayPageBuffer(t, bufferSize)
@@ -306,7 +335,9 @@ func (t *jsonType) LogicalType() format.LogicalType {
 	return format.LogicalType{Json: (*format.JsonType)(t)}
 }
 
-func (t *jsonType) ConvertedType() deprecated.ConvertedType { return deprecated.Json }
+func (t *jsonType) ConvertedType() *deprecated.ConvertedType {
+	return &convertedTypes[deprecated.Json]
+}
 
 func (t *jsonType) NewPageBuffer(bufferSize int) PageBuffer {
 	return newByteArrayPageBuffer(t, bufferSize)
@@ -324,7 +355,9 @@ func (t *bsonType) LogicalType() format.LogicalType {
 	return format.LogicalType{Bson: (*format.BsonType)(t)}
 }
 
-func (t *bsonType) ConvertedType() deprecated.ConvertedType { return deprecated.Bson }
+func (t *bsonType) ConvertedType() *deprecated.ConvertedType {
+	return &convertedTypes[deprecated.Bson]
+}
 
 func (t *bsonType) NewPageBuffer(bufferSize int) PageBuffer {
 	return newByteArrayPageBuffer(t, bufferSize)
@@ -342,7 +375,9 @@ func (t *dateType) LogicalType() format.LogicalType {
 	return format.LogicalType{Date: (*format.DateType)(t)}
 }
 
-func (t *dateType) ConvertedType() deprecated.ConvertedType { return deprecated.Date }
+func (t *dateType) ConvertedType() *deprecated.ConvertedType {
+	return &convertedTypes[deprecated.Date]
+}
 
 func (t *dateType) NewPageBuffer(bufferSize int) PageBuffer { return newInt32PageBuffer(t, bufferSize) }
 
@@ -414,14 +449,14 @@ func (t *timeType) LogicalType() format.LogicalType {
 	return format.LogicalType{Time: (*format.TimeType)(t)}
 }
 
-func (t *timeType) ConvertedType() deprecated.ConvertedType {
+func (t *timeType) ConvertedType() *deprecated.ConvertedType {
 	switch {
 	case t.Unit.Millis != nil:
-		return deprecated.TimeMillis
+		return &convertedTypes[deprecated.TimeMillis]
 	case t.Unit.Micros != nil:
-		return deprecated.TimeMicros
+		return &convertedTypes[deprecated.TimeMicros]
 	default:
-		return -1
+		return nil
 	}
 }
 
@@ -447,14 +482,14 @@ func (t *timestampType) LogicalType() format.LogicalType {
 	return format.LogicalType{Timestamp: (*format.TimestampType)(t)}
 }
 
-func (t *timestampType) ConvertedType() deprecated.ConvertedType {
+func (t *timestampType) ConvertedType() *deprecated.ConvertedType {
 	switch {
 	case t.Unit.Millis != nil:
-		return deprecated.TimestampMillis
+		return &convertedTypes[deprecated.TimestampMillis]
 	case t.Unit.Micros != nil:
-		return deprecated.TimestampMicros
+		return &convertedTypes[deprecated.TimestampMicros]
 	default:
-		return -1
+		return nil
 	}
 }
 
@@ -480,7 +515,9 @@ func (t *listType) LogicalType() format.LogicalType {
 	return format.LogicalType{List: (*format.ListType)(t)}
 }
 
-func (t *listType) ConvertedType() deprecated.ConvertedType { return deprecated.List }
+func (t *listType) ConvertedType() *deprecated.ConvertedType {
+	return &convertedTypes[deprecated.List]
+}
 
 func (t *listType) NewPageBuffer(bufferSize int) PageBuffer {
 	panic("cannot create page buffer for parquet list type")
@@ -509,7 +546,9 @@ func (t *mapType) LogicalType() format.LogicalType {
 	return format.LogicalType{Map: (*format.MapType)(t)}
 }
 
-func (t *mapType) ConvertedType() deprecated.ConvertedType { return deprecated.Map }
+func (t *mapType) ConvertedType() *deprecated.ConvertedType {
+	return &convertedTypes[deprecated.Map]
+}
 
 func (t *mapType) NewPageBuffer(bufferSize int) PageBuffer {
 	panic("cannot create page buffer for parquet map type")
@@ -525,7 +564,7 @@ func (t *nullType) LogicalType() format.LogicalType {
 	return format.LogicalType{Unknown: (*format.NullType)(t)}
 }
 
-func (t *nullType) ConvertedType() deprecated.ConvertedType { return -1 }
+func (t *nullType) ConvertedType() *deprecated.ConvertedType { return nil }
 
 func (t *nullType) NewPageBuffer(bufferSize int) PageBuffer {
 	panic("cannot create page buffer for parquet null type")
