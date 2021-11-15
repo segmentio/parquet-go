@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"reflect"
-	"sync"
 
 	"github.com/segmentio/encoding/thrift"
 	"github.com/segmentio/parquet/compress"
@@ -16,7 +15,9 @@ import (
 type WriterConfig struct {
 	PageBufferSize int
 
-	ColumnsConfig map[string]*WriterConfig
+	ColumnChunkBuffers BufferPool
+
+	RowGroupTargetSize int64
 }
 
 func (cfg *WriterConfig) Apply(options ...WriterOption) {
@@ -26,17 +27,6 @@ func (cfg *WriterConfig) Apply(options ...WriterOption) {
 }
 
 func (cfg *WriterConfig) Configure(config *WriterConfig) { *config = *cfg }
-
-func (cfg *WriterConfig) ColumnConfig(column string) *WriterConfig {
-	if columnConfig := cfg.ColumnsConfig[column]; columnConfig != nil {
-		return columnConfig
-	} else {
-		columnConfig = new(WriterConfig)
-		cfg.Configure(columnConfig)
-		columnConfig.ColumnsConfig = nil
-		return columnConfig
-	}
-}
 
 type WriterOption interface {
 	Configure(*WriterConfig)
@@ -50,33 +40,37 @@ func PageBufferSize(size int) WriterOption {
 	return writerOption(func(config *WriterConfig) { config.PageBufferSize = size })
 }
 
-func ColumnConfig(column string, options ...WriterOption) WriterOption {
-	return writerOption(func(config *WriterConfig) {
-		columnConfig := *config
-		columnConfig.Apply(options...)
+func ColumnChunkBuffers(buffers BufferPool) WriterOption {
+	return writerOption(func(config *WriterConfig) { config.ColumnChunkBuffers = buffers })
+}
 
-		if config.ColumnsConfig == nil {
-			config.ColumnsConfig = make(map[string]*WriterConfig)
-		}
-
-		config.ColumnsConfig[column] = &columnConfig
-	})
+func RowGroupTargetSize(size int64) WriterOption {
+	return writerOption(func(config *WriterConfig) { config.RowGroupTargetSize = size })
 }
 
 type RowGroupWriter struct {
-	once    sync.Once
-	writer  io.Writer
-	schema  Node
-	object  Object
-	row     Row
-	columns []*rowGroupColumn
+	writer io.Writer
+	schema Node
+	object Object
+	row    Row
+
+	columns   []*rowGroupColumn
+	rowGroups []format.RowGroup
+
+	numRows    int64
+	fileOffset int64
+
+	config WriterConfig
 }
 
 type rowGroupColumn struct {
+	node   Node
 	path   []string
-	buffer *bytes.Buffer
+	buffer Buffer
+	output countWriter
 	writer *ColumnChunkWriter
 
+	numValues          int64
 	maxDefinitionLevel int32
 	maxRepetitionLevel int32
 }
@@ -86,14 +80,22 @@ func NewRowGroupWriter(writer io.Writer, schema Node, options ...WriterOption) *
 		writer: writer,
 		schema: schema,
 		object: schema.Object(reflect.Value{}),
+		// Assume this is the first row group in the file, it starts after the
+		// "PAR1" magic number.
+		fileOffset: 4,
 	}
-	config := &WriterConfig{}
-	config.Apply(options...)
-	rgw.init(schema, nil, 0, 0, config)
+
+	rgw.config.Apply(options...)
+
+	if rgw.config.ColumnChunkBuffers == nil {
+		rgw.config.ColumnChunkBuffers = NewBufferPool()
+	}
+
+	rgw.init(schema, nil, 0, 0)
 	return rgw
 }
 
-func (rgw *RowGroupWriter) init(node Node, path []string, maxRepetitionLevel, maxDefinitionLevel int32, config *WriterConfig) {
+func (rgw *RowGroupWriter) init(node Node, path []string, maxRepetitionLevel, maxDefinitionLevel int32) {
 	if !node.Required() {
 		maxDefinitionLevel++
 	}
@@ -105,31 +107,142 @@ func (rgw *RowGroupWriter) init(node Node, path []string, maxRepetitionLevel, ma
 		base := path[:len(path):len(path)]
 
 		for _, name := range names {
-			rgw.init(node.ChildByName(name), append(base, name), maxRepetitionLevel, maxDefinitionLevel, config.ColumnConfig(name))
+			rgw.init(node.ChildByName(name), append(base, name), maxRepetitionLevel, maxDefinitionLevel)
 		}
 	} else {
-		buffer := new(bytes.Buffer)
-
-		rgw.columns = append(rgw.columns, &rowGroupColumn{
+		column := &rowGroupColumn{
+			node:               node,
 			path:               path,
-			buffer:             buffer,
-			writer:             NewColumnChunkWriter(buffer, &Uncompressed, &Plain, node.Type().NewPageBuffer(config.PageBufferSize)),
+			buffer:             rgw.config.ColumnChunkBuffers.GetBuffer(),
 			maxRepetitionLevel: maxRepetitionLevel,
 			maxDefinitionLevel: maxDefinitionLevel,
-		})
+		}
+
+		column.output.Reset(column.buffer)
+		column.writer = NewColumnChunkWriter(&column.output, &Uncompressed, &Plain, node.Type().NewPageBuffer(rgw.config.PageBufferSize))
+
+		rgw.columns = append(rgw.columns, column)
 	}
 }
 
+func (rgw *RowGroupWriter) RowGroups() []format.RowGroup {
+	return rgw.rowGroups
+}
+
+func (rgw *RowGroupWriter) Close() error {
+	var err error
+
+	if len(rgw.columns) > 0 {
+		err = rgw.Flush()
+
+		for _, col := range rgw.columns {
+			rgw.config.ColumnChunkBuffers.PutBuffer(col.buffer)
+		}
+
+		rgw.columns = nil
+	}
+
+	return err
+}
+
 func (rgw *RowGroupWriter) Flush() error {
+	if len(rgw.columns) == 0 {
+		return io.ErrClosedPipe
+	}
+
+	if rgw.numRows == 0 {
+		return nil // nothing to flush
+	}
+
+	for _, col := range rgw.columns {
+		if err := col.writer.Flush(); err != nil {
+			return err
+		}
+	}
+
+	totalByteSize := int64(0)
+	totalCompressedSize := int64(0)
+	columns := make([]format.ColumnChunk, len(rgw.columns))
+
+	for i, col := range rgw.columns {
+		_, err := io.Copy(rgw.writer, col.buffer)
+		if err != nil {
+			return err
+		}
+
+		columnChunkTotalUncompressedSize := col.writer.page.uncompressed.length
+		columnChunkTotalCompressedSize := col.output.length
+
+		totalByteSize += columnChunkTotalUncompressedSize
+		totalCompressedSize += columnChunkTotalCompressedSize
+
+		columns[i] = format.ColumnChunk{
+			MetaData: format.ColumnMetaData{
+				Type:                  format.Type(col.node.Type().Kind()),
+				Encoding:              []format.Encoding{format.Plain},
+				PathInSchema:          col.path,
+				Codec:                 col.writer.compression.CompressionCodec(),
+				NumValues:             col.numValues,
+				TotalUncompressedSize: columnChunkTotalUncompressedSize,
+				TotalCompressedSize:   columnChunkTotalCompressedSize,
+				KeyValueMetadata:      nil,
+				DataPageOffset:        0,
+				IndexPageOffset:       0,
+				DictionaryPageOffset:  0,
+				Statistics:            format.Statistics{}, // TODO
+				EncodingStats:         nil,
+				BloomFilterOffset:     0,
+			},
+			OffsetIndexOffset: 0,
+			OffsetIndexLength: 0,
+			ColumnIndexOffset: 0,
+			ColumnIndexLength: 0,
+		}
+	}
+
+	for _, col := range rgw.columns {
+		rgw.config.ColumnChunkBuffers.PutBuffer(col.buffer)
+		col.buffer = rgw.config.ColumnChunkBuffers.GetBuffer()
+		col.output.length = 0
+	}
+
+	rgw.rowGroups = append(rgw.rowGroups, format.RowGroup{
+		Columns:             columns,
+		TotalByteSize:       totalByteSize,
+		NumRows:             rgw.numRows,
+		SortingColumns:      nil, // TODO
+		FileOffset:          rgw.fileOffset,
+		TotalCompressedSize: totalCompressedSize,
+		Ordinal:             int16(len(rgw.rowGroups)),
+	})
+
+	rgw.numRows = 0
+	rgw.fileOffset += totalCompressedSize
 	return nil
 }
 
 func (rgw *RowGroupWriter) WriteRow(row interface{}) error {
+	if len(rgw.columns) == 0 {
+		return io.ErrClosedPipe
+	}
+
 	rgw.object.Reset(reflect.ValueOf(row))
 	rgw.row.Reset(rgw.object)
 
 	for rgw.row.Next() {
-		rgw.columns[rgw.row.ColumnIndex()].writer.WriteValue(rgw.row.Value())
+		col := rgw.columns[rgw.row.ColumnIndex()]
+		col.writer.WriteValue(rgw.row.Value())
+		col.numValues++
+	}
+
+	rgw.numRows++
+
+	rowGroupSize := int64(0)
+	for _, col := range rgw.columns {
+		rowGroupSize += col.output.length
+	}
+	if rowGroupSize >= rgw.config.RowGroupTargetSize {
+		return rgw.Flush()
 	}
 
 	return nil
@@ -172,6 +285,10 @@ func NewColumnChunkWriter(writer io.Writer, compression compress.Codec, encoding
 }
 
 func (ccw *ColumnChunkWriter) Flush() error {
+	if ccw.numValues == 0 {
+		return nil // nothin to flush
+	}
+
 	ccw.page.buffer.Reset()
 	ccw.page.checksum.Reset(&ccw.page.buffer)
 

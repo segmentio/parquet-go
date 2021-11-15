@@ -4,9 +4,14 @@ import (
 	"io"
 
 	"github.com/segmentio/parquet/compress"
+	"github.com/segmentio/parquet/format"
 )
 
 type Codec struct {
+}
+
+func (c *Codec) CompressionCodec() format.CompressionCodec {
+	return format.Uncompressed
 }
 
 func (c *Codec) NewReader(r io.Reader) (compress.Reader, error) {

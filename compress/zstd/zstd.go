@@ -5,6 +5,7 @@ import (
 
 	"github.com/klauspost/compress/zstd"
 	"github.com/segmentio/parquet/compress"
+	"github.com/segmentio/parquet/format"
 )
 
 type Level = zstd.EncoderLevel
@@ -36,6 +37,10 @@ const (
 type Codec struct {
 	Level       Level
 	Concurrency int
+}
+
+func (c *Codec) CompressionCodec() format.CompressionCodec {
+	return format.Zstd
 }
 
 func (c *Codec) NewReader(r io.Reader) (compress.Reader, error) {

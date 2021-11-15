@@ -2,6 +2,8 @@ package compress
 
 import (
 	"io"
+
+	"github.com/segmentio/parquet/format"
 )
 
 type Reader interface {
@@ -17,6 +19,7 @@ type Writer interface {
 }
 
 type Codec interface {
+	CompressionCodec() format.CompressionCodec
 	NewReader(io.Reader) (Reader, error)
 	NewWriter(io.Writer) (Writer, error)
 }

@@ -5,6 +5,7 @@ import (
 
 	"github.com/pierrec/lz4/v4"
 	"github.com/segmentio/parquet/compress"
+	"github.com/segmentio/parquet/format"
 )
 
 type BlockSize = lz4.BlockSize
@@ -41,6 +42,10 @@ type Codec struct {
 	BlockSize   BlockSize
 	Level       Level
 	Concurrency int
+}
+
+func (c *Codec) CompressionCodec() format.CompressionCodec {
+	return format.Lz4Raw
 }
 
 func (c *Codec) NewReader(r io.Reader) (compress.Reader, error) {

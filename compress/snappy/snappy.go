@@ -6,6 +6,7 @@ import (
 
 	"github.com/klauspost/compress/snappy"
 	"github.com/segmentio/parquet/compress"
+	"github.com/segmentio/parquet/format"
 )
 
 type Codec struct {
@@ -15,6 +16,10 @@ type Codec struct {
 // a framing protocol, but snappy requires the implementation to use the raw
 // snappy block encoding. This is why we need to use snappy.Encode/snappy.Decode
 // and have to ship custom implementations of the compressed reader and writer.
+
+func (c *Codec) CompressionCodec() format.CompressionCodec {
+	return format.Snappy
+}
 
 func (c *Codec) NewReader(r io.Reader) (compress.Reader, error) {
 	return &reader{input: r, offset: -1}, nil

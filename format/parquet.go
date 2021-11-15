@@ -808,7 +808,7 @@ type RowGroup struct {
 	FileOffset int64 `thrift:"5,optional"`
 
 	// Total byte size of all compressed (and potentially encrypted) column data
-	//  in this row group.
+	// in this row group.
 	TotalCompressedSize int64 `thrift:"6,optional"`
 
 	// Row group ordinal in the file.

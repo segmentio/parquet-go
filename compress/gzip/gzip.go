@@ -6,6 +6,7 @@ import (
 
 	"github.com/klauspost/compress/gzip"
 	"github.com/segmentio/parquet/compress"
+	"github.com/segmentio/parquet/format"
 )
 
 const (
@@ -22,6 +23,10 @@ const (
 
 type Codec struct {
 	Level int
+}
+
+func (c *Codec) CompressionCodec() format.CompressionCodec {
+	return format.Gzip
 }
 
 func (c *Codec) NewReader(r io.Reader) (compress.Reader, error) {

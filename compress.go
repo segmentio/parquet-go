@@ -18,7 +18,7 @@ import (
 
 var (
 	Uncompressed = uncompressed.Codec{
-		// ?
+		//
 	}
 
 	Gzip = gzip.Codec{
@@ -26,7 +26,7 @@ var (
 	}
 
 	Snappy = snappy.Codec{
-		// ?
+		//
 	}
 
 	Brotli = brotli.Codec{
@@ -104,6 +104,10 @@ func (r *compressedPageReader) Reset(page io.Reader) {
 }
 
 type unsupported struct{ codec format.CompressionCodec }
+
+func (u *unsupported) CompressionCodec() format.CompressionCodec {
+	return u.codec
+}
 
 func (u *unsupported) NewReader(r io.Reader) (compress.Reader, error) {
 	return unsupportedReader{u}, nil
