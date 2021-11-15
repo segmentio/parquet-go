@@ -30,7 +30,7 @@ type Type interface {
 
 	Length() int
 
-	LogicalType() format.LogicalType
+	LogicalType() *format.LogicalType
 
 	ConvertedType() *deprecated.ConvertedType
 
@@ -64,7 +64,7 @@ var convertedTypes = [...]deprecated.ConvertedType{
 
 type primitiveType struct{}
 
-func (t primitiveType) LogicalType() format.LogicalType { return format.LogicalType{} }
+func (t primitiveType) LogicalType() *format.LogicalType { return nil }
 
 func (t primitiveType) ConvertedType() *deprecated.ConvertedType { return nil }
 
@@ -206,8 +206,8 @@ func (t *intType) Kind() Kind {
 
 func (t *intType) Length() int { return int(t.BitWidth) }
 
-func (t *intType) LogicalType() format.LogicalType {
-	return format.LogicalType{Integer: (*format.IntType)(t)}
+func (t *intType) LogicalType() *format.LogicalType {
+	return &format.LogicalType{Integer: (*format.IntType)(t)}
 }
 
 func (t *intType) ConvertedType() *deprecated.ConvertedType {
@@ -255,8 +255,8 @@ func (t *decimalType) Kind() Kind { return t.typ.Kind() }
 
 func (t *decimalType) Length() int { return t.typ.Length() }
 
-func (t *decimalType) LogicalType() format.LogicalType {
-	return format.LogicalType{Decimal: &t.decimal}
+func (t *decimalType) LogicalType() *format.LogicalType {
+	return &format.LogicalType{Decimal: &t.decimal}
 }
 
 func (t *decimalType) ConvertedType() *deprecated.ConvertedType {
@@ -273,8 +273,8 @@ func (t *stringType) Kind() Kind { return ByteArray }
 
 func (t *stringType) Length() int { return 0 }
 
-func (t *stringType) LogicalType() format.LogicalType {
-	return format.LogicalType{UTF8: (*format.StringType)(t)}
+func (t *stringType) LogicalType() *format.LogicalType {
+	return &format.LogicalType{UTF8: (*format.StringType)(t)}
 }
 
 func (t *stringType) ConvertedType() *deprecated.ConvertedType {
@@ -293,8 +293,8 @@ func (t *uuidType) Kind() Kind { return FixedLenByteArray }
 
 func (t *uuidType) Length() int { return 16 }
 
-func (t *uuidType) LogicalType() format.LogicalType {
-	return format.LogicalType{UUID: (*format.UUIDType)(t)}
+func (t *uuidType) LogicalType() *format.LogicalType {
+	return &format.LogicalType{UUID: (*format.UUIDType)(t)}
 }
 
 func (t *uuidType) ConvertedType() *deprecated.ConvertedType { return nil }
@@ -311,8 +311,8 @@ func (t *enumType) Kind() Kind { return ByteArray }
 
 func (t *enumType) Length() int { return 0 }
 
-func (t *enumType) LogicalType() format.LogicalType {
-	return format.LogicalType{Enum: (*format.EnumType)(t)}
+func (t *enumType) LogicalType() *format.LogicalType {
+	return &format.LogicalType{Enum: (*format.EnumType)(t)}
 }
 
 func (t *enumType) ConvertedType() *deprecated.ConvertedType {
@@ -331,8 +331,8 @@ func (t *jsonType) Kind() Kind { return ByteArray }
 
 func (t *jsonType) Length() int { return 0 }
 
-func (t *jsonType) LogicalType() format.LogicalType {
-	return format.LogicalType{Json: (*format.JsonType)(t)}
+func (t *jsonType) LogicalType() *format.LogicalType {
+	return &format.LogicalType{Json: (*format.JsonType)(t)}
 }
 
 func (t *jsonType) ConvertedType() *deprecated.ConvertedType {
@@ -351,8 +351,8 @@ func (t *bsonType) Kind() Kind { return ByteArray }
 
 func (t *bsonType) Length() int { return 0 }
 
-func (t *bsonType) LogicalType() format.LogicalType {
-	return format.LogicalType{Bson: (*format.BsonType)(t)}
+func (t *bsonType) LogicalType() *format.LogicalType {
+	return &format.LogicalType{Bson: (*format.BsonType)(t)}
 }
 
 func (t *bsonType) ConvertedType() *deprecated.ConvertedType {
@@ -371,8 +371,8 @@ func (t *dateType) Kind() Kind { return Int32 }
 
 func (t *dateType) Length() int { return 32 }
 
-func (t *dateType) LogicalType() format.LogicalType {
-	return format.LogicalType{Date: (*format.DateType)(t)}
+func (t *dateType) LogicalType() *format.LogicalType {
+	return &format.LogicalType{Date: (*format.DateType)(t)}
 }
 
 func (t *dateType) ConvertedType() *deprecated.ConvertedType {
@@ -445,8 +445,8 @@ func (t *timeType) Length() int {
 	}
 }
 
-func (t *timeType) LogicalType() format.LogicalType {
-	return format.LogicalType{Time: (*format.TimeType)(t)}
+func (t *timeType) LogicalType() *format.LogicalType {
+	return &format.LogicalType{Time: (*format.TimeType)(t)}
 }
 
 func (t *timeType) ConvertedType() *deprecated.ConvertedType {
@@ -478,8 +478,8 @@ func (t *timestampType) Kind() Kind { return Int64 }
 
 func (t *timestampType) Length() int { return 64 }
 
-func (t *timestampType) LogicalType() format.LogicalType {
-	return format.LogicalType{Timestamp: (*format.TimestampType)(t)}
+func (t *timestampType) LogicalType() *format.LogicalType {
+	return &format.LogicalType{Timestamp: (*format.TimestampType)(t)}
 }
 
 func (t *timestampType) ConvertedType() *deprecated.ConvertedType {
@@ -511,8 +511,8 @@ func (t *listType) Kind() Kind { panic("cannot call Kind on parquet list type") 
 
 func (t *listType) Length() int { panic("cannot call Length on parquet list type") }
 
-func (t *listType) LogicalType() format.LogicalType {
-	return format.LogicalType{List: (*format.ListType)(t)}
+func (t *listType) LogicalType() *format.LogicalType {
+	return &format.LogicalType{List: (*format.ListType)(t)}
 }
 
 func (t *listType) ConvertedType() *deprecated.ConvertedType {
@@ -542,8 +542,8 @@ func (t *mapType) Kind() Kind { panic("cannot call Kind on parquet map type") }
 
 func (t *mapType) Length() int { panic("cannot call Length on parquet map type") }
 
-func (t *mapType) LogicalType() format.LogicalType {
-	return format.LogicalType{Map: (*format.MapType)(t)}
+func (t *mapType) LogicalType() *format.LogicalType {
+	return &format.LogicalType{Map: (*format.MapType)(t)}
 }
 
 func (t *mapType) ConvertedType() *deprecated.ConvertedType {
@@ -560,8 +560,8 @@ func (t *nullType) Kind() Kind { panic("cannot call Kind on null parquet type") 
 
 func (t *nullType) Length() int { panic("cannot call Length on null parquet type") }
 
-func (t *nullType) LogicalType() format.LogicalType {
-	return format.LogicalType{Unknown: (*format.NullType)(t)}
+func (t *nullType) LogicalType() *format.LogicalType {
+	return &format.LogicalType{Unknown: (*format.NullType)(t)}
 }
 
 func (t *nullType) ConvertedType() *deprecated.ConvertedType { return nil }

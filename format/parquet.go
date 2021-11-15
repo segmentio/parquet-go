@@ -332,7 +332,7 @@ type SchemaElement struct {
 	//
 	// LogicalType replaces ConvertedType, but ConvertedType is still required
 	// for some logical types to ensure forward-compatibility in format v1.
-	LogicalType LogicalType `thrift:"10,optional"`
+	LogicalType *LogicalType `thrift:"10,optional"`
 }
 
 // Encodings supported by Parquet. Not all encodings are valid for all types.

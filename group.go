@@ -63,7 +63,7 @@ type groupType struct{}
 
 func (groupType) Kind() Kind                               { panic("cannot call Kind on parquet group type") }
 func (groupType) Length() int                              { panic("cannot call Length on parquet group type") }
-func (groupType) LogicalType() format.LogicalType          { return format.LogicalType{} }
+func (groupType) LogicalType() *format.LogicalType         { return nil }
 func (groupType) ConvertedType() *deprecated.ConvertedType { return nil }
 func (groupType) NewPageBuffer(int) PageBuffer             { panic("cannot create page buffer for parquet group") }
 

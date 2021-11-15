@@ -111,8 +111,10 @@ func printWithIndent(w io.StringWriter, name string, node Node, indent *printInd
 }
 
 func annotationOf(node Node) string {
-	logicalType := node.Type().LogicalType()
-	return logicalType.String()
+	if logicalType := node.Type().LogicalType(); logicalType != nil {
+		return logicalType.String()
+	}
+	return ""
 }
 
 type printIndent struct {

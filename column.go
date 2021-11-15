@@ -250,7 +250,7 @@ func (t schemaElementType) Length() int {
 	return int(t.TypeLength)
 }
 
-func (t schemaElementType) LogicalType() format.LogicalType {
+func (t schemaElementType) LogicalType() *format.LogicalType {
 	return t.SchemaElement.LogicalType
 }
 
