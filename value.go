@@ -166,6 +166,8 @@ func makeValueByteArray(kind Kind, data *byte, size int) Value {
 
 func (v Value) Kind() Kind { return v.kind - 1 }
 
+func (v Value) IsNull() bool { return v.kind == 0 }
+
 func (v Value) Boolean() bool { return v.u32 != 0 }
 
 func (v Value) Int32() int32 { return int32(v.u32) }
