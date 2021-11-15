@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"testing"
 
 	"github.com/segmentio/parquet"
@@ -19,7 +20,7 @@ func TestWriterSimple(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Log(tmp.Name())
+	defer os.Remove(tmp.Name())
 
 	file := tmp //new(bytes.Buffer)
 	rows := []*RowType{
@@ -39,8 +40,8 @@ func TestWriterSimple(t *testing.T) {
 		},
 	}
 
-	schema := parquet.SchemaOf(new(RowType))
-	writer := parquet.NewWriter(&debugWriter{writer: file}, schema)
+	schema := parquet.SchemaOf(rows[0])
+	writer := parquet.NewWriter(file, schema)
 
 	for _, row := range rows {
 		if err := writer.WriteRow(row); err != nil {
@@ -52,14 +53,7 @@ func TestWriterSimple(t *testing.T) {
 		t.Fatal("closing:", err)
 	}
 
-	/*
-		content := bytes.NewReader(file.Bytes())
-		p, err := parquet.OpenFile(content, content.Size())
-		if err != nil {
-			t.Fatal(err)
-		}
-		printColumns(t, p.Root(), "")
-	*/
+	dump(t, tmp.Name())
 }
 
 type debugWriter struct {
@@ -72,4 +66,15 @@ func (d *debugWriter) Write(b []byte) (int, error) {
 	fmt.Printf("writing %d bytes at offset %d => %d %v\n", len(b), d.offset, n, err)
 	d.offset += int64(n)
 	return n, err
+}
+
+func dump(t *testing.T, path string) {
+	parquetTools := exec.Command("parquet-tools", "dump", path)
+	parquetTools.Stdin = os.Stdin
+	parquetTools.Stdout = os.Stdout
+	parquetTools.Stderr = os.Stderr
+
+	if err := parquetTools.Run(); err != nil {
+		t.Error(err)
+	}
 }

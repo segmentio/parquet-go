@@ -197,10 +197,15 @@ func (rgw *RowGroupWriter) init(node Node, path []string, maxRepetitionLevel, ma
 		maxRepetitionLevel++
 	}
 
+	repetitionType := (*format.FieldRepetitionType)(nil)
+	if len(path) > 1 { // the root has no repetition type
+		repetitionType = fieldRepetitionTypeOf(node)
+	}
+
 	rgw.schema = append(rgw.schema, format.SchemaElement{
 		Type:           nodeType.PhyiscalType(),
 		TypeLength:     typeLengthOf(nodeType),
-		RepetitionType: fieldRepetitionTypeOf(node),
+		RepetitionType: repetitionType,
 		Name:           path[len(path)-1],
 		NumChildren:    int32(node.NumChildren()),
 		ConvertedType:  nodeType.ConvertedType(),
@@ -297,7 +302,7 @@ func (rgw *RowGroupWriter) Flush() error {
 			MetaData: format.ColumnMetaData{
 				Type:                  col.typ,
 				Encoding:              col.writer.Encodings(),
-				PathInSchema:          col.path,
+				PathInSchema:          col.path[1:],
 				Codec:                 col.codec,
 				NumValues:             col.numValues,
 				TotalUncompressedSize: columnChunkTotalUncompressedSize,

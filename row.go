@@ -13,8 +13,9 @@ type Object interface {
 }
 
 type Row struct {
-	stack []iterator
-	value Value
+	stack  []iterator
+	value  Value
+	column int
 }
 
 type iterator struct {
@@ -36,6 +37,7 @@ func (row *Row) Reset(object Object) {
 
 	row.stack = row.stack[:0]
 	row.value = Value{}
+	row.column = -1
 
 	if object != nil {
 		limit := object.Len()
@@ -75,6 +77,7 @@ func (row *Row) Next() bool {
 			}
 
 			row.value = child.Value()
+			row.column++
 			return true
 		}
 
@@ -89,5 +92,5 @@ func (row *Row) Value() Value {
 }
 
 func (row *Row) ColumnIndex() int {
-	return len(row.stack) - 1
+	return row.column
 }
