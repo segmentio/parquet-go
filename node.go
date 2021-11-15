@@ -1,6 +1,10 @@
 package parquet
 
-import "reflect"
+import (
+	"reflect"
+
+	"github.com/segmentio/parquet/format"
+)
 
 type Node interface {
 	Type() Type
@@ -86,3 +90,22 @@ func (obj *leafObject) Len() int                  { return 0 }
 func (obj *leafObject) Index(int) Object          { panic("cannot call Index on leaf object") }
 func (obj *leafObject) Value() Value              { return obj.value }
 func (obj *leafObject) Reset(value reflect.Value) { obj.value = makeValue(obj.node.typ.Kind(), value) }
+
+var repetitionTypes = [...]format.FieldRepetitionType{
+	0: format.Required,
+	1: format.Optional,
+	2: format.Repeated,
+}
+
+func fieldRepetitionTypeOf(node Node) *format.FieldRepetitionType {
+	switch {
+	case node.Required():
+		return &repetitionTypes[format.Required]
+	case node.Optional():
+		return &repetitionTypes[format.Optional]
+	case node.Repeated():
+		return &repetitionTypes[format.Repeated]
+	default:
+		return nil
+	}
+}

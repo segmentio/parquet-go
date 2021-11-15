@@ -300,7 +300,7 @@ type SchemaElement struct {
 
 	// repetition of the field. The root of the schema does not have a repetition_type.
 	// All other nodes must have one.
-	RepetitionType FieldRepetitionType `thrift:"3,optional"`
+	RepetitionType *FieldRepetitionType `thrift:"3,optional"`
 
 	// Name of the field in the schema.
 	Name string `thrift:"4,required"`

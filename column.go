@@ -40,13 +40,13 @@ func (c *Column) Order() *format.ColumnOrder { return c.order }
 func (c *Column) Type() Type { return schemaElementType{c.schema} }
 
 // Required returns true if the column is required.
-func (c *Column) Required() bool { return c.schema.RepetitionType == format.Required }
+func (c *Column) Required() bool { return schemaRepetitionTypeOf(c.schema) == format.Required }
 
 // Optional returns true if the column is optional.
-func (c *Column) Optional() bool { return c.schema.RepetitionType == format.Optional }
+func (c *Column) Optional() bool { return schemaRepetitionTypeOf(c.schema) == format.Optional }
 
 // Repeated returns true if the column may repeat.
-func (c *Column) Repeated() bool { return c.schema.RepetitionType == format.Repeated }
+func (c *Column) Repeated() bool { return schemaRepetitionTypeOf(c.schema) == format.Repeated }
 
 // NumChildren returns the number of child columns.
 //
@@ -157,7 +157,7 @@ func openColumns(file *File) (*Column, error) {
 }
 
 func setMaxLevels(col *Column, depth, repetition, definition int32) {
-	switch col.schema.RepetitionType {
+	switch schemaRepetitionTypeOf(col.schema) {
 	case format.Optional:
 		definition++
 	case format.Repeated:
@@ -286,6 +286,13 @@ func (t schemaElementType) NewPageBuffer(bufferSize int) PageBuffer {
 	default:
 		panic("cannot create a page buffer from a schema element of unsupported type")
 	}
+}
+
+func schemaRepetitionTypeOf(s *format.SchemaElement) format.FieldRepetitionType {
+	if s.RepetitionType != nil {
+		return *s.RepetitionType
+	}
+	return format.Required
 }
 
 var (
