@@ -67,6 +67,10 @@ func (NotImplementedDecoder) DecodeFixedLenByteArray(size int, data []byte) (int
 	return 0, NotImplementedError("FIXED_LEN_BYTE_ARRAY")
 }
 
+func (NotImplementedDecoder) DecodeIntArray(IntArrayBuffer) error {
+	return NotImplementedError("INT")
+}
+
 func (NotImplementedDecoder) SetBitWidth(int) {
 }
 
@@ -109,6 +113,10 @@ func (NotImplementedEncoder) EncodeByteArray([][]byte) error {
 
 func (NotImplementedEncoder) EncodeFixedLenByteArray(int, []byte) error {
 	return NotImplementedError("FIXED_LEN_BYTE_ARRAY")
+}
+
+func (NotImplementedEncoder) EncodeIntArray(IntArrayView) error {
+	return NotImplementedError("INT")
 }
 
 func (NotImplementedEncoder) SetBitWidth(int) {

@@ -435,10 +435,10 @@ func newColumnChunkWriter(writer io.Writer, compression compress.Codec, encoding
 		encodings:          []format.Encoding{encoding.Encoding()},
 	}
 	if maxRepetitionLevel > 0 {
-		ccw.levels.repetition = compact.NewFixedIntArray(bits.Len32(uint32(maxRepetitionLevel)), 512)
+		ccw.levels.repetition = compact.NewFixedIntArray(bits.Len32(uint32(maxRepetitionLevel)))
 	}
 	if maxDefinitionLevel > 0 {
-		ccw.levels.definition = compact.NewFixedIntArray(bits.Len32(uint32(maxDefinitionLevel)), 512)
+		ccw.levels.definition = compact.NewFixedIntArray(bits.Len32(uint32(maxDefinitionLevel)))
 	}
 	ccw.page.encoder = encoding.NewEncoder(nil)
 	return ccw

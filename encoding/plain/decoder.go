@@ -5,18 +5,20 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/segmentio/parquet/encoding"
 	"github.com/segmentio/parquet/encoding/rle"
 	"github.com/segmentio/parquet/internal/bits"
 )
 
 type Decoder struct {
-	r   io.Reader
-	b   [4]byte
-	rle *rle.Decoder
+	reader   io.Reader
+	buffer   [8]byte
+	rle      *rle.Decoder
+	bitWidth int
 }
 
 func NewDecoder(r io.Reader) *Decoder {
-	return &Decoder{r: r}
+	return &Decoder{reader: r}
 }
 
 func (d *Decoder) Close() error {
@@ -27,7 +29,7 @@ func (d *Decoder) Close() error {
 }
 
 func (d *Decoder) Reset(r io.Reader) {
-	d.r = r
+	d.reader = r
 
 	if d.rle != nil {
 		d.rle.Reset(r)
@@ -36,45 +38,45 @@ func (d *Decoder) Reset(r io.Reader) {
 
 func (d *Decoder) DecodeBoolean(data []bool) (int, error) {
 	if d.rle == nil {
-		d.rle = rle.NewDecoder(d.r)
+		d.rle = rle.NewDecoder(d.reader)
 	}
 	return d.rle.DecodeBoolean(data)
 }
 
 func (d *Decoder) DecodeInt32(data []int32) (int, error) {
-	return readFull(d.r, 4, bits.Int32ToBytes(data))
+	return readFull(d.reader, 4, bits.Int32ToBytes(data))
 }
 
 func (d *Decoder) DecodeInt64(data []int64) (int, error) {
-	return readFull(d.r, 8, bits.Int64ToBytes(data))
+	return readFull(d.reader, 8, bits.Int64ToBytes(data))
 }
 
 func (d *Decoder) DecodeInt96(data [][12]byte) (int, error) {
-	return readFull(d.r, 12, bits.Int96ToBytes(data))
+	return readFull(d.reader, 12, bits.Int96ToBytes(data))
 }
 
 func (d *Decoder) DecodeFloat(data []float32) (int, error) {
-	return readFull(d.r, 4, bits.Float32ToBytes(data))
+	return readFull(d.reader, 4, bits.Float32ToBytes(data))
 }
 
 func (d *Decoder) DecodeDouble(data []float64) (int, error) {
-	return readFull(d.r, 8, bits.Float64ToBytes(data))
+	return readFull(d.reader, 8, bits.Float64ToBytes(data))
 }
 
 func (d *Decoder) DecodeByteArray(data [][]byte) (int, error) {
 	for i := range data {
-		if n, err := io.ReadFull(d.r, d.b[:4]); err != nil {
+		if n, err := io.ReadFull(d.reader, d.buffer[:4]); err != nil {
 			if err != io.EOF {
-				err = fmt.Errorf("reading 4 bytes length prefix of PLAIN byte array: %w (%d bytes were read: %08b)", err, n, d.b[:n])
+				err = fmt.Errorf("reading 4 bytes length prefix of PLAIN byte array: %w (%d bytes were read: %08b)", err, n, d.buffer[:n])
 			}
 			return i, err
 		}
 
-		size := int(binary.LittleEndian.Uint32(d.b[:4]))
+		size := int(binary.LittleEndian.Uint32(d.buffer[:4]))
 		item := make([]byte, size)
 
 		if size != 0 {
-			_, err := io.ReadFull(d.r, item)
+			_, err := io.ReadFull(d.reader, item)
 			if err != nil {
 				return i, fmt.Errorf("reading value of PLAIN byte array of length %d: %w", size, err)
 			}
@@ -89,12 +91,40 @@ func (d *Decoder) DecodeFixedLenByteArray(size int, data []byte) (int, error) {
 	if (len(data) % size) != 0 {
 		return 0, fmt.Errorf("length of fixed byte array is not a multiple of its size: size=%d length=%d", size, len(data))
 	}
-	return readFull(d.r, size, data)
+	return readFull(d.reader, size, data)
+}
+
+func (d *Decoder) DecodeIntArray(data encoding.IntArrayBuffer) error {
+	if d.bitWidth == 0 {
+		return fmt.Errorf("bit width must be set on PLAIN decoder before reading values into a dynamic int array")
+	}
+
+	decode := (func([]byte) int64)(nil)
+	if d.bitWidth == 64 {
+		decode = func(b []byte) int64 { return int64(binary.LittleEndian.Uint64(b)) }
+	} else {
+		decode = func(b []byte) int64 { return int64(int32(binary.LittleEndian.Uint32(b))) }
+	}
+
+	// TODO:
+	// * use a wider buffer to avoid calling Read for every value
+	wordSize := d.bitWidth / 8 // 4 or 8
+	wordData := d.buffer[:wordSize]
+
+	for {
+		_, err := io.ReadFull(d.reader, wordData)
+		if err != nil {
+			if err == io.EOF {
+				err = nil
+			}
+			return err
+		}
+		data.Append(decode(wordData))
+	}
 }
 
 func (d *Decoder) SetBitWidth(bitWidth int) {
-	// The plain encoding does not vary based on the bit-width of values,
-	// which is why this method does nothing.
+	d.bitWidth = coerceBitWidth(bitWidth)
 }
 
 func readFull(r io.Reader, scale int, data []byte) (int, error) {

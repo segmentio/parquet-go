@@ -20,3 +20,11 @@ func (e *Encoding) NewDecoder(r io.Reader) encoding.Decoder {
 func (e *Encoding) NewEncoder(w io.Writer) encoding.Encoder {
 	return NewEncoder(w)
 }
+
+func coerceBitWidth(bitWidth int) int {
+	if bitWidth <= 32 {
+		return 32
+	} else {
+		return 64
+	}
+}

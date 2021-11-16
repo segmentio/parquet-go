@@ -13,7 +13,7 @@ type Decoder struct {
 	encoding.NotImplementedDecoder
 	data      io.LimitedReader
 	init      bool
-	buffer    [4]byte
+	buffer    []byte
 	bitWidth  uint
 	decoder   hybridDecoder
 	runLength runLengthDecoder
@@ -26,6 +26,7 @@ func NewDecoder(r io.Reader) *Decoder {
 			R: r,
 			N: 4,
 		},
+		buffer: make([]byte, 8),
 	}
 }
 
@@ -63,6 +64,47 @@ func (d *Decoder) DecodeInt64(data []int64) (int, error) {
 
 func (d *Decoder) DecodeInt96(data [][12]byte) (int, error) {
 	return d.decode(bits.Int96ToBytes(data), 96, d.bitWidth)
+}
+
+func (d *Decoder) DecodeIntArray(data encoding.IntArrayBuffer) error {
+	dstWidth := d.bitWidth
+	srcWidth := d.bitWidth
+	if srcWidth == 0 {
+		return fmt.Errorf("bit width must be set on RLE decoder before reading values into a dynamic int array")
+	}
+
+	const bufferSize = 1024
+	if cap(d.buffer) < bufferSize {
+		d.buffer = make([]byte, bufferSize)
+	} else {
+		d.buffer = d.buffer[:bufferSize]
+	}
+
+	if dstWidth <= 32 {
+		dstWidth = 32
+	} else {
+		dstWidth = 64
+	}
+
+	for {
+		n, err := d.decode(d.buffer, dstWidth, srcWidth)
+		// TODO:
+		// * optimize by adding AppendInt32/AppendInt64 to the IntArrayBuffer
+		//   interface to append slices and have the int array classes  provide
+		//   optimized implementations of the copy routines.
+		if dstWidth == 64 {
+			for _, value := range bits.BytesToInt64(d.buffer[:n*8]) {
+				data.Append(value)
+			}
+		} else {
+			for _, value := range bits.BytesToInt32(d.buffer[:n*4]) {
+				data.Append(int64(value))
+			}
+		}
+		if err != nil {
+			return err
+		}
+	}
 }
 
 func (d *Decoder) decode(data []byte, dstWidth, srcWidth uint) (int, error) {

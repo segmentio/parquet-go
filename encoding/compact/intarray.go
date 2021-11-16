@@ -1,34 +1,11 @@
 package compact
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+	"math/bits"
 
-// IntArray is an interface implemented by arrays of integers provided by this
-// package.
-type IntArray interface {
-	IntArrayBuffer
-	IntArrayView
-	Reset()
-}
-
-// IntArrayBuffer is an interface presenting the methods of IntArray which
-// support writing to the array.
-type IntArrayBuffer interface {
-	Append(int64)
-}
-
-// IntArrayView is an interface presenting the methods of IntArray which support
-// reading values from the array.
-type IntArrayView interface {
-	BitWidth() int
-
-	Len() int
-
-	Index(int) int64
-
-	Bytes() []byte
-
-	EqualFunc() func([]byte, []byte) bool
-}
+	"github.com/segmentio/parquet/encoding"
+)
 
 // FixedIntArray is an array of integer values, compacted to use fewer bits to
 // represent values in memory than if a the program had used a slice of
@@ -37,174 +14,237 @@ type IntArrayView interface {
 // The type supports representing integers with up to 64 bits of precision.
 type FixedIntArray struct {
 	class intArrayClass
-	data  []byte
+	bits  []byte
 }
 
-func NewFixedIntArray(bitWidth, capacity int) *FixedIntArray {
-	var class intArrayClass
-
-	// TODO: support representing bit widths smaller than 8: 1, 2, 4 would be
-	// useful for parquet repetition and definition levels. This is blocked on
-	// improving the RLE encoder to be able to offset at partial bytes in the
-	// array buffer.
-	switch {
-	case bitWidth <= 8:
-		class = intArrayClass8{}
-	case bitWidth <= 16:
-		class = intArrayClass16{}
-	case bitWidth <= 24:
-		class = intArrayClass24{}
-	case bitWidth <= 32:
-		class = intArrayClass32{}
-	default:
-		class = intArrayClass64{}
-	}
-
+func NewFixedIntArray(bitWidth int) *FixedIntArray {
+	class := intArrayClassOf(bitWidth)
 	return &FixedIntArray{
 		class: class,
-		data:  make([]byte, 0, capacity*class.size()),
+		bits:  make([]byte, 0, (256*8)/class.bitWidth()),
 	}
 }
 
 func (a *FixedIntArray) BitWidth() int {
 	if a != nil {
-		return 8 * a.class.size()
+		return a.class.bitWidth()
 	}
 	return 0
 }
 
 func (a *FixedIntArray) Append(v int64) {
-	a.data = a.class.append(a.data, v)
+	a.bits = a.class.append(a.bits, v)
+}
+
+func (a *FixedIntArray) Cap() int {
+	if a != nil {
+		return (8 * cap(a.bits)) / a.class.bitWidth()
+	}
+	return 0
 }
 
 func (a *FixedIntArray) Len() int {
 	if a != nil {
-		return len(a.data) / a.class.size()
+		return (8 * len(a.bits)) / a.class.bitWidth()
 	}
 	return 0
 }
 
 func (a *FixedIntArray) Index(index int) int64 {
-	if a != nil {
-		return a.class.index(a.data, index)
-	}
-	return 0
+	return a.class.index(a.bits, index)
 }
 
-func (a *FixedIntArray) Bytes() []byte {
+func (a *FixedIntArray) Bits() []byte {
 	if a != nil {
-		return a.data
+		return a.bits
 	}
 	return nil
 }
 
 func (a *FixedIntArray) Reset() {
 	if a != nil {
-		a.data = a.data[:0]
+		a.bits = a.bits[:0]
 	}
 }
 
-func (a *FixedIntArray) EqualFunc() func([]byte, []byte) bool {
+type DynamicIntArray struct {
+	class    intArrayClass
+	bits     []byte
+	bitWidth int // cached to avoid an indirect method call in Append
+}
+
+func NewDynamicIntArray() *DynamicIntArray {
+	class := intArrayClass8{}
+	return &DynamicIntArray{
+		class:    class,
+		bits:     make([]byte, 0, 256),
+		bitWidth: class.bitWidth(),
+	}
+}
+
+func (a *DynamicIntArray) reclass(bitWidth int) {
+	numItems := a.Len()
+	newArray := &FixedIntArray{
+		class: intArrayClassOf(bitWidth),
+		bits:  make([]byte, 0, a.Cap()),
+	}
+
+	for i := 0; i < numItems; i++ { // TODO: optimize
+		newArray.Append(a.Index(i))
+	}
+
+	*a = DynamicIntArray{
+		class:    newArray.class,
+		bits:     newArray.bits,
+		bitWidth: newArray.class.bitWidth(),
+	}
+}
+
+func (a *DynamicIntArray) BitWidth() int {
 	if a != nil {
-		return a.class.equalFunc()
+		return a.bitWidth
+	}
+	return 0
+}
+
+func (a *DynamicIntArray) Append(v int64) {
+	if bitWidth := bits.Len64(uint64(v)); bitWidth > a.bitWidth {
+		a.reclass(bitWidth)
+	}
+	a.bits = a.class.append(a.bits, v)
+}
+
+func (a *DynamicIntArray) Cap() int {
+	if a != nil {
+		return (8 * cap(a.bits)) / a.bitWidth
+	}
+	return 0
+}
+
+func (a *DynamicIntArray) Len() int {
+	if a != nil {
+		return (8 * len(a.bits)) / a.bitWidth
+	}
+	return 0
+}
+
+func (a *DynamicIntArray) Index(index int) int64 {
+	return a.class.index(a.bits, index)
+}
+
+func (a *DynamicIntArray) Bits() []byte {
+	if a != nil {
+		return a.bits
 	}
 	return nil
 }
 
-type equalFunc = func([]byte, []byte) bool
+func (a *DynamicIntArray) Reset() {
+	if a != nil {
+		a.class = intArrayClass8{}
+		a.bits = a.bits[:0]
+		a.bitWidth = a.class.bitWidth()
+	}
+}
 
 type intArrayClass interface {
-	size() int
-
+	bitWidth() int
 	append([]byte, int64) []byte
-
 	index([]byte, int) int64
+}
 
-	equalFunc() equalFunc
+func intArrayClassOf(bitWidth int) intArrayClass {
+	// TODO: support representing bit widths smaller than 8: 1, 2, 4 would be
+	// useful for parquet repetition and definition levels. This is blocked on
+	// improving the RLE encoder to be able to offset at partial bytes in the
+	// array buffer.
+	switch {
+	case bitWidth <= 8:
+		return intArrayClass8{}
+	case bitWidth <= 16:
+		return intArrayClass16{}
+	case bitWidth <= 24:
+		return intArrayClass24{}
+	case bitWidth <= 32:
+		return intArrayClass32{}
+	default:
+		return intArrayClass64{}
+	}
 }
 
 type intArrayClass8 struct{}
 
-func (intArrayClass8) size() int { return 1 }
+func (intArrayClass8) bitWidth() int { return 8 }
 
-func (intArrayClass8) append(data []byte, value int64) []byte { return append(data, byte(value)) }
+func (intArrayClass8) append(bits []byte, value int64) []byte { return append(bits, byte(value)) }
 
-func (intArrayClass8) index(data []byte, index int) int64 { return int64(data[index]) }
-
-func (intArrayClass8) equalFunc() equalFunc { return equalInt8 }
+func (intArrayClass8) index(bits []byte, index int) int64 { return int64(int8(bits[index])) }
 
 type intArrayClass16 struct{}
 
-func (intArrayClass16) size() int { return 2 }
+func (intArrayClass16) bitWidth() int { return 16 }
 
-func (intArrayClass16) append(data []byte, value int64) []byte {
+func (intArrayClass16) append(bits []byte, value int64) []byte {
 	buf := [2]byte{}
 	binary.LittleEndian.PutUint16(buf[:], uint16(value))
-	return append(data, buf[:]...)
+	return append(bits, buf[:]...)
 }
 
-func (intArrayClass16) index(data []byte, index int) int64 {
-	return int64(int16(binary.LittleEndian.Uint16(data[2*index:])))
+func (intArrayClass16) index(bits []byte, index int) int64 {
+	return int64(int16(binary.LittleEndian.Uint16(bits[2*index:])))
 }
-
-func (intArrayClass16) equalFunc() equalFunc { return equalInt16 }
 
 type intArrayClass24 struct{}
 
-func (intArrayClass24) size() int { return 3 }
+func (intArrayClass24) bitWidth() int { return 24 }
 
-func (intArrayClass24) append(data []byte, value int64) []byte {
+func (intArrayClass24) append(bits []byte, value int64) []byte {
 	buf := [4]byte{}
 	binary.LittleEndian.PutUint32(buf[:], uint32(value))
-	return append(data, buf[:3]...)
+	return append(bits, buf[:3]...)
 }
 
-func (intArrayClass24) index(data []byte, index int) int64 {
+func (intArrayClass24) index(bits []byte, index int) int64 {
 	buf := [4]byte{}
-	copy(buf[:3], data[3*index:])
-	return int64(int32(binary.LittleEndian.Uint32(buf[:])))
+	copy(buf[:3], bits[3*index:])
+	u64 := uint64(binary.LittleEndian.Uint32(buf[:]))
+	// When the most-significant bit is set the value is negative and we must
+	// expand the one bits in the highest byte.
+	if ((u64 >> 23) & 1) != 0 {
+		u64 |= 0xFFFFFFFFFF000000
+	}
+	return int64(u64)
 }
-
-func (intArrayClass24) equalFunc() equalFunc { return equalInt24 }
 
 type intArrayClass32 struct{}
 
-func (intArrayClass32) size() int { return 4 }
+func (intArrayClass32) bitWidth() int { return 32 }
 
-func (intArrayClass32) append(data []byte, value int64) []byte {
+func (intArrayClass32) append(bits []byte, value int64) []byte {
 	buf := [4]byte{}
 	binary.LittleEndian.PutUint32(buf[:], uint32(value))
-	return append(data, buf[:]...)
+	return append(bits, buf[:]...)
 }
 
-func (intArrayClass32) index(data []byte, index int) int64 {
-	return int64(int32(binary.LittleEndian.Uint32(data[4*index:])))
+func (intArrayClass32) index(bits []byte, index int) int64 {
+	return int64(int32(binary.LittleEndian.Uint32(bits[4*index:])))
 }
-
-func (intArrayClass32) equalFunc() equalFunc { return equalInt32 }
 
 type intArrayClass64 struct{}
 
-func (intArrayClass64) size() int { return 8 }
+func (intArrayClass64) bitWidth() int { return 64 }
 
-func (intArrayClass64) append(data []byte, value int64) []byte {
+func (intArrayClass64) append(bits []byte, value int64) []byte {
 	buf := [8]byte{}
 	binary.LittleEndian.PutUint64(buf[:], uint64(value))
-	return append(data, buf[:]...)
+	return append(bits, buf[:]...)
 }
 
-func (intArrayClass64) index(data []byte, index int) int64 {
-	return int64(binary.LittleEndian.Uint64(data[8*index:]))
+func (intArrayClass64) index(bits []byte, index int) int64 {
+	return int64(binary.LittleEndian.Uint64(bits[8*index:]))
 }
-
-func (intArrayClass64) equalFunc() equalFunc { return equalInt64 }
-
-func equalInt8(a, b []byte) bool  { return a[0] == b[0] }
-func equalInt16(a, b []byte) bool { return *(*[2]byte)(a) == *(*[2]byte)(b) }
-func equalInt24(a, b []byte) bool { return *(*[3]byte)(a) == *(*[3]byte)(b) }
-func equalInt32(a, b []byte) bool { return *(*[4]byte)(a) == *(*[4]byte)(b) }
-func equalInt64(a, b []byte) bool { return *(*[8]byte)(a) == *(*[8]byte)(b) }
 
 var (
-	_ IntArray = (*FixedIntArray)(nil)
+	_ encoding.IntArray = (*FixedIntArray)(nil)
+	_ encoding.IntArray = (*DynamicIntArray)(nil)
 )

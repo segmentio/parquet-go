@@ -1,11 +1,11 @@
 package rle
 
 import (
+	"bytes"
 	"encoding/binary"
 	"io"
 
 	"github.com/segmentio/parquet/encoding"
-	"github.com/segmentio/parquet/encoding/compact"
 	"github.com/segmentio/parquet/internal/bits"
 )
 
@@ -54,7 +54,7 @@ func (e *Encoder) Reset(w io.Writer) {
 }
 
 func (e *Encoder) EncodeBoolean(data []bool) error {
-	return e.encode(bits.BoolToBytes(data), 1, 8, equalBool)
+	return e.encode(bits.BoolToBytes(data), 1, 8, equalInt8)
 }
 
 func (e *Encoder) EncodeInt32(data []int32) error {
@@ -69,8 +69,9 @@ func (e *Encoder) EncodeInt96(data [][12]byte) error {
 	return e.encode(bits.Int96ToBytes(data), uint(e.bitWidth), 96, equalInt96)
 }
 
-func (e *Encoder) EncodeIntArray(data compact.IntArrayView) error {
-	return e.encode(data.Bytes(), uint(e.bitWidth), uint(data.BitWidth()), data.EqualFunc())
+func (e *Encoder) EncodeIntArray(data encoding.IntArrayView) error {
+	srcWidth := uint(data.BitWidth())
+	return e.encode(data.Bits(), uint(e.bitWidth), srcWidth, equalFuncOf(srcWidth))
 }
 
 func (e *Encoder) encode(data []byte, dstWidth, srcWidth uint, eq func(a, b []byte) bool) error {
@@ -163,21 +164,34 @@ func forEachRun(data []byte, wordSize int, eq func(a, b []byte) bool, do func([]
 	}
 }
 
-func equalBool(a, b []byte) bool {
-	return a[0] == b[0]
+var equalFuncs = [...]func([]byte, []byte) bool{
+	0: equalInt8,
+	1: equalInt16,
+	2: equalInt24,
+	3: equalInt32,
+	4: equalInt40,
+	5: equalInt48,
+	6: equalInt56,
+	7: equalInt64,
 }
 
-func equalInt32(a, b []byte) bool {
-	return *(*[4]byte)(a) == *(*[4]byte)(b)
+func equalFuncOf(bitWidth uint) func([]byte, []byte) bool {
+	if i := (bitWidth / 8) - 1; i < uint(len(equalFuncs)) {
+		return equalFuncs[i]
+	} else {
+		return bytes.Equal
+	}
 }
 
-func equalInt64(a, b []byte) bool {
-	return *(*[8]byte)(a) == *(*[8]byte)(b)
-}
-
-func equalInt96(a, b []byte) bool {
-	return *(*[12]byte)(a) == *(*[12]byte)(b)
-}
+func equalInt8(a, b []byte) bool  { return a[0] == b[0] }
+func equalInt16(a, b []byte) bool { return *(*[2]byte)(a) == *(*[2]byte)(b) }
+func equalInt24(a, b []byte) bool { return *(*[3]byte)(a) == *(*[3]byte)(b) }
+func equalInt32(a, b []byte) bool { return *(*[4]byte)(a) == *(*[4]byte)(b) }
+func equalInt40(a, b []byte) bool { return *(*[5]byte)(a) == *(*[5]byte)(b) }
+func equalInt48(a, b []byte) bool { return *(*[6]byte)(a) == *(*[6]byte)(b) }
+func equalInt56(a, b []byte) bool { return *(*[7]byte)(a) == *(*[7]byte)(b) }
+func equalInt64(a, b []byte) bool { return *(*[8]byte)(a) == *(*[8]byte)(b) }
+func equalInt96(a, b []byte) bool { return *(*[12]byte)(a) == *(*[12]byte)(b) }
 
 // LevelEncoder is a variation of the default RLE encoder used when writing
 // definition an repetition levels for data pages v2, which omits the 4 bytes
