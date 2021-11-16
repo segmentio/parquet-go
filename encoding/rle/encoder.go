@@ -5,6 +5,7 @@ import (
 	"io"
 
 	"github.com/segmentio/parquet/encoding"
+	"github.com/segmentio/parquet/encoding/compact"
 	"github.com/segmentio/parquet/internal/bits"
 )
 
@@ -66,6 +67,10 @@ func (e *Encoder) EncodeInt64(data []int64) error {
 
 func (e *Encoder) EncodeInt96(data [][12]byte) error {
 	return e.encode(bits.Int96ToBytes(data), uint(e.bitWidth), 96, equalInt96)
+}
+
+func (e *Encoder) EncodeIntArray(data compact.IntArrayView) error {
+	return e.encode(data.Bytes(), uint(e.bitWidth), uint(data.BitWidth()), data.EqualFunc())
 }
 
 func (e *Encoder) encode(data []byte, dstWidth, srcWidth uint, eq func(a, b []byte) bool) error {
