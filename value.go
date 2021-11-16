@@ -16,11 +16,23 @@ type Value struct {
 	u64 uint64
 	u32 uint32
 	// type
-	kind Kind // +1 so the zero-value is <nil>
+	kind Kind // <<16 so the zero-value is <nil>
 	// levels
 	definitionLevel int32
 	repetitionLevel int32
 }
+
+type ValueReader interface {
+	ReadValue() (Value, error)
+}
+
+type ValueWriter interface {
+	WriteValue(Value) error
+}
+
+const (
+	valueKindShift = 16
+)
 
 func ValueOf(k Kind, v interface{}) Value {
 	return makeValue(k, reflect.ValueOf(v))
@@ -33,42 +45,42 @@ func makeValue(k Kind, v reflect.Value) Value {
 
 	switch k {
 	case Boolean:
-		return makeValueBoolean(k, v.Bool())
+		return makeValueBoolean(v.Bool())
 
 	case Int32:
 		switch v.Kind() {
 		case reflect.Int8, reflect.Int16, reflect.Int32:
-			return makeValueInt32(k, int32(v.Int()))
+			return makeValueInt32(int32(v.Int()))
 
 		case reflect.Uint8, reflect.Uint16, reflect.Uint32:
-			return makeValueInt32(k, int32(v.Uint()))
+			return makeValueInt32(int32(v.Uint()))
 		}
 
 	case Int64:
 		switch v.Kind() {
 		case reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Int:
-			return makeValueInt64(k, v.Int())
+			return makeValueInt64(v.Int())
 
 		case reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uint, reflect.Uintptr:
-			return makeValueInt64(k, int64(v.Uint()))
+			return makeValueInt64(int64(v.Uint()))
 		}
 
 	case Int96:
 		if vt := v.Type(); vt.Kind() == reflect.Array && vt.Elem().Kind() == reflect.Uint8 && vt.Len() == 12 {
 			b := v.Slice(0, v.Len()).Bytes()
-			return makeValueInt96(k, b)
+			return makeValueInt96(*(*[12]byte)(b))
 		}
 
 	case Float:
 		switch v.Kind() {
 		case reflect.Float32:
-			return makeValueFloat(k, float32(v.Float()))
+			return makeValueFloat(float32(v.Float()))
 		}
 
 	case Double:
 		switch v.Kind() {
 		case reflect.Float32, reflect.Float64:
-			return makeValueDouble(k, v.Float())
+			return makeValueDouble(v.Float())
 		}
 
 	case ByteArray:
@@ -97,75 +109,67 @@ func makeValue(k Kind, v reflect.Value) Value {
 	panic("cannot create parquet value of type " + k.String() + " from go value of type " + v.Type().String())
 }
 
-func makeValueBoolean(kind Kind, value bool) Value {
-	v := Value{kind: kind + 1}
+func makeValueBoolean(value bool) Value {
+	v := Value{kind: Boolean << valueKindShift}
 	if value {
 		v.u32 = 1
 	}
 	return v
 }
 
-func makeValueInt32(kind Kind, value int32) Value {
+func makeValueInt32(value int32) Value {
 	return Value{
-		kind: kind + 1,
+		kind: Int32 << valueKindShift,
 		u32:  uint32(value),
 	}
 }
 
-func makeValueInt64(kind Kind, value int64) Value {
+func makeValueInt64(value int64) Value {
 	return Value{
-		kind: kind + 1,
+		kind: Int64 << valueKindShift,
 		u64:  uint64(value),
 	}
 }
 
-func makeValueInt96(kind Kind, value []byte) Value {
+func makeValueInt96(value [12]byte) Value {
 	return Value{
-		kind: kind + 1,
+		kind: Int96 << valueKindShift,
 		u64:  binary.LittleEndian.Uint64(value[:8]),
 		u32:  binary.LittleEndian.Uint32(value[8:]),
 	}
 }
 
-func makeValueFloat(kind Kind, value float32) Value {
+func makeValueFloat(value float32) Value {
 	return Value{
-		kind: kind + 1,
+		kind: Float << valueKindShift,
 		u32:  math.Float32bits(value),
 	}
 }
 
-func makeValueDouble(kind Kind, value float64) Value {
+func makeValueDouble(value float64) Value {
 	return Value{
-		kind: kind + 1,
+		kind: Double << valueKindShift,
 		u64:  math.Float64bits(value),
 	}
 }
 
 func makeValueBytes(kind Kind, value []byte) Value {
-	return Value{
-		kind: kind + 1,
-		ptr:  *(**byte)(unsafe.Pointer(&value)),
-		u64:  uint64(len(value)),
-	}
+	return makeValueByteArray(kind, *(**byte)(unsafe.Pointer(&value)), len(value))
 }
 
 func makeValueString(kind Kind, value string) Value {
-	return Value{
-		kind: kind + 1,
-		ptr:  *(**byte)(unsafe.Pointer(&value)),
-		u64:  uint64(len(value)),
-	}
+	return makeValueByteArray(kind, *(**byte)(unsafe.Pointer(&value)), len(value))
 }
 
 func makeValueByteArray(kind Kind, data *byte, size int) Value {
 	return Value{
-		kind: kind + 1,
+		kind: kind << valueKindShift,
 		ptr:  data,
 		u64:  uint64(size),
 	}
 }
 
-func (v Value) Kind() Kind { return v.kind - 1 }
+func (v Value) Kind() Kind { return v.kind >> valueKindShift }
 
 func (v Value) IsNull() bool { return v.kind == 0 }
 
@@ -190,6 +194,31 @@ func (v Value) RepetitionLevel() int32 { return v.repetitionLevel }
 func (v *Value) SetDefinitionLevel(level int32) { v.definitionLevel = level }
 
 func (v *Value) SetRepetitionLevel(level int32) { v.repetitionLevel = level }
+
+func (v Value) Bytes() []byte { return v.AppendBytes(nil) }
+
+func (v Value) AppendBytes(b []byte) []byte {
+	buf := [12]byte{}
+	switch v.Kind() {
+	case Boolean:
+		binary.LittleEndian.PutUint32(buf[:4], v.u32)
+		return append(b, buf[0])
+	case Int32, Float:
+		binary.LittleEndian.PutUint32(buf[:4], v.u32)
+		return append(b, buf[:4]...)
+	case Int64, Double:
+		binary.LittleEndian.PutUint64(buf[:8], v.u64)
+		return append(b, buf[:8]...)
+	case Int96:
+		binary.LittleEndian.PutUint64(buf[:8], v.u64)
+		binary.LittleEndian.PutUint32(buf[8:], v.u32)
+		return append(b, buf[:12]...)
+	case ByteArray, FixedLenByteArray:
+		return append(b, v.ByteArray()...)
+	default:
+		return b
+	}
+}
 
 func (v Value) String() string {
 	switch v.Kind() {
@@ -240,12 +269,4 @@ func Equal(v1, v2 Value) bool {
 	default:
 		return false
 	}
-}
-
-type ValueReader interface {
-	ReadValue() (Value, error)
-}
-
-type ValueWriter interface {
-	WriteValue(Value) error
 }

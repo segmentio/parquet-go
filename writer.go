@@ -501,6 +501,8 @@ func (ccw *columnChunkWriter) Flush() error {
 	ccw.header.buffer.Reset()
 	ccw.header.encoder.Reset(ccw.header.protocol.NewWriter(&ccw.header.buffer))
 	encoding := ccw.encoding.Encoding()
+	minValueBytes := minValue.Bytes()
+	maxValueBytes := maxValue.Bytes()
 
 	if err := ccw.header.encoder.Encode(&format.PageHeader{
 		Type:                 format.DataPageV2,
@@ -516,23 +518,23 @@ func (ccw *columnChunkWriter) Flush() error {
 			// RepetitionLevelsByteLength:
 			IsCompressed: &ccw.isCompressed,
 			Statistics: format.Statistics{
-				Min:           minValue, // deprecated
-				Max:           maxValue, // deprecated
+				Min:           minValueBytes, // deprecated
+				Max:           maxValueBytes, // deprecated
 				NullCount:     int64(ccw.numNulls),
 				DistinctCount: int64(distinctCount),
-				MinValue:      minValue,
-				MaxValue:      maxValue,
+				MinValue:      minValueBytes,
+				MaxValue:      maxValueBytes,
 			},
 		},
 	}); err != nil {
 		return err
 	}
 
-	if ccw.statistics.MinValue == nil || ccw.values.Less(minValue, ccw.statistics.MinValue) {
-		ccw.statistics.MinValue = append(ccw.statistics.MinValue[:0], minValue...)
+	if ccw.statistics.MinValue == nil || ccw.values.Less(minValueBytes, ccw.statistics.MinValue) {
+		ccw.statistics.MinValue = append(ccw.statistics.MinValue[:0], minValueBytes...)
 	}
-	if ccw.statistics.MaxValue == nil || ccw.values.Less(ccw.statistics.MaxValue, maxValue) {
-		ccw.statistics.MaxValue = append(ccw.statistics.MaxValue[:0], maxValue...)
+	if ccw.statistics.MaxValue == nil || ccw.values.Less(ccw.statistics.MaxValue, maxValueBytes) {
+		ccw.statistics.MaxValue = append(ccw.statistics.MaxValue[:0], maxValueBytes...)
 	}
 
 	headerSize := int64(ccw.header.buffer.Len())

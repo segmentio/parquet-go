@@ -106,7 +106,7 @@ func (r *booleanPageReader) ReadValue() (Value, error) {
 	for {
 		if i := r.offset; i >= 0 && i < len(r.values) {
 			r.offset++
-			value := makeValueBoolean(Boolean, r.values[i])
+			value := makeValueBoolean(r.values[i])
 			value.SetRepetitionLevel(r.repetitions[i])
 			value.SetDefinitionLevel(r.definitions[i])
 			return value, nil

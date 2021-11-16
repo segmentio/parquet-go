@@ -114,7 +114,7 @@ func (d *debugWriter) Write(b []byte) (int, error) {
 }
 
 func hasParquetTools() bool {
-	_, err := exec.LookupPath("parquet-tools")
+	_, err := exec.LookPath("parquet-tools")
 	return err == nil
 }
 
