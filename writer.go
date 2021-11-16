@@ -500,6 +500,9 @@ func (ccw *columnChunkWriter) Flush() error {
 	if err := ccw.values.WriteTo(ccw.page.encoder); err != nil {
 		return err
 	}
+	if err := ccw.page.encoder.Close(); err != nil {
+		return err
+	}
 
 	ccw.header.buffer.Reset()
 	ccw.header.encoder.Reset(ccw.header.protocol.NewWriter(&ccw.header.buffer))
@@ -523,11 +526,12 @@ func (ccw *columnChunkWriter) Flush() error {
 			// RepetitionLevelsByteLength:
 			IsCompressed: &ccw.isCompressed,
 			Statistics: format.Statistics{
-				Min:       minValueBytes, // deprecated
-				Max:       maxValueBytes, // deprecated
-				NullCount: int64(ccw.numNulls),
-				MinValue:  minValueBytes,
-				MaxValue:  maxValueBytes,
+				Min:           minValueBytes, // deprecated
+				Max:           maxValueBytes, // deprecated
+				NullCount:     int64(ccw.numNulls),
+				DistinctCount: int64(ccw.values.DistinctCount()),
+				MinValue:      minValueBytes,
+				MaxValue:      maxValueBytes,
 			},
 		},
 	}); err != nil {

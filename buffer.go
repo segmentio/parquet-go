@@ -493,7 +493,7 @@ func (buf *fixedLenByteArrayPageBuffer) write(value []byte) error {
 }
 
 func (buf *fixedLenByteArrayPageBuffer) WriteTo(enc encoding.Encoder) error {
-	enc.SetBitWidth(8 * buf.size)
+	enc.SetBitWidth(0)
 	return enc.EncodeFixedLenByteArray(buf.size, buf.data)
 }
 
