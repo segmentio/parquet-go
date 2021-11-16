@@ -1,11 +1,13 @@
 package parquet
 
 import (
+	"bytes"
 	"fmt"
 	"time"
 
 	"github.com/segmentio/parquet/deprecated"
 	"github.com/segmentio/parquet/format"
+	"github.com/segmentio/parquet/internal/bits"
 )
 
 type Kind int32
@@ -29,6 +31,8 @@ type Type interface {
 	Kind() Kind
 
 	Length() int
+
+	Less(Value, Value) bool
 
 	PhyiscalType() *format.Type
 
@@ -116,6 +120,8 @@ func (t booleanType) Length() int { return 1 }
 
 func (t booleanType) PhyiscalType() *format.Type { return &physicalTypes[Boolean] }
 
+func (t booleanType) Less(v1, v2 Value) bool { return !v1.Boolean() && v2.Boolean() }
+
 func (t booleanType) NewPageBuffer(bufferSize int) PageBuffer {
 	return newBooleanPageBuffer(t, bufferSize)
 }
@@ -125,6 +131,8 @@ type int32Type struct{ primitiveType }
 func (t int32Type) Kind() Kind { return Int32 }
 
 func (t int32Type) Length() int { return 32 }
+
+func (t int32Type) Less(v1, v2 Value) bool { return v1.Int32() < v2.Int32() }
 
 func (t int32Type) PhyiscalType() *format.Type { return &physicalTypes[Int32] }
 
@@ -136,6 +144,8 @@ func (t int64Type) Kind() Kind { return Int64 }
 
 func (t int64Type) Length() int { return 64 }
 
+func (t int64Type) Less(v1, v2 Value) bool { return v1.Int64() < v2.Int64() }
+
 func (t int64Type) PhyiscalType() *format.Type { return &physicalTypes[Int64] }
 
 func (t int64Type) NewPageBuffer(bufferSize int) PageBuffer { return newInt64PageBuffer(t, bufferSize) }
@@ -145,6 +155,8 @@ type int96Type struct{ primitiveType }
 func (t int96Type) Kind() Kind { return Int96 }
 
 func (t int96Type) Length() int { return 96 }
+
+func (t int96Type) Less(v1, v2 Value) bool { return bits.CompareInt96(v1.Int96(), v2.Int96()) < 0 }
 
 func (t int96Type) PhyiscalType() *format.Type { return &physicalTypes[Int96] }
 
@@ -156,6 +168,8 @@ func (t floatType) Kind() Kind { return Float }
 
 func (t floatType) Length() int { return 32 }
 
+func (t floatType) Less(v1, v2 Value) bool { return v1.Float() < v2.Float() }
+
 func (t floatType) PhyiscalType() *format.Type { return &physicalTypes[Float] }
 
 func (t floatType) NewPageBuffer(bufferSize int) PageBuffer { return newFloatPageBuffer(t, bufferSize) }
@@ -165,6 +179,8 @@ type doubleType struct{ primitiveType }
 func (t doubleType) Kind() Kind { return Double }
 
 func (t doubleType) Length() int { return 64 }
+
+func (t doubleType) Less(v1, v2 Value) bool { return v1.Double() < v2.Double() }
 
 func (t doubleType) PhyiscalType() *format.Type { return &physicalTypes[Double] }
 
@@ -177,6 +193,10 @@ type byteArrayType struct{ primitiveType }
 func (t byteArrayType) Kind() Kind { return ByteArray }
 
 func (t byteArrayType) Length() int { return 0 }
+
+func (t byteArrayType) Less(v1, v2 Value) bool {
+	return bytes.Compare(v1.ByteArray(), v2.ByteArray()) < 0
+}
 
 func (t byteArrayType) PhyiscalType() *format.Type { return &physicalTypes[ByteArray] }
 
@@ -192,6 +212,10 @@ type fixedLenByteArrayType struct {
 func (t *fixedLenByteArrayType) Kind() Kind { return FixedLenByteArray }
 
 func (t *fixedLenByteArrayType) Length() int { return t.length }
+
+func (t *fixedLenByteArrayType) Less(v1, v2 Value) bool {
+	return bytes.Compare(v1.ByteArray(), v2.ByteArray()) < 0
+}
 
 func (t *fixedLenByteArrayType) PhyiscalType() *format.Type { return &physicalTypes[FixedLenByteArray] }
 
@@ -262,6 +286,26 @@ func (t *intType) Kind() Kind {
 
 func (t *intType) Length() int { return int(t.BitWidth) }
 
+func (t *intType) Less(v1, v2 Value) bool {
+	if t.BitWidth == 64 {
+		i1 := v1.Int64()
+		i2 := v2.Int64()
+		if t.IsSigned {
+			return i1 < i2
+		} else {
+			return uint64(i1) < uint64(i2)
+		}
+	} else {
+		i1 := v1.Int32()
+		i2 := v2.Int32()
+		if t.IsSigned {
+			return i1 < i2
+		} else {
+			return uint32(i1) < uint32(i2)
+		}
+	}
+}
+
 func (t *intType) PhyiscalType() *format.Type {
 	if t.BitWidth == 64 {
 		return &physicalTypes[Int64]
@@ -329,6 +373,8 @@ func (t *decimalType) ConvertedType() *deprecated.ConvertedType {
 	return &convertedTypes[deprecated.Decimal]
 }
 
+func (t *decimalType) Less(v1, v2 Value) bool { panic("NOT IMPLEMENTED") }
+
 func (t *decimalType) NewPageBuffer(bufferSize int) PageBuffer { panic("NOT IMPLEMENTED") }
 
 func String() Node { return &leafNode{typ: &stringType{}} }
@@ -338,6 +384,10 @@ type stringType format.StringType
 func (t *stringType) Kind() Kind { return ByteArray }
 
 func (t *stringType) Length() int { return 0 }
+
+func (t *stringType) Less(v1, v2 Value) bool {
+	return bytes.Compare(v1.ByteArray(), v2.ByteArray()) < 0
+}
 
 func (t *stringType) PhyiscalType() *format.Type {
 	return &physicalTypes[ByteArray]
@@ -363,6 +413,10 @@ func (t *uuidType) Kind() Kind { return FixedLenByteArray }
 
 func (t *uuidType) Length() int { return 16 }
 
+func (t *uuidType) Less(v1, v2 Value) bool {
+	return bytes.Compare(v1.ByteArray(), v2.ByteArray()) < 0
+}
+
 func (t *uuidType) PhyiscalType() *format.Type {
 	return &physicalTypes[ByteArray]
 }
@@ -384,6 +438,10 @@ type enumType format.EnumType
 func (t *enumType) Kind() Kind { return ByteArray }
 
 func (t *enumType) Length() int { return 0 }
+
+func (t *enumType) Less(v1, v2 Value) bool {
+	return bytes.Compare(v1.ByteArray(), v2.ByteArray()) < 0
+}
 
 func (t *enumType) PhyiscalType() *format.Type {
 	return &physicalTypes[ByteArray]
@@ -409,6 +467,10 @@ func (t *jsonType) Kind() Kind { return ByteArray }
 
 func (t *jsonType) Length() int { return 0 }
 
+func (t *jsonType) Less(v1, v2 Value) bool {
+	return bytes.Compare(v1.ByteArray(), v2.ByteArray()) < 0
+}
+
 func (t *jsonType) PhyiscalType() *format.Type {
 	return &physicalTypes[ByteArray]
 }
@@ -432,6 +494,10 @@ type bsonType format.BsonType
 func (t *bsonType) Kind() Kind { return ByteArray }
 
 func (t *bsonType) Length() int { return 0 }
+
+func (t *bsonType) Less(v1, v2 Value) bool {
+	return bytes.Compare(v1.ByteArray(), v2.ByteArray()) < 0
+}
 
 func (t *bsonType) PhyiscalType() *format.Type {
 	return &physicalTypes[ByteArray]
@@ -457,17 +523,15 @@ func (t *dateType) Kind() Kind { return Int32 }
 
 func (t *dateType) Length() int { return 32 }
 
-func (t *dateType) PhyiscalType() *format.Type {
-	return &physicalTypes[Int32]
-}
+func (t *dateType) Less(v1, v2 Value) bool { return v1.Int32() < v2.Int32() }
+
+func (t *dateType) PhyiscalType() *format.Type { return &physicalTypes[Int32] }
 
 func (t *dateType) LogicalType() *format.LogicalType {
 	return &format.LogicalType{Date: (*format.DateType)(t)}
 }
 
-func (t *dateType) ConvertedType() *deprecated.ConvertedType {
-	return &convertedTypes[deprecated.Date]
-}
+func (t *dateType) ConvertedType() *deprecated.ConvertedType { return &convertedTypes[deprecated.Date] }
 
 func (t *dateType) NewPageBuffer(bufferSize int) PageBuffer { return newInt32PageBuffer(t, bufferSize) }
 
@@ -485,30 +549,21 @@ var (
 
 type millisecond format.MilliSeconds
 
-func (u *millisecond) Duration() time.Duration {
-	return time.Millisecond
-}
-
+func (u *millisecond) Duration() time.Duration { return time.Millisecond }
 func (u *millisecond) TimeUnit() format.TimeUnit {
 	return format.TimeUnit{Millis: (*format.MilliSeconds)(u)}
 }
 
 type microsecond format.MicroSeconds
 
-func (u *microsecond) Duration() time.Duration {
-	return time.Microsecond
-}
-
+func (u *microsecond) Duration() time.Duration { return time.Microsecond }
 func (u *microsecond) TimeUnit() format.TimeUnit {
 	return format.TimeUnit{Micros: (*format.MicroSeconds)(u)}
 }
 
 type nanosecond format.NanoSeconds
 
-func (u *nanosecond) Duration() time.Duration {
-	return time.Nanosecond
-}
-
+func (u *nanosecond) Duration() time.Duration { return time.Nanosecond }
 func (u *nanosecond) TimeUnit() format.TimeUnit {
 	return format.TimeUnit{Nanos: (*format.NanoSeconds)(u)}
 }
@@ -532,6 +587,14 @@ func (t *timeType) Length() int {
 		return 32
 	} else {
 		return 64
+	}
+}
+
+func (t *timeType) Less(v1, v2 Value) bool {
+	if t.Unit.Millis != nil {
+		return v1.Int32() < v2.Int32()
+	} else {
+		return v1.Int64() < v2.Int64()
 	}
 }
 
@@ -576,9 +639,9 @@ func (t *timestampType) Kind() Kind { return Int64 }
 
 func (t *timestampType) Length() int { return 64 }
 
-func (t *timestampType) PhyiscalType() *format.Type {
-	return &physicalTypes[Int64]
-}
+func (t *timestampType) Less(v1, v2 Value) bool { return v1.Int64() < v2.Int64() }
+
+func (t *timestampType) PhyiscalType() *format.Type { return &physicalTypes[Int64] }
 
 func (t *timestampType) LogicalType() *format.LogicalType {
 	return &format.LogicalType{Timestamp: (*format.TimestampType)(t)}
@@ -609,9 +672,11 @@ func (listNode) Type() Type { return &listType{} }
 
 type listType format.ListType
 
-func (t *listType) Kind() Kind { panic("cannot call Kind on parquet list type") }
+func (t *listType) Kind() Kind { panic("cannot call Kind on parquet LIST type") }
 
 func (t *listType) Length() int { return 0 }
+
+func (t *listType) Less(Value, Value) bool { panic("cannot compare values on parquet LIST type") }
 
 func (t *listType) PhyiscalType() *format.Type { return nil }
 
@@ -642,9 +707,11 @@ func (mapNode) Type() Type { return &mapType{} }
 
 type mapType format.MapType
 
-func (t *mapType) Kind() Kind { panic("cannot call Kind on parquet map type") }
+func (t *mapType) Kind() Kind { panic("cannot call Kind on parquet MAP type") }
 
 func (t *mapType) Length() int { return 0 }
+
+func (t *mapType) Less(Value, Value) bool { panic("cannot compare values on parquet MAP type") }
 
 func (t *mapType) PhyiscalType() *format.Type { return nil }
 
@@ -662,9 +729,11 @@ func (t *mapType) NewPageBuffer(bufferSize int) PageBuffer {
 
 type nullType format.NullType
 
-func (t *nullType) Kind() Kind { panic("cannot call Kind on null parquet type") }
+func (t *nullType) Kind() Kind { panic("cannot call Kind on parquet NULL type") }
 
 func (t *nullType) Length() int { return 0 }
+
+func (t *nullType) Less(Value, Value) bool { panic("cannot compare values on parquet NULL type") }
 
 func (t *nullType) PhyiscalType() *format.Type { return nil }
 

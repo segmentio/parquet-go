@@ -1,12 +1,14 @@
 package parquet
 
 import (
+	"bytes"
 	"fmt"
 	"reflect"
 	"sort"
 
 	"github.com/segmentio/parquet/deprecated"
 	"github.com/segmentio/parquet/format"
+	"github.com/segmentio/parquet/internal/bits"
 )
 
 // Column represents a column in a parquet file.
@@ -254,6 +256,60 @@ func (t schemaElementType) Length() int {
 		return int(*t.TypeLength)
 	}
 	return 0
+}
+
+func (t schemaElementType) Less(v1, v2 Value) bool {
+	// First try to apply a logical type comparison.
+	switch lt := t.LogicalType(); {
+	case lt.UTF8 != nil:
+		return (*stringType)(lt.UTF8).Less(v1, v2)
+	case lt.Map != nil:
+		return (*mapType)(lt.Map).Less(v1, v2)
+	case lt.List != nil:
+		return (*listType)(lt.List).Less(v1, v2)
+	case lt.Enum != nil:
+		return (*enumType)(lt.Enum).Less(v1, v2)
+	case lt.Decimal != nil:
+		// TODO:
+		// return (*decimalType)(lt.Decimal).Less(v1, v2)
+	case lt.Date != nil:
+		return (*dateType)(lt.Date).Less(v1, v2)
+	case lt.Time != nil:
+		return (*timeType)(lt.Time).Less(v1, v2)
+	case lt.Timestamp != nil:
+		return (*timestampType)(lt.Timestamp).Less(v1, v2)
+	case lt.Integer != nil:
+		return (*intType)(lt.Integer).Less(v1, v2)
+	case lt.Unknown != nil:
+		return (*nullType)(lt.Unknown).Less(v1, v2)
+	case lt.Json != nil:
+		return (*jsonType)(lt.Json).Less(v1, v2)
+	case lt.Bson != nil:
+		return (*bsonType)(lt.Bson).Less(v1, v2)
+	case lt.UUID != nil:
+		return (*uuidType)(lt.UUID).Less(v1, v2)
+	}
+
+	// If no logical types were found, fallback to doing a basic comparison
+	// of the values.
+	switch t.Kind() {
+	case Boolean:
+		return !v1.Boolean() && v2.Boolean()
+	case Int32:
+		return v1.Int32() < v2.Int32()
+	case Int64:
+		return v1.Int64() < v2.Int64()
+	case Int96:
+		return bits.CompareInt96(v1.Int96(), v2.Int96()) < 0
+	case Float:
+		return v1.Float() < v2.Float()
+	case Double:
+		return v1.Double() < v2.Double()
+	case ByteArray, FixedLenByteArray:
+		return bytes.Compare(v1.ByteArray(), v2.ByteArray()) < 0
+	default:
+		return false
+	}
 }
 
 func (t schemaElementType) PhyiscalType() *format.Type {

@@ -4,7 +4,6 @@ go 1.17
 
 require (
 	github.com/andybalholm/brotli v1.0.3
-	github.com/axiomhq/hyperloglog v0.0.0-20211021164851-7f2dfa314bc7
 	github.com/google/uuid v1.3.0
 	github.com/klauspost/compress v1.13.6
 	github.com/pierrec/lz4/v4 v4.1.9
@@ -12,7 +11,4 @@ require (
 	github.com/segmentio/encoding v0.3.2-0.20211115084626-61ab87969342
 )
 
-require (
-	github.com/dgryski/go-metro v0.0.0-20180109044635-280f6062b5bc // indirect
-	golang.org/x/sys v0.0.0-20211110154304-99a53858aa08 // indirect
-)
+require golang.org/x/sys v0.0.0-20211110154304-99a53858aa08 // indirect

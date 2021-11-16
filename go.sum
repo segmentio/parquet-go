@@ -1,16 +1,7 @@
-github.com/OneOfOne/xxhash v1.2.2/go.mod h1:HSdplMjZKSmBqAxg5vPj2TmRDmfkzw+cTzAElWljhcU=
 github.com/andybalholm/brotli v1.0.3 h1:fpcw+r1N1h0Poc1F/pHbW40cUm/lMEQslZtCkBQ0UnM=
 github.com/andybalholm/brotli v1.0.3/go.mod h1:fO7iG3H7G2nSZ7m0zPUDn85XEX2GTukHGRSepvi9Eig=
-github.com/axiomhq/hyperloglog v0.0.0-20211021164851-7f2dfa314bc7 h1:YC6txRkSqLCzq5z/L9x0MM5gxaBmaIF7Wrrjl4AL8Po=
-github.com/axiomhq/hyperloglog v0.0.0-20211021164851-7f2dfa314bc7/go.mod h1:2stgcRjl6QmW+gU2h5E7BQXg4HU0gzxKWDuT5HviN9s=
-github.com/cespare/xxhash v1.1.0/go.mod h1:XrSqR1VqqWfGrhpAt58auRo0WTKS1nRRg3ghfAqPWnc=
-github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
-github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/dgryski/go-metro v0.0.0-20180109044635-280f6062b5bc h1:8WFBn63wegobsYAX0YjD+8suexZDga5CctH4CCTx2+8=
-github.com/dgryski/go-metro v0.0.0-20180109044635-280f6062b5bc/go.mod h1:c9O8+fpSOX1DM8cPNSkX/qsBWdkD4yd2dpciOWQjpBw=
 github.com/google/uuid v1.3.0 h1:t6JiXgmwXMjEs8VusXIJk2BXHsn+wx8BZdTaoZ5fu7I=
 github.com/google/uuid v1.3.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
-github.com/influxdata/influxdb v1.7.6/go.mod h1:qZna6X/4elxqT3yI9iZYdZrWWdeFOOprn86kgg4+IzY=
 github.com/klauspost/compress v1.13.6 h1:P76CopJELS0TiO2mebmnzgWaajssP/EszplttgQxcgc=
 github.com/klauspost/compress v1.13.6/go.mod h1:/3/Vjq9QcHkK5uEr5lBEmyoZ1iFhe47etQ6QUkpK6sk=
 github.com/klauspost/cpuid/v2 v2.0.6/go.mod h1:FInQzS24/EEf25PyTYn52gqo7WaD8xa0213Md/qVLRg=
@@ -19,10 +10,7 @@ github.com/pierrec/lz4/v4 v4.1.9/go.mod h1:gZWDp/Ze/IJXGXf23ltt2EXimqmTUXEy0GFuR
 github.com/segmentio/asm v1.1.0/go.mod h1:4EUJGaKsB8ImLUwOGORVsNd9vTRDeh44JGsY4aKp5I4=
 github.com/segmentio/asm v1.1.1 h1:WzUpP9BRnRgoP+v8qywthpSe9U5KLq1uDGdJBEcSeQo=
 github.com/segmentio/asm v1.1.1/go.mod h1:VCkA6aQH8usgIAUp4QMLQsAeaMl6iW7+VMLrW9Vkv0Y=
-github.com/segmentio/encoding v0.3.0 h1:kv9Y9vWgmG/3N/ENT4FxLKmmG5kaAcV2auRjhEus494=
-github.com/segmentio/encoding v0.3.0/go.mod h1:waft2p6XI4z2pk07M0YzZV4wEiqaRvsBSyWNHxVx4gU=
 github.com/segmentio/encoding v0.3.2-0.20211115084626-61ab87969342 h1:KlBCfPQipBr1PZ1nZpyU8Ccx5bFEUDD+1cmMvEbrsVo=
 github.com/segmentio/encoding v0.3.2-0.20211115084626-61ab87969342/go.mod h1:waft2p6XI4z2pk07M0YzZV4wEiqaRvsBSyWNHxVx4gU=
-github.com/spaolacci/murmur3 v0.0.0-20180118202830-f09979ecbc72/go.mod h1:JwIasOWyU6f++ZhiEuf87xNszmSA2myDM2Kzu9HwQUA=
 golang.org/x/sys v0.0.0-20211110154304-99a53858aa08 h1:WecRHqgE09JBkh/584XIE6PMz5KKE/vER4izNUi30AQ=
 golang.org/x/sys v0.0.0-20211110154304-99a53858aa08/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
