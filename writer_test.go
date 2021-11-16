@@ -32,7 +32,7 @@ func generateParquetFile(rows ...interface{}) ([]byte, error) {
 		return nil, err
 	}
 
-	return ptools("dump", path)
+	return parquetTools("dump", path)
 }
 
 type firstAndLastName struct {
@@ -81,6 +81,10 @@ value 3: R:0 D:0 V:Skywalker
 }
 
 func TestWriter(t *testing.T) {
+	if !hasParquetTools() {
+		t.Skip("parquet-tools are not installed")
+	}
+
 	for _, test := range writerTests {
 		t.Run("", func(t *testing.T) {
 			t.Parallel()
@@ -109,7 +113,12 @@ func (d *debugWriter) Write(b []byte) (int, error) {
 	return n, err
 }
 
-func ptools(cmd, path string) ([]byte, error) {
+func hasParquetTools() bool {
+	_, err := exec.LookupPath("parquet-tools")
+	return err == nil
+}
+
+func parquetTools(cmd, path string) ([]byte, error) {
 	p := exec.Command("parquet-tools", cmd, "--debug", path)
 
 	output, err := p.CombinedOutput()

@@ -183,13 +183,13 @@ func (v Value) Double() float64 { return math.Float64frombits(v.u64) }
 
 func (v Value) ByteArray() []byte { return unsafe.Slice(v.ptr, int(v.u64)) }
 
-func (v Value) DefinitionLevel() int { return int(v.definitionLevel) }
+func (v Value) DefinitionLevel() int32 { return v.definitionLevel }
 
-func (v Value) RepetitionLevel() int { return int(v.repetitionLevel) }
+func (v Value) RepetitionLevel() int32 { return v.repetitionLevel }
 
-func (v *Value) SetDefinitionLevel(level int) { v.definitionLevel = int32(level) }
+func (v *Value) SetDefinitionLevel(level int32) { v.definitionLevel = level }
 
-func (v *Value) SetRepetitionLevel(level int) { v.repetitionLevel = int32(level) }
+func (v *Value) SetRepetitionLevel(level int32) { v.repetitionLevel = level }
 
 func (v Value) String() string {
 	switch v.Kind() {
@@ -240,4 +240,12 @@ func Equal(v1, v2 Value) bool {
 	default:
 		return false
 	}
+}
+
+type ValueReader interface {
+	ReadValue() (Value, error)
+}
+
+type ValueWriter interface {
+	WriteValue(Value) error
 }

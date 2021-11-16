@@ -31,15 +31,24 @@ func (cfg *WriterConfig) Apply(options ...WriterOption) {
 	}
 }
 
-func (cfg *WriterConfig) Configure(config *WriterConfig) { *config = *cfg }
+func (cfg *WriterConfig) Configure(config *WriterConfig) {
+	if cfg.CreatedBy != "" {
+		config.CreatedBy = cfg.CreatedBy
+	}
+	if cfg.ColumnChunkBuffers != nil {
+		config.ColumnChunkBuffers = cfg.ColumnChunkBuffers
+	}
+	if cfg.PageBufferSize > 0 {
+		config.PageBufferSize = cfg.PageBufferSize
+	}
+	if cfg.RowGroupTargetSize > 0 {
+		config.RowGroupTargetSize = cfg.RowGroupTargetSize
+	}
+}
 
 type WriterOption interface {
 	Configure(*WriterConfig)
 }
-
-type writerOption func(*WriterConfig)
-
-func (opt writerOption) Configure(config *WriterConfig) { opt(config) }
 
 func CreatedBy(createdBy string) WriterOption {
 	return writerOption(func(config *WriterConfig) { config.CreatedBy = createdBy })
@@ -57,16 +66,20 @@ func RowGroupTargetSize(size int64) WriterOption {
 	return writerOption(func(config *WriterConfig) { config.RowGroupTargetSize = size })
 }
 
+type writerOption func(*WriterConfig)
+
+func (opt writerOption) Configure(config *WriterConfig) { opt(config) }
+
 type Writer struct {
 	initialized bool
 	closed      bool
 	numRows     int64
-	rowGroups   *RowGroupWriter
+	rowGroups   *rowGroupWriter
 }
 
 func NewWriter(writer io.Writer, schema *Schema, options ...WriterOption) *Writer {
 	return &Writer{
-		rowGroups: NewRowGroupWriter(writer, schema, options...),
+		rowGroups: newRowGroupWriter(writer, schema, options...),
 	}
 }
 
@@ -132,7 +145,7 @@ func (w *Writer) WriteRow(row interface{}) error {
 	return nil
 }
 
-type RowGroupWriter struct {
+type rowGroupWriter struct {
 	writer io.Writer
 	object Object
 	row    Row
@@ -152,7 +165,7 @@ type rowGroupColumn struct {
 	codec  format.CompressionCodec
 	path   []string
 	buffer Buffer
-	writer *ColumnChunkWriter
+	writer *columnChunkWriter
 
 	maxDefinitionLevel int32
 	maxRepetitionLevel int32
@@ -160,34 +173,26 @@ type rowGroupColumn struct {
 	numValues int64
 }
 
-func NewRowGroupWriter(writer io.Writer, schema *Schema, options ...WriterOption) *RowGroupWriter {
-	rgw := &RowGroupWriter{
+func newRowGroupWriter(writer io.Writer, schema *Schema, options ...WriterOption) *rowGroupWriter {
+	rgw := &rowGroupWriter{
 		writer: writer,
 		object: schema.Object(reflect.Value{}),
 		// Assume this is the first row group in the file, it starts after the
 		// "PAR1" magic number.
 		fileOffset: 4,
+		config: WriterConfig{
+			// default configuration
+			ColumnChunkBuffers: &defaultBufferPool,
+			PageBufferSize:     2 * 1024 * 1024,
+			RowGroupTargetSize: 128 * 1024 * 1024,
+		},
 	}
-
 	rgw.config.Apply(options...)
-
-	if rgw.config.ColumnChunkBuffers == nil {
-		rgw.config.ColumnChunkBuffers = NewBufferPool()
-	}
-
-	if rgw.config.PageBufferSize == 0 {
-		rgw.config.PageBufferSize = 2 * 1024 * 1024
-	}
-
-	if rgw.config.RowGroupTargetSize == 0 {
-		rgw.config.RowGroupTargetSize = 128 * 1024 * 1024
-	}
-
 	rgw.init(schema, []string{schema.Name()}, 0, 0)
 	return rgw
 }
 
-func (rgw *RowGroupWriter) init(node Node, path []string, maxRepetitionLevel, maxDefinitionLevel int32) {
+func (rgw *rowGroupWriter) init(node Node, path []string, maxRepetitionLevel, maxDefinitionLevel int32) {
 	nodeType := node.Type()
 
 	if !node.Required() {
@@ -229,7 +234,7 @@ func (rgw *RowGroupWriter) init(node Node, path []string, maxRepetitionLevel, ma
 			maxDefinitionLevel: maxDefinitionLevel,
 		}
 
-		column.writer = NewColumnChunkWriter(
+		column.writer = newColumnChunkWriter(
 			column.buffer,
 			&Uncompressed,
 			&Plain,
@@ -240,15 +245,15 @@ func (rgw *RowGroupWriter) init(node Node, path []string, maxRepetitionLevel, ma
 	}
 }
 
-func (rgw *RowGroupWriter) RowGroups() []format.RowGroup {
+func (rgw *rowGroupWriter) RowGroups() []format.RowGroup {
 	return rgw.rowGroups
 }
 
-func (rgw *RowGroupWriter) Schema() []format.SchemaElement {
+func (rgw *rowGroupWriter) Schema() []format.SchemaElement {
 	return rgw.schema
 }
 
-func (rgw *RowGroupWriter) Close() error {
+func (rgw *rowGroupWriter) Close() error {
 	var err error
 
 	if len(rgw.columns) > 0 {
@@ -264,7 +269,7 @@ func (rgw *RowGroupWriter) Close() error {
 	return err
 }
 
-func (rgw *RowGroupWriter) Flush() error {
+func (rgw *rowGroupWriter) Flush() error {
 	if len(rgw.columns) == 0 {
 		return io.ErrClosedPipe
 	}
@@ -343,7 +348,7 @@ func (rgw *RowGroupWriter) Flush() error {
 	return nil
 }
 
-func (rgw *RowGroupWriter) WriteRow(row interface{}) error {
+func (rgw *rowGroupWriter) WriteRow(row interface{}) error {
 	if len(rgw.columns) == 0 {
 		return io.ErrClosedPipe
 	}
@@ -375,7 +380,7 @@ func (rgw *RowGroupWriter) WriteRow(row interface{}) error {
 	return nil
 }
 
-type ColumnChunkWriter struct {
+type columnChunkWriter struct {
 	writer      io.Writer
 	encoding    encoding.Encoding
 	compression compress.Codec
@@ -412,8 +417,8 @@ type pageTypeEncoding struct {
 	encoding format.Encoding
 }
 
-func NewColumnChunkWriter(writer io.Writer, compression compress.Codec, encoding encoding.Encoding, values PageBuffer) *ColumnChunkWriter {
-	return &ColumnChunkWriter{
+func newColumnChunkWriter(writer io.Writer, compression compress.Codec, encoding encoding.Encoding, values PageBuffer) *columnChunkWriter {
+	return &columnChunkWriter{
 		writer:        writer,
 		encoding:      encoding,
 		compression:   compression,
@@ -424,23 +429,23 @@ func NewColumnChunkWriter(writer io.Writer, compression compress.Codec, encoding
 	}
 }
 
-func (ccw *ColumnChunkWriter) TotalUncompressedSize() int64 {
+func (ccw *columnChunkWriter) TotalUncompressedSize() int64 {
 	return ccw.totalUncompressedSize
 }
 
-func (ccw *ColumnChunkWriter) TotalCompressedSize() int64 {
+func (ccw *columnChunkWriter) TotalCompressedSize() int64 {
 	return ccw.totalCompressedSize
 }
 
-func (ccw *ColumnChunkWriter) Encodings() []format.Encoding {
+func (ccw *columnChunkWriter) Encodings() []format.Encoding {
 	return ccw.encodings
 }
 
-func (ccw *ColumnChunkWriter) EncodingStats() []format.PageEncodingStats {
+func (ccw *columnChunkWriter) EncodingStats() []format.PageEncodingStats {
 	return ccw.encodingStats
 }
 
-func (ccw *ColumnChunkWriter) Statistics() format.Statistics {
+func (ccw *columnChunkWriter) Statistics() format.Statistics {
 	ccw.statistics.Min = ccw.statistics.MinValue // deprecated
 	ccw.statistics.Max = ccw.statistics.MaxValue // depreacted
 	ccw.statistics.DistinctCount = int64(ccw.distinctCount.Estimate())
@@ -450,7 +455,7 @@ func (ccw *ColumnChunkWriter) Statistics() format.Statistics {
 	return ccw.statistics
 }
 
-func (ccw *ColumnChunkWriter) Reset() {
+func (ccw *columnChunkWriter) Reset() {
 	ccw.numNulls = 0
 	ccw.numRows = 0
 	ccw.encodings = ccw.encodings[:1] // keep the original encoding only
@@ -460,7 +465,7 @@ func (ccw *ColumnChunkWriter) Reset() {
 	ccw.statistics = format.Statistics{}
 }
 
-func (ccw *ColumnChunkWriter) Flush() error {
+func (ccw *columnChunkWriter) Flush() error {
 	ccw.page.buffer.Reset()
 	ccw.page.checksum.Reset(&ccw.page.buffer)
 
@@ -554,7 +559,7 @@ func (ccw *ColumnChunkWriter) Flush() error {
 	return nil
 }
 
-func (ccw *ColumnChunkWriter) WriteValue(v Value) error {
+func (ccw *columnChunkWriter) WriteValue(v Value) error {
 	for {
 		switch err := ccw.values.WriteValue(v); err {
 		case nil:

@@ -20,6 +20,10 @@ var (
 	ErrBufferFull = errors.New("page buffer is full")
 )
 
+var (
+	defaultBufferPool bufferPool
+)
+
 type Buffer interface {
 	io.Reader
 	io.Writer
@@ -104,19 +108,18 @@ var (
 )
 
 type PageBuffer interface {
+	ValueWriter
+
 	Reset()
 
 	Bounds() (min, max []byte)
 
 	Less(v1, v2 []byte) bool
 
-	WriteValue(Value) error
-
 	WriteTo(encoding.Encoder) (numValues, distinctCount int, err error)
 }
 
 type booleanPageBuffer struct {
-	typ    Type
 	min    [1]byte
 	max    [1]byte
 	values []bool
@@ -124,7 +127,6 @@ type booleanPageBuffer struct {
 
 func newBooleanPageBuffer(typ Type, bufferSize int) *booleanPageBuffer {
 	return &booleanPageBuffer{
-		typ:    typ,
 		values: make([]bool, 0, bufferSize),
 	}
 }
@@ -205,7 +207,6 @@ func (buf *booleanPageBuffer) WriteTo(enc encoding.Encoder) (int, int, error) {
 }
 
 type int32PageBuffer struct {
-	typ    Type
 	min    [4]byte
 	max    [4]byte
 	values []int32
@@ -213,7 +214,6 @@ type int32PageBuffer struct {
 
 func newInt32PageBuffer(typ Type, bufferSize int) *int32PageBuffer {
 	return &int32PageBuffer{
-		typ:    typ,
 		values: make([]int32, 0, bufferSize/4),
 	}
 }
@@ -264,7 +264,6 @@ func (buf *int32PageBuffer) WriteTo(enc encoding.Encoder) (int, int, error) {
 }
 
 type int64PageBuffer struct {
-	typ    Type
 	min    [8]byte
 	max    [8]byte
 	values []int64
@@ -272,7 +271,6 @@ type int64PageBuffer struct {
 
 func newInt64PageBuffer(typ Type, bufferSize int) *int64PageBuffer {
 	return &int64PageBuffer{
-		typ:    typ,
 		values: make([]int64, 0, bufferSize/8),
 	}
 }
@@ -323,7 +321,6 @@ func (buf *int64PageBuffer) WriteValue(v Value) error {
 }
 
 type int96PageBuffer struct {
-	typ    Type
 	min    [12]byte
 	max    [12]byte
 	values [][12]byte
@@ -331,7 +328,6 @@ type int96PageBuffer struct {
 
 func newInt96PageBuffer(typ Type, bufferSize int) *int96PageBuffer {
 	return &int96PageBuffer{
-		typ:    typ,
 		values: make([][12]byte, 0, bufferSize/12),
 	}
 }
@@ -378,7 +374,6 @@ func (buf *int96PageBuffer) WriteTo(enc encoding.Encoder) (int, int, error) {
 }
 
 type floatPageBuffer struct {
-	typ    Type
 	min    [4]byte
 	max    [4]byte
 	values []float32
@@ -386,7 +381,6 @@ type floatPageBuffer struct {
 
 func newFloatPageBuffer(typ Type, bufferSize int) *floatPageBuffer {
 	return &floatPageBuffer{
-		typ:    typ,
 		values: make([]float32, 0, bufferSize/4),
 	}
 }
@@ -437,7 +431,6 @@ func (buf *floatPageBuffer) WriteTo(enc encoding.Encoder) (int, int, error) {
 }
 
 type doublePageBuffer struct {
-	typ    Type
 	min    [8]byte
 	max    [8]byte
 	values []float64
@@ -445,7 +438,6 @@ type doublePageBuffer struct {
 
 func newDoublePageBuffer(typ Type, bufferSize int) *doublePageBuffer {
 	return &doublePageBuffer{
-		typ:    typ,
 		values: make([]float64, 0, bufferSize/8),
 	}
 }
@@ -496,7 +488,6 @@ func (buf *doublePageBuffer) WriteTo(enc encoding.Encoder) (int, int, error) {
 }
 
 type byteArrayPageBuffer struct {
-	typ    Type
 	buffer []byte
 	values [][]byte
 }
@@ -568,14 +559,12 @@ func (buf *byteArrayPageBuffer) WriteTo(enc encoding.Encoder) (int, int, error) 
 }
 
 type fixedLenByteArrayPageBuffer struct {
-	typ  Type
 	size int
 	data []byte
 }
 
 func newFixedLenByteArrayPageBuffer(typ Type, bufferSize int) *fixedLenByteArrayPageBuffer {
 	return &fixedLenByteArrayPageBuffer{
-		typ:  typ,
 		size: typ.Length(),
 		data: make([]byte, 0, bufferSize),
 	}
