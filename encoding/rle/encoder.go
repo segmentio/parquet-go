@@ -173,3 +173,18 @@ func equalInt64(a, b []byte) bool {
 func equalInt96(a, b []byte) bool {
 	return *(*[12]byte)(a) == *(*[12]byte)(b)
 }
+
+// LevelEncoder is a variation of the default RLE encoder used when writing
+// definition an repetition levels for data pages v2, which omits the 4 bytes
+// length prefix.
+type LevelEncoder struct{ Encoder }
+
+func (e *LevelEncoder) Close() error {
+	if len(e.data) > 4 {
+		defer e.Reset(e.w)
+		// When encoding a level, skip the length prefix, just write the data.
+		_, err := e.w.Write(e.data[4:])
+		return err
+	}
+	return nil
+}

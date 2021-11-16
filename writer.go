@@ -10,6 +10,7 @@ import (
 	"github.com/segmentio/encoding/thrift"
 	"github.com/segmentio/parquet/compress"
 	"github.com/segmentio/parquet/encoding"
+	"github.com/segmentio/parquet/encoding/rle"
 	"github.com/segmentio/parquet/format"
 )
 
@@ -236,6 +237,8 @@ func (rgw *rowGroupWriter) init(node Node, path []string, maxRepetitionLevel, ma
 			column.buffer,
 			&Uncompressed,
 			&Plain,
+			maxRepetitionLevel,
+			maxDefinitionLevel,
 			nodeType.NewPageBuffer(rgw.config.PageBufferSize),
 		)
 
@@ -384,6 +387,12 @@ type columnChunkWriter struct {
 	compression compress.Codec
 	values      PageBuffer
 
+	levels struct {
+		repetition []int32
+		definition []int32
+		encoder    rle.LevelEncoder
+	}
+
 	header struct {
 		buffer   bytes.Buffer
 		protocol thrift.CompactProtocol
@@ -398,12 +407,11 @@ type columnChunkWriter struct {
 		encoder      encoding.Encoder
 	}
 
-	minValue     Value
-	maxValue     Value
-	nullCount    int64
-	numNulls     int32
-	numRows      int32
-	isCompressed bool
+	minValue  Value
+	maxValue  Value
+	nullCount int64
+	numNulls  int32
+	numRows   int32
 
 	totalUncompressedSize int64
 	totalCompressedSize   int64
@@ -411,20 +419,22 @@ type columnChunkWriter struct {
 	encodingStats         []format.PageEncodingStats
 }
 
-type pageTypeEncoding struct {
-	pageType format.PageType
-	encoding format.Encoding
-}
-
-func newColumnChunkWriter(writer io.Writer, compression compress.Codec, encoding encoding.Encoding, values PageBuffer) *columnChunkWriter {
-	return &columnChunkWriter{
-		writer:       writer,
-		encoding:     encoding,
-		compression:  compression,
-		values:       values,
-		isCompressed: true,
-		encodings:    []format.Encoding{encoding.Encoding()},
+func newColumnChunkWriter(writer io.Writer, compression compress.Codec, encoding encoding.Encoding, maxRepetitionLevel, maxDefinitionLevel int32, values PageBuffer) *columnChunkWriter {
+	ccw := &columnChunkWriter{
+		writer:      writer,
+		encoding:    encoding,
+		compression: compression,
+		values:      values,
+		encodings:   []format.Encoding{encoding.Encoding()},
 	}
+	if maxRepetitionLevel > 0 {
+		ccw.levels.repetition = make([]int32, 0, 1024)
+	}
+	if maxDefinitionLevel > 0 {
+		ccw.levels.definition = make([]int32, 0, 1024)
+	}
+	ccw.page.encoder = encoding.NewEncoder(nil)
+	return ccw
 }
 
 func (ccw *columnChunkWriter) TotalUncompressedSize() int64 {
@@ -472,10 +482,33 @@ func (ccw *columnChunkWriter) Flush() error {
 	if numValues == 0 {
 		return nil
 	}
-	defer ccw.values.Reset()
+	defer func() {
+		ccw.values.Reset()
+		ccw.levels.repetition = ccw.levels.repetition[:0]
+		ccw.levels.definition = ccw.levels.definition[:0]
+	}()
 
 	ccw.page.buffer.Reset()
 	ccw.page.checksum.Reset(&ccw.page.buffer)
+
+	repetitionLevelsByteLength := int32(0)
+	definitionLevelsByteLength := int32(0)
+
+	if len(ccw.levels.repetition) > 0 {
+		ccw.page.uncompressed.Reset(&ccw.page.checksum)
+		ccw.levels.encoder.Reset(&ccw.page.uncompressed)
+		ccw.levels.encoder.EncodeInt32(ccw.levels.repetition)
+		ccw.levels.encoder.Close()
+		repetitionLevelsByteLength = int32(ccw.page.uncompressed.length)
+	}
+
+	if len(ccw.levels.definition) > 0 {
+		ccw.page.uncompressed.Reset(&ccw.page.checksum)
+		ccw.levels.encoder.Reset(&ccw.page.uncompressed)
+		ccw.levels.encoder.EncodeInt32(ccw.levels.definition)
+		ccw.levels.encoder.Close()
+		definitionLevelsByteLength = int32(ccw.page.uncompressed.length)
+	}
 
 	if ccw.page.compressed == nil {
 		w, err := ccw.compression.NewWriter(&ccw.page.checksum)
@@ -490,12 +523,7 @@ func (ccw *columnChunkWriter) Flush() error {
 	}
 
 	ccw.page.uncompressed.Reset(ccw.page.compressed)
-
-	if ccw.page.encoder == nil {
-		ccw.page.encoder = ccw.encoding.NewEncoder(&ccw.page.uncompressed)
-	} else {
-		ccw.page.encoder.Reset(&ccw.page.uncompressed)
-	}
+	ccw.page.encoder.Reset(&ccw.page.uncompressed)
 
 	if err := ccw.values.WriteTo(ccw.page.encoder); err != nil {
 		return err
@@ -518,13 +546,12 @@ func (ccw *columnChunkWriter) Flush() error {
 		CompressedPageSize:   int32(ccw.page.buffer.Len()),
 		CRC:                  int32(ccw.page.checksum.Sum32()),
 		DataPageHeaderV2: &format.DataPageHeaderV2{
-			NumValues: int32(numValues),
-			NumNulls:  ccw.numNulls,
-			NumRows:   ccw.numRows,
-			Encoding:  encoding,
-			// DefinitionLevelsByteLength:
-			// RepetitionLevelsByteLength:
-			IsCompressed: &ccw.isCompressed,
+			NumValues:                  int32(numValues),
+			NumNulls:                   ccw.numNulls,
+			NumRows:                    ccw.numRows,
+			Encoding:                   encoding,
+			DefinitionLevelsByteLength: definitionLevelsByteLength,
+			RepetitionLevelsByteLength: repetitionLevelsByteLength,
 			Statistics: format.Statistics{
 				Min:           minValueBytes, // deprecated
 				Max:           maxValueBytes, // deprecated
@@ -571,20 +598,28 @@ func (ccw *columnChunkWriter) Flush() error {
 }
 
 func (ccw *columnChunkWriter) WriteValue(v Value) error {
+	if cap(ccw.levels.repetition) > 0 {
+		ccw.levels.repetition = append(ccw.levels.repetition, v.RepetitionLevel())
+	}
+
+	if cap(ccw.levels.definition) > 0 {
+		ccw.levels.definition = append(ccw.levels.definition, v.DefinitionLevel())
+	}
+
+	if v.IsNull() {
+		ccw.nullCount++
+		ccw.numNulls++
+		return nil
+	}
+
 	for {
 		switch err := ccw.values.WriteValue(v); err {
 		case nil:
-			if v.IsNull() {
-				ccw.nullCount++
-				ccw.numNulls++
-			}
 			return nil
-
 		case ErrBufferFull:
 			if err := ccw.Flush(); err != nil {
 				return err
 			}
-
 		default:
 			return err
 		}

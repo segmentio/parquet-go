@@ -346,7 +346,7 @@ func (c *ColumnPages) decode(valueType Kind, repetitions, definitions []int32, d
 			c.v2.repetitions.setDataPageV2Section(c.column.file, c.reader.offset, repetitionsLength)
 			c.v2.definitions.setDataPageV2Section(c.column.file, c.reader.offset+repetitionsLength, definitionsLength)
 			// Skip the levels, we do this instead of positioning the reader at
-			// the beginning of the data so the CRC32 gets computed.
+			// the beginning of the data so the CRC32 checksum gets computed.
 			remainLength := c.data.N
 			levelsLength := repetitionsLength + definitionsLength
 			c.data.N = levelsLength
