@@ -69,7 +69,7 @@ func (c *Column) ChildByName(name string) Node { return c.Column(name) }
 // Object constructs a parquet object from the Go value passed as argument.
 //
 // This method contributes to satisfying the Node interface.
-func (c *Column) Object(value reflect.Value) Object {
+func (c *Column) Construct(value reflect.Value) Object {
 	panic("NOT IMPLEMENTED (TODO)")
 }
 

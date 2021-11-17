@@ -21,47 +21,151 @@ type Node interface {
 
 	ChildByName(name string) Node
 
-	Object(value reflect.Value) Object
+	Construct(value reflect.Value) Object
 }
 
 func Optional(node Node) Node {
 	if node.Optional() {
 		return node
 	}
-	return &optional{node}
+	return &optionalNode{node}
 }
 
-type optional struct{ Node }
+type optionalNode struct{ Node }
 
-func (opt *optional) Optional() bool { return true }
-func (opt *optional) Repeated() bool { return false }
-func (opt *optional) Required() bool { return false }
+func (opt *optionalNode) Optional() bool { return true }
+func (opt *optionalNode) Repeated() bool { return false }
+func (opt *optionalNode) Required() bool { return false }
+func (opt *optionalNode) Construct(value reflect.Value) Object {
+	definitionLevel := int32(1)
+
+	if !value.IsValid() {
+		definitionLevel = 0
+	} else {
+		switch value.Kind() {
+		case reflect.Ptr:
+			if value.IsNil() {
+				definitionLevel = 0
+				value = reflect.Value{}
+			} else {
+				value = value.Elem()
+			}
+
+		case reflect.Slice, reflect.Map:
+			if value.IsNil() {
+				definitionLevel = 0
+			}
+		}
+	}
+
+	return &optionalObject{
+		node:            opt,
+		definitionLevel: definitionLevel,
+		Object:          opt.Node.Construct(value),
+	}
+}
+
+type optionalObject struct {
+	node            Node
+	definitionLevel int32
+	Object
+}
+
+func (opt *optionalObject) Node() Node { return opt.node }
+
+func (opt *optionalObject) Index(index int) Object {
+	object := opt.Object.Index(index)
+	return &optionalObject{
+		node:            object.Node(),
+		definitionLevel: opt.definitionLevel,
+		Object:          object,
+	}
+}
+
+func (opt *optionalObject) Value() (value Value) {
+	value = opt.Object.Value()
+	value.definitionLevel += opt.definitionLevel
+	return
+}
 
 func Repeated(node Node) Node {
 	if node.Repeated() {
 		return node
 	}
-	return &repeated{node}
+	return &repeatedNode{node}
 }
 
-type repeated struct{ Node }
+type repeatedNode struct{ Node }
 
-func (opt *repeated) Optional() bool { return false }
-func (opt *repeated) Repeated() bool { return true }
-func (opt *repeated) Required() bool { return false }
+func (rep *repeatedNode) Optional() bool { return false }
+func (rep *repeatedNode) Repeated() bool { return true }
+func (rep *repeatedNode) Required() bool { return false }
+func (rep *repeatedNode) Construct(value reflect.Value) Object {
+	return &repeatedElement{elem: rep, slice: value}
+}
+
+type repeatedElement struct {
+	elem  *repeatedNode
+	slice reflect.Value
+}
+
+func (rep *repeatedElement) Node() Node {
+	return rep.elem
+}
+
+func (rep *repeatedElement) Len() int {
+	if rep.slice.IsValid() {
+		return rep.slice.Len()
+	}
+	return 0
+}
+
+func (rep *repeatedElement) Index(index int) Object {
+	repetitionLevel := int32(1)
+	definitionLevel := int32(1)
+
+	if index == 0 {
+		repetitionLevel = 0
+	}
+
+	return &repeatedObject{
+		repetitionLevel: repetitionLevel,
+		definitionLevel: definitionLevel,
+		Object:          rep.elem.Node.Construct(rep.slice.Index(index)),
+	}
+}
+
+func (rep *repeatedElement) Value() Value {
+	panic("cannot call Value on repeated element")
+}
+
+func (rep *repeatedElement) Reset(value reflect.Value) { rep.slice = value }
+
+type repeatedObject struct {
+	repetitionLevel int32
+	definitionLevel int32
+	Object
+}
+
+func (rep *repeatedObject) Value() (value Value) {
+	value = rep.Object.Value()
+	value.repetitionLevel += rep.repetitionLevel
+	value.definitionLevel += rep.definitionLevel
+	return
+}
 
 func Required(node Node) Node {
 	if node.Required() {
 		return node
 	}
-	return &required{node}
+	return &requiredNode{node}
 }
 
-type required struct{ Node }
+type requiredNode struct{ Node }
 
-func (opt *required) Optional() bool { return false }
-func (opt *required) Repeated() bool { return false }
-func (opt *required) Required() bool { return true }
+func (req *requiredNode) Optional() bool { return false }
+func (req *requiredNode) Repeated() bool { return false }
+func (req *requiredNode) Required() bool { return true }
 
 type leafNode struct{ typ Type }
 
@@ -77,7 +181,7 @@ func (n *leafNode) ChildByName(string) Node {
 func (n *leafNode) RowOf(reflect.Value) Row {
 	panic("cannot create row from leaf parquet node")
 }
-func (n *leafNode) Object(value reflect.Value) Object {
+func (n *leafNode) Construct(value reflect.Value) Object {
 	return &leafObject{node: n, value: makeValue(n.typ.Kind(), value)}
 }
 
@@ -88,6 +192,7 @@ type leafObject struct {
 
 func (obj *leafObject) Len() int                  { return 0 }
 func (obj *leafObject) Index(int) Object          { panic("cannot call Index on leaf object") }
+func (obj *leafObject) Node() Node                { return obj.node }
 func (obj *leafObject) Value() Value              { return obj.value }
 func (obj *leafObject) Reset(value reflect.Value) { obj.value = makeValue(obj.node.typ.Kind(), value) }
 

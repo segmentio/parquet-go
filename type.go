@@ -3,6 +3,7 @@ package parquet
 import (
 	"bytes"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/segmentio/parquet/deprecated"
@@ -663,12 +664,22 @@ func (t *timestampType) NewPageBuffer(bufferSize int) PageBuffer {
 }
 
 func List(of Node) Node {
-	return listNode{Group{"list": Repeated(Group{"element": of})}}
+	return &listNode{
+		Group:    Group{"list": Repeated(Group{"element": of})},
+		repeated: repeatedNode{of},
+	}
 }
 
-type listNode struct{ Group }
+type listNode struct {
+	Group
+	repeated repeatedNode
+}
 
-func (listNode) Type() Type { return &listType{} }
+func (list *listNode) Type() Type { return &listType{} }
+
+func (list *listNode) Construct(value reflect.Value) Object {
+	return list.repeated.Construct(value)
+}
 
 type listType format.ListType
 

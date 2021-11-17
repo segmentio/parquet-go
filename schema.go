@@ -63,12 +63,24 @@ func (s *Schema) ChildNames() []string { return s.root.ChildNames() }
 
 func (s *Schema) ChildByName(name string) Node { return s.root.ChildByName(name) }
 
-func (s *Schema) Object(value reflect.Value) Object { return s.root.Object(value) }
+func (s *Schema) Construct(value reflect.Value) Object { return s.root.Construct(dereference(value)) }
 
 func (s *Schema) String() string {
 	b := new(strings.Builder)
 	Print(b, s.name, s.root)
 	return b.String()
+}
+
+func dereference(value reflect.Value) reflect.Value {
+	if value.IsValid() {
+		if value.Kind() != reflect.Ptr {
+			return value
+		}
+		if !value.IsNil() {
+			return value.Elem()
+		}
+	}
+	return reflect.Value{}
 }
 
 type structNode struct {
@@ -120,33 +132,26 @@ func (s *structNode) ChildByName(name string) Node {
 	panic("column not found in parquet schema: " + name)
 }
 
-func (s *structNode) Object(value reflect.Value) Object {
+func (s *structNode) Construct(value reflect.Value) Object {
 	obj := &structObject{
 		node:   s,
 		fields: make([]Object, len(s.fields)),
 	}
 
 	structFields := s.fields
-	if value = dereference(value); value.IsValid() {
+	if value.IsValid() {
 		for i := range obj.fields {
 			f := &structFields[i]
-			obj.fields[i] = f.Object(value.FieldByIndex(f.index))
+			obj.fields[i] = f.Construct(value.FieldByIndex(f.index))
 		}
 	} else {
 		for i := range obj.fields {
 			f := &structFields[i]
-			obj.fields[i] = f.Object(reflect.Value{})
+			obj.fields[i] = f.Construct(reflect.Value{})
 		}
 	}
 
 	return obj
-}
-
-func dereference(value reflect.Value) reflect.Value {
-	if value.IsValid() && value.Kind() == reflect.Ptr && !value.IsNil() {
-		return value.Elem()
-	}
-	return value
 }
 
 type structObject struct {
@@ -154,20 +159,12 @@ type structObject struct {
 	fields []Object
 }
 
-func (obj *structObject) Len() int {
-	return len(obj.fields)
-}
-
-func (obj *structObject) Index(index int) Object {
-	return obj.fields[index]
-}
-
-func (obj *structObject) Value() Value {
-	panic("cannot call Value on parquet struct object")
-}
-
+func (obj *structObject) Len() int               { return len(obj.fields) }
+func (obj *structObject) Index(index int) Object { return obj.fields[index] }
+func (obj *structObject) Node() Node             { return obj.node }
+func (obj *structObject) Value() Value           { panic("cannot call Value on parquet struct object") }
 func (obj *structObject) Reset(value reflect.Value) {
-	if value = dereference(value); value.IsValid() {
+	if value.IsValid() {
 		structFields := obj.node.fields
 		for i, field := range obj.fields {
 			field.Reset(value.FieldByIndex(structFields[i].index))
@@ -179,24 +176,33 @@ func (obj *structObject) Reset(value reflect.Value) {
 	}
 }
 
-func (obj *structObject) reset() {
-	for _, field := range obj.fields {
-		field.Reset(reflect.Value{})
-	}
+type structField struct {
+	Node
+	name  string
+	index []int
 }
 
-type structField struct {
-	node     Node
-	name     string
-	optional bool
-	repeated bool
-	index    []int
+func structFieldString(f reflect.StructField) string {
+	return f.Name + " " + f.Type.String() + " " + string(f.Tag)
+}
+
+func throwInvalidFieldTag(f reflect.StructField, tag string) {
+	panic("struct has invalid '" + tag + "' parquet tag: " + structFieldString(f))
+}
+
+func throwUnknownFieldTag(f reflect.StructField, tag string) {
+	panic("struct has unrecognized '" + tag + "' parquet tag: " + structFieldString(f))
 }
 
 func makeStructField(f reflect.StructField, index []int) structField {
-	field := structField{
-		name:  f.Name,
-		index: index,
+	field := structField{index: index}
+	optional := false
+
+	setNode := func(node Node) {
+		if field.Node != nil {
+			panic("struct field has multiple logical parquet types declared: " + structFieldString(f))
+		}
+		field.Node = node
 	}
 
 	if tag := f.Tag.Get("parquet"); tag != "" {
@@ -208,41 +214,52 @@ func makeStructField(f reflect.StructField, index []int) structField {
 
 			switch opt {
 			case "optional":
-				field.optional = true
+				optional = true
 
 			case "list":
+				switch f.Type.Kind() {
+				case reflect.Slice:
+					setNode(List(nodeOf(f.Type.Elem())))
+				default:
+					throwInvalidFieldTag(f, opt)
+				}
 
 			case "enum":
 				switch f.Type.Kind() {
 				case reflect.String:
-					field.node = Enum()
+					setNode(Enum())
 				default:
-					panic("struct has invalid 'enum' parquet tag on field of type " + f.Type.String())
+					throwInvalidFieldTag(f, opt)
 				}
 
 			case "uuid":
+				switch f.Type.Kind() {
+				case reflect.String:
+					setNode(UUID())
+
+				case reflect.Array:
+					if f.Type.Elem().Kind() != reflect.Uint8 || f.Type.Len() != 16 {
+						throwInvalidFieldTag(f, opt)
+					}
+				}
 
 			default:
-				panic("struct field contains unknown parquet tag: " + opt)
+				throwUnknownFieldTag(f, tag)
 			}
 		}
 	}
 
-	if field.node == nil {
-		field.node = nodeOf(f.Type)
+	if field.name == "" {
+		field.name = f.Name
 	}
-
+	if field.Node == nil {
+		field.Node = nodeOf(f.Type)
+	}
+	if optional {
+		field.Node = Optional(field.Node)
+	}
 	return field
 }
-
-func (f *structField) Type() Type                        { return f.node.Type() }
-func (f *structField) Optional() bool                    { return f.optional }
-func (f *structField) Repeated() bool                    { return f.repeated }
-func (f *structField) Required() bool                    { return !f.optional && !f.repeated }
-func (f *structField) NumChildren() int                  { return f.node.NumChildren() }
-func (f *structField) ChildNames() []string              { return f.node.ChildNames() }
-func (f *structField) ChildByName(name string) Node      { return f.node.ChildByName(name) }
-func (f *structField) Object(value reflect.Value) Object { return f.node.Object(value) }
 
 func nodeOf(t reflect.Type) Node {
 	switch t.Kind() {
@@ -261,12 +278,17 @@ func nodeOf(t reflect.Type) Node {
 	case reflect.String:
 		return String()
 	case reflect.Ptr:
-		return nodeOf(t.Elem())
+		return Optional(nodeOf(t.Elem()))
 	case reflect.Struct:
 		return structNodeOf(t)
-	default:
-		panic("cannot create parquet node from go value of type " + t.String())
+	case reflect.Slice:
+		return Repeated(nodeOf(t.Elem()))
+	case reflect.Array:
+		if t.Elem().Kind() == reflect.Uint8 && t.Len() == 16 {
+			return UUID()
+		}
 	}
+	panic("cannot create parquet node from go value of type " + t.String())
 }
 
 func split(s string) (head, tail string) {

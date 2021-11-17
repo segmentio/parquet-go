@@ -8,6 +8,8 @@ import (
 	"reflect"
 	"strconv"
 	"unsafe"
+
+	"github.com/google/uuid"
 )
 
 type Value struct {
@@ -34,7 +36,44 @@ const (
 	valueKindShift = 16
 )
 
-func ValueOf(k Kind, v interface{}) Value {
+func ValueOf(v interface{}) Value {
+	switch value := v.(type) {
+	case nil:
+		return Value{}
+	case uuid.UUID:
+		return makeValueBytes(FixedLenByteArray, value[:])
+	}
+
+	k := Kind(-1)
+	t := reflect.TypeOf(v)
+
+	switch t.Kind() {
+	case reflect.Bool:
+		k = Boolean
+	case reflect.Int8, reflect.Int16, reflect.Int32, reflect.Uint8, reflect.Uint16, reflect.Uint32:
+		k = Int32
+	case reflect.Int64, reflect.Int, reflect.Uint64, reflect.Uint, reflect.Uintptr:
+		k = Int64
+	case reflect.Float32:
+		k = Float
+	case reflect.Float64:
+		k = Double
+	case reflect.String:
+		k = ByteArray
+	case reflect.Slice:
+		if t.Elem().Kind() == reflect.Uint8 {
+			k = ByteArray
+		}
+	case reflect.Array:
+		if t.Elem().Kind() == reflect.Uint8 {
+			k = FixedLenByteArray
+		}
+	}
+
+	if k < 0 {
+		panic("cannot create parquet value from go value of type " + t.String())
+	}
+
 	return makeValue(k, reflect.ValueOf(v))
 }
 
@@ -101,6 +140,16 @@ func makeValue(k Kind, v reflect.Value) Value {
 
 		case reflect.Array:
 			if vt.Elem().Kind() == reflect.Uint8 {
+				// When the array is addressable, we take advantage of this
+				// condition to avoid the heap allocation otherwise needed
+				// to pack the reference into an interface{} value.
+				if v.CanAddr() {
+					v = v.Addr()
+				} else {
+					u := reflect.New(vt)
+					u.Elem().Set(v)
+					v = u
+				}
 				return makeValueByteArray(k, (*byte)(unsafe.Pointer(v.Pointer())), vt.Len())
 			}
 		}
@@ -191,10 +240,6 @@ func (v Value) DefinitionLevel() int { return int(v.definitionLevel) }
 
 func (v Value) RepetitionLevel() int { return int(v.repetitionLevel) }
 
-func (v *Value) SetDefinitionLevel(level int) { v.definitionLevel = int32(level) }
-
-func (v *Value) SetRepetitionLevel(level int) { v.repetitionLevel = int32(level) }
-
 func (v Value) Bytes() []byte { return v.AppendBytes(nil) }
 
 func (v Value) AppendBytes(b []byte) []byte {
@@ -239,6 +284,12 @@ func (v Value) String() string {
 	default:
 		return "<nil>"
 	}
+}
+
+func (v Value) Level(repetitionLevel, definitionLevel int) Value {
+	v.repetitionLevel = int32(repetitionLevel)
+	v.definitionLevel = int32(definitionLevel)
+	return v
 }
 
 func makeInt96(lo uint64, hi uint32) (i96 [12]byte) {

@@ -37,7 +37,7 @@ func (g Group) ChildByName(name string) Node {
 	panic("column not found in parquet group: " + name)
 }
 
-func (g Group) Object(value reflect.Value) Object {
+func (g Group) Construct(value reflect.Value) Object {
 	names := g.ChildNames()
 	group := &groupObject{
 		group:   g,
@@ -48,11 +48,11 @@ func (g Group) Object(value reflect.Value) Object {
 	if value.IsValid() {
 		for i, name := range group.names {
 			index := reflect.ValueOf(&group.names[i]).Elem()
-			group.objects[i] = g[name].Object(value.MapIndex(index))
+			group.objects[i] = g[name].Construct(value.MapIndex(index))
 		}
 	} else {
 		for i, name := range group.names {
-			group.objects[i] = g[name].Object(reflect.Value{})
+			group.objects[i] = g[name].Construct(reflect.Value{})
 		}
 	}
 
@@ -75,18 +75,10 @@ type groupObject struct {
 	objects []Object
 }
 
-func (obj *groupObject) Len() int {
-	return len(obj.objects)
-}
-
-func (obj *groupObject) Index(index int) Object {
-	return obj.objects[index]
-}
-
-func (obj *groupObject) Value() Value {
-	panic("cannot call Value on parquet group object")
-}
-
+func (obj *groupObject) Len() int               { return len(obj.objects) }
+func (obj *groupObject) Index(index int) Object { return obj.objects[index] }
+func (obj *groupObject) Node() Node             { return obj.group }
+func (obj *groupObject) Value() Value           { panic("cannot call Value on parquet group object") }
 func (obj *groupObject) Reset(value reflect.Value) {
 	if value.IsValid() {
 		for i, child := range obj.objects {

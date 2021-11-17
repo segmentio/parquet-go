@@ -1,11 +1,16 @@
 package parquet
 
-import "reflect"
+import (
+	"fmt"
+	"reflect"
+)
 
 type Object interface {
 	Len() int
 
 	Index(int) Object
+
+	Node() Node
 
 	Value() Value
 
@@ -14,14 +19,8 @@ type Object interface {
 
 type Row struct {
 	stack  []iterator
-	value  Value
 	column int
-}
-
-type iterator struct {
-	object Object
-	index  int
-	limit  int
+	value  Value
 }
 
 func NewRow(object Object) *Row {
@@ -36,21 +35,11 @@ func (row *Row) Reset(object Object) {
 	}
 
 	row.stack = row.stack[:0]
-	row.value = Value{}
 	row.column = -1
+	row.value = Value{}
 
 	if object != nil {
-		limit := object.Len()
-
-		if limit == 0 {
-			panic("cannot initialize parquet row with object of length zero")
-		}
-
-		row.stack = append(row.stack, iterator{
-			object: object,
-			index:  -1,
-			limit:  limit,
-		})
+		row.stack = append(row.stack, makeIterator(object, 0))
 	}
 }
 
@@ -64,20 +53,23 @@ func (row *Row) Next() bool {
 		it := &row.stack[len(row.stack)-1]
 
 		if it.index++; it.index < it.limit {
-			child := it.object.Index(it.index)
-			limit := child.Len()
+			elem := it.object.Index(it.index)
+			node := elem.Node()
 
-			if limit > 0 {
-				row.stack = append(row.stack, iterator{
-					object: child,
-					index:  -1,
-					limit:  limit,
-				})
+			fmt.Printf("%#v (repeated=%t)\n", node, node.Repeated())
+
+			if node.NumChildren() > 0 || node.Repeated() {
+				row.stack = append(row.stack, makeIterator(elem, row.column))
 				continue
 			}
 
-			row.value = child.Value()
-			row.column++
+			if it.index == 0 && it.repeated {
+				row.column = it.column
+			} else {
+				row.column++
+			}
+
+			row.value = elem.Value()
 			return true
 		}
 
@@ -87,10 +79,28 @@ func (row *Row) Next() bool {
 	}
 }
 
+func (row *Row) ColumnIndex() int {
+	return int(row.column)
+}
+
 func (row *Row) Value() Value {
 	return row.value
 }
 
-func (row *Row) ColumnIndex() int {
-	return row.column
+type iterator struct {
+	object   Object
+	column   int
+	index    int
+	limit    int
+	repeated bool
+}
+
+func makeIterator(object Object, column int) iterator {
+	return iterator{
+		object:   object,
+		column:   column,
+		index:    -1,
+		limit:    object.Len(),
+		repeated: object.Node().Repeated(),
+	}
 }

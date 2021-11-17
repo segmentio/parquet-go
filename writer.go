@@ -176,7 +176,7 @@ type rowGroupColumn struct {
 func newRowGroupWriter(writer io.Writer, schema *Schema, options ...WriterOption) *rowGroupWriter {
 	rgw := &rowGroupWriter{
 		writer: writer,
-		object: schema.Object(reflect.Value{}),
+		object: schema.Construct(reflect.Value{}),
 		// Assume this is the first row group in the file, it starts after the
 		// "PAR1" magic number.
 		fileOffset: 4,
