@@ -18,7 +18,7 @@ type Value struct {
 	u64 uint64
 	u32 uint32
 	// type
-	kind Kind // <<16 so the zero-value is <nil>
+	kind int32 // XOR(Kind) so the zero-value is <nil>
 	// levels
 	definitionLevel int32
 	repetitionLevel int32
@@ -31,10 +31,6 @@ type ValueReader interface {
 type ValueWriter interface {
 	WriteValue(Value) error
 }
-
-const (
-	valueKindShift = 16
-)
 
 func ValueOf(v interface{}) Value {
 	switch value := v.(type) {
@@ -90,7 +86,6 @@ func makeValue(k Kind, v reflect.Value) Value {
 		switch v.Kind() {
 		case reflect.Int8, reflect.Int16, reflect.Int32:
 			return makeValueInt32(int32(v.Int()))
-
 		case reflect.Uint8, reflect.Uint16, reflect.Uint32:
 			return makeValueInt32(int32(v.Uint()))
 		}
@@ -99,7 +94,6 @@ func makeValue(k Kind, v reflect.Value) Value {
 		switch v.Kind() {
 		case reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Int:
 			return makeValueInt64(v.Int())
-
 		case reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uint, reflect.Uintptr:
 			return makeValueInt64(int64(v.Uint()))
 		}
@@ -126,7 +120,6 @@ func makeValue(k Kind, v reflect.Value) Value {
 		switch vt := v.Type(); vt.Kind() {
 		case reflect.String:
 			return makeValueString(k, v.String())
-
 		case reflect.Slice:
 			if vt.Elem().Kind() == reflect.Uint8 {
 				return makeValueBytes(k, v.Bytes())
@@ -137,20 +130,9 @@ func makeValue(k Kind, v reflect.Value) Value {
 		switch vt := v.Type(); vt.Kind() {
 		case reflect.String: // uuid
 			return makeValueString(k, v.String())
-
 		case reflect.Array:
 			if vt.Elem().Kind() == reflect.Uint8 {
-				// When the array is addressable, we take advantage of this
-				// condition to avoid the heap allocation otherwise needed
-				// to pack the reference into an interface{} value.
-				if v.CanAddr() {
-					v = v.Addr()
-				} else {
-					u := reflect.New(vt)
-					u.Elem().Set(v)
-					v = u
-				}
-				return makeValueByteArray(k, (*byte)(unsafe.Pointer(v.Pointer())), vt.Len())
+				return makeValueFixedLenByteArray(v)
 			}
 		}
 	}
@@ -159,7 +141,7 @@ func makeValue(k Kind, v reflect.Value) Value {
 }
 
 func makeValueBoolean(value bool) Value {
-	v := Value{kind: Boolean << valueKindShift}
+	v := Value{kind: ^int32(Boolean)}
 	if value {
 		v.u32 = 1
 	}
@@ -168,21 +150,21 @@ func makeValueBoolean(value bool) Value {
 
 func makeValueInt32(value int32) Value {
 	return Value{
-		kind: Int32 << valueKindShift,
+		kind: ^int32(Int32),
 		u32:  uint32(value),
 	}
 }
 
 func makeValueInt64(value int64) Value {
 	return Value{
-		kind: Int64 << valueKindShift,
+		kind: ^int32(Int64),
 		u64:  uint64(value),
 	}
 }
 
 func makeValueInt96(value [12]byte) Value {
 	return Value{
-		kind: Int96 << valueKindShift,
+		kind: ^int32(Int96),
 		u64:  binary.LittleEndian.Uint64(value[:8]),
 		u32:  binary.LittleEndian.Uint32(value[8:]),
 	}
@@ -190,14 +172,14 @@ func makeValueInt96(value [12]byte) Value {
 
 func makeValueFloat(value float32) Value {
 	return Value{
-		kind: Float << valueKindShift,
+		kind: ^int32(Float),
 		u32:  math.Float32bits(value),
 	}
 }
 
 func makeValueDouble(value float64) Value {
 	return Value{
-		kind: Double << valueKindShift,
+		kind: ^int32(Double),
 		u64:  math.Float64bits(value),
 	}
 }
@@ -210,15 +192,30 @@ func makeValueString(kind Kind, value string) Value {
 	return makeValueByteArray(kind, *(**byte)(unsafe.Pointer(&value)), len(value))
 }
 
+func makeValueFixedLenByteArray(v reflect.Value) Value {
+	t := v.Type()
+	// When the array is addressable, we take advantage of this
+	// condition to avoid the heap allocation otherwise needed
+	// to pack the reference into an interface{} value.
+	if v.CanAddr() {
+		v = v.Addr()
+	} else {
+		u := reflect.New(t)
+		u.Elem().Set(v)
+		v = u
+	}
+	return makeValueByteArray(FixedLenByteArray, (*byte)(unsafe.Pointer(v.Pointer())), t.Len())
+}
+
 func makeValueByteArray(kind Kind, data *byte, size int) Value {
 	return Value{
-		kind: kind << valueKindShift,
+		kind: ^int32(kind),
 		ptr:  data,
 		u64:  uint64(size),
 	}
 }
 
-func (v Value) Kind() Kind { return v.kind >> valueKindShift }
+func (v Value) Kind() Kind { return ^Kind(v.kind) }
 
 func (v Value) IsNull() bool { return v.kind == 0 }
 
@@ -317,6 +314,8 @@ func Equal(v1, v2 Value) bool {
 		return v1.Double() == v2.Double()
 	case ByteArray, FixedLenByteArray:
 		return bytes.Equal(v1.ByteArray(), v2.ByteArray())
+	case -1: // nil
+		return true
 	default:
 		return false
 	}

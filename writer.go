@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"reflect"
 
 	"github.com/segmentio/encoding/thrift"
 	"github.com/segmentio/parquet/compress"
@@ -147,11 +146,10 @@ func (w *Writer) WriteRow(row interface{}) error {
 
 type rowGroupWriter struct {
 	writer io.Writer
-	object Object
-	row    Row
+	schema *Schema
 
 	columns   []*rowGroupColumn
-	schema    []format.SchemaElement
+	colSchema []format.SchemaElement
 	rowGroups []format.RowGroup
 
 	numRows    int64
@@ -176,7 +174,7 @@ type rowGroupColumn struct {
 func newRowGroupWriter(writer io.Writer, schema *Schema, options ...WriterOption) *rowGroupWriter {
 	rgw := &rowGroupWriter{
 		writer: writer,
-		object: schema.Construct(reflect.Value{}),
+		schema: schema,
 		// Assume this is the first row group in the file, it starts after the
 		// "PAR1" magic number.
 		fileOffset: 4,
@@ -207,7 +205,7 @@ func (rgw *rowGroupWriter) init(node Node, path []string, maxRepetitionLevel, ma
 		repetitionType = fieldRepetitionTypeOf(node)
 	}
 
-	rgw.schema = append(rgw.schema, format.SchemaElement{
+	rgw.colSchema = append(rgw.colSchema, format.SchemaElement{
 		Type:           nodeType.PhyiscalType(),
 		TypeLength:     typeLengthOf(nodeType),
 		RepetitionType: repetitionType,
@@ -252,7 +250,7 @@ func (rgw *rowGroupWriter) RowGroups() []format.RowGroup {
 }
 
 func (rgw *rowGroupWriter) Schema() []format.SchemaElement {
-	return rgw.schema
+	return rgw.colSchema
 }
 
 func (rgw *rowGroupWriter) Close() error {
@@ -350,19 +348,24 @@ func (rgw *rowGroupWriter) Flush() error {
 	return nil
 }
 
+type rowGroupTraversal struct{ *rowGroupWriter }
+
+func (rgw rowGroupTraversal) Traverse(columnIndex int, value Value) error {
+	col := rgw.columns[columnIndex]
+	col.writer.WriteValue(value)
+	col.numValues++
+	return nil
+}
+
 func (rgw *rowGroupWriter) WriteRow(row interface{}) error {
 	if len(rgw.columns) == 0 {
 		return io.ErrClosedPipe
 	}
 
-	rgw.object.Reset(reflect.ValueOf(row))
-	rgw.row.Reset(rgw.object)
-
-	for rgw.row.Next() {
-		val := rgw.row.Value()
-		col := rgw.columns[rgw.row.ColumnIndex()]
-		col.writer.WriteValue(val)
-		col.numValues++
+	if err := rgw.schema.Traverse(row, rowGroupTraversal{
+		rowGroupWriter: rgw,
+	}); err != nil {
+		return err
 	}
 
 	for _, col := range rgw.columns {

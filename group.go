@@ -1,7 +1,6 @@
 package parquet
 
 import (
-	"reflect"
 	"sort"
 
 	"github.com/segmentio/parquet/deprecated"
@@ -37,28 +36,6 @@ func (g Group) ChildByName(name string) Node {
 	panic("column not found in parquet group: " + name)
 }
 
-func (g Group) Construct(value reflect.Value) Object {
-	names := g.ChildNames()
-	group := &groupObject{
-		group:   g,
-		names:   names,
-		objects: make([]Object, len(names)),
-	}
-
-	if value.IsValid() {
-		for i, name := range group.names {
-			index := reflect.ValueOf(&group.names[i]).Elem()
-			group.objects[i] = g[name].Construct(value.MapIndex(index))
-		}
-	} else {
-		for i, name := range group.names {
-			group.objects[i] = g[name].Construct(reflect.Value{})
-		}
-	}
-
-	return group
-}
-
 type groupType struct{}
 
 func (groupType) Kind() Kind                               { panic("cannot call Kind on parquet GROUP type") }
@@ -68,26 +45,3 @@ func (groupType) PhyiscalType() *format.Type               { return nil }
 func (groupType) LogicalType() *format.LogicalType         { return nil }
 func (groupType) ConvertedType() *deprecated.ConvertedType { return nil }
 func (groupType) NewPageBuffer(int) PageBuffer             { panic("cannot create page buffer for parquet group") }
-
-type groupObject struct {
-	group   Group
-	names   []string
-	objects []Object
-}
-
-func (obj *groupObject) Len() int               { return len(obj.objects) }
-func (obj *groupObject) Index(index int) Object { return obj.objects[index] }
-func (obj *groupObject) Node() Node             { return obj.group }
-func (obj *groupObject) Value() Value           { panic("cannot call Value on parquet group object") }
-func (obj *groupObject) Reset(value reflect.Value) {
-	if value.IsValid() {
-		for i, child := range obj.objects {
-			index := reflect.ValueOf(&obj.names[i]).Elem()
-			child.Reset(value.MapIndex(index))
-		}
-	} else {
-		for _, child := range obj.objects {
-			child.Reset(reflect.Value{})
-		}
-	}
-}
