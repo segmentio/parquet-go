@@ -30,7 +30,7 @@ func NewDecoderSize(r io.Reader, bufferSize int) *Decoder {
 			R: r,
 			N: 4,
 		},
-		buffer: make([]byte, bufferSize),
+		buffer: make([]byte, bits.NearestPowerOfTwo64(uint64(bufferSize))),
 	}
 }
 

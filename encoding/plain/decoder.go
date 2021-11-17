@@ -24,7 +24,7 @@ func NewDecoder(r io.Reader) *Decoder {
 func NewDecoderSize(r io.Reader, bufferSize int) *Decoder {
 	return &Decoder{
 		reader: r,
-		buffer: make([]byte, bufferSize),
+		buffer: make([]byte, bits.NearestPowerOfTwo64(uint64(bufferSize))),
 	}
 }
 
@@ -105,28 +105,18 @@ func (d *Decoder) DecodeIntArray(data encoding.IntArrayBuffer) error {
 	if d.bitWidth == 0 {
 		return fmt.Errorf("bit width must be set on PLAIN decoder before reading values into a dynamic int array")
 	}
-
-	decode := (func([]byte) int64)(nil)
-	if d.bitWidth == 64 {
-		decode = func(b []byte) int64 { return int64(binary.LittleEndian.Uint64(b)) }
-	} else {
-		decode = func(b []byte) int64 { return int64(int32(binary.LittleEndian.Uint32(b))) }
-	}
-
-	// TODO:
-	// * use a wider buffer to avoid calling Read for every value
-	wordSize := d.bitWidth / 8 // 4 or 8
-	wordData := d.buffer[:wordSize]
-
+	scale := d.bitWidth / 8
 	for {
-		_, err := io.ReadFull(d.reader, wordData)
+		n, err := readFull(d.reader, scale, d.buffer)
+		if n > 0 {
+			data.AppendBits(d.buffer[:n*scale], d.bitWidth)
+		}
 		if err != nil {
 			if err == io.EOF {
 				err = nil
 			}
 			return err
 		}
-		data.Append(decode(wordData))
 	}
 }
 

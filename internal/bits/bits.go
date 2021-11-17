@@ -17,6 +17,14 @@ func Round(count uint) uint {
 	return BitCount(ByteCount(count))
 }
 
+func NearestPowerOfTwo32(v uint32) uint32 {
+	return 1 << uint(bits.Len32(v-1))
+}
+
+func NearestPowerOfTwo64(v uint64) uint64 {
+	return 1 << uint(bits.Len64(v-1))
+}
+
 func Len32(i int32) int {
 	if i < 0 {
 		i = -i

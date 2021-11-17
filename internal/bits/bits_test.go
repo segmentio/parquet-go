@@ -7,6 +7,33 @@ import (
 	"github.com/segmentio/parquet/internal/bits"
 )
 
+func TestNearestPowerOfTwo(t *testing.T) {
+	for _, test := range []struct {
+		input  uint32
+		output uint32
+	}{
+		{input: 0, output: 0},
+		{input: 1, output: 1},
+		{input: 2, output: 2},
+		{input: 3, output: 4},
+		{input: 4, output: 4},
+		{input: 5, output: 8},
+		{input: 6, output: 8},
+		{input: 7, output: 8},
+		{input: 8, output: 8},
+		{input: 30, output: 32},
+	} {
+		t.Run(fmt.Sprintf("NearestPowerOfTwo(%d)", test.input), func(t *testing.T) {
+			if nextPow2 := bits.NearestPowerOfTwo32(test.input); nextPow2 != test.output {
+				t.Errorf("wrong 32 bits value: want=%d got=%d", test.output, nextPow2)
+			}
+			if nextPow2 := bits.NearestPowerOfTwo64(uint64(test.input)); nextPow2 != uint64(test.output) {
+				t.Errorf("wrong 64 bits value: want=%d got=%d", test.output, nextPow2)
+			}
+		})
+	}
+}
+
 func TestBitCount(t *testing.T) {
 	for _, test := range []struct {
 		bytes int

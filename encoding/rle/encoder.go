@@ -24,7 +24,7 @@ func NewEncoder(w io.Writer) *Encoder {
 func NewEncoderSize(w io.Writer, bufferSize int) *Encoder {
 	return &Encoder{
 		w:    w,
-		data: make([]byte, 4, bufferSize),
+		data: make([]byte, 4, bits.NearestPowerOfTwo64(uint64(bufferSize))),
 	}
 }
 

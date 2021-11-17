@@ -11,18 +11,27 @@ const (
 	defaultBufferSize = 1024
 )
 
-type Encoding struct{}
+type Encoding struct {
+	BufferSize int
+}
 
 func (e *Encoding) Encoding() format.Encoding {
 	return format.Plain
 }
 
 func (e *Encoding) NewDecoder(r io.Reader) encoding.Decoder {
-	return NewDecoder(r)
+	return NewDecoderSize(r, e.bufferSize())
 }
 
 func (e *Encoding) NewEncoder(w io.Writer) encoding.Encoder {
 	return NewEncoder(w)
+}
+
+func (e *Encoding) bufferSize() int {
+	if e.BufferSize > 0 {
+		return e.BufferSize
+	}
+	return defaultBufferSize
 }
 
 func coerceBitWidth(bitWidth int) int {
