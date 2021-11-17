@@ -71,14 +71,15 @@ func (d *Decoder) DecodeInt96(data [][12]byte) (int, error) {
 }
 
 func (d *Decoder) DecodeIntArray(data encoding.IntArrayBuffer) error {
-	bitWidth := d.bitWidth
-	if bitWidth == 0 {
+	srcWidth := d.bitWidth
+	dstWidth := bits.Round(d.bitWidth)
+	if srcWidth == 0 {
 		return fmt.Errorf("bit width must be set on RLE decoder before reading values into a dynamic int array")
 	}
 	for {
-		n, err := d.decode(d.buffer, bitWidth, bitWidth)
+		n, err := d.decode(d.buffer, dstWidth, srcWidth)
 		if n > 0 {
-			data.AppendBits(d.buffer[:bits.ByteCount(uint(n)*bitWidth)], int(bitWidth))
+			data.AppendBits(d.buffer[:bits.ByteCount(uint(n)*dstWidth)], int(dstWidth))
 		}
 		if err != nil {
 			if err == io.EOF {
