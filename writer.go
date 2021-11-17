@@ -5,15 +5,14 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"math/bits"
 	"reflect"
 
 	"github.com/segmentio/encoding/thrift"
 	"github.com/segmentio/parquet/compress"
 	"github.com/segmentio/parquet/encoding"
-	"github.com/segmentio/parquet/encoding/compact"
 	"github.com/segmentio/parquet/encoding/rle"
 	"github.com/segmentio/parquet/format"
+	"github.com/segmentio/parquet/internal/bits"
 )
 
 type WriterConfig struct {
@@ -393,8 +392,8 @@ type columnChunkWriter struct {
 	maxDefinitionLevel int32
 
 	levels struct {
-		repetition *compact.FixedIntArray
-		definition *compact.FixedIntArray
+		repetition encoding.IntArray
+		definition encoding.IntArray
 		encoder    rle.LevelEncoder
 	}
 
@@ -424,23 +423,23 @@ type columnChunkWriter struct {
 	encodingStats         []format.PageEncodingStats
 }
 
-func newColumnChunkWriter(writer io.Writer, compression compress.Codec, encoding encoding.Encoding, maxRepetitionLevel, maxDefinitionLevel int32, values PageBuffer) *columnChunkWriter {
+func newColumnChunkWriter(writer io.Writer, codec compress.Codec, enc encoding.Encoding, maxRepetitionLevel, maxDefinitionLevel int32, values PageBuffer) *columnChunkWriter {
 	ccw := &columnChunkWriter{
 		writer:             writer,
-		encoding:           encoding,
-		compression:        compression,
+		encoding:           enc,
+		compression:        codec,
 		values:             values,
 		maxRepetitionLevel: maxRepetitionLevel,
 		maxDefinitionLevel: maxDefinitionLevel,
-		encodings:          []format.Encoding{encoding.Encoding()},
+		encodings:          []format.Encoding{enc.Encoding()},
 	}
 	if maxRepetitionLevel > 0 {
-		ccw.levels.repetition = compact.NewFixedIntArray(bits.Len32(uint32(maxRepetitionLevel)))
+		ccw.levels.repetition = encoding.NewFixedIntArray(bits.Len32(maxRepetitionLevel))
 	}
 	if maxDefinitionLevel > 0 {
-		ccw.levels.definition = compact.NewFixedIntArray(bits.Len32(uint32(maxDefinitionLevel)))
+		ccw.levels.definition = encoding.NewFixedIntArray(bits.Len32(maxDefinitionLevel))
 	}
-	ccw.page.encoder = encoding.NewEncoder(nil)
+	ccw.page.encoder = enc.NewEncoder(nil)
 	return ccw
 }
 
@@ -491,8 +490,12 @@ func (ccw *columnChunkWriter) Flush() error {
 	}
 	defer func() {
 		ccw.values.Reset()
-		ccw.levels.repetition.Reset()
-		ccw.levels.definition.Reset()
+		if ccw.levels.repetition != nil {
+			ccw.levels.repetition.Reset()
+		}
+		if ccw.levels.definition != nil {
+			ccw.levels.definition.Reset()
+		}
 	}()
 
 	ccw.page.buffer.Reset()
@@ -504,7 +507,7 @@ func (ccw *columnChunkWriter) Flush() error {
 	if ccw.levels.repetition != nil {
 		ccw.page.uncompressed.Reset(&ccw.page.checksum)
 		ccw.levels.encoder.Reset(&ccw.page.uncompressed)
-		ccw.levels.encoder.SetBitWidth(bits.Len32(uint32(ccw.maxRepetitionLevel)))
+		ccw.levels.encoder.SetBitWidth(bits.Len32(ccw.maxRepetitionLevel))
 		ccw.levels.encoder.EncodeIntArray(ccw.levels.repetition)
 		ccw.levels.encoder.Close()
 		repetitionLevelsByteLength = int32(ccw.page.uncompressed.length)
@@ -513,7 +516,7 @@ func (ccw *columnChunkWriter) Flush() error {
 	if ccw.levels.definition != nil {
 		ccw.page.uncompressed.Reset(&ccw.page.checksum)
 		ccw.levels.encoder.Reset(&ccw.page.uncompressed)
-		ccw.levels.encoder.SetBitWidth(bits.Len32(uint32(ccw.maxDefinitionLevel)))
+		ccw.levels.encoder.SetBitWidth(bits.Len32(ccw.maxDefinitionLevel))
 		ccw.levels.encoder.EncodeIntArray(ccw.levels.definition)
 		ccw.levels.encoder.Close()
 		definitionLevelsByteLength = int32(ccw.page.uncompressed.length)

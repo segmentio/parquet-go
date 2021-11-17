@@ -12,13 +12,20 @@ import (
 
 type Decoder struct {
 	reader   io.Reader
-	buffer   [8]byte
+	buffer   []byte
 	rle      *rle.Decoder
 	bitWidth int
 }
 
 func NewDecoder(r io.Reader) *Decoder {
-	return &Decoder{reader: r}
+	return NewDecoderSize(r, defaultBufferSize)
+}
+
+func NewDecoderSize(r io.Reader, bufferSize int) *Decoder {
+	return &Decoder{
+		reader: r,
+		buffer: make([]byte, bufferSize),
+	}
 }
 
 func (d *Decoder) Close() error {

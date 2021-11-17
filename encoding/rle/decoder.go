@@ -21,12 +21,16 @@ type Decoder struct {
 }
 
 func NewDecoder(r io.Reader) *Decoder {
+	return NewDecoderSize(r, defaultBufferSize)
+}
+
+func NewDecoderSize(r io.Reader, bufferSize int) *Decoder {
 	return &Decoder{
 		data: io.LimitedReader{
 			R: r,
 			N: 4,
 		},
-		buffer: make([]byte, 8),
+		buffer: make([]byte, bufferSize),
 	}
 }
 
@@ -67,41 +71,19 @@ func (d *Decoder) DecodeInt96(data [][12]byte) (int, error) {
 }
 
 func (d *Decoder) DecodeIntArray(data encoding.IntArrayBuffer) error {
-	dstWidth := d.bitWidth
-	srcWidth := d.bitWidth
-	if srcWidth == 0 {
+	bitWidth := d.bitWidth
+	if bitWidth == 0 {
 		return fmt.Errorf("bit width must be set on RLE decoder before reading values into a dynamic int array")
 	}
-
-	const bufferSize = 1024
-	if cap(d.buffer) < bufferSize {
-		d.buffer = make([]byte, bufferSize)
-	} else {
-		d.buffer = d.buffer[:bufferSize]
-	}
-
-	if dstWidth <= 32 {
-		dstWidth = 32
-	} else {
-		dstWidth = 64
-	}
-
 	for {
-		n, err := d.decode(d.buffer, dstWidth, srcWidth)
-		// TODO:
-		// * optimize by adding AppendInt32/AppendInt64 to the IntArrayBuffer
-		//   interface to append slices and have the int array classes  provide
-		//   optimized implementations of the copy routines.
-		if dstWidth == 64 {
-			for _, value := range bits.BytesToInt64(d.buffer[:n*8]) {
-				data.Append(value)
-			}
-		} else {
-			for _, value := range bits.BytesToInt32(d.buffer[:n*4]) {
-				data.Append(int64(value))
-			}
+		n, err := d.decode(d.buffer, bitWidth, bitWidth)
+		if n > 0 {
+			data.AppendBits(d.buffer[:bits.ByteCount(uint(n)*bitWidth)], int(bitWidth))
 		}
 		if err != nil {
+			if err == io.EOF {
+				err = nil
+			}
 			return err
 		}
 	}
@@ -117,7 +99,10 @@ func (d *Decoder) decode(data []byte, dstWidth, srcWidth uint) (int, error) {
 	if !d.init {
 		_, err := io.ReadFull(&d.data, d.buffer[:4])
 		if err != nil {
-			return 0, fmt.Errorf("decoding RLE length: %w", err)
+			if err != io.EOF {
+				err = fmt.Errorf("decoding RLE length: %w", err)
+			}
+			return 0, err
 		}
 		d.data.N = int64(binary.LittleEndian.Uint32(d.buffer[:4]))
 		d.init = true

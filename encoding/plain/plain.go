@@ -7,6 +7,10 @@ import (
 	"github.com/segmentio/parquet/format"
 )
 
+const (
+	defaultBufferSize = 1024
+)
+
 type Encoding struct{}
 
 func (e *Encoding) Encoding() format.Encoding {

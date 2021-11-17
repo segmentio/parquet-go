@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"math"
+	"math/rand"
 	"testing"
 
 	"github.com/segmentio/parquet/encoding"
@@ -135,6 +136,64 @@ var fixedLenByteArrayTests = [...]struct {
 	{size: 8, data: []byte("ABCDEFGH")},
 }
 
+var intArrayTests = [...]encoding.IntArray{
+	newIntArray(),
+	newIntArray(0),
+	newIntArray(1),
+	newIntArray(2),
+	newIntArray(0, 1, 2, 3, 4, 5, 6, 7, 8, 9),
+	newIntArray(randomInt64(1, 0, math.MaxInt8, 200)...),
+	newIntArray(randomInt64(2, 0, math.MaxInt16, 1000)...),
+	newIntArray(randomInt64(3, 0, math.MaxInt32, 2000)...),
+	newIntArray(randomInt64(4, 0, math.MaxInt64, 3000)...),
+	newIntArray(randomInt64(5, math.MinInt8, math.MaxInt8, 200)...),
+	newIntArray(randomInt64(6, math.MinInt16, math.MaxInt16, 1000)...),
+	newIntArray(randomInt64(7, math.MinInt32, math.MaxInt32, 2000)...),
+}
+
+var fixedIntArrayTests = [...]encoding.IntArray{
+	newFixedIntArray(),
+	newFixedIntArray(0),
+	newFixedIntArray(1),
+	newFixedIntArray(2),
+	newFixedIntArray(0, 1, 2, 3, 4, 5, 6, 7, 8, 9),
+	newFixedIntArray(randomInt64(1, 0, math.MaxInt8, 200)...),
+	newFixedIntArray(randomInt64(2, 0, math.MaxInt16, 1000)...),
+	newFixedIntArray(randomInt64(3, 0, math.MaxInt32, 2000)...),
+	newFixedIntArray(randomInt64(4, 0, math.MaxInt64, 3000)...),
+	newFixedIntArray(randomInt64(5, math.MinInt8, math.MaxInt8, 200)...),
+	newFixedIntArray(randomInt64(6, math.MinInt16, math.MaxInt16, 1000)...),
+	newFixedIntArray(randomInt64(7, math.MinInt32, math.MaxInt32, 2000)...),
+}
+
+func newIntArray(values ...int64) encoding.IntArray {
+	array := encoding.NewIntArray()
+	appendIntArray(array, values...)
+	return array
+}
+
+func newFixedIntArray(values ...int64) encoding.IntArray {
+	array := encoding.NewFixedIntArray(bits.MaxLen64(values))
+	appendIntArray(array, values...)
+	return array
+}
+
+func appendIntArray(array encoding.IntArray, values ...int64) {
+	for _, value := range values {
+		array.Append(value)
+	}
+}
+
+func randomInt64(seed, min, max int64, count int) []int64 {
+	prng := rand.New(rand.NewSource(0))
+	limit := max - min
+	values := make([]int64, count)
+	for i := range values {
+		values[i] = prng.Int63n(limit) + min
+	}
+	return values
+}
+
 func TestEncoding(t *testing.T) {
 	for _, test := range [...]struct {
 		scenario string
@@ -197,6 +256,16 @@ func testEncoding(t *testing.T, e encoding.Encoding) {
 		{
 			scenario: "fixed length byte array",
 			function: testFixedLenByteArrayEncoding,
+		},
+
+		{
+			scenario: "IntArray",
+			function: testIntArrayEncoding,
+		},
+
+		{
+			scenario: "FixedIntArray",
+			function: testFixedIntArrayEncoding,
 		},
 	} {
 		t.Run(test.scenario, func(t *testing.T) { test.function(t, e) })
@@ -527,6 +596,98 @@ func testFixedLenByteArrayEncoding(t *testing.T, e encoding.Encoding) {
 				want := test.data[i*test.size : (i+1)*test.size]
 				if !bytes.Equal(want, tmp) {
 					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, want, tmp)
+				}
+			}
+
+			buf.Reset()
+			enc.Reset(buf)
+			dec.Reset(buf)
+		})
+	}
+}
+
+func testIntArrayEncoding(t *testing.T, e encoding.Encoding) {
+	buf := new(bytes.Buffer)
+	enc := e.NewEncoder(buf)
+	dec := e.NewDecoder(buf)
+	defer enc.Close()
+	defer dec.Close()
+
+	for _, test := range intArrayTests {
+		t.Run("", func(t *testing.T) {
+			bitWidth := test.BitWidth()
+			enc.SetBitWidth(bitWidth)
+			dec.SetBitWidth(bitWidth)
+
+			if err := enc.EncodeIntArray(test); err != nil {
+				if errors.Is(err, encoding.ErrNotImplemented) {
+					t.Skip(err)
+				}
+				t.Fatal("encode:", err)
+			}
+			if err := enc.Close(); err != nil {
+				t.Fatal("close:", err)
+			}
+
+			values := encoding.NewIntArray()
+			if err := dec.DecodeIntArray(values); err != nil {
+				t.Fatal("decode:", err)
+			}
+			if values.Len() != test.Len() {
+				t.Fatalf("wrong number of values decoded into int array: want=%d got=%d", test.Len(), values.Len())
+			}
+			for i, n := 0, test.Len(); i < n; i++ {
+				a := test.Index(i)
+				b := test.Index(i)
+
+				if a != b {
+					t.Fatalf("wrong value found in decoded int array at index %d: want=%d got=%d", i, a, b)
+				}
+			}
+
+			buf.Reset()
+			enc.Reset(buf)
+			dec.Reset(buf)
+		})
+	}
+}
+
+func testFixedIntArrayEncoding(t *testing.T, e encoding.Encoding) {
+	buf := new(bytes.Buffer)
+	enc := e.NewEncoder(buf)
+	dec := e.NewDecoder(buf)
+	defer enc.Close()
+	defer dec.Close()
+
+	for _, test := range fixedIntArrayTests {
+		t.Run("", func(t *testing.T) {
+			bitWidth := test.BitWidth()
+			enc.SetBitWidth(bitWidth)
+			dec.SetBitWidth(bitWidth)
+
+			if err := enc.EncodeIntArray(test); err != nil {
+				if errors.Is(err, encoding.ErrNotImplemented) {
+					t.Skip(err)
+				}
+				t.Fatal("encode:", err)
+			}
+			if err := enc.Close(); err != nil {
+				t.Fatal("close:", err)
+			}
+
+			values := encoding.NewFixedIntArray(bitWidth)
+			if err := dec.DecodeIntArray(values); err != nil {
+				t.Fatal("decode:", err)
+			}
+			if values.Len() != test.Len() {
+				t.Fatalf("wrong number of values decoded into int array: want=%d got=%d", test.Len(), values.Len())
+			}
+			for i, n := 0, test.Len(); i < n; i++ {
+				a := test.Index(i)
+				b := test.Index(i)
+
+				if a != b {
+					t.Fatalf("wrong value found in decoded int array at index %d: want=%d got=%d", i, a, b)
 				}
 			}
 

@@ -6,6 +6,14 @@ func BoolToBytes(data []bool) []byte {
 	return unsafe.Slice(*(**byte)(unsafe.Pointer(&data)), len(data))
 }
 
+func Int8ToBytes(data []int8) []byte {
+	return unsafe.Slice(*(**byte)(unsafe.Pointer(&data)), len(data))
+}
+
+func Int16ToBytes(data []int16) []byte {
+	return unsafe.Slice(*(**byte)(unsafe.Pointer(&data)), 2*len(data))
+}
+
 func Int32ToBytes(data []int32) []byte {
 	return unsafe.Slice(*(**byte)(unsafe.Pointer(&data)), 4*len(data))
 }
@@ -32,6 +40,14 @@ func Int32ToUint32(data []int32) []uint32 {
 
 func Int64ToUint64(data []int64) []uint64 {
 	return unsafe.Slice(*(**uint64)(unsafe.Pointer(&data)), len(data))
+}
+
+func BytesToInt8(data []byte) []int8 {
+	return unsafe.Slice(*(**int8)(unsafe.Pointer(&data)), len(data))
+}
+
+func BytesToInt16(data []byte) []int16 {
+	return unsafe.Slice(*(**int16)(unsafe.Pointer(&data)), len(data)/2)
 }
 
 func BytesToInt32(data []byte) []int32 {

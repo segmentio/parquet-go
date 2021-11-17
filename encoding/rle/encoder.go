@@ -9,10 +9,6 @@ import (
 	"github.com/segmentio/parquet/internal/bits"
 )
 
-const (
-	defaultBufferSize = 1024
-)
-
 type Encoder struct {
 	encoding.NotImplementedEncoder
 	w        io.Writer
@@ -22,9 +18,13 @@ type Encoder struct {
 }
 
 func NewEncoder(w io.Writer) *Encoder {
+	return NewEncoderSize(w, defaultBufferSize)
+}
+
+func NewEncoderSize(w io.Writer, bufferSize int) *Encoder {
 	return &Encoder{
 		w:    w,
-		data: make([]byte, 4, defaultBufferSize),
+		data: make([]byte, 4, bufferSize),
 	}
 }
 
@@ -109,6 +109,9 @@ func (e *Encoder) encodeBitPack(count int, data []byte, dstWidth, srcWidth uint)
 		e.data = e.data[:offset+length]
 	} else {
 		newCap := 2 * cap(e.data)
+		if newCap == 0 {
+			newCap = defaultBufferSize
+		}
 		for (newCap - offset) < length {
 			newCap *= 2
 		}

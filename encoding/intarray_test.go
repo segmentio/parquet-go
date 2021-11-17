@@ -1,4 +1,4 @@
-package compact_test
+package encoding_test
 
 import (
 	"math/rand"
@@ -6,21 +6,20 @@ import (
 	"testing"
 
 	"github.com/segmentio/parquet/encoding"
-	"github.com/segmentio/parquet/encoding/compact"
 )
 
-func TestFixedIntArray(t *testing.T) {
+func TestIntArray(t *testing.T) {
 	for _, bitWidth := range []int{8, 10, 16, 24, 32} {
 		t.Run(strconv.Itoa(bitWidth)+"bits", func(t *testing.T) {
-			testFixedArray(t, bitWidth, compact.NewFixedIntArray(bitWidth))
+			testFixedArray(t, bitWidth, encoding.NewIntArray())
 		})
 	}
 }
 
-func TestDynamicIntArray(t *testing.T) {
+func TestFixedIntArray(t *testing.T) {
 	for _, bitWidth := range []int{8, 10, 16, 24, 32} {
 		t.Run(strconv.Itoa(bitWidth)+"bits", func(t *testing.T) {
-			testFixedArray(t, bitWidth, compact.NewDynamicIntArray())
+			testFixedArray(t, bitWidth, encoding.NewFixedIntArray(bitWidth))
 		})
 	}
 }

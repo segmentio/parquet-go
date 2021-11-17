@@ -6,28 +6,6 @@ import (
 	"github.com/segmentio/parquet/format"
 )
 
-// IntArray is an interface implemented by arrays of integers.
-type IntArray interface {
-	IntArrayBuffer
-	IntArrayView
-	Reset()
-}
-
-// IntArrayBuffer is an interface presenting the methods of IntArray which
-// support writing to the array.
-type IntArrayBuffer interface {
-	Append(int64)
-}
-
-// IntArrayView is an interface presenting the methods of IntArray which support
-// reading values from the array.
-type IntArrayView interface {
-	BitWidth() int
-	Len() int
-	Index(int) int64
-	Bits() []byte
-}
-
 type Encoding interface {
 	Encoding() format.Encoding
 	NewDecoder(io.Reader) Decoder

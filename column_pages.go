@@ -8,12 +8,12 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"math/bits"
 	"strings"
 
 	"github.com/segmentio/encoding/thrift"
 	"github.com/segmentio/parquet/encoding"
 	"github.com/segmentio/parquet/format"
+	"github.com/segmentio/parquet/internal/bits"
 )
 
 var (
@@ -479,8 +479,8 @@ func (c *ColumnPages) resetDataPageV1(r io.Reader) error {
 	h := c.header.DataPageHeader
 	c.repetitions = resetLevelDecoder(c.repetitions, &c.v1.repetitions, h.RepetitionLevelEncoding)
 	c.definitions = resetLevelDecoder(c.definitions, &c.v1.definitions, h.DefinitionLevelEncoding)
-	c.repetitions.SetBitWidth(bits.Len32(uint32(maxRepetitionLevel)))
-	c.definitions.SetBitWidth(bits.Len32(uint32(maxDefinitionLevel)))
+	c.repetitions.SetBitWidth(bits.Len32(maxRepetitionLevel))
+	c.definitions.SetBitWidth(bits.Len32(maxDefinitionLevel))
 	return nil
 }
 
