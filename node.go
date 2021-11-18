@@ -105,11 +105,18 @@ func fieldRepetitionTypeOf(node Node) *format.FieldRepetitionType {
 // creating a parquet schema from a Go strut and using the parquet.(*Schema).Traverse
 // method will yield must better results.
 func Traverse(node Node, value interface{}, traversal Traversal) error {
-	_, err := traverse(node, 0, 0, 0, reflect.ValueOf(value), traversal)
+	_, err := traverse(node, levels{}, reflect.ValueOf(value), traversal)
 	return err
 }
 
-func traverse(node Node, columnIndex, repetitionLevel, definitionLevel int, value reflect.Value, traversal Traversal) (int, error) {
+type levels struct {
+	columnIndex     int32
+	repetitionDepth int32
+	repetitionLevel int32
+	definitionLevel int32
+}
+
+func traverse(node Node, levels levels, value reflect.Value, traversal Traversal) (int32, error) {
 	var err error
 
 	optional := node.Optional()
@@ -120,7 +127,7 @@ func traverse(node Node, columnIndex, repetitionLevel, definitionLevel int, valu
 			if value.IsZero() {
 				value = reflect.Value{}
 			} else {
-				definitionLevel++
+				levels.definitionLevel++
 			}
 		}
 	}
@@ -143,37 +150,29 @@ func traverse(node Node, columnIndex, repetitionLevel, definitionLevel int, valu
 
 	if repeated {
 		if value.IsValid() && value.Kind() != reflect.Slice {
-			return columnIndex, fmt.Errorf("cannot traverse non-repeated node with value of type " + value.Type().String())
+			return levels.columnIndex, fmt.Errorf("cannot traverse non-repeated node with value of type " + value.Type().String())
 		}
 
 		numValues := 0
 		if value.IsValid() {
 			numValues = value.Len()
-			definitionLevel++
+			levels.repetitionDepth++
+			if !value.IsNil() {
+				levels.definitionLevel++
+			}
 		}
 
-		baseColumnIndex := columnIndex
 		if numValues == 0 {
-			// When the repeated column is not a group, no need to continue; the
-			// column index is incremented to represent the leaf column that was
-			// reached.
-			if node.NumChildren() == 0 {
-				return columnIndex + 1, nil
-			}
-			// Continue through the rest of the function to increment the column
-			// index but don't send values to the traversal callback.
 			value = reflect.Value{}
-			traversal = TraversalFunc(func(int, Value) error { return nil })
 		} else {
+			columnIndex := int32(0)
 			// Remove the `repeated` attribute of the node so the recusrive call
 			// does not re-enter this branch.
 			node = Required(node)
 
 			for i := 0; i < numValues; i++ {
-				columnIndex, err = traverse(node, baseColumnIndex, repetitionLevel, definitionLevel, value.Index(i), traversal)
-				if i == 0 {
-					repetitionLevel++
-				}
+				columnIndex, err = traverse(node, levels, value.Index(i), traversal)
+				levels.repetitionLevel = levels.repetitionDepth
 			}
 
 			return columnIndex, err
@@ -181,8 +180,11 @@ func traverse(node Node, columnIndex, repetitionLevel, definitionLevel int, valu
 	}
 
 	if node.NumChildren() == 0 {
-		err = traversal.Traverse(columnIndex, makeValue(node.Type().Kind(), value).Level(repetitionLevel, definitionLevel))
-		columnIndex++
+		v := makeValue(node.Type().Kind(), value)
+		v.repetitionLevel = levels.repetitionLevel
+		v.definitionLevel = levels.definitionLevel
+		err = traversal.Traverse(int(levels.columnIndex), v)
+		levels.columnIndex++
 	} else {
 		index := reflect.Value.MapIndex
 
@@ -206,12 +208,12 @@ func traverse(node Node, columnIndex, repetitionLevel, definitionLevel int, valu
 		names := node.ChildNames()
 		for i := range names {
 			k := reflect.ValueOf(&names[i]).Elem()
-			columnIndex, err = traverse(node.ChildByName(names[i]), columnIndex, repetitionLevel, definitionLevel, index(value, k), traversal)
+			levels.columnIndex, err = traverse(node.ChildByName(names[i]), levels, index(value, k), traversal)
 			if err != nil {
 				break
 			}
 		}
 	}
 
-	return columnIndex, err
+	return levels.columnIndex, err
 }

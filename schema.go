@@ -89,7 +89,7 @@ func (s *Schema) Traverse(value interface{}, traversal Traversal) error {
 		}
 	}
 
-	return s.traverse(0, 0, v, traversal)
+	return s.traverse(levels{}, v, traversal)
 }
 
 func dereference(value reflect.Value) reflect.Value {
@@ -163,7 +163,7 @@ func appendStructFields(t reflect.Type, fields []reflect.StructField, index []in
 	return fields
 }
 
-func (s *structNode) traverse(repetitionLevel, definitionLevel int32, value reflect.Value, traversal Traversal) error {
+func (s *structNode) traverse(levels levels, value reflect.Value, traversal Traversal) error {
 	fieldByIndex := reflect.Value.FieldByIndex
 
 	if !value.IsValid() {
@@ -172,7 +172,7 @@ func (s *structNode) traverse(repetitionLevel, definitionLevel int32, value refl
 
 	for i := range s.fields {
 		f := &s.fields[i]
-		if err := f.traverse(repetitionLevel, definitionLevel, fieldByIndex(value, f.index), traversal); err != nil {
+		if err := f.traverse(levels, fieldByIndex(value, f.index), traversal); err != nil {
 			return err
 		}
 	}
@@ -339,7 +339,7 @@ func split(s string) (head, tail string) {
 	return
 }
 
-type traverseFunc func(repetitionLevel, definitionLevel int32, value reflect.Value, traversal Traversal) error
+type traverseFunc func(levels levels, value reflect.Value, traversal Traversal) error
 
 func traverseLeaf(k Kind, t reflect.Type, columnIndex int) traverseFunc {
 	var makeValue func(reflect.Value) Value
@@ -406,57 +406,65 @@ func traverseLeaf(k Kind, t reflect.Type, columnIndex int) traverseFunc {
 		panic("traverseLeaf called with invalid combination of parquet and go types: " + k.String() + "/" + t.String())
 	}
 
-	return func(repetitionLevel, definitionLevel int32, value reflect.Value, traversal Traversal) error {
+	return func(levels levels, value reflect.Value, traversal Traversal) error {
 		var v Value
 
 		if value.IsValid() {
 			v = makeValue(value)
 		}
 
-		v.repetitionLevel = repetitionLevel
-		v.definitionLevel = definitionLevel
+		v.repetitionLevel = levels.repetitionLevel
+		v.definitionLevel = levels.definitionLevel
 		return traversal.Traverse(columnIndex, v)
 	}
 }
 
 func traversePointer(traverse traverseFunc) traverseFunc {
-	return func(repetitionLevel, definitionLevel int32, value reflect.Value, traversal Traversal) error {
+	return func(levels levels, value reflect.Value, traversal Traversal) error {
 		if value.IsValid() {
 			if value.IsNil() {
 				value = reflect.Value{}
 			} else {
-				definitionLevel++
+				levels.definitionLevel++
 				value = value.Elem()
 			}
 		}
-		return traverse(repetitionLevel, definitionLevel, value, traversal)
+		return traverse(levels, value, traversal)
 	}
 }
 
 func traverseOptional(traverse traverseFunc) traverseFunc {
-	return func(repetitionLevel, definitionLevel int32, value reflect.Value, traversal Traversal) error {
+	return func(levels levels, value reflect.Value, traversal Traversal) error {
 		if value.IsValid() {
 			if value.IsZero() {
 				value = reflect.Value{}
 			} else {
-				definitionLevel++
+				levels.definitionLevel++
 			}
 		}
-		return traverse(repetitionLevel, definitionLevel, value, traversal)
+		return traverse(levels, value, traversal)
 	}
 }
 
 func traverseSlice(traverse traverseFunc) traverseFunc {
-	return func(repetitionLevel, definitionLevel int32, value reflect.Value, traversal Traversal) error {
+	return func(levels levels, value reflect.Value, traversal Traversal) error {
+		var numValues int
 		var err error
 
 		if value.IsValid() {
-			definitionLevel++
-			nextRepetitionLevel := repetitionLevel + 1
+			numValues = value.Len()
+			levels.repetitionDepth++
+			if !value.IsNil() {
+				levels.definitionLevel++
+			}
+		}
 
-			for i, n := 0, value.Len(); i < n && err == nil; i++ {
-				err = traverse(repetitionLevel, definitionLevel, value.Index(i), traversal)
-				repetitionLevel = nextRepetitionLevel
+		if numValues == 0 {
+			err = traverse(levels, reflect.Value{}, traversal)
+		} else {
+			for i := 0; i < numValues && err == nil; i++ {
+				err = traverse(levels, value.Index(i), traversal)
+				levels.repetitionLevel = levels.repetitionDepth
 			}
 		}
 

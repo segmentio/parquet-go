@@ -96,6 +96,37 @@ func TestSchemaTraversal(t *testing.T) {
 		Friends []Friend `parquet:",list,optional"`
 	}
 
+	type List2 struct {
+		Value string `parquet:",optional"`
+	}
+
+	type List1 struct {
+		List2 []List2 `parquet:",list"`
+	}
+
+	type List0 struct {
+		List1 []List1 `parquet:",list"`
+	}
+
+	type nestedListsLevel1 struct {
+		Level2 []string `parquet:"level2"`
+	}
+
+	type nestedLists struct {
+		Level1 []nestedListsLevel1 `parquet:"level1"`
+	}
+
+	type Contact struct {
+		Name        string `parquet:"name"`
+		PhoneNumber string `parquet:"phoneNumber,optional"`
+	}
+
+	type AddressBook struct {
+		Owner             string    `parquet:"owner"`
+		OwnerPhoneNumbers []string  `parquet:"ownerPhoneNumbers"`
+		Contacts          []Contact `parquet:"contacts"`
+	}
+
 	tests := []struct {
 		scenario string
 		input    interface{}
@@ -134,7 +165,9 @@ func TestSchemaTraversal(t *testing.T) {
 			}{
 				Symbols: nil,
 			},
-			values: [][]parquet.Value{0: {}},
+			values: [][]parquet.Value{
+				0: {parquet.ValueOf(nil).Level(0, 0)},
+			},
 		},
 
 		{
@@ -198,14 +231,10 @@ func TestSchemaTraversal(t *testing.T) {
 
 		{
 			scenario: "sub level nil pointer field",
-			input: struct {
-				User User
-			}{
-				User: User{
-					ID: uuid.MustParse("A65B576D-9299-4769-9D93-04BE0583F027"),
-					Details: &Details{
-						Person: nil,
-					},
+			input: User{
+				ID: uuid.MustParse("A65B576D-9299-4769-9D93-04BE0583F027"),
+				Details: &Details{
+					Person: nil,
 				},
 			},
 			// Here there are four nil values because the Person type has four
@@ -216,6 +245,13 @@ func TestSchemaTraversal(t *testing.T) {
 				1: {parquet.ValueOf(nil).Level(0, 1)},
 				2: {parquet.ValueOf(nil).Level(0, 1)},
 				3: {parquet.ValueOf(nil).Level(0, 1)},
+				// User.Friends.Details.Person
+				4: {parquet.ValueOf(nil).Level(0, 0)},
+				5: {parquet.ValueOf(nil).Level(0, 0)},
+				6: {parquet.ValueOf(nil).Level(0, 0)},
+				7: {parquet.ValueOf(nil).Level(0, 0)},
+				// User.Friends.ID
+				8: {parquet.ValueOf(nil).Level(0, 0)},
 				// User.ID
 				9: {parquet.ValueOf(uuid.MustParse("A65B576D-9299-4769-9D93-04BE0583F027"))},
 			},
@@ -307,6 +343,159 @@ func TestSchemaTraversal(t *testing.T) {
 
 				// User.ID
 				9: {parquet.ValueOf(uuid.MustParse("A65B576D-9299-4769-9D93-04BE0583F027"))},
+			},
+		},
+
+		{
+			scenario: "multiple repeated levels",
+			input: List0{
+				List1: []List1{
+					{List2: []List2{{Value: "A"}, {Value: "B"}}},
+					{List2: []List2{}},
+					{List2: []List2{{Value: "C"}}},
+				},
+			},
+			values: [][]parquet.Value{
+				{
+					parquet.ValueOf("A").Level(0, 3),
+					parquet.ValueOf("B").Level(2, 3),
+					parquet.ValueOf(nil).Level(1, 2),
+					parquet.ValueOf("C").Level(1, 3),
+				},
+			},
+		},
+
+		// https://blog.twitter.com/engineering/en_us/a/2013/dremel-made-simple-with-parquet
+
+		// message nestedLists {
+		//   repeated group level1 {
+		//     repeated string level2;
+		//   }
+		// }
+		// ---
+		// {
+		//   level1: {
+		//     level2: a
+		//     level2: b
+		//     level2: c
+		//   },
+		//   level1: {
+		//     level2: d
+		//     level2: e
+		//     level2: f
+		//     level2: g
+		//   }
+		// }
+		//
+		{
+			scenario: "twitter blog example 1",
+			input: nestedLists{
+				Level1: []nestedListsLevel1{
+					{Level2: []string{"a", "b", "c"}},
+					{Level2: []string{"d", "e", "f", "g"}},
+				},
+			},
+			values: [][]parquet.Value{
+				0: {
+					parquet.ValueOf("a").Level(0, 2),
+					parquet.ValueOf("b").Level(2, 2),
+					parquet.ValueOf("c").Level(2, 2),
+					parquet.ValueOf("d").Level(1, 2),
+					parquet.ValueOf("e").Level(2, 2),
+					parquet.ValueOf("f").Level(2, 2),
+					parquet.ValueOf("g").Level(2, 2),
+				},
+			},
+		},
+
+		// message nestedLists {
+		//   repeated group level1 {
+		//     repeated string level2;
+		//   }
+		// }
+		// ---
+		// {
+		//   level1: {
+		//     level2: h
+		//   },
+		//   level1: {
+		//     level2: i
+		//     level2: j
+		//   }
+		// }
+		//
+		{
+			scenario: "twitter blog example 2",
+			input: nestedLists{
+				Level1: []nestedListsLevel1{
+					{Level2: []string{"h"}},
+					{Level2: []string{"i", "j"}},
+				},
+			},
+			values: [][]parquet.Value{
+				0: {
+					parquet.ValueOf("h").Level(0, 2),
+					parquet.ValueOf("i").Level(1, 2),
+					parquet.ValueOf("j").Level(2, 2),
+				},
+			},
+		},
+
+		// message AddressBook {
+		//   required string owner;
+		//   repeated string ownerPhoneNumbers;
+		//   repeated group contacts {
+		//     required string name;
+		//     optional string phoneNumber;
+		//   }
+		// }
+		// ---
+		// AddressBook {
+		//   owner: "Julien Le Dem",
+		//   ownerPhoneNumbers: "555 123 4567",
+		//   ownerPhoneNumbers: "555 666 1337",
+		//   contacts: {
+		//     name: "Dmitriy Ryaboy",
+		//     phoneNumber: "555 987 6543",
+		//   },
+		//   contacts: {
+		//     name: "Chris Aniszczyk"
+		//   }
+		// }
+		{
+			scenario: "twitter blog example 3",
+			input: AddressBook{
+				Owner: "Julien Le Dem",
+				OwnerPhoneNumbers: []string{
+					"555 123 4567",
+					"555 666 1337",
+				},
+				Contacts: []Contact{
+					{
+						Name:        "Dmitriy Ryaboy",
+						PhoneNumber: "555 987 6543",
+					},
+					{
+						Name: "Chris Aniszczyk",
+					},
+				},
+			},
+			values: [][]parquet.Value{
+				0: { // AddressBook.contacts.name
+					parquet.ValueOf("Dmitriy Ryaboy").Level(0, 1),
+					parquet.ValueOf("Chris Aniszczyk").Level(1, 1),
+				},
+				1: { // AddressBook.contacts.phoneNumber
+					parquet.ValueOf("555 987 6543").Level(0, 2),
+					parquet.ValueOf(nil).Level(1, 1),
+				},
+				2: { // AddressBook.owner
+					parquet.ValueOf("Julien Le Dem").Level(0, 0),
+				},
+				3: { // AddressBook.ownerPhoneNumbers
+					parquet.ValueOf("555 123 4567").Level(0, 1),
+					parquet.ValueOf("555 666 1337").Level(1, 1),
+				},
 			},
 		},
 	}
