@@ -107,7 +107,7 @@ func TestSchemaTraversal(t *testing.T) {
 				Name string
 			}{Name: "Luke"},
 			values: [][]parquet.Value{
-				{parquet.ValueOf("Luke")},
+				0: {parquet.ValueOf("Luke")},
 			},
 		},
 
@@ -120,10 +120,10 @@ func TestSchemaTraversal(t *testing.T) {
 				Weight:    81.5,
 			},
 			values: [][]parquet.Value{
-				{parquet.ValueOf(42).Level(0, 1)},
-				{parquet.ValueOf("Han")},
-				{parquet.ValueOf("Solo")},
-				{parquet.ValueOf(81.5).Level(0, 1)},
+				0: {parquet.ValueOf(42).Level(0, 1)},
+				1: {parquet.ValueOf("Han")},
+				2: {parquet.ValueOf("Solo")},
+				3: {parquet.ValueOf(81.5).Level(0, 1)},
 			},
 		},
 
@@ -134,7 +134,7 @@ func TestSchemaTraversal(t *testing.T) {
 			}{
 				Symbols: nil,
 			},
-			values: [][]parquet.Value{{}},
+			values: [][]parquet.Value{0: {}},
 		},
 
 		{
@@ -145,7 +145,7 @@ func TestSchemaTraversal(t *testing.T) {
 				Symbols: []string{"EUR", "USD", "GBP", "JPY"},
 			},
 			values: [][]parquet.Value{
-				{
+				0: {
 					parquet.ValueOf("EUR").Level(0, 1),
 					parquet.ValueOf("USD").Level(1, 1),
 					parquet.ValueOf("GBP").Level(1, 1),
@@ -164,13 +164,13 @@ func TestSchemaTraversal(t *testing.T) {
 				Values:  []float32{0.1, 0.2, 0.3, 0.4},
 			},
 			values: [][]parquet.Value{
-				{
+				0: {
 					parquet.ValueOf("EUR").Level(0, 1),
 					parquet.ValueOf("USD").Level(1, 1),
 					parquet.ValueOf("GBP").Level(1, 1),
 					parquet.ValueOf("JPY").Level(1, 1),
 				},
-				{
+				1: {
 					parquet.ValueOf(float32(0.1)).Level(0, 1),
 					parquet.ValueOf(float32(0.2)).Level(1, 1),
 					parquet.ValueOf(float32(0.3)).Level(1, 1),
@@ -189,10 +189,10 @@ func TestSchemaTraversal(t *testing.T) {
 			// Here there are four nil values because the Person type has four
 			// fields but it is nil.
 			values: [][]parquet.Value{
-				{parquet.ValueOf(nil).Level(0, 0)},
-				{parquet.ValueOf(nil).Level(0, 0)},
-				{parquet.ValueOf(nil).Level(0, 0)},
-				{parquet.ValueOf(nil).Level(0, 0)},
+				0: {parquet.ValueOf(nil).Level(0, 0)},
+				1: {parquet.ValueOf(nil).Level(0, 0)},
+				2: {parquet.ValueOf(nil).Level(0, 0)},
+				3: {parquet.ValueOf(nil).Level(0, 0)},
 			},
 		},
 
@@ -211,16 +211,13 @@ func TestSchemaTraversal(t *testing.T) {
 			// Here there are four nil values because the Person type has four
 			// fields but it is nil.
 			values: [][]parquet.Value{
-				{parquet.ValueOf(nil).Level(0, 1)},
-				{parquet.ValueOf(nil).Level(0, 1)},
-				{parquet.ValueOf(nil).Level(0, 1)},
-				{parquet.ValueOf(nil).Level(0, 1)},
-				{},
-				{},
-				{},
-				{},
-				{},
-				{parquet.ValueOf(uuid.MustParse("A65B576D-9299-4769-9D93-04BE0583F027"))},
+				// User.Details.Person
+				0: {parquet.ValueOf(nil).Level(0, 1)},
+				1: {parquet.ValueOf(nil).Level(0, 1)},
+				2: {parquet.ValueOf(nil).Level(0, 1)},
+				3: {parquet.ValueOf(nil).Level(0, 1)},
+				// User.ID
+				9: {parquet.ValueOf(uuid.MustParse("A65B576D-9299-4769-9D93-04BE0583F027"))},
 			},
 		},
 
@@ -273,43 +270,43 @@ func TestSchemaTraversal(t *testing.T) {
 
 			values: [][]parquet.Value{
 				// User.Details
-				{parquet.ValueOf(nil).Level(0, 2)},
-				{parquet.ValueOf("Luke").Level(0, 2)},
-				{parquet.ValueOf("Skywalker").Level(0, 2)},
-				{parquet.ValueOf(nil).Level(0, 2)},
+				0: {parquet.ValueOf(nil).Level(0, 2)},
+				1: {parquet.ValueOf("Luke").Level(0, 2)},
+				2: {parquet.ValueOf("Skywalker").Level(0, 2)},
+				3: {parquet.ValueOf(nil).Level(0, 2)},
 
-				{ // User.Friends.Details.Person.Age
+				4: { // User.Friends.Details.Person.Age
 					parquet.ValueOf(nil).Level(0, 4),
 					parquet.ValueOf(nil).Level(1, 4),
 					parquet.ValueOf(nil).Level(1, 4),
 				},
 
-				{ // User.Friends.Details.Person.FirstName
+				5: { // User.Friends.Details.Person.FirstName
 					parquet.ValueOf("Han").Level(0, 4),
 					parquet.ValueOf("Leia").Level(1, 4),
 					parquet.ValueOf("C3PO").Level(1, 4),
 				},
 
-				{ // User.Friends.Details.Person.LastName
+				6: { // User.Friends.Details.Person.LastName
 					parquet.ValueOf("Solo").Level(0, 4),
 					parquet.ValueOf("Skywalker").Level(1, 4),
 					parquet.ValueOf("Droid").Level(1, 4),
 				},
 
-				{ // User.Friends.Details.Person.Weight
+				7: { // User.Friends.Details.Person.Weight
 					parquet.ValueOf(nil).Level(0, 4),
 					parquet.ValueOf(nil).Level(1, 4),
 					parquet.ValueOf(nil).Level(1, 4),
 				},
 
-				{ // User.Friends.ID
+				8: { // User.Friends.ID
 					parquet.ValueOf(uuid.MustParse("1B76F8D0-82C6-403F-A104-DCDA69207220")).Level(0, 2),
 					parquet.ValueOf(uuid.MustParse("C43C8852-CCE5-40E6-B0DF-7212A5633346")).Level(1, 2),
 					parquet.ValueOf(uuid.MustParse("E78642A8-0931-4D5F-918F-24DC8FF445B0")).Level(1, 2),
 				},
 
 				// User.ID
-				{parquet.ValueOf(uuid.MustParse("A65B576D-9299-4769-9D93-04BE0583F027"))},
+				9: {parquet.ValueOf(uuid.MustParse("A65B576D-9299-4769-9D93-04BE0583F027"))},
 			},
 		},
 	}
@@ -319,15 +316,47 @@ func TestSchemaTraversal(t *testing.T) {
 			schema := parquet.SchemaOf(test.input)
 			values := make(map[int][]parquet.Value)
 
-			t.Log(schema)
+			t.Logf("\n%s\n", schema)
 
-			schema.Traverse(test.input, parquet.TraversalFunc(func(columnIndex int, value parquet.Value) error {
-				values[columnIndex] = append(values[columnIndex], value)
-				return nil
-			}))
+			methods := []struct {
+				scenario string
+				traverse func(interface{}, parquet.Traversal) error
+			}{
+				{
+					scenario: "generic",
+					traverse: func(value interface{}, traversal parquet.Traversal) error {
+						return parquet.Traverse(schema, value, traversal)
+					},
+				},
+				{
+					scenario: "optimized",
+					traverse: schema.Traverse,
+				},
+			}
 
-			for columnIndex, expect := range test.values {
-				assertEqualValues(t, columnIndex, expect, values[columnIndex])
+			for _, method := range methods {
+				t.Run(method.scenario, func(t *testing.T) {
+					for columnIndex := range values {
+						delete(values, columnIndex)
+					}
+
+					err := method.traverse(test.input, parquet.TraversalFunc(func(columnIndex int, value parquet.Value) error {
+						values[columnIndex] = append(values[columnIndex], value)
+						return nil
+					}))
+					if err != nil {
+						t.Fatal(err)
+					}
+
+					for columnIndex, expect := range test.values {
+						assertEqualValues(t, columnIndex, expect, values[columnIndex])
+						delete(values, columnIndex)
+					}
+
+					for columnIndex, unexpected := range values {
+						t.Errorf("unexpected column index %d found with %d values in it", columnIndex, len(unexpected))
+					}
+				})
 			}
 		})
 	}

@@ -35,9 +35,6 @@ func namedSchemaOf(name string, model reflect.Value) *Schema {
 			node, _, traverse := structNodeOf(elem, 0)
 			return newSchema(name, node, traverse)
 		}
-
-	case reflect.Map:
-
 	}
 
 	panic("cannot construct parquet schema from value of type " + model.Type().String())
@@ -131,7 +128,7 @@ func structNodeOf(t reflect.Type, columnIndex int) (*structNode, int, traverseFu
 }
 
 func structFieldsOf(t reflect.Type) []reflect.StructField {
-	fields := appendStructFields(nil, t, nil)
+	fields := appendStructFields(t, nil, nil)
 
 	for i := range fields {
 		f := &fields[i]
@@ -151,13 +148,13 @@ func structFieldsOf(t reflect.Type) []reflect.StructField {
 	return fields
 }
 
-func appendStructFields(fields []reflect.StructField, t reflect.Type, index []int) []reflect.StructField {
+func appendStructFields(t reflect.Type, fields []reflect.StructField, index []int) []reflect.StructField {
 	for i, n := 0, t.NumField(); i < n; i++ {
 		fieldIndex := index[:len(index):len(index)]
 		fieldIndex = append(fieldIndex, i)
 
 		if f := t.Field(i); f.Anonymous {
-			fields = appendStructFields(fields, f.Type, fieldIndex)
+			fields = appendStructFields(f.Type, fields, fieldIndex)
 		} else if f.IsExported() {
 			f.Index = fieldIndex
 			fields = append(fields, f)
