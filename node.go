@@ -162,6 +162,7 @@ func traverse(node Node, columnIndex, repetitionLevel, definitionLevel int, valu
 			}
 			// Continue through the rest of the function to increment the column
 			// index but don't send values to the traversal callback.
+			value = reflect.Value{}
 			traversal = TraversalFunc(func(int, Value) error { return nil })
 		} else {
 			// Remove the `repeated` attribute of the node so the recusrive call
