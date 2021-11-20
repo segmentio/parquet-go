@@ -19,7 +19,7 @@ type Encoder struct {
 }
 
 func NewEncoder(w io.Writer) *Encoder {
-	return NewEncoderSize(w, defaultBufferSize)
+	return NewEncoderSize(w, encoding.DefaultBufferSize)
 }
 
 func NewEncoderSize(w io.Writer, bufferSize int) *Encoder {
@@ -51,7 +51,7 @@ func (e *Encoder) Reset(w io.Writer) {
 	e.w = w
 
 	if cap(e.data) == 0 {
-		e.data = make([]byte, 4, defaultBufferSize)
+		e.data = make([]byte, 4, encoding.DefaultBufferSize)
 	} else {
 		e.data = e.data[:4]
 		*(*[4]byte)(e.data) = [4]byte{}
@@ -115,7 +115,7 @@ func (e *Encoder) encodeBitPack(count int, data []byte, dstWidth, srcWidth uint)
 	} else {
 		newCap := 2 * cap(e.data)
 		if newCap == 0 {
-			newCap = defaultBufferSize
+			newCap = encoding.DefaultBufferSize
 		}
 		for (newCap - offset) < length {
 			newCap *= 2

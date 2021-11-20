@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/segmentio/parquet/encoding"
+	"github.com/segmentio/parquet/encoding/dict"
 	"github.com/segmentio/parquet/encoding/plain"
 	"github.com/segmentio/parquet/encoding/rle"
 	"github.com/segmentio/parquet/internal/bits"
@@ -207,6 +208,16 @@ func TestEncoding(t *testing.T) {
 		{
 			scenario: "RLE",
 			encoding: new(rle.Encoding),
+		},
+
+		{
+			scenario: "PLAIN_DICTIONARY",
+			encoding: new(dict.Encoding).PlainEncoding(),
+		},
+
+		{
+			scenario: "RLE_DICTIONARY",
+			encoding: new(dict.Encoding),
 		},
 	} {
 		t.Run(test.scenario, func(t *testing.T) { testEncoding(t, test.encoding) })

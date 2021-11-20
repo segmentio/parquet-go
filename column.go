@@ -375,6 +375,29 @@ func (t schemaElementType) ConvertedType() *deprecated.ConvertedType {
 	return t.SchemaElement.ConvertedType
 }
 
+func (t schemaElementType) NewDictionary(bufferSize int) Dictionary {
+	switch t.Kind() {
+	case Boolean:
+		return newBooleanDictionary(t)
+	case Int32:
+		return newInt32Dictionary(t, bufferSize)
+	case Int64:
+		return newInt64Dictionary(t, bufferSize)
+	case Int96:
+		return newInt96Dictionary(t, bufferSize)
+	case Float:
+		return newFloatDictionary(t, bufferSize)
+	case Double:
+		return newDoubleDictionary(t, bufferSize)
+	case ByteArray:
+		return newByteArrayDictionary(t, bufferSize)
+	case FixedLenByteArray:
+		return newFixedLenByteArrayDictionary(t, bufferSize)
+	default:
+		panic("cannot create a page buffer from a schema element of unsupported type")
+	}
+}
+
 func (t schemaElementType) NewPageBuffer(bufferSize int) PageBuffer {
 	switch t.Kind() {
 	case Boolean:

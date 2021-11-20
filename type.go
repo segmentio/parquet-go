@@ -40,6 +40,8 @@ type Type interface {
 
 	ConvertedType() *deprecated.ConvertedType
 
+	NewDictionary(bufferSize int) Dictionary
+
 	NewPageBuffer(bufferSize int) PageBuffer
 }
 
@@ -122,6 +124,8 @@ func (t booleanType) PhyiscalType() *format.Type { return &physicalTypes[Boolean
 
 func (t booleanType) Less(v1, v2 Value) bool { return !v1.Boolean() && v2.Boolean() }
 
+func (t booleanType) NewDictionary(bufferSize int) Dictionary { return newBooleanDictionary(t) }
+
 func (t booleanType) NewPageBuffer(bufferSize int) PageBuffer {
 	return newBooleanPageBuffer(t, bufferSize)
 }
@@ -136,6 +140,8 @@ func (t int32Type) Less(v1, v2 Value) bool { return v1.Int32() < v2.Int32() }
 
 func (t int32Type) PhyiscalType() *format.Type { return &physicalTypes[Int32] }
 
+func (t int32Type) NewDictionary(bufferSize int) Dictionary { return newInt32Dictionary(t, bufferSize) }
+
 func (t int32Type) NewPageBuffer(bufferSize int) PageBuffer { return newInt32PageBuffer(t, bufferSize) }
 
 type int64Type struct{ primitiveType }
@@ -147,6 +153,8 @@ func (t int64Type) Length() int { return 64 }
 func (t int64Type) Less(v1, v2 Value) bool { return v1.Int64() < v2.Int64() }
 
 func (t int64Type) PhyiscalType() *format.Type { return &physicalTypes[Int64] }
+
+func (t int64Type) NewDictionary(bufferSize int) Dictionary { return newInt64Dictionary(t, bufferSize) }
 
 func (t int64Type) NewPageBuffer(bufferSize int) PageBuffer { return newInt64PageBuffer(t, bufferSize) }
 
@@ -160,6 +168,8 @@ func (t int96Type) Less(v1, v2 Value) bool { return bits.CompareInt96(v1.Int96()
 
 func (t int96Type) PhyiscalType() *format.Type { return &physicalTypes[Int96] }
 
+func (t int96Type) NewDictionary(bufferSize int) Dictionary { return newInt96Dictionary(t, bufferSize) }
+
 func (t int96Type) NewPageBuffer(bufferSize int) PageBuffer { return newInt96PageBuffer(t, bufferSize) }
 
 type floatType struct{ primitiveType }
@@ -172,6 +182,8 @@ func (t floatType) Less(v1, v2 Value) bool { return v1.Float() < v2.Float() }
 
 func (t floatType) PhyiscalType() *format.Type { return &physicalTypes[Float] }
 
+func (t floatType) NewDictionary(bufferSize int) Dictionary { return newFloatDictionary(t, bufferSize) }
+
 func (t floatType) NewPageBuffer(bufferSize int) PageBuffer { return newFloatPageBuffer(t, bufferSize) }
 
 type doubleType struct{ primitiveType }
@@ -183,6 +195,10 @@ func (t doubleType) Length() int { return 64 }
 func (t doubleType) Less(v1, v2 Value) bool { return v1.Double() < v2.Double() }
 
 func (t doubleType) PhyiscalType() *format.Type { return &physicalTypes[Double] }
+
+func (t doubleType) NewDictionary(bufferSize int) Dictionary {
+	return newDoubleDictionary(t, bufferSize)
+}
 
 func (t doubleType) NewPageBuffer(bufferSize int) PageBuffer {
 	return newDoublePageBuffer(t, bufferSize)
@@ -199,6 +215,10 @@ func (t byteArrayType) Less(v1, v2 Value) bool {
 }
 
 func (t byteArrayType) PhyiscalType() *format.Type { return &physicalTypes[ByteArray] }
+
+func (t byteArrayType) NewDictionary(bufferSize int) Dictionary {
+	return newByteArrayDictionary(t, bufferSize)
+}
 
 func (t byteArrayType) NewPageBuffer(bufferSize int) PageBuffer {
 	return newByteArrayPageBuffer(t, bufferSize)
@@ -218,6 +238,10 @@ func (t *fixedLenByteArrayType) Less(v1, v2 Value) bool {
 }
 
 func (t *fixedLenByteArrayType) PhyiscalType() *format.Type { return &physicalTypes[FixedLenByteArray] }
+
+func (t *fixedLenByteArrayType) NewDictionary(bufferSize int) Dictionary {
+	return newFixedLenByteArrayDictionary(t, bufferSize)
+}
 
 func (t *fixedLenByteArrayType) NewPageBuffer(bufferSize int) PageBuffer {
 	return newFixedLenByteArrayPageBuffer(t, bufferSize)
@@ -326,6 +350,14 @@ func (t *intType) ConvertedType() *deprecated.ConvertedType {
 	return &convertedTypes[convertedType]
 }
 
+func (t *intType) NewDictionary(bufferSize int) Dictionary {
+	if t.BitWidth == 64 {
+		return newInt64Dictionary(t, bufferSize)
+	} else {
+		return newInt32Dictionary(t, bufferSize)
+	}
+}
+
 func (t *intType) NewPageBuffer(bufferSize int) PageBuffer {
 	if t.IsSigned {
 		if t.BitWidth == 64 {
@@ -375,6 +407,8 @@ func (t *decimalType) ConvertedType() *deprecated.ConvertedType {
 
 func (t *decimalType) Less(v1, v2 Value) bool { panic("NOT IMPLEMENTED") }
 
+func (t *decimalType) NewDictionary(bufferSize int) Dictionary { panic("NOT IMPLEMENTED") }
+
 func (t *decimalType) NewPageBuffer(bufferSize int) PageBuffer { panic("NOT IMPLEMENTED") }
 
 func String() Node { return &leafNode{typ: &stringType{}} }
@@ -399,6 +433,10 @@ func (t *stringType) LogicalType() *format.LogicalType {
 
 func (t *stringType) ConvertedType() *deprecated.ConvertedType {
 	return &convertedTypes[deprecated.UTF8]
+}
+
+func (t *stringType) NewDictionary(bufferSize int) Dictionary {
+	return newByteArrayDictionary(t, bufferSize)
 }
 
 func (t *stringType) NewPageBuffer(bufferSize int) PageBuffer {
@@ -427,6 +465,10 @@ func (t *uuidType) LogicalType() *format.LogicalType {
 
 func (t *uuidType) ConvertedType() *deprecated.ConvertedType { return nil }
 
+func (t *uuidType) NewDictionary(bufferSize int) Dictionary {
+	return uuidDictionary{newFixedLenByteArrayDictionary(t, bufferSize)}
+}
+
 func (t *uuidType) NewPageBuffer(bufferSize int) PageBuffer {
 	return uuidPageBuffer{newFixedLenByteArrayPageBuffer(t, bufferSize)}
 }
@@ -453,6 +495,10 @@ func (t *enumType) LogicalType() *format.LogicalType {
 
 func (t *enumType) ConvertedType() *deprecated.ConvertedType {
 	return &convertedTypes[deprecated.Enum]
+}
+
+func (t *enumType) NewDictionary(bufferSize int) Dictionary {
+	return newByteArrayDictionary(t, bufferSize)
 }
 
 func (t *enumType) NewPageBuffer(bufferSize int) PageBuffer {
@@ -483,6 +529,10 @@ func (t *jsonType) ConvertedType() *deprecated.ConvertedType {
 	return &convertedTypes[deprecated.Json]
 }
 
+func (t *jsonType) NewDictionary(bufferSize int) Dictionary {
+	return newByteArrayDictionary(t, bufferSize)
+}
+
 func (t *jsonType) NewPageBuffer(bufferSize int) PageBuffer {
 	return newByteArrayPageBuffer(t, bufferSize)
 }
@@ -511,6 +561,10 @@ func (t *bsonType) ConvertedType() *deprecated.ConvertedType {
 	return &convertedTypes[deprecated.Bson]
 }
 
+func (t *bsonType) NewDictionary(bufferSize int) Dictionary {
+	return newByteArrayDictionary(t, bufferSize)
+}
+
 func (t *bsonType) NewPageBuffer(bufferSize int) PageBuffer {
 	return newByteArrayPageBuffer(t, bufferSize)
 }
@@ -532,6 +586,8 @@ func (t *dateType) LogicalType() *format.LogicalType {
 }
 
 func (t *dateType) ConvertedType() *deprecated.ConvertedType { return &convertedTypes[deprecated.Date] }
+
+func (t *dateType) NewDictionary(bufferSize int) Dictionary { return newInt32Dictionary(t, bufferSize) }
 
 func (t *dateType) NewPageBuffer(bufferSize int) PageBuffer { return newInt32PageBuffer(t, bufferSize) }
 
@@ -621,6 +677,14 @@ func (t *timeType) ConvertedType() *deprecated.ConvertedType {
 	}
 }
 
+func (t *timeType) NewDictionary(bufferSize int) Dictionary {
+	if t.Unit.Millis != nil {
+		return newInt32Dictionary(t, bufferSize)
+	} else {
+		return newInt64Dictionary(t, bufferSize)
+	}
+}
+
 func (t *timeType) NewPageBuffer(bufferSize int) PageBuffer {
 	if t.Unit.Millis != nil {
 		return newInt32PageBuffer(t, bufferSize)
@@ -658,6 +722,10 @@ func (t *timestampType) ConvertedType() *deprecated.ConvertedType {
 	}
 }
 
+func (t *timestampType) NewDictionary(bufferSize int) Dictionary {
+	return newInt64Dictionary(t, bufferSize)
+}
+
 func (t *timestampType) NewPageBuffer(bufferSize int) PageBuffer {
 	return newInt64PageBuffer(t, bufferSize)
 }
@@ -688,8 +756,12 @@ func (t *listType) ConvertedType() *deprecated.ConvertedType {
 	return &convertedTypes[deprecated.List]
 }
 
+func (t *listType) NewDictionary(bufferSize int) Dictionary {
+	panic("cannot create dictionary for parquet LIST type")
+}
+
 func (t *listType) NewPageBuffer(bufferSize int) PageBuffer {
-	panic("cannot create page buffer for parquet list type")
+	panic("cannot create page buffer for parquet LIST type")
 }
 
 func Map(key, value Node) Node {
@@ -723,8 +795,12 @@ func (t *mapType) ConvertedType() *deprecated.ConvertedType {
 	return &convertedTypes[deprecated.Map]
 }
 
+func (t *mapType) NewDictionary(bufferSize int) Dictionary {
+	panic("cannot create dictionary for parquet MAP type")
+}
+
 func (t *mapType) NewPageBuffer(bufferSize int) PageBuffer {
-	panic("cannot create page buffer for parquet map type")
+	panic("cannot create page buffer for parquet MAP type")
 }
 
 type nullType format.NullType
@@ -743,6 +819,10 @@ func (t *nullType) LogicalType() *format.LogicalType {
 
 func (t *nullType) ConvertedType() *deprecated.ConvertedType { return nil }
 
+func (t *nullType) NewDictionary(bufferSize int) Dictionary {
+	panic("cannot create dictionary for parquet NULL type")
+}
+
 func (t *nullType) NewPageBuffer(bufferSize int) PageBuffer {
-	panic("cannot create page buffer for parquet null type")
+	panic("cannot create page buffer for parquet NULL type")
 }

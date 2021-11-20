@@ -6,6 +6,10 @@ import (
 	"github.com/segmentio/parquet/format"
 )
 
+const (
+	DefaultBufferSize = 1024
+)
+
 type Encoding interface {
 	Encoding() format.Encoding
 	CanEncode(format.Type) bool

@@ -19,7 +19,7 @@ type Decoder struct {
 }
 
 func NewDecoder(r io.Reader) *Decoder {
-	return NewDecoderSize(r, defaultBufferSize)
+	return NewDecoderSize(r, encoding.DefaultBufferSize)
 }
 
 func NewDecoderSize(r io.Reader, bufferSize int) *Decoder {

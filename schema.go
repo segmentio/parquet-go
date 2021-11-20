@@ -298,6 +298,9 @@ func makeStructField(f reflect.StructField, columnIndex int) (structField, int) 
 					throwInvalidFieldTag(f, option)
 				}
 
+			case "dict":
+				setEncoding(&Dict)
+
 			case "list":
 				switch f.Type.Kind() {
 				case reflect.Slice:

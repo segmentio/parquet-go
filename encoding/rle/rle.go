@@ -7,10 +7,6 @@ import (
 	"github.com/segmentio/parquet/format"
 )
 
-const (
-	defaultBufferSize = 1024
-)
-
 type Encoding struct {
 	BufferSize int
 }
@@ -39,7 +35,7 @@ func (e *Encoding) bufferSize() int {
 	if e.BufferSize > 0 {
 		return e.BufferSize
 	}
-	return defaultBufferSize
+	return encoding.DefaultBufferSize
 }
 
 type levelEncoding struct{ base *Encoding }

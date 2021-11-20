@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	"github.com/segmentio/parquet/encoding"
+	"github.com/segmentio/parquet/encoding/dict"
 	"github.com/segmentio/parquet/encoding/plain"
 	"github.com/segmentio/parquet/encoding/rle"
 	"github.com/segmentio/parquet/format"
@@ -14,9 +15,13 @@ var (
 
 	RLE rle.Encoding
 
+	Dict dict.Encoding
+
 	encodings = [10]encoding.Encoding{
-		format.Plain: &Plain,
-		format.RLE:   &RLE,
+		format.Plain:           &Plain,
+		format.PlainDictionary: Dict.PlainEncoding(),
+		format.RLE:             &RLE,
+		format.RLEDictionary:   &Dict,
 	}
 )
 
