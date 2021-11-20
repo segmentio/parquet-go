@@ -243,12 +243,20 @@ func (rgw *rowGroupWriter) init(node Node, path []string, dataPageType format.Pa
 			rgw.init(node.ChildByName(name), append(base, name), dataPageType, maxRepetitionLevel, maxDefinitionLevel)
 		}
 	} else {
-		// TODO: we pick the first compression algorithm configured on the node.
-		// An amelioration we could bring to this model is to generate a matrix
-		// of encoding x codec and generate multiple representations of the
-		// pages, picking the one with the smallest space footprint; keep it
-		// simplefor now.
+		// TODO: we pick the first encoding and compression algorithm configured
+		// on the node. An amelioration we could bring to this model is to
+		// generate a matrix of encoding x codec and generate multiple
+		// representations of the pages, picking the one with the smallest space
+		// footprint; keep it simple for now.
+		encoding := encoding.Encoding(&Plain)
 		compressionCodec := compress.Codec(&Uncompressed)
+
+		for _, enc := range node.Encoding() {
+			if enc.Encoding() != format.Plain {
+				encoding = enc
+				break
+			}
+		}
 
 		for _, codec := range node.Compression() {
 			if codec.CompressionCodec() != format.Uncompressed {
@@ -268,7 +276,7 @@ func (rgw *rowGroupWriter) init(node Node, path []string, dataPageType format.Pa
 			writer: newColumnChunkWriter(
 				buffer,
 				compressionCodec,
-				&Plain,
+				encoding,
 				dataPageType,
 				maxRepetitionLevel,
 				maxDefinitionLevel,

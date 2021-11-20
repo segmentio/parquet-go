@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/segmentio/parquet/compress"
+	"github.com/segmentio/parquet/encoding"
 )
 
 type Schema struct {
@@ -65,6 +66,8 @@ func (s *Schema) NumChildren() int { return s.root.NumChildren() }
 func (s *Schema) ChildNames() []string { return s.root.ChildNames() }
 
 func (s *Schema) ChildByName(name string) Node { return s.root.ChildByName(name) }
+
+func (s *Schema) Encoding() []encoding.Encoding { return s.root.Encoding() }
 
 func (s *Schema) Compression() []compress.Codec { return s.root.Compression() }
 
@@ -217,9 +220,12 @@ func throwUnknownFieldTag(f reflect.StructField, tag string) {
 }
 
 func makeStructField(f reflect.StructField, columnIndex int) (structField, int) {
-	field := structField{index: f.Index}
-	optional := false
-	compression := []compress.Codec{}
+	var (
+		field     = structField{index: f.Index}
+		optional  bool
+		encodings []encoding.Encoding
+		codecs    []compress.Codec
+	)
 
 	setNode := func(node Node, traverse traverseFunc) {
 		if field.Node != nil {
@@ -236,13 +242,22 @@ func makeStructField(f reflect.StructField, columnIndex int) (structField, int) 
 		optional = true
 	}
 
-	setCompression := func(codec compress.Codec) {
-		for _, c := range compression {
-			if c.CompressionCodec() == codec.CompressionCodec() {
-				panic("struct field has multiple compression codecs declared: " + structFieldString(f))
+	setEncoding := func(enc encoding.Encoding) {
+		for _, e := range encodings {
+			if e.Encoding() == enc.Encoding() {
+				panic("struct field has encoding declared multiple times: " + structFieldString(f))
 			}
 		}
-		compression = append(compression, codec)
+		encodings = append(encodings, enc)
+	}
+
+	setCompression := func(codec compress.Codec) {
+		for _, c := range codecs {
+			if c.CompressionCodec() == codec.CompressionCodec() {
+				panic("struct field has compression codecs declared multiple times: " + structFieldString(f))
+			}
+		}
+		codecs = append(codecs, codec)
 	}
 
 	if tag := f.Tag.Get("parquet"); tag != "" {
@@ -272,6 +287,16 @@ func makeStructField(f reflect.StructField, columnIndex int) (structField, int) 
 
 			case "zstd":
 				setCompression(&Zstd)
+
+			case "rle":
+				switch f.Type.Kind() {
+				case reflect.Bool,
+					reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+					reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+					setEncoding(&RLE)
+				default:
+					throwInvalidFieldTag(f, option)
+				}
 
 			case "list":
 				switch f.Type.Kind() {
@@ -319,7 +344,8 @@ func makeStructField(f reflect.StructField, columnIndex int) (structField, int) 
 		field.traverse = traverseOptional(field.traverse)
 	}
 
-	field.Node = Compressed(field.Node, compression...)
+	field.Node = Compressed(field.Node, codecs...)
+	field.Node = Encoded(field.Node, encodings...)
 	return field, columnIndex
 }
 

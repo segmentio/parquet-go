@@ -19,6 +19,10 @@ func (e *Encoding) Encoding() format.Encoding {
 	return format.Plain
 }
 
+func (e *Encoding) CanEncode(format.Type) bool {
+	return true
+}
+
 func (e *Encoding) NewDecoder(r io.Reader) encoding.Decoder {
 	return NewDecoderSize(r, e.bufferSize())
 }

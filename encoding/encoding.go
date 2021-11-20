@@ -8,6 +8,7 @@ import (
 
 type Encoding interface {
 	Encoding() format.Encoding
+	CanEncode(format.Type) bool
 	NewDecoder(io.Reader) Decoder
 	NewEncoder(io.Writer) Encoder
 }

@@ -136,9 +136,11 @@ func (w unsupportedWriter) Reset(io.Writer) error       { return nil }
 func (w unsupportedWriter) Write(b []byte) (int, error) { return 0, w.error() }
 
 func sortCodecs(codecs []compress.Codec) {
-	sort.Slice(codecs, func(i, j int) bool {
-		return codecs[i].CompressionCodec() < codecs[j].CompressionCodec()
-	})
+	if len(codecs) > 1 {
+		sort.Slice(codecs, func(i, j int) bool {
+			return codecs[i].CompressionCodec() < codecs[j].CompressionCodec()
+		})
+	}
 }
 
 func dedupeSortedCodecs(codecs []compress.Codec) []compress.Codec {

@@ -1,6 +1,8 @@
 package parquet
 
 import (
+	"sort"
+
 	"github.com/segmentio/parquet/encoding"
 	"github.com/segmentio/parquet/encoding/plain"
 	"github.com/segmentio/parquet/encoding/rle"
@@ -25,4 +27,28 @@ func lookupEncoding(enc format.Encoding) encoding.Encoding {
 		}
 	}
 	return encoding.NotImplemented{}
+}
+
+func sortEncodings(encodings []encoding.Encoding) {
+	if len(encodings) > 1 {
+		sort.Slice(encodings, func(i, j int) bool {
+			return encodings[i].Encoding() < encodings[j].Encoding()
+		})
+	}
+}
+
+func dedupeSortedEncodings(encodings []encoding.Encoding) []encoding.Encoding {
+	if len(encodings) > 0 {
+		i := 0
+
+		for _, c := range encodings[1:] {
+			if c.Encoding() != encodings[i].Encoding() {
+				i++
+				encodings[i] = c
+			}
+		}
+
+		encodings = encodings[:i+1]
+	}
+	return encodings
 }

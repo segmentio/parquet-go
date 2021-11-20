@@ -5,6 +5,7 @@ import (
 
 	"github.com/segmentio/parquet/compress"
 	"github.com/segmentio/parquet/deprecated"
+	"github.com/segmentio/parquet/encoding"
 	"github.com/segmentio/parquet/format"
 )
 
@@ -37,13 +38,20 @@ func (g Group) ChildByName(name string) Node {
 	panic("column not found in parquet group: " + name)
 }
 
+func (g Group) Encoding() []encoding.Encoding {
+	encodings := make([]encoding.Encoding, 0, len(g))
+	for _, node := range g {
+		encodings = append(encodings, node.Encoding()...)
+	}
+	sortEncodings(encodings)
+	return dedupeSortedEncodings(encodings)
+}
+
 func (g Group) Compression() []compress.Codec {
 	codecs := make([]compress.Codec, 0, len(g))
-
 	for _, node := range g {
 		codecs = append(codecs, node.Compression()...)
 	}
-
 	sortCodecs(codecs)
 	return dedupeSortedCodecs(codecs)
 }

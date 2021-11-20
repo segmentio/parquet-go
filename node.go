@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	"github.com/segmentio/parquet/compress"
+	"github.com/segmentio/parquet/encoding"
 	"github.com/segmentio/parquet/format"
 )
 
@@ -24,16 +25,47 @@ type Node interface {
 
 	ChildByName(name string) Node
 
+	Encoding() []encoding.Encoding
+
 	Compression() []compress.Codec
+}
+
+func Encoded(node Node, encodings ...encoding.Encoding) Node {
+	if len(encodings) == 0 {
+		return node
+	}
+	kind := node.Type().Kind()
+	for _, e := range encodings {
+		if !e.CanEncode(format.Type(kind)) {
+			panic("cannot apply " + e.Encoding().String() + " to node of type " + kind.String())
+		}
+	}
+	encodings = append([]encoding.Encoding{}, encodings...)
+	return &encodedNode{
+		Node:      node,
+		encodings: encodings[:len(encodings):len(encodings)],
+	}
+}
+
+type encodedNode struct {
+	Node
+	encodings []encoding.Encoding
+}
+
+func (n *encodedNode) Encoding() []encoding.Encoding {
+	encodings := append(n.encodings, n.Node.Encoding()...)
+	sortEncodings(encodings)
+	return dedupeSortedEncodings(encodings)
 }
 
 func Compressed(node Node, codecs ...compress.Codec) Node {
 	if len(codecs) == 0 {
 		return node
 	}
+	codecs = append([]compress.Codec{}, codecs...)
 	return &compressedNode{
 		Node:   node,
-		codecs: append([]compress.Codec{}, codecs...),
+		codecs: codecs[:len(codecs):len(codecs)],
 	}
 }
 
@@ -43,8 +75,7 @@ type compressedNode struct {
 }
 
 func (n *compressedNode) Compression() []compress.Codec {
-	compression := n.Node.Compression()
-	compression = append(compression[:len(compression):len(compression)], n.codecs...)
+	compression := append(n.codecs, n.Node.Compression()...)
 	sortCodecs(compression)
 	return dedupeSortedCodecs(compression)
 }
@@ -96,6 +127,7 @@ func (node) Required() bool                { return true }
 func (node) NumChildren() int              { return 0 }
 func (node) ChildNames() []string          { return nil }
 func (node) ChildByName(string) Node       { panic("cannot call ChildByName in leaf parquet node") }
+func (node) Encoding() []encoding.Encoding { return nil }
 func (node) Compression() []compress.Codec { return nil }
 
 type leafNode struct {

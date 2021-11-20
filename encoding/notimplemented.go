@@ -18,6 +18,10 @@ func (NotImplemented) Encoding() format.Encoding {
 	return -1
 }
 
+func (NotImplemented) CanEncode(format.Type) bool {
+	return false
+}
+
 func (NotImplemented) NewDecoder(io.Reader) Decoder {
 	return NotImplementedDecoder{}
 }

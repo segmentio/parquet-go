@@ -7,6 +7,7 @@ import (
 
 	"github.com/segmentio/parquet/compress"
 	"github.com/segmentio/parquet/deprecated"
+	"github.com/segmentio/parquet/encoding"
 	"github.com/segmentio/parquet/format"
 	"github.com/segmentio/parquet/internal/bits"
 )
@@ -18,12 +19,14 @@ import (
 //
 // Column instances satisfy the Node interface.
 type Column struct {
-	file    *File
-	schema  *format.SchemaElement
-	order   *format.ColumnOrder
-	names   []string
-	columns []*Column
-	chunks  []*format.ColumnChunk
+	file        *File
+	schema      *format.SchemaElement
+	order       *format.ColumnOrder
+	names       []string
+	columns     []*Column
+	chunks      []*format.ColumnChunk
+	encoding    []encoding.Encoding
+	compression []compress.Codec
 
 	depth              int32
 	maxRepetitionLevel int32
@@ -66,15 +69,11 @@ func (c *Column) ChildNames() []string { return c.names }
 // This method contributes to satisfying the Node interface.
 func (c *Column) ChildByName(name string) Node { return c.Column(name) }
 
+// Encoding returns the encodings used by this column.
+func (c *Column) Encoding() []encoding.Encoding { return c.encoding }
+
 // Compression returns the compression codecs used by this column.
-func (c *Column) Compression() []compress.Codec {
-	codecs := make([]compress.Codec, len(c.chunks))
-	for i, chunk := range c.chunks {
-		codecs[i] = lookupCompressionCodec(chunk.MetaData.Codec)
-	}
-	sortCodecs(codecs)
-	return dedupeSortedCodecs(codecs)
-}
+func (c *Column) Compression() []compress.Codec { return c.compression }
 
 // Name returns the column name.
 func (c *Column) Name() string { return c.schema.Name }
@@ -206,12 +205,31 @@ func (cl *columnLoader) open(file *File) (*Column, error) {
 			}
 			c.chunks = append(c.chunks, &rowGroup.Columns[cl.rowGroupColumnIndex])
 		}
+
+		c.encoding = make([]encoding.Encoding, 0, len(c.chunks))
+		for _, chunk := range c.chunks {
+			for _, encoding := range chunk.MetaData.Encoding {
+				c.encoding = append(c.encoding, lookupEncoding(encoding))
+			}
+		}
+		sortEncodings(c.encoding)
+		c.encoding = dedupeSortedEncodings(c.encoding)
+
+		c.compression = make([]compress.Codec, len(c.chunks))
+		for i, chunk := range c.chunks {
+			c.compression[i] = lookupCompressionCodec(chunk.MetaData.Codec)
+		}
+		sortCodecs(c.compression)
+		c.compression = dedupeSortedCodecs(c.compression)
+
 		cl.rowGroupColumnIndex++
 		return c, nil
 	}
 
 	c.names = make([]string, numChildren)
 	c.columns = make([]*Column, numChildren)
+	c.encoding = make([]encoding.Encoding, 0, numChildren)
+	c.compression = make([]compress.Codec, 0, numChildren)
 
 	for i := range c.columns {
 		if cl.schemaIndex >= len(file.metadata.Schema) {

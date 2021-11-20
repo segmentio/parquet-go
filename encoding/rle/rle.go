@@ -19,6 +19,10 @@ func (e *Encoding) Encoding() format.Encoding {
 	return format.RLE
 }
 
+func (e *Encoding) CanEncode(t format.Type) bool {
+	return t == format.Boolean || t == format.Int32 || t == format.Int64 || t == format.Int96
+}
+
 func (e *Encoding) LevelEncoding() encoding.Encoding {
 	return levelEncoding{e}
 }
@@ -42,6 +46,10 @@ type levelEncoding struct{ base *Encoding }
 
 func (e levelEncoding) Encoding() format.Encoding {
 	return e.base.Encoding()
+}
+
+func (e levelEncoding) CanEncode(t format.Type) bool {
+	return e.base.CanEncode(t)
 }
 
 func (e levelEncoding) NewDecoder(r io.Reader) encoding.Decoder {
