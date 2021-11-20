@@ -237,6 +237,15 @@ func (v Value) DefinitionLevel() int { return int(v.definitionLevel) }
 
 func (v Value) RepetitionLevel() int { return int(v.repetitionLevel) }
 
+func (v Value) Clone() Value {
+	switch v.Kind() {
+	case ByteArray, FixedLenByteArray:
+		return makeValueBytes(v.Kind(), v.Bytes())
+	default:
+		return v
+	}
+}
+
 func (v Value) Bytes() []byte { return v.AppendBytes(nil) }
 
 func (v Value) AppendBytes(b []byte) []byte {

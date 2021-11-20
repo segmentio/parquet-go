@@ -330,13 +330,15 @@ func (d *fixedLenByteArrayDictionary) Keys() []byte { return d.keys }
 
 func (d *fixedLenByteArrayDictionary) Values() encoding.IntArray { return d.values }
 
+func (d *fixedLenByteArrayDictionary) Len() int { return len(d.keys) / d.size }
+
 func (d *fixedLenByteArrayDictionary) Index(i int) Value {
 	return makeValueBytes(FixedLenByteArray, d.key(i))
 }
 
-func (d *fixedLenByteArrayDictionary) key(i int) []byte { return d.keys[i*d.size : (i+1)*d.size] }
-
-func (d *fixedLenByteArrayDictionary) Len() int { return len(d.keys) / d.size }
+func (d *fixedLenByteArrayDictionary) key(i int) []byte {
+	return d.keys[i*d.size : (i+1)*d.size]
+}
 
 func (d *fixedLenByteArrayDictionary) Reset() {
 	d.keys = d.keys[:0]
@@ -379,6 +381,45 @@ func (d uuidDictionary) WriteValue(v Value) error {
 		b = u[:]
 	}
 	return d.writeValue(b)
+}
+
+func NewDictionaryPageBuffer(dict Dictionary) PageBuffer { return &dictionaryPageBuffer{dict} }
+
+type dictionaryPageBuffer struct{ Dictionary }
+
+func (buf *dictionaryPageBuffer) Reset() { buf.Values().Reset() }
+
+func (buf *dictionaryPageBuffer) NumValues() int { return buf.Values().Len() }
+
+func (buf *dictionaryPageBuffer) DistinctCount() int { return buf.Len() }
+
+func (buf *dictionaryPageBuffer) Bounds() (min, max Value) {
+	values := buf.Values()
+
+	if n := values.Len(); n > 0 {
+		min = buf.Index(int(values.Index(0)))
+		max = buf.Index(int(values.Index(0)))
+		t := buf.Type()
+
+		for i := 1; i < n; i++ {
+			v := buf.Index(int(values.Index(i)))
+			if t.Less(v, min) {
+				min = v
+			}
+			if t.Less(max, v) {
+				max = v
+			}
+		}
+
+		min = min.Clone()
+		max = max.Clone()
+	}
+
+	return min, max
+}
+
+func (buf *dictionaryPageBuffer) WriteTo(enc encoding.Encoder) error {
+	return enc.EncodeIntArray(buf.Values())
 }
 
 var (

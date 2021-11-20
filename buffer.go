@@ -105,8 +105,6 @@ var (
 )
 
 type PageBuffer interface {
-	ValueWriter
-
 	Type() Type
 
 	Reset()
@@ -118,6 +116,8 @@ type PageBuffer interface {
 	Bounds() (min, max Value)
 
 	WriteTo(encoding.Encoder) error
+
+	ValueWriter
 }
 
 type booleanPageBuffer struct {

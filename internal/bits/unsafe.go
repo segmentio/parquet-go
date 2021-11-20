@@ -58,6 +58,14 @@ func BytesToInt64(data []byte) []int64 {
 	return unsafe.Slice(*(**int64)(unsafe.Pointer(&data)), len(data)/8)
 }
 
+func BytesToFloat32(data []byte) []float32 {
+	return unsafe.Slice(*(**float32)(unsafe.Pointer(&data)), len(data)/4)
+}
+
+func BytesToFloat64(data []byte) []float64 {
+	return unsafe.Slice(*(**float64)(unsafe.Pointer(&data)), len(data)/8)
+}
+
 func BytesToBE128(data []byte) [][16]byte {
 	return unsafe.Slice(*(**[16]byte)(unsafe.Pointer(&data)), len(data)/16)
 }

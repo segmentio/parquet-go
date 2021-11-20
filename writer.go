@@ -16,7 +16,7 @@ import (
 type WriterConfig struct {
 	CreatedBy string
 
-	ColumnChunkBuffers BufferPool
+	ColumnPageBuffers BufferPool
 
 	PageBufferSize int
 
@@ -34,7 +34,7 @@ func (c *WriterConfig) Apply(options ...WriterOption) {
 func (c *WriterConfig) Configure(config *WriterConfig) {
 	*config = WriterConfig{
 		CreatedBy:          coalesceString(c.CreatedBy, config.CreatedBy),
-		ColumnChunkBuffers: coalesceBufferPool(c.ColumnChunkBuffers, config.ColumnChunkBuffers),
+		ColumnPageBuffers:  coalesceBufferPool(c.ColumnPageBuffers, config.ColumnPageBuffers),
 		PageBufferSize:     coalesceInt(c.PageBufferSize, config.PageBufferSize),
 		DataPageVersion:    coalesceInt(c.DataPageVersion, config.DataPageVersion),
 		RowGroupTargetSize: coalesceInt64(c.RowGroupTargetSize, config.RowGroupTargetSize),
@@ -44,7 +44,7 @@ func (c *WriterConfig) Configure(config *WriterConfig) {
 func (c *WriterConfig) Validate() error {
 	const baseName = "parquet.(*WriterConfig)."
 	return errorInvalidConfiguration(
-		validateNotNil(baseName+"ColumnChunkBuffers", c.ColumnChunkBuffers),
+		validateNotNil(baseName+"ColumnPageBuffers", c.ColumnPageBuffers),
 		validatePositiveInt(baseName+"PageBufferSize", c.PageBufferSize),
 		validatePositiveInt64(baseName+"RowGroupTargetSize", c.RowGroupTargetSize),
 		validateOneOfInt(baseName+"DataPageVersion", c.DataPageVersion, 1, 2),
@@ -59,8 +59,8 @@ func CreatedBy(createdBy string) WriterOption {
 	return writerOption(func(config *WriterConfig) { config.CreatedBy = createdBy })
 }
 
-func ColumnChunkBuffers(buffers BufferPool) WriterOption {
-	return writerOption(func(config *WriterConfig) { config.ColumnChunkBuffers = buffers })
+func ColumnPageBuffers(buffers BufferPool) WriterOption {
+	return writerOption(func(config *WriterConfig) { config.ColumnPageBuffers = buffers })
 }
 
 func PageBufferSize(size int) WriterOption {
@@ -89,8 +89,8 @@ type Writer struct {
 func NewWriter(writer io.Writer, schema *Schema, options ...WriterOption) *Writer {
 	config := &WriterConfig{
 		// default configuration
-		ColumnChunkBuffers: &defaultBufferPool,
-		PageBufferSize:     2 * 1024 * 1024,
+		ColumnPageBuffers:  &defaultBufferPool,
+		PageBufferSize:     1 * 1024 * 1024,
 		DataPageVersion:    2,
 		RowGroupTargetSize: 128 * 1024 * 1024,
 	}
@@ -105,7 +105,7 @@ func NewWriter(writer io.Writer, schema *Schema, options ...WriterOption) *Write
 }
 
 func (w *Writer) writeMagicHeader() error {
-	_, err := io.WriteString(w.rowGroups.writer, "PAR1")
+	_, err := io.WriteString(&w.rowGroups.writer, "PAR1")
 	return err
 }
 
@@ -167,7 +167,7 @@ func (w *Writer) WriteRow(row interface{}) error {
 }
 
 type rowGroupWriter struct {
-	writer io.Writer
+	writer countWriter
 	schema *Schema
 	config *WriterConfig
 
@@ -180,11 +180,12 @@ type rowGroupWriter struct {
 }
 
 type rowGroupColumn struct {
-	typ    format.Type
-	codec  format.CompressionCodec
-	path   []string
-	buffer Buffer
-	writer *columnChunkWriter
+	typ        format.Type
+	codec      format.CompressionCodec
+	path       []string
+	dictionary Dictionary
+	buffer     *bufferPoolPageWriter
+	writer     *columnChunkWriter
 
 	maxDefinitionLevel int32
 	maxRepetitionLevel int32
@@ -194,7 +195,7 @@ type rowGroupColumn struct {
 
 func newRowGroupWriter(writer io.Writer, schema *Schema, config *WriterConfig) *rowGroupWriter {
 	rgw := &rowGroupWriter{
-		writer: writer,
+		writer: countWriter{writer: writer},
 		schema: schema,
 		config: config,
 		// Assume this is the first row group in the file, it starts after the
@@ -265,11 +266,23 @@ func (rgw *rowGroupWriter) init(node Node, path []string, dataPageType format.Pa
 			}
 		}
 
-		buffer := rgw.config.ColumnChunkBuffers.GetBuffer()
+		dictionary := Dictionary(nil)
+		pageBuffer := PageBuffer(nil)
+
+		switch encoding.Encoding() {
+		case format.PlainDictionary, format.RLEDictionary:
+			dictionary = nodeType.NewDictionary(rgw.config.PageBufferSize)
+			pageBuffer = NewDictionaryPageBuffer(dictionary)
+		default:
+			pageBuffer = nodeType.NewPageBuffer(rgw.config.PageBufferSize)
+		}
+
+		buffer := &bufferPoolPageWriter{pool: rgw.config.ColumnPageBuffers}
 		column := &rowGroupColumn{
 			typ:                format.Type(nodeType.Kind()),
 			codec:              compressionCodec.CompressionCodec(),
 			path:               path,
+			dictionary:         dictionary,
 			buffer:             buffer,
 			maxRepetitionLevel: maxRepetitionLevel,
 			maxDefinitionLevel: maxDefinitionLevel,
@@ -280,7 +293,7 @@ func (rgw *rowGroupWriter) init(node Node, path []string, dataPageType format.Pa
 				dataPageType,
 				maxRepetitionLevel,
 				maxDefinitionLevel,
-				nodeType.NewPageBuffer(rgw.config.PageBufferSize),
+				pageBuffer,
 			),
 		}
 
@@ -303,7 +316,7 @@ func (rgw *rowGroupWriter) Close() error {
 		err = rgw.Flush()
 
 		for _, col := range rgw.columns {
-			rgw.config.ColumnChunkBuffers.PutBuffer(col.buffer)
+			col.buffer.release()
 		}
 
 		rgw.columns = nil
@@ -327,19 +340,25 @@ func (rgw *rowGroupWriter) Flush() error {
 		}
 	}
 
-	dataPageOffset := int64(4) // starts after the "PAR1" magic header
 	totalByteSize := int64(0)
 	totalCompressedSize := int64(0)
 	columns := make([]format.ColumnChunk, len(rgw.columns))
 
-	for _, col := range rgw.columns {
-		_, err := io.Copy(rgw.writer, col.buffer)
-		if err != nil {
+	for i, col := range rgw.columns {
+		dictionaryPageOffset := int64(0)
+		if col.dictionary != nil {
+			dictionaryPageOffset = rgw.writer.length
+
+			if err := col.writer.writeDictionaryPage(&rgw.writer, col.dictionary); err != nil {
+				return err
+			}
+		}
+
+		dataPageOffset := rgw.writer.length
+		if err := col.buffer.writeTo(&rgw.writer); err != nil {
 			return err
 		}
-	}
 
-	for i, col := range rgw.columns {
 		columnChunkTotalUncompressedSize := col.writer.TotalUncompressedSize()
 		columnChunkTotalCompressedSize := col.writer.TotalCompressedSize()
 
@@ -358,7 +377,7 @@ func (rgw *rowGroupWriter) Flush() error {
 				KeyValueMetadata:      nil,
 				DataPageOffset:        dataPageOffset,
 				IndexPageOffset:       0,
-				DictionaryPageOffset:  0,
+				DictionaryPageOffset:  dictionaryPageOffset,
 				Statistics:            col.writer.Statistics(),
 				EncodingStats:         col.writer.EncodingStats(),
 				BloomFilterOffset:     0,
@@ -369,10 +388,7 @@ func (rgw *rowGroupWriter) Flush() error {
 			ColumnIndexLength: 0,
 		}
 
-		dataPageOffset += columnChunkTotalCompressedSize
-
-		rgw.config.ColumnChunkBuffers.PutBuffer(col.buffer)
-		col.buffer = rgw.config.ColumnChunkBuffers.GetBuffer()
+		col.buffer.release()
 		col.writer.Reset()
 	}
 
@@ -429,7 +445,7 @@ func (rgw *rowGroupWriter) WriteRow(row interface{}) error {
 }
 
 type columnChunkWriter struct {
-	writer      io.Writer
+	writer      pageWriter
 	encoding    encoding.Encoding
 	compression compress.Codec
 	values      PageBuffer
@@ -473,7 +489,7 @@ type columnChunkWriter struct {
 	encodingStats         []format.PageEncodingStats
 }
 
-func newColumnChunkWriter(writer io.Writer, codec compress.Codec, enc encoding.Encoding, dataPageType format.PageType, maxRepetitionLevel, maxDefinitionLevel int32, values PageBuffer) *columnChunkWriter {
+func newColumnChunkWriter(writer pageWriter, codec compress.Codec, enc encoding.Encoding, dataPageType format.PageType, maxRepetitionLevel, maxDefinitionLevel int32, values PageBuffer) *columnChunkWriter {
 	ccw := &columnChunkWriter{
 		writer:             writer,
 		encoding:           enc,
@@ -695,13 +711,7 @@ func (ccw *columnChunkWriter) Flush() error {
 		ccw.levels.definition.Reset()
 	}
 
-	if _, err := ccw.header.buffer.WriteTo(ccw.writer); err != nil {
-		return err
-	}
-	if _, err := ccw.page.buffer.WriteTo(ccw.writer); err != nil {
-		return err
-	}
-	return nil
+	return ccw.writer.writePage(ccw.header.buffer.Bytes(), ccw.page.buffer.Bytes())
 }
 
 func (ccw *columnChunkWriter) WriteValue(v Value) error {
@@ -749,6 +759,107 @@ func addPageEncodingStats(stats []format.PageEncodingStats, add format.PageEncod
 		}
 	}
 	return append(stats, add)
+}
+
+func (ccw *columnChunkWriter) writeDictionaryPage(w io.Writer, dict Dictionary) error {
+	ccw.page.buffer.Reset()
+	ccw.page.checksum.Reset(&ccw.page.buffer)
+
+	if err := ccw.page.compressed.Reset(&ccw.page.checksum); err != nil {
+		return fmt.Errorf("resetting compressor for parquet column chunk writer: %w", err)
+	}
+	keys := dict.Keys()
+	if _, err := ccw.page.compressed.Write(keys); err != nil {
+		return err
+	}
+	if err := ccw.page.compressed.Close(); err != nil {
+		return err
+	}
+
+	ccw.header.buffer.Reset()
+	ccw.header.encoder.Reset(ccw.header.protocol.NewWriter(&ccw.header.buffer))
+
+	if err := ccw.header.encoder.Encode(&format.PageHeader{
+		Type:                 format.DictionaryPage,
+		UncompressedPageSize: int32(len(keys)),
+		CompressedPageSize:   int32(ccw.page.buffer.Len()),
+		CRC:                  int32(ccw.page.checksum.Sum32()),
+		DictionaryPageHeader: &format.DictionaryPageHeader{
+			NumValues: int32(dict.Len()),
+			Encoding:  format.Plain,
+			IsSorted:  false,
+		},
+	}); err != nil {
+		return err
+	}
+
+	if _, err := ccw.header.buffer.WriteTo(w); err != nil {
+		return err
+	}
+	if _, err := ccw.page.buffer.WriteTo(w); err != nil {
+		return err
+	}
+	return nil
+}
+
+type pageWriter interface {
+	writePage(header, data []byte) error
+}
+
+type bufferPageWriter struct {
+	buffer Buffer
+}
+
+func (w *bufferPageWriter) writePage(header, data []byte) error {
+	if _, err := w.buffer.Write(header); err != nil {
+		return err
+	}
+	if _, err := w.buffer.Write(data); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (w *bufferPageWriter) writeTo(dst io.Writer) error {
+	_, err := io.Copy(dst, w.buffer)
+	return err
+}
+
+func (w *bufferPageWriter) release(pool BufferPool) {
+	if buf := w.buffer; buf != nil {
+		w.buffer = nil
+		pool.PutBuffer(buf)
+	}
+}
+
+type bufferPoolPageWriter struct {
+	pool  BufferPool
+	pages []bufferPageWriter
+}
+
+func (w *bufferPoolPageWriter) writePage(header, data []byte) error {
+	writer := bufferPageWriter{buffer: w.pool.GetBuffer()}
+	if err := writer.writePage(header, data); err != nil {
+		return err
+	}
+	w.pages = append(w.pages, writer)
+	return nil
+}
+
+func (w *bufferPoolPageWriter) writeTo(dst io.Writer) error {
+	for _, page := range w.pages {
+		if err := page.writeTo(dst); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (w *bufferPoolPageWriter) release() {
+	for i := range w.pages {
+		w.pages[i].release(w.pool)
+	}
+	w.pages = w.pages[:0]
 }
 
 type countWriter struct {
