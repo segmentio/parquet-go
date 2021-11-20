@@ -48,6 +48,21 @@ func (d *Decoder) Reset(r io.Reader) {
 	}
 }
 
+func (d *Decoder) DecodeBitWidth() (int, error) {
+	_, err := io.ReadFull(d.reader, d.buffer[:1])
+	if err != nil {
+		if err == io.EOF {
+			err = io.ErrUnexpectedEOF
+		}
+		return 0, err
+	}
+	b := d.buffer[0]
+	if b > 32 {
+		return 0, fmt.Errorf("decoding RLE bit width: %d>32", b)
+	}
+	return int(b), nil
+}
+
 func (d *Decoder) DecodeBoolean(data []bool) (int, error) {
 	if d.rle == nil {
 		d.rle = rle.NewDecoder(d.reader)

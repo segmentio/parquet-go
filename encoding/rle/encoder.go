@@ -3,6 +3,7 @@ package rle
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
 
 	"github.com/segmentio/parquet/encoding"
@@ -12,7 +13,7 @@ import (
 
 type Encoder struct {
 	encoding.NotImplementedEncoder
-	w        io.Writer
+	writer   io.Writer
 	buffer   [binary.MaxVarintLen32]byte
 	data     []byte
 	bitWidth uint
@@ -24,8 +25,8 @@ func NewEncoder(w io.Writer) *Encoder {
 
 func NewEncoderSize(w io.Writer, bufferSize int) *Encoder {
 	return &Encoder{
-		w:    w,
-		data: make([]byte, 4, bits.NearestPowerOfTwo64(uint64(bufferSize))),
+		writer: w,
+		data:   make([]byte, 0, bits.NearestPowerOfTwo64(uint64(bufferSize))),
 	}
 }
 
@@ -34,13 +35,31 @@ func (e *Encoder) Encoding() format.Encoding {
 }
 
 func (e *Encoder) Close() error {
-	if len(e.data) > 4 {
-		defer e.Reset(e.w)
-		binary.LittleEndian.PutUint32(e.data[:4], uint32(len(e.data)-4))
-		_, err := e.w.Write(e.data)
-		return err
+	if len(e.data) > 0 {
+		defer e.Reset(e.writer)
+		if err := e.writeLength(); err != nil {
+			return err
+		}
+		return e.writeData()
 	}
 	return nil
+}
+
+func (e *Encoder) writeLength() error {
+	binary.LittleEndian.PutUint32(e.buffer[:4], uint32(len(e.data)))
+	_, err := e.writer.Write(e.buffer[:4])
+	return err
+}
+
+func (e *Encoder) writeData() error {
+	_, err := e.writer.Write(e.data)
+	return err
+}
+
+func (e *Encoder) WriteByte(b byte) error {
+	e.buffer[0] = b
+	_, err := e.writer.Write(e.buffer[:1])
+	return err
 }
 
 func (e *Encoder) SetBitWidth(bitWidth int) {
@@ -48,14 +67,23 @@ func (e *Encoder) SetBitWidth(bitWidth int) {
 }
 
 func (e *Encoder) Reset(w io.Writer) {
-	e.w = w
+	e.writer = w
 
 	if cap(e.data) == 0 {
-		e.data = make([]byte, 4, encoding.DefaultBufferSize)
+		e.data = make([]byte, 0, encoding.DefaultBufferSize)
 	} else {
-		e.data = e.data[:4]
-		*(*[4]byte)(e.data) = [4]byte{}
+		e.data = e.data[:0]
 	}
+}
+
+func (e *Encoder) EncodeBitWidth(bitWidth int) error {
+	if bitWidth <= 0 {
+		return fmt.Errorf("encoding RLE bit width: %d<=0", bitWidth)
+	}
+	if bitWidth > 64 {
+		return fmt.Errorf("encoding RLE bit width: %d>64", bitWidth)
+	}
+	return e.WriteByte(byte(bitWidth))
 }
 
 func (e *Encoder) EncodeBoolean(data []bool) error {
@@ -211,11 +239,9 @@ func newLevelEncoderSize(w io.Writer, bufferSize int) levelEncoder {
 }
 
 func (e levelEncoder) Close() error {
-	if len(e.data) > 4 {
-		defer e.Reset(e.w)
-		// When encoding a level, skip the length prefix, just write the data.
-		_, err := e.w.Write(e.data[4:])
-		return err
+	if len(e.data) > 0 {
+		defer e.Reset(e.writer)
+		return e.writeData()
 	}
 	return nil
 }

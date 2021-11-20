@@ -30,7 +30,7 @@ func NewDecoderSize(r io.Reader, bufferSize int) *Decoder {
 	return &Decoder{
 		data: io.LimitedReader{
 			R: r,
-			N: 4,
+			N: math.MaxInt64,
 		},
 		buffer: make([]byte, bits.NearestPowerOfTwo64(uint64(bufferSize))),
 	}
@@ -50,7 +50,7 @@ func (d *Decoder) SetBitWidth(bitWidth int) {
 
 func (d *Decoder) Reset(r io.Reader) {
 	d.data.R = r
-	d.data.N = 4
+	d.data.N = math.MaxInt64
 	d.init = false
 	d.decoder = nil
 }
@@ -58,6 +58,21 @@ func (d *Decoder) Reset(r io.Reader) {
 func (d *Decoder) ReadByte() (byte, error) {
 	_, err := d.data.Read(d.buffer[:1])
 	return d.buffer[0], err
+}
+
+func (d *Decoder) DecodeBitWidth() (int, error) {
+	_, err := d.ReadByte()
+	if err != nil {
+		if err == io.EOF {
+			err = io.ErrUnexpectedEOF
+		}
+		return 0, fmt.Errorf("decoding RLE bit width: %w", err)
+	}
+	b := d.buffer[0]
+	if b > 64 {
+		return 0, fmt.Errorf("decoding RLE bit width: %d>64", b)
+	}
+	return int(b), nil
 }
 
 func (d *Decoder) DecodeBoolean(data []bool) (int, error) {

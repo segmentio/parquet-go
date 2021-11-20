@@ -1,9 +1,12 @@
 package encoding
 
 import (
+	"fmt"
+	"io"
 	"sort"
 
 	"github.com/segmentio/parquet/internal/bits"
+	"github.com/segmentio/parquet/internal/stringio"
 )
 
 // IntArray is an interface implemented by arrays of integers.
@@ -28,6 +31,8 @@ type IntArrayBuffer interface {
 // IntArrayView is an interface presenting the methods of IntArray which support
 // reading values from the array.
 type IntArrayView interface {
+	fmt.Formatter
+
 	// Returns the number of items in the array.
 	Len() int
 
@@ -117,14 +122,15 @@ func (a *fixedIntArray1) AppendBits(data []byte, bitWidth int) {
 
 type fixedIntArray8 struct{ values []int8 }
 
-func (a *fixedIntArray8) BitWidth() int      { return 8 }
-func (a *fixedIntArray8) Len() int           { return len(a.values) }
-func (a *fixedIntArray8) Less(i, j int) bool { return a.Index(i) < a.Index(j) }
-func (a *fixedIntArray8) Swap(i, j int)      { a.values[i], a.values[j] = a.values[j], a.values[i] }
-func (a *fixedIntArray8) Index(i int) int64  { return int64(a.values[i]) }
-func (a *fixedIntArray8) Bits() []byte       { return bits.Int8ToBytes(a.values) }
-func (a *fixedIntArray8) Reset()             { a.values = a.values[:0] }
-func (a *fixedIntArray8) Append(v int64)     { a.values = append(a.values, int8(v)) }
+func (a *fixedIntArray8) Format(w fmt.State, v rune) { formatIntArray(w, v, a) }
+func (a *fixedIntArray8) BitWidth() int              { return 8 }
+func (a *fixedIntArray8) Len() int                   { return len(a.values) }
+func (a *fixedIntArray8) Less(i, j int) bool         { return a.Index(i) < a.Index(j) }
+func (a *fixedIntArray8) Swap(i, j int)              { a.values[i], a.values[j] = a.values[j], a.values[i] }
+func (a *fixedIntArray8) Index(i int) int64          { return int64(a.values[i]) }
+func (a *fixedIntArray8) Bits() []byte               { return bits.Int8ToBytes(a.values) }
+func (a *fixedIntArray8) Reset()                     { a.values = a.values[:0] }
+func (a *fixedIntArray8) Append(v int64)             { a.values = append(a.values, int8(v)) }
 func (a *fixedIntArray8) AppendBits(data []byte, bitWidth int) {
 	values, _ := appendBits(bits.Int8ToBytes(a.values[:cap(a.values)])[:len(a.values)], 8, data, bitWidth)
 	a.values = bits.BytesToInt8(values[:cap(values)])[:len(values)]
@@ -132,14 +138,15 @@ func (a *fixedIntArray8) AppendBits(data []byte, bitWidth int) {
 
 type fixedIntArray16 struct{ values []int16 }
 
-func (a *fixedIntArray16) BitWidth() int      { return 16 }
-func (a *fixedIntArray16) Len() int           { return len(a.values) }
-func (a *fixedIntArray16) Less(i, j int) bool { return a.Index(i) < a.Index(j) }
-func (a *fixedIntArray16) Swap(i, j int)      { a.values[i], a.values[j] = a.values[j], a.values[i] }
-func (a *fixedIntArray16) Index(i int) int64  { return int64(a.values[i]) }
-func (a *fixedIntArray16) Bits() []byte       { return bits.Int16ToBytes(a.values) }
-func (a *fixedIntArray16) Reset()             { a.values = a.values[:0] }
-func (a *fixedIntArray16) Append(v int64)     { a.values = append(a.values, int16(v)) }
+func (a *fixedIntArray16) Format(w fmt.State, v rune) { formatIntArray(w, v, a) }
+func (a *fixedIntArray16) BitWidth() int              { return 16 }
+func (a *fixedIntArray16) Len() int                   { return len(a.values) }
+func (a *fixedIntArray16) Less(i, j int) bool         { return a.Index(i) < a.Index(j) }
+func (a *fixedIntArray16) Swap(i, j int)              { a.values[i], a.values[j] = a.values[j], a.values[i] }
+func (a *fixedIntArray16) Index(i int) int64          { return int64(a.values[i]) }
+func (a *fixedIntArray16) Bits() []byte               { return bits.Int16ToBytes(a.values) }
+func (a *fixedIntArray16) Reset()                     { a.values = a.values[:0] }
+func (a *fixedIntArray16) Append(v int64)             { a.values = append(a.values, int16(v)) }
 func (a *fixedIntArray16) AppendBits(data []byte, bitWidth int) {
 	values, _ := appendBits(bits.Int16ToBytes(a.values[:cap(a.values)])[:len(a.values)*2], 16, data, bitWidth)
 	a.values = bits.BytesToInt16(values[:cap(values)])[:len(values)/2]
@@ -147,14 +154,15 @@ func (a *fixedIntArray16) AppendBits(data []byte, bitWidth int) {
 
 type fixedIntArray32 struct{ values []int32 }
 
-func (a *fixedIntArray32) BitWidth() int      { return 32 }
-func (a *fixedIntArray32) Len() int           { return len(a.values) }
-func (a *fixedIntArray32) Less(i, j int) bool { return a.Index(i) < a.Index(j) }
-func (a *fixedIntArray32) Swap(i, j int)      { a.values[i], a.values[j] = a.values[j], a.values[i] }
-func (a *fixedIntArray32) Index(i int) int64  { return int64(a.values[i]) }
-func (a *fixedIntArray32) Bits() []byte       { return bits.Int32ToBytes(a.values) }
-func (a *fixedIntArray32) Reset()             { a.values = a.values[:0] }
-func (a *fixedIntArray32) Append(v int64)     { a.values = append(a.values, int32(v)) }
+func (a *fixedIntArray32) Format(w fmt.State, v rune) { formatIntArray(w, v, a) }
+func (a *fixedIntArray32) BitWidth() int              { return 32 }
+func (a *fixedIntArray32) Len() int                   { return len(a.values) }
+func (a *fixedIntArray32) Less(i, j int) bool         { return a.Index(i) < a.Index(j) }
+func (a *fixedIntArray32) Swap(i, j int)              { a.values[i], a.values[j] = a.values[j], a.values[i] }
+func (a *fixedIntArray32) Index(i int) int64          { return int64(a.values[i]) }
+func (a *fixedIntArray32) Bits() []byte               { return bits.Int32ToBytes(a.values) }
+func (a *fixedIntArray32) Reset()                     { a.values = a.values[:0] }
+func (a *fixedIntArray32) Append(v int64)             { a.values = append(a.values, int32(v)) }
 func (a *fixedIntArray32) AppendBits(data []byte, bitWidth int) {
 	values, _ := appendBits(bits.Int32ToBytes(a.values[:cap(a.values)])[:len(a.values)*4], 32, data, bitWidth)
 	a.values = bits.BytesToInt32(values[:cap(values)])[:len(values)/4]
@@ -162,14 +170,15 @@ func (a *fixedIntArray32) AppendBits(data []byte, bitWidth int) {
 
 type fixedIntArray64 struct{ values []int64 }
 
-func (a *fixedIntArray64) BitWidth() int      { return 64 }
-func (a *fixedIntArray64) Len() int           { return len(a.values) }
-func (a *fixedIntArray64) Less(i, j int) bool { return a.Index(i) < a.Index(j) }
-func (a *fixedIntArray64) Swap(i, j int)      { a.values[i], a.values[j] = a.values[j], a.values[i] }
-func (a *fixedIntArray64) Index(i int) int64  { return int64(a.values[i]) }
-func (a *fixedIntArray64) Bits() []byte       { return bits.Int64ToBytes(a.values) }
-func (a *fixedIntArray64) Reset()             { a.values = a.values[:0] }
-func (a *fixedIntArray64) Append(v int64)     { a.values = append(a.values, int64(v)) }
+func (a *fixedIntArray64) Format(w fmt.State, v rune) { formatIntArray(w, v, a) }
+func (a *fixedIntArray64) BitWidth() int              { return 64 }
+func (a *fixedIntArray64) Len() int                   { return len(a.values) }
+func (a *fixedIntArray64) Less(i, j int) bool         { return a.Index(i) < a.Index(j) }
+func (a *fixedIntArray64) Swap(i, j int)              { a.values[i], a.values[j] = a.values[j], a.values[i] }
+func (a *fixedIntArray64) Index(i int) int64          { return int64(a.values[i]) }
+func (a *fixedIntArray64) Bits() []byte               { return bits.Int64ToBytes(a.values) }
+func (a *fixedIntArray64) Reset()                     { a.values = a.values[:0] }
+func (a *fixedIntArray64) Append(v int64)             { a.values = append(a.values, int64(v)) }
 func (a *fixedIntArray64) AppendBits(data []byte, bitWidth int) {
 	values, _ := appendBits(bits.Int64ToBytes(a.values[:cap(a.values)])[:len(a.values)*8], 64, data, bitWidth)
 	a.values = bits.BytesToInt64(values[:cap(values)])[:len(values)/8]
@@ -222,4 +231,19 @@ func appendBits(dst []byte, dstWidth int, src []byte, srcWidth int) ([]byte, int
 
 	count := bits.Pack(dst[offset:], uint(dstWidth), src, uint(srcWidth))
 	return dst, count
+}
+
+func formatIntArray(w fmt.State, v rune, a IntArray) {
+	ww := w.(io.Writer)
+	sw := stringio.StringWriter(w)
+	sw.WriteString("[")
+
+	for i, n := 0, a.Len(); i < n; i++ {
+		if i != 0 {
+			sw.WriteString(" ")
+		}
+		fmt.Fprintf(ww, "%d", a.Index(i))
+	}
+
+	sw.WriteString("]")
 }

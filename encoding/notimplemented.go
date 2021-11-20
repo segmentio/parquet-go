@@ -43,6 +43,10 @@ func (NotImplementedDecoder) Close() error {
 func (NotImplementedDecoder) Reset(io.Reader) {
 }
 
+func (NotImplementedDecoder) DecodeBitWidth() (int, error) {
+	return 0, NotImplementedError("BIT_WIDTH")
+}
+
 func (NotImplementedDecoder) DecodeBoolean([]bool) (int, error) {
 	return 0, NotImplementedError("BOOLEAN")
 }
@@ -93,6 +97,10 @@ func (NotImplementedEncoder) Close() error {
 }
 
 func (NotImplementedEncoder) Reset(io.Writer) {
+}
+
+func (NotImplementedEncoder) EncodeBitWidth(int) error {
+	return NotImplementedError("BIT_WIDTH")
 }
 
 func (NotImplementedEncoder) EncodeBoolean([]bool) error {

@@ -383,26 +383,28 @@ func (d uuidDictionary) WriteValue(v Value) error {
 	return d.writeValue(b)
 }
 
-func NewDictionaryPageBuffer(dict Dictionary) PageBuffer { return &dictionaryPageBuffer{dict} }
+func NewDictionaryPageBuffer(dict Dictionary) PageBuffer { return &dictionaryPageBuffer{dict: dict} }
 
-type dictionaryPageBuffer struct{ Dictionary }
+type dictionaryPageBuffer struct{ dict Dictionary }
 
-func (buf *dictionaryPageBuffer) Reset() { buf.Values().Reset() }
+func (buf *dictionaryPageBuffer) Type() Type { return buf.dict.Type() }
 
-func (buf *dictionaryPageBuffer) NumValues() int { return buf.Values().Len() }
+func (buf *dictionaryPageBuffer) Reset() { buf.dict.Values().Reset() }
 
-func (buf *dictionaryPageBuffer) DistinctCount() int { return buf.Len() }
+func (buf *dictionaryPageBuffer) NumValues() int { return buf.dict.Values().Len() }
+
+func (buf *dictionaryPageBuffer) DistinctCount() int { return buf.dict.Len() }
 
 func (buf *dictionaryPageBuffer) Bounds() (min, max Value) {
-	values := buf.Values()
+	values := buf.dict.Values()
 
 	if n := values.Len(); n > 0 {
-		min = buf.Index(int(values.Index(0)))
-		max = buf.Index(int(values.Index(0)))
-		t := buf.Type()
+		min = buf.dict.Index(int(values.Index(0)))
+		max = buf.dict.Index(int(values.Index(0)))
+		t := buf.dict.Type()
 
 		for i := 1; i < n; i++ {
-			v := buf.Index(int(values.Index(i)))
+			v := buf.dict.Index(int(values.Index(i)))
 			if t.Less(v, min) {
 				min = v
 			}
@@ -418,8 +420,12 @@ func (buf *dictionaryPageBuffer) Bounds() (min, max Value) {
 	return min, max
 }
 
+func (buf *dictionaryPageBuffer) WriteValue(value Value) error {
+	return buf.dict.WriteValue(value) // TODO: handle ErrBufferFull
+}
+
 func (buf *dictionaryPageBuffer) WriteTo(enc encoding.Encoder) error {
-	return enc.EncodeIntArray(buf.Values())
+	return enc.EncodeIntArray(buf.dict.Values())
 }
 
 var (

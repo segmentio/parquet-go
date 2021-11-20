@@ -311,6 +311,10 @@ func testBooleanEncoding(t *testing.T, e encoding.Encoding) {
 
 	for _, test := range booleanTests {
 		t.Run("", func(t *testing.T) {
+			defer dec.Reset(buf)
+			defer enc.Reset(buf)
+			defer buf.Reset()
+
 			if err := enc.EncodeBoolean(test); err != nil {
 				if errors.Is(err, encoding.ErrNotImplemented) {
 					t.Skip(err)
@@ -333,10 +337,6 @@ func testBooleanEncoding(t *testing.T, e encoding.Encoding) {
 					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, want, got)
 				}
 			}
-
-			buf.Reset()
-			enc.Reset(buf)
-			dec.Reset(buf)
 		})
 	}
 }
@@ -351,6 +351,10 @@ func testInt32Encoding(t *testing.T, e encoding.Encoding) {
 
 	for _, test := range int32Tests {
 		t.Run("", func(t *testing.T) {
+			defer dec.Reset(buf)
+			defer enc.Reset(buf)
+			defer buf.Reset()
+
 			bitWidth := bits.MaxLen32(test)
 			enc.SetBitWidth(bitWidth)
 			dec.SetBitWidth(bitWidth)
@@ -377,10 +381,6 @@ func testInt32Encoding(t *testing.T, e encoding.Encoding) {
 					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, test[i], tmp[0])
 				}
 			}
-
-			buf.Reset()
-			enc.Reset(buf)
-			dec.Reset(buf)
 		})
 	}
 }
@@ -395,6 +395,10 @@ func testInt64Encoding(t *testing.T, e encoding.Encoding) {
 
 	for _, test := range int64Tests {
 		t.Run("", func(t *testing.T) {
+			defer dec.Reset(buf)
+			defer enc.Reset(buf)
+			defer buf.Reset()
+
 			bitWidth := bits.MaxLen64(test)
 			enc.SetBitWidth(bitWidth)
 			dec.SetBitWidth(bitWidth)
@@ -421,10 +425,6 @@ func testInt64Encoding(t *testing.T, e encoding.Encoding) {
 					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, test[i], tmp[0])
 				}
 			}
-
-			buf.Reset()
-			enc.Reset(buf)
-			dec.Reset(buf)
 		})
 	}
 }
@@ -439,6 +439,10 @@ func testInt96Encoding(t *testing.T, e encoding.Encoding) {
 
 	for _, test := range int96Tests {
 		t.Run("", func(t *testing.T) {
+			defer dec.Reset(buf)
+			defer enc.Reset(buf)
+			defer buf.Reset()
+
 			bitWidth := bits.MaxLen96(test)
 			enc.SetBitWidth(bitWidth)
 			dec.SetBitWidth(bitWidth)
@@ -465,10 +469,6 @@ func testInt96Encoding(t *testing.T, e encoding.Encoding) {
 					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, test[i], tmp[i])
 				}
 			}
-
-			buf.Reset()
-			enc.Reset(buf)
-			dec.Reset(buf)
 		})
 	}
 }
@@ -483,6 +483,10 @@ func testFloatEncoding(t *testing.T, e encoding.Encoding) {
 
 	for _, test := range floatTests {
 		t.Run("", func(t *testing.T) {
+			defer dec.Reset(buf)
+			defer enc.Reset(buf)
+			defer buf.Reset()
+
 			if err := enc.EncodeFloat(test); err != nil {
 				if errors.Is(err, encoding.ErrNotImplemented) {
 					t.Skip(err)
@@ -505,10 +509,6 @@ func testFloatEncoding(t *testing.T, e encoding.Encoding) {
 					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, test[i], tmp[i])
 				}
 			}
-
-			buf.Reset()
-			enc.Reset(buf)
-			dec.Reset(buf)
 		})
 	}
 }
@@ -523,6 +523,10 @@ func testDoubleEncoding(t *testing.T, e encoding.Encoding) {
 
 	for _, test := range doubleTests {
 		t.Run("", func(t *testing.T) {
+			defer dec.Reset(buf)
+			defer enc.Reset(buf)
+			defer buf.Reset()
+
 			if err := enc.EncodeDouble(test); err != nil {
 				if errors.Is(err, encoding.ErrNotImplemented) {
 					t.Skip(err)
@@ -545,10 +549,6 @@ func testDoubleEncoding(t *testing.T, e encoding.Encoding) {
 					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, test[i], tmp[i])
 				}
 			}
-
-			buf.Reset()
-			enc.Reset(buf)
-			dec.Reset(buf)
 		})
 	}
 }
@@ -563,6 +563,10 @@ func testByteArrayEncoding(t *testing.T, e encoding.Encoding) {
 
 	for _, test := range byteArrayTests {
 		t.Run("", func(t *testing.T) {
+			defer dec.Reset(buf)
+			defer enc.Reset(buf)
+			defer buf.Reset()
+
 			if err := enc.EncodeByteArray(test); err != nil {
 				if errors.Is(err, encoding.ErrNotImplemented) {
 					t.Skip(err)
@@ -585,10 +589,6 @@ func testByteArrayEncoding(t *testing.T, e encoding.Encoding) {
 					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, test[i], tmp[i])
 				}
 			}
-
-			buf.Reset()
-			enc.Reset(buf)
-			dec.Reset(buf)
 		})
 	}
 }
@@ -602,6 +602,9 @@ func testFixedLenByteArrayEncoding(t *testing.T, e encoding.Encoding) {
 
 	for _, test := range fixedLenByteArrayTests {
 		t.Run("", func(t *testing.T) {
+			defer dec.Reset(buf)
+			defer enc.Reset(buf)
+			defer buf.Reset()
 			tmp := make([]byte, test.size)
 
 			if err := enc.EncodeFixedLenByteArray(test.size, test.data); err != nil {
@@ -627,10 +630,6 @@ func testFixedLenByteArrayEncoding(t *testing.T, e encoding.Encoding) {
 					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, want, tmp)
 				}
 			}
-
-			buf.Reset()
-			enc.Reset(buf)
-			dec.Reset(buf)
 		})
 	}
 }
@@ -644,6 +643,10 @@ func testIntArrayEncoding(t *testing.T, e encoding.Encoding) {
 
 	for _, test := range intArrayTests {
 		t.Run("", func(t *testing.T) {
+			defer dec.Reset(buf)
+			defer enc.Reset(buf)
+			defer buf.Reset()
+
 			bitWidth := test.BitWidth()
 			enc.SetBitWidth(bitWidth)
 			dec.SetBitWidth(bitWidth)
@@ -673,10 +676,6 @@ func testIntArrayEncoding(t *testing.T, e encoding.Encoding) {
 					t.Fatalf("wrong value found in decoded int array at index %d: want=%d got=%d", i, a, b)
 				}
 			}
-
-			buf.Reset()
-			enc.Reset(buf)
-			dec.Reset(buf)
 		})
 	}
 }
@@ -690,6 +689,10 @@ func testFixedIntArrayEncoding(t *testing.T, e encoding.Encoding) {
 
 	for _, test := range fixedIntArrayTests {
 		t.Run("", func(t *testing.T) {
+			defer dec.Reset(buf)
+			defer enc.Reset(buf)
+			defer buf.Reset()
+
 			bitWidth := test.BitWidth()
 			enc.SetBitWidth(bitWidth)
 			dec.SetBitWidth(bitWidth)
@@ -719,10 +722,6 @@ func testFixedIntArrayEncoding(t *testing.T, e encoding.Encoding) {
 					t.Fatalf("wrong value found in decoded int array at index %d: want=%d got=%d", i, a, b)
 				}
 			}
-
-			buf.Reset()
-			enc.Reset(buf)
-			dec.Reset(buf)
 		})
 	}
 }

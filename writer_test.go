@@ -110,16 +110,16 @@ func generateParquetFile(dataPageVersion int, rows ...interface{}) ([]byte, erro
 		return nil, err
 	}
 
-	if err := scanParquetFile(tmp); err != nil {
-		return nil, err
-	}
+	// if err := scanParquetFile(tmp); err != nil {
+	// 	return nil, err
+	// }
 
 	return parquetTools("dump", path)
 }
 
 type firstAndLastName struct {
-	FirstName string `parquet:"first_name"`
-	LastName  string `parquet:"last_name"`
+	FirstName string `parquet:"first_name,dict"`
+	LastName  string `parquet:"last_name,dict"`
 }
 
 var writerTests = []struct {

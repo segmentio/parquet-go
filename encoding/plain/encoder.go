@@ -42,6 +42,19 @@ func (e *Encoder) Reset(w io.Writer) {
 	}
 }
 
+func (e *Encoder) EncodeBitWidth(bitWidth int) error {
+	if bitWidth <= 0 {
+		return fmt.Errorf("encoding PLAIN bit width: %d<=0", bitWidth)
+	}
+	if bitWidth > 32 {
+		return fmt.Errorf("encoding PLAIN bit width: %d>32", bitWidth)
+	}
+	bitWidth = coerceBitWidth(bitWidth)
+	e.buffer[0] = byte(bitWidth)
+	_, err := e.writer.Write(e.buffer[:1])
+	return err
+}
+
 func (e *Encoder) EncodeBoolean(data []bool) error {
 	if e.rle == nil {
 		e.rle = rle.NewEncoder(e.writer)

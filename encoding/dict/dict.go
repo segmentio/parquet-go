@@ -18,16 +18,15 @@ func (e *Encoding) Encoding() format.Encoding {
 }
 
 func (e *Encoding) CanEncode(t format.Type) bool {
-	rle := rle.Encoding{BufferSize: e.BufferSize}
-	return rle.CanEncode(t)
+	return true
 }
 
 func (e *Encoding) NewDecoder(r io.Reader) encoding.Decoder {
-	return decoder{rle.NewDecoderSize(r, e.bufferSize())}
+	return decoder{rle: rle.NewDecoderSize(r, e.bufferSize())}
 }
 
 func (e *Encoding) NewEncoder(w io.Writer) encoding.Encoder {
-	return encoder{rle.NewEncoderSize(w, e.bufferSize())}
+	return encoder{rle: rle.NewEncoderSize(w, e.bufferSize())}
 }
 
 func (e *Encoding) PlainEncoding() encoding.Encoding {
@@ -41,13 +40,43 @@ func (e *Encoding) bufferSize() int {
 	return encoding.DefaultBufferSize
 }
 
-type decoder struct{ *rle.Decoder }
+type decoder struct {
+	encoding.NotImplementedDecoder
+	rle *rle.Decoder
+}
 
-func (decoder) Encoding() format.Encoding { return format.RLEDictionary }
+func (d decoder) Close() error { return d.rle.Close() }
 
-type encoder struct{ *rle.Encoder }
+func (d decoder) Reset(r io.Reader) { d.rle.Reset(r) }
 
-func (encoder) Encoding() format.Encoding { return format.RLEDictionary }
+func (d decoder) Encoding() format.Encoding { return format.RLEDictionary }
+
+func (d decoder) DecodeIntArray(values encoding.IntArrayBuffer) error {
+	bitWidth, err := d.rle.DecodeBitWidth()
+	if err != nil {
+		return err
+	}
+	d.rle.SetBitWidth(bitWidth)
+	return d.rle.DecodeIntArray(values)
+}
+
+type encoder struct {
+	encoding.NotImplementedEncoder
+	rle *rle.Encoder
+}
+
+func (e encoder) Close() error { return e.rle.Close() }
+
+func (e encoder) Reset(w io.Writer) { e.rle.Reset(w) }
+
+func (e encoder) Encoding() format.Encoding { return format.RLEDictionary }
+
+func (e encoder) EncodeIntArray(values encoding.IntArrayView) error {
+	bitWidth := values.BitWidth()
+	e.rle.SetBitWidth(bitWidth)
+	e.rle.EncodeBitWidth(bitWidth)
+	return e.rle.EncodeIntArray(values)
+}
 
 type plainEncoding struct{ base *Encoding }
 
@@ -60,17 +89,41 @@ func (e plainEncoding) CanEncode(t format.Type) bool {
 }
 
 func (e plainEncoding) NewDecoder(r io.Reader) encoding.Decoder {
-	return plainDecoder{plain.NewDecoderSize(r, e.base.bufferSize())}
+	return plainDecoder{plain: plain.NewDecoderSize(r, e.base.bufferSize())}
 }
 
 func (e plainEncoding) NewEncoder(w io.Writer) encoding.Encoder {
-	return plainEncoder{plain.NewEncoder(w)}
+	return plainEncoder{plain: plain.NewEncoder(w)}
 }
 
-type plainDecoder struct{ *plain.Decoder }
+type plainDecoder struct {
+	encoding.NotImplementedDecoder
+	plain *plain.Decoder
+}
 
-func (plainDecoder) Encoding() format.Encoding { return format.PlainDictionary }
+func (d plainDecoder) Close() error { return d.plain.Close() }
 
-type plainEncoder struct{ *plain.Encoder }
+func (d plainDecoder) Reset(r io.Reader) { d.plain.Reset(r) }
 
-func (plainEncoder) Encoding() format.Encoding { return format.PlainDictionary }
+func (d plainDecoder) Encoding() format.Encoding { return format.PlainDictionary }
+
+func (d plainDecoder) DecodeIntArray(values encoding.IntArrayBuffer) error {
+	d.plain.SetBitWidth(32)
+	return d.plain.DecodeIntArray(values)
+}
+
+type plainEncoder struct {
+	encoding.NotImplementedEncoder
+	plain *plain.Encoder
+}
+
+func (e plainEncoder) Close() error { return e.plain.Close() }
+
+func (e plainEncoder) Reset(w io.Writer) { e.plain.Reset(w) }
+
+func (e plainEncoder) Encoding() format.Encoding { return format.PlainDictionary }
+
+func (e plainEncoder) EncodeIntArray(values encoding.IntArrayView) error {
+	e.plain.SetBitWidth(32)
+	return e.plain.EncodeIntArray(values)
+}

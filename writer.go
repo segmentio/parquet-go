@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"sort"
 
 	"github.com/segmentio/encoding/thrift"
 	"github.com/segmentio/parquet/compress"
@@ -499,7 +500,8 @@ func newColumnChunkWriter(writer pageWriter, codec compress.Codec, enc encoding.
 		maxRepetitionLevel: maxRepetitionLevel,
 		maxDefinitionLevel: maxDefinitionLevel,
 		isCompressed:       codec.CompressionCodec() != format.Uncompressed,
-		encodings:          []format.Encoding{enc.Encoding()},
+		encodings:          make([]format.Encoding, 0, 3),
+		encodingStats:      make([]format.PageEncodingStats, 0, 3),
 	}
 
 	if maxRepetitionLevel > 0 {
@@ -519,6 +521,7 @@ func newColumnChunkWriter(writer pageWriter, codec compress.Codec, enc encoding.
 	}
 
 	ccw.page.encoder = enc.NewEncoder(nil)
+	ccw.encodings = append(ccw.encodings, format.RLE)
 	return ccw
 }
 
@@ -531,10 +534,12 @@ func (ccw *columnChunkWriter) TotalCompressedSize() int64 {
 }
 
 func (ccw *columnChunkWriter) Encodings() []format.Encoding {
+	sort.Sort(columnChunkEncodingsOrder{ccw})
 	return ccw.encodings
 }
 
 func (ccw *columnChunkWriter) EncodingStats() []format.PageEncodingStats {
+	sort.Sort(columnChunkEncodingStatsOrder{ccw})
 	return ccw.encodingStats
 }
 
@@ -558,9 +563,9 @@ func (ccw *columnChunkWriter) Reset() {
 	ccw.nullCount = 0
 	ccw.numNulls = 0
 	ccw.numRows = 0
-	ccw.encodings = ccw.encodings[:1] // keep the original encoding only
 	ccw.totalUncompressedSize = 0
 	ccw.totalCompressedSize = 0
+	ccw.encodings = ccw.encodings[:2] // keep the original encodings only
 	ccw.encodingStats = ccw.encodingStats[:0]
 }
 
@@ -698,7 +703,7 @@ func (ccw *columnChunkWriter) Flush() error {
 	headerSize := ccw.header.buffer.Len()
 	ccw.totalUncompressedSize += int64(headerSize) + int64(uncompressedPageSize)
 	ccw.totalCompressedSize += int64(headerSize) + int64(compressedPageSize)
-	ccw.addDataPageEncodingStats(encoding)
+	ccw.addPageEncoding(ccw.dataPageType, encoding)
 
 	ccw.values.Reset()
 	ccw.numNulls = 0
@@ -743,24 +748,6 @@ func (ccw *columnChunkWriter) WriteValue(v Value) error {
 	}
 }
 
-func (ccw *columnChunkWriter) addDataPageEncodingStats(encoding format.Encoding) {
-	ccw.encodingStats = addPageEncodingStats(ccw.encodingStats, format.PageEncodingStats{
-		PageType: ccw.dataPageType,
-		Encoding: encoding,
-		Count:    1,
-	})
-}
-
-func addPageEncodingStats(stats []format.PageEncodingStats, add format.PageEncodingStats) []format.PageEncodingStats {
-	for i, st := range stats {
-		if st.PageType == add.PageType && st.Encoding == add.Encoding {
-			stats[i].Count += add.Count
-			return stats
-		}
-	}
-	return append(stats, add)
-}
-
 func (ccw *columnChunkWriter) writeDictionaryPage(w io.Writer, dict Dictionary) error {
 	ccw.page.buffer.Reset()
 	ccw.page.checksum.Reset(&ccw.page.buffer)
@@ -793,6 +780,11 @@ func (ccw *columnChunkWriter) writeDictionaryPage(w io.Writer, dict Dictionary) 
 		return err
 	}
 
+	headerSize := ccw.header.buffer.Len()
+	ccw.totalUncompressedSize += int64(headerSize) + int64(len(keys))
+	ccw.totalCompressedSize += int64(headerSize) + int64(ccw.page.buffer.Len())
+	ccw.addPageEncoding(format.DictionaryPage, format.Plain)
+
 	if _, err := ccw.header.buffer.WriteTo(w); err != nil {
 		return err
 	}
@@ -800,6 +792,63 @@ func (ccw *columnChunkWriter) writeDictionaryPage(w io.Writer, dict Dictionary) 
 		return err
 	}
 	return nil
+}
+
+func (ccw *columnChunkWriter) addPageEncoding(pageType format.PageType, encoding format.Encoding) {
+	ccw.encodings = addEncoding(ccw.encodings, encoding)
+	ccw.encodingStats = addPageEncodingStats(ccw.encodingStats, format.PageEncodingStats{
+		PageType: pageType,
+		Encoding: encoding,
+		Count:    1,
+	})
+}
+
+func addEncoding(encodings []format.Encoding, add format.Encoding) []format.Encoding {
+	for _, enc := range encodings {
+		if enc == add {
+			return encodings
+		}
+	}
+	return append(encodings, add)
+}
+
+func addPageEncodingStats(stats []format.PageEncodingStats, add format.PageEncodingStats) []format.PageEncodingStats {
+	for i, st := range stats {
+		if st.PageType == add.PageType && st.Encoding == add.Encoding {
+			stats[i].Count += add.Count
+			return stats
+		}
+	}
+	return append(stats, add)
+}
+
+type columnChunkEncodingsOrder struct{ *columnChunkWriter }
+
+func (c columnChunkEncodingsOrder) Len() int {
+	return len(c.encodings)
+}
+func (c columnChunkEncodingsOrder) Less(i, j int) bool {
+	return c.encodings[i] < c.encodings[j]
+}
+func (c columnChunkEncodingsOrder) Swap(i, j int) {
+	c.encodings[i], c.encodings[j] = c.encodings[j], c.encodings[i]
+}
+
+type columnChunkEncodingStatsOrder struct{ *columnChunkWriter }
+
+func (c columnChunkEncodingStatsOrder) Len() int {
+	return len(c.encodingStats)
+}
+func (c columnChunkEncodingStatsOrder) Less(i, j int) bool {
+	s1 := &c.encodingStats[i]
+	s2 := &c.encodingStats[j]
+	if s1.PageType != s2.PageType {
+		return s1.PageType < s2.PageType
+	}
+	return s1.Encoding < s2.Encoding
+}
+func (c columnChunkEncodingStatsOrder) Swap(i, j int) {
+	c.encodingStats[i], c.encodingStats[j] = c.encodingStats[j], c.encodingStats[i]
 }
 
 type pageWriter interface {

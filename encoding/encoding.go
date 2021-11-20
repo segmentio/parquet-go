@@ -21,6 +21,7 @@ type Encoder interface {
 	io.Closer
 	Reset(io.Writer)
 	Encoding() format.Encoding
+	EncodeBitWidth(bitWidth int) error
 	EncodeBoolean(data []bool) error
 	EncodeInt32(data []int32) error
 	EncodeInt64(data []int64) error
@@ -37,6 +38,7 @@ type Decoder interface {
 	io.Closer
 	Reset(io.Reader)
 	Encoding() format.Encoding
+	DecodeBitWidth() (int, error)
 	DecodeBoolean(data []bool) (int, error)
 	DecodeInt32(data []int32) (int, error)
 	DecodeInt64(data []int64) (int, error)
