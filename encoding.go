@@ -38,7 +38,7 @@ func sortEncodings(encodings []encoding.Encoding) {
 }
 
 func dedupeSortedEncodings(encodings []encoding.Encoding) []encoding.Encoding {
-	if len(encodings) > 0 {
+	if len(encodings) > 1 {
 		i := 0
 
 		for _, c := range encodings[1:] {

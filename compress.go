@@ -144,7 +144,7 @@ func sortCodecs(codecs []compress.Codec) {
 }
 
 func dedupeSortedCodecs(codecs []compress.Codec) []compress.Codec {
-	if len(codecs) > 0 {
+	if len(codecs) > 1 {
 		i := 0
 
 		for _, c := range codecs[1:] {
