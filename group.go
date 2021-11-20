@@ -3,6 +3,7 @@ package parquet
 import (
 	"sort"
 
+	"github.com/segmentio/parquet/compress"
 	"github.com/segmentio/parquet/deprecated"
 	"github.com/segmentio/parquet/format"
 )
@@ -34,6 +35,17 @@ func (g Group) ChildByName(name string) Node {
 		return n
 	}
 	panic("column not found in parquet group: " + name)
+}
+
+func (g Group) Compression() []compress.Codec {
+	codecs := make([]compress.Codec, 0, len(g))
+
+	for _, node := range g {
+		codecs = append(codecs, node.Compression()...)
+	}
+
+	sortCodecs(codecs)
+	return dedupeSortedCodecs(codecs)
 }
 
 type groupType struct{}

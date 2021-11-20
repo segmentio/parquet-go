@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"sort"
 
+	"github.com/segmentio/parquet/compress"
 	"github.com/segmentio/parquet/format"
 )
 
@@ -22,6 +23,30 @@ type Node interface {
 	ChildNames() []string
 
 	ChildByName(name string) Node
+
+	Compression() []compress.Codec
+}
+
+func Compressed(node Node, codecs ...compress.Codec) Node {
+	if len(codecs) == 0 {
+		return node
+	}
+	return &compressedNode{
+		Node:   node,
+		codecs: append([]compress.Codec{}, codecs...),
+	}
+}
+
+type compressedNode struct {
+	Node
+	codecs []compress.Codec
+}
+
+func (n *compressedNode) Compression() []compress.Codec {
+	compression := n.Node.Compression()
+	compression = append(compression[:len(compression):len(compression)], n.codecs...)
+	sortCodecs(compression)
+	return dedupeSortedCodecs(compression)
 }
 
 func Optional(node Node) Node {
@@ -63,17 +88,22 @@ func (req *requiredNode) Optional() bool { return false }
 func (req *requiredNode) Repeated() bool { return false }
 func (req *requiredNode) Required() bool { return true }
 
-type leafNode struct{ typ Type }
+type node struct{}
 
-func (n *leafNode) Type() Type           { return n.typ }
-func (n *leafNode) Optional() bool       { return false }
-func (n *leafNode) Repeated() bool       { return false }
-func (n *leafNode) Required() bool       { return true }
-func (n *leafNode) NumChildren() int     { return 0 }
-func (n *leafNode) ChildNames() []string { return nil }
-func (n *leafNode) ChildByName(string) Node {
-	panic("cannot lookup child by name in leaf parquet node")
+func (node) Optional() bool                { return false }
+func (node) Repeated() bool                { return false }
+func (node) Required() bool                { return true }
+func (node) NumChildren() int              { return 0 }
+func (node) ChildNames() []string          { return nil }
+func (node) ChildByName(string) Node       { panic("cannot call ChildByName in leaf parquet node") }
+func (node) Compression() []compress.Codec { return nil }
+
+type leafNode struct {
+	node
+	typ Type
 }
+
+func (n *leafNode) Type() Type { return n.typ }
 
 var repetitionTypes = [...]format.FieldRepetitionType{
 	0: format.Required,

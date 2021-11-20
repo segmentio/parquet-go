@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/segmentio/parquet/compress"
 	"github.com/segmentio/parquet/deprecated"
 	"github.com/segmentio/parquet/format"
 	"github.com/segmentio/parquet/internal/bits"
@@ -64,6 +65,16 @@ func (c *Column) ChildNames() []string { return c.names }
 //
 // This method contributes to satisfying the Node interface.
 func (c *Column) ChildByName(name string) Node { return c.Column(name) }
+
+// Compression returns the compression codecs used by this column.
+func (c *Column) Compression() []compress.Codec {
+	codecs := make([]compress.Codec, len(c.chunks))
+	for i, chunk := range c.chunks {
+		codecs[i] = lookupCompressionCodec(chunk.MetaData.Codec)
+	}
+	sortCodecs(codecs)
+	return dedupeSortedCodecs(codecs)
+}
 
 // Name returns the column name.
 func (c *Column) Name() string { return c.schema.Name }

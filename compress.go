@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"runtime"
+	"sort"
 	"sync"
 
 	"github.com/segmentio/parquet/compress"
@@ -133,3 +134,25 @@ func (w unsupportedWriter) Close() error                { return nil }
 func (w unsupportedWriter) Flush() error                { return nil }
 func (w unsupportedWriter) Reset(io.Writer) error       { return nil }
 func (w unsupportedWriter) Write(b []byte) (int, error) { return 0, w.error() }
+
+func sortCodecs(codecs []compress.Codec) {
+	sort.Slice(codecs, func(i, j int) bool {
+		return codecs[i].CompressionCodec() < codecs[j].CompressionCodec()
+	})
+}
+
+func dedupeSortedCodecs(codecs []compress.Codec) []compress.Codec {
+	if len(codecs) > 0 {
+		i := 0
+
+		for _, c := range codecs[1:] {
+			if c.CompressionCodec() != codecs[i].CompressionCodec() {
+				i++
+				codecs[i] = c
+			}
+		}
+
+		codecs = codecs[:i+1]
+	}
+	return codecs
+}

@@ -17,12 +17,12 @@ type nestedLists struct {
 
 type Contact struct {
 	Name        string `parquet:"name"`
-	PhoneNumber string `parquet:"phoneNumber,optional"`
+	PhoneNumber string `parquet:"phoneNumber,optional,snappy"`
 }
 
 type AddressBook struct {
-	Owner             string    `parquet:"owner"`
-	OwnerPhoneNumbers []string  `parquet:"ownerPhoneNumbers"`
+	Owner             string    `parquet:"owner,zstd"`
+	OwnerPhoneNumbers []string  `parquet:"ownerPhoneNumbers,gzip"`
 	Contacts          []Contact `parquet:"contacts"`
 }
 

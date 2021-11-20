@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+
+	"github.com/segmentio/parquet/compress"
 )
 
 type Schema struct {
@@ -64,6 +66,8 @@ func (s *Schema) ChildNames() []string { return s.root.ChildNames() }
 
 func (s *Schema) ChildByName(name string) Node { return s.root.ChildByName(name) }
 
+func (s *Schema) Compression() []compress.Codec { return s.root.Compression() }
+
 func (s *Schema) String() string {
 	b := new(strings.Builder)
 	Print(b, s.name, s.root)
@@ -105,6 +109,7 @@ func dereference(value reflect.Value) reflect.Value {
 }
 
 type structNode struct {
+	node
 	fields []structField
 	names  []string
 }
@@ -181,9 +186,6 @@ func (s *structNode) traverse(levels levels, value reflect.Value, traversal Trav
 }
 
 func (s *structNode) Type() Type           { return groupType{} }
-func (s *structNode) Optional() bool       { return false }
-func (s *structNode) Repeated() bool       { return false }
-func (s *structNode) Required() bool       { return true }
 func (s *structNode) NumChildren() int     { return len(s.fields) }
 func (s *structNode) ChildNames() []string { return s.names }
 func (s *structNode) ChildByName(name string) Node {
@@ -217,6 +219,7 @@ func throwUnknownFieldTag(f reflect.StructField, tag string) {
 func makeStructField(f reflect.StructField, columnIndex int) (structField, int) {
 	field := structField{index: f.Index}
 	optional := false
+	compression := []compress.Codec{}
 
 	setNode := func(node Node, traverse traverseFunc) {
 		if field.Node != nil {
@@ -224,6 +227,22 @@ func makeStructField(f reflect.StructField, columnIndex int) (structField, int) 
 		}
 		field.Node = node
 		field.traverse = traverse
+	}
+
+	setOptional := func() {
+		if optional {
+			panic("struct field has multiple declaration of the optional tag: " + structFieldString(f))
+		}
+		optional = true
+	}
+
+	setCompression := func(codec compress.Codec) {
+		for _, c := range compression {
+			if c.CompressionCodec() == codec.CompressionCodec() {
+				panic("struct field has multiple compression codecs declared: " + structFieldString(f))
+			}
+		}
+		compression = append(compression, codec)
 	}
 
 	if tag := f.Tag.Get("parquet"); tag != "" {
@@ -237,8 +256,22 @@ func makeStructField(f reflect.StructField, columnIndex int) (structField, int) 
 
 			switch option {
 			case "optional":
-				// TODO: this seems wrong
-				optional = true
+				setOptional()
+
+			case "snappy":
+				setCompression(&Snappy)
+
+			case "gzip":
+				setCompression(&Gzip)
+
+			case "brotli":
+				setCompression(&Brotli)
+
+			case "lz4":
+				setCompression(&Lz4Raw)
+
+			case "zstd":
+				setCompression(&Zstd)
 
 			case "list":
 				switch f.Type.Kind() {
@@ -280,10 +313,13 @@ func makeStructField(f reflect.StructField, columnIndex int) (structField, int) 
 	if field.Node == nil {
 		field.Node, columnIndex, field.traverse = nodeOf(f.Type, columnIndex)
 	}
+
 	if optional {
 		field.Node = Optional(field.Node)
 		field.traverse = traverseOptional(field.traverse)
 	}
+
+	field.Node = Compressed(field.Node, compression...)
 	return field, columnIndex
 }
 

@@ -243,24 +243,38 @@ func (rgw *rowGroupWriter) init(node Node, path []string, dataPageType format.Pa
 			rgw.init(node.ChildByName(name), append(base, name), dataPageType, maxRepetitionLevel, maxDefinitionLevel)
 		}
 	} else {
-		column := &rowGroupColumn{
-			typ:                format.Type(nodeType.Kind()),
-			codec:              Uncompressed.CompressionCodec(),
-			path:               path,
-			buffer:             rgw.config.ColumnChunkBuffers.GetBuffer(),
-			maxRepetitionLevel: maxRepetitionLevel,
-			maxDefinitionLevel: maxDefinitionLevel,
+		// TODO: we pick the first compression algorithm configured on the node.
+		// An amelioration we could bring to this model is to generate a matrix
+		// of encoding x codec and generate multiple representations of the
+		// pages, picking the one with the smallest space footprint; keep it
+		// simplefor now.
+		compressionCodec := compress.Codec(&Uncompressed)
+
+		for _, codec := range node.Compression() {
+			if codec.CompressionCodec() != format.Uncompressed {
+				compressionCodec = codec
+				break
+			}
 		}
 
-		column.writer = newColumnChunkWriter(
-			column.buffer,
-			&Uncompressed,
-			&Plain,
-			dataPageType,
-			maxRepetitionLevel,
-			maxDefinitionLevel,
-			nodeType.NewPageBuffer(rgw.config.PageBufferSize),
-		)
+		buffer := rgw.config.ColumnChunkBuffers.GetBuffer()
+		column := &rowGroupColumn{
+			typ:                format.Type(nodeType.Kind()),
+			codec:              compressionCodec.CompressionCodec(),
+			path:               path,
+			buffer:             buffer,
+			maxRepetitionLevel: maxRepetitionLevel,
+			maxDefinitionLevel: maxDefinitionLevel,
+			writer: newColumnChunkWriter(
+				buffer,
+				compressionCodec,
+				&Plain,
+				dataPageType,
+				maxRepetitionLevel,
+				maxDefinitionLevel,
+				nodeType.NewPageBuffer(rgw.config.PageBufferSize),
+			),
+		}
 
 		rgw.columns = append(rgw.columns, column)
 	}
