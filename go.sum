@@ -10,7 +10,7 @@ github.com/pierrec/lz4/v4 v4.1.9/go.mod h1:gZWDp/Ze/IJXGXf23ltt2EXimqmTUXEy0GFuR
 github.com/segmentio/asm v1.1.0/go.mod h1:4EUJGaKsB8ImLUwOGORVsNd9vTRDeh44JGsY4aKp5I4=
 github.com/segmentio/asm v1.1.1 h1:WzUpP9BRnRgoP+v8qywthpSe9U5KLq1uDGdJBEcSeQo=
 github.com/segmentio/asm v1.1.1/go.mod h1:VCkA6aQH8usgIAUp4QMLQsAeaMl6iW7+VMLrW9Vkv0Y=
-github.com/segmentio/encoding v0.3.2-0.20211115084626-61ab87969342 h1:KlBCfPQipBr1PZ1nZpyU8Ccx5bFEUDD+1cmMvEbrsVo=
-github.com/segmentio/encoding v0.3.2-0.20211115084626-61ab87969342/go.mod h1:waft2p6XI4z2pk07M0YzZV4wEiqaRvsBSyWNHxVx4gU=
+github.com/segmentio/encoding v0.3.2 h1:gkXXteOfNaPPlrXTEf/e5tWvaQGVJWnvT3LqMzUeH7U=
+github.com/segmentio/encoding v0.3.2/go.mod h1:waft2p6XI4z2pk07M0YzZV4wEiqaRvsBSyWNHxVx4gU=
 golang.org/x/sys v0.0.0-20211110154304-99a53858aa08 h1:WecRHqgE09JBkh/584XIE6PMz5KKE/vER4izNUi30AQ=
 golang.org/x/sys v0.0.0-20211110154304-99a53858aa08/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
