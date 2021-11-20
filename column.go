@@ -228,8 +228,6 @@ func (cl *columnLoader) open(file *File) (*Column, error) {
 
 	c.names = make([]string, numChildren)
 	c.columns = make([]*Column, numChildren)
-	c.encoding = make([]encoding.Encoding, 0, numChildren)
-	c.compression = make([]compress.Codec, 0, numChildren)
 
 	for i := range c.columns {
 		if cl.schemaIndex >= len(file.metadata.Schema) {
@@ -248,8 +246,40 @@ func (cl *columnLoader) open(file *File) (*Column, error) {
 		c.names[i] = col.Name()
 	}
 
+	c.encoding = mergeColumnEncoding(c.columns)
+	c.compression = mergeColumnCompression(c.columns)
 	sort.Sort(columnsByName{c})
 	return c, nil
+}
+
+func mergeColumnEncoding(columns []*Column) []encoding.Encoding {
+	index := make(map[format.Encoding]encoding.Encoding)
+	for _, col := range columns {
+		for _, e := range col.encoding {
+			index[e.Encoding()] = e
+		}
+	}
+	merged := make([]encoding.Encoding, 0, len(index))
+	for _, encoding := range index {
+		merged = append(merged, encoding)
+	}
+	sortEncodings(merged)
+	return merged
+}
+
+func mergeColumnCompression(columns []*Column) []compress.Codec {
+	index := make(map[format.CompressionCodec]compress.Codec)
+	for _, col := range columns {
+		for _, c := range col.compression {
+			index[c.CompressionCodec()] = c
+		}
+	}
+	merged := make([]compress.Codec, 0, len(index))
+	for _, codec := range index {
+		merged = append(merged, codec)
+	}
+	sortCodecs(merged)
+	return merged
 }
 
 type columnsByName struct{ *Column }
