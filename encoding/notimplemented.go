@@ -28,6 +28,10 @@ func (NotImplemented) NewEncoder(io.Writer) Encoder {
 
 type NotImplementedDecoder struct{}
 
+func (NotImplementedDecoder) Encoding() format.Encoding {
+	return -1
+}
+
 func (NotImplementedDecoder) Close() error {
 	return nil
 }
@@ -75,6 +79,10 @@ func (NotImplementedDecoder) SetBitWidth(int) {
 }
 
 type NotImplementedEncoder struct{}
+
+func (NotImplementedEncoder) Encoding() format.Encoding {
+	return -1
+}
 
 func (NotImplementedEncoder) Close() error {
 	return nil

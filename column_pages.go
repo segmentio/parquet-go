@@ -331,37 +331,19 @@ func (c *ColumnPages) decode(valueType Kind, repetitions, definitions []int32, d
 
 		switch h := c.header; h.Type {
 		case format.DataPage:
-			if c.page == nil {
-				c.page = acquireCompressedPageReader(c.metadata.Codec, &c.data)
-			} else {
-				c.page.Reset(&c.data)
-			}
+			c.page = initCompressedPage(c.page, c.metadata.Codec, &c.data)
 			enc = h.DataPageHeader.Encoding
-			err = c.resetDataPageV1(c.page)
+			err = c.initDataPageV1(c.page)
 
 		case format.DataPageV2:
 			enc = h.DataPageHeaderV2.Encoding
-			repetitionsLength := int64(h.DataPageHeaderV2.RepetitionLevelsByteLength)
-			definitionsLength := int64(h.DataPageHeaderV2.DefinitionLevelsByteLength)
-			c.v2.repetitions.setDataPageV2Section(c.column.file, c.reader.offset, repetitionsLength)
-			c.v2.definitions.setDataPageV2Section(c.column.file, c.reader.offset+repetitionsLength, definitionsLength)
-			// Skip the levels, we do this instead of positioning the reader at
-			// the beginning of the data so the CRC32 checksum gets computed.
-			remainLength := c.data.N
-			levelsLength := repetitionsLength + definitionsLength
-			c.data.N = levelsLength
-			_, err = io.Copy(io.Discard, &c.data)
-			c.data.N = remainLength - levelsLength
+			err = c.initDataPageV2(h)
 			if err == nil {
 				codec := format.Uncompressed
 				if h.DataPageHeaderV2.IsCompressed == nil || *h.DataPageHeaderV2.IsCompressed {
 					codec = c.metadata.Codec
 				}
-				if c.page == nil {
-					c.page = acquireCompressedPageReader(codec, &c.data)
-				} else {
-					c.page.Reset(&c.data)
-				}
+				c.page = initCompressedPage(c.page, codec, &c.data)
 			}
 
 		default:
@@ -372,7 +354,7 @@ func (c *ColumnPages) decode(valueType Kind, repetitions, definitions []int32, d
 			return 0, err
 		}
 
-		c.values = lookupEncoding(enc).NewDecoder(c.page)
+		c.values = initDecoder(c.values, c.page, lookupEncoding(enc))
 		c.values.SetBitWidth(schemaElementType{c.column.schema}.Length())
 	}
 
@@ -458,7 +440,7 @@ func dontExpectEOF(err error) error {
 	return err
 }
 
-func (c *ColumnPages) resetDataPageV1(r io.Reader) error {
+func (c *ColumnPages) initDataPageV1(r io.Reader) error {
 	maxRepetitionLevel := c.column.maxRepetitionLevel
 	maxDefinitionLevel := c.column.maxDefinitionLevel
 	c.v1.repetitions.reset()
@@ -477,16 +459,57 @@ func (c *ColumnPages) resetDataPageV1(r io.Reader) error {
 	}
 
 	h := c.header.DataPageHeader
-	c.repetitions = resetLevelDecoder(c.repetitions, &c.v1.repetitions, h.RepetitionLevelEncoding)
-	c.definitions = resetLevelDecoder(c.definitions, &c.v1.definitions, h.DefinitionLevelEncoding)
+	c.repetitions = initDecoder(c.repetitions, &c.v1.repetitions, lookupEncoding(h.RepetitionLevelEncoding))
+	c.definitions = initDecoder(c.definitions, &c.v1.definitions, lookupEncoding(h.DefinitionLevelEncoding))
 	c.repetitions.SetBitWidth(bits.Len32(maxRepetitionLevel))
 	c.definitions.SetBitWidth(bits.Len32(maxDefinitionLevel))
 	return nil
 }
 
-func resetLevelDecoder(d encoding.Decoder, r io.Reader, encoding format.Encoding) encoding.Decoder {
-	if d == nil {
-		d = lookupEncoding(encoding).NewDecoder(r)
+func (c *ColumnPages) initDataPageV2(h *format.PageHeader) error {
+	repetitionsLength := int64(h.DataPageHeaderV2.RepetitionLevelsByteLength)
+	definitionsLength := int64(h.DataPageHeaderV2.DefinitionLevelsByteLength)
+
+	if repetitionsLength > 0 {
+		c.v2.repetitions.setDataPageV2Section(c.column.file, c.reader.offset, repetitionsLength)
+		c.repetitions = initDecoder(c.repetitions, &c.v2.repetitions, RLE.LevelEncoding())
+		c.repetitions.SetBitWidth(bits.Len32(c.column.maxRepetitionLevel))
+	}
+
+	if definitionsLength > 0 {
+		c.v2.definitions.setDataPageV2Section(c.column.file, c.reader.offset+repetitionsLength, definitionsLength)
+		c.definitions = initDecoder(c.definitions, &c.v2.definitions, RLE.LevelEncoding())
+		c.definitions.SetBitWidth(bits.Len32(c.column.maxDefinitionLevel))
+	}
+
+	// Skip the levels, we do this instead of positioning the reader at
+	// the beginning of the data so the CRC32 checksum gets computed.
+	remainLength := c.data.N
+	levelsLength := repetitionsLength + definitionsLength
+	c.data.N = levelsLength
+	defer func() { c.data.N = remainLength - levelsLength }()
+
+	_, err := io.Copy(io.Discard, &c.data)
+	return err
+}
+
+func initCompressedPage(page *compressedPageReader, codec format.CompressionCodec, compressed io.Reader) *compressedPageReader {
+	if page == nil {
+		page = acquireCompressedPageReader(codec, compressed)
+	} else {
+		if page.codec != codec {
+			releaseCompressedPageReader(page)
+			page = acquireCompressedPageReader(codec, compressed)
+		} else {
+			page.Reset(compressed)
+		}
+	}
+	return page
+}
+
+func initDecoder(d encoding.Decoder, r io.Reader, e encoding.Encoding) encoding.Decoder {
+	if d == nil || d.Encoding() != e.Encoding() {
+		d = e.NewDecoder(r)
 	} else {
 		d.Reset(r)
 	}
@@ -530,7 +553,7 @@ func (lvl *dataPageLevelV1) readDataPageV1Level(r io.Reader, buf *[4]byte, typ s
 	}
 
 	if rn, err := io.ReadFull(r, lvl.data[4:]); err != nil {
-		return fmt.Errorf("reading %d/%d bytes %s levels: %w", rn, m, typ, err)
+		return fmt.Errorf("reading %d/%d bytes of %s levels: %w", rn, m, typ, err)
 	}
 
 	// Write the encoded length back to the front of the buffer os the whole

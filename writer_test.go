@@ -3,7 +3,6 @@ package parquet_test
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"testing"
@@ -11,16 +10,95 @@ import (
 	"github.com/segmentio/parquet"
 )
 
-func generateParquetFile(rows ...interface{}) ([]byte, error) {
+func scanParquetFile(f *os.File) error {
+	s, err := f.Stat()
+	if err != nil {
+		return err
+	}
+
+	p, err := parquet.OpenFile(f, s.Size())
+	if err != nil {
+		return err
+	}
+
+	return scanParquetColumns(p.Root())
+}
+
+func scanParquetColumns(col *parquet.Column) error {
+	chunks := col.Chunks()
+	defer chunks.Close()
+
+	for chunks.Next() {
+		pages := chunks.DataPages()
+
+		for pages.Next() {
+			numValues := pages.NumValues()
+			repetitions := make([]int32, numValues)
+			definitions := make([]int32, numValues)
+
+			var n int
+			var err error
+			var typ = col.Type()
+
+			switch typ.Kind() {
+			case parquet.Boolean:
+				n, err = pages.DecodeBoolean(repetitions, definitions, make([]bool, numValues))
+			case parquet.Int32:
+				n, err = pages.DecodeInt32(repetitions, definitions, make([]int32, numValues))
+			case parquet.Int64:
+				n, err = pages.DecodeInt64(repetitions, definitions, make([]int64, numValues))
+			case parquet.Int96:
+				n, err = pages.DecodeInt96(repetitions, definitions, make([][12]byte, numValues))
+			case parquet.Float:
+				n, err = pages.DecodeFloat(repetitions, definitions, make([]float32, numValues))
+			case parquet.Double:
+				n, err = pages.DecodeDouble(repetitions, definitions, make([]float64, numValues))
+			case parquet.ByteArray:
+				n, err = pages.DecodeByteArray(repetitions, definitions, make([][]byte, numValues))
+			case parquet.FixedLenByteArray:
+				n, err = pages.DecodeFixedLenByteArray(repetitions, definitions, make([]byte, typ.Length()*numValues))
+			}
+
+			_ = n
+
+			if err != nil {
+				return err
+			}
+
+			if err := pages.Err(); err != nil {
+				return err
+			}
+		}
+
+		if err := pages.Close(); err != nil {
+			return err
+		}
+	}
+
+	if err := chunks.Close(); err != nil {
+		return err
+	}
+
+	for _, child := range col.Columns() {
+		if err := scanParquetColumns(child); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func generateParquetFile(dataPageVersion int, rows ...interface{}) ([]byte, error) {
 	tmp, err := os.CreateTemp("/tmp", "*.parquet")
 	if err != nil {
 		return nil, err
 	}
+	defer tmp.Close()
 	path := tmp.Name()
 	defer os.Remove(path)
 
 	schema := parquet.SchemaOf(rows[0])
-	writer := parquet.NewWriter(tmp, schema)
+	writer := parquet.NewWriter(tmp, schema, parquet.DataPageVersion(dataPageVersion))
 
 	for _, row := range rows {
 		if err := writer.WriteRow(row); err != nil {
@@ -29,6 +107,10 @@ func generateParquetFile(rows ...interface{}) ([]byte, error) {
 	}
 
 	if err := writer.Close(); err != nil {
+		return nil, err
+	}
+
+	if err := scanParquetFile(tmp); err != nil {
 		return nil, err
 	}
 
@@ -78,6 +160,31 @@ value 2: R:0 D:0 V:Skywalker
 value 3: R:0 D:0 V:Skywalker
 `,
 	},
+
+	{
+		rows: []interface{}{
+			AddressBook{
+				Owner: "Julien Le Dem",
+				OwnerPhoneNumbers: []string{
+					"555 123 4567",
+					"555 666 1337",
+				},
+				Contacts: []Contact{
+					{
+						Name:        "Dmitriy Ryaboy",
+						PhoneNumber: "555 987 6543",
+					},
+					{
+						Name: "Chris Aniszczyk",
+					},
+				},
+			},
+			AddressBook{
+				Owner:             "A. Nonymous",
+				OwnerPhoneNumbers: nil,
+			},
+		},
+	},
 }
 
 func TestWriter(t *testing.T) {
@@ -85,32 +192,29 @@ func TestWriter(t *testing.T) {
 		t.Skip("parquet-tools are not installed")
 	}
 
-	for _, test := range writerTests {
-		t.Run("", func(t *testing.T) {
+	for _, version := range []int{1, 2} {
+		t.Run(fmt.Sprintf("v%d", version), func(t *testing.T) {
 			t.Parallel()
 
-			dump, err := generateParquetFile(test.rows...)
-			if err != nil {
-				t.Fatal(err)
-			}
+			for _, test := range writerTests {
+				rows := test.rows
+				dump := test.dump
+				t.Run("", func(t *testing.T) {
+					t.Parallel()
 
-			if string(dump) != test.dump {
-				t.Errorf("OUTPUT MISMATCH\ngot:\n%s\nwant:\n%s", string(dump), test.dump)
+					b, err := generateParquetFile(version, rows...)
+					if err != nil {
+						t.Logf("\n%s", string(b))
+						t.Fatal(err)
+					}
+
+					if string(b) != dump {
+						t.Errorf("OUTPUT MISMATCH\ngot:\n%s\nwant:\n%s", string(b), dump)
+					}
+				})
 			}
 		})
 	}
-}
-
-type debugWriter struct {
-	writer io.Writer
-	offset int64
-}
-
-func (d *debugWriter) Write(b []byte) (int, error) {
-	n, err := d.writer.Write(b)
-	fmt.Printf("writing %d bytes at offset %d => %d %v\n", len(b), d.offset, n, err)
-	d.offset += int64(n)
-	return n, err
 }
 
 func hasParquetTools() bool {

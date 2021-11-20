@@ -7,6 +7,25 @@ import (
 	"github.com/segmentio/parquet"
 )
 
+type nestedListsLevel1 struct {
+	Level2 []string `parquet:"level2"`
+}
+
+type nestedLists struct {
+	Level1 []nestedListsLevel1 `parquet:"level1"`
+}
+
+type Contact struct {
+	Name        string `parquet:"name"`
+	PhoneNumber string `parquet:"phoneNumber,optional"`
+}
+
+type AddressBook struct {
+	Owner             string    `parquet:"owner"`
+	OwnerPhoneNumbers []string  `parquet:"ownerPhoneNumbers"`
+	Contacts          []Contact `parquet:"contacts"`
+}
+
 func TestSchemaOf(t *testing.T) {
 	tests := []struct {
 		value interface{}
@@ -106,25 +125,6 @@ func TestSchemaTraversal(t *testing.T) {
 
 	type List0 struct {
 		List1 []List1 `parquet:",list"`
-	}
-
-	type nestedListsLevel1 struct {
-		Level2 []string `parquet:"level2"`
-	}
-
-	type nestedLists struct {
-		Level1 []nestedListsLevel1 `parquet:"level1"`
-	}
-
-	type Contact struct {
-		Name        string `parquet:"name"`
-		PhoneNumber string `parquet:"phoneNumber,optional"`
-	}
-
-	type AddressBook struct {
-		Owner             string    `parquet:"owner"`
-		OwnerPhoneNumbers []string  `parquet:"ownerPhoneNumbers"`
-		Contacts          []Contact `parquet:"contacts"`
 	}
 
 	tests := []struct {

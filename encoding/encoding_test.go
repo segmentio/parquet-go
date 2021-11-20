@@ -219,6 +219,11 @@ func testEncoding(t *testing.T, e encoding.Encoding) {
 		function func(*testing.T, encoding.Encoding)
 	}{
 		{
+			scenario: "encoding",
+			function: testFormatEncoding,
+		},
+
+		{
 			scenario: "boolean",
 			function: testBooleanEncoding,
 		},
@@ -269,6 +274,19 @@ func testEncoding(t *testing.T, e encoding.Encoding) {
 		},
 	} {
 		t.Run(test.scenario, func(t *testing.T) { test.function(t, e) })
+	}
+}
+
+func testFormatEncoding(t *testing.T, e encoding.Encoding) {
+	enc := e.NewEncoder(nil)
+	dec := e.NewDecoder(nil)
+
+	if enc.Encoding() != e.Encoding() {
+		t.Errorf("wrong encoder encoding: want=%s got=%s", e.Encoding(), enc.Encoding())
+	}
+
+	if dec.Encoding() != e.Encoding() {
+		t.Errorf("wrong decoder encoding: want=%s got=%s", e.Encoding(), dec.Encoding())
 	}
 }
 

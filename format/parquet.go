@@ -84,8 +84,8 @@ type Statistics struct {
 	//
 	// To support older readers, these may be set when the column order is
 	// signed.
-	Min []byte `thrift:"1"`
-	Max []byte `thrift:"2"`
+	Max []byte `thrift:"1"`
+	Min []byte `thrift:"2"`
 	// Count of null value in the column.
 	NullCount int64 `thrift:"3"`
 	// Count of distinct values occurring.
@@ -94,8 +94,8 @@ type Statistics struct {
 	//
 	// Values are encoded using PLAIN encoding, except that variable-length byte
 	// arrays do not include a length prefix.
-	MinValue []byte `thrift:"5"`
-	MaxValue []byte `thrift:"6"`
+	MaxValue []byte `thrift:"5"`
+	MinValue []byte `thrift:"6"`
 }
 
 // Empty structs to use as logical type annotations.

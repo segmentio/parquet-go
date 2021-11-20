@@ -1,6 +1,8 @@
 package bits
 
-import "bytes"
+import (
+	"bytes"
+)
 
 func MinLeadingZeros32(data []int32) int {
 	if len(data) == 0 {
@@ -147,7 +149,7 @@ func MinMaxByteArray(data [][]byte) (min, max []byte) {
 		min = data[0]
 		max = data[0]
 
-		for _, v := range data {
+		for _, v := range data[1:] {
 			if bytes.Compare(v, min) < 0 {
 				min = v
 			}

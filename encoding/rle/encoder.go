@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/segmentio/parquet/encoding"
+	"github.com/segmentio/parquet/format"
 	"github.com/segmentio/parquet/internal/bits"
 )
 
@@ -28,8 +29,8 @@ func NewEncoderSize(w io.Writer, bufferSize int) *Encoder {
 	}
 }
 
-func (e *Encoder) SetBitWidth(bitWidth int) {
-	e.bitWidth = uint(bitWidth)
+func (e *Encoder) Encoding() format.Encoding {
+	return format.RLE
 }
 
 func (e *Encoder) Close() error {
@@ -40,6 +41,10 @@ func (e *Encoder) Close() error {
 		return err
 	}
 	return nil
+}
+
+func (e *Encoder) SetBitWidth(bitWidth int) {
+	e.bitWidth = uint(bitWidth)
 }
 
 func (e *Encoder) Reset(w io.Writer) {
@@ -196,12 +201,16 @@ func equalInt56(a, b []byte) bool { return *(*[7]byte)(a) == *(*[7]byte)(b) }
 func equalInt64(a, b []byte) bool { return *(*[8]byte)(a) == *(*[8]byte)(b) }
 func equalInt96(a, b []byte) bool { return *(*[12]byte)(a) == *(*[12]byte)(b) }
 
-// LevelEncoder is a variation of the default RLE encoder used when writing
+// levelEncoder is a variation of the default RLE encoder used when writing
 // definition an repetition levels for data pages v2, which omits the 4 bytes
 // length prefix.
-type LevelEncoder struct{ Encoder }
+type levelEncoder struct{ *Encoder }
 
-func (e *LevelEncoder) Close() error {
+func newLevelEncoderSize(w io.Writer, bufferSize int) levelEncoder {
+	return levelEncoder{NewEncoderSize(w, bufferSize)}
+}
+
+func (e levelEncoder) Close() error {
 	if len(e.data) > 4 {
 		defer e.Reset(e.w)
 		// When encoding a level, skip the length prefix, just write the data.

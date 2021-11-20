@@ -7,6 +7,7 @@ import (
 
 	"github.com/segmentio/parquet/encoding"
 	"github.com/segmentio/parquet/encoding/rle"
+	"github.com/segmentio/parquet/format"
 	"github.com/segmentio/parquet/internal/bits"
 )
 
@@ -26,6 +27,10 @@ func NewDecoderSize(r io.Reader, bufferSize int) *Decoder {
 		reader: r,
 		buffer: make([]byte, bits.NearestPowerOfTwo64(uint64(bufferSize))),
 	}
+}
+
+func (d *Decoder) Encoding() format.Encoding {
+	return format.Plain
 }
 
 func (d *Decoder) Close() error {

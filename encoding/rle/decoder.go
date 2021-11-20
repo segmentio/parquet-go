@@ -4,8 +4,10 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"math"
 
 	"github.com/segmentio/parquet/encoding"
+	"github.com/segmentio/parquet/format"
 	"github.com/segmentio/parquet/internal/bits"
 )
 
@@ -32,6 +34,10 @@ func NewDecoderSize(r io.Reader, bufferSize int) *Decoder {
 		},
 		buffer: make([]byte, bits.NearestPowerOfTwo64(uint64(bufferSize))),
 	}
+}
+
+func (d *Decoder) Encoding() format.Encoding {
+	return format.RLE
 }
 
 func (d *Decoder) Close() error {
@@ -267,4 +273,19 @@ func (d *runLengthDecoder) decode(r io.Reader, data []byte, dstWidth, srcWidth u
 
 	d.count -= uint32(count)
 	return len(data), nil
+}
+
+// levelDecoder is the counter part of levelEncoder, which is used to encode
+// repetition and definition levels in data page v2.
+type levelDecoder struct{ *Decoder }
+
+func newLevelDecoderSize(r io.Reader, bufferSize int) levelDecoder {
+	d := levelDecoder{NewDecoderSize(r, bufferSize)}
+	d.data.N, d.init = math.MaxInt64, true
+	return d
+}
+
+func (d levelDecoder) Reset(r io.Reader) {
+	d.Decoder.Reset(r)
+	d.data.N, d.init = math.MaxInt64, true
 }
