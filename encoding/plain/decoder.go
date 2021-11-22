@@ -19,14 +19,7 @@ type Decoder struct {
 }
 
 func NewDecoder(r io.Reader) *Decoder {
-	return NewDecoderSize(r, encoding.DefaultBufferSize)
-}
-
-func NewDecoderSize(r io.Reader, bufferSize int) *Decoder {
-	return &Decoder{
-		reader: r,
-		buffer: make([]byte, bits.NearestPowerOfTwo64(uint64(bufferSize))),
-	}
+	return &Decoder{reader: r}
 }
 
 func (d *Decoder) Encoding() format.Encoding {
@@ -46,21 +39,6 @@ func (d *Decoder) Reset(r io.Reader) {
 	if d.rle != nil {
 		d.rle.Reset(r)
 	}
-}
-
-func (d *Decoder) DecodeBitWidth() (int, error) {
-	_, err := io.ReadFull(d.reader, d.buffer[:1])
-	if err != nil {
-		if err == io.EOF {
-			err = io.ErrUnexpectedEOF
-		}
-		return 0, err
-	}
-	b := d.buffer[0]
-	if b > 32 {
-		return 0, fmt.Errorf("decoding RLE bit width: %d>32", b)
-	}
-	return int(b), nil
 }
 
 func (d *Decoder) DecodeBoolean(data []bool) (int, error) {
@@ -98,28 +76,45 @@ func (d *Decoder) DecodeDouble(data []float64) (int, error) {
 	return readFull(d.reader, 8, bits.Float64ToBytes(data))
 }
 
-func (d *Decoder) DecodeByteArray(data [][]byte) (int, error) {
-	for i := range data {
-		if n, err := io.ReadFull(d.reader, d.buffer[:4]); err != nil {
-			if err != io.EOF {
-				err = fmt.Errorf("reading 4 bytes length prefix of PLAIN byte array: %w (%d bytes were read: %08b)", err, n, d.buffer[:n])
-			}
-			return i, err
-		}
-
-		size := int(binary.LittleEndian.Uint32(d.buffer[:4]))
-		item := make([]byte, size)
-
-		if size != 0 {
-			_, err := io.ReadFull(d.reader, item)
-			if err != nil {
-				return i, fmt.Errorf("reading value of PLAIN byte array of length %d: %w", size, err)
-			}
-		}
-
-		data[i] = item
+func (d *Decoder) DecodeByteArray(data []byte) (int, error) {
+	if len(data) == 0 {
+		return 0, nil
 	}
-	return len(data), nil
+
+	if len(data) < 4 {
+		return 0, encoding.ErrBufferTooShort
+	}
+
+	n := copy(data, d.buffer)
+	d.buffer = d.buffer[:copy(d.buffer, d.buffer[n:])]
+
+	if n < len(data) {
+		r, err := io.ReadFull(d.reader, data[n:])
+		if err != nil && (err != io.EOF || (n+r) == 0) {
+			return 0, err
+		}
+		data = data[:n+r]
+	}
+
+	if size := int(binary.LittleEndian.Uint32(data)); size > (len(data) - 4) {
+		return 0, encoding.ErrValueTooLarge
+	}
+
+	numValues := 0
+	offset := uint(4)
+	length := uint(0)
+
+	for offset <= uint(len(data)) {
+		length = uint(binary.LittleEndian.Uint32(data[offset-4:]))
+		if length > (uint(len(data)) - offset) {
+			break
+		}
+		numValues++
+		offset += 4 + length
+	}
+
+	d.buffer = prepend(d.buffer, data[offset-4:])
+	return numValues, nil
 }
 
 func (d *Decoder) DecodeFixedLenByteArray(size int, data []byte) (int, error) {
@@ -139,4 +134,15 @@ func readFull(r io.Reader, scale int, data []byte) (int, error) {
 		err = io.EOF
 	}
 	return n / scale, err
+}
+
+func prepend(dst, src []byte) (ret []byte) {
+	if (cap(dst) - len(dst)) < len(src) {
+		ret = make([]byte, len(src)+len(dst))
+	} else {
+		ret = dst[:len(src)+len(dst)]
+	}
+	copy(ret[len(src):], dst)
+	copy(ret, src)
+	return ret
 }

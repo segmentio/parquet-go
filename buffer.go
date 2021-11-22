@@ -3,13 +3,16 @@ package parquet
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"sync"
 
 	"github.com/google/uuid"
 	"github.com/segmentio/parquet/encoding"
+	"github.com/segmentio/parquet/encoding/plain"
 	"github.com/segmentio/parquet/internal/bits"
 )
 
@@ -386,67 +389,71 @@ func (buf *doublePageBuffer) WriteTo(enc encoding.Encoder) error {
 
 type byteArrayPageBuffer struct {
 	typ    Type
-	buffer []byte
-	values [][]byte
+	values []byte
+	min    []byte
+	max    []byte
+	count  int
 }
 
 func newByteArrayPageBuffer(typ Type, bufferSize int) *byteArrayPageBuffer {
-	bufferSize /= 2
 	return &byteArrayPageBuffer{
 		typ:    typ,
-		buffer: make([]byte, 0, bufferSize),
-		values: make([][]byte, 0, bufferSize/24),
+		values: make([]byte, 0, bufferSize),
 	}
 }
 
 func (buf *byteArrayPageBuffer) Type() Type { return buf.typ }
 
 func (buf *byteArrayPageBuffer) Reset() {
-	buf.buffer = buf.buffer[:0]
 	buf.values = buf.values[:0]
+	buf.min = nil
+	buf.max = nil
+	buf.count = 0
 }
 
-func (buf *byteArrayPageBuffer) NumValues() int { return len(buf.values) }
+func (buf *byteArrayPageBuffer) NumValues() int { return buf.count }
 
 func (buf *byteArrayPageBuffer) DistinctCount() int { return 0 }
 
 func (buf *byteArrayPageBuffer) Bounds() (Value, Value) {
-	min, max := bits.MinMaxByteArray(buf.values)
-	min = copyBytes(min)
-	max = copyBytes(max)
+	min := copyBytes(buf.min)
+	max := copyBytes(buf.max)
 	return makeValueBytes(ByteArray, min), makeValueBytes(ByteArray, max)
 }
 
 func (buf *byteArrayPageBuffer) WriteValue(v Value) error {
-	if len(buf.values) == cap(buf.values) {
-		return ErrBufferFull
+	value := v.ByteArray()
+	if len(value) > (math.MaxInt32 - 4) {
+		return fmt.Errorf("cannot write value of length %d to parquet byte array page", len(value))
 	}
 
-	value := v.ByteArray()
-
-	if len(value) > cap(buf.buffer) {
-		if len(buf.buffer) != 0 {
+	if (4 + len(value)) > cap(buf.values) {
+		if len(buf.values) != 0 {
 			return ErrBufferFull
 		}
-		buf.buffer = make([]byte, len(value))
-		buf.values = append(buf.values[:0], buf.buffer)
-		copy(buf.buffer, value)
+		buf.values = plain.ByteArray(value)
 		return nil
 	}
 
-	if (cap(buf.buffer) - len(buf.buffer)) < len(value) {
+	if (cap(buf.values) - len(buf.values)) < (4 + len(value)) {
 		return ErrBufferFull
 	}
 
-	i := len(buf.buffer)
-	j := len(buf.buffer) + len(value)
-	buf.buffer = append(buf.buffer, value...)
-	buf.values = append(buf.values, buf.buffer[i:j:j])
+	buf.values = plain.AppendByteArray(buf.values, value)
+	value = buf.values[len(buf.values)-len(value):]
+
+	if string(value) < string(buf.min) {
+		buf.min = value
+	}
+	if string(value) > string(buf.max) {
+		buf.max = value
+	}
+
+	buf.count++
 	return nil
 }
 
 func (buf *byteArrayPageBuffer) WriteTo(enc encoding.Encoder) error {
-	enc.SetBitWidth(0)
 	return enc.EncodeByteArray(buf.values)
 }
 
@@ -485,6 +492,9 @@ func (buf *fixedLenByteArrayPageBuffer) WriteValue(v Value) error {
 }
 
 func (buf *fixedLenByteArrayPageBuffer) write(value []byte) error {
+	if len(value) != buf.size {
+		return fmt.Errorf("cannot write value of size %d to fixed length parquet page of size %d", len(value), buf.size)
+	}
 	if (cap(buf.data) - len(buf.data)) < len(value) {
 		return ErrBufferFull
 	}
@@ -493,7 +503,6 @@ func (buf *fixedLenByteArrayPageBuffer) write(value []byte) error {
 }
 
 func (buf *fixedLenByteArrayPageBuffer) WriteTo(enc encoding.Encoder) error {
-	enc.SetBitWidth(0)
 	return enc.EncodeFixedLenByteArray(buf.size, buf.data)
 }
 

@@ -142,7 +142,7 @@ func (e plainEncoding) CanEncode(t format.Type) bool {
 }
 
 func (e plainEncoding) NewDecoder(r io.Reader) encoding.Decoder {
-	return plainDecoder{plain.NewDecoderSize(r, e.base.bufferSize())}
+	return plainDecoder{plain.NewDecoder(r)}
 }
 
 func (e plainEncoding) NewEncoder(w io.Writer) encoding.Encoder {

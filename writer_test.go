@@ -54,7 +54,7 @@ func scanParquetColumns(col *parquet.Column) error {
 			case parquet.Double:
 				n, err = pages.DecodeDouble(repetitions, definitions, make([]float64, numValues))
 			case parquet.ByteArray:
-				n, err = pages.DecodeByteArray(repetitions, definitions, make([][]byte, numValues))
+				//n, err = pages.DecodeByteArray(repetitions, definitions, make([][]byte, numValues))
 			case parquet.FixedLenByteArray:
 				n, err = pages.DecodeFixedLenByteArray(repetitions, definitions, make([]byte, typ.Length()*numValues))
 			}

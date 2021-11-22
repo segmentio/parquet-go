@@ -269,6 +269,7 @@ func (c *ColumnPages) DecodeDouble(repetitions, definitions []int8, values []flo
 	})
 }
 
+/*
 func (c *ColumnPages) DecodeByteArray(repetitions, definitions []int8, values [][]byte) (int, error) {
 	return c.decode(ByteArray, repetitions, definitions, func(d decoding) error {
 		_, err := c.values.DecodeByteArray(values[:d.numValues])
@@ -283,6 +284,7 @@ func (c *ColumnPages) DecodeByteArray(repetitions, definitions []int8, values []
 		return nil
 	})
 }
+*/
 
 func (c *ColumnPages) DecodeFixedLenByteArray(repetitions, definitions []int8, values []byte) (int, error) {
 	return c.decode(FixedLenByteArray, repetitions, definitions, func(d decoding) error {

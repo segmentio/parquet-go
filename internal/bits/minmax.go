@@ -144,23 +144,6 @@ func MinMaxFloat64(data []float64) (min, max float64) {
 	return min, max
 }
 
-func MinMaxByteArray(data [][]byte) (min, max []byte) {
-	if len(data) > 0 {
-		min = data[0]
-		max = data[0]
-
-		for _, v := range data[1:] {
-			if bytes.Compare(v, min) < 0 {
-				min = v
-			}
-			if bytes.Compare(v, max) > 0 {
-				max = v
-			}
-		}
-	}
-	return min, max
-}
-
 func MinMaxFixedLenByteArray(size int, data []byte) (min, max []byte) {
 	if len(data) > 0 {
 		min = data[:size]

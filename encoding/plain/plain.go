@@ -8,7 +8,6 @@ import (
 )
 
 type Encoding struct {
-	BufferSize int
 }
 
 func (e *Encoding) Encoding() format.Encoding {
@@ -20,18 +19,11 @@ func (e *Encoding) CanEncode(format.Type) bool {
 }
 
 func (e *Encoding) NewDecoder(r io.Reader) encoding.Decoder {
-	return NewDecoderSize(r, e.bufferSize())
+	return NewDecoder(r)
 }
 
 func (e *Encoding) NewEncoder(w io.Writer) encoding.Encoder {
 	return NewEncoder(w)
-}
-
-func (e *Encoding) bufferSize() int {
-	if e.BufferSize > 0 {
-		return e.BufferSize
-	}
-	return encoding.DefaultBufferSize
 }
 
 func coerceBitWidth(bitWidth int) int {

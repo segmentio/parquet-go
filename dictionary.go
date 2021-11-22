@@ -1,11 +1,11 @@
 package parquet
 
 import (
-	"encoding/binary"
 	"math"
 
 	"github.com/google/uuid"
 	"github.com/segmentio/parquet/encoding"
+	"github.com/segmentio/parquet/encoding/plain"
 	"github.com/segmentio/parquet/internal/bits"
 )
 
@@ -210,7 +210,7 @@ func (d doubleDictionary) Insert(v Value) (int, error) {
 type byteArrayDictionary struct {
 	typ    Type
 	keys   []byte
-	offset []uint32
+	offset []int32
 	index  map[string]int32
 }
 
@@ -218,7 +218,7 @@ func newByteArrayDictionary(typ Type, bufferSize int) *byteArrayDictionary {
 	return &byteArrayDictionary{
 		typ:    typ,
 		keys:   make([]byte, 0, bufferSize/4),
-		offset: make([]uint32, 0, bufferSize/(4*4)),
+		offset: make([]int32, 0, bufferSize/(4*4)),
 		index:  make(map[string]int32, bufferSize/4),
 	}
 }
@@ -231,32 +231,29 @@ func (d *byteArrayDictionary) Len() int { return len(d.offset) }
 
 func (d *byteArrayDictionary) Index(i int) Value {
 	offset := d.offset[i]
-	length := binary.LittleEndian.Uint32(d.keys[offset:])
-	return makeValueBytes(ByteArray, d.keys[offset+4:offset+length+4])
+	value, _ := plain.SplitByteArray(d.keys[offset:])
+	return makeValueBytes(ByteArray, value)
 }
 
 func (d *byteArrayDictionary) Insert(v Value) (int, error) {
 	return d.insert(v.ByteArray())
 }
 
-func (d *byteArrayDictionary) insert(k []byte) (int, error) {
-	if index, exists := d.index[string(k)]; exists {
+func (d *byteArrayDictionary) insert(key []byte) (int, error) {
+	if index, exists := d.index[string(key)]; exists {
 		return int(index), nil
 	}
 	if len(d.offset) == cap(d.offset) {
 		return -1, ErrBufferFull
 	}
 
-	i := len(d.keys)
-	n := make([]byte, 4)
-	binary.LittleEndian.PutUint32(n, uint32(len(k)))
-	d.keys = append(d.keys, n...)
-	d.keys = append(d.keys, k...)
+	offset := len(d.keys)
+	d.keys = plain.AppendByteArray(d.keys, key)
+	stringKey := bits.BytesToString(d.keys[offset+4:])
 
-	key := bits.BytesToString(d.keys[i+4:])
 	index := len(d.offset)
-	d.index[key] = int32(index)
-	d.offset = append(d.offset, uint32(i))
+	d.index[stringKey] = int32(index)
+	d.offset = append(d.offset, int32(offset))
 	return index, nil
 }
 

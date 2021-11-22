@@ -1,6 +1,7 @@
 package encoding
 
 import (
+	"errors"
 	"io"
 
 	"github.com/segmentio/parquet/format"
@@ -8,6 +9,11 @@ import (
 
 const (
 	DefaultBufferSize = 1024
+)
+
+var (
+	ErrValueTooLarge  = errors.New("value is too large to be written to the buffer")
+	ErrBufferTooShort = errors.New("buffer is too short to contain a single vlaue")
 )
 
 type Encoding interface {
@@ -29,7 +35,7 @@ type Encoder interface {
 	EncodeInt96(data [][12]byte) error
 	EncodeFloat(data []float32) error
 	EncodeDouble(data []float64) error
-	EncodeByteArray(data [][]byte) error
+	EncodeByteArray(data []byte) error
 	EncodeFixedLenByteArray(size int, data []byte) error
 	SetBitWidth(bitWidth int)
 }
@@ -46,7 +52,7 @@ type Decoder interface {
 	DecodeInt96(data [][12]byte) (int, error)
 	DecodeFloat(data []float32) (int, error)
 	DecodeDouble(data []float64) (int, error)
-	DecodeByteArray(data [][]byte) (int, error)
+	DecodeByteArray(data []byte) (int, error)
 	DecodeFixedLenByteArray(size int, data []byte) (int, error)
 	SetBitWidth(bitWidth int)
 }

@@ -77,7 +77,7 @@ func (NotImplementedDecoder) DecodeDouble([]float64) (int, error) {
 	return 0, NotImplementedError("DOUBLE")
 }
 
-func (NotImplementedDecoder) DecodeByteArray([][]byte) (int, error) {
+func (NotImplementedDecoder) DecodeByteArray([]byte) (int, error) {
 	return 0, NotImplementedError("BYTE_ARRAY")
 }
 
@@ -134,7 +134,7 @@ func (NotImplementedEncoder) EncodeDouble([]float64) error {
 	return NotImplementedError("DOUBLE")
 }
 
-func (NotImplementedEncoder) EncodeByteArray([][]byte) error {
+func (NotImplementedEncoder) EncodeByteArray([]byte) error {
 	return NotImplementedError("BYTE_ARRAY")
 }
 
