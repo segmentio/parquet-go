@@ -58,11 +58,30 @@ func (g Group) Compression() []compress.Codec {
 
 type groupType struct{}
 
-func (groupType) Kind() Kind                               { panic("cannot call Kind on parquet group") }
-func (groupType) Length() int                              { return 0 }
-func (groupType) Less(Value, Value) bool                   { panic("cannot compare values on parquet group") }
-func (groupType) PhyiscalType() *format.Type               { return nil }
-func (groupType) LogicalType() *format.LogicalType         { return nil }
+func (groupType) Kind() Kind {
+	panic("cannot call Kind on parquet group")
+}
+
+func (groupType) Less(Value, Value) bool {
+	panic("cannot compare values on parquet group")
+}
+
+func (groupType) NewDictionary(int) Dictionary {
+	panic("cannot create dictionary for parquet group")
+}
+
+func (groupType) NewPageBuffer(int) PageBuffer {
+	panic("cannot create page buffer for parquet group")
+}
+
+func (groupType) NewPageReader(encoding.Decoder, int) PageReader {
+	panic("cannot create page reader from parquet group")
+}
+
+func (groupType) Length() int { return 0 }
+
+func (groupType) PhyiscalType() *format.Type { return nil }
+
+func (groupType) LogicalType() *format.LogicalType { return nil }
+
 func (groupType) ConvertedType() *deprecated.ConvertedType { return nil }
-func (groupType) NewDictionary(int) Dictionary             { panic("cannot create dictionary for parquet group") }
-func (groupType) NewPageBuffer(int) PageBuffer             { panic("cannot create page buffer for parquet group") }

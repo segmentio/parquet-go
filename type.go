@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/segmentio/parquet/deprecated"
+	"github.com/segmentio/parquet/encoding"
 	"github.com/segmentio/parquet/format"
 	"github.com/segmentio/parquet/internal/bits"
 )
@@ -43,6 +44,8 @@ type Type interface {
 	NewDictionary(bufferSize int) Dictionary
 
 	NewPageBuffer(bufferSize int) PageBuffer
+
+	NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader
 }
 
 var physicalTypes = [...]format.Type{
@@ -120,14 +123,24 @@ func (t booleanType) Kind() Kind { return Boolean }
 
 func (t booleanType) Length() int { return 1 }
 
-func (t booleanType) PhyiscalType() *format.Type { return &physicalTypes[Boolean] }
+func (t booleanType) PhyiscalType() *format.Type {
+	return &physicalTypes[Boolean]
+}
 
-func (t booleanType) Less(v1, v2 Value) bool { return !v1.Boolean() && v2.Boolean() }
+func (t booleanType) Less(v1, v2 Value) bool {
+	return !v1.Boolean() && v2.Boolean()
+}
 
-func (t booleanType) NewDictionary(bufferSize int) Dictionary { return newBooleanDictionary(t) }
+func (t booleanType) NewDictionary(bufferSize int) Dictionary {
+	return newBooleanDictionary(t)
+}
 
 func (t booleanType) NewPageBuffer(bufferSize int) PageBuffer {
 	return newBooleanPageBuffer(t, bufferSize)
+}
+
+func (t booleanType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
+	return newBooleanPageReader(t, decoder, bufferSize)
 }
 
 type int32Type struct{ primitiveType }
@@ -136,13 +149,25 @@ func (t int32Type) Kind() Kind { return Int32 }
 
 func (t int32Type) Length() int { return 32 }
 
-func (t int32Type) Less(v1, v2 Value) bool { return v1.Int32() < v2.Int32() }
+func (t int32Type) Less(v1, v2 Value) bool {
+	return v1.Int32() < v2.Int32()
+}
 
-func (t int32Type) PhyiscalType() *format.Type { return &physicalTypes[Int32] }
+func (t int32Type) PhyiscalType() *format.Type {
+	return &physicalTypes[Int32]
+}
 
-func (t int32Type) NewDictionary(bufferSize int) Dictionary { return newInt32Dictionary(t, bufferSize) }
+func (t int32Type) NewDictionary(bufferSize int) Dictionary {
+	return newInt32Dictionary(t, bufferSize)
+}
 
-func (t int32Type) NewPageBuffer(bufferSize int) PageBuffer { return newInt32PageBuffer(t, bufferSize) }
+func (t int32Type) NewPageBuffer(bufferSize int) PageBuffer {
+	return newInt32PageBuffer(t, bufferSize)
+}
+
+func (t int32Type) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
+	return newInt32PageReader(t, decoder, bufferSize)
+}
 
 type int64Type struct{ primitiveType }
 
@@ -150,13 +175,25 @@ func (t int64Type) Kind() Kind { return Int64 }
 
 func (t int64Type) Length() int { return 64 }
 
-func (t int64Type) Less(v1, v2 Value) bool { return v1.Int64() < v2.Int64() }
+func (t int64Type) Less(v1, v2 Value) bool {
+	return v1.Int64() < v2.Int64()
+}
 
-func (t int64Type) PhyiscalType() *format.Type { return &physicalTypes[Int64] }
+func (t int64Type) PhyiscalType() *format.Type {
+	return &physicalTypes[Int64]
+}
 
-func (t int64Type) NewDictionary(bufferSize int) Dictionary { return newInt64Dictionary(t, bufferSize) }
+func (t int64Type) NewDictionary(bufferSize int) Dictionary {
+	return newInt64Dictionary(t, bufferSize)
+}
 
-func (t int64Type) NewPageBuffer(bufferSize int) PageBuffer { return newInt64PageBuffer(t, bufferSize) }
+func (t int64Type) NewPageBuffer(bufferSize int) PageBuffer {
+	return newInt64PageBuffer(t, bufferSize)
+}
+
+func (t int64Type) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
+	return newInt64PageReader(t, decoder, bufferSize)
+}
 
 type int96Type struct{ primitiveType }
 
@@ -164,13 +201,21 @@ func (t int96Type) Kind() Kind { return Int96 }
 
 func (t int96Type) Length() int { return 96 }
 
-func (t int96Type) Less(v1, v2 Value) bool { return bits.CompareInt96(v1.Int96(), v2.Int96()) < 0 }
+func (t int96Type) Less(v1, v2 Value) bool {
+	return bits.CompareInt96(v1.Int96(), v2.Int96()) < 0
+}
 
-func (t int96Type) PhyiscalType() *format.Type { return &physicalTypes[Int96] }
+func (t int96Type) PhyiscalType() *format.Type {
+	return &physicalTypes[Int96]
+}
 
 func (t int96Type) NewDictionary(bufferSize int) Dictionary { return newInt96Dictionary(t, bufferSize) }
 
 func (t int96Type) NewPageBuffer(bufferSize int) PageBuffer { return newInt96PageBuffer(t, bufferSize) }
+
+func (t int96Type) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
+	return newInt96PageReader(t, decoder, bufferSize)
+}
 
 type floatType struct{ primitiveType }
 
@@ -178,13 +223,25 @@ func (t floatType) Kind() Kind { return Float }
 
 func (t floatType) Length() int { return 32 }
 
-func (t floatType) Less(v1, v2 Value) bool { return v1.Float() < v2.Float() }
+func (t floatType) Less(v1, v2 Value) bool {
+	return v1.Float() < v2.Float()
+}
 
-func (t floatType) PhyiscalType() *format.Type { return &physicalTypes[Float] }
+func (t floatType) PhyiscalType() *format.Type {
+	return &physicalTypes[Float]
+}
 
-func (t floatType) NewDictionary(bufferSize int) Dictionary { return newFloatDictionary(t, bufferSize) }
+func (t floatType) NewDictionary(bufferSize int) Dictionary {
+	return newFloatDictionary(t, bufferSize)
+}
 
-func (t floatType) NewPageBuffer(bufferSize int) PageBuffer { return newFloatPageBuffer(t, bufferSize) }
+func (t floatType) NewPageBuffer(bufferSize int) PageBuffer {
+	return newFloatPageBuffer(t, bufferSize)
+}
+
+func (t floatType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
+	return newFloatPageReader(t, decoder, bufferSize)
+}
 
 type doubleType struct{ primitiveType }
 
@@ -202,6 +259,10 @@ func (t doubleType) NewDictionary(bufferSize int) Dictionary {
 
 func (t doubleType) NewPageBuffer(bufferSize int) PageBuffer {
 	return newDoublePageBuffer(t, bufferSize)
+}
+
+func (t doubleType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
+	return newDoublePageReader(t, decoder, bufferSize)
 }
 
 type byteArrayType struct{ primitiveType }
@@ -224,6 +285,10 @@ func (t byteArrayType) NewPageBuffer(bufferSize int) PageBuffer {
 	return newByteArrayPageBuffer(t, bufferSize)
 }
 
+func (t byteArrayType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
+	return newByteArrayPageReader(t, decoder, bufferSize)
+}
+
 type fixedLenByteArrayType struct {
 	primitiveType
 	length int
@@ -237,7 +302,9 @@ func (t *fixedLenByteArrayType) Less(v1, v2 Value) bool {
 	return bytes.Compare(v1.ByteArray(), v2.ByteArray()) < 0
 }
 
-func (t *fixedLenByteArrayType) PhyiscalType() *format.Type { return &physicalTypes[FixedLenByteArray] }
+func (t *fixedLenByteArrayType) PhyiscalType() *format.Type {
+	return &physicalTypes[FixedLenByteArray]
+}
 
 func (t *fixedLenByteArrayType) NewDictionary(bufferSize int) Dictionary {
 	return newFixedLenByteArrayDictionary(t, bufferSize)
@@ -245,6 +312,10 @@ func (t *fixedLenByteArrayType) NewDictionary(bufferSize int) Dictionary {
 
 func (t *fixedLenByteArrayType) NewPageBuffer(bufferSize int) PageBuffer {
 	return newFixedLenByteArrayPageBuffer(t, bufferSize)
+}
+
+func (t *fixedLenByteArrayType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
+	return newFixedLenByteArrayPageReader(t, decoder, bufferSize)
 }
 
 var (
@@ -374,6 +445,14 @@ func (t *intType) NewPageBuffer(bufferSize int) PageBuffer {
 	}
 }
 
+func (t *intType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
+	if t.BitWidth == 64 {
+		return newInt64PageReader(t, decoder, bufferSize)
+	} else {
+		return newInt32PageReader(t, decoder, bufferSize)
+	}
+}
+
 func Decimal(scale, precision int, typ Type) Node {
 	return &leafNode{
 		typ: &decimalType{
@@ -411,6 +490,10 @@ func (t *decimalType) NewDictionary(bufferSize int) Dictionary { panic("NOT IMPL
 
 func (t *decimalType) NewPageBuffer(bufferSize int) PageBuffer { panic("NOT IMPLEMENTED") }
 
+func (t *decimalType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
+	panic("NOT IMPLEMENTED")
+}
+
 func String() Node { return &leafNode{typ: &stringType{}} }
 
 type stringType format.StringType
@@ -443,6 +526,10 @@ func (t *stringType) NewPageBuffer(bufferSize int) PageBuffer {
 	return newByteArrayPageBuffer(t, bufferSize)
 }
 
+func (t *stringType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
+	return newByteArrayPageReader(t, decoder, bufferSize)
+}
+
 func UUID() Node { return &leafNode{typ: &uuidType{}} }
 
 type uuidType format.UUIDType
@@ -471,6 +558,10 @@ func (t *uuidType) NewDictionary(bufferSize int) Dictionary {
 
 func (t *uuidType) NewPageBuffer(bufferSize int) PageBuffer {
 	return uuidPageBuffer{newFixedLenByteArrayPageBuffer(t, bufferSize)}
+}
+
+func (t *uuidType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
+	return newFixedLenByteArrayPageReader(t, decoder, bufferSize)
 }
 
 func Enum() Node { return &leafNode{typ: &enumType{}} }
@@ -505,6 +596,10 @@ func (t *enumType) NewPageBuffer(bufferSize int) PageBuffer {
 	return newByteArrayPageBuffer(t, bufferSize)
 }
 
+func (t *enumType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
+	return newByteArrayPageReader(t, decoder, bufferSize)
+}
+
 func JSON() Node { return &leafNode{typ: &jsonType{}} }
 
 type jsonType format.JsonType
@@ -535,6 +630,10 @@ func (t *jsonType) NewDictionary(bufferSize int) Dictionary {
 
 func (t *jsonType) NewPageBuffer(bufferSize int) PageBuffer {
 	return newByteArrayPageBuffer(t, bufferSize)
+}
+
+func (t *jsonType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
+	return newByteArrayPageReader(t, decoder, bufferSize)
 }
 
 func BSON() Node { return &leafNode{typ: &bsonType{}} }
@@ -569,6 +668,10 @@ func (t *bsonType) NewPageBuffer(bufferSize int) PageBuffer {
 	return newByteArrayPageBuffer(t, bufferSize)
 }
 
+func (t *bsonType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
+	return newByteArrayPageReader(t, decoder, bufferSize)
+}
+
 func Date() Node { return &leafNode{typ: &dateType{}} }
 
 type dateType format.DateType
@@ -585,11 +688,21 @@ func (t *dateType) LogicalType() *format.LogicalType {
 	return &format.LogicalType{Date: (*format.DateType)(t)}
 }
 
-func (t *dateType) ConvertedType() *deprecated.ConvertedType { return &convertedTypes[deprecated.Date] }
+func (t *dateType) ConvertedType() *deprecated.ConvertedType {
+	return &convertedTypes[deprecated.Date]
+}
 
-func (t *dateType) NewDictionary(bufferSize int) Dictionary { return newInt32Dictionary(t, bufferSize) }
+func (t *dateType) NewDictionary(bufferSize int) Dictionary {
+	return newInt32Dictionary(t, bufferSize)
+}
 
-func (t *dateType) NewPageBuffer(bufferSize int) PageBuffer { return newInt32PageBuffer(t, bufferSize) }
+func (t *dateType) NewPageBuffer(bufferSize int) PageBuffer {
+	return newInt32PageBuffer(t, bufferSize)
+}
+
+func (t *dateType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
+	return newInt32PageReader(t, decoder, bufferSize)
+}
 
 type TimeUnit interface {
 	Duration() time.Duration
@@ -693,6 +806,14 @@ func (t *timeType) NewPageBuffer(bufferSize int) PageBuffer {
 	}
 }
 
+func (t *timeType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
+	if t.Unit.Millis != nil {
+		return newInt32PageReader(t, decoder, bufferSize)
+	} else {
+		return newInt64PageReader(t, decoder, bufferSize)
+	}
+}
+
 func Timestamp(unit TimeUnit) Node {
 	return &leafNode{typ: &timestampType{IsAdjustedToUTC: true, Unit: unit.TimeUnit()}}
 }
@@ -730,6 +851,10 @@ func (t *timestampType) NewPageBuffer(bufferSize int) PageBuffer {
 	return newInt64PageBuffer(t, bufferSize)
 }
 
+func (t *timestampType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
+	return newInt64PageReader(t, decoder, bufferSize)
+}
+
 func List(of Node) Node {
 	return listNode{Group{"list": Repeated(Group{"element": of})}}
 }
@@ -757,11 +882,15 @@ func (t *listType) ConvertedType() *deprecated.ConvertedType {
 }
 
 func (t *listType) NewDictionary(bufferSize int) Dictionary {
-	panic("cannot create dictionary for parquet LIST type")
+	panic("cannot create dictionary from parquet LIST type")
 }
 
 func (t *listType) NewPageBuffer(bufferSize int) PageBuffer {
-	panic("cannot create page buffer for parquet LIST type")
+	panic("cannot create page buffer from parquet LIST type")
+}
+
+func (t *listType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
+	panic("cannot create page reader from parquet LIST type")
 }
 
 func Map(key, value Node) Node {
@@ -796,11 +925,15 @@ func (t *mapType) ConvertedType() *deprecated.ConvertedType {
 }
 
 func (t *mapType) NewDictionary(bufferSize int) Dictionary {
-	panic("cannot create dictionary for parquet MAP type")
+	panic("cannot create dictionary from parquet MAP type")
 }
 
 func (t *mapType) NewPageBuffer(bufferSize int) PageBuffer {
-	panic("cannot create page buffer for parquet MAP type")
+	panic("cannot create page buffer from parquet MAP type")
+}
+
+func (t *mapType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
+	panic("cannot create page reader from parquet MAP type")
 }
 
 type nullType format.NullType
@@ -825,4 +958,8 @@ func (t *nullType) NewDictionary(bufferSize int) Dictionary {
 
 func (t *nullType) NewPageBuffer(bufferSize int) PageBuffer {
 	panic("cannot create page buffer for parquet NULL type")
+}
+
+func (t *nullType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
+	panic("cannot create page reader for parquet NULL type")
 }

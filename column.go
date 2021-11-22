@@ -446,6 +446,29 @@ func (t schemaElementType) NewPageBuffer(bufferSize int) PageBuffer {
 	}
 }
 
+func (t schemaElementType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
+	switch t.Kind() {
+	case Boolean:
+		return newBooleanPageReader(t, decoder, bufferSize)
+	case Int32:
+		return newInt32PageReader(t, decoder, bufferSize)
+	case Int64:
+		return newInt64PageReader(t, decoder, bufferSize)
+	case Int96:
+		return newInt96PageReader(t, decoder, bufferSize)
+	case Float:
+		return newFloatPageReader(t, decoder, bufferSize)
+	case Double:
+		return newDoublePageReader(t, decoder, bufferSize)
+	case ByteArray:
+		return newByteArrayPageReader(t, decoder, bufferSize)
+	case FixedLenByteArray:
+		return newFixedLenByteArrayPageReader(t, decoder, bufferSize)
+	default:
+		panic("cannot create a page buffer from a schema element of unsupported type")
+	}
+}
+
 func schemaRepetitionTypeOf(s *format.SchemaElement) format.FieldRepetitionType {
 	if s.RepetitionType != nil {
 		return *s.RepetitionType

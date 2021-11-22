@@ -215,6 +215,40 @@ func makeValueByteArray(kind Kind, data *byte, size int) Value {
 	}
 }
 
+func makeValueKind(k Kind, b []byte) Value {
+	if b != nil {
+		switch k {
+		case Boolean:
+			if len(b) == 1 {
+				return makeValueBoolean(b[0] != 0)
+			}
+		case Int32:
+			if len(b) == 4 {
+				return makeValueInt32(int32(binary.LittleEndian.Uint32(b)))
+			}
+		case Int64:
+			if len(b) == 8 {
+				return makeValueInt64(int64(binary.LittleEndian.Uint64(b)))
+			}
+		case Int96:
+			if len(b) == 12 {
+				return makeValueInt96(*(*[12]byte)(b))
+			}
+		case Float:
+			if len(b) == 4 {
+				return makeValueFloat(math.Float32frombits(binary.LittleEndian.Uint32(b)))
+			}
+		case Double:
+			if len(b) == 8 {
+				return makeValueDouble(math.Float64frombits(binary.LittleEndian.Uint64(b)))
+			}
+		case ByteArray, FixedLenByteArray:
+			return makeValueBytes(k, b)
+		}
+	}
+	return Value{}
+}
+
 func (v Value) Kind() Kind { return ^Kind(v.kind) }
 
 func (v Value) IsNull() bool { return v.kind == 0 }

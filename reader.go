@@ -1,13 +1,9 @@
 package parquet
 
-import (
-	"fmt"
-	"io"
-)
-
 type Reader struct {
 }
 
+/*
 type columnChunkReader struct {
 	chunks *ColumnChunks
 	pages  *ColumnPages
@@ -133,3 +129,4 @@ func (r *unsupportedPageReader) Reset(*ColumnPages) {}
 func (r *unsupportedPageReader) ReadValue() (Value, error) {
 	return Value{}, fmt.Errorf("cannot read parquet column page of type %s", r.typ.Kind())
 }
+*/

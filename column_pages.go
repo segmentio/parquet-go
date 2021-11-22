@@ -27,7 +27,7 @@ type ColumnPages struct {
 	column   *Column
 	metadata *format.ColumnMetaData
 	header   *format.PageHeader
-	reader   dataPageReader
+	reader   offsetReader
 	crc32    crc32Reader
 	protocol thrift.CompactProtocol
 	decoder  thrift.Decoder
@@ -580,14 +580,14 @@ func (lvl *dataPageLevelV2) setDataPageV2Section(file *File, dataPageOffset, dat
 // This implementation of io.Reader is used to keep track of the current page
 // offset. This is useful to be able to create section readers for data page v2,
 // which avoid loading the repetition and definition levels in memory.
-type dataPageReader struct {
-	// This could be an io.Reader but we specialize it since dataPageReader is
+type offsetReader struct {
+	// This could be an io.Reader but we specialize it since offsetReader is
 	// only used internally with a bufio.Reader.
 	reader *bufio.Reader
 	offset int64
 }
 
-func (r *dataPageReader) Read(b []byte) (int, error) {
+func (r *offsetReader) Read(b []byte) (int, error) {
 	n, err := r.reader.Read(b)
 	r.offset += int64(n)
 	return n, err
