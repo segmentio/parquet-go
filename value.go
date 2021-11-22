@@ -101,7 +101,7 @@ func makeValue(k Kind, v reflect.Value) Value {
 	case Int96:
 		if vt := v.Type(); vt.Kind() == reflect.Array && vt.Elem().Kind() == reflect.Uint8 && vt.Len() == 12 {
 			b := v.Slice(0, v.Len()).Bytes()
-			return makeValueInt96(*(*[12]byte)(b))
+			return makeValueInt96(*(*int96)(b))
 		}
 
 	case Float:
@@ -162,7 +162,7 @@ func makeValueInt64(value int64) Value {
 	}
 }
 
-func makeValueInt96(value [12]byte) Value {
+func makeValueInt96(value int96) Value {
 	return Value{
 		kind: ^int16(Int96),
 		u64:  binary.LittleEndian.Uint64(value[:8]),
@@ -232,7 +232,7 @@ func makeValueKind(k Kind, b []byte) Value {
 			}
 		case Int96:
 			if len(b) == 12 {
-				return makeValueInt96(*(*[12]byte)(b))
+				return makeValueInt96(*(*int96)(b))
 			}
 		case Float:
 			if len(b) == 4 {
@@ -332,7 +332,7 @@ func (v Value) Level(repetitionLevel, definitionLevel int8) Value {
 	return v
 }
 
-func makeInt96(lo uint64, hi uint32) (i96 [12]byte) {
+func makeInt96(lo uint64, hi uint32) (i96 int96) {
 	binary.LittleEndian.PutUint64(i96[:8], uint64(lo))
 	binary.LittleEndian.PutUint32(i96[8:], uint32(hi))
 	return

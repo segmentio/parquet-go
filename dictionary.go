@@ -28,7 +28,7 @@ type Dictionary interface {
 	Index(int) Value
 
 	// Inserts a value to the dictionary, returning the index at which it was
-	// recorded, or an error if the insert could be be performed.
+	// recorded.
 	Insert(Value) (int, error)
 
 	// Resets the dictionary to its initial state, removing all keys and values.
@@ -106,9 +106,6 @@ func (d *int32Dictionary) insert(key int32) (int, error) {
 	if index, exists := d.index[key]; exists {
 		return int(index), nil
 	}
-	if len(d.keys) == cap(d.keys) {
-		return -1, ErrBufferFull
-	}
 	index := len(d.keys)
 	d.index[key] = int32(index)
 	d.keys = append(d.keys, key)
@@ -152,9 +149,6 @@ func (d *int64Dictionary) insert(key int64) (int, error) {
 	if index, exists := d.index[key]; exists {
 		return int(index), nil
 	}
-	if len(d.keys) == cap(d.keys) {
-		return -1, ErrBufferFull
-	}
 	index := len(d.keys)
 	d.index[key] = int32(index)
 	d.keys = append(d.keys, key)
@@ -176,7 +170,7 @@ func newInt96Dictionary(typ Type, bufferSize int) int96Dictionary {
 }
 
 func (d int96Dictionary) Index(i int) Value {
-	return makeValueInt96(*(*[12]byte)(d.key(i)))
+	return makeValueInt96(*(*int96)(d.key(i)))
 }
 
 type floatDictionary struct{ *int32Dictionary }
@@ -243,9 +237,6 @@ func (d *byteArrayDictionary) insert(key []byte) (int, error) {
 	if index, exists := d.index[string(key)]; exists {
 		return int(index), nil
 	}
-	if len(d.offset) == cap(d.offset) {
-		return -1, ErrBufferFull
-	}
 
 	offset := len(d.keys)
 	d.keys = plain.AppendByteArray(d.keys, key)
@@ -309,9 +300,6 @@ func (d *fixedLenByteArrayDictionary) Insert(v Value) (int, error) {
 func (d *fixedLenByteArrayDictionary) insert(key []byte) (int, error) {
 	if index, exists := d.index[string(key)]; exists {
 		return int(index), nil
-	}
-	if len(d.keys) == cap(d.keys) {
-		return -1, ErrBufferFull
 	}
 	i := d.Len()
 	n := len(d.keys)
@@ -387,7 +375,7 @@ func (buf *dictionaryPageBuffer) Bounds() (min, max Value) {
 func (buf *dictionaryPageBuffer) WriteValue(value Value) error {
 	i, err := buf.dict.Insert(value)
 	if err != nil {
-		return err // TODO: handle ErrBufferFull
+		return err
 	}
 	buf.values = append(buf.values, int32(i))
 	return nil
@@ -395,6 +383,75 @@ func (buf *dictionaryPageBuffer) WriteValue(value Value) error {
 
 func (buf *dictionaryPageBuffer) WriteTo(enc encoding.Encoder) error {
 	return enc.EncodeInt32(buf.values)
+}
+
+func NewIndexedPageWriter(encoder encoding.Encoder, bufferSize int, dict Dictionary) PageWriter {
+	return &indexedPageWriter{
+		dict:    dict,
+		encoder: encoder,
+		values:  make([]int32, 0, bufferSize/4),
+	}
+}
+
+type indexedPageWriter struct {
+	dict    Dictionary
+	encoder encoding.Encoder
+	values  []int32
+	min     Value
+	max     Value
+	count   int
+}
+
+func (w *indexedPageWriter) Type() Type { return w.dict.Type() }
+
+func (w *indexedPageWriter) NumValues() int { return w.count }
+
+func (w *indexedPageWriter) DistinctCount() int { return 0 }
+
+func (w *indexedPageWriter) Bounds() (min, max Value) {
+	if w.count > 0 {
+		min = w.min
+		max = w.max
+	}
+	return min, max
+}
+
+func (w *indexedPageWriter) WriteValue(value Value) error {
+	i, err := w.dict.Insert(value)
+	if err != nil {
+		return err
+	}
+
+	if w.count == 0 {
+		w.min = value
+		w.max = value
+	} else {
+		typ := w.Type()
+		if typ.Less(value, w.min) {
+			w.min = value
+		}
+		if typ.Less(w.max, value) {
+			w.max = value
+		}
+	}
+
+	w.values = append(w.values, int32(i))
+	w.count++
+	return nil
+}
+
+func (w *indexedPageWriter) Flush() error {
+	defer func() { w.values = w.values[:0] }()
+	w.encoder.SetBitWidth(0)
+	return w.encoder.EncodeInt32(w.values)
+}
+
+func (w *indexedPageWriter) Reset(encoder encoding.Encoder) {
+	w.encoder = encoder
+	w.values = w.values[:0]
+	w.min = Value{}
+	w.max = Value{}
+	w.count = 0
 }
 
 var (

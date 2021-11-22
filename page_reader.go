@@ -12,8 +12,6 @@ type PageReader interface {
 
 	Type() Type
 
-	Reset()
-
 	NumValues() int
 
 	NumNulls() int
@@ -21,6 +19,8 @@ type PageReader interface {
 	DistinctCount() int
 
 	Bounds() (min, max Value)
+
+	Reset(encoding.Decoder)
 }
 
 type dataPageReader struct {
@@ -59,6 +59,8 @@ func newDataPageReader(repetition, definition encoding.Decoder, page PageReader,
 }
 
 func (r *dataPageReader) ReadValue() (Value, error) {
+	// TODO: this is not correct, we need to read the levels first to determine
+	// whether the record in null.
 	v, err := r.page.ReadValue()
 	if err != nil {
 		return v, err
@@ -80,17 +82,6 @@ func (r *dataPageReader) ReadValue() (Value, error) {
 
 func (r *dataPageReader) Type() Type {
 	return r.page.Type()
-}
-
-func (r *dataPageReader) Reset() {
-	r.reset(nil)
-}
-
-func (r *dataPageReader) reset(header *format.PageHeader) {
-	r.header = header
-	r.page.Reset()
-	r.repetition.Reset()
-	r.definition.Reset()
 }
 
 func (r *dataPageReader) NumValues() int {
@@ -146,6 +137,17 @@ func (r *dataPageReader) statistics() *format.Statistics {
 	return nil
 }
 
+func (r *dataPageReader) Reset(decoder encoding.Decoder) {
+	r.reset(r.repetition.decoder, r.definition.decoder, decoder, nil)
+}
+
+func (r *dataPageReader) reset(repetitionLevelDecoder, definitionLevelDecoder, valueDecoder encoding.Decoder, header *format.PageHeader) {
+	r.header = header
+	r.page.Reset(valueDecoder)
+	r.repetition.Reset(repetitionLevelDecoder)
+	r.definition.Reset(definitionLevelDecoder)
+}
+
 type levelReader struct {
 	decoder encoding.Decoder
 	levels  []int8
@@ -177,7 +179,8 @@ func (r *levelReader) ReadLevel() (int8, error) {
 	}
 }
 
-func (r *levelReader) Reset() {
+func (r *levelReader) Reset(decoder encoding.Decoder) {
+	r.decoder = decoder
 	r.levels = r.levels[:0]
 	r.offset = 0
 }
@@ -215,7 +218,8 @@ func (r *booleanPageReader) ReadValue() (Value, error) {
 	}
 }
 
-func (r *booleanPageReader) Reset() {
+func (r *booleanPageReader) Reset(decoder encoding.Decoder) {
+	r.decoder = decoder
 	r.values = r.values[:0]
 	r.offset = 0
 }
@@ -263,7 +267,8 @@ func (r *int32PageReader) ReadValue() (Value, error) {
 	}
 }
 
-func (r *int32PageReader) Reset() {
+func (r *int32PageReader) Reset(decoder encoding.Decoder) {
+	r.decoder = decoder
 	r.values = r.values[:0]
 	r.offset = 0
 }
@@ -311,7 +316,8 @@ func (r *int64PageReader) ReadValue() (Value, error) {
 	}
 }
 
-func (r *int64PageReader) Reset() {
+func (r *int64PageReader) Reset(decoder encoding.Decoder) {
+	r.decoder = decoder
 	r.values = r.values[:0]
 	r.offset = 0
 }
@@ -359,7 +365,8 @@ func (r *int96PageReader) ReadValue() (Value, error) {
 	}
 }
 
-func (r *int96PageReader) Reset() {
+func (r *int96PageReader) Reset(decoder encoding.Decoder) {
+	r.decoder = decoder
 	r.values = r.values[:0]
 	r.offset = 0
 }
@@ -407,7 +414,8 @@ func (r *floatPageReader) ReadValue() (Value, error) {
 	}
 }
 
-func (r *floatPageReader) Reset() {
+func (r *floatPageReader) Reset(decoder encoding.Decoder) {
+	r.decoder = decoder
 	r.values = r.values[:0]
 	r.offset = 0
 }
@@ -455,7 +463,8 @@ func (r *doublePageReader) ReadValue() (Value, error) {
 	}
 }
 
-func (r *doublePageReader) Reset() {
+func (r *doublePageReader) Reset(decoder encoding.Decoder) {
+	r.decoder = decoder
 	r.values = r.values[:0]
 	r.offset = 0
 }
@@ -513,7 +522,8 @@ func (r *byteArrayPageReader) ReadValue() (Value, error) {
 	}
 }
 
-func (r *byteArrayPageReader) Reset() {
+func (r *byteArrayPageReader) Reset(decoder encoding.Decoder) {
+	r.decoder = decoder
 	r.offset = 0
 	r.remain = 0
 }
@@ -564,7 +574,8 @@ func (r *fixedLenByteArrayPageReader) ReadValue() (Value, error) {
 	}
 }
 
-func (r *fixedLenByteArrayPageReader) Reset() {
+func (r *fixedLenByteArrayPageReader) Reset(decoder encoding.Decoder) {
+	r.decoder = decoder
 	r.values = r.values[:0]
 	r.offset = 0
 }

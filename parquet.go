@@ -5,6 +5,14 @@ import (
 	"strings"
 )
 
+type int96 = [12]byte
+
+func copyBytes(b []byte) []byte {
+	c := make([]byte, len(b))
+	copy(c, b)
+	return c
+}
+
 func coalesceInt(i1, i2 int) int {
 	if i1 != 0 {
 		return i1

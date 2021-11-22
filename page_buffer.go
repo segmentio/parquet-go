@@ -178,13 +178,13 @@ func (buf *int64PageBuffer) WriteTo(enc encoding.Encoder) error {
 
 type int96PageBuffer struct {
 	typ    Type
-	values [][12]byte
+	values []int96
 }
 
 func newInt96PageBuffer(typ Type, bufferSize int) *int96PageBuffer {
 	return &int96PageBuffer{
 		typ:    typ,
-		values: make([][12]byte, 0, bufferSize/12),
+		values: make([]int96, 0, bufferSize/12),
 	}
 }
 
@@ -435,10 +435,4 @@ func (buf uuidPageBuffer) WriteValue(v Value) error {
 		b = u[:]
 	}
 	return buf.write(b)
-}
-
-func copyBytes(b []byte) []byte {
-	c := make([]byte, len(b))
-	copy(c, b)
-	return c
 }
