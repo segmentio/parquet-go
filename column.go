@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/segmentio/parquet/compress"
 	"github.com/segmentio/parquet/deprecated"
@@ -22,15 +23,16 @@ type Column struct {
 	file        *File
 	schema      *format.SchemaElement
 	order       *format.ColumnOrder
+	path        []string
 	names       []string
 	columns     []*Column
 	chunks      []*format.ColumnChunk
 	encoding    []encoding.Encoding
 	compression []compress.Codec
 
-	depth              int32
-	maxRepetitionLevel int32
-	maxDefinitionLevel int32
+	depth              int8
+	maxRepetitionLevel int8
+	maxDefinitionLevel int8
 }
 
 // Schema returns the underlying schema element of c.
@@ -75,6 +77,9 @@ func (c *Column) Encoding() []encoding.Encoding { return c.encoding }
 // Compression returns the compression codecs used by this column.
 func (c *Column) Compression() []compress.Codec { return c.compression }
 
+// Path of the column in the parquet schema.
+func (c *Column) Path() []string { return c.path }
+
 // Name returns the column name.
 func (c *Column) Name() string { return c.schema.Name }
 
@@ -114,14 +119,14 @@ func (c *Column) String() string {
 	switch {
 	case c.columns != nil:
 		return fmt.Sprintf("%s{%s,R=%d,D=%d}",
-			c.schema.Name,
+			join(c.path),
 			c.schema.RepetitionType,
 			c.maxRepetitionLevel,
 			c.maxDefinitionLevel)
 
 	case c.Type().Kind() == FixedLenByteArray:
 		return fmt.Sprintf("%s{%s(%d),%s,R=%d,D=%d}",
-			c.schema.Name,
+			join(c.path),
 			c.schema.Type,
 			c.schema.TypeLength,
 			c.schema.RepetitionType,
@@ -130,7 +135,7 @@ func (c *Column) String() string {
 
 	default:
 		return fmt.Sprintf("%s{%s,%s,R=%d,D=%d}",
-			c.schema.Name,
+			join(c.path),
 			c.schema.Type,
 			c.schema.RepetitionType,
 			c.maxRepetitionLevel,
@@ -138,10 +143,14 @@ func (c *Column) String() string {
 	}
 }
 
+func join(path []string) string {
+	return strings.Join(path, ".")
+}
+
 func openColumns(file *File) (*Column, error) {
 	cl := columnLoader{}
 
-	c, err := cl.open(file)
+	c, err := cl.open(file, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -156,11 +165,10 @@ func openColumns(file *File) (*Column, error) {
 		}
 	}
 
-	setMaxLevels(c, 0, 0, 0)
-	return c, nil
+	return c, setMaxLevels(c, 0, 0, 0)
 }
 
-func setMaxLevels(col *Column, depth, repetition, definition int32) {
+func setMaxLevels(col *Column, depth, repetition, definition int8) error {
 	switch schemaRepetitionTypeOf(col.schema) {
 	case format.Optional:
 		definition++
@@ -168,13 +176,29 @@ func setMaxLevels(col *Column, depth, repetition, definition int32) {
 		repetition++
 		definition++
 	}
+
 	col.depth = depth
 	col.maxRepetitionLevel = repetition
 	col.maxDefinitionLevel = definition
 	depth++
-	for _, c := range col.columns {
-		setMaxLevels(c, depth, repetition, definition)
+
+	if depth < 0 {
+		return fmt.Errorf("cannot represent parquet columns with more than 127 nested levels: %s", join(col.path))
 	}
+	if repetition < 0 {
+		return fmt.Errorf("cannot represent parquet columns with more than 127 repetition levels: %s", join(col.path))
+	}
+	if definition < 0 {
+		return fmt.Errorf("cannot represent parquet columns with more than 127 definition levels: %s", join(col.path))
+	}
+
+	for _, c := range col.columns {
+		if err := setMaxLevels(c, depth, repetition, definition); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 type columnLoader struct {
@@ -183,11 +207,12 @@ type columnLoader struct {
 	rowGroupColumnIndex int
 }
 
-func (cl *columnLoader) open(file *File) (*Column, error) {
+func (cl *columnLoader) open(file *File, path []string) (*Column, error) {
 	c := &Column{
 		file:   file,
 		schema: &file.metadata.Schema[cl.schemaIndex],
 	}
+	c.path = append(path[:len(path):len(path)], c.schema.Name)
 
 	cl.schemaIndex++
 	numChildren := int(c.schema.NumChildren)
@@ -236,7 +261,7 @@ func (cl *columnLoader) open(file *File) (*Column, error) {
 		}
 
 		var err error
-		c.columns[i], err = cl.open(file)
+		c.columns[i], err = cl.open(file, path)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", c.schema.Name, err)
 		}

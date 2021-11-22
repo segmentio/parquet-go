@@ -10,7 +10,7 @@ import (
 	"github.com/segmentio/parquet/internal/bits"
 )
 
-type Kind int32
+type Kind int16
 
 const (
 	Boolean           Kind = Kind(format.Boolean)

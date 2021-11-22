@@ -3,7 +3,6 @@ package rle
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"io"
 
 	"github.com/segmentio/parquet/encoding"
@@ -62,6 +61,10 @@ func (e *Encoder) WriteByte(b byte) error {
 	return err
 }
 
+func (e *Encoder) BitWidth() int {
+	return int(e.bitWidth)
+}
+
 func (e *Encoder) SetBitWidth(bitWidth int) {
 	e.bitWidth = uint(bitWidth)
 }
@@ -76,18 +79,16 @@ func (e *Encoder) Reset(w io.Writer) {
 	}
 }
 
-func (e *Encoder) EncodeBitWidth(bitWidth int) error {
-	if bitWidth <= 0 {
-		return fmt.Errorf("encoding RLE bit width: %d<=0", bitWidth)
-	}
-	if bitWidth > 64 {
-		return fmt.Errorf("encoding RLE bit width: %d>64", bitWidth)
-	}
-	return e.WriteByte(byte(bitWidth))
-}
-
 func (e *Encoder) EncodeBoolean(data []bool) error {
 	return e.encode(bits.BoolToBytes(data), 1, 8, equalInt8)
+}
+
+func (e *Encoder) EncodeInt8(data []int8) error {
+	return e.encode(bits.Int8ToBytes(data), uint(e.bitWidth), 8, equalInt8)
+}
+
+func (e *Encoder) EncodeInt16(data []int16) error {
+	return e.encode(bits.Int16ToBytes(data), uint(e.bitWidth), 16, equalInt16)
 }
 
 func (e *Encoder) EncodeInt32(data []int32) error {
@@ -100,11 +101,6 @@ func (e *Encoder) EncodeInt64(data []int64) error {
 
 func (e *Encoder) EncodeInt96(data [][12]byte) error {
 	return e.encode(bits.Int96ToBytes(data), uint(e.bitWidth), 96, equalInt96)
-}
-
-func (e *Encoder) EncodeIntArray(data encoding.IntArrayView) error {
-	srcWidth := uint(data.BitWidth())
-	return e.encode(data.Bits(), uint(e.bitWidth), srcWidth, equalFuncOf(srcWidth))
 }
 
 func (e *Encoder) encode(data []byte, dstWidth, srcWidth uint, eq func(a, b []byte) bool) error {

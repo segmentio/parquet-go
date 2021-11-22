@@ -56,8 +56,8 @@ func printColumns(t *testing.T, col *parquet.Column, indent string) {
 
 		for pages.Next() {
 			numValues := pages.NumValues()
-			repetitions := make([]int32, numValues)
-			definitions := make([]int32, numValues)
+			repetitions := make([]int8, numValues)
+			definitions := make([]int8, numValues)
 
 			var n int
 			var err error

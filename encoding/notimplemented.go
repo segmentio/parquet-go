@@ -12,7 +12,8 @@ var (
 	ErrNotImplemented = errors.New("encoding not implemented")
 )
 
-type NotImplemented struct{}
+type NotImplemented struct {
+}
 
 func (NotImplemented) Encoding() format.Encoding {
 	return -1
@@ -30,7 +31,8 @@ func (NotImplemented) NewEncoder(io.Writer) Encoder {
 	return NotImplementedEncoder{}
 }
 
-type NotImplementedDecoder struct{}
+type NotImplementedDecoder struct {
+}
 
 func (NotImplementedDecoder) Encoding() format.Encoding {
 	return -1
@@ -43,12 +45,16 @@ func (NotImplementedDecoder) Close() error {
 func (NotImplementedDecoder) Reset(io.Reader) {
 }
 
-func (NotImplementedDecoder) DecodeBitWidth() (int, error) {
-	return 0, NotImplementedError("BIT_WIDTH")
-}
-
 func (NotImplementedDecoder) DecodeBoolean([]bool) (int, error) {
 	return 0, NotImplementedError("BOOLEAN")
+}
+
+func (NotImplementedDecoder) DecodeInt8([]int8) (int, error) {
+	return 0, NotImplementedError("INT8")
+}
+
+func (NotImplementedDecoder) DecodeInt16([]int16) (int, error) {
+	return 0, NotImplementedError("INT16")
 }
 
 func (NotImplementedDecoder) DecodeInt32([]int32) (int, error) {
@@ -79,14 +85,11 @@ func (NotImplementedDecoder) DecodeFixedLenByteArray(size int, data []byte) (int
 	return 0, NotImplementedError("FIXED_LEN_BYTE_ARRAY")
 }
 
-func (NotImplementedDecoder) DecodeIntArray(IntArrayBuffer) error {
-	return NotImplementedError("INT")
-}
-
 func (NotImplementedDecoder) SetBitWidth(int) {
 }
 
-type NotImplementedEncoder struct{}
+type NotImplementedEncoder struct {
+}
 
 func (NotImplementedEncoder) Encoding() format.Encoding {
 	return -1
@@ -99,12 +102,16 @@ func (NotImplementedEncoder) Close() error {
 func (NotImplementedEncoder) Reset(io.Writer) {
 }
 
-func (NotImplementedEncoder) EncodeBitWidth(int) error {
-	return NotImplementedError("BIT_WIDTH")
-}
-
 func (NotImplementedEncoder) EncodeBoolean([]bool) error {
 	return NotImplementedError("BOOLEAN")
+}
+
+func (NotImplementedEncoder) EncodeInt8([]int8) error {
+	return NotImplementedError("INT8")
+}
+
+func (NotImplementedEncoder) EncodeInt16([]int16) error {
+	return NotImplementedError("INT16")
 }
 
 func (NotImplementedEncoder) EncodeInt32([]int32) error {
@@ -133,10 +140,6 @@ func (NotImplementedEncoder) EncodeByteArray([][]byte) error {
 
 func (NotImplementedEncoder) EncodeFixedLenByteArray(int, []byte) error {
 	return NotImplementedError("FIXED_LEN_BYTE_ARRAY")
-}
-
-func (NotImplementedEncoder) EncodeIntArray(IntArrayView) error {
-	return NotImplementedError("INT")
 }
 
 func (NotImplementedEncoder) SetBitWidth(int) {

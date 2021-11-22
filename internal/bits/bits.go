@@ -25,17 +25,19 @@ func NearestPowerOfTwo64(v uint64) uint64 {
 	return 1 << uint(bits.Len64(v-1))
 }
 
+func Len8(i int8) int {
+	return bits.Len8(uint8(i))
+}
+
+func Len16(i int16) int {
+	return bits.Len16(uint16(i))
+}
+
 func Len32(i int32) int {
-	if i < 0 {
-		i = -i
-	}
 	return bits.Len32(uint32(i))
 }
 
 func Len64(i int64) int {
-	if i < 0 {
-		i = -i
-	}
 	return bits.Len64(uint64(i))
 }
 

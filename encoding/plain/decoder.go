@@ -70,6 +70,14 @@ func (d *Decoder) DecodeBoolean(data []bool) (int, error) {
 	return d.rle.DecodeBoolean(data)
 }
 
+func (e *Decoder) DecodeInt8(data []int8) (int, error) {
+	return 0, encoding.NotImplementedError("INT8")
+}
+
+func (e *Decoder) DecodeInt16(data []int16) (int, error) {
+	return 0, encoding.NotImplementedError("INT16")
+}
+
 func (d *Decoder) DecodeInt32(data []int32) (int, error) {
 	return readFull(d.reader, 4, bits.Int32ToBytes(data))
 }
@@ -119,25 +127,6 @@ func (d *Decoder) DecodeFixedLenByteArray(size int, data []byte) (int, error) {
 		return 0, fmt.Errorf("length of fixed byte array is not a multiple of its size: size=%d length=%d", size, len(data))
 	}
 	return readFull(d.reader, size, data)
-}
-
-func (d *Decoder) DecodeIntArray(data encoding.IntArrayBuffer) error {
-	if d.bitWidth == 0 {
-		return fmt.Errorf("bit width must be set on PLAIN decoder before reading values into a dynamic int array")
-	}
-	scale := d.bitWidth / 8
-	for {
-		n, err := readFull(d.reader, scale, d.buffer)
-		if n > 0 {
-			data.AppendBits(d.buffer[:n*scale], d.bitWidth)
-		}
-		if err != nil {
-			if err == io.EOF {
-				err = nil
-			}
-			return err
-		}
-	}
 }
 
 func (d *Decoder) SetBitWidth(bitWidth int) {

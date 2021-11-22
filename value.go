@@ -18,10 +18,10 @@ type Value struct {
 	u64 uint64
 	u32 uint32
 	// type
-	kind int32 // XOR(Kind) so the zero-value is <nil>
+	kind int16 // XOR(Kind) so the zero-value is <nil>
 	// levels
-	definitionLevel int32
-	repetitionLevel int32
+	definitionLevel int8
+	repetitionLevel int8
 }
 
 type ValueReader interface {
@@ -141,7 +141,7 @@ func makeValue(k Kind, v reflect.Value) Value {
 }
 
 func makeValueBoolean(value bool) Value {
-	v := Value{kind: ^int32(Boolean)}
+	v := Value{kind: ^int16(Boolean)}
 	if value {
 		v.u32 = 1
 	}
@@ -150,21 +150,21 @@ func makeValueBoolean(value bool) Value {
 
 func makeValueInt32(value int32) Value {
 	return Value{
-		kind: ^int32(Int32),
+		kind: ^int16(Int32),
 		u32:  uint32(value),
 	}
 }
 
 func makeValueInt64(value int64) Value {
 	return Value{
-		kind: ^int32(Int64),
+		kind: ^int16(Int64),
 		u64:  uint64(value),
 	}
 }
 
 func makeValueInt96(value [12]byte) Value {
 	return Value{
-		kind: ^int32(Int96),
+		kind: ^int16(Int96),
 		u64:  binary.LittleEndian.Uint64(value[:8]),
 		u32:  binary.LittleEndian.Uint32(value[8:]),
 	}
@@ -172,14 +172,14 @@ func makeValueInt96(value [12]byte) Value {
 
 func makeValueFloat(value float32) Value {
 	return Value{
-		kind: ^int32(Float),
+		kind: ^int16(Float),
 		u32:  math.Float32bits(value),
 	}
 }
 
 func makeValueDouble(value float64) Value {
 	return Value{
-		kind: ^int32(Double),
+		kind: ^int16(Double),
 		u64:  math.Float64bits(value),
 	}
 }
@@ -209,7 +209,7 @@ func makeValueFixedLenByteArray(v reflect.Value) Value {
 
 func makeValueByteArray(kind Kind, data *byte, size int) Value {
 	return Value{
-		kind: ^int32(kind),
+		kind: ^int16(kind),
 		ptr:  data,
 		u64:  uint64(size),
 	}
@@ -233,9 +233,9 @@ func (v Value) Double() float64 { return math.Float64frombits(v.u64) }
 
 func (v Value) ByteArray() []byte { return unsafe.Slice(v.ptr, int(v.u64)) }
 
-func (v Value) DefinitionLevel() int { return int(v.definitionLevel) }
+func (v Value) DefinitionLevel() int8 { return v.definitionLevel }
 
-func (v Value) RepetitionLevel() int { return int(v.repetitionLevel) }
+func (v Value) RepetitionLevel() int8 { return v.repetitionLevel }
 
 func (v Value) Clone() Value {
 	switch v.Kind() {
@@ -292,9 +292,9 @@ func (v Value) String() string {
 	}
 }
 
-func (v Value) Level(repetitionLevel, definitionLevel int) Value {
-	v.repetitionLevel = int32(repetitionLevel)
-	v.definitionLevel = int32(definitionLevel)
+func (v Value) Level(repetitionLevel, definitionLevel int8) Value {
+	v.repetitionLevel = repetitionLevel
+	v.definitionLevel = definitionLevel
 	return v
 }
 

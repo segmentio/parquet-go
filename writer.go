@@ -188,8 +188,8 @@ type rowGroupColumn struct {
 	buffer     *bufferPoolPageWriter
 	writer     *columnChunkWriter
 
-	maxDefinitionLevel int32
-	maxRepetitionLevel int32
+	maxDefinitionLevel int8
+	maxRepetitionLevel int8
 
 	numValues int64
 }
@@ -213,14 +213,20 @@ func newRowGroupWriter(writer io.Writer, schema *Schema, config *WriterConfig) *
 	return rgw
 }
 
-func (rgw *rowGroupWriter) init(node Node, path []string, dataPageType format.PageType, maxRepetitionLevel, maxDefinitionLevel int32) {
+func (rgw *rowGroupWriter) init(node Node, path []string, dataPageType format.PageType, maxRepetitionLevel, maxDefinitionLevel int8) {
 	nodeType := node.Type()
 
 	if !node.Required() {
 		maxDefinitionLevel++
+		if maxDefinitionLevel < 0 { // overflow
+			panic("cannot represent parquet schema with more than 127 definition levels")
+		}
 	}
 	if node.Repeated() {
 		maxRepetitionLevel++
+		if maxRepetitionLevel < 0 { // overflow
+			panic("cannot represent parquet schema with more than 127 repetition levels")
+		}
 	}
 
 	repetitionType := (*format.FieldRepetitionType)(nil)
@@ -269,13 +275,15 @@ func (rgw *rowGroupWriter) init(node Node, path []string, dataPageType format.Pa
 
 		dictionary := Dictionary(nil)
 		pageBuffer := PageBuffer(nil)
+		bufferSize := rgw.config.PageBufferSize
 
 		switch encoding.Encoding() {
 		case format.PlainDictionary, format.RLEDictionary:
-			dictionary = nodeType.NewDictionary(rgw.config.PageBufferSize)
-			pageBuffer = NewDictionaryPageBuffer(dictionary)
+			bufferSize /= 2
+			dictionary = nodeType.NewDictionary(bufferSize)
+			pageBuffer = NewDictionaryPageBuffer(dictionary, bufferSize)
 		default:
-			pageBuffer = nodeType.NewPageBuffer(rgw.config.PageBufferSize)
+			pageBuffer = nodeType.NewPageBuffer(bufferSize)
 		}
 
 		buffer := &bufferPoolPageWriter{pool: rgw.config.ColumnPageBuffers}
@@ -452,12 +460,12 @@ type columnChunkWriter struct {
 	values      PageBuffer
 
 	dataPageType       format.PageType
-	maxRepetitionLevel int32
-	maxDefinitionLevel int32
+	maxRepetitionLevel int8
+	maxDefinitionLevel int8
 
 	levels struct {
-		repetition encoding.IntArray
-		definition encoding.IntArray
+		repetition []int8
+		definition []int8
 		encoder    encoding.Encoder
 	}
 
@@ -490,7 +498,7 @@ type columnChunkWriter struct {
 	encodingStats         []format.PageEncodingStats
 }
 
-func newColumnChunkWriter(writer pageWriter, codec compress.Codec, enc encoding.Encoding, dataPageType format.PageType, maxRepetitionLevel, maxDefinitionLevel int32, values PageBuffer) *columnChunkWriter {
+func newColumnChunkWriter(writer pageWriter, codec compress.Codec, enc encoding.Encoding, dataPageType format.PageType, maxRepetitionLevel, maxDefinitionLevel int8, values PageBuffer) *columnChunkWriter {
 	ccw := &columnChunkWriter{
 		writer:             writer,
 		encoding:           enc,
@@ -505,11 +513,11 @@ func newColumnChunkWriter(writer pageWriter, codec compress.Codec, enc encoding.
 	}
 
 	if maxRepetitionLevel > 0 {
-		ccw.levels.repetition = encoding.NewFixedIntArray(bits.Len32(maxRepetitionLevel))
+		ccw.levels.repetition = make([]int8, 0, 1024)
 	}
 
 	if maxDefinitionLevel > 0 {
-		ccw.levels.definition = encoding.NewFixedIntArray(bits.Len32(maxDefinitionLevel))
+		ccw.levels.definition = make([]int8, 0, 1024)
 	}
 
 	if maxRepetitionLevel > 0 || maxDefinitionLevel > 0 {
@@ -582,19 +590,19 @@ func (ccw *columnChunkWriter) Flush() error {
 	definitionLevelsByteLength := int32(0)
 
 	if ccw.dataPageType == format.DataPageV2 {
-		if ccw.levels.repetition != nil {
+		if ccw.maxRepetitionLevel > 0 {
 			ccw.page.uncompressed.Reset(&ccw.page.checksum)
 			ccw.levels.encoder.Reset(&ccw.page.uncompressed)
-			ccw.levels.encoder.SetBitWidth(bits.Len32(ccw.maxRepetitionLevel))
-			ccw.levels.encoder.EncodeIntArray(ccw.levels.repetition)
+			ccw.levels.encoder.SetBitWidth(bits.Len8(ccw.maxRepetitionLevel))
+			ccw.levels.encoder.EncodeInt8(ccw.levels.repetition)
 			ccw.levels.encoder.Close()
 			repetitionLevelsByteLength = int32(ccw.page.uncompressed.length)
 		}
-		if ccw.levels.definition != nil {
+		if ccw.maxDefinitionLevel > 0 {
 			ccw.page.uncompressed.Reset(&ccw.page.checksum)
 			ccw.levels.encoder.Reset(&ccw.page.uncompressed)
-			ccw.levels.encoder.SetBitWidth(bits.Len32(ccw.maxDefinitionLevel))
-			ccw.levels.encoder.EncodeIntArray(ccw.levels.definition)
+			ccw.levels.encoder.SetBitWidth(bits.Len8(ccw.maxDefinitionLevel))
+			ccw.levels.encoder.EncodeInt8(ccw.levels.definition)
 			ccw.levels.encoder.Close()
 			definitionLevelsByteLength = int32(ccw.page.uncompressed.length)
 		}
@@ -614,16 +622,16 @@ func (ccw *columnChunkWriter) Flush() error {
 
 	ccw.page.uncompressed.Reset(ccw.page.compressed)
 	if ccw.dataPageType == format.DataPage {
-		if ccw.levels.repetition != nil {
+		if ccw.maxRepetitionLevel > 0 {
 			ccw.levels.encoder.Reset(&ccw.page.uncompressed)
-			ccw.levels.encoder.SetBitWidth(bits.Len32(ccw.maxRepetitionLevel))
-			ccw.levels.encoder.EncodeIntArray(ccw.levels.repetition)
+			ccw.levels.encoder.SetBitWidth(bits.Len8(ccw.maxRepetitionLevel))
+			ccw.levels.encoder.EncodeInt8(ccw.levels.repetition)
 			ccw.levels.encoder.Close()
 		}
-		if ccw.levels.definition != nil {
+		if ccw.maxDefinitionLevel > 0 {
 			ccw.levels.encoder.Reset(&ccw.page.uncompressed)
-			ccw.levels.encoder.SetBitWidth(bits.Len32(ccw.maxDefinitionLevel))
-			ccw.levels.encoder.EncodeIntArray(ccw.levels.definition)
+			ccw.levels.encoder.SetBitWidth(bits.Len8(ccw.maxDefinitionLevel))
+			ccw.levels.encoder.EncodeInt8(ccw.levels.definition)
 			ccw.levels.encoder.Close()
 		}
 	}
@@ -708,24 +716,19 @@ func (ccw *columnChunkWriter) Flush() error {
 	ccw.values.Reset()
 	ccw.numNulls = 0
 	ccw.numRows = 0
-
-	if ccw.levels.repetition != nil {
-		ccw.levels.repetition.Reset()
-	}
-	if ccw.levels.definition != nil {
-		ccw.levels.definition.Reset()
-	}
+	ccw.levels.repetition = ccw.levels.repetition[:0]
+	ccw.levels.definition = ccw.levels.definition[:0]
 
 	return ccw.writer.writePage(ccw.header.buffer.Bytes(), ccw.page.buffer.Bytes())
 }
 
 func (ccw *columnChunkWriter) WriteValue(v Value) error {
-	if ccw.levels.repetition != nil {
-		ccw.levels.repetition.Append(int64(v.RepetitionLevel()))
+	if ccw.maxRepetitionLevel > 0 {
+		ccw.levels.repetition = append(ccw.levels.repetition, v.repetitionLevel)
 	}
 
-	if ccw.levels.definition != nil {
-		ccw.levels.definition.Append(int64(v.DefinitionLevel()))
+	if ccw.maxDefinitionLevel > 0 {
+		ccw.levels.definition = append(ccw.levels.definition, v.definitionLevel)
 	}
 
 	if v.IsNull() {

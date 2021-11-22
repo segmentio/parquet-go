@@ -82,8 +82,8 @@ type booleanPageReader struct {
 	pages       *ColumnPages
 	offset      int
 	values      []bool
-	repetitions []int32
-	definitions []int32
+	repetitions []int8
+	definitions []int8
 }
 
 func newBooleanPageReader(pages *ColumnPages, bufferSize int) *booleanPageReader {
@@ -91,8 +91,8 @@ func newBooleanPageReader(pages *ColumnPages, bufferSize int) *booleanPageReader
 	return &booleanPageReader{
 		pages:       pages,
 		values:      make([]bool, 0, n),
-		repetitions: make([]int32, n),
-		definitions: make([]int32, n),
+		repetitions: make([]int8, n),
+		definitions: make([]int8, n),
 	}
 }
 

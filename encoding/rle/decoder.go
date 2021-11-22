@@ -44,6 +44,10 @@ func (d *Decoder) Close() error {
 	return nil
 }
 
+func (d *Decoder) BitWidth() int {
+	return int(d.bitWidth)
+}
+
 func (d *Decoder) SetBitWidth(bitWidth int) {
 	d.bitWidth = uint(bitWidth)
 }
@@ -60,23 +64,16 @@ func (d *Decoder) ReadByte() (byte, error) {
 	return d.buffer[0], err
 }
 
-func (d *Decoder) DecodeBitWidth() (int, error) {
-	_, err := d.ReadByte()
-	if err != nil {
-		if err == io.EOF {
-			err = io.ErrUnexpectedEOF
-		}
-		return 0, fmt.Errorf("decoding RLE bit width: %w", err)
-	}
-	b := d.buffer[0]
-	if b > 64 {
-		return 0, fmt.Errorf("decoding RLE bit width: %d>64", b)
-	}
-	return int(b), nil
-}
-
 func (d *Decoder) DecodeBoolean(data []bool) (int, error) {
 	return d.decode(bits.BoolToBytes(data), 8, 1)
+}
+
+func (d *Decoder) DecodeInt8(data []int8) (int, error) {
+	return d.decode(bits.Int8ToBytes(data), 8, d.bitWidth)
+}
+
+func (d *Decoder) DecodeInt16(data []int16) (int, error) {
+	return d.decode(bits.Int16ToBytes(data), 16, d.bitWidth)
 }
 
 func (d *Decoder) DecodeInt32(data []int32) (int, error) {
@@ -89,26 +86,6 @@ func (d *Decoder) DecodeInt64(data []int64) (int, error) {
 
 func (d *Decoder) DecodeInt96(data [][12]byte) (int, error) {
 	return d.decode(bits.Int96ToBytes(data), 96, d.bitWidth)
-}
-
-func (d *Decoder) DecodeIntArray(data encoding.IntArrayBuffer) error {
-	srcWidth := d.bitWidth
-	dstWidth := bits.Round(d.bitWidth)
-	if srcWidth == 0 {
-		return fmt.Errorf("bit width must be set on RLE decoder before reading values into a dynamic int array")
-	}
-	for {
-		n, err := d.decode(d.buffer, dstWidth, srcWidth)
-		if n > 0 {
-			data.AppendBits(d.buffer[:bits.ByteCount(uint(n)*dstWidth)], int(dstWidth))
-		}
-		if err != nil {
-			if err == io.EOF {
-				err = nil
-			}
-			return err
-		}
-	}
 }
 
 func (d *Decoder) decode(data []byte, dstWidth, srcWidth uint) (int, error) {

@@ -173,9 +173,9 @@ func Traverse(node Node, value interface{}, traversal Traversal) error {
 
 type levels struct {
 	columnIndex     int32
-	repetitionDepth int32
-	repetitionLevel int32
-	definitionLevel int32
+	repetitionDepth int8
+	repetitionLevel int8
+	definitionLevel int8
 }
 
 func traverse(node Node, levels levels, value reflect.Value, traversal Traversal) (int32, error) {
@@ -242,9 +242,15 @@ func traverse(node Node, levels levels, value reflect.Value, traversal Traversal
 	}
 
 	if node.NumChildren() == 0 {
+		if levels.repetitionLevel > 127 {
+			panic("cannot represent parquet schema with more than 127 repetition levels")
+		}
+		if levels.definitionLevel > 127 {
+			panic("cannot represent parquet schema with more than 127 definition levels")
+		}
 		v := makeValue(node.Type().Kind(), value)
-		v.repetitionLevel = levels.repetitionLevel
-		v.definitionLevel = levels.definitionLevel
+		v.repetitionLevel = int8(levels.repetitionLevel)
+		v.definitionLevel = int8(levels.definitionLevel)
 		err = traversal.Traverse(int(levels.columnIndex), v)
 		levels.columnIndex++
 	} else {
