@@ -153,6 +153,11 @@ func TestEncoding(t *testing.T) {
 		},
 
 		{
+			scenario: "RLE (level)",
+			encoding: new(rle.Encoding).LevelEncoding(),
+		},
+
+		{
 			scenario: "PLAIN_DICTIONARY",
 			encoding: new(dict.Encoding).PlainEncoding(),
 		},

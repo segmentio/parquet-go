@@ -269,11 +269,11 @@ type levelDecoder struct{ *Decoder }
 
 func newLevelDecoderSize(r io.Reader, bufferSize int) levelDecoder {
 	d := levelDecoder{NewDecoderSize(r, bufferSize)}
-	d.data.N, d.init = math.MaxInt64, true
+	d.init = true
 	return d
 }
 
 func (d levelDecoder) Reset(r io.Reader) {
 	d.Decoder.Reset(r)
-	d.data.N, d.init = math.MaxInt64, true
+	d.init = true
 }
