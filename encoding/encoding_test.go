@@ -516,7 +516,7 @@ func testByteArrayEncoding(t *testing.T, e encoding.Encoding) {
 					maxLen = len(value)
 				}
 			}
-			x
+
 			for i := 0; i < len(test); {
 				for i := range tmp {
 					tmp[i] = 0

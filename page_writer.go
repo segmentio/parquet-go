@@ -85,7 +85,6 @@ func (w *booleanPageWriter) WriteValue(v Value) error {
 
 func (w *booleanPageWriter) Flush() error {
 	defer func() { w.values = w.values[:0] }()
-	w.encoder.SetBitWidth(1)
 	return w.encoder.EncodeBoolean(w.values)
 }
 
@@ -145,7 +144,6 @@ func (w *int32PageWriter) Flush() error {
 	defer func() { w.values = w.values[:0] }()
 	w.min, w.max = w.bounds()
 	w.flush++
-	w.encoder.SetBitWidth(bits.MaxLen32(w.values))
 	return w.encoder.EncodeInt32(w.values)
 }
 
@@ -226,7 +224,6 @@ func (w *int64PageWriter) Flush() error {
 	defer func() { w.values = w.values[:0] }()
 	w.min, w.max = w.bounds()
 	w.flush++
-	w.encoder.SetBitWidth(bits.MaxLen64(w.values))
 	return w.encoder.EncodeInt64(w.values)
 }
 
@@ -307,7 +304,6 @@ func (w *int96PageWriter) Flush() error {
 	defer func() { w.values = w.values[:0] }()
 	w.min, w.max = w.bounds()
 	w.flush++
-	w.encoder.SetBitWidth(bits.MaxLen96(w.values))
 	return w.encoder.EncodeInt96(w.values)
 }
 
@@ -388,7 +384,6 @@ func (w *floatPageWriter) Flush() error {
 	defer func() { w.values = w.values[:0] }()
 	w.min, w.max = w.bounds()
 	w.flush++
-	w.encoder.SetBitWidth(32)
 	return w.encoder.EncodeFloat(w.values)
 }
 
@@ -469,7 +464,6 @@ func (w *doublePageWriter) Flush() error {
 	defer func() { w.values = w.values[:0] }()
 	w.min, w.max = w.bounds()
 	w.flush++
-	w.encoder.SetBitWidth(64)
 	return w.encoder.EncodeDouble(w.values)
 }
 
@@ -526,7 +520,11 @@ func (w *byteArrayPageWriter) NumValues() int { return w.count }
 func (w *byteArrayPageWriter) DistinctCount() int { return 0 }
 
 func (w *byteArrayPageWriter) Bounds() (min, max Value) {
-	return makeValueBytes(ByteArray, w.min), makeValueBytes(ByteArray, w.max)
+	if w.count > 0 {
+		min = makeValueBytes(ByteArray, w.min)
+		max = makeValueBytes(ByteArray, w.max)
+	}
+	return min, max
 }
 
 func (w *byteArrayPageWriter) WriteValue(v Value) error {
@@ -580,7 +578,6 @@ func (w *byteArrayPageWriter) setMax(max []byte) {
 
 func (w *byteArrayPageWriter) Flush() error {
 	defer func() { w.values = w.values[:0] }()
-	w.encoder.SetBitWidth(0)
 	return w.encoder.EncodeByteArray(w.values)
 }
 
@@ -656,7 +653,6 @@ func (w *fixedLenByteArrayPageWriter) Flush() error {
 	copy(w.min, min)
 	copy(w.max, max)
 	w.flush++
-	w.encoder.SetBitWidth(0)
 	return w.encoder.EncodeFixedLenByteArray(w.size, w.data)
 }
 
@@ -687,9 +683,31 @@ func (w *fixedLenByteArrayPageWriter) bounds() (min, max []byte) {
 	return min, max
 }
 
-type uint32PageWriter struct{ *int32PageWriter }
+type uint32PageWriter struct {
+	typ     Type
+	encoder encoding.Encoder
+	values  []uint32
+	min     uint32
+	max     uint32
+	count   int
+	flush   int
+}
 
-func (w uint32PageWriter) Bounds() (min, max Value) {
+func newUint32PageWriter(typ Type, encoder encoding.Encoder, bufferSize int) *uint32PageWriter {
+	return &uint32PageWriter{
+		typ:     typ,
+		encoder: encoder,
+		values:  make([]uint32, 0, bufferSize/4),
+	}
+}
+
+func (w *uint32PageWriter) Type() Type { return w.typ }
+
+func (w *uint32PageWriter) NumValues() int { return w.count }
+
+func (w *uint32PageWriter) DistinctCount() int { return 0 }
+
+func (w *uint32PageWriter) Bounds() (min, max Value) {
 	if w.count > 0 {
 		minUint32, maxUint32 := w.bounds()
 		min = makeValueInt32(int32(minUint32))
@@ -698,21 +716,38 @@ func (w uint32PageWriter) Bounds() (min, max Value) {
 	return min, max
 }
 
-func (w uint32PageWriter) Flush() error {
+func (w *uint32PageWriter) WriteValue(v Value) error {
+	if len(w.values) == cap(w.values) {
+		if err := w.Flush(); err != nil {
+			return err
+		}
+	}
+	w.values = append(w.values, uint32(v.Int32()))
+	w.count++
+	return nil
+}
+
+func (w *uint32PageWriter) Flush() error {
 	defer func() { w.values = w.values[:0] }()
-	min, max := w.bounds()
-	w.min = int32(min)
-	w.max = int32(max)
+	w.min, w.max = w.bounds()
 	w.flush++
-	w.encoder.SetBitWidth(bits.MaxLen32(w.values))
-	return w.encoder.EncodeInt32(w.values)
+	return w.encoder.EncodeInt32(bits.Uint32ToInt32(w.values))
+}
+
+func (w *uint32PageWriter) Reset(encoder encoding.Encoder) {
+	w.encoder = encoder
+	w.values = w.values[:0]
+	w.min = 0
+	w.max = 0
+	w.count = 0
+	w.flush = 0
 }
 
 func (w *uint32PageWriter) bounds() (min, max uint32) {
-	min = uint32(w.min)
-	max = uint32(w.max)
+	min = w.min
+	max = w.max
 	if len(w.values) > 0 {
-		minValue, maxValue := bits.MinMaxUint32(bits.Int32ToUint32(w.values))
+		minValue, maxValue := bits.MinMaxUint32(w.values)
 		if w.flush == 0 {
 			min = minValue
 			max = maxValue
@@ -728,9 +763,31 @@ func (w *uint32PageWriter) bounds() (min, max uint32) {
 	return min, max
 }
 
-type uint64PageWriter struct{ *int64PageWriter }
+type uint64PageWriter struct {
+	typ     Type
+	encoder encoding.Encoder
+	values  []uint64
+	min     uint64
+	max     uint64
+	count   int
+	flush   int
+}
 
-func (w uint64PageWriter) Bounds() (min, max Value) {
+func newUint64PageWriter(typ Type, encoder encoding.Encoder, bufferSize int) *uint64PageWriter {
+	return &uint64PageWriter{
+		typ:     typ,
+		encoder: encoder,
+		values:  make([]uint64, 0, bufferSize/8),
+	}
+}
+
+func (w *uint64PageWriter) Type() Type { return w.typ }
+
+func (w *uint64PageWriter) NumValues() int { return w.count }
+
+func (w *uint64PageWriter) DistinctCount() int { return 0 }
+
+func (w *uint64PageWriter) Bounds() (min, max Value) {
 	if w.count > 0 {
 		minUint64, maxUint64 := w.bounds()
 		min = makeValueInt64(int64(minUint64))
@@ -739,21 +796,38 @@ func (w uint64PageWriter) Bounds() (min, max Value) {
 	return min, max
 }
 
-func (w uint64PageWriter) Flush() error {
+func (w *uint64PageWriter) WriteValue(v Value) error {
+	if len(w.values) == cap(w.values) {
+		if err := w.Flush(); err != nil {
+			return err
+		}
+	}
+	w.values = append(w.values, uint64(v.Int64()))
+	w.count++
+	return nil
+}
+
+func (w *uint64PageWriter) Flush() error {
 	defer func() { w.values = w.values[:0] }()
-	min, max := w.bounds()
-	w.min = int64(min)
-	w.max = int64(max)
+	w.min, w.max = w.bounds()
 	w.flush++
-	w.encoder.SetBitWidth(bits.MaxLen64(w.values))
-	return w.encoder.EncodeInt64(w.values)
+	return w.encoder.EncodeInt64(bits.Uint64ToInt64(w.values))
+}
+
+func (w *uint64PageWriter) Reset(encoder encoding.Encoder) {
+	w.encoder = encoder
+	w.values = w.values[:0]
+	w.min = 0
+	w.max = 0
+	w.count = 0
+	w.flush = 0
 }
 
 func (w *uint64PageWriter) bounds() (min, max uint64) {
-	min = uint64(w.min)
-	max = uint64(w.max)
+	min = w.min
+	max = w.max
 	if len(w.values) > 0 {
-		minValue, maxValue := bits.MinMaxUint64(bits.Int64ToUint64(w.values))
+		minValue, maxValue := bits.MinMaxUint64(w.values)
 		if w.flush == 0 {
 			min = minValue
 			max = maxValue
@@ -792,7 +866,7 @@ var (
 	_ PageWriter = (*doublePageWriter)(nil)
 	_ PageWriter = (*byteArrayPageWriter)(nil)
 	_ PageWriter = (*fixedLenByteArrayPageWriter)(nil)
-	_ PageWriter = uint32PageWriter{}
-	_ PageWriter = uint64PageWriter{}
+	_ PageWriter = (*uint32PageWriter)(nil)
+	_ PageWriter = (*uint64PageWriter)(nil)
 	_ PageWriter = uuidPageWriter{}
 )

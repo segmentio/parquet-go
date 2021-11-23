@@ -442,7 +442,6 @@ func (w *indexedPageWriter) WriteValue(value Value) error {
 
 func (w *indexedPageWriter) Flush() error {
 	defer func() { w.values = w.values[:0] }()
-	w.encoder.SetBitWidth(0)
 	return w.encoder.EncodeInt32(w.values)
 }
 

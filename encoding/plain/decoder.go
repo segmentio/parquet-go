@@ -90,10 +90,14 @@ func (d *Decoder) DecodeByteArray(data []byte) (int, error) {
 
 	if n < len(data) {
 		r, err := io.ReadFull(d.reader, data[n:])
-		if err != nil && (err != io.EOF || (n+r) == 0) {
+		if err != nil && (n+r) == 0 {
 			return 0, err
 		}
 		data = data[:n+r]
+	}
+
+	if len(data) < 4 {
+		return 0, io.ErrUnexpectedEOF
 	}
 
 	if size := int(binary.LittleEndian.Uint32(data)); size > (len(data) - 4) {

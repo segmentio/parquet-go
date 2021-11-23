@@ -424,6 +424,7 @@ func (t schemaElementType) NewDictionary(bufferSize int) Dictionary {
 }
 
 func (t schemaElementType) NewPageBuffer(bufferSize int) PageBuffer {
+	// TODO: remove
 	switch t.Kind() {
 	case Boolean:
 		return newBooleanPageBuffer(t, bufferSize)
@@ -447,6 +448,7 @@ func (t schemaElementType) NewPageBuffer(bufferSize int) PageBuffer {
 }
 
 func (t schemaElementType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
+	// TODO: handle logical types
 	switch t.Kind() {
 	case Boolean:
 		return newBooleanPageReader(t, decoder, bufferSize)
@@ -464,6 +466,30 @@ func (t schemaElementType) NewPageReader(decoder encoding.Decoder, bufferSize in
 		return newByteArrayPageReader(t, decoder, bufferSize)
 	case FixedLenByteArray:
 		return newFixedLenByteArrayPageReader(t, decoder, bufferSize)
+	default:
+		panic("cannot create a page buffer from a schema element of unsupported type")
+	}
+}
+
+func (t schemaElementType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
+	// TODO: handle logical types
+	switch t.Kind() {
+	case Boolean:
+		return newBooleanPageWriter(t, encoder, bufferSize)
+	case Int32:
+		return newInt32PageWriter(t, encoder, bufferSize)
+	case Int64:
+		return newInt64PageWriter(t, encoder, bufferSize)
+	case Int96:
+		return newInt96PageWriter(t, encoder, bufferSize)
+	case Float:
+		return newFloatPageWriter(t, encoder, bufferSize)
+	case Double:
+		return newDoublePageWriter(t, encoder, bufferSize)
+	case ByteArray:
+		return newByteArrayPageWriter(t, encoder, bufferSize)
+	case FixedLenByteArray:
+		return newFixedLenByteArrayPageWriter(t, encoder, bufferSize)
 	default:
 		panic("cannot create a page buffer from a schema element of unsupported type")
 	}

@@ -78,6 +78,10 @@ func (groupType) NewPageReader(encoding.Decoder, int) PageReader {
 	panic("cannot create page reader from parquet group")
 }
 
+func (groupType) NewPageWriter(encoding.Encoder, int) PageWriter {
+	panic("cannot create page writer from parquet group")
+}
+
 func (groupType) Length() int { return 0 }
 
 func (groupType) PhyiscalType() *format.Type { return nil }
