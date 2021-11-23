@@ -1,6 +1,7 @@
 package parquet
 
 import (
+	"fmt"
 	"math"
 
 	"github.com/google/uuid"
@@ -385,6 +386,14 @@ func (buf *dictionaryPageBuffer) WriteTo(enc encoding.Encoder) error {
 	return enc.EncodeInt32(buf.values)
 }
 
+func NewIndexedPageReader(decoder encoding.Decoder, bufferSize int, dict Dictionary) PageReader {
+	return &indexedPageReader{
+		dict:    dict,
+		decoder: decoder,
+		values:  make([]int32, 0, bufferSize/4),
+	}
+}
+
 func NewIndexedPageWriter(encoder encoding.Encoder, bufferSize int, dict Dictionary) PageWriter {
 	return &indexedPageWriter{
 		dict:    dict,
@@ -393,12 +402,58 @@ func NewIndexedPageWriter(encoder encoding.Encoder, bufferSize int, dict Diction
 	}
 }
 
+type indexedPageReader struct {
+	dict    Dictionary
+	decoder encoding.Decoder
+	values  []int32
+	offset  uint
+}
+
+func (r *indexedPageReader) Type() Type { return r.dict.Type() }
+
+func (r *indexedPageReader) NumValues() int { return 0 }
+
+func (r *indexedPageReader) NumNulls() int { return 0 }
+
+func (r *indexedPageReader) DistinctCount() int { return 0 }
+
+func (r *indexedPageReader) Bounds() (min, max Value) { return }
+
+func (r *indexedPageReader) Reset(decoder encoding.Decoder) {
+	r.decoder = decoder
+	r.values = r.values[:0]
+	r.offset = 0
+}
+
+func (r *indexedPageReader) ReadValue() (Value, error) {
+	for {
+		if r.offset < uint(len(r.values)) {
+			index := int(r.values[r.offset])
+
+			if index >= 0 && index < r.dict.Len() {
+				r.offset++
+				return r.dict.Index(index), nil
+			}
+
+			return Value{}, fmt.Errorf("reading value from indexed page: index out of bounds: %d/%d", index, r.dict.Len())
+		}
+
+		n, err := r.decoder.DecodeInt32(r.values[:cap(r.values)])
+		if n == 0 {
+			return Value{}, err
+		}
+
+		r.values = r.values[:n]
+		r.offset = 0
+	}
+}
+
 type indexedPageWriter struct {
 	dict    Dictionary
 	encoder encoding.Encoder
 	values  []int32
-	min     Value
-	max     Value
+	min     int
+	max     int
 	count   int
 }
 
@@ -410,8 +465,9 @@ func (w *indexedPageWriter) DistinctCount() int { return 0 }
 
 func (w *indexedPageWriter) Bounds() (min, max Value) {
 	if w.count > 0 {
-		min = w.min
-		max = w.max
+		minIndex, maxIndex := w.bounds()
+		min = w.dict.Index(minIndex)
+		max = w.dict.Index(maxIndex)
 	}
 	return min, max
 }
@@ -421,20 +477,6 @@ func (w *indexedPageWriter) WriteValue(value Value) error {
 	if err != nil {
 		return err
 	}
-
-	if w.count == 0 {
-		w.min = value
-		w.max = value
-	} else {
-		typ := w.Type()
-		if typ.Less(value, w.min) {
-			w.min = value
-		}
-		if typ.Less(w.max, value) {
-			w.max = value
-		}
-	}
-
 	w.values = append(w.values, int32(i))
 	w.count++
 	return nil
@@ -442,15 +484,47 @@ func (w *indexedPageWriter) WriteValue(value Value) error {
 
 func (w *indexedPageWriter) Flush() error {
 	defer func() { w.values = w.values[:0] }()
+	w.min, w.max = w.bounds()
 	return w.encoder.EncodeInt32(w.values)
 }
 
 func (w *indexedPageWriter) Reset(encoder encoding.Encoder) {
 	w.encoder = encoder
 	w.values = w.values[:0]
-	w.min = Value{}
-	w.max = Value{}
+	w.min = -1
+	w.max = -1
 	w.count = 0
+}
+
+func (w *indexedPageWriter) bounds() (min, max int) {
+	min = w.min
+	max = w.max
+
+	if len(w.values) > 0 {
+		if min < 0 {
+			min = int(w.values[0])
+		}
+		if max < 0 {
+			max = int(w.values[0])
+		}
+
+		typ := w.dict.Type()
+		minValue := w.dict.Index(min)
+		maxValue := w.dict.Index(max)
+
+		for _, index := range w.values {
+			value := w.dict.Index(int(index))
+
+			if typ.Less(value, minValue) {
+				min, minValue = int(index), value
+			}
+			if typ.Less(maxValue, value) {
+				max, maxValue = int(index), value
+			}
+		}
+	}
+
+	return min, max
 }
 
 var (
