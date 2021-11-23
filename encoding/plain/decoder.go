@@ -26,13 +26,6 @@ func (d *Decoder) Encoding() format.Encoding {
 	return format.Plain
 }
 
-func (d *Decoder) Close() error {
-	if d.rle != nil {
-		return d.rle.Close()
-	}
-	return nil
-}
-
 func (d *Decoder) Reset(r io.Reader) {
 	d.reader = r
 

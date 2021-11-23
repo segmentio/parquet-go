@@ -61,21 +61,6 @@ type ColumnPages struct {
 func (c *ColumnPages) Close() error {
 	c.header = nil
 
-	if c.repetitions != nil {
-		c.repetitions.Close()
-		c.repetitions = nil
-	}
-
-	if c.definitions != nil {
-		c.definitions.Close()
-		c.definitions = nil
-	}
-
-	if c.values != nil {
-		c.values.Close()
-		c.values = nil
-	}
-
 	if c.page != nil {
 		releaseCompressedPageReader(c.page)
 		c.page = nil
@@ -102,11 +87,6 @@ func (c *ColumnPages) Err() error {
 func (c *ColumnPages) Next() bool {
 	if c.err != nil {
 		return false
-	}
-
-	if c.values != nil {
-		c.values.Close()
-		c.values = nil
 	}
 
 	if c.data.N > 0 {

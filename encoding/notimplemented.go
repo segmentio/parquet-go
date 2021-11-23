@@ -38,10 +38,6 @@ func (NotImplementedDecoder) Encoding() format.Encoding {
 	return -1
 }
 
-func (NotImplementedDecoder) Close() error {
-	return nil
-}
-
 func (NotImplementedDecoder) Reset(io.Reader) {
 }
 

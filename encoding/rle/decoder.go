@@ -40,10 +40,6 @@ func (d *Decoder) Encoding() format.Encoding {
 	return format.RLE
 }
 
-func (d *Decoder) Close() error {
-	return nil
-}
-
 func (d *Decoder) BitWidth() int {
 	return int(d.bitWidth)
 }

@@ -41,7 +41,6 @@ type Encoder interface {
 }
 
 type Decoder interface {
-	io.Closer
 	Reset(io.Reader)
 	Encoding() format.Encoding
 	DecodeBoolean(data []bool) (int, error)

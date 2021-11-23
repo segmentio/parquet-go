@@ -47,8 +47,6 @@ type decoder struct {
 	rle *rle.Decoder
 }
 
-func (d decoder) Close() error { return d.rle.Close() }
-
 func (d decoder) Reset(r io.Reader) {
 	d.rle.Reset(r)
 	d.rle.SetBitWidth(0)
