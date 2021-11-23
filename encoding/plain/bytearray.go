@@ -67,20 +67,20 @@ func SplitByteArray(buffer []byte) (value, remain []byte) {
 // of PLAIN byte array values.
 func ScanByteArrayList(buffer []byte, limit int, scan func([]byte) error) (int, error) {
 	var remain = limit
+	var err error
+
 	for len(buffer) >= 4 && remain > 0 {
 		n := 4 + ByteArrayLength(buffer)
 		if len(buffer) < n {
-			return limit - remain, fmt.Errorf("invalid PLAIN byte array sequence has value of length %d but only %d bytes remain to be read", n-4, len(buffer)-4)
+			err = fmt.Errorf("invalid PLAIN byte array sequence has value of length %d but only %d bytes remain to be read", n-4, len(buffer)-4)
+			break
 		}
-		if err := scan(buffer[4:n]); err != nil {
-			return limit - remain, err
+		if err = scan(buffer[4:n]); err != nil {
+			break
 		}
 		buffer = buffer[n:]
 		remain--
 	}
-	var err error
-	if len(buffer) != 0 {
-		err = fmt.Errorf("invalid PLAIN byte array sequence has %d trailing bytes", len(buffer))
-	}
+
 	return limit - remain, err
 }

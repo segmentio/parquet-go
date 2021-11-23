@@ -48,6 +48,17 @@ func coalesceBufferPool(p1, p2 BufferPool) BufferPool {
 	return p2
 }
 
+func atLeastOne(size int) int {
+	return atLeast(size, 1)
+}
+
+func atLeast(size, least int) int {
+	if size > least {
+		return size
+	}
+	return least
+}
+
 func validatePositiveInt(optionName string, optionValue int) error {
 	if optionValue > 0 {
 		return nil

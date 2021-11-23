@@ -196,7 +196,7 @@ func newBooleanPageReader(typ Type, decoder encoding.Decoder, bufferSize int) *b
 	return &booleanPageReader{
 		typ:     typ,
 		decoder: decoder,
-		values:  make([]bool, 0, bufferSize),
+		values:  make([]bool, 0, atLeastOne(bufferSize)),
 	}
 }
 
@@ -245,7 +245,7 @@ func newInt32PageReader(typ Type, decoder encoding.Decoder, bufferSize int) *int
 	return &int32PageReader{
 		typ:     typ,
 		decoder: decoder,
-		values:  make([]int32, 0, bufferSize/4),
+		values:  make([]int32, 0, atLeastOne(bufferSize/4)),
 	}
 }
 
@@ -294,7 +294,7 @@ func newInt64PageReader(typ Type, decoder encoding.Decoder, bufferSize int) *int
 	return &int64PageReader{
 		typ:     typ,
 		decoder: decoder,
-		values:  make([]int64, 0, bufferSize/8),
+		values:  make([]int64, 0, atLeastOne(bufferSize/8)),
 	}
 }
 
@@ -343,7 +343,7 @@ func newInt96PageReader(typ Type, decoder encoding.Decoder, bufferSize int) *int
 	return &int96PageReader{
 		typ:     typ,
 		decoder: decoder,
-		values:  make([][12]byte, 0, bufferSize/12),
+		values:  make([][12]byte, 0, atLeastOne(bufferSize/12)),
 	}
 }
 
@@ -392,7 +392,7 @@ func newFloatPageReader(typ Type, decoder encoding.Decoder, bufferSize int) *flo
 	return &floatPageReader{
 		typ:     typ,
 		decoder: decoder,
-		values:  make([]float32, 0, bufferSize/4),
+		values:  make([]float32, 0, atLeastOne(bufferSize/4)),
 	}
 }
 
@@ -441,7 +441,7 @@ func newDoublePageReader(typ Type, decoder encoding.Decoder, bufferSize int) *do
 	return &doublePageReader{
 		typ:     typ,
 		decoder: decoder,
-		values:  make([]float64, 0, bufferSize/8),
+		values:  make([]float64, 0, atLeastOne(bufferSize/8)),
 	}
 }
 
@@ -491,7 +491,7 @@ func newByteArrayPageReader(typ Type, decoder encoding.Decoder, bufferSize int) 
 	return &byteArrayPageReader{
 		typ:     typ,
 		decoder: decoder,
-		values:  make([]byte, bufferSize),
+		values:  make([]byte, atLeast(bufferSize, 4)),
 	}
 }
 
@@ -552,7 +552,7 @@ func newFixedLenByteArrayPageReader(typ Type, decoder encoding.Decoder, bufferSi
 		typ:     typ,
 		decoder: decoder,
 		size:    uint(size),
-		values:  make([]byte, 0, ((bufferSize/size)+1)*size),
+		values:  make([]byte, 0, atLeast((bufferSize/size)*size, size)),
 	}
 }
 

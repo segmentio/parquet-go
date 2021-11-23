@@ -40,7 +40,7 @@ func newBooleanPageWriter(typ Type, encoder encoding.Encoder, bufferSize int) *b
 	return &booleanPageWriter{
 		typ:     typ,
 		encoder: encoder,
-		values:  make([]bool, 0, bufferSize),
+		values:  make([]bool, 0, atLeastOne(bufferSize)),
 	}
 }
 
@@ -117,7 +117,7 @@ func newInt32PageWriter(typ Type, encoder encoding.Encoder, bufferSize int) *int
 	return &int32PageWriter{
 		typ:     typ,
 		encoder: encoder,
-		values:  make([]int32, 0, bufferSize/4),
+		values:  make([]int32, 0, atLeastOne(bufferSize/4)),
 	}
 }
 
@@ -204,7 +204,7 @@ func newInt64PageWriter(typ Type, encoder encoding.Encoder, bufferSize int) *int
 	return &int64PageWriter{
 		typ:     typ,
 		encoder: encoder,
-		values:  make([]int64, 0, bufferSize/8),
+		values:  make([]int64, 0, atLeastOne(bufferSize/8)),
 	}
 }
 
@@ -291,7 +291,7 @@ func newInt96PageWriter(typ Type, encoder encoding.Encoder, bufferSize int) *int
 	return &int96PageWriter{
 		typ:     typ,
 		encoder: encoder,
-		values:  make([]int96, 0, bufferSize/12),
+		values:  make([]int96, 0, atLeastOne(bufferSize/12)),
 	}
 }
 
@@ -378,7 +378,7 @@ func newFloatPageWriter(typ Type, encoder encoding.Encoder, bufferSize int) *flo
 	return &floatPageWriter{
 		typ:     typ,
 		encoder: encoder,
-		values:  make([]float32, 0, bufferSize/4),
+		values:  make([]float32, 0, atLeastOne(bufferSize/4)),
 	}
 }
 
@@ -465,7 +465,7 @@ func newDoublePageWriter(typ Type, encoder encoding.Encoder, bufferSize int) *do
 	return &doublePageWriter{
 		typ:     typ,
 		encoder: encoder,
-		values:  make([]float64, 0, bufferSize/8),
+		values:  make([]float64, 0, atLeastOne(bufferSize/8)),
 	}
 }
 
@@ -551,7 +551,7 @@ func newByteArrayPageWriter(typ Type, encoder encoding.Encoder, bufferSize int) 
 	return &byteArrayPageWriter{
 		typ:     typ,
 		encoder: encoder,
-		values:  make([]byte, 0, bufferSize),
+		values:  make([]byte, 0, atLeast(bufferSize, 4)),
 	}
 }
 
@@ -655,7 +655,7 @@ func newFixedLenByteArrayPageWriter(typ Type, encoder encoding.Encoder, bufferSi
 		typ:     typ,
 		encoder: encoder,
 		size:    size,
-		data:    make([]byte, 0, (bufferSize/size)*size),
+		data:    make([]byte, 0, atLeast((bufferSize/size)*size, size)),
 		min:     make([]byte, size),
 		max:     make([]byte, size),
 	}
@@ -776,7 +776,7 @@ func newUint32PageWriter(typ Type, encoder encoding.Encoder, bufferSize int) *ui
 	return &uint32PageWriter{
 		typ:     typ,
 		encoder: encoder,
-		values:  make([]uint32, 0, bufferSize/4),
+		values:  make([]uint32, 0, atLeastOne(bufferSize/4)),
 	}
 }
 
@@ -863,7 +863,7 @@ func newUint64PageWriter(typ Type, encoder encoding.Encoder, bufferSize int) *ui
 	return &uint64PageWriter{
 		typ:     typ,
 		encoder: encoder,
-		values:  make([]uint64, 0, bufferSize/8),
+		values:  make([]uint64, 0, atLeastOne(bufferSize/8)),
 	}
 }
 

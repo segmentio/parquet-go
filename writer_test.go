@@ -29,17 +29,20 @@ func scanParquetColumns(col *parquet.Column) error {
 
 	for chunks.Next() {
 		pages := chunks.Pages()
+		dictionary := (parquet.Dictionary)(nil)
 
 		for pages.Next() {
 			switch header := pages.PageHeader().(type) {
 			case parquet.DictionaryPageHeader:
-				fmt.Println(header)
+				decoder := header.Encoding().NewDecoder(pages.PageData())
+				dictionary = col.Type().NewDictionary(0)
 
-			case parquet.DataPageHeaderV1:
-				fmt.Println(header)
+				if err := dictionary.ReadFrom(decoder); err != nil {
+					return err
+				}
 
-			case parquet.DataPageHeaderV2:
-				fmt.Println(header)
+			case parquet.DataPageHeader:
+				//decoder := header.Encoding().NewDecoder(pages.PageData())
 
 			default:
 				return fmt.Errorf("unsupported page header type: %#v", header)

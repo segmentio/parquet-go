@@ -2,6 +2,7 @@ package parquet
 
 import (
 	"fmt"
+	"io"
 	"math"
 
 	"github.com/google/uuid"
@@ -26,56 +27,53 @@ type Dictionary interface {
 	Type() Type
 
 	// Returns the dictionary keys (plain encoded).
+	//
+	// TODO: remove
 	Keys() []byte
 
-	// Returns the number of key indexed in the dictionary.
+	// Returns the number of value indexed in the dictionary.
 	Len() int
 
-	// Returns the dictionary key at the given index.
+	// Returns the dictionary value at the given index.
 	Index(int) Value
 
 	// Inserts a value to the dictionary, returning the index at which it was
 	// recorded.
 	Insert(Value) (int, error)
 
-	// Resets the dictionary to its initial state, removing all keys and values.
+	// Reads the dictionary from the decoder passed as argument.
+	//
+	// The dictionary is cleared prior to loading the values so that its final
+	// content contains only the entries read from the decoder.
+	ReadFrom(encoding.Decoder) error
+
+	// Wrties the dictionary to the encoder passed as argument.
+	WriteTo(encoding.Encoder) error
+
+	// Resets the dictionary to its initial state, removing all values.
 	Reset()
 }
 
 // The boolean dictionary always contains two values for true and false.
-// Its PLAIN encoding is actually using RLE since we are writing bit-packed
-// boolean values; which is inlined as a constant in the constructor.
 type booleanDictionary struct {
-	typ  Type
-	keys [8]byte
+	typ    Type
+	values [2]bool
 }
 
 func newBooleanDictionary(typ Type) *booleanDictionary {
 	return &booleanDictionary{
-		typ: typ,
-		keys: [8]byte{
-			// rle-bit-packed-hybrid: <length> <encoded-data>
-			0: 4,
-			1: 0,
-			2: 0,
-			3: 0,
-			// rle-run := <rle-header> <repeated-value>
-			// rle-header := varint-encode( (rle-run-len) << 1)
-			4: 1 << 1,
-			5: 0,
-			6: 1 << 1,
-			7: 1,
-		},
+		typ:    typ,
+		values: [2]bool{false, true},
 	}
 }
 
 func (d *booleanDictionary) Type() Type { return d.typ }
 
-func (d *booleanDictionary) Keys() []byte { return d.keys[:] }
+func (d *booleanDictionary) Keys() []byte { return nil }
 
 func (d *booleanDictionary) Len() int { return 2 }
 
-func (d *booleanDictionary) Index(i int) Value { return makeValueBoolean(d.keys[5+(2*i)] != 0) }
+func (d *booleanDictionary) Index(i int) Value { return makeValueBoolean(d.values[i]) }
 
 func (d *booleanDictionary) Insert(v Value) (int, error) {
 	if v.Boolean() {
@@ -85,96 +83,190 @@ func (d *booleanDictionary) Insert(v Value) (int, error) {
 	}
 }
 
-func (d *booleanDictionary) Reset() {}
+func (d *booleanDictionary) ReadFrom(decoder encoding.Decoder) error {
+	_, err := decoder.DecodeBoolean(d.values[:])
+	d.Reset()
+	if err != nil {
+		if err == io.EOF {
+			err = nil
+		} else {
+			err = fmt.Errorf("reading parquet dictionary of boolean values: %w", err)
+		}
+	}
+	return err
+}
+
+func (d *booleanDictionary) WriteTo(encoder encoding.Encoder) error {
+	if err := encoder.EncodeBoolean(d.values[:]); err != nil {
+		return fmt.Errorf("writing parquet dictionary of %d boolean values: %w", d.Len(), err)
+	}
+	return nil
+}
+
+func (d *booleanDictionary) Reset() {
+	d.values = [2]bool{false, true}
+}
 
 type int32Dictionary struct {
-	typ   Type
-	keys  []int32
-	index map[int32]int32
+	typ    Type
+	values []int32
+	index  map[int32]int32
 }
 
 func newInt32Dictionary(typ Type, bufferSize int) *int32Dictionary {
-	const keysItemSize = 4
+	const valueItemSize = 4
 	const indexItemSize = 4 + 4 + mapSizeOverheadPerItem
-	capacity := bufferSize / (keysItemSize + indexItemSize)
+	capacity := bufferSize / (valueItemSize + indexItemSize)
 	return &int32Dictionary{
-		typ:   typ,
-		keys:  make([]int32, 0, capacity),
-		index: make(map[int32]int32, capacity),
+		typ:    typ,
+		values: make([]int32, 0, capacity),
 	}
 }
 
 func (d *int32Dictionary) Type() Type { return d.typ }
 
-func (d *int32Dictionary) Keys() []byte { return bits.Int32ToBytes(d.keys) }
+func (d *int32Dictionary) Keys() []byte { return bits.Int32ToBytes(d.values) }
 
-func (d *int32Dictionary) Len() int { return len(d.keys) }
+func (d *int32Dictionary) Len() int { return len(d.values) }
 
-func (d *int32Dictionary) Index(i int) Value { return makeValueInt32(d.keys[i]) }
+func (d *int32Dictionary) Index(i int) Value { return makeValueInt32(d.values[i]) }
 
 func (d *int32Dictionary) Insert(v Value) (int, error) { return d.insert(v.Int32()) }
 
-func (d *int32Dictionary) insert(key int32) (int, error) {
-	if index, exists := d.index[key]; exists {
+func (d *int32Dictionary) insert(value int32) (int, error) {
+	if index, exists := d.index[value]; exists {
 		return int(index), nil
 	}
-	index := len(d.keys)
-	d.index[key] = int32(index)
-	d.keys = append(d.keys, key)
+	if d.index == nil {
+		d.index = make(map[int32]int32, cap(d.values))
+	}
+	index := len(d.values)
+	d.index[value] = int32(index)
+	d.values = append(d.values, value)
 	return index, nil
 }
 
-func (d *int32Dictionary) Reset() {
-	d.keys = d.keys[:0]
+func (d *int32Dictionary) ReadFrom(decoder encoding.Decoder) error {
+	d.Reset()
 
-	for key := range d.index {
-		delete(d.index, key)
+	if cap(d.values) == 0 {
+		d.values = make([]int32, 0, encoding.DefaultBufferSize/4)
+	}
+
+	for {
+		if len(d.values) == cap(d.values) {
+			newValues := make([]int32, len(d.values), 2*cap(d.values))
+			copy(newValues, d.values)
+			d.values = newValues
+		}
+
+		n, err := decoder.DecodeInt32(d.values[len(d.values):cap(d.values)])
+		if n > 0 {
+			d.values = d.values[:len(d.values)+n]
+		}
+
+		if err != nil {
+			if err == io.EOF {
+				err = nil
+			} else {
+				err = fmt.Errorf("reading parquet dictionary of int32 values: %w", err)
+			}
+			return err
+		}
 	}
 }
 
+func (d *int32Dictionary) WriteTo(encoder encoding.Encoder) error {
+	if err := encoder.EncodeInt32(d.values); err != nil {
+		return fmt.Errorf("writing parquet dictionary of %d int32 values: %w", d.Len(), err)
+	}
+	return nil
+}
+
+func (d *int32Dictionary) Reset() {
+	d.values = d.values[:0]
+	d.index = nil
+}
+
 type int64Dictionary struct {
-	typ   Type
-	keys  []int64
-	index map[int64]int32
+	typ    Type
+	values []int64
+	index  map[int64]int32
 }
 
 func newInt64Dictionary(typ Type, bufferSize int) *int64Dictionary {
-	const keysItemSize = 8
+	const valueItemSize = 8
 	const indexItemSize = 8 + 4 + mapSizeOverheadPerItem
-	capacity := bufferSize / (keysItemSize + indexItemSize)
+	capacity := bufferSize / (valueItemSize + indexItemSize)
 	return &int64Dictionary{
-		typ:   typ,
-		keys:  make([]int64, 0, capacity),
-		index: make(map[int64]int32, capacity),
+		typ:    typ,
+		values: make([]int64, 0, capacity),
 	}
 }
 
 func (d *int64Dictionary) Type() Type { return d.typ }
 
-func (d *int64Dictionary) Keys() []byte { return bits.Int64ToBytes(d.keys) }
+func (d *int64Dictionary) Keys() []byte { return bits.Int64ToBytes(d.values) }
 
-func (d *int64Dictionary) Len() int { return len(d.keys) }
+func (d *int64Dictionary) Len() int { return len(d.values) }
 
-func (d *int64Dictionary) Index(i int) Value { return makeValueInt64(d.keys[i]) }
+func (d *int64Dictionary) Index(i int) Value { return makeValueInt64(d.values[i]) }
 
 func (d *int64Dictionary) Insert(v Value) (int, error) { return d.insert(v.Int64()) }
 
-func (d *int64Dictionary) insert(key int64) (int, error) {
-	if index, exists := d.index[key]; exists {
+func (d *int64Dictionary) insert(value int64) (int, error) {
+	if index, exists := d.index[value]; exists {
 		return int(index), nil
 	}
-	index := len(d.keys)
-	d.index[key] = int32(index)
-	d.keys = append(d.keys, key)
+	if d.index == nil {
+		d.index = make(map[int64]int32, cap(d.values))
+	}
+	index := len(d.values)
+	d.index[value] = int32(index)
+	d.values = append(d.values, value)
 	return index, nil
 }
 
-func (d *int64Dictionary) Reset() {
-	d.keys = d.keys[:0]
+func (d *int64Dictionary) ReadFrom(decoder encoding.Decoder) error {
+	d.Reset()
 
-	for key := range d.index {
-		delete(d.index, key)
+	if cap(d.values) == 0 {
+		d.values = make([]int64, 0, encoding.DefaultBufferSize/8)
 	}
+
+	for {
+		if len(d.values) == cap(d.values) {
+			newValues := make([]int64, len(d.values), 2*cap(d.values))
+			copy(newValues, d.values)
+			d.values = newValues
+		}
+
+		n, err := decoder.DecodeInt64(d.values[len(d.values):cap(d.values)])
+		if n > 0 {
+			d.values = d.values[:len(d.values)+n]
+		}
+
+		if err != nil {
+			if err == io.EOF {
+				err = nil
+			} else {
+				err = fmt.Errorf("reading parquet dictionary of int64 values: %w", err)
+			}
+			return err
+		}
+	}
+}
+
+func (d *int64Dictionary) WriteTo(encoder encoding.Encoder) error {
+	if err := encoder.EncodeInt64(d.values); err != nil {
+		return fmt.Errorf("writing parquet dictionary of %d int64 values: %w", d.Len(), err)
+	}
+	return nil
+}
+
+func (d *int64Dictionary) Reset() {
+	d.values = d.values[:0]
+	d.index = nil
 }
 
 type int96Dictionary struct{ *fixedLenByteArrayDictionary }
@@ -184,7 +276,7 @@ func newInt96Dictionary(typ Type, bufferSize int) int96Dictionary {
 }
 
 func (d int96Dictionary) Index(i int) Value {
-	return makeValueInt96(*(*int96)(d.key(i)))
+	return makeValueInt96(*(*int96)(d.value(i)))
 }
 
 type floatDictionary struct{ *int32Dictionary }
@@ -194,7 +286,7 @@ func newFloatDictionary(typ Type, bufferSize int) floatDictionary {
 }
 
 func (d floatDictionary) Index(i int) Value {
-	return makeValueFloat(math.Float32frombits(uint32(d.keys[i])))
+	return makeValueFloat(math.Float32frombits(uint32(d.values[i])))
 }
 
 func (d floatDictionary) Insert(v Value) (int, error) {
@@ -208,7 +300,7 @@ func newDoubleDictionary(typ Type, bufferSize int) doubleDictionary {
 }
 
 func (d doubleDictionary) Index(i int) Value {
-	return makeValueDouble(math.Float64frombits(uint64(d.keys[i])))
+	return makeValueDouble(math.Float64frombits(uint64(d.values[i])))
 }
 
 func (d doubleDictionary) Insert(v Value) (int, error) {
@@ -217,33 +309,32 @@ func (d doubleDictionary) Insert(v Value) (int, error) {
 
 type byteArrayDictionary struct {
 	typ    Type
-	keys   []byte
+	values []byte
 	offset []int32
 	index  map[string]int32
 }
 
 func newByteArrayDictionary(typ Type, bufferSize int) *byteArrayDictionary {
-	const keysItemSize = 20
+	const valueItemSize = 20
 	const offsetItemsize = 4
 	const indexItemSize = 16 + 4 + mapSizeOverheadPerItem
-	capacity := bufferSize / (keysItemSize + offsetItemsize + indexItemSize)
+	capacity := bufferSize / (valueItemSize + offsetItemsize + indexItemSize)
 	return &byteArrayDictionary{
 		typ:    typ,
-		keys:   make([]byte, 0, capacity),
+		values: make([]byte, 0, capacity*valueItemSize),
 		offset: make([]int32, 0, capacity),
-		index:  make(map[string]int32, capacity),
 	}
 }
 
 func (d *byteArrayDictionary) Type() Type { return d.typ }
 
-func (d *byteArrayDictionary) Keys() []byte { return d.keys }
+func (d *byteArrayDictionary) Keys() []byte { return d.values }
 
 func (d *byteArrayDictionary) Len() int { return len(d.offset) }
 
 func (d *byteArrayDictionary) Index(i int) Value {
 	offset := d.offset[i]
-	value, _ := plain.SplitByteArray(d.keys[offset:])
+	value, _ := plain.SplitByteArray(d.values[offset:])
 	return makeValueBytes(ByteArray, value)
 }
 
@@ -251,35 +342,86 @@ func (d *byteArrayDictionary) Insert(v Value) (int, error) {
 	return d.insert(v.ByteArray())
 }
 
-func (d *byteArrayDictionary) insert(key []byte) (int, error) {
-	if index, exists := d.index[string(key)]; exists {
+func (d *byteArrayDictionary) insert(value []byte) (int, error) {
+	if index, exists := d.index[string(value)]; exists {
 		return int(index), nil
 	}
 
-	offset := len(d.keys)
-	d.keys = plain.AppendByteArray(d.keys, key)
-	stringKey := bits.BytesToString(d.keys[offset+4:])
+	offset := len(d.values)
+	d.values = plain.AppendByteArray(d.values, value)
+	stringValue := bits.BytesToString(d.values[offset+4:])
 
+	if d.index == nil {
+		d.index = make(map[string]int32, cap(d.offset))
+	}
 	index := len(d.offset)
-	d.index[stringKey] = int32(index)
+	d.index[stringValue] = int32(index)
 	d.offset = append(d.offset, int32(offset))
 	return index, nil
 }
 
-func (d *byteArrayDictionary) Reset() {
-	d.keys = d.keys[:0]
-	d.offset = d.offset[:0]
+func (d *byteArrayDictionary) ReadFrom(decoder encoding.Decoder) error {
+	d.Reset()
 
-	for key := range d.index {
-		delete(d.index, key)
+	if cap(d.values) == 0 {
+		d.values = make([]byte, 0, encoding.DefaultBufferSize)
+	}
+
+	for {
+		if (cap(d.values) - len(d.values)) < 4 {
+			newValues := make([]byte, len(d.values), bits.NearestPowerOfTwo(len(d.values)+4))
+			copy(newValues, d.values)
+			d.values = newValues
+		}
+
+		buffer := d.values[len(d.values):cap(d.values)]
+		n, err := decoder.DecodeByteArray(buffer)
+		if n > 0 {
+			offset := len(d.values)
+			_, err := plain.ScanByteArrayList(buffer, n, func(value []byte) error {
+				d.offset = append(d.offset, int32(offset))
+				offset += 4 + len(value)
+				return nil
+			})
+			d.values = d.values[:offset]
+			if err != nil {
+				return fmt.Errorf("reading parquet dictionary of binary values: %w", err)
+			}
+		}
+
+		switch err {
+		case nil:
+		case io.EOF:
+			return nil
+		case encoding.ErrValueTooLarge:
+			size := 4 + uint32(plain.ByteArrayLength(d.values[len(d.values):len(d.values)+4]))
+			newValues := make([]byte, len(d.values), bits.NearestPowerOfTwo32(size))
+			copy(newValues, d.values)
+			d.values = newValues
+		default:
+			return fmt.Errorf("reading parquet dictionary of binary values: %w", err)
+		}
 	}
 }
 
+func (d *byteArrayDictionary) WriteTo(encoder encoding.Encoder) error {
+	if err := encoder.EncodeByteArray(d.values); err != nil {
+		return fmt.Errorf("writing parquet dictionary of %d binary values: %w", d.Len(), err)
+	}
+	return nil
+}
+
+func (d *byteArrayDictionary) Reset() {
+	d.values = d.values[:0]
+	d.offset = d.offset[:0]
+	d.index = nil
+}
+
 type fixedLenByteArrayDictionary struct {
-	typ   Type
-	size  int
-	keys  []byte
-	index map[string]int32
+	typ    Type
+	size   int
+	values []byte
+	index  map[string]int32
 }
 
 func newFixedLenByteArrayDictionary(typ Type, bufferSize int) *fixedLenByteArrayDictionary {
@@ -287,48 +429,84 @@ func newFixedLenByteArrayDictionary(typ Type, bufferSize int) *fixedLenByteArray
 	size := typeSizeOf(typ)
 	capacity := bufferSize / (size + indexItemSize)
 	return &fixedLenByteArrayDictionary{
-		typ:   typ,
-		size:  size,
-		keys:  make([]byte, 0, capacity*size),
-		index: make(map[string]int32, capacity),
+		typ:    typ,
+		size:   size,
+		values: make([]byte, 0, capacity*size),
 	}
 }
 
 func (d *fixedLenByteArrayDictionary) Type() Type { return d.typ }
 
-func (d *fixedLenByteArrayDictionary) Keys() []byte { return d.keys }
+func (d *fixedLenByteArrayDictionary) Keys() []byte { return d.values }
 
-func (d *fixedLenByteArrayDictionary) Len() int { return len(d.keys) / d.size }
+func (d *fixedLenByteArrayDictionary) Len() int { return len(d.values) / d.size }
 
 func (d *fixedLenByteArrayDictionary) Index(i int) Value {
-	return makeValueBytes(FixedLenByteArray, d.key(i))
+	return makeValueBytes(FixedLenByteArray, d.value(i))
 }
 
-func (d *fixedLenByteArrayDictionary) key(i int) []byte {
-	return d.keys[i*d.size : (i+1)*d.size]
+func (d *fixedLenByteArrayDictionary) value(i int) []byte {
+	return d.values[i*d.size : (i+1)*d.size]
 }
 
 func (d *fixedLenByteArrayDictionary) Insert(v Value) (int, error) {
 	return d.insert(v.ByteArray())
 }
 
-func (d *fixedLenByteArrayDictionary) insert(key []byte) (int, error) {
-	if index, exists := d.index[string(key)]; exists {
+func (d *fixedLenByteArrayDictionary) insert(value []byte) (int, error) {
+	if index, exists := d.index[string(value)]; exists {
 		return int(index), nil
 	}
+	if d.index == nil {
+		d.index = make(map[string]int32, cap(d.values)/d.size)
+	}
 	i := d.Len()
-	n := len(d.keys)
-	d.keys = append(d.keys, key...)
-	d.index[bits.BytesToString(d.keys[n:])] = int32(i)
+	n := len(d.values)
+	d.values = append(d.values, value...)
+	d.index[bits.BytesToString(d.values[n:])] = int32(i)
 	return i, nil
 }
 
-func (d *fixedLenByteArrayDictionary) Reset() {
-	d.keys = d.keys[:0]
+func (d *fixedLenByteArrayDictionary) ReadFrom(decoder encoding.Decoder) error {
+	d.Reset()
 
-	for key := range d.index {
-		delete(d.index, key)
+	if cap(d.values) == 0 {
+		d.values = make([]byte, 0, ((encoding.DefaultBufferSize/d.size)+1)*d.size)
 	}
+
+	for {
+		if len(d.values) == cap(d.values) {
+			newValues := make([]byte, len(d.values), 2*cap(d.values))
+			copy(newValues, d.values)
+			d.values = newValues
+		}
+
+		n, err := decoder.DecodeFixedLenByteArray(d.size, d.values[len(d.values):cap(d.values)])
+		if n > 0 {
+			d.values = d.values[:len(d.values)+(n*d.size)]
+		}
+
+		if err != nil {
+			if err == io.EOF {
+				err = nil
+			} else {
+				err = fmt.Errorf("reading parquet dictionary of fixed-length binary values of size %d: %w", d.size, err)
+			}
+			return err
+		}
+	}
+}
+
+func (d *fixedLenByteArrayDictionary) WriteTo(encoder encoding.Encoder) error {
+	if err := encoder.EncodeFixedLenByteArray(d.size, d.values); err != nil {
+		return fmt.Errorf("writing parquet dictionary of %d fixed-length binary values of size %d: %w", d.Len(), d.size, err)
+	}
+	return nil
+}
+
+func (d *fixedLenByteArrayDictionary) Reset() {
+	d.values = d.values[:0]
+	d.index = nil
 }
 
 type uuidDictionary struct{ *fixedLenByteArrayDictionary }

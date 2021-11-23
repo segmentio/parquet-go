@@ -28,12 +28,13 @@ type ColumnPages struct {
 	protocol thrift.CompactProtocol
 	decoder  thrift.Decoder
 
-	data             io.LimitedReader
-	page             *compressedPageReader
-	repetitionLevels io.Reader
-	definitionLevels io.Reader
-	pageData         io.Reader
-	pageHeader       PageHeader
+	data               io.LimitedReader
+	page               *compressedPageReader
+	repetitionLevels   io.Reader
+	definitionLevels   io.Reader
+	compressedPageData io.Reader
+	pageData           io.Reader
+	pageHeader         PageHeader
 
 	v1 struct {
 		repetitions dataPageLevelV1
@@ -134,6 +135,7 @@ func (c *ColumnPages) Next() bool {
 			c.page = initCompressedPage(c.page, c.codec, &c.data)
 			c.pageData = c.page
 		}
+		c.compressedPageData = &c.data
 		c.pageHeader = DictionaryPageHeader{header.DictionaryPageHeader}
 
 	case format.DataPage:
@@ -144,6 +146,7 @@ func (c *ColumnPages) Next() bool {
 			c.pageData = c.page
 		}
 		c.err = c.initDataPageV1(c.pageData)
+		c.compressedPageData = c.pageData
 		c.pageHeader = DataPageHeaderV1{header.DataPageHeader}
 
 	case format.DataPageV2:
@@ -162,11 +165,13 @@ func (c *ColumnPages) Next() bool {
 				c.pageData = c.page
 			}
 		}
+		c.compressedPageData = &c.data
 		c.pageHeader = DataPageHeaderV2{header.DataPageHeaderV2}
 
 	default:
 		c.repetitionLevels = emptyReader{}
 		c.definitionLevels = emptyReader{}
+		c.compressedPageData = &c.data
 		c.pageData = &c.data
 		c.pageHeader = unknownPageHeader{header}
 		c.err = fmt.Errorf("cannot decode page of type %s", header.Type)
@@ -181,6 +186,10 @@ func (c *ColumnPages) RepetitionLevels() io.Reader {
 
 func (c *ColumnPages) DefinitionLevels() io.Reader {
 	return c.definitionLevels
+}
+
+func (c *ColumnPages) CompressedPageData() io.Reader {
+	return c.compressedPageData
 }
 
 func (c *ColumnPages) PageData() io.Reader {
