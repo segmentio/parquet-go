@@ -26,57 +26,29 @@ func scanParquetFile(f *os.File) error {
 
 func scanParquetColumns(col *parquet.Column) error {
 	chunks := col.Chunks()
-	defer chunks.Close()
 
 	for chunks.Next() {
-		pages := chunks.DataPages()
+		pages := chunks.Pages()
 
 		for pages.Next() {
-			numValues := pages.NumValues()
-			repetitions := make([]int8, numValues)
-			definitions := make([]int8, numValues)
+			switch header := pages.PageHeader().(type) {
+			case parquet.DictionaryPageHeader:
+				fmt.Println(header)
 
-			var n int
-			var err error
-			var typ = col.Type()
+			case parquet.DataPageHeaderV1:
+				fmt.Println(header)
 
-			switch typ.Kind() {
-			case parquet.Boolean:
-				n, err = pages.DecodeBoolean(repetitions, definitions, make([]bool, numValues))
-			case parquet.Int32:
-				n, err = pages.DecodeInt32(repetitions, definitions, make([]int32, numValues))
-			case parquet.Int64:
-				n, err = pages.DecodeInt64(repetitions, definitions, make([]int64, numValues))
-			case parquet.Int96:
-				n, err = pages.DecodeInt96(repetitions, definitions, make([][12]byte, numValues))
-			case parquet.Float:
-				n, err = pages.DecodeFloat(repetitions, definitions, make([]float32, numValues))
-			case parquet.Double:
-				n, err = pages.DecodeDouble(repetitions, definitions, make([]float64, numValues))
-			case parquet.ByteArray:
-				//n, err = pages.DecodeByteArray(repetitions, definitions, make([][]byte, numValues))
-			case parquet.FixedLenByteArray:
-				n, err = pages.DecodeFixedLenByteArray(repetitions, definitions, make([]byte, typ.Length()*numValues))
-			}
+			case parquet.DataPageHeaderV2:
+				fmt.Println(header)
 
-			_ = n
-
-			if err != nil {
-				return err
+			default:
+				return fmt.Errorf("unsupported page header type: %#v", header)
 			}
 
 			if err := pages.Err(); err != nil {
 				return err
 			}
 		}
-
-		if err := pages.Close(); err != nil {
-			return err
-		}
-	}
-
-	if err := chunks.Close(); err != nil {
-		return err
 	}
 
 	for _, child := range col.Columns() {
@@ -110,9 +82,9 @@ func generateParquetFile(dataPageVersion int, rows ...interface{}) ([]byte, erro
 		return nil, err
 	}
 
-	// if err := scanParquetFile(tmp); err != nil {
-	// 	return nil, err
-	// }
+	if err := scanParquetFile(tmp); err != nil {
+		return nil, err
+	}
 
 	return parquetTools("dump", path)
 }

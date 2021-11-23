@@ -34,6 +34,13 @@ func coalesceString(s1, s2 string) string {
 	return s2
 }
 
+func coalesceBytes(b1, b2 []byte) []byte {
+	if b1 != nil {
+		return b1
+	}
+	return b2
+}
+
 func coalesceBufferPool(p1, p2 BufferPool) BufferPool {
 	if p1 != nil {
 		return p1

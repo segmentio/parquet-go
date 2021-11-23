@@ -108,11 +108,11 @@ func (c *Column) Depth() int { return int(c.depth) }
 
 // MaxRepetitionLevel returns the maximum value of repetition levels on this
 // column.
-func (c *Column) MaxRepetitionLevel() int { return int(c.maxRepetitionLevel) }
+func (c *Column) MaxRepetitionLevel() int8 { return c.maxRepetitionLevel }
 
 // MaxDefinitionLevel returns the maximum value of definition levels on this
 // column.
-func (c *Column) MaxDefinitionLevel() int { return int(c.maxDefinitionLevel) }
+func (c *Column) MaxDefinitionLevel() int8 { return c.maxDefinitionLevel }
 
 // String returns a human-redable string representation of the oclumn.
 func (c *Column) String() string {

@@ -21,11 +21,13 @@ type ColumnChunks struct {
 	err error
 }
 
-// Close closes the iterator, positioning it at the end of the column chunk
-// sequence, and returns the last error it ecountered.
-func (c *ColumnChunks) Close() error {
+func (c *ColumnChunks) close(err error) {
 	c.index = len(c.column.chunks)
-	c.metadata = nil
+	c.err = err
+}
+
+// Err returns the last error observed by the column chunk iterator.
+func (c *ColumnChunks) Err() error {
 	return c.err
 }
 
@@ -50,7 +52,7 @@ func (c *ColumnChunks) Next() bool {
 		return true
 	}
 
-	c.setError(fmt.Errorf("remote column data are not supported: %s", chunk.FilePath))
+	c.close(fmt.Errorf("remote column data are not supported: %s", chunk.FilePath))
 	return false
 
 	// This is a sketch of what the code would look like when we support
@@ -90,26 +92,11 @@ func (c *ColumnChunks) Chunk() *format.ColumnChunk {
 	return nil
 }
 
-// MetaData returns the column metadata for the chunk that the iterator is
-// currently positioned at. The method returns nil after the iterator reached
-// the end or encountered an error.
-func (c *ColumnChunks) MetaData() *format.ColumnMetaData {
-	return c.metadata
-}
-
 // DataPages returns an iterator over the data pages in the column chunk that
 // the iterator is currently positioned at.
-func (c *ColumnChunks) DataPages() *ColumnPages {
+func (c *ColumnChunks) Pages() *ColumnPages {
 	if c.metadata != nil {
-		return &ColumnPages{
-			column:   c.column,
-			metadata: c.metadata,
-		}
+		return newColumnPages(c.column, c.metadata)
 	}
 	return nil
-}
-
-func (c *ColumnChunks) setError(err error) {
-	c.index = len(c.column.chunks)
-	c.err = err
 }
