@@ -31,7 +31,6 @@ func (k Kind) String() string {
 type Type interface {
 	Kind() Kind
 
-	// split Bits + Size
 	Length() int
 
 	Less(Value, Value) bool
@@ -100,6 +99,19 @@ var typeLengths = [...]int32{
 
 	0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37,
 	0x38, 0x39, 0x3A, 0x3B, 0x3C, 0x3D, 0x3E, 0x3F,
+}
+
+func typeBitsOf(t Type) uint {
+	switch t.Kind() {
+	case ByteArray, FixedLenByteArray:
+		return bits.BitCount(t.Length())
+	default:
+		return uint(t.Length())
+	}
+}
+
+func typeSizeOf(t Type) int {
+	return bits.ByteCount(typeBitsOf(t))
 }
 
 func typeLengthOf(t Type) *int32 {

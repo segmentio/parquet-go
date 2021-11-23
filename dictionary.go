@@ -283,11 +283,8 @@ type fixedLenByteArrayDictionary struct {
 }
 
 func newFixedLenByteArrayDictionary(typ Type, bufferSize int) *fixedLenByteArrayDictionary {
-	size := typ.Length()
-	if typ.Kind() != FixedLenByteArray {
-		size = bits.ByteCount(uint(size))
-	}
 	const indexItemSize = 16 + 4 + mapSizeOverheadPerItem
+	size := typeSizeOf(typ)
 	capacity := bufferSize / (size + indexItemSize)
 	return &fixedLenByteArrayDictionary{
 		typ:   typ,
