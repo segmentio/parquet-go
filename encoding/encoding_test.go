@@ -243,7 +243,6 @@ func testBooleanEncoding(t *testing.T, e encoding.Encoding) {
 	enc := e.NewEncoder(buf)
 	dec := e.NewDecoder(buf)
 	tmp := [1]bool{}
-	defer enc.Close()
 
 	for _, test := range booleanTests {
 		t.Run("", func(t *testing.T) {
@@ -257,7 +256,7 @@ func testBooleanEncoding(t *testing.T, e encoding.Encoding) {
 				}
 				t.Fatal("encode:", err)
 			}
-			if err := enc.Close(); err != nil {
+			if err := enc.Flush(); err != nil {
 				t.Fatal("close:", err)
 			}
 
@@ -282,7 +281,6 @@ func testInt32Encoding(t *testing.T, e encoding.Encoding) {
 	enc := e.NewEncoder(buf)
 	dec := e.NewDecoder(buf)
 	tmp := [1]int32{}
-	defer enc.Close()
 
 	for _, test := range int32Tests {
 		t.Run("", func(t *testing.T) {
@@ -300,7 +298,7 @@ func testInt32Encoding(t *testing.T, e encoding.Encoding) {
 				}
 				t.Fatal("encode:", err)
 			}
-			if err := enc.Close(); err != nil {
+			if err := enc.Flush(); err != nil {
 				t.Fatal("close:", err)
 			}
 
@@ -325,7 +323,6 @@ func testInt64Encoding(t *testing.T, e encoding.Encoding) {
 	enc := e.NewEncoder(buf)
 	dec := e.NewDecoder(buf)
 	tmp := [1]int64{}
-	defer enc.Close()
 
 	for _, test := range int64Tests {
 		t.Run("", func(t *testing.T) {
@@ -343,7 +340,7 @@ func testInt64Encoding(t *testing.T, e encoding.Encoding) {
 				}
 				t.Fatal("encode:", err)
 			}
-			if err := enc.Close(); err != nil {
+			if err := enc.Flush(); err != nil {
 				t.Fatal("close:", err)
 			}
 
@@ -368,7 +365,6 @@ func testInt96Encoding(t *testing.T, e encoding.Encoding) {
 	enc := e.NewEncoder(buf)
 	dec := e.NewDecoder(buf)
 	tmp := [1][12]byte{}
-	defer enc.Close()
 
 	for _, test := range int96Tests {
 		t.Run("", func(t *testing.T) {
@@ -386,7 +382,7 @@ func testInt96Encoding(t *testing.T, e encoding.Encoding) {
 				}
 				t.Fatal("encode:", err)
 			}
-			if err := enc.Close(); err != nil {
+			if err := enc.Flush(); err != nil {
 				t.Fatal("close:", err)
 			}
 
@@ -411,7 +407,6 @@ func testFloatEncoding(t *testing.T, e encoding.Encoding) {
 	enc := e.NewEncoder(buf)
 	dec := e.NewDecoder(buf)
 	tmp := [1]float32{}
-	defer enc.Close()
 
 	for _, test := range floatTests {
 		t.Run("", func(t *testing.T) {
@@ -425,7 +420,7 @@ func testFloatEncoding(t *testing.T, e encoding.Encoding) {
 				}
 				t.Fatal("encode:", err)
 			}
-			if err := enc.Close(); err != nil {
+			if err := enc.Flush(); err != nil {
 				t.Fatal("close:", err)
 			}
 
@@ -450,7 +445,6 @@ func testDoubleEncoding(t *testing.T, e encoding.Encoding) {
 	enc := e.NewEncoder(buf)
 	dec := e.NewDecoder(buf)
 	tmp := [1]float64{}
-	defer enc.Close()
 
 	for _, test := range doubleTests {
 		t.Run("", func(t *testing.T) {
@@ -464,7 +458,7 @@ func testDoubleEncoding(t *testing.T, e encoding.Encoding) {
 				}
 				t.Fatal("encode:", err)
 			}
-			if err := enc.Close(); err != nil {
+			if err := enc.Flush(); err != nil {
 				t.Fatal("close:", err)
 			}
 
@@ -489,7 +483,6 @@ func testByteArrayEncoding(t *testing.T, e encoding.Encoding) {
 	enc := e.NewEncoder(buf)
 	dec := e.NewDecoder(buf)
 	tmp := make([]byte, 0, 4096)
-	defer enc.Close()
 
 	for _, test := range byteArrayTests {
 		t.Run("", func(t *testing.T) {
@@ -504,7 +497,7 @@ func testByteArrayEncoding(t *testing.T, e encoding.Encoding) {
 				}
 				t.Fatal("encode:", err)
 			}
-			if err := enc.Close(); err != nil {
+			if err := enc.Flush(); err != nil {
 				t.Fatal("close:", err)
 			}
 
@@ -542,7 +535,6 @@ func testFixedLenByteArrayEncoding(t *testing.T, e encoding.Encoding) {
 	buf := new(bytes.Buffer)
 	enc := e.NewEncoder(buf)
 	dec := e.NewDecoder(buf)
-	defer enc.Close()
 
 	for _, test := range fixedLenByteArrayTests {
 		t.Run("", func(t *testing.T) {
@@ -557,7 +549,7 @@ func testFixedLenByteArrayEncoding(t *testing.T, e encoding.Encoding) {
 				}
 				t.Fatal("encode:", err)
 			}
-			if err := enc.Close(); err != nil {
+			if err := enc.Flush(); err != nil {
 				t.Fatal("close:", err)
 			}
 

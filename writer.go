@@ -595,7 +595,7 @@ func (ccw *columnChunkWriter) Flush() error {
 			ccw.levels.encoder.Reset(&ccw.page.uncompressed)
 			ccw.levels.encoder.SetBitWidth(bits.Len8(ccw.maxRepetitionLevel))
 			ccw.levels.encoder.EncodeInt8(ccw.levels.repetition)
-			ccw.levels.encoder.Close()
+			ccw.levels.encoder.Flush()
 			repetitionLevelsByteLength = int32(ccw.page.uncompressed.length)
 		}
 		if ccw.maxDefinitionLevel > 0 {
@@ -603,7 +603,7 @@ func (ccw *columnChunkWriter) Flush() error {
 			ccw.levels.encoder.Reset(&ccw.page.uncompressed)
 			ccw.levels.encoder.SetBitWidth(bits.Len8(ccw.maxDefinitionLevel))
 			ccw.levels.encoder.EncodeInt8(ccw.levels.definition)
-			ccw.levels.encoder.Close()
+			ccw.levels.encoder.Flush()
 			definitionLevelsByteLength = int32(ccw.page.uncompressed.length)
 		}
 	}
@@ -626,13 +626,13 @@ func (ccw *columnChunkWriter) Flush() error {
 			ccw.levels.encoder.Reset(&ccw.page.uncompressed)
 			ccw.levels.encoder.SetBitWidth(bits.Len8(ccw.maxRepetitionLevel))
 			ccw.levels.encoder.EncodeInt8(ccw.levels.repetition)
-			ccw.levels.encoder.Close()
+			ccw.levels.encoder.Flush()
 		}
 		if ccw.maxDefinitionLevel > 0 {
 			ccw.levels.encoder.Reset(&ccw.page.uncompressed)
 			ccw.levels.encoder.SetBitWidth(bits.Len8(ccw.maxDefinitionLevel))
 			ccw.levels.encoder.EncodeInt8(ccw.levels.definition)
-			ccw.levels.encoder.Close()
+			ccw.levels.encoder.Flush()
 		}
 	}
 
@@ -640,7 +640,7 @@ func (ccw *columnChunkWriter) Flush() error {
 	if err := ccw.values.WriteTo(ccw.page.encoder); err != nil {
 		return err
 	}
-	if err := ccw.page.encoder.Close(); err != nil {
+	if err := ccw.page.encoder.Flush(); err != nil {
 		return err
 	}
 	if err := ccw.page.compressed.Close(); err != nil {

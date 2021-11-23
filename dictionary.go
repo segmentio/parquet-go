@@ -10,6 +10,12 @@ import (
 	"github.com/segmentio/parquet/internal/bits"
 )
 
+const (
+	// Completely arbitrary, feel free to adjust if a different value would be
+	// more representative of the map implementation in Go.
+	mapSizeOverheadPerItem = 8
+)
+
 // The Dictionary interface represents type-specific implementations of parquet
 // dictionaries.
 //
@@ -36,6 +42,9 @@ type Dictionary interface {
 	Reset()
 }
 
+// The boolean dictionary always contains two values for true and false.
+// Its PLAIN encoding is actually using RLE since we are writing bit-packed
+// boolean values; which is inlined as a constant in the constructor.
 type booleanDictionary struct {
 	typ  Type
 	keys [8]byte
@@ -85,11 +94,13 @@ type int32Dictionary struct {
 }
 
 func newInt32Dictionary(typ Type, bufferSize int) *int32Dictionary {
-	bufferSize /= 2
+	const keysItemSize = 4
+	const indexItemSize = 4 + 4 + mapSizeOverheadPerItem
+	capacity := bufferSize / (keysItemSize + indexItemSize)
 	return &int32Dictionary{
 		typ:   typ,
-		keys:  make([]int32, 0, bufferSize/4),
-		index: make(map[int32]int32, bufferSize/4),
+		keys:  make([]int32, 0, capacity),
+		index: make(map[int32]int32, capacity),
 	}
 }
 
@@ -128,11 +139,13 @@ type int64Dictionary struct {
 }
 
 func newInt64Dictionary(typ Type, bufferSize int) *int64Dictionary {
-	bufferSize /= 2
+	const keysItemSize = 8
+	const indexItemSize = 8 + 4 + mapSizeOverheadPerItem
+	capacity := bufferSize / (keysItemSize + indexItemSize)
 	return &int64Dictionary{
 		typ:   typ,
-		keys:  make([]int64, 0, bufferSize/8),
-		index: make(map[int64]int32, bufferSize/8),
+		keys:  make([]int64, 0, capacity),
+		index: make(map[int64]int32, capacity),
 	}
 }
 
@@ -210,11 +223,15 @@ type byteArrayDictionary struct {
 }
 
 func newByteArrayDictionary(typ Type, bufferSize int) *byteArrayDictionary {
+	const keysItemSize = 20
+	const offsetItemsize = 4
+	const indexItemSize = 16 + 4 + mapSizeOverheadPerItem
+	capacity := bufferSize / (keysItemSize + offsetItemsize + indexItemSize)
 	return &byteArrayDictionary{
 		typ:    typ,
-		keys:   make([]byte, 0, bufferSize/4),
-		offset: make([]int32, 0, bufferSize/(4*4)),
-		index:  make(map[string]int32, bufferSize/4),
+		keys:   make([]byte, 0, capacity),
+		offset: make([]int32, 0, capacity),
+		index:  make(map[string]int32, capacity),
 	}
 }
 
@@ -270,13 +287,13 @@ func newFixedLenByteArrayDictionary(typ Type, bufferSize int) *fixedLenByteArray
 	if typ.Kind() != FixedLenByteArray {
 		size = bits.ByteCount(uint(size))
 	}
-	bufferSize /= 2
-	bufferSize = ((bufferSize / size) + 1) * size
+	const indexItemSize = 16 + 4 + mapSizeOverheadPerItem
+	capacity := bufferSize / (size + indexItemSize)
 	return &fixedLenByteArrayDictionary{
 		typ:   typ,
 		size:  size,
-		keys:  make([]byte, 0, bufferSize),
-		index: make(map[string]int32, bufferSize/size),
+		keys:  make([]byte, 0, capacity*size),
+		index: make(map[string]int32, capacity),
 	}
 }
 

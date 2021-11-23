@@ -91,7 +91,7 @@ func (NotImplementedEncoder) Encoding() format.Encoding {
 	return -1
 }
 
-func (NotImplementedEncoder) Close() error {
+func (NotImplementedEncoder) Flush() error {
 	return nil
 }
 

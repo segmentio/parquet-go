@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/segmentio/parquet"
-	"github.com/segmentio/parquet/encoding"
 )
 
 var pageReadWriteTests = []struct {
@@ -169,7 +168,7 @@ func TestPageReadWrite(t *testing.T) {
 							pr.Reset(dec)
 							pw.Reset(enc)
 						}()
-						testPageReadWrite(t, pr, pw, dec, enc, values)
+						testPageReadWrite(t, pr, pw, values)
 					})
 				}
 			})
@@ -191,7 +190,7 @@ func TestPageReadWrite(t *testing.T) {
 							pr.Reset(dec)
 							pw.Reset(enc)
 						}()
-						testPageReadWrite(t, pr, pw, dec, enc, values)
+						testPageReadWrite(t, pr, pw, values)
 					})
 				}
 			})
@@ -199,7 +198,7 @@ func TestPageReadWrite(t *testing.T) {
 	}
 }
 
-func testPageReadWrite(t *testing.T, r parquet.PageReader, w parquet.PageWriter, d encoding.Decoder, e encoding.Encoder, values []interface{}) {
+func testPageReadWrite(t *testing.T, r parquet.PageReader, w parquet.PageWriter, values []interface{}) {
 	typ := r.Type()
 	minValue := parquet.Value{}
 	maxValue := parquet.Value{}
@@ -227,10 +226,6 @@ func testPageReadWrite(t *testing.T, r parquet.PageReader, w parquet.PageWriter,
 
 	if err := w.Flush(); err != nil {
 		t.Fatal("flushing page writer:", err)
-	}
-
-	if err := e.Close(); err != nil {
-		t.Fatal("closing encoder:", err)
 	}
 
 	n := w.NumValues()

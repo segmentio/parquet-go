@@ -31,6 +31,7 @@ func (k Kind) String() string {
 type Type interface {
 	Kind() Kind
 
+	// split Bits + Size
 	Length() int
 
 	Less(Value, Value) bool

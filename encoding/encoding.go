@@ -24,8 +24,8 @@ type Encoding interface {
 }
 
 type Encoder interface {
-	io.Closer
 	Reset(io.Writer)
+	Flush() error
 	Encoding() format.Encoding
 	EncodeBoolean(data []bool) error
 	EncodeInt8(data []int8) error

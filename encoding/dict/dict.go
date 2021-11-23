@@ -96,7 +96,7 @@ type encoder struct {
 	rle *rle.Encoder
 }
 
-func (e encoder) Close() error { return e.rle.Close() }
+func (e encoder) Flush() error { return e.rle.Flush() }
 
 func (e encoder) Reset(w io.Writer) { e.rle.Reset(w) }
 
@@ -122,7 +122,7 @@ func (e encoder) encode(bitWidth int, encode func() error) error {
 	if err := encode(); err != nil {
 		return err
 	}
-	return e.rle.Close()
+	return e.rle.Flush()
 }
 
 func (e encoder) encodeBitWidth(bitWidth int) error {

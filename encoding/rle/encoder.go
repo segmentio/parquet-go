@@ -1,7 +1,6 @@
 package rle
 
 import (
-	"bytes"
 	"encoding/binary"
 	"io"
 
@@ -33,7 +32,7 @@ func (e *Encoder) Encoding() format.Encoding {
 	return format.RLE
 }
 
-func (e *Encoder) Close() error {
+func (e *Encoder) Flush() error {
 	if len(e.data) > 0 {
 		defer e.Reset(e.writer)
 		if err := e.writeLength(); err != nil {
@@ -196,32 +195,9 @@ func forEachRun(data []byte, wordSize int, eq func(a, b []byte) bool, do func([]
 	}
 }
 
-var equalFuncs = [...]func([]byte, []byte) bool{
-	0: equalInt8,
-	1: equalInt16,
-	2: equalInt24,
-	3: equalInt32,
-	4: equalInt40,
-	5: equalInt48,
-	6: equalInt56,
-	7: equalInt64,
-}
-
-func equalFuncOf(bitWidth uint) func([]byte, []byte) bool {
-	if i := (bitWidth / 8) - 1; i < uint(len(equalFuncs)) {
-		return equalFuncs[i]
-	} else {
-		return bytes.Equal
-	}
-}
-
 func equalInt8(a, b []byte) bool  { return a[0] == b[0] }
 func equalInt16(a, b []byte) bool { return *(*[2]byte)(a) == *(*[2]byte)(b) }
-func equalInt24(a, b []byte) bool { return *(*[3]byte)(a) == *(*[3]byte)(b) }
 func equalInt32(a, b []byte) bool { return *(*[4]byte)(a) == *(*[4]byte)(b) }
-func equalInt40(a, b []byte) bool { return *(*[5]byte)(a) == *(*[5]byte)(b) }
-func equalInt48(a, b []byte) bool { return *(*[6]byte)(a) == *(*[6]byte)(b) }
-func equalInt56(a, b []byte) bool { return *(*[7]byte)(a) == *(*[7]byte)(b) }
 func equalInt64(a, b []byte) bool { return *(*[8]byte)(a) == *(*[8]byte)(b) }
 func equalInt96(a, b []byte) bool { return *(*[12]byte)(a) == *(*[12]byte)(b) }
 
@@ -234,7 +210,7 @@ func newLevelEncoderSize(w io.Writer, bufferSize int) levelEncoder {
 	return levelEncoder{NewEncoderSize(w, bufferSize)}
 }
 
-func (e levelEncoder) Close() error {
+func (e levelEncoder) Flush() error {
 	if len(e.data) > 0 {
 		defer e.Reset(e.writer)
 		return e.writeData()

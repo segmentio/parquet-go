@@ -25,9 +25,9 @@ func (e *Encoder) Encoding() format.Encoding {
 	return format.Plain
 }
 
-func (e *Encoder) Close() error {
+func (e *Encoder) Flush() error {
 	if e.rle != nil {
-		return e.rle.Close()
+		return e.rle.Flush()
 	}
 	return nil
 }
