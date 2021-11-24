@@ -1,9 +1,11 @@
 package parquet
 
 import (
+	"fmt"
+	"io"
+
 	"github.com/segmentio/parquet/encoding"
 	"github.com/segmentio/parquet/encoding/plain"
-	"github.com/segmentio/parquet/format"
 	"github.com/segmentio/parquet/internal/bits"
 )
 
@@ -12,27 +14,19 @@ type PageReader interface {
 
 	Type() Type
 
-	NumValues() int
-
-	NumNulls() int
-
-	DistinctCount() int
-
-	Bounds() (min, max Value)
-
 	Reset(encoding.Decoder)
 }
 
-type dataPageReader struct {
-	header             *format.PageHeader
+type DataPageReader struct {
 	page               PageReader
+	remain             int
 	maxRepetitionLevel int8
 	maxDefinitionLevel int8
 	repetition         levelReader
 	definition         levelReader
 }
 
-func newDataPageReader(repetition, definition encoding.Decoder, page PageReader, maxRepetitionLevel, maxDefinitionLevel int8, bufferSize int, header *format.PageHeader) *dataPageReader {
+func NewDataPageReader(repetition, definition encoding.Decoder, numValues int, page PageReader, maxRepetitionLevel, maxDefinitionLevel int8, bufferSize int) *DataPageReader {
 	repetitionBufferSize := 0
 	definitionBufferSize := 0
 
@@ -48,9 +42,11 @@ func newDataPageReader(repetition, definition encoding.Decoder, page PageReader,
 		definitionBufferSize = bufferSize
 	}
 
-	return &dataPageReader{
-		header:             header,
+	repetition.SetBitWidth(bits.Len8(maxRepetitionLevel))
+	definition.SetBitWidth(bits.Len8(maxDefinitionLevel))
+	return &DataPageReader{
 		page:               page,
+		remain:             numValues,
 		maxRepetitionLevel: maxRepetitionLevel,
 		maxDefinitionLevel: maxDefinitionLevel,
 		repetition:         makeLevelReader(repetition, repetitionBufferSize),
@@ -58,94 +54,48 @@ func newDataPageReader(repetition, definition encoding.Decoder, page PageReader,
 	}
 }
 
-func (r *dataPageReader) ReadValue() (Value, error) {
-	// TODO: this is not correct, we need to read the levels first to determine
-	// whether the record in null.
-	v, err := r.page.ReadValue()
-	if err != nil {
-		return v, err
+func (r *DataPageReader) ReadValue() (Value, error) {
+	if r.remain == 0 {
+		return Value{}, io.EOF
 	}
-	if r.maxRepetitionLevel > 0 {
-		v.repetitionLevel, err = r.repetition.ReadLevel()
+
+	var val Value
+	var err error
+	var repetitionLevel int8
+	var definitionLevel int8
+
+	switch {
+	case r.maxRepetitionLevel > 0:
+		repetitionLevel, err = r.repetition.ReadLevel()
 		if err != nil {
-			return v, err
+			return val, fmt.Errorf("reading parquet repetition level: %w", err)
 		}
-	}
-	if r.maxDefinitionLevel > 0 {
-		v.definitionLevel, err = r.definition.ReadLevel()
+		fallthrough
+
+	case r.maxDefinitionLevel > 0:
+		definitionLevel, err = r.definition.ReadLevel()
 		if err != nil {
-			return v, err
+			return val, fmt.Errorf("reading parquet definition level: %w", err)
 		}
 	}
-	return v, nil
-}
 
-func (r *dataPageReader) Type() Type {
-	return r.page.Type()
-}
-
-func (r *dataPageReader) NumValues() int {
-	if r.header != nil {
-		switch r.header.Type {
-		case format.DataPage:
-			return int(r.header.DataPageHeader.NumValues)
-		case format.DataPageV2:
-			return int(r.header.DataPageHeaderV2.NumValues)
-		}
+	if definitionLevel == r.maxDefinitionLevel {
+		val, err = r.page.ReadValue()
 	}
-	return 0
+
+	val.repetitionLevel = repetitionLevel
+	val.definitionLevel = definitionLevel
+	r.remain--
+	return val, err
 }
 
-func (r *dataPageReader) NumNulls() int {
-	if r.header != nil {
-		switch r.header.Type {
-		case format.DataPage:
-			return int(r.header.DataPageHeader.Statistics.NullCount)
-		case format.DataPageV2:
-			return int(r.header.DataPageHeaderV2.NumNulls)
-		}
-	}
-	return 0
-}
-
-func (r *dataPageReader) DistinctCount() int {
-	if stats := r.statistics(); stats != nil {
-		return int(stats.DistinctCount)
-	}
-	return 0
-}
-
-func (r *dataPageReader) Bounds() (min, max Value) {
-	if stats := r.statistics(); stats != nil {
-		t := r.Type()
-		k := t.Kind()
-		min = makeValueKind(k, stats.MinValue)
-		max = makeValueKind(k, stats.MaxValue)
-	}
-	return min, max
-}
-
-func (r *dataPageReader) statistics() *format.Statistics {
-	if r.header != nil {
-		switch r.header.Type {
-		case format.DataPage:
-			return &r.header.DataPageHeader.Statistics
-		case format.DataPageV2:
-			return &r.header.DataPageHeaderV2.Statistics
-		}
-	}
-	return nil
-}
-
-func (r *dataPageReader) Reset(decoder encoding.Decoder) {
-	r.reset(r.repetition.decoder, r.definition.decoder, decoder, nil)
-}
-
-func (r *dataPageReader) reset(repetitionLevelDecoder, definitionLevelDecoder, valueDecoder encoding.Decoder, header *format.PageHeader) {
-	r.header = header
-	r.page.Reset(valueDecoder)
-	r.repetition.Reset(repetitionLevelDecoder)
-	r.definition.Reset(definitionLevelDecoder)
+func (r *DataPageReader) Reset(repetition, definition encoding.Decoder, numValues int, page PageReader) {
+	repetition.SetBitWidth(bits.Len8(r.maxRepetitionLevel))
+	definition.SetBitWidth(bits.Len8(r.maxDefinitionLevel))
+	r.page = page
+	r.remain = numValues
+	r.repetition.Reset(repetition)
+	r.definition.Reset(definition)
 }
 
 type levelReader struct {
@@ -226,14 +176,6 @@ func (r *booleanPageReader) Reset(decoder encoding.Decoder) {
 
 func (r *booleanPageReader) Type() Type { return r.typ }
 
-func (r *booleanPageReader) NumValues() int { return 0 }
-
-func (r *booleanPageReader) NumNulls() int { return 0 }
-
-func (r *booleanPageReader) DistinctCount() int { return 0 }
-
-func (r *booleanPageReader) Bounds() (min, max Value) { return }
-
 type int32PageReader struct {
 	typ     Type
 	decoder encoding.Decoder
@@ -274,14 +216,6 @@ func (r *int32PageReader) Reset(decoder encoding.Decoder) {
 }
 
 func (r *int32PageReader) Type() Type { return r.typ }
-
-func (r *int32PageReader) NumValues() int { return 0 }
-
-func (r *int32PageReader) NumNulls() int { return 0 }
-
-func (r *int32PageReader) DistinctCount() int { return 0 }
-
-func (r *int32PageReader) Bounds() (min, max Value) { return }
 
 type int64PageReader struct {
 	typ     Type
@@ -324,14 +258,6 @@ func (r *int64PageReader) Reset(decoder encoding.Decoder) {
 
 func (r *int64PageReader) Type() Type { return r.typ }
 
-func (r *int64PageReader) NumValues() int { return 0 }
-
-func (r *int64PageReader) NumNulls() int { return 0 }
-
-func (r *int64PageReader) DistinctCount() int { return 0 }
-
-func (r *int64PageReader) Bounds() (min, max Value) { return }
-
 type int96PageReader struct {
 	typ     Type
 	decoder encoding.Decoder
@@ -372,14 +298,6 @@ func (r *int96PageReader) Reset(decoder encoding.Decoder) {
 }
 
 func (r *int96PageReader) Type() Type { return r.typ }
-
-func (r *int96PageReader) NumValues() int { return 0 }
-
-func (r *int96PageReader) NumNulls() int { return 0 }
-
-func (r *int96PageReader) DistinctCount() int { return 0 }
-
-func (r *int96PageReader) Bounds() (min, max Value) { return }
 
 type floatPageReader struct {
 	typ     Type
@@ -422,14 +340,6 @@ func (r *floatPageReader) Reset(decoder encoding.Decoder) {
 
 func (r *floatPageReader) Type() Type { return r.typ }
 
-func (r *floatPageReader) NumValues() int { return 0 }
-
-func (r *floatPageReader) NumNulls() int { return 0 }
-
-func (r *floatPageReader) DistinctCount() int { return 0 }
-
-func (r *floatPageReader) Bounds() (min, max Value) { return }
-
 type doublePageReader struct {
 	typ     Type
 	decoder encoding.Decoder
@@ -470,14 +380,6 @@ func (r *doublePageReader) Reset(decoder encoding.Decoder) {
 }
 
 func (r *doublePageReader) Type() Type { return r.typ }
-
-func (r *doublePageReader) NumValues() int { return 0 }
-
-func (r *doublePageReader) NumNulls() int { return 0 }
-
-func (r *doublePageReader) DistinctCount() int { return 0 }
-
-func (r *doublePageReader) Bounds() (min, max Value) { return }
 
 type byteArrayPageReader struct {
 	typ     Type
@@ -530,14 +432,6 @@ func (r *byteArrayPageReader) Reset(decoder encoding.Decoder) {
 
 func (r *byteArrayPageReader) Type() Type { return r.typ }
 
-func (r *byteArrayPageReader) NumValues() int { return 0 }
-
-func (r *byteArrayPageReader) NumNulls() int { return 0 }
-
-func (r *byteArrayPageReader) DistinctCount() int { return 0 }
-
-func (r *byteArrayPageReader) Bounds() (min, max Value) { return }
-
 type fixedLenByteArrayPageReader struct {
 	typ     Type
 	decoder encoding.Decoder
@@ -582,21 +476,13 @@ func (r *fixedLenByteArrayPageReader) Reset(decoder encoding.Decoder) {
 
 func (r *fixedLenByteArrayPageReader) Type() Type { return r.typ }
 
-func (r *fixedLenByteArrayPageReader) NumValues() int { return 0 }
-
-func (r *fixedLenByteArrayPageReader) NumNulls() int { return 0 }
-
-func (r *fixedLenByteArrayPageReader) DistinctCount() int { return 0 }
-
-func (r *fixedLenByteArrayPageReader) Bounds() (min, max Value) { return }
-
 var (
-	_ PageReader = (*dataPageReader)(nil)
-	_ PageReader = (*int32PageReader)(nil)
-	_ PageReader = (*int64PageReader)(nil)
-	_ PageReader = (*int96PageReader)(nil)
-	_ PageReader = (*floatPageReader)(nil)
-	_ PageReader = (*doublePageReader)(nil)
-	_ PageReader = (*byteArrayPageReader)(nil)
-	_ PageReader = (*fixedLenByteArrayPageReader)(nil)
+	_ ValueReader = (*DataPageReader)(nil)
+	_ PageReader  = (*int32PageReader)(nil)
+	_ PageReader  = (*int64PageReader)(nil)
+	_ PageReader  = (*int96PageReader)(nil)
+	_ PageReader  = (*floatPageReader)(nil)
+	_ PageReader  = (*doublePageReader)(nil)
+	_ PageReader  = (*byteArrayPageReader)(nil)
+	_ PageReader  = (*fixedLenByteArrayPageReader)(nil)
 )

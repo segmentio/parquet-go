@@ -3,6 +3,7 @@ package parquet_test
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"testing"
@@ -25,6 +26,7 @@ func scanParquetFile(f *os.File) error {
 }
 
 func scanParquetColumns(col *parquet.Column) error {
+	const bufferSize = 1024
 	chunks := col.Chunks()
 
 	for chunks.Next() {
@@ -42,7 +44,35 @@ func scanParquetColumns(col *parquet.Column) error {
 				}
 
 			case parquet.DataPageHeader:
-				//decoder := header.Encoding().NewDecoder(pages.PageData())
+				var pageReader parquet.PageReader
+				var pageData = header.Encoding().NewDecoder(pages.PageData())
+
+				if dictionary != nil {
+					pageReader = parquet.NewIndexedPageReader(pageData, bufferSize, dictionary)
+				} else {
+					pageReader = col.Type().NewPageReader(pageData, bufferSize)
+				}
+
+				dataPageReader := parquet.NewDataPageReader(
+					header.RepetitionLevelEncoding().NewDecoder(pages.RepetitionLevels()),
+					header.DefinitionLevelEncoding().NewDecoder(pages.DefinitionLevels()),
+					header.NumValues(),
+					pageReader,
+					col.MaxRepetitionLevel(),
+					col.MaxDefinitionLevel(),
+					bufferSize,
+				)
+
+				for {
+					v, err := dataPageReader.ReadValue()
+					if err != nil {
+						if err != io.EOF {
+							return err
+						}
+						break
+					}
+					fmt.Printf("> %v\n", v)
+				}
 
 			default:
 				return fmt.Errorf("unsupported page header type: %#v", header)
@@ -168,6 +198,7 @@ func TestWriter(t *testing.T) {
 	}
 
 	for _, version := range []int{1, 2} {
+		dataPageVersion := version
 		t.Run(fmt.Sprintf("v%d", version), func(t *testing.T) {
 			t.Parallel()
 
@@ -177,7 +208,7 @@ func TestWriter(t *testing.T) {
 				t.Run("", func(t *testing.T) {
 					t.Parallel()
 
-					b, err := generateParquetFile(version, rows...)
+					b, err := generateParquetFile(dataPageVersion, rows...)
 					if err != nil {
 						t.Logf("\n%s", string(b))
 						t.Fatal(err)

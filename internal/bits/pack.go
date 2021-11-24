@@ -15,49 +15,32 @@ package bits
 //
 // The source and destination buffers must not overlap.
 func Pack(dst []byte, dstWidth uint, src []byte, srcWidth uint) int {
-	srcWords := BitCount(len(src)) / srcWidth
-	dstWords := BitCount(len(dst)) / dstWidth
-	wordCount := srcWords
-	if dstWords < srcWords {
-		wordCount = dstWords
-	}
-	if wordCount == 0 {
-		return 0
-	}
-	src = src[:ByteCount(wordCount*srcWidth)]
-	dst = dst[:ByteCount(wordCount*dstWidth)]
+	nSrc := BitCount(len(src)) / srcWidth
+	nDst := BitCount(len(dst)) / dstWidth
 
+	n := nSrc
+	if n > nDst {
+		n = nDst
+	}
+
+	k := srcWidth
+	if k > dstWidth {
+		k = dstWidth
+	}
+
+	dst = dst[:ByteCount(n*dstWidth)]
 	for i := range dst {
 		dst[i] = 0
 	}
 
-	si := uint(0)
-	di := uint(0)
-
-	steps := 1
-	srcBitsPerStep := srcWidth
-	if dstWidth < srcWidth {
-		srcBitsPerStep = dstWidth
-	}
-	if srcBitsPerStep > 8 {
-		steps = ByteCount(srcBitsPerStep)
-		srcBitsPerStep = 8
-	}
-
-	for n := wordCount; n != 0; n-- {
-		nextSrcBitIndex := si + srcWidth
-		nextDstBitIndex := di + dstWidth
-
-		for i := steps; i != 0; i-- {
-			v := load(src, si, srcBitsPerStep)
-			store(dst, di, srcBitsPerStep, v)
-			si += srcBitsPerStep
-			di += srcBitsPerStep
+	for i := uint(0); i < n; i++ { // slow but correct
+		for j := uint(0); j < k; j++ {
+			srcIndex, srcShift := IndexShift8((i * srcWidth) + j)
+			dstIndex, dstShift := IndexShift8((i * dstWidth) + j)
+			bit := (src[srcIndex] >> srcShift) & 1
+			dst[dstIndex] |= bit << dstShift
 		}
-
-		si = nextSrcBitIndex
-		di = nextDstBitIndex
 	}
 
-	return int(wordCount)
+	return int(n)
 }

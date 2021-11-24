@@ -2,6 +2,7 @@ package parquet
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"io"
 	"os"
@@ -99,3 +100,28 @@ var (
 	_ io.ReaderFrom = (*errorBuffer)(nil)
 	_ io.WriterTo   = (*errorBuffer)(nil)
 )
+
+type lengthPrefixedWriter struct {
+	writer io.Writer
+	buffer []byte
+}
+
+func (w *lengthPrefixedWriter) Reset(ww io.Writer) {
+	w.writer = ww
+	w.buffer = append(w.buffer[:0], 0, 0, 0, 0)
+}
+
+func (w *lengthPrefixedWriter) Close() error {
+	if len(w.buffer) > 0 {
+		defer func() { w.buffer = w.buffer[:0] }()
+		binary.LittleEndian.PutUint32(w.buffer, uint32(len(w.buffer))-4)
+		_, err := w.writer.Write(w.buffer)
+		return err
+	}
+	return nil
+}
+
+func (w *lengthPrefixedWriter) Write(b []byte) (int, error) {
+	w.buffer = append(w.buffer, b...)
+	return len(b), nil
+}

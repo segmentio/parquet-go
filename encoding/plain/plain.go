@@ -26,10 +26,6 @@ func (e *Encoding) NewEncoder(w io.Writer) encoding.Encoder {
 	return NewEncoder(w)
 }
 
-func coerceBitWidth(bitWidth int) int {
-	if bitWidth <= 32 {
-		return 32
-	} else {
-		return 64
-	}
+func (e *Encoding) String() string {
+	return "PLAIN"
 }

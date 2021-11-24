@@ -13,51 +13,30 @@ type Encoder struct {
 	encoding.NotImplementedEncoder
 	writer   io.Writer
 	buffer   [binary.MaxVarintLen32]byte
-	data     []byte
 	bitWidth uint
 }
 
 func NewEncoder(w io.Writer) *Encoder {
-	return NewEncoderSize(w, encoding.DefaultBufferSize)
-}
-
-func NewEncoderSize(w io.Writer, bufferSize int) *Encoder {
-	return &Encoder{
-		writer: w,
-		data:   make([]byte, 0, bits.NearestPowerOfTwo64(uint64(bufferSize))),
-	}
+	return &Encoder{writer: w}
 }
 
 func (e *Encoder) Encoding() format.Encoding {
 	return format.RLE
 }
 
-func (e *Encoder) Flush() error {
-	if len(e.data) > 0 {
-		defer e.Reset(e.writer)
-		if err := e.writeLength(); err != nil {
-			return err
-		}
-		return e.writeData()
-	}
-	return nil
-}
-
-func (e *Encoder) writeLength() error {
-	binary.LittleEndian.PutUint32(e.buffer[:4], uint32(len(e.data)))
-	_, err := e.writer.Write(e.buffer[:4])
-	return err
-}
-
-func (e *Encoder) writeData() error {
-	_, err := e.writer.Write(e.data)
-	return err
+func (e *Encoder) Write(b []byte) (int, error) {
+	return e.writer.Write(b)
 }
 
 func (e *Encoder) WriteByte(b byte) error {
 	e.buffer[0] = b
-	_, err := e.writer.Write(e.buffer[:1])
+	_, err := e.Write(e.buffer[:1])
 	return err
+}
+
+func (e *Encoder) WriteUvarint(u uint64) (int, error) {
+	n := binary.PutUvarint(e.buffer[:], u)
+	return e.Write(e.buffer[:n])
 }
 
 func (e *Encoder) BitWidth() int {
@@ -70,12 +49,6 @@ func (e *Encoder) SetBitWidth(bitWidth int) {
 
 func (e *Encoder) Reset(w io.Writer) {
 	e.writer = w
-
-	if cap(e.data) == 0 {
-		e.data = make([]byte, 0, encoding.DefaultBufferSize)
-	} else {
-		e.data = e.data[:0]
-	}
 }
 
 func (e *Encoder) EncodeBoolean(data []bool) error {
@@ -125,39 +98,42 @@ func (e *Encoder) encode(data []byte, dstWidth, srcWidth uint, eq func(a, b []by
 	return nil
 }
 
-func (e *Encoder) encodeBitPack(count int, data []byte, dstWidth, srcWidth uint) int {
-	n := binary.PutUvarint(e.buffer[:], (uint64(count/8)<<1)|1)
-	e.data = append(e.data, e.buffer[:n]...)
-
-	wordSize := bits.ByteCount(srcWidth)
-	offset := len(e.data)
-	length := bits.ByteCount(uint(len(data)/wordSize) * dstWidth)
-
-	if (cap(e.data) - offset) >= length {
-		e.data = e.data[:offset+length]
-	} else {
-		newCap := 2 * cap(e.data)
-		if newCap == 0 {
-			newCap = encoding.DefaultBufferSize
-		}
-		for (newCap - offset) < length {
-			newCap *= 2
-		}
-		newData := make([]byte, offset+length, newCap)
-		copy(newData, e.data)
-		e.data = newData
+func (e *Encoder) encodeBitPack(count int, data []byte, dstWidth, srcWidth uint) (int, error) {
+	if _, err := e.WriteUvarint((uint64(count/8) << 1) | 1); err != nil {
+		return 0, err
 	}
 
-	return bits.Pack(e.data[offset:], dstWidth, data, srcWidth)
+	/*
+		wordSize := bits.ByteCount(srcWidth)
+		offset := len(e.data)
+		length := bits.ByteCount(uint(len(data)/wordSize) * dstWidth)
+
+		if (cap(e.data) - offset) >= length {
+			e.data = e.data[:offset+length]
+		} else {
+			newCap := 2 * cap(e.data)
+			if newCap == 0 {
+				newCap = encoding.DefaultBufferSize
+			}
+			for (newCap - offset) < length {
+				newCap *= 2
+			}
+			newData := make([]byte, offset+length, newCap)
+			copy(newData, e.data)
+			e.data = newData
+		}
+
+		return bits.Pack(e.data[offset:], dstWidth, data, srcWidth)
+	*/
+	return 0, nil
 }
 
-func (e *Encoder) encodeRunLength(count int, data []byte) {
-	n := binary.PutUvarint(e.buffer[:], uint64(count)<<1)
-	e.data = append(e.data, e.buffer[:n]...)
-
-	if count > 0 {
-		e.data = append(e.data, data...)
+func (e *Encoder) encodeRunLength(count int, data []byte) error {
+	if _, err := e.WriteUvarint(uint64(count) << 1); err != nil {
+		return err
 	}
+	_, err := e.Write(data)
+	return err
 }
 
 func preferBitPack(data []byte, dstWidth, srcWidth uint, eq func(a, b []byte) bool) bool {
@@ -201,19 +177,7 @@ func equalInt32(a, b []byte) bool { return *(*[4]byte)(a) == *(*[4]byte)(b) }
 func equalInt64(a, b []byte) bool { return *(*[8]byte)(a) == *(*[8]byte)(b) }
 func equalInt96(a, b []byte) bool { return *(*[12]byte)(a) == *(*[12]byte)(b) }
 
-// levelEncoder is a variation of the default RLE encoder used when writing
-// definition an repetition levels for data pages v2, which omits the 4 bytes
-// length prefix.
-type levelEncoder struct{ *Encoder }
-
-func newLevelEncoderSize(w io.Writer, bufferSize int) levelEncoder {
-	return levelEncoder{NewEncoderSize(w, bufferSize)}
-}
-
-func (e levelEncoder) Flush() error {
-	if len(e.data) > 0 {
-		defer e.Reset(e.writer)
-		return e.writeData()
-	}
-	return nil
-}
+var (
+	_ io.ByteWriter = (*Encoder)(nil)
+	_ io.Writer     = (*Encoder)(nil)
+)

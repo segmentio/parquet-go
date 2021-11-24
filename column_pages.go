@@ -1,6 +1,7 @@
 package parquet
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/binary"
 	"errors"
@@ -22,7 +23,7 @@ var (
 type ColumnPages struct {
 	column   *Column
 	header   *format.PageHeader
-	section  io.SectionReader
+	section  offsetReader
 	crc32    crc32Reader
 	codec    format.CompressionCodec
 	protocol thrift.CompactProtocol
@@ -49,7 +50,7 @@ type ColumnPages struct {
 	err error
 }
 
-func newColumnPages(column *Column, metadata *format.ColumnMetaData) *ColumnPages {
+func newColumnPages(column *Column, metadata *format.ColumnMetaData, bufferSize int) *ColumnPages {
 	c := &ColumnPages{
 		column: column,
 		codec:  metadata.Codec,
@@ -58,7 +59,9 @@ func newColumnPages(column *Column, metadata *format.ColumnMetaData) *ColumnPage
 	if metadata.DictionaryPageOffset > 0 {
 		pageOffset = metadata.DictionaryPageOffset
 	}
-	c.section = *io.NewSectionReader(column.file, pageOffset, metadata.TotalCompressedSize)
+	fileSection := io.NewSectionReader(column.file, pageOffset, metadata.TotalCompressedSize)
+	c.section.reader = bufio.NewReaderSize(fileSection, bufferSize)
+	c.section.offset = pageOffset
 	c.decoder.Reset(c.protocol.NewReader(&c.section))
 	return c
 }
@@ -201,10 +204,7 @@ func (c *ColumnPages) PageHeader() PageHeader {
 }
 
 func (c *ColumnPages) fileOffset() int64 {
-	// Ignoring the error is OK here since we know the concrete type cannot
-	// error with the given input.
-	offset, _ := c.section.Seek(0, io.SeekCurrent)
-	return offset
+	return c.section.offset
 }
 
 func (c *ColumnPages) initDataPageV1(r io.Reader) error {
@@ -299,27 +299,25 @@ func (lvl *dataPageLevelV1) reset() {
 // header, therefore there is no need to buffer the levels.
 func (lvl *dataPageLevelV1) readDataPageV1Level(r io.Reader, typ string) error {
 	const defaultLevelBufferSize = 256
-	if cap(lvl.data) == 0 {
-		lvl.data = make([]byte, 0, defaultLevelBufferSize)
-	}
 
-	if _, err := io.ReadFull(r, lvl.data[:4]); err != nil {
+	if cap(lvl.data) < 4 {
+		lvl.data = make([]byte, 4, defaultLevelBufferSize)
+	} else {
+		lvl.data = lvl.data[:4]
+	}
+	if _, err := io.ReadFull(r, lvl.data); err != nil {
 		return fmt.Errorf("reading RLE encoded length of %s levels: %w", typ, err)
 	}
 
-	// Work on the assumption that the level is encoded with RLE, in which case
-	// the section is prefixed with a 4 byte length of the data.
-	m := binary.LittleEndian.Uint32(lvl.data[:4])
-	n := 4 + int(m)
+	n := int(binary.LittleEndian.Uint32(lvl.data))
 	if cap(lvl.data) < n {
 		lvl.data = make([]byte, n)
-		binary.LittleEndian.PutUint32(lvl.data[:4], m)
 	} else {
 		lvl.data = lvl.data[:n]
 	}
 
-	if rn, err := io.ReadFull(r, lvl.data[4:]); err != nil {
-		return fmt.Errorf("reading %d/%d bytes of %s levels: %w", rn, m, typ, err)
+	if rn, err := io.ReadFull(r, lvl.data); err != nil {
+		return fmt.Errorf("reading %d/%d bytes of %s levels: %w", rn, n, typ, err)
 	}
 
 	lvl.section.Reset(lvl.data)
@@ -338,12 +336,43 @@ func (lvl *dataPageLevelV2) setDataPageV2Section(file *File, dataPageOffset, dat
 	lvl.section = *io.NewSectionReader(file, dataPageOffset, dataPageLength)
 }
 
+type offsetReader struct {
+	reader *bufio.Reader
+	offset int64
+}
+
+func (r *offsetReader) ReadByte() (byte, error) {
+	b, err := r.reader.ReadByte()
+	if err == nil {
+		r.offset++
+	}
+	return b, err
+}
+
+func (r *offsetReader) Read(b []byte) (int, error) {
+	n, err := r.reader.Read(b)
+	r.offset += int64(n)
+	return n, err
+}
+
+func (r *offsetReader) WriteTo(w io.Writer) (int64, error) {
+	n, err := r.reader.WriteTo(w)
+	r.offset += n
+	return n, err
+}
+
 type emptyReader struct{}
 
+func (emptyReader) ReadByte() (byte, error)          { return 0, io.EOF }
 func (emptyReader) Read([]byte) (int, error)         { return 0, io.EOF }
 func (emptyReader) WriteTo(io.Writer) (int64, error) { return 0, nil }
 
 var (
-	_ io.Reader   = emptyReader{}
-	_ io.WriterTo = emptyReader{}
+	_ io.ByteReader = emptyReader{}
+	_ io.Reader     = emptyReader{}
+	_ io.WriterTo   = emptyReader{}
+
+	_ io.ByteReader = (*offsetReader)(nil)
+	_ io.Reader     = (*offsetReader)(nil)
+	_ io.WriterTo   = (*offsetReader)(nil)
 )

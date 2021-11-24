@@ -28,11 +28,15 @@ func (e *Encoding) NewDecoder(r io.Reader) encoding.Decoder {
 }
 
 func (e *Encoding) NewEncoder(w io.Writer) encoding.Encoder {
-	return encoder{rle: rle.NewEncoderSize(w, e.bufferSize())}
+	return encoder{rle: rle.NewEncoder(w)}
 }
 
 func (e *Encoding) PlainEncoding() encoding.Encoding {
 	return plainEncoding{base: e}
+}
+
+func (e *Encoding) String() string {
+	return "RLE_DICTIONARY"
 }
 
 func (e *Encoding) bufferSize() int {
@@ -96,8 +100,6 @@ type encoder struct {
 	rle *rle.Encoder
 }
 
-func (e encoder) Flush() error { return e.rle.Flush() }
-
 func (e encoder) Reset(w io.Writer) { e.rle.Reset(w) }
 
 func (e encoder) Encoding() format.Encoding { return format.RLEDictionary }
@@ -119,10 +121,7 @@ func (e encoder) encode(bitWidth int, encode func() error) error {
 		return err
 	}
 	e.rle.SetBitWidth(bitWidth)
-	if err := encode(); err != nil {
-		return err
-	}
-	return e.rle.Flush()
+	return encode()
 }
 
 func (e encoder) encodeBitWidth(bitWidth int) error {
@@ -145,6 +144,10 @@ func (e plainEncoding) NewDecoder(r io.Reader) encoding.Decoder {
 
 func (e plainEncoding) NewEncoder(w io.Writer) encoding.Encoder {
 	return plainEncoder{plain.NewEncoder(w)}
+}
+
+func (e plainEncoding) String() string {
+	return "PLAIN_DICTIONARY"
 }
 
 type plainDecoder struct{ *plain.Decoder }

@@ -15,14 +15,10 @@ import (
 )
 
 type WriterConfig struct {
-	CreatedBy string
-
-	ColumnPageBuffers BufferPool
-
-	PageBufferSize int
-
-	DataPageVersion int
-
+	CreatedBy          string
+	ColumnPageBuffers  BufferPool
+	PageBufferSize     int
+	DataPageVersion    int
 	RowGroupTargetSize int64
 }
 
@@ -467,6 +463,15 @@ type columnChunkWriter struct {
 		repetition []int8
 		definition []int8
 		encoder    encoding.Encoder
+		// In data pages v1, the repetition and definition levels are prefixed
+		// with the 4 bytes length of the sections. While the parquet-format
+		// documentation indicates that the length prefix is part of the hybrid
+		// RLE/Bit-Pack encoding, this is the only condition where it is used
+		// so we treat it as a special case rather than implementing it in the
+		// encoding.
+		//
+		// Reference https://github.com/apache/parquet-format/blob/master/Encodings.md#run-length-encoding--bit-packing-hybrid-rle--3
+		v1 lengthPrefixedWriter
 	}
 
 	header struct {
@@ -623,16 +628,20 @@ func (ccw *columnChunkWriter) Flush() error {
 	ccw.page.uncompressed.Reset(ccw.page.compressed)
 	if ccw.dataPageType == format.DataPage {
 		if ccw.maxRepetitionLevel > 0 {
-			ccw.levels.encoder.Reset(&ccw.page.uncompressed)
+			ccw.levels.v1.Reset(&ccw.page.uncompressed)
+			ccw.levels.encoder.Reset(&ccw.levels.v1)
 			ccw.levels.encoder.SetBitWidth(bits.Len8(ccw.maxRepetitionLevel))
 			ccw.levels.encoder.EncodeInt8(ccw.levels.repetition)
 			ccw.levels.encoder.Flush()
+			ccw.levels.v1.Close()
 		}
 		if ccw.maxDefinitionLevel > 0 {
-			ccw.levels.encoder.Reset(&ccw.page.uncompressed)
+			ccw.levels.v1.Reset(&ccw.page.uncompressed)
+			ccw.levels.encoder.Reset(&ccw.levels.v1)
 			ccw.levels.encoder.SetBitWidth(bits.Len8(ccw.maxDefinitionLevel))
 			ccw.levels.encoder.EncodeInt8(ccw.levels.definition)
 			ccw.levels.encoder.Flush()
+			ccw.levels.v1.Close()
 		}
 	}
 

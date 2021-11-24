@@ -582,7 +582,7 @@ func NewIndexedPageReader(decoder encoding.Decoder, bufferSize int, dict Diction
 	return &indexedPageReader{
 		dict:    dict,
 		decoder: decoder,
-		values:  make([]int32, 0, bufferSize/4),
+		values:  make([]int32, 0, atLeastOne(bufferSize/4)),
 	}
 }
 
@@ -590,7 +590,7 @@ func NewIndexedPageWriter(encoder encoding.Encoder, bufferSize int, dict Diction
 	return &indexedPageWriter{
 		dict:    dict,
 		encoder: encoder,
-		values:  make([]int32, 0, bufferSize/4),
+		values:  make([]int32, 0, atLeastOne(bufferSize/4)),
 	}
 }
 

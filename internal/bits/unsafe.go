@@ -42,6 +42,14 @@ func Int64ToUint64(data []int64) []uint64 {
 	return unsafe.Slice(*(**uint64)(unsafe.Pointer(&data)), len(data))
 }
 
+func Uint32ToBytes(data []uint32) []byte {
+	return unsafe.Slice(*(**byte)(unsafe.Pointer(&data)), 4*len(data))
+}
+
+func Uint64ToBytes(data []uint64) []byte {
+	return unsafe.Slice(*(**byte)(unsafe.Pointer(&data)), 8*len(data))
+}
+
 func Uint32ToInt32(data []uint32) []int32 {
 	return unsafe.Slice(*(**int32)(unsafe.Pointer(&data)), len(data))
 }
@@ -64,6 +72,14 @@ func BytesToInt32(data []byte) []int32 {
 
 func BytesToInt64(data []byte) []int64 {
 	return unsafe.Slice(*(**int64)(unsafe.Pointer(&data)), len(data)/8)
+}
+
+func BytesToUint32(data []byte) []uint32 {
+	return unsafe.Slice(*(**uint32)(unsafe.Pointer(&data)), len(data)/4)
+}
+
+func BytesToUint64(data []byte) []uint64 {
+	return unsafe.Slice(*(**uint64)(unsafe.Pointer(&data)), len(data)/8)
 }
 
 func BytesToFloat32(data []byte) []float32 {

@@ -52,7 +52,7 @@ func OpenFile(r io.ReaderAt, size int64) (*File, error) {
 	footerData := io.NewSectionReader(r, size-(footerSize+8), footerSize)
 
 	decoder := thrift.NewDecoder(
-		f.protocol.NewReader(bufio.NewReaderSize(footerData, defaultBufferSize)),
+		f.protocol.NewReader(bufio.NewReaderSize(footerData, int(footerSize))),
 	)
 
 	if err := decoder.Decode(&f.metadata); err != nil {

@@ -153,11 +153,6 @@ func TestEncoding(t *testing.T) {
 		},
 
 		{
-			scenario: "RLE (level)",
-			encoding: new(rle.Encoding).LevelEncoding(),
-		},
-
-		{
 			scenario: "PLAIN_DICTIONARY",
 			encoding: new(dict.Encoding).PlainEncoding(),
 		},
@@ -256,9 +251,6 @@ func testBooleanEncoding(t *testing.T, e encoding.Encoding) {
 				}
 				t.Fatal("encode:", err)
 			}
-			if err := enc.Flush(); err != nil {
-				t.Fatal("close:", err)
-			}
 
 			for i, want := range test {
 				n, err := dec.DecodeBoolean(tmp[:])
@@ -297,9 +289,6 @@ func testInt32Encoding(t *testing.T, e encoding.Encoding) {
 					t.Skip(err)
 				}
 				t.Fatal("encode:", err)
-			}
-			if err := enc.Flush(); err != nil {
-				t.Fatal("close:", err)
 			}
 
 			for i := range test {
@@ -340,9 +329,6 @@ func testInt64Encoding(t *testing.T, e encoding.Encoding) {
 				}
 				t.Fatal("encode:", err)
 			}
-			if err := enc.Flush(); err != nil {
-				t.Fatal("close:", err)
-			}
 
 			for i := range test {
 				n, err := dec.DecodeInt64(tmp[:])
@@ -382,9 +368,6 @@ func testInt96Encoding(t *testing.T, e encoding.Encoding) {
 				}
 				t.Fatal("encode:", err)
 			}
-			if err := enc.Flush(); err != nil {
-				t.Fatal("close:", err)
-			}
 
 			for i := range test {
 				n, err := dec.DecodeInt96(tmp[:])
@@ -419,9 +402,6 @@ func testFloatEncoding(t *testing.T, e encoding.Encoding) {
 					t.Skip(err)
 				}
 				t.Fatal("encode:", err)
-			}
-			if err := enc.Flush(); err != nil {
-				t.Fatal("close:", err)
 			}
 
 			for i := range test {
@@ -458,9 +438,6 @@ func testDoubleEncoding(t *testing.T, e encoding.Encoding) {
 				}
 				t.Fatal("encode:", err)
 			}
-			if err := enc.Flush(); err != nil {
-				t.Fatal("close:", err)
-			}
 
 			for i := range test {
 				n, err := dec.DecodeDouble(tmp[:])
@@ -496,9 +473,6 @@ func testByteArrayEncoding(t *testing.T, e encoding.Encoding) {
 					t.Skip(err)
 				}
 				t.Fatal("encode:", err)
-			}
-			if err := enc.Flush(); err != nil {
-				t.Fatal("close:", err)
 			}
 
 			maxLen := 0
@@ -548,9 +522,6 @@ func testFixedLenByteArrayEncoding(t *testing.T, e encoding.Encoding) {
 					t.Skip(err)
 				}
 				t.Fatal("encode:", err)
-			}
-			if err := enc.Flush(); err != nil {
-				t.Fatal("close:", err)
 			}
 
 			for i := 0; i < (len(test.data) / test.size); i++ {

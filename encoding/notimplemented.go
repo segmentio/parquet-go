@@ -31,6 +31,10 @@ func (NotImplemented) NewEncoder(io.Writer) Encoder {
 	return NotImplementedEncoder{}
 }
 
+func (NotImplemented) String() string {
+	return "NOT_IMPLEMENTED"
+}
+
 type NotImplementedDecoder struct {
 }
 

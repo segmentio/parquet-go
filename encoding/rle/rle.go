@@ -19,16 +19,16 @@ func (e *Encoding) CanEncode(t format.Type) bool {
 	return t == format.Boolean || t == format.Int32 || t == format.Int64 || t == format.Int96
 }
 
-func (e *Encoding) LevelEncoding() encoding.Encoding {
-	return levelEncoding{e}
-}
-
 func (e *Encoding) NewDecoder(r io.Reader) encoding.Decoder {
 	return NewDecoderSize(r, e.bufferSize())
 }
 
 func (e *Encoding) NewEncoder(w io.Writer) encoding.Encoder {
-	return NewEncoderSize(w, e.bufferSize())
+	return NewEncoder(w)
+}
+
+func (e *Encoding) String() string {
+	return "RLE"
 }
 
 func (e *Encoding) bufferSize() int {
@@ -36,22 +36,4 @@ func (e *Encoding) bufferSize() int {
 		return e.BufferSize
 	}
 	return encoding.DefaultBufferSize
-}
-
-type levelEncoding struct{ base *Encoding }
-
-func (e levelEncoding) Encoding() format.Encoding {
-	return e.base.Encoding()
-}
-
-func (e levelEncoding) CanEncode(t format.Type) bool {
-	return e.base.CanEncode(t)
-}
-
-func (e levelEncoding) NewDecoder(r io.Reader) encoding.Decoder {
-	return newLevelDecoderSize(r, e.base.bufferSize())
-}
-
-func (e levelEncoding) NewEncoder(w io.Writer) encoding.Encoder {
-	return newLevelEncoderSize(w, e.base.bufferSize())
 }

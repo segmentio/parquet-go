@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"math"
 
 	"github.com/segmentio/parquet/encoding"
 	"github.com/segmentio/parquet/format"
@@ -13,8 +12,7 @@ import (
 
 type Decoder struct {
 	encoding.NotImplementedDecoder
-	data      io.LimitedReader
-	init      bool
+	reader    io.Reader
 	buffer    []byte
 	bitWidth  uint
 	decoder   hybridDecoder
@@ -28,10 +26,7 @@ func NewDecoder(r io.Reader) *Decoder {
 
 func NewDecoderSize(r io.Reader, bufferSize int) *Decoder {
 	return &Decoder{
-		data: io.LimitedReader{
-			R: r,
-			N: math.MaxInt64,
-		},
+		reader: r,
 		buffer: make([]byte, bits.NearestPowerOfTwo64(uint64(bufferSize))),
 	}
 }
@@ -49,14 +44,16 @@ func (d *Decoder) SetBitWidth(bitWidth int) {
 }
 
 func (d *Decoder) Reset(r io.Reader) {
-	d.data.R = r
-	d.data.N = math.MaxInt64
-	d.init = false
+	d.reader = r
 	d.decoder = nil
 }
 
+func (d *Decoder) Read(b []byte) (int, error) {
+	return d.reader.Read(b)
+}
+
 func (d *Decoder) ReadByte() (byte, error) {
-	_, err := d.data.Read(d.buffer[:1])
+	_, err := d.Read(d.buffer[:1])
 	return d.buffer[0], err
 }
 
@@ -91,18 +88,6 @@ func (d *Decoder) decode(data []byte, dstWidth, srcWidth uint) (int, error) {
 		srcWidth = dstWidth
 	}
 
-	if !d.init {
-		_, err := io.ReadFull(&d.data, d.buffer[:4])
-		if err != nil {
-			if err != io.EOF {
-				err = fmt.Errorf("decoding RLE length: %w", err)
-			}
-			return 0, err
-		}
-		d.data.N = int64(binary.LittleEndian.Uint32(d.buffer[:4]))
-		d.init = true
-	}
-
 	for len(data) > 0 {
 		if d.decoder == nil {
 			u, err := binary.ReadUvarint(d)
@@ -125,7 +110,7 @@ func (d *Decoder) decode(data []byte, dstWidth, srcWidth uint) (int, error) {
 					d.runLength.value = [12]byte{}
 				} else {
 					length := bits.ByteCount(srcWidth)
-					_, err := io.ReadFull(&d.data, d.runLength.value[:length])
+					_, err := io.ReadFull(d.reader, d.runLength.value[:length])
 					if err != nil {
 						return decoded, fmt.Errorf("decoding RLE repeated value of length %d after count=%d: %w", length, count, err)
 					}
@@ -134,7 +119,7 @@ func (d *Decoder) decode(data []byte, dstWidth, srcWidth uint) (int, error) {
 			}
 		}
 
-		n, err := d.decoder.decode(&d.data, data, dstWidth, srcWidth)
+		n, err := d.decoder.decode(d.reader, data, dstWidth, srcWidth)
 		decoded += n / wordSize
 
 		if err != nil {
@@ -263,17 +248,7 @@ func (d *runLengthDecoder) decode(r io.Reader, data []byte, dstWidth, srcWidth u
 	return len(data), nil
 }
 
-// levelDecoder is the counter part of levelEncoder, which is used to encode
-// repetition and definition levels in data page v2.
-type levelDecoder struct{ *Decoder }
-
-func newLevelDecoderSize(r io.Reader, bufferSize int) levelDecoder {
-	d := levelDecoder{NewDecoderSize(r, bufferSize)}
-	d.init = true
-	return d
-}
-
-func (d levelDecoder) Reset(r io.Reader) {
-	d.Decoder.Reset(r)
-	d.init = true
-}
+var (
+	_ io.ByteReader = (*Decoder)(nil)
+	_ io.Reader     = (*Decoder)(nil)
+)

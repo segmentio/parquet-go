@@ -2,6 +2,7 @@ package encoding
 
 import (
 	"errors"
+	"fmt"
 	"io"
 
 	"github.com/segmentio/parquet/format"
@@ -17,6 +18,7 @@ var (
 )
 
 type Encoding interface {
+	fmt.Stringer
 	Encoding() format.Encoding
 	CanEncode(format.Type) bool
 	NewDecoder(io.Reader) Decoder
@@ -25,7 +27,6 @@ type Encoding interface {
 
 type Encoder interface {
 	Reset(io.Writer)
-	Flush() error
 	Encoding() format.Encoding
 	EncodeBoolean(data []bool) error
 	EncodeInt8(data []int8) error

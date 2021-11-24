@@ -18,8 +18,6 @@ type PageWriter interface {
 
 	NumValues() int
 
-	DistinctCount() int
-
 	Bounds() (min, max Value)
 
 	Flush() error
@@ -125,8 +123,6 @@ func (w *int32PageWriter) Type() Type { return w.typ }
 
 func (w *int32PageWriter) NumValues() int { return w.count }
 
-func (w *int32PageWriter) DistinctCount() int { return 0 }
-
 func (w *int32PageWriter) Bounds() (min, max Value) {
 	if w.count > 0 {
 		minInt32, maxInt32 := w.bounds()
@@ -211,8 +207,6 @@ func newInt64PageWriter(typ Type, encoder encoding.Encoder, bufferSize int) *int
 func (w *int64PageWriter) Type() Type { return w.typ }
 
 func (w *int64PageWriter) NumValues() int { return w.count }
-
-func (w *int64PageWriter) DistinctCount() int { return 0 }
 
 func (w *int64PageWriter) Bounds() (min, max Value) {
 	if w.count > 0 {
@@ -299,8 +293,6 @@ func (w *int96PageWriter) Type() Type { return w.typ }
 
 func (w *int96PageWriter) NumValues() int { return w.count }
 
-func (w *int96PageWriter) DistinctCount() int { return 0 }
-
 func (w *int96PageWriter) Bounds() (min, max Value) {
 	if w.count > 0 {
 		minInt96, maxInt96 := w.bounds()
@@ -385,8 +377,6 @@ func newFloatPageWriter(typ Type, encoder encoding.Encoder, bufferSize int) *flo
 func (w *floatPageWriter) Type() Type { return w.typ }
 
 func (w *floatPageWriter) NumValues() int { return w.count }
-
-func (w *floatPageWriter) DistinctCount() int { return 0 }
 
 func (w *floatPageWriter) Bounds() (min, max Value) {
 	if w.count > 0 {
@@ -473,8 +463,6 @@ func (w *doublePageWriter) Type() Type { return w.typ }
 
 func (w *doublePageWriter) NumValues() int { return w.count }
 
-func (w *doublePageWriter) DistinctCount() int { return 0 }
-
 func (w *doublePageWriter) Bounds() (min, max Value) {
 	if w.count > 0 {
 		minDouble, maxDouble := w.bounds()
@@ -558,8 +546,6 @@ func newByteArrayPageWriter(typ Type, encoder encoding.Encoder, bufferSize int) 
 func (w *byteArrayPageWriter) Type() Type { return w.typ }
 
 func (w *byteArrayPageWriter) NumValues() int { return w.count }
-
-func (w *byteArrayPageWriter) DistinctCount() int { return 0 }
 
 func (w *byteArrayPageWriter) Bounds() (min, max Value) {
 	if w.count > 0 {
@@ -664,8 +650,6 @@ func newFixedLenByteArrayPageWriter(typ Type, encoder encoding.Encoder, bufferSi
 func (w *fixedLenByteArrayPageWriter) Type() Type { return w.typ }
 
 func (w *fixedLenByteArrayPageWriter) NumValues() int { return w.count }
-
-func (w *fixedLenByteArrayPageWriter) DistinctCount() int { return 0 }
 
 func (w *fixedLenByteArrayPageWriter) Bounds() (min, max Value) {
 	if w.count > 0 {
@@ -784,8 +768,6 @@ func (w *uint32PageWriter) Type() Type { return w.typ }
 
 func (w *uint32PageWriter) NumValues() int { return w.count }
 
-func (w *uint32PageWriter) DistinctCount() int { return 0 }
-
 func (w *uint32PageWriter) Bounds() (min, max Value) {
 	if w.count > 0 {
 		minUint32, maxUint32 := w.bounds()
@@ -870,8 +852,6 @@ func newUint64PageWriter(typ Type, encoder encoding.Encoder, bufferSize int) *ui
 func (w *uint64PageWriter) Type() Type { return w.typ }
 
 func (w *uint64PageWriter) NumValues() int { return w.count }
-
-func (w *uint64PageWriter) DistinctCount() int { return 0 }
 
 func (w *uint64PageWriter) Bounds() (min, max Value) {
 	if w.count > 0 {

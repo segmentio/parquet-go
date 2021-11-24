@@ -11,10 +11,9 @@ import (
 )
 
 type Encoder struct {
-	writer   io.Writer
-	buffer   [8]byte
-	rle      *rle.Encoder
-	bitWidth int
+	writer io.Writer
+	buffer [8]byte
+	rle    *rle.Encoder
 }
 
 func NewEncoder(w io.Writer) *Encoder {
@@ -23,13 +22,6 @@ func NewEncoder(w io.Writer) *Encoder {
 
 func (e *Encoder) Encoding() format.Encoding {
 	return format.Plain
-}
-
-func (e *Encoder) Flush() error {
-	if e.rle != nil {
-		return e.rle.Flush()
-	}
-	return nil
 }
 
 func (e *Encoder) Reset(w io.Writer) {
@@ -98,6 +90,4 @@ func (e *Encoder) EncodeFixedLenByteArray(size int, data []byte) error {
 	return err
 }
 
-func (e *Encoder) SetBitWidth(bitWidth int) {
-	e.bitWidth = coerceBitWidth(bitWidth)
-}
+func (e *Encoder) SetBitWidth(bitWidth int) {}

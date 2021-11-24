@@ -96,7 +96,7 @@ func (c *ColumnChunks) Chunk() *format.ColumnChunk {
 // the iterator is currently positioned at.
 func (c *ColumnChunks) Pages() *ColumnPages {
 	if c.metadata != nil {
-		return newColumnPages(c.column, c.metadata)
+		return newColumnPages(c.column, c.metadata, defaultBufferSize)
 	}
 	return nil
 }

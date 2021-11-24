@@ -12,10 +12,9 @@ import (
 )
 
 type Decoder struct {
-	reader   io.Reader
-	buffer   []byte
-	rle      *rle.Decoder
-	bitWidth int
+	reader io.Reader
+	buffer []byte
+	rle    *rle.Decoder
 }
 
 func NewDecoder(r io.Reader) *Decoder {
@@ -90,10 +89,12 @@ func (d *Decoder) DecodeByteArray(data []byte) (int, error) {
 	}
 
 	if len(data) < 4 {
+		d.buffer = prepend(d.buffer, data)
 		return 0, io.ErrUnexpectedEOF
 	}
 
 	if size := int(binary.LittleEndian.Uint32(data)); size > (len(data) - 4) {
+		d.buffer = prepend(d.buffer, data)
 		return 0, encoding.ErrValueTooLarge
 	}
 
@@ -121,9 +122,7 @@ func (d *Decoder) DecodeFixedLenByteArray(size int, data []byte) (int, error) {
 	return readFull(d.reader, size, data)
 }
 
-func (d *Decoder) SetBitWidth(bitWidth int) {
-	d.bitWidth = coerceBitWidth(bitWidth)
-}
+func (d *Decoder) SetBitWidth(bitWidth int) {}
 
 func readFull(r io.Reader, scale int, data []byte) (int, error) {
 	n, err := io.ReadFull(r, data)
