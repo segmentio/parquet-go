@@ -242,7 +242,7 @@ func (d *runLengthDecoder) decode(r io.Reader, data []byte, dstWidth, srcWidth u
 		data, count = data[:n], int(d.count)
 	}
 
-	bits.Fill(data, d.value[:wordSize])
+	fill(data, d.value[:wordSize])
 
 	d.count -= uint32(count)
 	return len(data), nil

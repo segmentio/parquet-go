@@ -3,6 +3,7 @@ package rle
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"math/rand"
 	"testing"
 
@@ -21,10 +22,9 @@ func TestBitPack(t *testing.T) {
 
 	for bitWidth := uint(1); bitWidth <= 64; bitWidth++ {
 		t.Run(fmt.Sprintf("bitWidth=%d", bitWidth), func(t *testing.T) {
-			enc.reset(buf, bitWidth)
-			dec.reset(buf, bitWidth)
+			dec.reset(buf, bitWidth, uint(len(data)))
 
-			if err := enc.encode(bits.Uint64ToBytes(data), 64); err != nil {
+			if err := enc.encode(buf, bitWidth, bits.Uint64ToBytes(data), 64); err != nil {
 				t.Fatal("encoding:", err)
 			}
 
@@ -43,6 +43,12 @@ func TestBitPack(t *testing.T) {
 				if v1 != v2 {
 					t.Fatalf("wrong value at index %d/%d: want=%08b got=%08b (mask=%08b)", i, len(data), v1, v2, mask)
 				}
+			}
+
+			if n, err := dec.decode(bits.Uint64ToBytes(tmp[:]), 64); err != io.EOF {
+				t.Fatal("non-EOF error returned after decoding all the values:", err)
+			} else if n != 0 {
+				t.Fatal("non-zero number of values decoded at EOF:", n)
 			}
 		})
 	}

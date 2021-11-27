@@ -8,11 +8,11 @@ import (
 	"github.com/segmentio/parquet/internal/bits"
 )
 
-// Large enougth to hold 64 x int96
-const bitPackBufferSize = 768
+// Large enougth to hold 64 x int64
+const bitPackBufferSize = 512
 
 type bitPackRunDecoder struct {
-	reader io.Reader
+	reader io.LimitedReader
 	// Offset and length of values read into the buffer, and number of values
 	// left to be consumed.
 	offset uint
@@ -23,15 +23,16 @@ type bitPackRunDecoder struct {
 	bitWidth uint
 	capacity uint
 	// Buffer where bits are loaded from the io.Reader; the size is large enough
-	// to contain 64 int96 values, since bit-pack integers are encoded in chunks
+	// to contain 64 int64 values, since bit-pack integers are encoded in chunks
 	// of 8 values. Most of the time the source bit-width is a lot smaller than
-	// 96 bits (commonly 2-3 bits), so a lot more values get loaded in each read
+	// 64 bits (commonly 2-3 bits), so a lot more values get loaded in each read
 	// from the io.Reader.
 	buffer [bitPackBufferSize]byte
 }
 
-func (d *bitPackRunDecoder) reset(r io.Reader, bitWidth uint) {
-	d.reader = r
+func (d *bitPackRunDecoder) reset(r io.Reader, bitWidth, numValues uint) {
+	d.reader.R = r
+	d.reader.N = int64(numValues * bitWidth)
 	d.offset = 0
 	d.length = 0
 	d.remain = 0
@@ -72,7 +73,7 @@ func (d *bitPackRunDecoder) decode(dst []byte, dstWidth uint) (int, error) {
 			continue
 		}
 
-		n, err := io.ReadFull(d.reader, d.buffer[:d.capacity])
+		n, err := io.ReadFull(&d.reader, d.buffer[:d.capacity])
 		if err != nil && n == 0 {
 			return numValues, err
 		}
@@ -89,17 +90,10 @@ func (d *bitPackRunDecoder) decode(dst []byte, dstWidth uint) (int, error) {
 }
 
 type bitPackRunEncoder struct {
-	writer   io.Writer
-	bitWidth uint
-	buffer   [bitPackBufferSize]byte
+	buffer [bitPackBufferSize]byte
 }
 
-func (e *bitPackRunEncoder) reset(w io.Writer, bitWidth uint) {
-	e.writer = w
-	e.bitWidth = bitWidth
-}
-
-func (e *bitPackRunEncoder) encode(src []byte, srcWidth uint) error {
+func (e *bitPackRunEncoder) encode(dst io.Writer, dstWidth uint, src []byte, srcWidth uint) error {
 	srcBitCount := bits.BitCount(len(src))
 
 	if srcWidth < 8 || srcWidth > 64 || OnesCount(srcWidth) != 1 {
@@ -114,17 +108,17 @@ func (e *bitPackRunEncoder) encode(src []byte, srcWidth uint) error {
 		return fmt.Errorf("BIT_PACK encoder expects sequences of 8 values but %d were written", srcBitCount/srcWidth)
 	}
 
-	if srcWidth < e.bitWidth {
+	if srcWidth < dstWidth {
 		return fmt.Errorf("BIT_PACK encoder cannot encode %d bits values to %d bits: the source width must be less or equal to the destination width",
-			srcWidth, e.bitWidth)
+			srcWidth, dstWidth)
 	}
 
-	if srcWidth == e.bitWidth {
-		_, err := e.writer.Write(src)
+	if srcWidth == dstWidth {
+		_, err := dst.Write(src)
 		return err
 	}
 
-	bytesPerLoop := (bitPackBufferSize / (8 * e.bitWidth)) * (8 * srcWidth)
+	bytesPerLoop := (bitPackBufferSize / (8 * dstWidth)) * (8 * srcWidth)
 
 	for len(src) > 0 {
 		i := bytesPerLoop
@@ -132,8 +126,8 @@ func (e *bitPackRunEncoder) encode(src []byte, srcWidth uint) error {
 			i = uint(len(src))
 		}
 
-		n := bits.Pack(e.buffer[:], e.bitWidth, src[:i], srcWidth)
-		_, err := e.writer.Write(e.buffer[:bits.ByteCount(uint(n)*e.bitWidth)])
+		n := bits.Pack(e.buffer[:], dstWidth, src[:i], srcWidth)
+		_, err := dst.Write(e.buffer[:bits.ByteCount(uint(n)*dstWidth)])
 		if err != nil {
 			return err
 		}
