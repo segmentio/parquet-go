@@ -111,11 +111,11 @@ func (v2 DataPageHeaderV2) NumRows() int {
 }
 
 func (v2 DataPageHeaderV2) RepetitionLevelEncoding() encoding.Encoding {
-	return RLE.LevelEncoding()
+	return &RLE
 }
 
 func (v2 DataPageHeaderV2) DefinitionLevelEncoding() encoding.Encoding {
-	return RLE.LevelEncoding()
+	return &RLE
 }
 
 func (v2 DataPageHeaderV2) Encoding() encoding.Encoding {

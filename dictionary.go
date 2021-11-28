@@ -150,7 +150,7 @@ func (d *int32Dictionary) ReadFrom(decoder encoding.Decoder) error {
 	d.Reset()
 
 	if cap(d.values) == 0 {
-		d.values = make([]int32, 0, encoding.DefaultBufferSize/4)
+		d.values = make([]int32, 0, defaultBufferSize/4)
 	}
 
 	for {
@@ -231,7 +231,7 @@ func (d *int64Dictionary) ReadFrom(decoder encoding.Decoder) error {
 	d.Reset()
 
 	if cap(d.values) == 0 {
-		d.values = make([]int64, 0, encoding.DefaultBufferSize/8)
+		d.values = make([]int64, 0, defaultBufferSize/8)
 	}
 
 	for {
@@ -364,7 +364,7 @@ func (d *byteArrayDictionary) ReadFrom(decoder encoding.Decoder) error {
 	d.Reset()
 
 	if cap(d.values) == 0 {
-		d.values = make([]byte, 0, encoding.DefaultBufferSize)
+		d.values = make([]byte, 0, defaultBufferSize)
 	}
 
 	for {
@@ -471,7 +471,7 @@ func (d *fixedLenByteArrayDictionary) ReadFrom(decoder encoding.Decoder) error {
 	d.Reset()
 
 	if cap(d.values) == 0 {
-		d.values = make([]byte, 0, ((encoding.DefaultBufferSize/d.size)+1)*d.size)
+		d.values = make([]byte, 0, ((defaultBufferSize/d.size)+1)*d.size)
 	}
 
 	for {

@@ -58,7 +58,7 @@ func (w *booleanPageWriter) Bounds() (min, max Value) {
 
 func (w *booleanPageWriter) WriteValue(v Value) error {
 	if len(w.values) == cap(w.values) {
-		if err := w.flush(); err != nil {
+		if err := w.Flush(); err != nil {
 			return err
 		}
 	}
@@ -82,13 +82,6 @@ func (w *booleanPageWriter) WriteValue(v Value) error {
 }
 
 func (w *booleanPageWriter) Flush() error {
-	if err := w.flush(); err != nil {
-		return err
-	}
-	return w.encoder.Flush()
-}
-
-func (w *booleanPageWriter) flush() error {
 	defer func() { w.values = w.values[:0] }()
 	return w.encoder.EncodeBoolean(w.values)
 }
@@ -134,7 +127,7 @@ func (w *int32PageWriter) Bounds() (min, max Value) {
 
 func (w *int32PageWriter) WriteValue(v Value) error {
 	if len(w.values) == cap(w.values) {
-		if err := w.flush(); err != nil {
+		if err := w.Flush(); err != nil {
 			return err
 		}
 	}
@@ -144,13 +137,6 @@ func (w *int32PageWriter) WriteValue(v Value) error {
 }
 
 func (w *int32PageWriter) Flush() error {
-	if err := w.flush(); err != nil {
-		return err
-	}
-	return w.encoder.Flush()
-}
-
-func (w *int32PageWriter) flush() error {
 	defer func() { w.values = w.values[:0] }()
 	w.min, w.max = w.bounds()
 	w.flushes++
@@ -219,7 +205,7 @@ func (w *int64PageWriter) Bounds() (min, max Value) {
 
 func (w *int64PageWriter) WriteValue(v Value) error {
 	if len(w.values) == cap(w.values) {
-		if err := w.flush(); err != nil {
+		if err := w.Flush(); err != nil {
 			return err
 		}
 	}
@@ -229,13 +215,6 @@ func (w *int64PageWriter) WriteValue(v Value) error {
 }
 
 func (w *int64PageWriter) Flush() error {
-	if err := w.flush(); err != nil {
-		return err
-	}
-	return w.encoder.Flush()
-}
-
-func (w *int64PageWriter) flush() error {
 	defer func() { w.values = w.values[:0] }()
 	w.min, w.max = w.bounds()
 	w.flushes++
@@ -304,7 +283,7 @@ func (w *int96PageWriter) Bounds() (min, max Value) {
 
 func (w *int96PageWriter) WriteValue(v Value) error {
 	if len(w.values) == cap(w.values) {
-		if err := w.flush(); err != nil {
+		if err := w.Flush(); err != nil {
 			return err
 		}
 	}
@@ -314,13 +293,6 @@ func (w *int96PageWriter) WriteValue(v Value) error {
 }
 
 func (w *int96PageWriter) Flush() error {
-	if err := w.flush(); err != nil {
-		return err
-	}
-	return w.encoder.Flush()
-}
-
-func (w *int96PageWriter) flush() error {
 	defer func() { w.values = w.values[:0] }()
 	w.min, w.max = w.bounds()
 	w.flushes++
@@ -389,7 +361,7 @@ func (w *floatPageWriter) Bounds() (min, max Value) {
 
 func (w *floatPageWriter) WriteValue(v Value) error {
 	if len(w.values) == cap(w.values) {
-		if err := w.flush(); err != nil {
+		if err := w.Flush(); err != nil {
 			return err
 		}
 	}
@@ -399,13 +371,6 @@ func (w *floatPageWriter) WriteValue(v Value) error {
 }
 
 func (w *floatPageWriter) Flush() error {
-	if err := w.flush(); err != nil {
-		return err
-	}
-	return w.encoder.Flush()
-}
-
-func (w *floatPageWriter) flush() error {
 	defer func() { w.values = w.values[:0] }()
 	w.min, w.max = w.bounds()
 	w.flushes++
@@ -474,7 +439,7 @@ func (w *doublePageWriter) Bounds() (min, max Value) {
 
 func (w *doublePageWriter) WriteValue(v Value) error {
 	if len(w.values) == cap(w.values) {
-		if err := w.flush(); err != nil {
+		if err := w.Flush(); err != nil {
 			return err
 		}
 	}
@@ -484,13 +449,6 @@ func (w *doublePageWriter) WriteValue(v Value) error {
 }
 
 func (w *doublePageWriter) Flush() error {
-	if err := w.flush(); err != nil {
-		return err
-	}
-	return w.encoder.Flush()
-}
-
-func (w *doublePageWriter) flush() error {
 	defer func() { w.values = w.values[:0] }()
 	w.min, w.max = w.bounds()
 	w.flushes++
@@ -564,16 +522,16 @@ func (w *byteArrayPageWriter) WriteValue(v Value) error {
 
 	if (4 + len(value)) > cap(w.values) {
 		if len(w.values) != 0 {
-			if err := w.flush(); err != nil {
+			if err := w.Flush(); err != nil {
 				return err
 			}
 		}
 		w.values = plain.ByteArray(value)
-		return w.flush() // flush large values immediately
+		return w.Flush() // flush large values immediately
 	}
 
 	if (cap(w.values) - len(w.values)) < (4 + len(value)) {
-		if err := w.flush(); err != nil {
+		if err := w.Flush(); err != nil {
 			return err
 		}
 	}
@@ -605,13 +563,6 @@ func (w *byteArrayPageWriter) setMax(max []byte) {
 }
 
 func (w *byteArrayPageWriter) Flush() error {
-	if err := w.flush(); err != nil {
-		return err
-	}
-	return w.encoder.Flush()
-}
-
-func (w *byteArrayPageWriter) flush() error {
 	defer func() { w.values = w.values[:0] }()
 	return w.encoder.EncodeByteArray(w.values)
 }
@@ -670,7 +621,7 @@ func (w *fixedLenByteArrayPageWriter) write(value []byte) error {
 	}
 
 	if (cap(w.data) - len(w.data)) < len(value) {
-		if err := w.flush(); err != nil {
+		if err := w.Flush(); err != nil {
 			return err
 		}
 	}
@@ -681,13 +632,6 @@ func (w *fixedLenByteArrayPageWriter) write(value []byte) error {
 }
 
 func (w *fixedLenByteArrayPageWriter) Flush() error {
-	if err := w.flush(); err != nil {
-		return err
-	}
-	return w.encoder.Flush()
-}
-
-func (w *fixedLenByteArrayPageWriter) flush() error {
 	defer func() { w.data = w.data[:0] }()
 	min, max := w.bounds()
 	copy(w.min, min)
@@ -779,7 +723,7 @@ func (w *uint32PageWriter) Bounds() (min, max Value) {
 
 func (w *uint32PageWriter) WriteValue(v Value) error {
 	if len(w.values) == cap(w.values) {
-		if err := w.flush(); err != nil {
+		if err := w.Flush(); err != nil {
 			return err
 		}
 	}
@@ -789,13 +733,6 @@ func (w *uint32PageWriter) WriteValue(v Value) error {
 }
 
 func (w *uint32PageWriter) Flush() error {
-	if err := w.flush(); err != nil {
-		return err
-	}
-	return w.encoder.Flush()
-}
-
-func (w *uint32PageWriter) flush() error {
 	defer func() { w.values = w.values[:0] }()
 	w.min, w.max = w.bounds()
 	w.flushes++
@@ -864,7 +801,7 @@ func (w *uint64PageWriter) Bounds() (min, max Value) {
 
 func (w *uint64PageWriter) WriteValue(v Value) error {
 	if len(w.values) == cap(w.values) {
-		if err := w.flush(); err != nil {
+		if err := w.Flush(); err != nil {
 			return err
 		}
 	}
@@ -874,13 +811,6 @@ func (w *uint64PageWriter) WriteValue(v Value) error {
 }
 
 func (w *uint64PageWriter) Flush() error {
-	if err := w.flush(); err != nil {
-		return err
-	}
-	return w.encoder.Flush()
-}
-
-func (w *uint64PageWriter) flush() error {
 	defer func() { w.values = w.values[:0] }()
 	w.min, w.max = w.bounds()
 	w.flushes++

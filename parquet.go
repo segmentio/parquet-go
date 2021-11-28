@@ -5,6 +5,10 @@ import (
 	"strings"
 )
 
+const (
+	defaultBufferSize = 4096
+)
+
 type int96 = [12]byte
 
 func copyBytes(b []byte) []byte {

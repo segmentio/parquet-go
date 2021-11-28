@@ -526,11 +526,7 @@ func newColumnChunkWriter(writer pageWriter, codec compress.Codec, enc encoding.
 	}
 
 	if maxRepetitionLevel > 0 || maxDefinitionLevel > 0 {
-		levelEncoding := encoding.Encoding(&RLE)
-		if dataPageType == format.DataPageV2 {
-			levelEncoding = RLE.LevelEncoding()
-		}
-		ccw.levels.encoder = levelEncoding.NewEncoder(nil)
+		ccw.levels.encoder = RLE.NewEncoder(nil)
 	}
 
 	ccw.page.encoder = enc.NewEncoder(nil)
@@ -600,7 +596,6 @@ func (ccw *columnChunkWriter) Flush() error {
 			ccw.levels.encoder.Reset(&ccw.page.uncompressed)
 			ccw.levels.encoder.SetBitWidth(bits.Len8(ccw.maxRepetitionLevel))
 			ccw.levels.encoder.EncodeInt8(ccw.levels.repetition)
-			ccw.levels.encoder.Flush()
 			repetitionLevelsByteLength = int32(ccw.page.uncompressed.length)
 		}
 		if ccw.maxDefinitionLevel > 0 {
@@ -608,7 +603,6 @@ func (ccw *columnChunkWriter) Flush() error {
 			ccw.levels.encoder.Reset(&ccw.page.uncompressed)
 			ccw.levels.encoder.SetBitWidth(bits.Len8(ccw.maxDefinitionLevel))
 			ccw.levels.encoder.EncodeInt8(ccw.levels.definition)
-			ccw.levels.encoder.Flush()
 			definitionLevelsByteLength = int32(ccw.page.uncompressed.length)
 		}
 	}
@@ -632,7 +626,6 @@ func (ccw *columnChunkWriter) Flush() error {
 			ccw.levels.encoder.Reset(&ccw.levels.v1)
 			ccw.levels.encoder.SetBitWidth(bits.Len8(ccw.maxRepetitionLevel))
 			ccw.levels.encoder.EncodeInt8(ccw.levels.repetition)
-			ccw.levels.encoder.Flush()
 			ccw.levels.v1.Close()
 		}
 		if ccw.maxDefinitionLevel > 0 {
@@ -640,16 +633,12 @@ func (ccw *columnChunkWriter) Flush() error {
 			ccw.levels.encoder.Reset(&ccw.levels.v1)
 			ccw.levels.encoder.SetBitWidth(bits.Len8(ccw.maxDefinitionLevel))
 			ccw.levels.encoder.EncodeInt8(ccw.levels.definition)
-			ccw.levels.encoder.Flush()
 			ccw.levels.v1.Close()
 		}
 	}
 
 	ccw.page.encoder.Reset(&ccw.page.uncompressed)
 	if err := ccw.values.WriteTo(ccw.page.encoder); err != nil {
-		return err
-	}
-	if err := ccw.page.encoder.Flush(); err != nil {
 		return err
 	}
 	if err := ccw.page.compressed.Close(); err != nil {

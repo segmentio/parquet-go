@@ -74,9 +74,9 @@ func (d *Decoder) decode(data []byte, dstWidth, srcWidth uint) (int, error) {
 		return 0, fmt.Errorf("the source bit-width must be configured on a RLE decoder before reading %d bits integer values", dstWidth)
 	}
 	decoded := 0
-	minLen := bits.ByteCount(dstWidth)
+	wordSize := bits.ByteCount(dstWidth)
 
-	for len(data) >= minLen {
+	for len(data) >= wordSize {
 		if d.decoder == nil {
 			u, err := binary.ReadUvarint(d)
 			switch err {
@@ -110,7 +110,7 @@ func (d *Decoder) decode(data []byte, dstWidth, srcWidth uint) (int, error) {
 			}
 		}
 
-		data = data[n:]
+		data = data[n*wordSize:]
 	}
 
 	return decoded, nil

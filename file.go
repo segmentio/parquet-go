@@ -11,10 +11,6 @@ import (
 	"github.com/segmentio/parquet/format"
 )
 
-const (
-	defaultBufferSize = 4096
-)
-
 var (
 	ErrMissingRootColumn = errors.New("parquet file is missing a root column")
 )
