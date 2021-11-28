@@ -8,6 +8,9 @@ import (
 	"os/exec"
 	"testing"
 
+	"github.com/hexops/gotextdiff"
+	"github.com/hexops/gotextdiff/myers"
+	"github.com/hexops/gotextdiff/span"
 	"github.com/segmentio/parquet"
 )
 
@@ -196,26 +199,26 @@ value 3: R:0 D:0 V:Skywalker
 		dump: `row group 0
 --------------------------------------------------------------------------------
 contacts:
-.name:              BINARY UNCOMPRESSED DO:0 FPO:4 SZ:111/111/1.00 VC:3 [more]...
-.phoneNumber:       BINARY SNAPPY DO:0 FPO:115 SZ:90/88/0.98 VC:3 ENC:PLAIN,RLE [more]...
-owner:              BINARY ZSTD DO:0 FPO:205 SZ:101/92/0.91 VC:2 ENC:PLAIN,RLE [more]...
-ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:306 SZ:127/102/0.80 VC:3 ENC:PLAIN,RLE [more]...
+.name:              BINARY UNCOMPRESSED DO:0 FPO:4 SZ:145/145/1.00 VC:3 [more]...
+.phoneNumber:       BINARY SNAPPY DO:0 FPO:149 SZ:118/116/0.98 VC:3 EN [more]...
+owner:              BINARY ZSTD DO:0 FPO:267 SZ:127/118/0.93 VC:2 ENC:PLAIN,RLE [more]...
+ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:394 SZ:155/130/0.84 VC:3 ENC:PLAIN,RLE [more]...
 
     contacts.name TV=3 RL=1 DL=1
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[num_nulls: 1, min/max not defined] [more]...
+    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[min: Chris Aniszczyk, max:  [more]... VC:3
 
     contacts.phoneNumber TV=3 RL=1 DL=2
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[num_nulls: 2, min/max not defined] [more]...
+    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[min: 555 987 6543, max: 555 [more]... VC:3
 
     owner TV=2 RL=0 DL=0
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[no stats for this column] SZ:32 VC:2
+    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[min: A. Nonymous, max: Juli [more]... VC:2
 
     ownerPhoneNumbers TV=3 RL=1 DL=1
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[num_nulls: 1, min/max not defined] [more]...
+    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[min: 555 123 4567, max: 555 [more]... VC:3
 
 BINARY contacts.name
 --------------------------------------------------------------------------------
@@ -267,7 +270,9 @@ func TestWriter(t *testing.T) {
 			}
 
 			if string(b) != dump {
-				t.Errorf("OUTPUT MISMATCH\ngot:\n%s\nwant:\n%s", string(b), dump)
+				edits := myers.ComputeEdits(span.URIFromPath("want.txt"), dump, string(b))
+				diff := fmt.Sprint(gotextdiff.ToUnified("want.txt", "got.txt", dump, edits))
+				t.Errorf("\n%s", diff)
 			}
 		})
 	}

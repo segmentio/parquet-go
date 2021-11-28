@@ -436,3 +436,116 @@ func (buf uuidPageBuffer) WriteValue(v Value) error {
 	}
 	return buf.write(b)
 }
+
+func copyBytes(b []byte) []byte {
+	c := make([]byte, len(b))
+	copy(c, b)
+	return c
+}
+
+/*
+type pageBuffer struct {
+	encoder encoding.Encoder
+	header  bytes.Buffer
+	buffer  bytes.Buffer
+	writer  io.Writer
+}
+
+func (p *pageBuffer) flush(numValues int) error {
+	return nil
+}
+
+func (p *pageBuffer) Reset(w io.Writer) {
+	p.header.Reset()
+	p.buffer.Reset()
+	p.encoder.Reset(&p.buffer)
+	p.writer = w
+}
+
+func (p *pageBuffer) Encoding() format.Encoding {
+	return p.encoder.Encoding()
+}
+
+func (p *pageBuffer) EncodeBoolean(data []bool) error {
+	if err := p.encoder.EncodeBoolean(data); err != nil {
+		return err
+	}
+	return p.flush(len(data))
+}
+
+func (p *pageBuffer) EncodeInt8(data []int8) error {
+	if err := p.encoder.EncodeInt8(data); err != nil {
+		return err
+	}
+	return p.flush(len(data))
+}
+
+func (p *pageBuffer) EncodeInt16(data []int16) error {
+	if err := p.encoder.EncodeInt16(data); err != nil {
+		return err
+	}
+	return p.flush(len(data))
+}
+
+func (p *pageBuffer) EncodeInt32(data []int32) error {
+	if err := p.encoder.EncodeInt32(data); err != nil {
+		return err
+	}
+	return p.flush(len(data))
+}
+
+func (p *pageBuffer) EncodeInt64(data []int64) error {
+	if err := p.encoder.EncodeInt64(data); err != nil {
+		return err
+	}
+	return p.flush(len(data))
+}
+
+func (p *pageBuffer) EncodeInt96(data []int96) error {
+	if err := p.encoder.EncodeInt96(data); err != nil {
+		return err
+	}
+	return p.flush(len(data))
+}
+
+func (p *pageBuffer) EncodeFloat(data []float32) error {
+	if err := p.encoder.EncodeFloat(data); err != nil {
+		return err
+	}
+	return p.flush(len(data))
+}
+
+func (p *pageBuffer) EncodeDouble(data []float64) error {
+	if err := p.encoder.EncodeDouble(data); err != nil {
+		return err
+	}
+	return p.flush(len(data))
+}
+
+func (p *pageBuffer) EncodeByteArray(data []byte) error {
+	if err := p.encoder.EncodeByteArray(data); err != nil {
+		return err
+	}
+	numValues := 0
+	plain.ScanByteArrayList(data, len(data)/4, func([]byte) error {
+		numValues++
+		return nil
+	})
+	return p.flush(numValues)
+}
+
+func (p *pageBuffer) EncodeFixedLenByteArray(size int, data []byte) error {
+	if err := p.encoder.EncodeFixedLenByteArray(size, data); err != nil {
+		return err
+	}
+	return p.flush(len(data) / size)
+}
+
+func (p *pageBuffer) SetBitWidth(bitWidth int) {
+	p.encoder.SetBitWidth(bitWidth)
+}
+
+var (
+	_ encoding.Encoder = (*pageBuffer)(nil)
+)
+*/

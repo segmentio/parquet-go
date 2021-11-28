@@ -208,16 +208,16 @@ func (rgw *rowGroupWriter) init(node Node, path []string, dataPageType format.Pa
 		}
 
 		dictionary := Dictionary(nil)
-		pageBuffer := PageBuffer(nil)
+		pageWriter := PageWriter(nil)
 		bufferSize := rgw.config.PageBufferSize
+		encoder := encoding.NewEncoder(nil)
 
 		switch encoding.Encoding() {
 		case format.PlainDictionary, format.RLEDictionary:
-			bufferSize /= 2
 			dictionary = nodeType.NewDictionary(bufferSize)
-			pageBuffer = NewDictionaryPageBuffer(dictionary, bufferSize)
+			pageWriter = NewIndexedPageWriter(encoder, bufferSize, dictionary)
 		default:
-			pageBuffer = nodeType.NewPageBuffer(bufferSize)
+			pageWriter = nodeType.NewPageWriter(encoder, bufferSize)
 		}
 
 		buffer := &bufferPoolPageWriter{pool: rgw.config.ColumnPageBuffers}
@@ -232,11 +232,11 @@ func (rgw *rowGroupWriter) init(node Node, path []string, dataPageType format.Pa
 			writer: newColumnChunkWriter(
 				buffer,
 				compressionCodec,
-				encoding,
+				encoder,
 				dataPageType,
 				maxRepetitionLevel,
 				maxDefinitionLevel,
-				pageBuffer,
+				pageWriter,
 			),
 		}
 
@@ -388,10 +388,9 @@ func (rgw *rowGroupWriter) WriteRow(row interface{}) error {
 }
 
 type columnChunkWriter struct {
-	writer      pageWriter
-	encoding    encoding.Encoding
+	buffer      pageBuffer
+	values      PageWriter
 	compression compress.Codec
-	values      PageBuffer
 
 	dataPageType       format.PageType
 	maxRepetitionLevel int8
@@ -441,12 +440,11 @@ type columnChunkWriter struct {
 	encodingStats         []format.PageEncodingStats
 }
 
-func newColumnChunkWriter(writer pageWriter, codec compress.Codec, enc encoding.Encoding, dataPageType format.PageType, maxRepetitionLevel, maxDefinitionLevel int8, values PageBuffer) *columnChunkWriter {
+func newColumnChunkWriter(buffer pageBuffer, codec compress.Codec, enc encoding.Encoder, dataPageType format.PageType, maxRepetitionLevel, maxDefinitionLevel int8, values PageWriter) *columnChunkWriter {
 	ccw := &columnChunkWriter{
-		writer:             writer,
-		encoding:           enc,
-		compression:        codec,
+		buffer:             buffer,
 		values:             values,
+		compression:        codec,
 		dataPageType:       dataPageType,
 		maxRepetitionLevel: maxRepetitionLevel,
 		maxDefinitionLevel: maxDefinitionLevel,
@@ -467,7 +465,7 @@ func newColumnChunkWriter(writer pageWriter, codec compress.Codec, enc encoding.
 		ccw.levels.encoder = RLE.NewEncoder(nil)
 	}
 
-	ccw.page.encoder = enc.NewEncoder(nil)
+	ccw.page.encoder = enc
 	ccw.encodings = append(ccw.encodings, format.RLE)
 	return ccw
 }
@@ -576,7 +574,7 @@ func (ccw *columnChunkWriter) Flush() error {
 	}
 
 	ccw.page.encoder.Reset(&ccw.page.uncompressed)
-	if err := ccw.values.WriteTo(ccw.page.encoder); err != nil {
+	if err := ccw.values.Flush(); err != nil {
 		return err
 	}
 	if err := ccw.page.compressed.Close(); err != nil {
@@ -588,7 +586,7 @@ func (ccw *columnChunkWriter) Flush() error {
 	levelsByteLength := repetitionLevelsByteLength + definitionLevelsByteLength
 	uncompressedPageSize := ccw.page.uncompressed.length + int64(levelsByteLength)
 	compressedPageSize := ccw.page.buffer.Len()
-	encoding := ccw.encoding.Encoding()
+	encoding := ccw.page.encoder.Encoding()
 
 	pageHeader := &format.PageHeader{
 		Type:                 ccw.dataPageType,
@@ -605,7 +603,7 @@ func (ccw *columnChunkWriter) Flush() error {
 		Min:           ccw.minValueBytes, // deprecated
 		Max:           ccw.maxValueBytes, // deprecated
 		NullCount:     int64(ccw.numNulls),
-		DistinctCount: int64(ccw.values.DistinctCount()),
+		DistinctCount: 0,
 		MinValue:      ccw.minValueBytes,
 		MaxValue:      ccw.maxValueBytes,
 	}
@@ -649,13 +647,13 @@ func (ccw *columnChunkWriter) Flush() error {
 	ccw.totalCompressedSize += int64(headerSize) + int64(compressedPageSize)
 	ccw.addPageEncoding(ccw.dataPageType, encoding)
 
-	ccw.values.Reset()
+	ccw.values.Reset(ccw.page.encoder)
 	ccw.numNulls = 0
 	ccw.numRows = 0
 	ccw.levels.repetition = ccw.levels.repetition[:0]
 	ccw.levels.definition = ccw.levels.definition[:0]
 
-	return ccw.writer.writePage(ccw.header.buffer.Bytes(), ccw.page.buffer.Bytes())
+	return ccw.buffer.writePage(ccw.header.buffer.Bytes(), ccw.page.buffer.Bytes())
 }
 
 func (ccw *columnChunkWriter) WriteValue(v Value) error {
@@ -790,7 +788,7 @@ func (c columnChunkEncodingStatsOrder) Swap(i, j int) {
 	c.encodingStats[i], c.encodingStats[j] = c.encodingStats[j], c.encodingStats[i]
 }
 
-type pageWriter interface {
+type pageBuffer interface {
 	writePage(header, data []byte) error
 }
 

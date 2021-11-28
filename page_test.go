@@ -157,7 +157,7 @@ func TestPageReadWrite(t *testing.T) {
 				dec := parquet.Plain.NewDecoder(buf)
 				enc := parquet.Plain.NewEncoder(buf)
 				pr := test.typ.NewPageReader(dec, 32)
-				pw := test.typ.NewPageWriter(enc, 32)
+				pw := test.typ.NewPageWriter(enc, 1024)
 
 				for _, values := range test.values {
 					t.Run("", func(t *testing.T) {
@@ -179,7 +179,7 @@ func TestPageReadWrite(t *testing.T) {
 				dec := parquet.Plain.NewDecoder(buf)
 				enc := parquet.Plain.NewEncoder(buf)
 				pr := parquet.NewIndexedPageReader(dec, 32, dict)
-				pw := parquet.NewIndexedPageWriter(enc, 32, dict)
+				pw := parquet.NewIndexedPageWriter(enc, 1024, dict)
 
 				for _, values := range test.values {
 					t.Run("", func(t *testing.T) {
@@ -216,6 +216,7 @@ func testPageReadWrite(t *testing.T, r parquet.PageReader, w parquet.PageWriter,
 		}
 	}
 
+	numValues := w.NumValues()
 	min, max := w.Bounds()
 	if !parquet.Equal(min, minValue) {
 		t.Errorf("min value mismatch: want=%v got=%v", minValue, min)
@@ -228,7 +229,6 @@ func testPageReadWrite(t *testing.T, r parquet.PageReader, w parquet.PageWriter,
 		t.Fatal("flushing page writer:", err)
 	}
 
-	n := w.NumValues()
 	i := 0
 	for {
 		v, err := r.ReadValue()
@@ -248,7 +248,7 @@ func testPageReadWrite(t *testing.T, r parquet.PageReader, w parquet.PageWriter,
 		i++
 	}
 
-	if i != n {
-		t.Errorf("wrong number of values read from page reader: want=%d got=%d", n, i)
+	if i != numValues {
+		t.Errorf("wrong number of values read from page reader: want=%d got=%d", numValues, i)
 	}
 }
