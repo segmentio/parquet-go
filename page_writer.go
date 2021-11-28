@@ -10,17 +10,36 @@ import (
 	"github.com/segmentio/parquet/internal/bits"
 )
 
+// PageWriter is an interface implemented by types which support writing valuees
+// to a buffer and flushing it to an underlying encoder.
 type PageWriter interface {
 	ValueWriter
 
+	// Returns the type values written to the underlying page.
 	Type() Type
 
+	// Returns the number of values currently buffered in the writer.
 	NumValues() int
 
+	// Returns the min and max values currently bufffered in the writter.
+	//
+	// When no values have been written, or the writer was flushed, the min and
+	// max values are both null.
 	Bounds() (min, max Value)
 
+	// Flushes all buffered values to the underlying encoder.
+	//
+	// Flush must be called explicitly when calling WriteValue returns
+	// ErrBufferFull, or when no more values will be written.
+	//
+	// The design decision of requiring explicit flushes was made to given
+	// applications the opportunity to gather the number and bounds of values
+	// before flushing the buffers.
 	Flush() error
 
+	// Resets the encoder used to write values to the parquet page. This method
+	// is useful to allow reusing writers. Calling this method drops all values
+	// previously buffered by the writer.
 	Reset(encoding.Encoder)
 }
 

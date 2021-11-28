@@ -9,14 +9,29 @@ import (
 	"github.com/segmentio/parquet/internal/bits"
 )
 
+// PageReader is an interface implemented by types that support reading values
+// from pages of parquet files.
+//
+// The values read from the page do not have repetition or definition levels
+// set, use a DataPageReader to decode values with levels.
 type PageReader interface {
 	ValueReader
 
+	// Returns the type of values read from the underlying page.
 	Type() Type
 
+	// Resets the decoder used to read values from the parquet page. This method
+	// is useful to allow reusing readers. Calling this method drops all values
+	// previously buffered by the reader.
 	Reset(encoding.Decoder)
 }
 
+// DataPageReader reads values from a data page.
+//
+// DataPageReader implements the ValueReader interface; when they exist,
+// the reader decodes repetition and definition levels in order to assign
+// levels to values returned to the application, which includes producing
+// null values when needed.
 type DataPageReader struct {
 	page               PageReader
 	remain             int

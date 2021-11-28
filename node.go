@@ -10,17 +10,34 @@ import (
 	"github.com/segmentio/parquet/format"
 )
 
+// Node values represent nodes of a parquet schema.
+//
+// Nodes carry the type of values, as well as properties like whether the values
+// are optional or repeat. Nodes with one or more children represent parquet
+// groups and therefore do not have a logical type.
 type Node interface {
+	// For leaf nodes, returns the type of values of the parquet column.
+	//
+	// Calling this method on non-leaf nodes will panic.
 	Type() Type
 
+	// Returns whether the parquet column is optional.
 	Optional() bool
 
+	// Returns whether the parquet column is repeated.
 	Repeated() bool
 
+	// Returns whether the parquet column is required.
 	Required() bool
 
+	// Returns the number of child nodes.
+	//
+	// The method returns zero on leaf nodes.
 	NumChildren() int
 
+	// Returns the sorted list of child node namees.
+	//
+	// The method returns an empty slice on leaf nodes.
 	ChildNames() []string
 
 	ChildByName(name string) Node

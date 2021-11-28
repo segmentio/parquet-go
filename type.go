@@ -11,6 +11,8 @@ import (
 	"github.com/segmentio/parquet/internal/bits"
 )
 
+// Kind is an enumeration type representing the physical types supported by the
+// parquet type system.
 type Kind int16
 
 const (
@@ -28,23 +30,56 @@ func (k Kind) String() string {
 	return format.Type(k).String()
 }
 
+// The Type interface represents logical types of the parquet type system.
 type Type interface {
+	// Returns the Kind value representing the underlying physical type.
 	Kind() Kind
 
+	// For integer and floating point physical types, the method returns the
+	// size of values in bits.
+	//
+	// For fixed-length byte arrays, the method returns the size of elements
+	// in bytes.
+	//
+	// For other types, the value is zero.
 	Length() int
 
+	// Compares two values and returns whether the first one is less than the
+	// other.
+	//
+	// The values Kind must match the type, otherewise the result is undefined.
 	Less(Value, Value) bool
 
+	// Returns the physical type as a *format.Type value.
+	//
+	// As an optimization, the method may return the same pointer accross
+	// multiple calls. Applications must treat the returned value as immutable,
+	// mutating the value will result in undefined behavior.
 	PhyiscalType() *format.Type
 
+	// Returns the logical type as a *format.LogicalType value. When the logical
+	// type is unknown, the method returns nil.
+	//
+	// As an optimization, the method may return the same pointer accross
+	// multiple calls. Applications must treat the returned value as immutable,
+	// mutating the value will result in undefined behavior.
 	LogicalType() *format.LogicalType
 
+	// Returns the logical type's equivaleent converted type. When there are
+	// no equivalent convertted type, the method returns nil.
+	//
+	// As an optimization, the method may return the same pointer accross
+	// multiple calls. Applications must treat the returned value as immutable,
+	// mutating the value will result in undefined behavior.
 	ConvertedType() *deprecated.ConvertedType
 
+	// Creates a dictionary holding values of this type.
 	NewDictionary(bufferSize int) Dictionary
 
+	// Creates a page writer for values of this type.
 	NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader
 
+	// Creates a page reader for values of this type.
 	NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter
 }
 
@@ -345,14 +380,24 @@ var (
 	ByteArrayType Type = byteArrayType{}
 )
 
+// FixedLenByteArrayType constructs a type for fixed-length values of the given
+// size (in bytes).
 func FixedLenByteArrayType(length int) Type {
 	return &fixedLenByteArrayType{length: length}
 }
 
+// Int constructs a leaf node of signed integer logical type of the given bit
+// width.
+//
+// The bit width must be one of 8, 16, 32, 64, or the function will panic.
 func Int(bitWidth int) Node {
 	return &leafNode{typ: integerType(bitWidth, &signedIntTypes)}
 }
 
+// Uint constructts a leaf node of unsigned integer logical type of the given
+// bit width.
+//
+// The bit width must be one of 8, 16, 32, 64, or the function will panic.
 func Uint(bitWidth int) Node {
 	return &leafNode{typ: integerType(bitWidth, &unsignedIntTypes)}
 }
@@ -470,6 +515,8 @@ func (t *intType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWr
 	}
 }
 
+// Decimal constructs a leaf node of decimal logical ttype with the given
+// sccale, precision, and underlying type.
 func Decimal(scale, precision int, typ Type) Node {
 	return &leafNode{
 		typ: &decimalType{
@@ -513,6 +560,9 @@ func (t *decimalType) NewPageWriter(encoder encoding.Encoder, bufferSize int) Pa
 	panic("NOT IMPLEMENTED")
 }
 
+// String constructs a leaf node of UTF8 logical type.
+//
+// https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#string
 func String() Node { return &leafNode{typ: &stringType{}} }
 
 type stringType format.StringType
@@ -549,6 +599,9 @@ func (t *stringType) NewPageWriter(encoder encoding.Encoder, bufferSize int) Pag
 	return newByteArrayPageWriter(t, encoder, bufferSize)
 }
 
+// UUID constructs a leaf node of UUID logical type.
+//
+// https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#uuid
 func UUID() Node { return &leafNode{typ: &uuidType{}} }
 
 type uuidType format.UUIDType
@@ -583,6 +636,9 @@ func (t *uuidType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageW
 	return uuidPageWriter{newFixedLenByteArrayPageWriter(t, encoder, bufferSize)}
 }
 
+// Enum constructs a leaf node with a logical type representing enumerations.
+//
+// https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#enum
 func Enum() Node { return &leafNode{typ: &enumType{}} }
 
 type enumType format.EnumType
@@ -619,6 +675,9 @@ func (t *enumType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageW
 	return newByteArrayPageWriter(t, encoder, bufferSize)
 }
 
+// JSON constructs a leaf node of JSON logical type.
+//
+// https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#json
 func JSON() Node { return &leafNode{typ: &jsonType{}} }
 
 type jsonType format.JsonType
@@ -655,6 +714,9 @@ func (t *jsonType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageW
 	return newByteArrayPageWriter(t, encoder, bufferSize)
 }
 
+// BSON constructs a leaf node of BSON logical type.
+//
+// https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#bson
 func BSON() Node { return &leafNode{typ: &bsonType{}} }
 
 type bsonType format.BsonType
@@ -691,6 +753,9 @@ func (t *bsonType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageW
 	return newByteArrayPageWriter(t, encoder, bufferSize)
 }
 
+// Date constructs a leaf node of DATE logical type.
+//
+// https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#date
 func Date() Node { return &leafNode{typ: &dateType{}} }
 
 type dateType format.DateType
@@ -723,9 +788,12 @@ func (t *dateType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageW
 	return newInt32PageWriter(t, encoder, bufferSize)
 }
 
+// TimeUnit represents units of time in the parquet type system.
 type TimeUnit interface {
+	// Returns the precision of the time unit as a time.Duration value.
 	Duration() time.Duration
-
+	// Converts the TimeUnit value to its representation in the parquet thrift
+	// format.
 	TimeUnit() format.TimeUnit
 }
 
@@ -756,6 +824,9 @@ func (u *nanosecond) TimeUnit() format.TimeUnit {
 	return format.TimeUnit{Nanos: (*format.NanoSeconds)(u)}
 }
 
+// Time constructs a leaf node of TIME logical type.
+//
+// https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#time
 func Time(unit TimeUnit) Node {
 	return &leafNode{typ: &timeType{IsAdjustedToUTC: true, Unit: unit.TimeUnit()}}
 }
@@ -833,6 +904,9 @@ func (t *timeType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageW
 	}
 }
 
+// Timestamp constructs of leaf node of TIMESTAMP logical type.
+//
+// https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#timestamp
 func Timestamp(unit TimeUnit) Node {
 	return &leafNode{typ: &timestampType{IsAdjustedToUTC: true, Unit: unit.TimeUnit()}}
 }
@@ -874,6 +948,9 @@ func (t *timestampType) NewPageWriter(encoder encoding.Encoder, bufferSize int) 
 	return newInt64PageWriter(t, encoder, bufferSize)
 }
 
+// List constructs a node eof LIST logical type.
+//
+// https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#lists
 func List(of Node) Node {
 	return listNode{Group{"list": Repeated(Group{"element": of})}}
 }
@@ -912,6 +989,9 @@ func (t *listType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageW
 	panic("cannot create page writer from parquet LIST type")
 }
 
+// Map constructs a node of MAP logical type.
+//
+// https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#maps
 func Map(key, value Node) Node {
 	return mapNode{Group{
 		"key_value": Repeated(Group{
