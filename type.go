@@ -43,8 +43,6 @@ type Type interface {
 
 	NewDictionary(bufferSize int) Dictionary
 
-	NewPageBuffer(bufferSize int) PageBuffer
-
 	NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader
 
 	NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter
@@ -150,10 +148,6 @@ func (t booleanType) NewDictionary(bufferSize int) Dictionary {
 	return newBooleanDictionary(t)
 }
 
-func (t booleanType) NewPageBuffer(bufferSize int) PageBuffer {
-	return newBooleanPageBuffer(t, bufferSize)
-}
-
 func (t booleanType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
 	return newBooleanPageReader(t, decoder, bufferSize)
 }
@@ -178,10 +172,6 @@ func (t int32Type) PhyiscalType() *format.Type {
 
 func (t int32Type) NewDictionary(bufferSize int) Dictionary {
 	return newInt32Dictionary(t, bufferSize)
-}
-
-func (t int32Type) NewPageBuffer(bufferSize int) PageBuffer {
-	return newInt32PageBuffer(t, bufferSize)
 }
 
 func (t int32Type) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
@@ -210,10 +200,6 @@ func (t int64Type) NewDictionary(bufferSize int) Dictionary {
 	return newInt64Dictionary(t, bufferSize)
 }
 
-func (t int64Type) NewPageBuffer(bufferSize int) PageBuffer {
-	return newInt64PageBuffer(t, bufferSize)
-}
-
 func (t int64Type) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
 	return newInt64PageReader(t, decoder, bufferSize)
 }
@@ -238,10 +224,6 @@ func (t int96Type) PhyiscalType() *format.Type {
 
 func (t int96Type) NewDictionary(bufferSize int) Dictionary {
 	return newInt96Dictionary(t, bufferSize)
-}
-
-func (t int96Type) NewPageBuffer(bufferSize int) PageBuffer {
-	return newInt96PageBuffer(t, bufferSize)
 }
 
 func (t int96Type) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
@@ -270,10 +252,6 @@ func (t floatType) NewDictionary(bufferSize int) Dictionary {
 	return newFloatDictionary(t, bufferSize)
 }
 
-func (t floatType) NewPageBuffer(bufferSize int) PageBuffer {
-	return newFloatPageBuffer(t, bufferSize)
-}
-
 func (t floatType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
 	return newFloatPageReader(t, decoder, bufferSize)
 }
@@ -294,10 +272,6 @@ func (t doubleType) PhyiscalType() *format.Type { return &physicalTypes[Double] 
 
 func (t doubleType) NewDictionary(bufferSize int) Dictionary {
 	return newDoubleDictionary(t, bufferSize)
-}
-
-func (t doubleType) NewPageBuffer(bufferSize int) PageBuffer {
-	return newDoublePageBuffer(t, bufferSize)
 }
 
 func (t doubleType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
@@ -322,10 +296,6 @@ func (t byteArrayType) PhyiscalType() *format.Type { return &physicalTypes[ByteA
 
 func (t byteArrayType) NewDictionary(bufferSize int) Dictionary {
 	return newByteArrayDictionary(t, bufferSize)
-}
-
-func (t byteArrayType) NewPageBuffer(bufferSize int) PageBuffer {
-	return newByteArrayPageBuffer(t, bufferSize)
 }
 
 func (t byteArrayType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
@@ -355,10 +325,6 @@ func (t *fixedLenByteArrayType) PhyiscalType() *format.Type {
 
 func (t *fixedLenByteArrayType) NewDictionary(bufferSize int) Dictionary {
 	return newFixedLenByteArrayDictionary(t, bufferSize)
-}
-
-func (t *fixedLenByteArrayType) NewPageBuffer(bufferSize int) PageBuffer {
-	return newFixedLenByteArrayPageBuffer(t, bufferSize)
 }
 
 func (t *fixedLenByteArrayType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
@@ -480,22 +446,6 @@ func (t *intType) NewDictionary(bufferSize int) Dictionary {
 	}
 }
 
-func (t *intType) NewPageBuffer(bufferSize int) PageBuffer {
-	if t.IsSigned {
-		if t.BitWidth == 64 {
-			return newInt64PageBuffer(t, bufferSize)
-		} else {
-			return newInt32PageBuffer(t, bufferSize)
-		}
-	} else {
-		if t.BitWidth == 64 {
-			return uint64PageBuffer{newInt64PageBuffer(t, bufferSize)}
-		} else {
-			return uint32PageBuffer{newInt32PageBuffer(t, bufferSize)}
-		}
-	}
-}
-
 func (t *intType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
 	if t.BitWidth == 64 {
 		return newInt64PageReader(t, decoder, bufferSize)
@@ -555,8 +505,6 @@ func (t *decimalType) Less(v1, v2 Value) bool { panic("NOT IMPLEMENTED") }
 
 func (t *decimalType) NewDictionary(bufferSize int) Dictionary { panic("NOT IMPLEMENTED") }
 
-func (t *decimalType) NewPageBuffer(bufferSize int) PageBuffer { panic("NOT IMPLEMENTED") }
-
 func (t *decimalType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
 	panic("NOT IMPLEMENTED")
 }
@@ -593,10 +541,6 @@ func (t *stringType) NewDictionary(bufferSize int) Dictionary {
 	return newByteArrayDictionary(t, bufferSize)
 }
 
-func (t *stringType) NewPageBuffer(bufferSize int) PageBuffer {
-	return newByteArrayPageBuffer(t, bufferSize)
-}
-
 func (t *stringType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
 	return newByteArrayPageReader(t, decoder, bufferSize)
 }
@@ -629,10 +573,6 @@ func (t *uuidType) ConvertedType() *deprecated.ConvertedType { return nil }
 
 func (t *uuidType) NewDictionary(bufferSize int) Dictionary {
 	return uuidDictionary{newFixedLenByteArrayDictionary(t, bufferSize)}
-}
-
-func (t *uuidType) NewPageBuffer(bufferSize int) PageBuffer {
-	return uuidPageBuffer{newFixedLenByteArrayPageBuffer(t, bufferSize)}
 }
 
 func (t *uuidType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
@@ -671,10 +611,6 @@ func (t *enumType) NewDictionary(bufferSize int) Dictionary {
 	return newByteArrayDictionary(t, bufferSize)
 }
 
-func (t *enumType) NewPageBuffer(bufferSize int) PageBuffer {
-	return newByteArrayPageBuffer(t, bufferSize)
-}
-
 func (t *enumType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
 	return newByteArrayPageReader(t, decoder, bufferSize)
 }
@@ -709,10 +645,6 @@ func (t *jsonType) ConvertedType() *deprecated.ConvertedType {
 
 func (t *jsonType) NewDictionary(bufferSize int) Dictionary {
 	return newByteArrayDictionary(t, bufferSize)
-}
-
-func (t *jsonType) NewPageBuffer(bufferSize int) PageBuffer {
-	return newByteArrayPageBuffer(t, bufferSize)
 }
 
 func (t *jsonType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
@@ -751,10 +683,6 @@ func (t *bsonType) NewDictionary(bufferSize int) Dictionary {
 	return newByteArrayDictionary(t, bufferSize)
 }
 
-func (t *bsonType) NewPageBuffer(bufferSize int) PageBuffer {
-	return newByteArrayPageBuffer(t, bufferSize)
-}
-
 func (t *bsonType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
 	return newByteArrayPageReader(t, decoder, bufferSize)
 }
@@ -785,10 +713,6 @@ func (t *dateType) ConvertedType() *deprecated.ConvertedType {
 
 func (t *dateType) NewDictionary(bufferSize int) Dictionary {
 	return newInt32Dictionary(t, bufferSize)
-}
-
-func (t *dateType) NewPageBuffer(bufferSize int) PageBuffer {
-	return newInt32PageBuffer(t, bufferSize)
 }
 
 func (t *dateType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
@@ -893,14 +817,6 @@ func (t *timeType) NewDictionary(bufferSize int) Dictionary {
 	}
 }
 
-func (t *timeType) NewPageBuffer(bufferSize int) PageBuffer {
-	if t.Unit.Millis != nil {
-		return newInt32PageBuffer(t, bufferSize)
-	} else {
-		return newInt64PageBuffer(t, bufferSize)
-	}
-}
-
 func (t *timeType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
 	if t.Unit.Millis != nil {
 		return newInt32PageReader(t, decoder, bufferSize)
@@ -950,10 +866,6 @@ func (t *timestampType) NewDictionary(bufferSize int) Dictionary {
 	return newInt64Dictionary(t, bufferSize)
 }
 
-func (t *timestampType) NewPageBuffer(bufferSize int) PageBuffer {
-	return newInt64PageBuffer(t, bufferSize)
-}
-
 func (t *timestampType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
 	return newInt64PageReader(t, decoder, bufferSize)
 }
@@ -990,10 +902,6 @@ func (t *listType) ConvertedType() *deprecated.ConvertedType {
 
 func (t *listType) NewDictionary(bufferSize int) Dictionary {
 	panic("cannot create dictionary from parquet LIST type")
-}
-
-func (t *listType) NewPageBuffer(bufferSize int) PageBuffer {
-	panic("cannot create page buffer from parquet LIST type")
 }
 
 func (t *listType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
@@ -1039,10 +947,6 @@ func (t *mapType) NewDictionary(bufferSize int) Dictionary {
 	panic("cannot create dictionary from parquet MAP type")
 }
 
-func (t *mapType) NewPageBuffer(bufferSize int) PageBuffer {
-	panic("cannot create page buffer from parquet MAP type")
-}
-
 func (t *mapType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
 	panic("cannot create page reader from parquet MAP type")
 }
@@ -1069,10 +973,6 @@ func (t *nullType) ConvertedType() *deprecated.ConvertedType { return nil }
 
 func (t *nullType) NewDictionary(bufferSize int) Dictionary {
 	panic("cannot create dictionary for parquet NULL type")
-}
-
-func (t *nullType) NewPageBuffer(bufferSize int) PageBuffer {
-	panic("cannot create page buffer for parquet NULL type")
 }
 
 func (t *nullType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {

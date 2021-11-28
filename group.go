@@ -70,10 +70,6 @@ func (groupType) NewDictionary(int) Dictionary {
 	panic("cannot create dictionary for parquet group")
 }
 
-func (groupType) NewPageBuffer(int) PageBuffer {
-	panic("cannot create page buffer for parquet group")
-}
-
 func (groupType) NewPageReader(encoding.Decoder, int) PageReader {
 	panic("cannot create page reader from parquet group")
 }

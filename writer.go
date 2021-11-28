@@ -573,6 +573,18 @@ func (ccw *columnChunkWriter) Flush() error {
 		}
 	}
 
+	minValue, maxValue := ccw.values.Bounds()
+	ccw.minValueBytes = minValue.AppendBytes(ccw.minValueBytes[:0])
+	ccw.maxValueBytes = maxValue.AppendBytes(ccw.maxValueBytes[:0])
+
+	typ := ccw.values.Type()
+	if ccw.minValue.IsNull() || typ.Less(minValue, ccw.minValue) {
+		ccw.minValue = minValue.Clone()
+	}
+	if ccw.maxValue.IsNull() || typ.Less(ccw.maxValue, maxValue) {
+		ccw.maxValue = maxValue.Clone()
+	}
+
 	ccw.page.encoder.Reset(&ccw.page.uncompressed)
 	if err := ccw.values.Flush(); err != nil {
 		return err
@@ -594,10 +606,6 @@ func (ccw *columnChunkWriter) Flush() error {
 		CompressedPageSize:   int32(compressedPageSize),
 		CRC:                  int32(ccw.page.checksum.Sum32()),
 	}
-
-	minValue, maxValue := ccw.values.Bounds()
-	ccw.minValueBytes = minValue.AppendBytes(ccw.minValueBytes[:0])
-	ccw.maxValueBytes = maxValue.AppendBytes(ccw.maxValueBytes[:0])
 
 	statistics := format.Statistics{
 		Min:           ccw.minValueBytes, // deprecated
@@ -632,14 +640,6 @@ func (ccw *columnChunkWriter) Flush() error {
 
 	if err := ccw.header.encoder.Encode(pageHeader); err != nil {
 		return err
-	}
-
-	typ := ccw.values.Type()
-	if ccw.minValue.IsNull() || typ.Less(minValue, ccw.minValue) {
-		ccw.minValue = minValue
-	}
-	if ccw.maxValue.IsNull() || typ.Less(ccw.maxValue, maxValue) {
-		ccw.maxValue = maxValue
 	}
 
 	headerSize := ccw.header.buffer.Len()
