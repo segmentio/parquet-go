@@ -8,10 +8,6 @@ import (
 	"github.com/segmentio/parquet/format"
 )
 
-const (
-	DefaultBufferSize = 1024
-)
-
 var (
 	ErrValueTooLarge  = errors.New("value is too large to be written to the buffer")
 	ErrBufferTooShort = errors.New("buffer is too short to contain a single vlaue")

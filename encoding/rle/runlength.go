@@ -15,6 +15,8 @@ type runLengthRunDecoder struct {
 	buffer   [8]byte
 }
 
+func (d *runLengthRunDecoder) String() string { return "RLE" }
+
 func (d *runLengthRunDecoder) reset(r io.Reader, bitWidth, numValues uint) {
 	d.reader = r
 	d.remain = numValues
@@ -47,17 +49,23 @@ func (d *runLengthRunDecoder) decode(dst []byte, dstWidth uint) (int, error) {
 }
 
 type runLengthRunEncoder struct {
-	buffer [8]byte
+	writer   io.Writer
+	bitWidth uint
+	buffer   [8]byte
 }
 
-func (e *runLengthRunEncoder) encode(dst io.Writer, dstWidth uint, src []byte, srcWidth uint) error {
+func (e *runLengthRunEncoder) reset(w io.Writer, bitWidth uint) {
+	e.writer, e.bitWidth = w, bitWidth
+}
+
+func (e *runLengthRunEncoder) encode(src []byte, srcWidth uint) error {
 	// At this stage we make the assumption that the source buffer contains a
 	// sequence of repeated values of the given bit width; we pack the first
 	// value only into the encoder's buffer to adjust the bit width then write
 	// it to the underlying io.Writer.
-	i := bits.ByteCount(dstWidth)
+	i := bits.ByteCount(e.bitWidth)
 	j := bits.ByteCount(srcWidth)
-	bits.Pack(e.buffer[:i], dstWidth, src[:j], srcWidth)
-	_, err := dst.Write(e.buffer[:i])
+	bits.Pack(e.buffer[:i], e.bitWidth, src[:j], srcWidth)
+	_, err := e.writer.Write(e.buffer[:i])
 	return err
 }

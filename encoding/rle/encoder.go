@@ -3,6 +3,7 @@ package rle
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
 
 	"github.com/segmentio/parquet/encoding"
@@ -59,27 +60,27 @@ func (e *Encoder) EncodeBoolean(data []bool) error {
 }
 
 func (e *Encoder) EncodeInt8(data []int8) error {
-	return e.encode(bits.Int8ToBytes(data), uint(e.bitWidth), 8)
+	return e.encode(bits.Int8ToBytes(data), e.bitWidth, 8)
 }
 
 func (e *Encoder) EncodeInt16(data []int16) error {
-	return e.encode(bits.Int16ToBytes(data), uint(e.bitWidth), 16)
+	return e.encode(bits.Int16ToBytes(data), e.bitWidth, 16)
 }
 
 func (e *Encoder) EncodeInt32(data []int32) error {
-	return e.encode(bits.Int32ToBytes(data), uint(e.bitWidth), 32)
+	return e.encode(bits.Int32ToBytes(data), e.bitWidth, 32)
 }
 
 func (e *Encoder) EncodeInt64(data []int64) error {
-	return e.encode(bits.Int64ToBytes(data), uint(e.bitWidth), 64)
+	return e.encode(bits.Int64ToBytes(data), e.bitWidth, 64)
 }
 
 func (e *Encoder) encode(data []byte, dstWidth, srcWidth uint) error {
-	wordSize := uint(bits.ByteCount(srcWidth))
 	if dstWidth == 0 {
-		dstWidth = srcWidth
+		return fmt.Errorf("the destination bit-width must be configured on a RLE encoder before writing %d bits integer values", srcWidth)
 	}
 
+	wordSize := uint(bits.ByteCount(srcWidth))
 	eightWordSize := 8 * wordSize
 	i := uint(0)
 	n := uint(len(data))
@@ -133,14 +134,16 @@ func (e *Encoder) encodeBitPack(run []byte, dstWidth, srcWidth uint) error {
 	if _, err := e.WriteUvarint((uint64(len(run)/(8*bits.ByteCount(srcWidth))) << 1) | 1); err != nil {
 		return err
 	}
-	return e.bitPack.encode(e.writer, dstWidth, run, srcWidth)
+	e.bitPack.reset(e.writer, dstWidth)
+	return e.bitPack.encode(run, srcWidth)
 }
 
 func (e *Encoder) encodeRunLength(run []byte, dstWidth, srcWidth uint) error {
 	if _, err := e.WriteUvarint(uint64(len(run)/bits.ByteCount(srcWidth)) << 1); err != nil {
 		return err
 	}
-	return e.runLength.encode(e.writer, dstWidth, run, srcWidth)
+	e.runLength.reset(e.writer, dstWidth)
+	return e.runLength.encode(run, srcWidth)
 }
 
 func fill(b, v []byte) int {

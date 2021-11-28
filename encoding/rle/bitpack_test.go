@@ -22,9 +22,10 @@ func TestBitPack(t *testing.T) {
 
 	for bitWidth := uint(1); bitWidth <= 64; bitWidth++ {
 		t.Run(fmt.Sprintf("bitWidth=%d", bitWidth), func(t *testing.T) {
+			enc.reset(buf, bitWidth)
 			dec.reset(buf, bitWidth, uint(len(data)))
 
-			if err := enc.encode(buf, bitWidth, bits.Uint64ToBytes(data), 64); err != nil {
+			if err := enc.encode(bits.Uint64ToBytes(data), 64); err != nil {
 				t.Fatal("encoding:", err)
 			}
 

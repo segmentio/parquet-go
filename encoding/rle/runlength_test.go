@@ -23,11 +23,12 @@ func TestRunLength(t *testing.T) {
 			if bitWidth == 0 {
 				bitWidth = 1
 			}
+			enc.reset(buf, bitWidth)
 			dec.reset(buf, bitWidth, numValues)
 
 			data[0] = int16(value)
 
-			if err := enc.encode(buf, bitWidth, bits.Int16ToBytes(data[:]), 16); err != nil {
+			if err := enc.encode(bits.Int16ToBytes(data[:]), 16); err != nil {
 				t.Fatal("encoding:", err)
 			}
 

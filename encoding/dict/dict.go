@@ -12,7 +12,6 @@ import (
 )
 
 type Encoding struct {
-	BufferSize int
 }
 
 func (e *Encoding) Encoding() format.Encoding {
@@ -24,7 +23,7 @@ func (e *Encoding) CanEncode(t format.Type) bool {
 }
 
 func (e *Encoding) NewDecoder(r io.Reader) encoding.Decoder {
-	return decoder{rle: rle.NewDecoderSize(r, e.bufferSize())}
+	return decoder{rle: rle.NewDecoder(r)}
 }
 
 func (e *Encoding) NewEncoder(w io.Writer) encoding.Encoder {
@@ -37,13 +36,6 @@ func (e *Encoding) PlainEncoding() encoding.Encoding {
 
 func (e *Encoding) String() string {
 	return "RLE_DICTIONARY"
-}
-
-func (e *Encoding) bufferSize() int {
-	if e.BufferSize > 0 {
-		return e.BufferSize
-	}
-	return encoding.DefaultBufferSize
 }
 
 type decoder struct {
@@ -83,16 +75,17 @@ func (d decoder) decode(decode func() (int, error)) (int, error) {
 
 func (d decoder) decodeBitWidth() (int, error) {
 	b, err := d.rle.ReadByte()
-	if err != nil {
-		if err == io.EOF {
-			err = io.ErrUnexpectedEOF
+	switch err {
+	case nil:
+		if b > 32 {
+			return 0, fmt.Errorf("decoding RLE bit width: %d>32", b)
 		}
+		return int(b), nil
+	case io.EOF:
+		return 0, err
+	default:
 		return 0, fmt.Errorf("decoding RLE bit width: %w", err)
 	}
-	if b > 32 {
-		return 0, fmt.Errorf("decoding RLE bit width: %d>32", b)
-	}
-	return int(b), nil
 }
 
 type encoder struct {

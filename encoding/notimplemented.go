@@ -95,10 +95,6 @@ func (NotImplementedEncoder) Encoding() format.Encoding {
 	return -1
 }
 
-func (NotImplementedEncoder) Flush() error {
-	return nil
-}
-
 func (NotImplementedEncoder) Reset(io.Writer) {
 }
 

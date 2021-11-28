@@ -42,6 +42,56 @@ var booleanTests = [...][]bool{
 	},
 }
 
+var int8Tests = [...][]int8{
+	{},
+	{0},
+	{1},
+	{-1, 0, 1, 0, 2, 3, 4, 5, 6, math.MaxInt8, math.MaxInt8, 0},
+	{ // repeating 24x
+		42, 42, 42, 42, 42, 42, 42, 42,
+		42, 42, 42, 42, 42, 42, 42, 42,
+		42, 42, 42, 42, 42, 42, 42, 42,
+	},
+	{ // never repeating
+		0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+		0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
+		0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+		0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F,
+	},
+	{ // strakes of repeating values
+		0, 0, 0, 0, 1, 1, 1, 1,
+		2, 2, 2, 2, 3, 3, 3, 3,
+		4, 4, 4, 4, 5, 5, 5, 5,
+		6, 6, 6, 7, 7, 7, 8, 8,
+		8, 9, 9, 9,
+	},
+}
+
+var int16Tests = [...][]int16{
+	{},
+	{0},
+	{1},
+	{-1, 0, 1, 0, 2, 3, 4, 5, 6, math.MaxInt16, math.MaxInt16, 0},
+	{ // repeating 24x
+		42, 42, 42, 42, 42, 42, 42, 42,
+		42, 42, 42, 42, 42, 42, 42, 42,
+		42, 42, 42, 42, 42, 42, 42, 42,
+	},
+	{ // never repeating
+		0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+		0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
+		0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+		0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F,
+	},
+	{ // strakes of repeating values
+		0, 0, 0, 0, 1, 1, 1, 1,
+		2, 2, 2, 2, 3, 3, 3, 3,
+		4, 4, 4, 4, 5, 5, 5, 5,
+		6, 6, 6, 7, 7, 7, 8, 8,
+		8, 9, 9, 9,
+	},
+}
+
 var int32Tests = [...][]int32{
 	{},
 	{0},
@@ -182,6 +232,16 @@ func testEncoding(t *testing.T, e encoding.Encoding) {
 		},
 
 		{
+			scenario: "int8",
+			function: testInt8Encoding,
+		},
+
+		{
+			scenario: "int16",
+			function: testInt16Encoding,
+		},
+
+		{
 			scenario: "int32",
 			function: testInt32Encoding,
 		},
@@ -264,6 +324,102 @@ func testBooleanEncoding(t *testing.T, e encoding.Encoding) {
 					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, want, got)
 				}
 			}
+
+			if n, err := dec.DecodeBoolean(tmp[:]); err != io.EOF {
+				t.Fatal("non-EOF error returned after decoding all the values:", err)
+			} else if n != 0 {
+				t.Fatal("non-zero number of values decoded at EOF:", n)
+			}
+		})
+	}
+}
+
+func testInt8Encoding(t *testing.T, e encoding.Encoding) {
+	buf := new(bytes.Buffer)
+	enc := e.NewEncoder(buf)
+	dec := e.NewDecoder(buf)
+	tmp := [1]int8{}
+
+	for _, test := range int8Tests {
+		t.Run("", func(t *testing.T) {
+			defer dec.Reset(buf)
+			defer enc.Reset(buf)
+			defer buf.Reset()
+
+			bitWidth := bits.MaxLen8(test)
+			enc.SetBitWidth(bitWidth)
+			dec.SetBitWidth(bitWidth)
+
+			if err := enc.EncodeInt8(test); err != nil {
+				if errors.Is(err, encoding.ErrNotImplemented) {
+					t.Skip(err)
+				}
+				t.Fatal("encode:", err)
+			}
+
+			for i := range test {
+				n, err := dec.DecodeInt8(tmp[:])
+				if err != nil {
+					t.Fatal("decode:", err)
+				}
+				if n != 1 {
+					t.Fatalf("decoder decoded the wrong number of items: %d", n)
+				}
+				if tmp[0] != test[i] {
+					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, test[i], tmp[0])
+				}
+			}
+
+			if n, err := dec.DecodeInt8(tmp[:]); err != io.EOF {
+				t.Fatal("non-EOF error returned after decoding all the values:", err)
+			} else if n != 0 {
+				t.Fatal("non-zero number of values decoded at EOF:", n)
+			}
+		})
+	}
+}
+
+func testInt16Encoding(t *testing.T, e encoding.Encoding) {
+	buf := new(bytes.Buffer)
+	enc := e.NewEncoder(buf)
+	dec := e.NewDecoder(buf)
+	tmp := [1]int16{}
+
+	for _, test := range int16Tests {
+		t.Run("", func(t *testing.T) {
+			defer dec.Reset(buf)
+			defer enc.Reset(buf)
+			defer buf.Reset()
+
+			bitWidth := bits.MaxLen16(test)
+			enc.SetBitWidth(bitWidth)
+			dec.SetBitWidth(bitWidth)
+
+			if err := enc.EncodeInt16(test); err != nil {
+				if errors.Is(err, encoding.ErrNotImplemented) {
+					t.Skip(err)
+				}
+				t.Fatal("encode:", err)
+			}
+
+			for i := range test {
+				n, err := dec.DecodeInt16(tmp[:])
+				if err != nil {
+					t.Fatal("decode:", err)
+				}
+				if n != 1 {
+					t.Fatalf("decoder decoded the wrong number of items: %d", n)
+				}
+				if tmp[0] != test[i] {
+					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, test[i], tmp[0])
+				}
+			}
+
+			if n, err := dec.DecodeInt16(tmp[:]); err != io.EOF {
+				t.Fatal("non-EOF error returned after decoding all the values:", err)
+			} else if n != 0 {
+				t.Fatal("non-zero number of values decoded at EOF:", n)
+			}
 		})
 	}
 }
@@ -302,6 +458,12 @@ func testInt32Encoding(t *testing.T, e encoding.Encoding) {
 				if tmp[0] != test[i] {
 					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, test[i], tmp[0])
 				}
+			}
+
+			if n, err := dec.DecodeInt32(tmp[:]); err != io.EOF {
+				t.Fatal("non-EOF error returned after decoding all the values:", err)
+			} else if n != 0 {
+				t.Fatal("non-zero number of values decoded at EOF:", n)
 			}
 		})
 	}
@@ -342,6 +504,12 @@ func testInt64Encoding(t *testing.T, e encoding.Encoding) {
 					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, test[i], tmp[0])
 				}
 			}
+
+			if n, err := dec.DecodeInt64(tmp[:]); err != io.EOF {
+				t.Fatal("non-EOF error returned after decoding all the values:", err)
+			} else if n != 0 {
+				t.Fatal("non-zero number of values decoded at EOF:", n)
+			}
 		})
 	}
 }
@@ -381,6 +549,12 @@ func testInt96Encoding(t *testing.T, e encoding.Encoding) {
 					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, test[i], tmp[i])
 				}
 			}
+
+			if n, err := dec.DecodeInt96(tmp[:]); err != io.EOF {
+				t.Fatal("non-EOF error returned after decoding all the values:", err)
+			} else if n != 0 {
+				t.Fatal("non-zero number of values decoded at EOF:", n)
+			}
 		})
 	}
 }
@@ -416,6 +590,12 @@ func testFloatEncoding(t *testing.T, e encoding.Encoding) {
 					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, test[i], tmp[i])
 				}
 			}
+
+			if n, err := dec.DecodeFloat(tmp[:]); err != io.EOF {
+				t.Fatal("non-EOF error returned after decoding all the values:", err)
+			} else if n != 0 {
+				t.Fatal("non-zero number of values decoded at EOF:", n)
+			}
 		})
 	}
 }
@@ -450,6 +630,12 @@ func testDoubleEncoding(t *testing.T, e encoding.Encoding) {
 				if tmp[0] != test[i] {
 					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, test[i], tmp[i])
 				}
+			}
+
+			if n, err := dec.DecodeDouble(tmp[:]); err != io.EOF {
+				t.Fatal("non-EOF error returned after decoding all the values:", err)
+			} else if n != 0 {
+				t.Fatal("non-zero number of values decoded at EOF:", n)
 			}
 		})
 	}
@@ -501,6 +687,12 @@ func testByteArrayEncoding(t *testing.T, e encoding.Encoding) {
 					return nil
 				})
 			}
+
+			if n, err := dec.DecodeByteArray(tmp[:4+maxLen]); err != io.EOF {
+				t.Fatal("non-EOF error returned after decoding all the values:", err)
+			} else if n != 0 {
+				t.Fatal("non-zero number of values decoded at EOF:", n)
+			}
 		})
 	}
 }
@@ -536,6 +728,12 @@ func testFixedLenByteArrayEncoding(t *testing.T, e encoding.Encoding) {
 				if !bytes.Equal(want, tmp) {
 					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, want, tmp)
 				}
+			}
+
+			if n, err := dec.DecodeFixedLenByteArray(test.size, tmp); err != io.EOF {
+				t.Fatal("non-EOF error returned after decoding all the values:", err)
+			} else if n != 0 {
+				t.Fatal("non-zero number of values decoded at EOF:", n)
 			}
 		})
 	}

@@ -4,27 +4,6 @@ import (
 	"bytes"
 )
 
-func MinLeadingZeros32(data []int32) int {
-	if len(data) == 0 {
-		return 0
-	}
-	return 32 - MaxLen32(data)
-}
-
-func MinLeadingZeros64(data []int64) int {
-	if len(data) == 0 {
-		return 0
-	}
-	return 64 - MaxLen64(data)
-}
-
-func MinLeadingZeros96(data [][12]byte) int {
-	if len(data) == 0 {
-		return 0
-	}
-	return 96 - MaxLen96(data)
-}
-
 func MinMaxInt32(data []int32) (min, max int32) {
 	if len(data) > 0 {
 		min = data[0]

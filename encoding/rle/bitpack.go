@@ -30,9 +30,11 @@ type bitPackRunDecoder struct {
 	buffer [bitPackBufferSize]byte
 }
 
+func (d *bitPackRunDecoder) String() string { return "BIT_PACK" }
+
 func (d *bitPackRunDecoder) reset(r io.Reader, bitWidth, numValues uint) {
 	d.reader.R = r
-	d.reader.N = int64(numValues * bitWidth)
+	d.reader.N = int64(bits.ByteCount(numValues * bitWidth))
 	d.offset = 0
 	d.length = 0
 	d.remain = 0
@@ -90,10 +92,16 @@ func (d *bitPackRunDecoder) decode(dst []byte, dstWidth uint) (int, error) {
 }
 
 type bitPackRunEncoder struct {
-	buffer [bitPackBufferSize]byte
+	writer   io.Writer
+	bitWidth uint
+	buffer   [bitPackBufferSize]byte
 }
 
-func (e *bitPackRunEncoder) encode(dst io.Writer, dstWidth uint, src []byte, srcWidth uint) error {
+func (e *bitPackRunEncoder) reset(w io.Writer, bitWidth uint) {
+	e.writer, e.bitWidth = w, bitWidth
+}
+
+func (e *bitPackRunEncoder) encode(src []byte, srcWidth uint) error {
 	srcBitCount := bits.BitCount(len(src))
 
 	if srcWidth < 8 || srcWidth > 64 || OnesCount(srcWidth) != 1 {
@@ -108,17 +116,17 @@ func (e *bitPackRunEncoder) encode(dst io.Writer, dstWidth uint, src []byte, src
 		return fmt.Errorf("BIT_PACK encoder expects sequences of 8 values but %d were written", srcBitCount/srcWidth)
 	}
 
-	if srcWidth < dstWidth {
+	if srcWidth < e.bitWidth {
 		return fmt.Errorf("BIT_PACK encoder cannot encode %d bits values to %d bits: the source width must be less or equal to the destination width",
-			srcWidth, dstWidth)
+			srcWidth, e.bitWidth)
 	}
 
-	if srcWidth == dstWidth {
-		_, err := dst.Write(src)
+	if srcWidth == e.bitWidth {
+		_, err := e.writer.Write(src)
 		return err
 	}
 
-	bytesPerLoop := (bitPackBufferSize / (8 * dstWidth)) * (8 * srcWidth)
+	bytesPerLoop := (bitPackBufferSize / (8 * e.bitWidth)) * (8 * srcWidth)
 
 	for len(src) > 0 {
 		i := bytesPerLoop
@@ -126,8 +134,8 @@ func (e *bitPackRunEncoder) encode(dst io.Writer, dstWidth uint, src []byte, src
 			i = uint(len(src))
 		}
 
-		n := bits.Pack(e.buffer[:], dstWidth, src[:i], srcWidth)
-		_, err := dst.Write(e.buffer[:bits.ByteCount(uint(n)*dstWidth)])
+		n := bits.Pack(e.buffer[:], e.bitWidth, src[:i], srcWidth)
+		_, err := e.writer.Write(e.buffer[:bits.ByteCount(uint(n)*e.bitWidth)])
 		if err != nil {
 			return err
 		}
