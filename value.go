@@ -18,7 +18,7 @@ type Value struct {
 	u64 uint64
 	u32 uint32
 	// type
-	kind int16 // XOR(Kind) so the zero-value is <nil>
+	kind int16 // XOR(Kind) so the zero-value is <null>
 	// levels
 	definitionLevel int8
 	repetitionLevel int8
@@ -400,7 +400,7 @@ func Equal(v1, v2 Value) bool {
 		return v1.Double() == v2.Double()
 	case ByteArray, FixedLenByteArray:
 		return bytes.Equal(v1.ByteArray(), v2.ByteArray())
-	case -1: // nil
+	case -1: // null
 		return true
 	default:
 		return false

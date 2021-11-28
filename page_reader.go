@@ -261,7 +261,7 @@ func (r *int64PageReader) Type() Type { return r.typ }
 type int96PageReader struct {
 	typ     Type
 	decoder encoding.Decoder
-	values  [][12]byte
+	values  []int96
 	offset  uint
 }
 
@@ -269,7 +269,7 @@ func newInt96PageReader(typ Type, decoder encoding.Decoder, bufferSize int) *int
 	return &int96PageReader{
 		typ:     typ,
 		decoder: decoder,
-		values:  make([][12]byte, 0, atLeastOne(bufferSize/12)),
+		values:  make([]int96, 0, atLeastOne(bufferSize/12)),
 	}
 }
 
