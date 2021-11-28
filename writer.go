@@ -14,68 +14,6 @@ import (
 	"github.com/segmentio/parquet/internal/bits"
 )
 
-type WriterConfig struct {
-	CreatedBy          string
-	ColumnPageBuffers  BufferPool
-	PageBufferSize     int
-	DataPageVersion    int
-	RowGroupTargetSize int64
-}
-
-func (c *WriterConfig) Apply(options ...WriterOption) {
-	for _, opt := range options {
-		opt.Configure(c)
-	}
-}
-
-func (c *WriterConfig) Configure(config *WriterConfig) {
-	*config = WriterConfig{
-		CreatedBy:          coalesceString(c.CreatedBy, config.CreatedBy),
-		ColumnPageBuffers:  coalesceBufferPool(c.ColumnPageBuffers, config.ColumnPageBuffers),
-		PageBufferSize:     coalesceInt(c.PageBufferSize, config.PageBufferSize),
-		DataPageVersion:    coalesceInt(c.DataPageVersion, config.DataPageVersion),
-		RowGroupTargetSize: coalesceInt64(c.RowGroupTargetSize, config.RowGroupTargetSize),
-	}
-}
-
-func (c *WriterConfig) Validate() error {
-	const baseName = "parquet.(*WriterConfig)."
-	return errorInvalidConfiguration(
-		validateNotNil(baseName+"ColumnPageBuffers", c.ColumnPageBuffers),
-		validatePositiveInt(baseName+"PageBufferSize", c.PageBufferSize),
-		validatePositiveInt64(baseName+"RowGroupTargetSize", c.RowGroupTargetSize),
-		validateOneOfInt(baseName+"DataPageVersion", c.DataPageVersion, 1, 2),
-	)
-}
-
-type WriterOption interface {
-	Configure(*WriterConfig)
-}
-
-func CreatedBy(createdBy string) WriterOption {
-	return writerOption(func(config *WriterConfig) { config.CreatedBy = createdBy })
-}
-
-func ColumnPageBuffers(buffers BufferPool) WriterOption {
-	return writerOption(func(config *WriterConfig) { config.ColumnPageBuffers = buffers })
-}
-
-func PageBufferSize(size int) WriterOption {
-	return writerOption(func(config *WriterConfig) { config.PageBufferSize = size })
-}
-
-func DataPageVersion(version int) WriterOption {
-	return writerOption(func(config *WriterConfig) { config.DataPageVersion = version })
-}
-
-func RowGroupTargetSize(size int64) WriterOption {
-	return writerOption(func(config *WriterConfig) { config.RowGroupTargetSize = size })
-}
-
-type writerOption func(*WriterConfig)
-
-func (opt writerOption) Configure(config *WriterConfig) { opt(config) }
-
 type Writer struct {
 	initialized bool
 	closed      bool

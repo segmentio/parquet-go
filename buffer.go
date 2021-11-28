@@ -90,7 +90,6 @@ func (pool *fileBufferPool) PutBuffer(buf Buffer) {
 
 type errorBuffer struct{ err error }
 
-func (errbuf *errorBuffer) Close() error                      { return nil }
 func (errbuf *errorBuffer) Read([]byte) (int, error)          { return 0, errbuf.err }
 func (errbuf *errorBuffer) Write([]byte) (int, error)         { return 0, errbuf.err }
 func (errbuf *errorBuffer) ReadFrom(io.Reader) (int64, error) { return 0, errbuf.err }

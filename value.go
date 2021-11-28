@@ -411,3 +411,48 @@ var (
 	_ fmt.Formatter = Value{}
 	_ fmt.Stringer  = Value{}
 )
+
+type ValueIter struct {
+	reader ValueReader
+	value  Value
+	err    error
+}
+
+func NewValueIter(r ValueReader) *ValueIter {
+	return &ValueIter{reader: r}
+}
+
+func (it *ValueIter) Reset(r ValueReader) {
+	it.reader, it.value, it.err = r, Value{}, nil
+}
+
+func (it *ValueIter) Next() bool {
+	if it.reader == nil {
+		return false
+	}
+
+	v, err := it.reader.ReadValue()
+	if err != nil {
+		if it.err != io.EOF {
+			it.err = err
+		}
+		it.reader = nil
+		it.value = Value{}
+		return false
+	}
+
+	it.value = v
+	return true
+}
+
+func (it *ValueIter) Done() bool {
+	return it.reader == nil
+}
+
+func (it *ValueIter) Err() error {
+	return it.err
+}
+
+func (it *ValueIter) Value() Value {
+	return it.value
+}
