@@ -288,16 +288,6 @@ func makeStructField(f reflect.StructField, columnIndex int) (structField, int) 
 			case "zstd":
 				setCompression(&Zstd)
 
-			case "rle":
-				switch f.Type.Kind() {
-				case reflect.Bool,
-					reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-					reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-					setEncoding(&RLE)
-				default:
-					throwInvalidFieldTag(f, option)
-				}
-
 			case "dict":
 				setEncoding(&Dict)
 
