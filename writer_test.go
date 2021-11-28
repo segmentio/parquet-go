@@ -71,7 +71,7 @@ func scanParquetColumns(col *parquet.Column) error {
 						}
 						break
 					}
-					fmt.Printf("> %v\n", v)
+					fmt.Printf("> %+v\n", v)
 				}
 
 			default:
@@ -128,10 +128,12 @@ type firstAndLastName struct {
 }
 
 var writerTests = []struct {
-	rows []interface{}
-	dump string
+	version int
+	rows    []interface{}
+	dump    string
 }{
 	{
+		version: 1,
 		rows: []interface{}{
 			&firstAndLastName{FirstName: "Han", LastName: "Solo"},
 			&firstAndLastName{FirstName: "Leia", LastName: "Skywalker"},
@@ -139,16 +141,16 @@ var writerTests = []struct {
 		},
 		dump: `row group 0
 --------------------------------------------------------------------------------
-first_name:  BINARY UNCOMPRESSED DO:0 FPO:4 SZ:74/74/1.00 VC:3 ENC:PLAIN [more]...
-last_name:   BINARY UNCOMPRESSED DO:0 FPO:78 SZ:97/97/1.00 VC:3 ENC:PLAIN [more]...
+first_name:  BINARY UNCOMPRESSED DO:4 FPO:46 SZ:96/96/1.00 VC:3 ENC:PL [more]...
+last_name:   BINARY UNCOMPRESSED DO:100 FPO:140 SZ:104/104/1.00 VC:3 E [more]...
 
-    first_name TV=3 RL=0 DL=0
+    first_name TV=3 RL=0 DL=0 DS: 3 DE:PLAIN
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[min: Luke, max: Han, num_nu [more]... VC:3
+    page 0:                        DLE:RLE RLE:RLE VLE:RLE_DICTIONARY  [more]... SZ:7
 
-    last_name TV=3 RL=0 DL=0
+    last_name TV=3 RL=0 DL=0 DS:  2 DE:PLAIN
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[min: Solo, max: Skywalker,  [more]... VC:3
+    page 0:                        DLE:RLE RLE:RLE VLE:RLE_DICTIONARY  [more]... SZ:5
 
 BINARY first_name
 --------------------------------------------------------------------------------
@@ -167,6 +169,7 @@ value 3: R:0 D:0 V:Skywalker
 	},
 
 	{
+		version: 2,
 		rows: []interface{}{
 			AddressBook{
 				Owner: "Julien Le Dem",
@@ -189,6 +192,58 @@ value 3: R:0 D:0 V:Skywalker
 				OwnerPhoneNumbers: nil,
 			},
 		},
+
+		dump: `row group 0
+--------------------------------------------------------------------------------
+contacts:
+.name:              BINARY UNCOMPRESSED DO:0 FPO:4 SZ:111/111/1.00 VC:3 [more]...
+.phoneNumber:       BINARY SNAPPY DO:0 FPO:115 SZ:90/88/0.98 VC:3 ENC:PLAIN,RLE [more]...
+owner:              BINARY ZSTD DO:0 FPO:205 SZ:101/92/0.91 VC:2 ENC:PLAIN,RLE [more]...
+ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:306 SZ:127/102/0.80 VC:3 ENC:PLAIN,RLE [more]...
+
+    contacts.name TV=3 RL=1 DL=1
+    ----------------------------------------------------------------------------
+    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[num_nulls: 1, min/max not defined] [more]...
+
+    contacts.phoneNumber TV=3 RL=1 DL=2
+    ----------------------------------------------------------------------------
+    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[num_nulls: 2, min/max not defined] [more]...
+
+    owner TV=2 RL=0 DL=0
+    ----------------------------------------------------------------------------
+    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[no stats for this column] SZ:32 VC:2
+
+    ownerPhoneNumbers TV=3 RL=1 DL=1
+    ----------------------------------------------------------------------------
+    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[num_nulls: 1, min/max not defined] [more]...
+
+BINARY contacts.name
+--------------------------------------------------------------------------------
+*** row group 1 of 1, values 1 to 3 ***
+value 1: R:0 D:1 V:Dmitriy Ryaboy
+value 2: R:1 D:1 V:Chris Aniszczyk
+value 3: R:0 D:0 V:<null>
+
+BINARY contacts.phoneNumber
+--------------------------------------------------------------------------------
+*** row group 1 of 1, values 1 to 3 ***
+value 1: R:0 D:2 V:555 987 6543
+value 2: R:1 D:1 V:<null>
+value 3: R:0 D:0 V:<null>
+
+BINARY owner
+--------------------------------------------------------------------------------
+*** row group 1 of 1, values 1 to 2 ***
+value 1: R:0 D:0 V:Julien Le Dem
+value 2: R:0 D:0 V:A. Nonymous
+
+BINARY ownerPhoneNumbers
+--------------------------------------------------------------------------------
+*** row group 1 of 1, values 1 to 3 ***
+value 1: R:0 D:1 V:555 123 4567
+value 2: R:1 D:1 V:555 666 1337
+value 3: R:0 D:0 V:<null>
+`,
 	},
 }
 
@@ -197,27 +252,22 @@ func TestWriter(t *testing.T) {
 		t.Skip("parquet-tools are not installed")
 	}
 
-	for _, version := range []int{1, 2} {
-		dataPageVersion := version
-		t.Run(fmt.Sprintf("v%d", version), func(t *testing.T) {
+	for _, test := range writerTests {
+		dataPageVersion := test.version
+		rows := test.rows
+		dump := test.dump
+
+		t.Run("", func(t *testing.T) {
 			t.Parallel()
 
-			for _, test := range writerTests {
-				rows := test.rows
-				dump := test.dump
-				t.Run("", func(t *testing.T) {
-					t.Parallel()
+			b, err := generateParquetFile(dataPageVersion, rows...)
+			if err != nil {
+				t.Logf("\n%s", string(b))
+				t.Fatal(err)
+			}
 
-					b, err := generateParquetFile(dataPageVersion, rows...)
-					if err != nil {
-						t.Logf("\n%s", string(b))
-						t.Fatal(err)
-					}
-
-					if string(b) != dump {
-						t.Errorf("OUTPUT MISMATCH\ngot:\n%s\nwant:\n%s", string(b), dump)
-					}
-				})
+			if string(b) != dump {
+				t.Errorf("OUTPUT MISMATCH\ngot:\n%s\nwant:\n%s", string(b), dump)
 			}
 		})
 	}

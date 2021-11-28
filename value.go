@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"math"
 	"reflect"
-	"strconv"
 	"unsafe"
 
 	"github.com/google/uuid"
@@ -305,25 +305,68 @@ func (v Value) AppendBytes(b []byte) []byte {
 	}
 }
 
-func (v Value) String() string {
-	switch v.Kind() {
-	case Boolean:
-		return strconv.FormatBool(v.Boolean())
-	case Int32:
-		return strconv.FormatInt(int64(v.Int32()), 10)
-	case Int64:
-		return strconv.FormatInt(v.Int64(), 10)
-	case Int96:
-		return fmt.Sprintf("%X", v.Int96())
-	case Float:
-		return strconv.FormatFloat(float64(v.Float()), 'g', -1, 32)
-	case Double:
-		return strconv.FormatFloat(v.Double(), 'g', -1, 64)
-	case ByteArray, FixedLenByteArray:
-		return strconv.Quote(string(v.ByteArray()))
-	default:
-		return "<nil>"
+func (v Value) Format(w fmt.State, r rune) {
+	switch r {
+	case 'd':
+		if w.Flag('+') {
+			io.WriteString(w, "D:")
+		}
+		fmt.Fprint(w, v.definitionLevel)
+
+	case 'r':
+		if w.Flag('+') {
+			io.WriteString(w, "R:")
+		}
+		fmt.Fprint(w, v.repetitionLevel)
+
+	case 'q':
+		if w.Flag('+') {
+			io.WriteString(w, "V:")
+		}
+		switch v.Kind() {
+		case ByteArray, FixedLenByteArray:
+			fmt.Fprintf(w, "%q", v.ByteArray())
+		default:
+			fmt.Fprintf(w, `"%s"`, v)
+		}
+
+	case 's':
+		if w.Flag('+') {
+			io.WriteString(w, "V:")
+		}
+		switch v.Kind() {
+		case Boolean:
+			fmt.Fprint(w, v.Boolean())
+		case Int32:
+			fmt.Fprint(w, v.Int32())
+		case Int64:
+			fmt.Fprint(w, v.Int64())
+		case Int96:
+			fmt.Fprint(w, v.Int96())
+		case Float:
+			fmt.Fprint(w, v.Float())
+		case Double:
+			fmt.Fprint(w, v.Double())
+		case ByteArray, FixedLenByteArray:
+			w.Write(v.ByteArray())
+		default:
+			io.WriteString(w, "<null>")
+		}
+
+	case 'v':
+		switch {
+		case w.Flag('+'):
+			fmt.Fprintf(w, "%+[1]d %+[1]r %+[1]s", v)
+		case w.Flag('#'):
+			fmt.Fprintf(w, "parquet.Value{%+[1]d,%+[1]d,%+[1]s}", v)
+		default:
+			v.Format(w, 's')
+		}
 	}
+}
+
+func (v Value) String() string {
+	return fmt.Sprint(v)
 }
 
 func (v Value) Level(repetitionLevel, definitionLevel int8) Value {
@@ -363,3 +406,8 @@ func Equal(v1, v2 Value) bool {
 		return false
 	}
 }
+
+var (
+	_ fmt.Formatter = Value{}
+	_ fmt.Stringer  = Value{}
+)
