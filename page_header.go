@@ -7,6 +7,7 @@ import (
 	"github.com/segmentio/parquet/format"
 )
 
+// Statistics represent parquet statistics held on data pages.
 type Statistics struct {
 	DistinctCount int
 	NullCount     int
@@ -23,24 +24,37 @@ func makeStatistics(stats *format.Statistics) Statistics {
 	}
 }
 
+// PageHeader is an interface implemented by parquet page headers.
 type PageHeader interface {
 	fmt.Stringer
 
+	// Returns the number of values in the page (including nulls).
 	NumValues() int
 
+	// Returns the page encoding.
 	Encoding() encoding.Encoding
 }
 
+// DataPageHeader is a specialization of the PageHeader interface implemented by
+// data pages.
 type DataPageHeader interface {
 	PageHeader
 
+	// Returns the encoding of the repetition level section.
 	RepetitionLevelEncoding() encoding.Encoding
 
+	// Returns the encoding of the definition level section.
 	DefinitionLevelEncoding() encoding.Encoding
 
+	// Returns the data page statistics.
+	//
+	// The MinValue and MaxValue field may hold references to internal byte
+	// slices which should be treated as immutable by the application.
 	Statistics() Statistics
 }
 
+// DictionaryPageHeader is an implementation of the PageHeader interface
+// representing dictionary pages.
 type DictionaryPageHeader struct {
 	header *format.DictionaryPageHeader
 }
@@ -64,6 +78,8 @@ func (dict DictionaryPageHeader) String() string {
 		dict.header.IsSorted)
 }
 
+// DataPageHeaderV1 is an implementation of the DataPageHeader interface
+// representing data pages version 1.
 type DataPageHeaderV1 struct {
 	header *format.DataPageHeader
 }
@@ -94,6 +110,8 @@ func (v1 DataPageHeaderV1) String() string {
 		v1.header.Encoding)
 }
 
+// DataPageHeaderV2 is an implementation of the DataPageHeader interface
+// representing data pages version 2.
 type DataPageHeaderV2 struct {
 	header *format.DataPageHeaderV2
 }

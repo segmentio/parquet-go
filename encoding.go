@@ -11,10 +11,13 @@ import (
 )
 
 var (
+	// Plain is the default parquet encoding.
 	Plain plain.Encoding
 
+	// RLE is the hybrid bit-pack/run-length parquet encoding.
 	RLE rle.Encoding
 
+	// Dict is the dictionary parquet encoding.
 	Dict dict.Encoding
 
 	encodings = [10]encoding.Encoding{

@@ -12,6 +12,14 @@ import (
 	"github.com/google/uuid"
 )
 
+// The Value type is similar to the reflect.Value abstraction of Go values, but
+// for parquet values. Value instances wrap underlying Go values mapped to one
+// of the parquet physical types.
+//
+// Value instances are small, immutable objects, and usually passed by value
+// between function calls.
+//
+// The zero-value of Value represents the null parquet value.
 type Value struct {
 	// data
 	ptr *byte
@@ -24,14 +32,53 @@ type Value struct {
 	repetitionLevel int8
 }
 
+// The ValueReader interface is implemented by types that read sequences of
+// parquet values.
 type ValueReader interface {
+	// Reads the next value from the sequence, or returns io.EOF when the end
+	// of the sequence was reached, or another error if no values could be read.
 	ReadValue() (Value, error)
 }
 
+// The ValueWriter interface is implemented by types that write sequences of
+// parquet values.
 type ValueWriter interface {
+	// Writes the next value to the sequence, returning a non-nil error if the
+	// write failed.
 	WriteValue(Value) error
 }
 
+// ValueOf constructs a parquet value from a Go value v.
+//
+// The physical type of the value is assumed from the Go type of v using the
+// following conversion table:
+//
+//	Go type | Parquet physical type
+//	------- | ---------------------
+//	nil     | NULL
+//	bool    | BOOLEAN
+//	int8    | INT32
+//	int16   | INT32
+//	int32   | INT32
+//	int64   | INT64
+//	int     | INT64
+//	uint8   | INT32
+//	uint16  | INT32
+//	uint32  | INT32
+//	uint64  | INT64
+//	uintptr | INT64
+//	float32 | FLOAT
+//	float64 | DOUBLE
+//	string  | BYTE_ARRAY
+//	[]byte  | BYTE_ARRAY
+//	[*]byte | FIXED_LEN_BYTE_ARRARY
+//
+// When converting a []byte or [*]byte value, the underlying byte array is not
+// copied; instead, the returned parquet value holds a reference to it.
+//
+// The repetition and definition levels of the returned value are both zero.
+//
+// The function panics if the Go value cannot be represented in parquet.
 func ValueOf(v interface{}) Value {
 	switch value := v.(type) {
 	case nil:
@@ -249,28 +296,43 @@ func makeValueKind(k Kind, b []byte) Value {
 	return Value{}
 }
 
+// Kind returns the kind of v, which represents its parquet physical type.
 func (v Value) Kind() Kind { return ^Kind(v.kind) }
 
+// IsNull returns true if v is the null value.
 func (v Value) IsNull() bool { return v.kind == 0 }
 
+// Boolean returns v as a bool, assuming the underlying type is BOOLEAN.
 func (v Value) Boolean() bool { return v.u32 != 0 }
 
+// Int32 returns v as a int32, assuming the underlying type is INT32.
 func (v Value) Int32() int32 { return int32(v.u32) }
 
+// Int64 returns v as a int64, assuming the underlying type is INT64.
 func (v Value) Int64() int64 { return int64(v.u64) }
 
+// Int96 returns v as a int96, assuming the underlying type is INT96.
 func (v Value) Int96() [12]byte { return makeInt96(v.u64, v.u32) }
 
+// Float returns v as a float32, assuming the underlying type is FLOAT.
 func (v Value) Float() float32 { return math.Float32frombits(v.u32) }
 
+// Double returns v as a float64, assuming the underlying type is DOUBLE.
 func (v Value) Double() float64 { return math.Float64frombits(v.u64) }
 
+// ByteArray returns v as a []byte, assuming the underlying type is either
+// BYTE_ARRAY or FIXED_LEN_BYTE_ARRAY.
 func (v Value) ByteArray() []byte { return unsafe.Slice(v.ptr, int(v.u64)) }
 
-func (v Value) DefinitionLevel() int8 { return v.definitionLevel }
-
+// RepetitionLevel returns the repetition level of v.
 func (v Value) RepetitionLevel() int8 { return v.repetitionLevel }
 
+// DefinitionLevel returns the definition level of v.
+func (v Value) DefinitionLevel() int8 { return v.definitionLevel }
+
+// Clone returns a copy of v which shares no pointers: if the underlying
+// type was BYTE_ARRAY or FIXED_LEN_BYTE_ARRAY, the returned Value references
+// a copy of the underlying byte array.
 func (v Value) Clone() Value {
 	switch v.Kind() {
 	case ByteArray, FixedLenByteArray:
@@ -280,8 +342,10 @@ func (v Value) Clone() Value {
 	}
 }
 
+// Bytes returns the binary representation of v.
 func (v Value) Bytes() []byte { return v.AppendBytes(nil) }
 
+// AppendBytes appends the binary representation of v to b.
 func (v Value) AppendBytes(b []byte) []byte {
 	buf := [12]byte{}
 	switch v.Kind() {
@@ -305,6 +369,24 @@ func (v Value) AppendBytes(b []byte) []byte {
 	}
 }
 
+// Format outputs a human-readable representation of v to w, using r as the
+// formatting verb to describe how the value should be printed.
+//
+// The following formatting options are supported:
+//
+//	%d	prints the definition level
+//	%+d	prints the definition level, prefixed with "D:"
+//	%r	prints the repetition level
+//	%+r	prints the repetition level, prefixed with "R:"
+//	%q	prints the quoted representation of v
+//	%+q	prints the quoted representation of v, prefixed with "V:"
+//	%s	prints the string representation of v
+//	%+s	prints the string representation of v, prefixed with "V:"
+//	%v	same as %s
+//	%+v	same as %+s
+//	%#v	prints a Go value representation of v
+//
+// Format satisfies the fmt.Formatter interface.
 func (v Value) Format(w fmt.State, r rune) {
 	switch r {
 	case 'd':
@@ -365,11 +447,27 @@ func (v Value) Format(w fmt.State, r rune) {
 	}
 }
 
+// String returns a string representation of v.
 func (v Value) String() string {
-	return fmt.Sprint(v)
+	return fmt.Sprintf("%s", v)
 }
 
+// GoString returns a Go value string representation of v.
+func (v Value) GoString() string {
+	return fmt.Sprintf("%#v", v)
+}
+
+// Level returns v with the repetition and definition levels set to the values
+// passed as arguments.
+//
+// The method panics if either argument is negative.
 func (v Value) Level(repetitionLevel, definitionLevel int8) Value {
+	if repetitionLevel < 0 {
+		panic("cannot create a value with a negative repetition level")
+	}
+	if definitionLevel < 0 {
+		panic("cannot create a value with a negative definition level")
+	}
 	v.repetitionLevel = repetitionLevel
 	v.definitionLevel = definitionLevel
 	return v
@@ -381,6 +479,11 @@ func makeInt96(lo uint64, hi uint32) (i96 int96) {
 	return
 }
 
+// Equal returns true if v1 and v2 are equal.
+//
+// Values are considered equal if they are of the same physical typee and hold
+// the same Go values. For BYTE_ARRAY and FIXED_LEN_BYTE_ARRAY, the content of
+// the underlying byte arrays are tested for equality.
 func Equal(v1, v2 Value) bool {
 	if v1.kind != v2.kind {
 		return false
@@ -412,6 +515,7 @@ var (
 	_ fmt.Stringer  = Value{}
 )
 
+/*
 type ValueIter struct {
 	reader ValueReader
 	value  Value
@@ -456,3 +560,4 @@ func (it *ValueIter) Err() error {
 func (it *ValueIter) Value() Value {
 	return it.value
 }
+*/

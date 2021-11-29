@@ -18,28 +18,31 @@ import (
 )
 
 var (
-	Uncompressed = uncompressed.Codec{
-		//
-	}
+	// Uncompressed is a parquet compression codec representing uncompressed
+	// pages.
+	Uncompressed uncompressed.Codec
 
+	// Snappy is the SNAPPY parquet compression codec.
+	Snappy snappy.Codec
+
+	// Gzip is the GZIP parquet compression codec.
 	Gzip = gzip.Codec{
 		Level: gzip.DefaultCompression,
 	}
 
-	Snappy = snappy.Codec{
-		//
-	}
-
+	// Brotli is the BROTLI parquet compression codec.
 	Brotli = brotli.Codec{
 		Quality: brotli.DefaultQuality,
 		LGWin:   brotli.DefaultLGWin,
 	}
 
+	// Zstd is the ZSTD parquet compression codec.
 	Zstd = zstd.Codec{
 		Level:       zstd.DefaultLevel,
 		Concurrency: zstd.DefaultConcurrency,
 	}
 
+	// Lz4Raw is the LZ4_RAW parquet compression codec.
 	Lz4Raw = lz4.Codec{
 		BlockSize:   lz4.DefaultBlockSize,
 		Level:       lz4.DefaultLevel,
@@ -49,8 +52,8 @@ var (
 	compressedPageReaders = [8]sync.Pool{}
 	compressionCodecs     = [8]compress.Codec{
 		format.Uncompressed: &Uncompressed,
-		format.Gzip:         &Gzip,
 		format.Snappy:       &Snappy,
+		format.Gzip:         &Gzip,
 		format.Brotli:       &Brotli,
 		format.Zstd:         &Zstd,
 		format.Lz4Raw:       &Lz4Raw,

@@ -6,6 +6,7 @@ import (
 )
 
 type Reader struct {
+	// WIP
 }
 
 type columnChunkReader struct {

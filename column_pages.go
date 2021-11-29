@@ -20,6 +20,7 @@ var (
 	Corrupted = errors.New("corrupted")
 )
 
+// ColumnPages is an iterator type used to scan pages of a column chunk.
 type ColumnPages struct {
 	column   *Column
 	header   *format.PageHeader
@@ -77,6 +78,11 @@ func (c *ColumnPages) close(err error) {
 	c.err = err
 }
 
+// Err return the last error seen by the column page iterator.
+//
+// Note that not all errors are fatal; page corruption errors can be handled by
+// skipping the page and allowing the program to continue reading the remaining
+// valid pages in the column chunk.
 func (c *ColumnPages) Err() error {
 	switch c.err {
 	case nil:
@@ -101,6 +107,11 @@ func (c *ColumnPages) Err() error {
 	return nil
 }
 
+// Next advances the iterator to the next page, returning true if another page
+// was available.
+//
+// When newly created, the iterator is positioned before the first page,
+// therefore Next must be called before any other method of the iterator.
 func (c *ColumnPages) Next() bool {
 	if c.data.N > 0 {
 		if _, err := io.Copy(ioutil.Discard, &c.data); err != nil {
@@ -183,25 +194,27 @@ func (c *ColumnPages) Next() bool {
 	return true
 }
 
-func (c *ColumnPages) RepetitionLevels() io.Reader {
-	return c.repetitionLevels
-}
+// RepetitionLevels returns an io.Reader exposing the raw bytes of the
+// repetition levels in the current data page.
+func (c *ColumnPages) RepetitionLevels() io.Reader { return c.repetitionLevels }
 
-func (c *ColumnPages) DefinitionLevels() io.Reader {
-	return c.definitionLevels
-}
+// DefinitionLevels returns an io.Reader exposing the raw bytes of the
+// definition levels in the current data page.
+func (c *ColumnPages) DefinitionLevels() io.Reader { return c.definitionLevels }
 
-func (c *ColumnPages) CompressedPageData() io.Reader {
-	return c.compressedPageData
-}
+// CompressedDataPage returns an io.Reader exposing the raw bytes of the
+// current page before decompression.
+//
+// This method is useful to avoid decompressing data pages when doing low-level
+// manipulations of parquet files.
+func (c *ColumnPages) CompressedPageData() io.Reader { return c.compressedPageData }
 
-func (c *ColumnPages) PageData() io.Reader {
-	return c.pageData
-}
+// PageData returns an io.Reader exposing the raw bytes of the current page
+// after decompression.
+func (c *ColumnPages) PageData() io.Reader { return c.pageData }
 
-func (c *ColumnPages) PageHeader() PageHeader {
-	return c.pageHeader
-}
+// PageHeader returns a PageHeader representing the header of the current page.
+func (c *ColumnPages) PageHeader() PageHeader { return c.pageHeader }
 
 func (c *ColumnPages) fileOffset() int64 {
 	return c.section.offset

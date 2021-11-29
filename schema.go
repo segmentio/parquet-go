@@ -9,12 +9,45 @@ import (
 	"github.com/segmentio/parquet/encoding"
 )
 
+// Schema represents a parquet schema created from a Go value.
+//
+// Schema implements the Node interface to represent the root node of a parquet
+// schema.
 type Schema struct {
 	name     string
 	root     Node
 	traverse traverseFunc
 }
 
+// SchemaOf constructs a parquet schema from a Go value.
+//
+// The function can construct parquet schemas from struct or pointer-to-struct
+// values only. A panic is raised if a Go value of a different type is passed
+// to this function.
+//
+// When creating a parquet Schema from a Go value, the struct fields may contain
+// a "parquet" tag to describe properties of the parquet node. The "parquet" tag
+// follows the conventional format of Go struct tags: a comma-separated list of
+// values describe the options, with the first one defining the name of the
+// parquet column.
+//
+// The following options are also supported in the "parquet" struct tag:
+//
+//	optional | make the parquet column optional
+//	snappy   | sets the parquet column compression codec to snappy
+//	gzip     | sets the parquet column compression codec to gzip
+//	brotli   | sets the parquet column compression codec to brotli
+//	lz4      | sets the parquet column compression codec to lz4
+//	zstd     | sets the parquet column compression codec to zstd
+//	dict     | enables dictionary encoding on the parquet column
+//	list     | for slice types, use the parquet LIST logical type
+//	enum     | for string types, use the parquet ENUM logical type
+//	uuid     | for string and [16]byte types, use the parquet UUID logical type
+//
+// Invalid combination of struct tags and Go types, or repeating options will
+// cause the function to panic.
+//
+// The schema name is the Go type name of the value.
 func SchemaOf(model interface{}) *Schema {
 	t := reflect.TypeOf(model)
 	if t.Kind() == reflect.Ptr {
@@ -23,6 +56,8 @@ func SchemaOf(model interface{}) *Schema {
 	return NamedSchemaOf(t.Name(), model)
 }
 
+// NamedSchemaOf is like SchemaOf but allows the program to customize the name
+// of the parquet schema.
 func NamedSchemaOf(name string, model interface{}) *Schema {
 	return namedSchemaOf(name, reflect.ValueOf(model))
 }
@@ -51,40 +86,69 @@ func newSchema(name string, root Node, traverse traverseFunc) *Schema {
 	}
 }
 
+// Name returns the name of s.
 func (s *Schema) Name() string { return s.name }
 
+// Type returns the parquet type of s.
 func (s *Schema) Type() Type { return s.root.Type() }
 
+// Optional returns false since the root node of a parquet schema is always required.
 func (s *Schema) Optional() bool { return s.root.Optional() }
 
+// Repeated returns false since the root node of a parquet schema is always required.
 func (s *Schema) Repeated() bool { return s.root.Repeated() }
 
+// Required returns true since the root node of a parquet schema is always required.
 func (s *Schema) Required() bool { return s.root.Required() }
 
+// NumChildren returns the number of child nodes of s.
 func (s *Schema) NumChildren() int { return s.root.NumChildren() }
 
+// ChildNames returns the list of child node names of s.
 func (s *Schema) ChildNames() []string { return s.root.ChildNames() }
 
+// ChildByName returns the child node with the given name in s.
 func (s *Schema) ChildByName(name string) Node { return s.root.ChildByName(name) }
 
+// Encoding returns the list of encodings in child nodes of s.
 func (s *Schema) Encoding() []encoding.Encoding { return s.root.Encoding() }
 
+// Compression returns the list of compression codecs in the child nodes of s.
 func (s *Schema) Compression() []compress.Codec { return s.root.Compression() }
 
+// String returns a parquet schema representation of s.
 func (s *Schema) String() string {
 	b := new(strings.Builder)
 	Print(b, s.name, s.root)
 	return b.String()
 }
 
+// Traversal is an interface used to implement the parquet schema traversal
+// algorithm.
 type Traversal interface {
+	// The Traverse method is called for each column index and parquet value
+	// when traversing a Go value with its parquet schema.
+	//
+	// The repetition and definition levels of the parquet value will be set
+	// according to the structure of the input Go value.
 	Traverse(columnIndex int, value Value) error
 }
 
+// TraversalFunc is an implementation of the Traverse interface for regular
+// Go functions and methods.
 type TraversalFunc func(int, Value) error
 
+// Traverse satsifies the Traversal interface.
 func (f TraversalFunc) Traverse(columnIndex int, value Value) error { return f(columnIndex, value) }
 
+// Traverse is the implementation of the traversal algorithm which converts
+// Go values into a sequence of column index + parquet value pairs by calling
+// the given traversal callback.
+//
+// The type of the Go value must match the parquet schema or the method will
+// panic.
+//
+// The traversal callback must not be nil or the method will panic.
 func (s *Schema) Traverse(value interface{}, traversal Traversal) error {
 	v := reflect.ValueOf(value)
 

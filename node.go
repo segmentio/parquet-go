@@ -40,16 +40,34 @@ type Node interface {
 	// The method returns an empty slice on leaf nodes.
 	ChildNames() []string
 
+	// Returns the child node associated with the given name.
+	//
+	// The method panics if it is called on a leaf node.
 	ChildByName(name string) Node
 
+	// Returns the list of encodings used by the node and its children.
+	//
+	// The method may return an empty slice to indicate that only the plain
+	// encoding is used.
 	Encoding() []encoding.Encoding
 
+	// Returns the list of compression codecs used by the node and its children.
+	//
+	// The method may return an empty slice to indicate that no compression was
+	// configured on the node.
 	Compression() []compress.Codec
 }
 
+// Encoded wraps the node passed as argument to add the given list of encodings.
+//
+// The function panics if it is called on a non-leaf node, or if one of the
+// encodings is not able to encode the node type.
 func Encoded(node Node, encodings ...encoding.Encoding) Node {
 	if len(encodings) == 0 {
 		return node
+	}
+	if node.NumChildren() != 0 {
+		panic("cannot add encodings to a non-leaf node")
 	}
 	kind := node.Type().Kind()
 	for _, e := range encodings {
@@ -75,9 +93,16 @@ func (n *encodedNode) Encoding() []encoding.Encoding {
 	return dedupeSortedEncodings(encodings)
 }
 
+// Compressed wraps the node passed as argument to add the given list of
+// compression codecs.
+//
+// The function panics if it is called on a non-leaf node.
 func Compressed(node Node, codecs ...compress.Codec) Node {
 	if len(codecs) == 0 {
 		return node
+	}
+	if node.NumChildren() != 0 {
+		panic("cannot add compression codecs to a non-leaf node")
 	}
 	codecs = append([]compress.Codec{}, codecs...)
 	return &compressedNode{
@@ -97,6 +122,7 @@ func (n *compressedNode) Compression() []compress.Codec {
 	return dedupeSortedCodecs(compression)
 }
 
+// Optional wraps the given node to make it optional.
 func Optional(node Node) Node {
 	if node.Optional() {
 		return node
@@ -110,6 +136,7 @@ func (opt *optionalNode) Optional() bool { return true }
 func (opt *optionalNode) Repeated() bool { return false }
 func (opt *optionalNode) Required() bool { return false }
 
+// Repeated wraps the given node to make it repeated.
 func Repeated(node Node) Node {
 	if node.Repeated() {
 		return node
@@ -123,6 +150,7 @@ func (rep *repeatedNode) Optional() bool { return false }
 func (rep *repeatedNode) Repeated() bool { return true }
 func (rep *repeatedNode) Required() bool { return false }
 
+// Required wraps the given node to make it required.
 func Required(node Node) Node {
 	if node.Required() {
 		return node

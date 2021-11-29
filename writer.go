@@ -14,6 +14,24 @@ import (
 	"github.com/segmentio/parquet/internal/bits"
 )
 
+// A Writer uses a parquet schema and sequence of Go values to produce a parquet
+// file to an io.Writer.
+//
+// This example shows how to typically use parquet writers:
+//
+//	schema := parquet.SchemoOf(rows[0])
+//	writer := parquet.NewWriter(output, schema)
+//
+//	for _, row := range rows {
+//		if err := writer.WriteRow(row); err != nil {
+//			...
+//		}
+//	}
+//
+//	if err := writer.Close(); err != nil {
+//		...
+//	}
+//
 type Writer struct {
 	initialized bool
 	closed      bool
@@ -44,6 +62,8 @@ func (w *Writer) writeMagicHeader() error {
 	return err
 }
 
+// Close must be called after all values were produced to the writer in order to
+// flush all buffers and write the parquet footer.
 func (w *Writer) Close() error {
 	if w.closed {
 		return nil
@@ -84,6 +104,10 @@ func (w *Writer) Close() error {
 	return err
 }
 
+// WriteRow is called to write another row to the parquet file.
+//
+// The method uses the parquet schema configured on w to traverse the Go value
+// and decompose it into a set of columns and values.
 func (w *Writer) WriteRow(row interface{}) error {
 	if !w.initialized {
 		w.initialized = true

@@ -15,6 +15,7 @@ var (
 	ErrMissingRootColumn = errors.New("parquet file is missing a root column")
 )
 
+// File represents a parquet file.
 type File struct {
 	metadata format.FileMetaData
 	protocol thrift.CompactProtocol
@@ -24,6 +25,12 @@ type File struct {
 	root     *Column
 }
 
+// OpenFile opens a parquet file from the content between offset 0 and the given
+// size in r.
+//
+// Only the parquet magic bytes and footer are read, column chunks and other
+// parts of the file are left untouched; this means that successfully opening
+// a file does not validate that the pages are not corrupted.
 func OpenFile(r io.ReaderAt, size int64) (*File, error) {
 	f := &File{
 		reader: r,
@@ -68,14 +75,15 @@ func OpenFile(r io.ReaderAt, size int64) (*File, error) {
 	return f, nil
 }
 
-func (f *File) Root() *Column {
-	return f.root
-}
+// Root returns the root column of f.
+func (f *File) Root() *Column { return f.root }
 
-func (f *File) Size() int64 {
-	return f.size
-}
+// Size returns the size of f (in bytes).
+func (f *File) Size() int64 { return f.size }
 
+// ReadAt reads bytes into b from f at the given offset.
+//
+// The method satisfies the io.ReaderAt interface.
 func (f *File) ReadAt(b []byte, off int64) (int, error) {
 	if off < 0 || off >= f.size {
 		return 0, io.EOF
@@ -92,6 +100,6 @@ func (f *File) ReadAt(b []byte, off int64) (int, error) {
 	return f.reader.ReadAt(b, off)
 }
 
-func (f *File) MetaData() *format.FileMetaData {
-	return &f.metadata
-}
+var (
+	_ io.ReaderAt = (*File)(nil)
+)
