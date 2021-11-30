@@ -10,6 +10,7 @@ import (
 	"github.com/segmentio/encoding/thrift"
 	"github.com/segmentio/parquet/compress"
 	"github.com/segmentio/parquet/encoding"
+	"github.com/segmentio/parquet/encoding/plain"
 	"github.com/segmentio/parquet/format"
 	"github.com/segmentio/parquet/internal/bits"
 )
@@ -449,6 +450,10 @@ type columnChunkWriter struct {
 		encoder      encoding.Encoder
 	}
 
+	dict struct {
+		encoder plain.Encoder
+	}
+
 	minValueBytes []byte
 	maxValueBytes []byte
 	minValue      Value
@@ -716,12 +721,15 @@ func (ccw *columnChunkWriter) writeDictionaryPage(w io.Writer, dict Dictionary) 
 	if err := ccw.page.compressed.Reset(&ccw.page.checksum); err != nil {
 		return fmt.Errorf("resetting compressor for parquet column chunk writer: %w", err)
 	}
-	keys := dict.Keys()
-	if _, err := ccw.page.compressed.Write(keys); err != nil {
-		return err
+
+	ccw.page.uncompressed.Reset(ccw.page.compressed)
+	ccw.dict.encoder.Reset(&ccw.page.uncompressed)
+
+	if err := dict.WriteTo(&ccw.dict.encoder); err != nil {
+		return fmt.Errorf("writing parquet dictionary page: %w", err)
 	}
 	if err := ccw.page.compressed.Close(); err != nil {
-		return err
+		return fmt.Errorf("flushing compressed parquet dictionary page: %w", err)
 	}
 
 	ccw.header.buffer.Reset()
@@ -729,7 +737,7 @@ func (ccw *columnChunkWriter) writeDictionaryPage(w io.Writer, dict Dictionary) 
 
 	if err := ccw.header.encoder.Encode(&format.PageHeader{
 		Type:                 format.DictionaryPage,
-		UncompressedPageSize: int32(len(keys)),
+		UncompressedPageSize: int32(ccw.page.uncompressed.length),
 		CompressedPageSize:   int32(ccw.page.buffer.Len()),
 		CRC:                  int32(ccw.page.checksum.Sum32()),
 		DictionaryPageHeader: &format.DictionaryPageHeader{
@@ -742,7 +750,7 @@ func (ccw *columnChunkWriter) writeDictionaryPage(w io.Writer, dict Dictionary) 
 	}
 
 	headerSize := ccw.header.buffer.Len()
-	ccw.totalUncompressedSize += int64(headerSize) + int64(len(keys))
+	ccw.totalUncompressedSize += int64(headerSize) + ccw.page.uncompressed.length
 	ccw.totalCompressedSize += int64(headerSize) + int64(ccw.page.buffer.Len())
 	ccw.addPageEncoding(format.DictionaryPage, format.Plain)
 

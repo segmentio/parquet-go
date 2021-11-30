@@ -26,11 +26,6 @@ type Dictionary interface {
 	// Returns the type that the dictionary was created from.
 	Type() Type
 
-	// Returns the dictionary keys (plain encoded).
-	//
-	// TODO: remove
-	Keys() []byte
-
 	// Returns the number of value indexed in the dictionary.
 	Len() int
 
@@ -68,8 +63,6 @@ func newBooleanDictionary(typ Type) *booleanDictionary {
 }
 
 func (d *booleanDictionary) Type() Type { return d.typ }
-
-func (d *booleanDictionary) Keys() []byte { return nil }
 
 func (d *booleanDictionary) Len() int { return 2 }
 
@@ -124,8 +117,6 @@ func newInt32Dictionary(typ Type, bufferSize int) *int32Dictionary {
 }
 
 func (d *int32Dictionary) Type() Type { return d.typ }
-
-func (d *int32Dictionary) Keys() []byte { return bits.Int32ToBytes(d.values) }
 
 func (d *int32Dictionary) Len() int { return len(d.values) }
 
@@ -205,8 +196,6 @@ func newInt64Dictionary(typ Type, bufferSize int) *int64Dictionary {
 }
 
 func (d *int64Dictionary) Type() Type { return d.typ }
-
-func (d *int64Dictionary) Keys() []byte { return bits.Int64ToBytes(d.values) }
 
 func (d *int64Dictionary) Len() int { return len(d.values) }
 
@@ -328,8 +317,6 @@ func newByteArrayDictionary(typ Type, bufferSize int) *byteArrayDictionary {
 
 func (d *byteArrayDictionary) Type() Type { return d.typ }
 
-func (d *byteArrayDictionary) Keys() []byte { return d.values }
-
 func (d *byteArrayDictionary) Len() int { return len(d.offset) }
 
 func (d *byteArrayDictionary) Index(i int) Value {
@@ -436,8 +423,6 @@ func newFixedLenByteArrayDictionary(typ Type, bufferSize int) *fixedLenByteArray
 }
 
 func (d *fixedLenByteArrayDictionary) Type() Type { return d.typ }
-
-func (d *fixedLenByteArrayDictionary) Keys() []byte { return d.values }
 
 func (d *fixedLenByteArrayDictionary) Len() int { return len(d.values) / d.size }
 
