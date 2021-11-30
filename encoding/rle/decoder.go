@@ -11,7 +11,7 @@ import (
 )
 
 type Decoder struct {
-	encoding.NotImplementedDecoder
+	encoding.NotSupportedDecoder
 	reader    io.Reader
 	buffer    [1]byte
 	bitWidth  uint

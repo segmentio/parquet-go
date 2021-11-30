@@ -1,3 +1,6 @@
+// Package dict implements the PLAIN and RLE dictionary encodings.
+//
+// https://github.com/apache/parquet-format/blob/master/Encodings.md#dictionary-encoding-plain_dictionary--2-and-rle_dictionary--8
 package dict
 
 import (
@@ -39,7 +42,7 @@ func (e *Encoding) String() string {
 }
 
 type decoder struct {
-	encoding.NotImplementedDecoder
+	encoding.NotSupportedDecoder
 	rle *rle.Decoder
 }
 
@@ -89,7 +92,7 @@ func (d decoder) decodeBitWidth() (int, error) {
 }
 
 type encoder struct {
-	encoding.NotImplementedEncoder
+	encoding.NotSupportedEncoder
 	rle *rle.Encoder
 }
 

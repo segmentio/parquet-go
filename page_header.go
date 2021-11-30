@@ -161,7 +161,7 @@ func (u unknownPageHeader) NumValues() int {
 }
 
 func (u unknownPageHeader) Encoding() encoding.Encoding {
-	return encoding.NotImplemented{}
+	return encoding.NotSupported{}
 }
 
 func (u unknownPageHeader) String() string {

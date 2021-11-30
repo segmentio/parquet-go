@@ -1,3 +1,8 @@
+// Package rle implements the hybrid RLE/Bit-Packed encoding employed in
+// repetition and definition levels, dictionary indexed data pages, and
+// boolean values in the PLAIN encoding.
+//
+// https://github.com/apache/parquet-format/blob/master/Encodings.md#run-length-encoding--bit-packing-hybrid-rle--3
 package rle
 
 import (
@@ -15,7 +20,7 @@ func (e *Encoding) Encoding() format.Encoding {
 }
 
 func (e *Encoding) CanEncode(t format.Type) bool {
-	return t == format.Boolean || t == format.Int32 || t == format.Int64 || t == format.Int96
+	return t == format.Boolean || t == format.Int32 || t == format.Int64
 }
 
 func (e *Encoding) NewDecoder(r io.Reader) encoding.Decoder {
