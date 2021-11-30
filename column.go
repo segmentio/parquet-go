@@ -1,7 +1,6 @@
 package parquet
 
 import (
-	"bytes"
 	"fmt"
 	"sort"
 	"strings"
@@ -10,7 +9,6 @@ import (
 	"github.com/segmentio/parquet/deprecated"
 	"github.com/segmentio/parquet/encoding"
 	"github.com/segmentio/parquet/format"
-	"github.com/segmentio/parquet/internal/bits"
 )
 
 // Column represents a column in a parquet file.
@@ -20,6 +18,7 @@ import (
 //
 // Column instances satisfy the Node interface.
 type Column struct {
+	typ         Type
 	file        *File
 	schema      *format.SchemaElement
 	order       *format.ColumnOrder
@@ -44,7 +43,7 @@ func (c *Column) Order() *format.ColumnOrder { return c.order }
 // Type returns the type of the column.
 //
 // The returned value is unspecified if c is not a leaf column.
-func (c *Column) Type() Type { return schemaElementType{c.schema} }
+func (c *Column) Type() Type { return c.typ }
 
 // Required returns true if the column is required.
 func (c *Column) Required() bool { return schemaRepetitionTypeOf(c.schema) == format.Required }
@@ -218,6 +217,8 @@ func (cl *columnLoader) open(file *File, path []string) (*Column, error) {
 	numChildren := int(c.schema.NumChildren)
 
 	if numChildren == 0 {
+		c.typ = schemaElementTypeOf(c.schema)
+
 		if cl.columnOrderIndex < len(file.metadata.ColumnOrders) {
 			c.order = &file.metadata.ColumnOrders[cl.columnOrderIndex]
 			cl.columnOrderIndex++
@@ -251,6 +252,7 @@ func (cl *columnLoader) open(file *File, path []string) (*Column, error) {
 		return c, nil
 	}
 
+	c.typ = &groupType{}
 	c.names = make([]string, numChildren)
 	c.columns = make([]*Column, numChildren)
 
@@ -318,157 +320,124 @@ func (c columnsByName) Swap(i, j int) {
 	c.columns[i], c.columns[j] = c.columns[j], c.columns[i]
 }
 
-type schemaElementType struct{ *format.SchemaElement }
-
-func (t schemaElementType) Kind() Kind {
-	if t.Type != nil {
-		return Kind(*t.Type)
-	}
-	return -1
-}
-
-func (t schemaElementType) Length() int {
-	if t.TypeLength != nil {
-		return int(*t.TypeLength)
-	}
-	return 0
-}
-
-func (t schemaElementType) Less(v1, v2 Value) bool {
-	// First try to apply a logical type comparison.
-	switch lt := t.LogicalType(); {
-	case lt.UTF8 != nil:
-		return (*stringType)(lt.UTF8).Less(v1, v2)
-	case lt.Map != nil:
-		return (*mapType)(lt.Map).Less(v1, v2)
-	case lt.List != nil:
-		return (*listType)(lt.List).Less(v1, v2)
-	case lt.Enum != nil:
-		return (*enumType)(lt.Enum).Less(v1, v2)
-	case lt.Decimal != nil:
-		// TODO:
-		// return (*decimalType)(lt.Decimal).Less(v1, v2)
-	case lt.Date != nil:
-		return (*dateType)(lt.Date).Less(v1, v2)
-	case lt.Time != nil:
-		return (*timeType)(lt.Time).Less(v1, v2)
-	case lt.Timestamp != nil:
-		return (*timestampType)(lt.Timestamp).Less(v1, v2)
-	case lt.Integer != nil:
-		return (*intType)(lt.Integer).Less(v1, v2)
-	case lt.Unknown != nil:
-		return (*nullType)(lt.Unknown).Less(v1, v2)
-	case lt.Json != nil:
-		return (*jsonType)(lt.Json).Less(v1, v2)
-	case lt.Bson != nil:
-		return (*bsonType)(lt.Bson).Less(v1, v2)
-	case lt.UUID != nil:
-		return (*uuidType)(lt.UUID).Less(v1, v2)
+func schemaElementTypeOf(s *format.SchemaElement) Type {
+	if lt := s.LogicalType; lt != nil {
+		// A logical type exists, the Type interface implementations in this
+		// package are all based on the logical parquet types declared in the
+		// format sub-package so we can return them directly via a pointer type
+		// conversion.
+		switch {
+		case lt.UTF8 != nil:
+			return (*stringType)(lt.UTF8)
+		case lt.Map != nil:
+			return (*mapType)(lt.Map)
+		case lt.List != nil:
+			return (*listType)(lt.List)
+		case lt.Enum != nil:
+			return (*enumType)(lt.Enum)
+		case lt.Decimal != nil:
+			// TODO:
+			// return (*decimalType)(lt.Decimal)
+		case lt.Date != nil:
+			return (*dateType)(lt.Date)
+		case lt.Time != nil:
+			return (*timeType)(lt.Time)
+		case lt.Timestamp != nil:
+			return (*timestampType)(lt.Timestamp)
+		case lt.Integer != nil:
+			return (*intType)(lt.Integer)
+		case lt.Unknown != nil:
+			return (*nullType)(lt.Unknown)
+		case lt.Json != nil:
+			return (*jsonType)(lt.Json)
+		case lt.Bson != nil:
+			return (*bsonType)(lt.Bson)
+		case lt.UUID != nil:
+			return (*uuidType)(lt.UUID)
+		}
 	}
 
-	// If no logical types were found, fallback to doing a basic comparison
-	// of the values.
-	switch t.Kind() {
-	case Boolean:
-		return !v1.Boolean() && v2.Boolean()
-	case Int32:
-		return v1.Int32() < v2.Int32()
-	case Int64:
-		return v1.Int64() < v2.Int64()
-	case Int96:
-		return bits.CompareInt96(v1.Int96(), v2.Int96()) < 0
-	case Float:
-		return v1.Float() < v2.Float()
-	case Double:
-		return v1.Double() < v2.Double()
-	case ByteArray, FixedLenByteArray:
-		return bytes.Compare(v1.ByteArray(), v2.ByteArray()) < 0
-	default:
-		return false
+	if ct := s.ConvertedType; ct != nil {
+		// This column contains no logical type but has a converted type, it
+		// was likely created by an older parquet writer. Convert the legacy
+		// type representation to the equivalent logical parquet type.
+		switch *ct {
+		case deprecated.UTF8:
+			return &stringType{}
+		case deprecated.Map:
+			return &mapType{}
+		case deprecated.MapKeyValue:
+			return &groupType{}
+		case deprecated.List:
+			return &listType{}
+		case deprecated.Enum:
+			return &enumType{}
+		case deprecated.Decimal:
+			// TODO
+		case deprecated.Date:
+			return &dateType{}
+		case deprecated.TimeMillis:
+			return &timeType{IsAdjustedToUTC: true, Unit: Millisecond.TimeUnit()}
+		case deprecated.TimeMicros:
+			return &timeType{IsAdjustedToUTC: true, Unit: Microsecond.TimeUnit()}
+		case deprecated.TimestampMillis:
+			return &timestampType{IsAdjustedToUTC: true, Unit: Millisecond.TimeUnit()}
+		case deprecated.TimestampMicros:
+			return &timestampType{IsAdjustedToUTC: true, Unit: Microsecond.TimeUnit()}
+		case deprecated.Uint8:
+			return &unsignedIntTypes[0]
+		case deprecated.Uint16:
+			return &unsignedIntTypes[1]
+		case deprecated.Uint32:
+			return &unsignedIntTypes[2]
+		case deprecated.Uint64:
+			return &unsignedIntTypes[3]
+		case deprecated.Int8:
+			return &signedIntTypes[0]
+		case deprecated.Int16:
+			return &signedIntTypes[1]
+		case deprecated.Int32:
+			return &signedIntTypes[2]
+		case deprecated.Int64:
+			return &signedIntTypes[3]
+		case deprecated.Json:
+			return &jsonType{}
+		case deprecated.Bson:
+			return &bsonType{}
+		case deprecated.Interval:
+			// TODO
+		}
 	}
-}
 
-func (t schemaElementType) PhyiscalType() *format.Type {
-	return t.SchemaElement.Type
-}
-
-func (t schemaElementType) LogicalType() *format.LogicalType {
-	return t.SchemaElement.LogicalType
-}
-
-func (t schemaElementType) ConvertedType() *deprecated.ConvertedType {
-	return t.SchemaElement.ConvertedType
-}
-
-func (t schemaElementType) NewDictionary(bufferSize int) Dictionary {
-	switch t.Kind() {
-	case Boolean:
-		return newBooleanDictionary(t)
-	case Int32:
-		return newInt32Dictionary(t, bufferSize)
-	case Int64:
-		return newInt64Dictionary(t, bufferSize)
-	case Int96:
-		return newInt96Dictionary(t, bufferSize)
-	case Float:
-		return newFloatDictionary(t, bufferSize)
-	case Double:
-		return newDoubleDictionary(t, bufferSize)
-	case ByteArray:
-		return newByteArrayDictionary(t, bufferSize)
-	case FixedLenByteArray:
-		return newFixedLenByteArrayDictionary(t, bufferSize)
-	default:
-		panic("cannot create a page buffer from a schema element of unsupported type")
+	if t := s.Type; t != nil {
+		// The column only has a physical type, convert it to one of the
+		// primitive types supported by this package.
+		switch kind := Kind(*t); kind {
+		case Boolean:
+			return BooleanType
+		case Int32:
+			return Int32Type
+		case Int64:
+			return Int64Type
+		case Int96:
+			return Int96Type
+		case Float:
+			return FloatType
+		case Double:
+			return DoubleType
+		case ByteArray:
+			return ByteArrayType
+		case FixedLenByteArray:
+			if s.TypeLength != nil {
+				return FixedLenByteArrayType(int(*s.TypeLength))
+			}
+		}
 	}
-}
 
-func (t schemaElementType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
-	// TODO: handle logical types
-	switch t.Kind() {
-	case Boolean:
-		return newBooleanPageReader(t, decoder, bufferSize)
-	case Int32:
-		return newInt32PageReader(t, decoder, bufferSize)
-	case Int64:
-		return newInt64PageReader(t, decoder, bufferSize)
-	case Int96:
-		return newInt96PageReader(t, decoder, bufferSize)
-	case Float:
-		return newFloatPageReader(t, decoder, bufferSize)
-	case Double:
-		return newDoublePageReader(t, decoder, bufferSize)
-	case ByteArray:
-		return newByteArrayPageReader(t, decoder, bufferSize)
-	case FixedLenByteArray:
-		return newFixedLenByteArrayPageReader(t, decoder, bufferSize)
-	default:
-		panic("cannot create a page buffer from a schema element of unsupported type")
-	}
-}
-
-func (t schemaElementType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
-	// TODO: handle logical types
-	switch t.Kind() {
-	case Boolean:
-		return newBooleanPageWriter(t, encoder, bufferSize)
-	case Int32:
-		return newInt32PageWriter(t, encoder, bufferSize)
-	case Int64:
-		return newInt64PageWriter(t, encoder, bufferSize)
-	case Int96:
-		return newInt96PageWriter(t, encoder, bufferSize)
-	case Float:
-		return newFloatPageWriter(t, encoder, bufferSize)
-	case Double:
-		return newDoublePageWriter(t, encoder, bufferSize)
-	case ByteArray:
-		return newByteArrayPageWriter(t, encoder, bufferSize)
-	case FixedLenByteArray:
-		return newFixedLenByteArrayPageWriter(t, encoder, bufferSize)
-	default:
-		panic("cannot create a page buffer from a schema element of unsupported type")
-	}
+	// If we reach this point, we are likely reading a parquet column that was
+	// written with a non-standard type or is in a newer version of the format
+	// than this package supports.
+	return &nullType{}
 }
 
 func schemaRepetitionTypeOf(s *format.SchemaElement) format.FieldRepetitionType {
