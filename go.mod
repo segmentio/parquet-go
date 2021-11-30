@@ -8,8 +8,5 @@ require (
 	github.com/hexops/gotextdiff v1.0.3
 	github.com/klauspost/compress v1.13.6
 	github.com/pierrec/lz4/v4 v4.1.9
-	github.com/segmentio/asm v1.1.1
 	github.com/segmentio/encoding v0.3.2
 )
-
-require golang.org/x/sys v0.0.0-20211110154304-99a53858aa08 // indirect
