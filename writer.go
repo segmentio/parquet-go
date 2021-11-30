@@ -78,13 +78,13 @@ func (w *Writer) Close() error {
 		}
 	}
 
-	if err := w.rowGroups.Close(); err != nil {
+	if err := w.rowGroups.close(); err != nil {
 		return err
 	}
 
 	numRows := int64(0)
-	schema := w.rowGroups.Schema()
-	rowGroups := w.rowGroups.RowGroups()
+	schema := w.rowGroups.colSchema
+	rowGroups := w.rowGroups.rowGroups
 	createdBy := w.rowGroups.config.CreatedBy
 
 	for rowGroupIndex := range rowGroups {
@@ -126,7 +126,7 @@ func (w *Writer) WriteRow(row interface{}) error {
 		}
 	}
 
-	return w.rowGroups.WriteRow(row)
+	return w.rowGroups.writeRow(row)
 }
 
 type rowGroupWriter struct {
@@ -279,15 +279,7 @@ func (rgw *rowGroupWriter) init(node Node, path []string, dataPageType format.Pa
 	}
 }
 
-func (rgw *rowGroupWriter) RowGroups() []format.RowGroup {
-	return rgw.rowGroups
-}
-
-func (rgw *rowGroupWriter) Schema() []format.SchemaElement {
-	return rgw.colSchema
-}
-
-func (rgw *rowGroupWriter) Close() error {
+func (rgw *rowGroupWriter) close() error {
 	if len(rgw.columns) == 0 {
 		return nil
 	}
@@ -299,7 +291,7 @@ func (rgw *rowGroupWriter) Close() error {
 		rgw.columns = nil
 	}()
 
-	if err := rgw.Flush(); err != nil {
+	if err := rgw.flush(); err != nil {
 		return err
 	}
 
@@ -324,7 +316,7 @@ func (rgw *rowGroupWriter) Close() error {
 	return nil
 }
 
-func (rgw *rowGroupWriter) Flush() error {
+func (rgw *rowGroupWriter) flush() error {
 	if len(rgw.columns) == 0 {
 		return io.ErrClosedPipe
 	}
@@ -334,7 +326,7 @@ func (rgw *rowGroupWriter) Flush() error {
 	}
 
 	for _, col := range rgw.columns {
-		if err := col.writer.Flush(); err != nil {
+		if err := col.writer.flush(); err != nil {
 			return err
 		}
 	}
@@ -373,17 +365,17 @@ func (rgw *rowGroupWriter) Flush() error {
 			}
 		}
 
-		columnChunkTotalUncompressedSize := col.writer.TotalUncompressedSize()
-		columnChunkTotalCompressedSize := col.writer.TotalCompressedSize()
+		columnChunkTotalUncompressedSize := col.writer.totalUncompressedSize
+		columnChunkTotalCompressedSize := col.writer.totalCompressedSize
 
-		totalRowCount += col.writer.TotalRowCount()
+		totalRowCount += col.writer.totalRowCount
 		totalByteSize += columnChunkTotalUncompressedSize
 		totalCompressedSize += columnChunkTotalCompressedSize
 
 		columns[i] = format.ColumnChunk{
 			MetaData: format.ColumnMetaData{
 				Type:                  col.typ,
-				Encoding:              col.writer.Encodings(),
+				Encoding:              col.writer.sortedEncodings(),
 				PathInSchema:          col.path[1:],
 				Codec:                 col.codec,
 				NumValues:             col.numValues,
@@ -393,8 +385,8 @@ func (rgw *rowGroupWriter) Flush() error {
 				DataPageOffset:        dataPageOffset,
 				IndexPageOffset:       0,
 				DictionaryPageOffset:  dictionaryPageOffset,
-				Statistics:            col.writer.Statistics(),
-				EncodingStats:         col.writer.EncodingStats(),
+				Statistics:            col.writer.statistics(),
+				EncodingStats:         col.writer.sortedEncodingStats(),
 				BloomFilterOffset:     0,
 			},
 			OffsetIndexOffset: 0,
@@ -404,7 +396,7 @@ func (rgw *rowGroupWriter) Flush() error {
 		}
 
 		col.buffer.release()
-		col.writer.Reset()
+		col.writer.reset()
 	}
 
 	rgw.rowGroups = append(rgw.rowGroups, format.RowGroup{
@@ -426,12 +418,12 @@ type rowGroupTraversal struct{ *rowGroupWriter }
 
 func (rgw rowGroupTraversal) Traverse(columnIndex int, value Value) error {
 	col := rgw.columns[columnIndex]
-	col.writer.WriteValue(value)
+	col.writer.writeValue(value)
 	col.numValues++
 	return nil
 }
 
-func (rgw *rowGroupWriter) WriteRow(row interface{}) error {
+func (rgw *rowGroupWriter) writeRow(row interface{}) error {
 	if len(rgw.columns) == 0 {
 		return io.ErrClosedPipe
 	}
@@ -450,10 +442,10 @@ func (rgw *rowGroupWriter) WriteRow(row interface{}) error {
 
 	rowGroupSize := int64(0)
 	for _, col := range rgw.columns {
-		rowGroupSize += col.writer.TotalCompressedSize()
+		rowGroupSize += col.writer.totalCompressedSize
 	}
 	if rowGroupSize >= rgw.config.RowGroupTargetSize {
-		return rgw.Flush()
+		return rgw.flush()
 	}
 
 	return nil
@@ -547,29 +539,17 @@ func newColumnChunkWriter(buffer pageBuffer, codec compress.Codec, enc encoding.
 	return ccw
 }
 
-func (ccw *columnChunkWriter) TotalRowCount() int64 {
-	return ccw.totalRowCount
-}
-
-func (ccw *columnChunkWriter) TotalUncompressedSize() int64 {
-	return ccw.totalUncompressedSize
-}
-
-func (ccw *columnChunkWriter) TotalCompressedSize() int64 {
-	return ccw.totalCompressedSize
-}
-
-func (ccw *columnChunkWriter) Encodings() []format.Encoding {
+func (ccw *columnChunkWriter) sortedEncodings() []format.Encoding {
 	sort.Sort(columnChunkEncodingsOrder{ccw})
 	return ccw.encodings
 }
 
-func (ccw *columnChunkWriter) EncodingStats() []format.PageEncodingStats {
+func (ccw *columnChunkWriter) sortedEncodingStats() []format.PageEncodingStats {
 	sort.Sort(columnChunkEncodingStatsOrder{ccw})
 	return ccw.encodingStats
 }
 
-func (ccw *columnChunkWriter) Statistics() format.Statistics {
+func (ccw *columnChunkWriter) statistics() format.Statistics {
 	ccw.minValueBytes = ccw.minValue.AppendBytes(ccw.minValueBytes[:0])
 	ccw.maxValueBytes = ccw.maxValue.AppendBytes(ccw.maxValueBytes[:0])
 	return format.Statistics{
@@ -581,7 +561,7 @@ func (ccw *columnChunkWriter) Statistics() format.Statistics {
 	}
 }
 
-func (ccw *columnChunkWriter) Reset() {
+func (ccw *columnChunkWriter) reset() {
 	ccw.minValueBytes = ccw.minValueBytes[:0]
 	ccw.maxValueBytes = ccw.maxValueBytes[:0]
 	ccw.minValue = Value{}
@@ -596,7 +576,7 @@ func (ccw *columnChunkWriter) Reset() {
 	ccw.encodingStats = ccw.encodingStats[:0]
 }
 
-func (ccw *columnChunkWriter) Flush() error {
+func (ccw *columnChunkWriter) flush() error {
 	numValues := ccw.values.NumValues()
 	if numValues == 0 {
 		return nil
@@ -739,7 +719,7 @@ func (ccw *columnChunkWriter) Flush() error {
 	return ccw.buffer.writePage(rowIndex, ccw.header.buffer.Bytes(), ccw.page.buffer.Bytes())
 }
 
-func (ccw *columnChunkWriter) WriteValue(v Value) error {
+func (ccw *columnChunkWriter) writeValue(v Value) error {
 	if ccw.maxRepetitionLevel > 0 {
 		ccw.levels.repetition = append(ccw.levels.repetition, v.repetitionLevel)
 	}
@@ -759,7 +739,7 @@ func (ccw *columnChunkWriter) WriteValue(v Value) error {
 		case nil:
 			return nil
 		case ErrBufferFull:
-			if err := ccw.Flush(); err != nil {
+			if err := ccw.flush(); err != nil {
 				return err
 			}
 		default:
