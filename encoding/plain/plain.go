@@ -1,3 +1,6 @@
+// Package plain implements the PLAIN parquet encoding.
+//
+// https://github.com/apache/parquet-format/blob/master/Encodings.md#plain-plain--0
 package plain
 
 import (

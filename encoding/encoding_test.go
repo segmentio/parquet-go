@@ -306,7 +306,7 @@ func testBooleanEncoding(t *testing.T, e encoding.Encoding) {
 			defer buf.Reset()
 
 			if err := enc.EncodeBoolean(test); err != nil {
-				if errors.Is(err, encoding.ErrNotImplemented) {
+				if errors.Is(err, encoding.ErrNotSupported) {
 					t.Skip(err)
 				}
 				t.Fatal("encode:", err)
@@ -351,7 +351,7 @@ func testInt8Encoding(t *testing.T, e encoding.Encoding) {
 			dec.SetBitWidth(bitWidth)
 
 			if err := enc.EncodeInt8(test); err != nil {
-				if errors.Is(err, encoding.ErrNotImplemented) {
+				if errors.Is(err, encoding.ErrNotSupported) {
 					t.Skip(err)
 				}
 				t.Fatal("encode:", err)
@@ -396,7 +396,7 @@ func testInt16Encoding(t *testing.T, e encoding.Encoding) {
 			dec.SetBitWidth(bitWidth)
 
 			if err := enc.EncodeInt16(test); err != nil {
-				if errors.Is(err, encoding.ErrNotImplemented) {
+				if errors.Is(err, encoding.ErrNotSupported) {
 					t.Skip(err)
 				}
 				t.Fatal("encode:", err)
@@ -441,7 +441,7 @@ func testInt32Encoding(t *testing.T, e encoding.Encoding) {
 			dec.SetBitWidth(bitWidth)
 
 			if err := enc.EncodeInt32(test); err != nil {
-				if errors.Is(err, encoding.ErrNotImplemented) {
+				if errors.Is(err, encoding.ErrNotSupported) {
 					t.Skip(err)
 				}
 				t.Fatal("encode:", err)
@@ -486,7 +486,7 @@ func testInt64Encoding(t *testing.T, e encoding.Encoding) {
 			dec.SetBitWidth(bitWidth)
 
 			if err := enc.EncodeInt64(test); err != nil {
-				if errors.Is(err, encoding.ErrNotImplemented) {
+				if errors.Is(err, encoding.ErrNotSupported) {
 					t.Skip(err)
 				}
 				t.Fatal("encode:", err)
@@ -531,7 +531,7 @@ func testInt96Encoding(t *testing.T, e encoding.Encoding) {
 			dec.SetBitWidth(bitWidth)
 
 			if err := enc.EncodeInt96(test); err != nil {
-				if errors.Is(err, encoding.ErrNotImplemented) {
+				if errors.Is(err, encoding.ErrNotSupported) {
 					t.Skip(err)
 				}
 				t.Fatal("encode:", err)
@@ -572,7 +572,7 @@ func testFloatEncoding(t *testing.T, e encoding.Encoding) {
 			defer buf.Reset()
 
 			if err := enc.EncodeFloat(test); err != nil {
-				if errors.Is(err, encoding.ErrNotImplemented) {
+				if errors.Is(err, encoding.ErrNotSupported) {
 					t.Skip(err)
 				}
 				t.Fatal("encode:", err)
@@ -613,7 +613,7 @@ func testDoubleEncoding(t *testing.T, e encoding.Encoding) {
 			defer buf.Reset()
 
 			if err := enc.EncodeDouble(test); err != nil {
-				if errors.Is(err, encoding.ErrNotImplemented) {
+				if errors.Is(err, encoding.ErrNotSupported) {
 					t.Skip(err)
 				}
 				t.Fatal("encode:", err)
@@ -655,7 +655,7 @@ func testByteArrayEncoding(t *testing.T, e encoding.Encoding) {
 			tmp = plain.AppendByteArrayList(tmp[:0], test...)
 
 			if err := enc.EncodeByteArray(tmp); err != nil {
-				if errors.Is(err, encoding.ErrNotImplemented) {
+				if errors.Is(err, encoding.ErrNotSupported) {
 					t.Skip(err)
 				}
 				t.Fatal("encode:", err)
@@ -710,7 +710,7 @@ func testFixedLenByteArrayEncoding(t *testing.T, e encoding.Encoding) {
 			tmp := make([]byte, test.size)
 
 			if err := enc.EncodeFixedLenByteArray(test.size, test.data); err != nil {
-				if errors.Is(err, encoding.ErrNotImplemented) {
+				if errors.Is(err, encoding.ErrNotSupported) {
 					t.Skip(err)
 				}
 				t.Fatal("encode:", err)

@@ -12,6 +12,7 @@ import (
 )
 
 type Decoder struct {
+	encoding.NotSupportedDecoder
 	reader io.Reader
 	buffer []byte
 	rle    *rle.Decoder
@@ -38,14 +39,6 @@ func (d *Decoder) DecodeBoolean(data []bool) (int, error) {
 		d.rle = rle.NewDecoder(d.reader)
 	}
 	return d.rle.DecodeBoolean(data)
-}
-
-func (e *Decoder) DecodeInt8(data []int8) (int, error) {
-	return 0, encoding.NotImplementedError("INT8")
-}
-
-func (e *Decoder) DecodeInt16(data []int16) (int, error) {
-	return 0, encoding.NotImplementedError("INT16")
 }
 
 func (d *Decoder) DecodeInt32(data []int32) (int, error) {

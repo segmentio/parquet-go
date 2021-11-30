@@ -11,6 +11,7 @@ import (
 )
 
 type Encoder struct {
+	encoding.NotSupportedEncoder
 	writer io.Writer
 	buffer [8]byte
 	rle    *rle.Encoder
@@ -37,14 +38,6 @@ func (e *Encoder) EncodeBoolean(data []bool) error {
 		e.rle = rle.NewEncoder(e.writer)
 	}
 	return e.rle.EncodeBoolean(data)
-}
-
-func (e *Encoder) EncodeInt8(data []int8) error {
-	return encoding.NotImplementedError("INT8")
-}
-
-func (e *Encoder) EncodeInt16(data []int16) error {
-	return encoding.NotImplementedError("INT16")
 }
 
 func (e *Encoder) EncodeInt32(data []int32) error {

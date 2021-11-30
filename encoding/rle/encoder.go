@@ -12,7 +12,7 @@ import (
 )
 
 type Encoder struct {
-	encoding.NotImplementedEncoder
+	encoding.NotSupportedEncoder
 	writer    io.Writer
 	bitWidth  uint
 	buffer    [64]byte
