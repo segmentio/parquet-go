@@ -261,6 +261,12 @@ func (rgw *rowGroupWriter) init(node Node, path []string, dataPageType format.Pa
 				maxRepetitionLevel,
 				maxDefinitionLevel,
 				pageWriter,
+				// Data pages in version 2 can omit compression when dictionary
+				// encoding is employed; only the dictionary page needs to be
+				// compressed, the data pages are encoded with the hybrid
+				// RLE/Bit-Pack encoding which doesn't benefit from an extra
+				// compression layer.
+				compressionCodec.CompressionCodec() != format.Uncompressed && (dataPageType != format.DataPageV2 || dictionary == nil),
 			),
 		}
 
@@ -464,7 +470,7 @@ type columnChunkWriter struct {
 	encodingStats         []format.PageEncodingStats
 }
 
-func newColumnChunkWriter(buffer pageBuffer, codec compress.Codec, enc encoding.Encoder, dataPageType format.PageType, maxRepetitionLevel, maxDefinitionLevel int8, values PageWriter) *columnChunkWriter {
+func newColumnChunkWriter(buffer pageBuffer, codec compress.Codec, enc encoding.Encoder, dataPageType format.PageType, maxRepetitionLevel, maxDefinitionLevel int8, values PageWriter, isCompressed bool) *columnChunkWriter {
 	ccw := &columnChunkWriter{
 		buffer:             buffer,
 		values:             values,
@@ -472,7 +478,7 @@ func newColumnChunkWriter(buffer pageBuffer, codec compress.Codec, enc encoding.
 		dataPageType:       dataPageType,
 		maxRepetitionLevel: maxRepetitionLevel,
 		maxDefinitionLevel: maxDefinitionLevel,
-		isCompressed:       codec.CompressionCodec() != format.Uncompressed,
+		isCompressed:       isCompressed,
 		encodings:          make([]format.Encoding, 0, 3),
 		encodingStats:      make([]format.PageEncodingStats, 0, 3),
 	}
@@ -567,19 +573,16 @@ func (ccw *columnChunkWriter) Flush() error {
 		}
 	}
 
-	if ccw.page.compressed == nil {
-		w, err := ccw.compression.NewWriter(&ccw.page.checksum)
-		if err != nil {
-			return fmt.Errorf("creating compressor for parquet column chunk writer: %w", err)
-		}
-		ccw.page.compressed = w
+	if !ccw.isCompressed {
+		ccw.page.uncompressed.Reset(&ccw.page.checksum)
 	} else {
-		if err := ccw.page.compressed.Reset(&ccw.page.checksum); err != nil {
-			return fmt.Errorf("resetting compressor for parquet column chunk writer: %w", err)
+		p, err := ccw.compressedPage(&ccw.page.checksum)
+		if err != nil {
+			return err
 		}
+		ccw.page.uncompressed.Reset(p)
 	}
 
-	ccw.page.uncompressed.Reset(ccw.page.compressed)
 	if ccw.dataPageType == format.DataPage {
 		if ccw.maxRepetitionLevel > 0 {
 			ccw.levels.v1.Reset(&ccw.page.uncompressed)
@@ -613,8 +616,10 @@ func (ccw *columnChunkWriter) Flush() error {
 	if err := ccw.values.Flush(); err != nil {
 		return err
 	}
-	if err := ccw.page.compressed.Close(); err != nil {
-		return err
+	if ccw.page.compressed != nil {
+		if err := ccw.page.compressed.Close(); err != nil {
+			return err
+		}
 	}
 
 	ccw.header.buffer.Reset()
@@ -709,18 +714,34 @@ func (ccw *columnChunkWriter) WriteValue(v Value) error {
 	}
 }
 
+func (ccw *columnChunkWriter) compressedPage(w io.Writer) (compress.Writer, error) {
+	if ccw.page.compressed == nil {
+		z, err := ccw.compression.NewWriter(w)
+		if err != nil {
+			return nil, fmt.Errorf("creating compressor for parquet column chunk writer: %w", err)
+		}
+		ccw.page.compressed = z
+	} else {
+		if err := ccw.page.compressed.Reset(w); err != nil {
+			return nil, fmt.Errorf("resetting compressor for parquet column chunk writer: %w", err)
+		}
+	}
+	return ccw.page.compressed, nil
+}
+
 func (ccw *columnChunkWriter) writeDictionaryPage(w io.Writer, dict Dictionary) error {
 	ccw.page.buffer.Reset()
 	ccw.page.checksum.Reset(&ccw.page.buffer)
 
-	if err := ccw.page.compressed.Reset(&ccw.page.checksum); err != nil {
-		return fmt.Errorf("resetting compressor for parquet column chunk writer: %w", err)
-	}
-	keys := dict.Keys()
-	if _, err := ccw.page.compressed.Write(keys); err != nil {
+	p, err := ccw.compressedPage(&ccw.page.checksum)
+	if err != nil {
 		return err
 	}
-	if err := ccw.page.compressed.Close(); err != nil {
+	keys := dict.Keys()
+	if _, err := p.Write(keys); err != nil {
+		return err
+	}
+	if err := p.Close(); err != nil {
 		return err
 	}
 

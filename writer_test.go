@@ -126,17 +126,19 @@ func generateParquetFile(dataPageVersion int, rows ...interface{}) ([]byte, erro
 }
 
 type firstAndLastName struct {
-	FirstName string `parquet:"first_name,dict"`
-	LastName  string `parquet:"last_name,dict"`
+	FirstName string `parquet:"first_name,dict,zstd"`
+	LastName  string `parquet:"last_name,dict,zstd"`
 }
 
 var writerTests = []struct {
-	version int
-	rows    []interface{}
-	dump    string
+	scenario string
+	version  int
+	rows     []interface{}
+	dump     string
 }{
 	{
-		version: 1,
+		scenario: "page v1 with dictionary encoding",
+		version:  1,
 		rows: []interface{}{
 			&firstAndLastName{FirstName: "Han", LastName: "Solo"},
 			&firstAndLastName{FirstName: "Leia", LastName: "Skywalker"},
@@ -144,8 +146,8 @@ var writerTests = []struct {
 		},
 		dump: `row group 0
 --------------------------------------------------------------------------------
-first_name:  BINARY UNCOMPRESSED DO:4 FPO:46 SZ:96/96/1.00 VC:3 ENC:PL [more]...
-last_name:   BINARY UNCOMPRESSED DO:100 FPO:140 SZ:104/104/1.00 VC:3 E [more]...
+first_name:  BINARY ZSTD DO:4 FPO:55 SZ:114/96/0.84 VC:3 ENC:PLAIN,RLE [more]...
+last_name:   BINARY ZSTD DO:118 FPO:167 SZ:122/104/0.85 VC:3 ENC:PLAIN [more]...
 
     first_name TV=3 RL=0 DL=0 DS: 3 DE:PLAIN
     ----------------------------------------------------------------------------
@@ -171,8 +173,46 @@ value 3: R:0 D:0 V:Skywalker
 `,
 	},
 
+	{ // same as the previous test but uses page v2 where data pages aren't compressed
+		scenario: "page v2 with dictionary encoding",
+		version:  2,
+		rows: []interface{}{
+			&firstAndLastName{FirstName: "Han", LastName: "Solo"},
+			&firstAndLastName{FirstName: "Leia", LastName: "Skywalker"},
+			&firstAndLastName{FirstName: "Luke", LastName: "Skywalker"},
+		},
+		dump: `row group 0
+--------------------------------------------------------------------------------
+first_name:  BINARY ZSTD DO:4 FPO:55 SZ:110/101/0.92 VC:3 ENC:RLE_DICT [more]...
+last_name:   BINARY ZSTD DO:114 FPO:163 SZ:118/109/0.92 VC:3 ENC:RLE_D [more]...
+
+    first_name TV=3 RL=0 DL=0 DS: 3 DE:PLAIN
+    ----------------------------------------------------------------------------
+    page 0:                        DLE:RLE RLE:RLE VLE:RLE_DICTIONARY  [more]... VC:3
+
+    last_name TV=3 RL=0 DL=0 DS:  2 DE:PLAIN
+    ----------------------------------------------------------------------------
+    page 0:                        DLE:RLE RLE:RLE VLE:RLE_DICTIONARY  [more]... VC:3
+
+BINARY first_name
+--------------------------------------------------------------------------------
+*** row group 1 of 1, values 1 to 3 ***
+value 1: R:0 D:0 V:Han
+value 2: R:0 D:0 V:Leia
+value 3: R:0 D:0 V:Luke
+
+BINARY last_name
+--------------------------------------------------------------------------------
+*** row group 1 of 1, values 1 to 3 ***
+value 1: R:0 D:0 V:Solo
+value 2: R:0 D:0 V:Skywalker
+value 3: R:0 D:0 V:Skywalker
+`,
+	},
+
 	{
-		version: 2,
+		scenario: "example from the twitter blog",
+		version:  2,
 		rows: []interface{}{
 			AddressBook{
 				Owner: "Julien Le Dem",
@@ -260,7 +300,7 @@ func TestWriter(t *testing.T) {
 		rows := test.rows
 		dump := test.dump
 
-		t.Run("", func(t *testing.T) {
+		t.Run(test.scenario, func(t *testing.T) {
 			t.Parallel()
 
 			b, err := generateParquetFile(dataPageVersion, rows...)
