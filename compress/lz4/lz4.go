@@ -1,3 +1,4 @@
+// Package lz4 implements the LZ4_RAW parquet compression codec.
 package lz4
 
 import (

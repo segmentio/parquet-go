@@ -1,3 +1,4 @@
+// Package brotli implements the BROTLI parquet compression codec.
 package brotli
 
 import (
