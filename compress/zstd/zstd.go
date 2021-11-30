@@ -1,3 +1,4 @@
+// Package zstd implements the ZSTD parquet compression codec.
 package zstd
 
 import (

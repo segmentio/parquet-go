@@ -49,8 +49,8 @@ var (
 		Concurrency: lz4.DefaultConcurrency,
 	}
 
-	compressedPageReaders = [8]sync.Pool{}
-	compressionCodecs     = [8]compress.Codec{
+	// Table of compression codecs indexed by their code in the parquet format.
+	compressionCodecs = [...]compress.Codec{
 		format.Uncompressed: &Uncompressed,
 		format.Snappy:       &Snappy,
 		format.Gzip:         &Gzip,
@@ -58,6 +58,11 @@ var (
 		format.Zstd:         &Zstd,
 		format.Lz4Raw:       &Lz4Raw,
 	}
+
+	// Pools of compressed page readers used to retain compression codecs across
+	// page reads to reduce the compute and memory footprint of creating new
+	// decompressors for every new page read in a parquet file.
+	compressedPageReaders = [len(compressionCodecs)]sync.Pool{}
 )
 
 func lookupCompressionCodec(codec format.CompressionCodec) compress.Codec {

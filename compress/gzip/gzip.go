@@ -1,3 +1,4 @@
+// Package gzip implements the GZIP parquet compression codec.
 package gzip
 
 import (

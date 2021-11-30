@@ -1,3 +1,6 @@
+// Package uncompressed provides implementations of the compression codec
+// interfaces as pass-through without applying any compression nor
+// decompression.
 package uncompressed
 
 import (

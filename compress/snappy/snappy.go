@@ -1,3 +1,4 @@
+// Package snappy implements the SNAPPY parquet compression codec.
 package snappy
 
 import (
