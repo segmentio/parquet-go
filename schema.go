@@ -163,18 +163,6 @@ func (s *Schema) Traverse(value interface{}, traversal Traversal) error {
 	return s.traverse(levels{}, v, traversal)
 }
 
-func dereference(value reflect.Value) reflect.Value {
-	if value.IsValid() {
-		if value.Kind() != reflect.Ptr {
-			return value
-		}
-		if !value.IsNil() {
-			return value.Elem()
-		}
-	}
-	return reflect.Value{}
-}
-
 type structNode struct {
 	node
 	fields []structField
