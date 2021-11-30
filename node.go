@@ -209,8 +209,8 @@ func fieldRepetitionTypeOf(node Node) *format.FieldRepetitionType {
 // dynamically matches the schema by introspecting the given Go value. As a
 // result, it has a higher overhead than using a generated parquet schema.
 // In contexts where the compute footprint of the program should be minimized,
-// creating a parquet schema from a Go strut and using the parquet.(*Schema).Traverse
-// method will yield must better results.
+// creating a parquet schema from a Go struct and using the
+// parquet.(*Schema).Traverse method will yield must better results.
 func Traverse(node Node, value interface{}, traversal Traversal) error {
 	_, err := traverse(node, levels{}, reflect.ValueOf(value), traversal)
 	return err

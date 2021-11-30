@@ -5,10 +5,6 @@ import (
 	"strings"
 )
 
-const (
-	defaultBufferSize = 4096
-)
-
 // The ReaderConfig type carries configuration options for parquet readers.
 //
 // ReaderConfig implements the ReaderOption interface so it can be used directly
@@ -29,7 +25,7 @@ func (c *ReaderConfig) Apply(options ...ReaderOption) {
 	}
 }
 
-// Configure applies configuration options from config to c.
+// Configure applies configuration options from c to config.
 func (c *ReaderConfig) Configure(config *ReaderConfig) {
 	*config = ReaderConfig{
 		PageBufferSize: coalesceInt(c.PageBufferSize, config.PageBufferSize),
@@ -68,7 +64,7 @@ func (c *WriterConfig) Apply(options ...WriterOption) {
 	}
 }
 
-// Configure applies configuration options from config to c.
+// Configure applies configuration options from c to config.
 func (c *WriterConfig) Configure(config *WriterConfig) {
 	*config = WriterConfig{
 		CreatedBy:          coalesceString(c.CreatedBy, config.CreatedBy),

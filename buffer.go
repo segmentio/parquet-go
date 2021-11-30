@@ -10,12 +10,17 @@ import (
 	"sync"
 )
 
-var (
-	ErrBufferFull = errors.New("page buffer is full")
+const (
+	defaultBufferSize      = 4096
+	defaultLevelBufferSize = 1024
 )
 
 var (
 	defaultBufferPool bufferPool
+)
+
+var (
+	ErrBufferFull = errors.New("page buffer is full")
 )
 
 type Buffer interface {

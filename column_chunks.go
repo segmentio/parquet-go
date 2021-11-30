@@ -26,7 +26,7 @@ func (c *ColumnChunks) Err() error {
 }
 
 // Seek positions the iterator at the given index. The program must still call
-// Next after calling Seek, otherwise the
+// Next after calling Seek, otherwise the behavior is undefined.
 func (c *ColumnChunks) Seek(index int) {
 	c.index = index - 1
 	c.metadata = nil

@@ -19,7 +19,7 @@ import (
 //
 // This example shows how to typically use parquet writers:
 //
-//	schema := parquet.SchemoOf(rows[0])
+//	schema := parquet.SchemaOf(rows[0])
 //	writer := parquet.NewWriter(output, schema)
 //
 //	for _, row := range rows {
@@ -478,11 +478,11 @@ func newColumnChunkWriter(buffer pageBuffer, codec compress.Codec, enc encoding.
 	}
 
 	if maxRepetitionLevel > 0 {
-		ccw.levels.repetition = make([]int8, 0, 1024)
+		ccw.levels.repetition = make([]int8, 0, defaultLevelBufferSize)
 	}
 
 	if maxDefinitionLevel > 0 {
-		ccw.levels.definition = make([]int8, 0, 1024)
+		ccw.levels.definition = make([]int8, 0, defaultLevelBufferSize)
 	}
 
 	if maxRepetitionLevel > 0 || maxDefinitionLevel > 0 {
