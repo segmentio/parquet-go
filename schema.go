@@ -138,7 +138,7 @@ type Traversal interface {
 // Go functions and methods.
 type TraversalFunc func(int, Value) error
 
-// Traverse satsifies the Traversal interface.
+// Traverse satisfies the Traversal interface.
 func (f TraversalFunc) Traverse(columnIndex int, value Value) error { return f(columnIndex, value) }
 
 // Traverse is the implementation of the traversal algorithm which converts
@@ -161,18 +161,6 @@ func (s *Schema) Traverse(value interface{}, traversal Traversal) error {
 	}
 
 	return s.traverse(levels{}, v, traversal)
-}
-
-func dereference(value reflect.Value) reflect.Value {
-	if value.IsValid() {
-		if value.Kind() != reflect.Ptr {
-			return value
-		}
-		if !value.IsNil() {
-			return value.Elem()
-		}
-	}
-	return reflect.Value{}
 }
 
 type structNode struct {

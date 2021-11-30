@@ -9,16 +9,10 @@ import (
 // ColumnChunks is an iterator type exposing chunks of a column within a parquet
 // file.
 type ColumnChunks struct {
-	column *Column
-	index  int
-
-	// reader   *io.SectionReader
-	// buffer   *bufio.Reader
-	// protocol thrift.CompactProtocol
-	// decoder  thrift.Decoder
+	column   *Column
+	index    int
 	metadata *format.ColumnMetaData
-
-	err error
+	err      error
 }
 
 func (c *ColumnChunks) close(err error) {
@@ -32,7 +26,7 @@ func (c *ColumnChunks) Err() error {
 }
 
 // Seek positions the iterator at the given index. The program must still call
-// Next after calling Seek, otherwise the
+// Next after calling Seek, otherwise the behavior is undefined.
 func (c *ColumnChunks) Seek(index int) {
 	c.index = index - 1
 	c.metadata = nil
@@ -54,32 +48,6 @@ func (c *ColumnChunks) Next() bool {
 
 	c.close(fmt.Errorf("remote column data are not supported: %s", chunk.FilePath))
 	return false
-
-	// This is a sketch of what the code would look like when we support
-	// reading data from remote files.
-	/*
-		if c.reader == nil {
-			c.reader = io.NewSectionReader(c.file, 0, c.size)
-			c.buffer = bufio.NewReaderSize(c.reader, defaultBufferSize)
-			c.decoder.Reset(c.protocol.NewReader(c.buffer))
-		}
-
-		if _, err := c.reader.Seek(chunk.FileOffset, io.SeekStart); err != nil {
-			c.setError(err)
-			return false
-		}
-
-		c.buffer.Reset(c.reader)
-		metadata := new(format.ColumnMetaData)
-
-		if err := c.decoder.Decode(metadata); err != nil {
-			c.setError(err)
-			return false
-		}
-
-		c.metadata = metadata
-		return true
-	*/
 }
 
 // Chunk returns the schema for the chunk that the iterator is currently

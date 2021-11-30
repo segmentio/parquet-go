@@ -304,7 +304,7 @@ func (lvl *dataPageLevelV1) reset() {
 // In the data header format v1, the repetition and definition levels were
 // part of the compressed page payload. In order to access the data, the
 // levels must be fully read. Because of it, the levels have to be buffered
-// to allow the content to be decoded lazily layer on.
+// to allow the content to be decoded lazily later on.
 //
 // In the data header format v2, the repetition and definition levels are not
 // part of the compressed page data, they can be accessed by slicing a section
