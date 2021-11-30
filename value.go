@@ -71,7 +71,7 @@ type ValueWriter interface {
 //	float64 | DOUBLE
 //	string  | BYTE_ARRAY
 //	[]byte  | BYTE_ARRAY
-//	[*]byte | FIXED_LEN_BYTE_ARRARY
+//	[*]byte | FIXED_LEN_BYTE_ARRAY
 //
 // When converting a []byte or [*]byte value, the underlying byte array is not
 // copied; instead, the returned parquet value holds a reference to it.

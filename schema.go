@@ -138,7 +138,7 @@ type Traversal interface {
 // Go functions and methods.
 type TraversalFunc func(int, Value) error
 
-// Traverse satsifies the Traversal interface.
+// Traverse satisfies the Traversal interface.
 func (f TraversalFunc) Traverse(columnIndex int, value Value) error { return f(columnIndex, value) }
 
 // Traverse is the implementation of the traversal algorithm which converts

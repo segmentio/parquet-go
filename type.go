@@ -52,7 +52,7 @@ type Type interface {
 
 	// Returns the physical type as a *format.Type value.
 	//
-	// As an optimization, the method may return the same pointer accross
+	// As an optimization, the method may return the same pointer across
 	// multiple calls. Applications must treat the returned value as immutable,
 	// mutating the value will result in undefined behavior.
 	PhyiscalType() *format.Type
@@ -60,7 +60,7 @@ type Type interface {
 	// Returns the logical type as a *format.LogicalType value. When the logical
 	// type is unknown, the method returns nil.
 	//
-	// As an optimization, the method may return the same pointer accross
+	// As an optimization, the method may return the same pointer across
 	// multiple calls. Applications must treat the returned value as immutable,
 	// mutating the value will result in undefined behavior.
 	LogicalType() *format.LogicalType
@@ -68,7 +68,7 @@ type Type interface {
 	// Returns the logical type's equivaleent converted type. When there are
 	// no equivalent convertted type, the method returns nil.
 	//
-	// As an optimization, the method may return the same pointer accross
+	// As an optimization, the method may return the same pointer across
 	// multiple calls. Applications must treat the returned value as immutable,
 	// mutating the value will result in undefined behavior.
 	ConvertedType() *deprecated.ConvertedType
