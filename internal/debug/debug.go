@@ -1,33 +1,46 @@
 package debug
 
 import (
-	"log"
-	"sync/atomic"
+	"fmt"
+	"io"
 )
 
-var enabled int32 = 0
-
-// Toggle turns on/off debug mode
-func Toggle(on bool) {
-	val := int32(0)
-	if on {
-		val = 1
+func Reader(reader io.Reader, prefix string) io.Reader {
+	return &ioReader{
+		reader: reader,
+		prefix: prefix,
 	}
-	atomic.StoreInt32(&enabled, val)
 }
 
-// Do executes a function if debug is enabled, usually for side effects.
-func Do(f func()) {
-	if atomic.LoadInt32(&enabled) != 1 {
-		return
-	}
-	f()
+type ioReader struct {
+	reader io.Reader
+	prefix string
+	offset int64
 }
 
-// Format a log line and writes it to stderr if debug is enabled
-func Format(format string, args ...interface{}) {
-	if atomic.LoadInt32(&enabled) != 1 {
-		return
+func (d *ioReader) Read(b []byte) (int, error) {
+	n, err := d.reader.Read(b)
+	fmt.Printf("%s: Read(%d) @%d => %d %v \n  %q\n", d.prefix, len(b), d.offset, n, err, b[:n])
+	d.offset += int64(n)
+	return n, err
+}
+
+func Writer(writer io.Writer, prefix string) io.Writer {
+	return &ioWriter{
+		writer: writer,
+		prefix: prefix,
 	}
-	log.Printf(format, args...)
+}
+
+type ioWriter struct {
+	writer io.Writer
+	prefix string
+	offset int64
+}
+
+func (d *ioWriter) Write(b []byte) (int, error) {
+	n, err := d.writer.Write(b)
+	fmt.Printf("%s: Write(%d) @%d => %d %v \n  %q\n", d.prefix, len(b), d.offset, n, err, b[:n])
+	d.offset += int64(n)
+	return n, err
 }

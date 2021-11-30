@@ -1,14 +1,15 @@
 module github.com/segmentio/parquet
 
-go 1.15
+go 1.17
 
 require (
-	github.com/apache/thrift v0.13.0
-	github.com/golang/snappy v0.0.2
-	github.com/logrusorgru/aurora/v3 v3.0.0
-	github.com/pmezard/go-difflib v1.0.0
-	github.com/segmentio/cli v0.3.4
-	github.com/stretchr/testify v1.6.1
-	github.com/xitongsys/parquet-go v1.5.3
-	github.com/xitongsys/parquet-go-source v0.0.0-20200817004010-026bad9b25d0
+	github.com/andybalholm/brotli v1.0.3
+	github.com/google/uuid v1.3.0
+	github.com/hexops/gotextdiff v1.0.3
+	github.com/klauspost/compress v1.13.6
+	github.com/pierrec/lz4/v4 v4.1.9
+	github.com/segmentio/asm v1.1.1
+	github.com/segmentio/encoding v0.3.2
 )
+
+require golang.org/x/sys v0.0.0-20211110154304-99a53858aa08 // indirect
