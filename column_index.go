@@ -363,12 +363,64 @@ func (index *byteArrayColumnIndexer) ColumnIndex() format.ColumnIndex {
 	// valid PLAIN encoded list of byte array values.
 	minValues, _ := plain.SplitByteArrayList(index.minValues)
 	maxValues, _ := plain.SplitByteArrayList(index.maxValues)
+	truncateLargeMinByteArrayValues(minValues)
+	truncateLargeMaxByteArrayValues(maxValues)
 	return index.columnIndex(
 		minValues,
 		maxValues,
 		bits.OrderOfBytes(minValues),
 		bits.OrderOfBytes(maxValues),
 	)
+}
+
+const (
+	// TODO: come up with a way to configure this?
+	maxValueSize = 64
+)
+
+func truncateLargeMinByteArrayValues(values [][]byte) {
+	for i, v := range values {
+		if len(v) > maxValueSize {
+			values[i] = v[:maxValueSize]
+		}
+	}
+}
+
+func truncateLargeMaxByteArrayValues(values [][]byte) {
+	for i, v := range values {
+		if len(v) > maxValueSize {
+			// If v is the max value we cannot truncate it since there are no
+			// shorter byte sequence with a greater value. This condition should
+			// never occur unless the input was especially constructed to trigger
+			// it.
+			if !isMaxByteArrayValue(v) {
+				values[i] = nextByteArrayValue(v[:maxValueSize])
+			}
+		}
+	}
+}
+
+func isMaxByteArrayValue(value []byte) bool {
+	for i := range value {
+		if value[i] != 0xFF {
+			return false
+		}
+	}
+	return true
+}
+
+func nextByteArrayValue(value []byte) []byte {
+	b := make([]byte, len(value))
+	copy(b, value)
+
+	for i := len(b) - 1; i > 0; i-- {
+		if b[i]++; b[i] != 0 {
+			break
+		}
+		// Overflow: increment the next byte
+	}
+
+	return b
 }
 
 type fixedLenByteArrayColumnIndexer struct {
