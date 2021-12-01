@@ -8,6 +8,31 @@ import (
 	"github.com/segmentio/parquet/internal/bits"
 )
 
+// ColumnIndex is the data structure representing column indexes.
+type ColumnIndex format.ColumnIndex
+
+// Page return min/max bounds for the page at index i in the column index.
+// The last returned value is a boolean indicating whether the page only
+// contained null pages, in which case the min/max values are empty byte
+// slices which must be interpreted as the null parquet value.
+func (index *ColumnIndex) PageBounds(i int) (minValue, maxValue []byte, nullPage bool) {
+	minValue = index.MinValues[i]
+	maxValue = index.MaxValues[i]
+	nullPage = index.NullPages[i]
+	return
+}
+
+// NumPages returns the number of paged in the column index.
+func (index *ColumnIndex) NumPages() int { return len(index.NullPages) }
+
+// IsAscending returns true if the column index min/max values are sorted in
+// ascending order (based on the ordering rules of the column's logical type).
+func (index *ColumnIndex) IsAscending() bool { return index.BoundaryOrder == format.Ascending }
+
+// IsDescending returns true if the column index min/max values are sorted in
+// descending order (based on the ordering rules of the column's logical type).
+func (index *ColumnIndex) IsDescending() bool { return index.BoundaryOrder == format.Descending }
+
 // The ColumnIndexer interface is implemented by types that support generating
 // parquet column indexes.
 //
@@ -32,7 +57,7 @@ type ColumnIndexer interface {
 	// The returned value may reference internal buffers, in which case the
 	// values remain valid until the next call to IndexPage or Reset on the
 	// column indexer.
-	ColumnIndex() format.ColumnIndex
+	ColumnIndex() ColumnIndex
 }
 
 type columnIndexer struct {
@@ -55,8 +80,8 @@ func (index *columnIndexer) observe(numValues, numNulls int) {
 	index.nullCounts = append(index.nullCounts, int64(numNulls))
 }
 
-func (index *columnIndexer) columnIndex(minValues, maxValues [][]byte, minOrder, maxOrder int) format.ColumnIndex {
-	return format.ColumnIndex{
+func (index *columnIndexer) columnIndex(minValues, maxValues [][]byte, minOrder, maxOrder int) ColumnIndex {
+	return ColumnIndex{
 		NullPages:     index.nullPages,
 		NullCounts:    index.nullCounts,
 		MinValues:     minValues,
@@ -97,7 +122,7 @@ func (index *genericColumnIndexer) IndexPage(numValues, numNulls int, min, max V
 	index.maxValues = append(index.maxValues, max.Clone())
 }
 
-func (index *genericColumnIndexer) ColumnIndex() format.ColumnIndex {
+func (index *genericColumnIndexer) ColumnIndex() ColumnIndex {
 	return index.columnIndex(
 		valuesBytes(index.typ, index.minValues),
 		valuesBytes(index.typ, index.maxValues),
@@ -136,7 +161,7 @@ func (index *booleanColumnIndexer) IndexPage(numValues, numNulls int, min, max V
 	index.maxValues = append(index.maxValues, max.Boolean())
 }
 
-func (index *booleanColumnIndexer) ColumnIndex() format.ColumnIndex {
+func (index *booleanColumnIndexer) ColumnIndex() ColumnIndex {
 	return index.columnIndex(
 		splitFixedLenByteArrayList(1, bits.BoolToBytes(index.minValues)),
 		splitFixedLenByteArrayList(1, bits.BoolToBytes(index.maxValues)),
@@ -175,7 +200,7 @@ func (index *int32ColumnIndexer) IndexPage(numValues, numNulls int, min, max Val
 	index.maxValues = append(index.maxValues, max.Int32())
 }
 
-func (index *int32ColumnIndexer) ColumnIndex() format.ColumnIndex {
+func (index *int32ColumnIndexer) ColumnIndex() ColumnIndex {
 	return index.columnIndex(
 		splitFixedLenByteArrayList(4, bits.Int32ToBytes(index.minValues)),
 		splitFixedLenByteArrayList(4, bits.Int32ToBytes(index.maxValues)),
@@ -214,7 +239,7 @@ func (index *int64ColumnIndexer) IndexPage(numValues, numNulls int, min, max Val
 	index.maxValues = append(index.maxValues, max.Int64())
 }
 
-func (index *int64ColumnIndexer) ColumnIndex() format.ColumnIndex {
+func (index *int64ColumnIndexer) ColumnIndex() ColumnIndex {
 	return index.columnIndex(
 		splitFixedLenByteArrayList(8, bits.Int64ToBytes(index.minValues)),
 		splitFixedLenByteArrayList(8, bits.Int64ToBytes(index.maxValues)),
@@ -253,7 +278,7 @@ func (index *floatColumnIndexer) IndexPage(numValues, numNulls int, min, max Val
 	index.maxValues = append(index.maxValues, max.Float())
 }
 
-func (index *floatColumnIndexer) ColumnIndex() format.ColumnIndex {
+func (index *floatColumnIndexer) ColumnIndex() ColumnIndex {
 	return index.columnIndex(
 		splitFixedLenByteArrayList(4, bits.Float32ToBytes(index.minValues)),
 		splitFixedLenByteArrayList(4, bits.Float32ToBytes(index.maxValues)),
@@ -292,7 +317,7 @@ func (index *doubleColumnIndexer) IndexPage(numValues, numNulls int, min, max Va
 	index.maxValues = append(index.maxValues, max.Double())
 }
 
-func (index *doubleColumnIndexer) ColumnIndex() format.ColumnIndex {
+func (index *doubleColumnIndexer) ColumnIndex() ColumnIndex {
 	return index.columnIndex(
 		splitFixedLenByteArrayList(8, bits.Float64ToBytes(index.minValues)),
 		splitFixedLenByteArrayList(8, bits.Float64ToBytes(index.maxValues)),
@@ -358,7 +383,7 @@ func (index *byteArrayColumnIndexer) setMax(max []byte) {
 	index.max = append(index.max[:0], max...)
 }
 
-func (index *byteArrayColumnIndexer) ColumnIndex() format.ColumnIndex {
+func (index *byteArrayColumnIndexer) ColumnIndex() ColumnIndex {
 	// It is safe to ignore the errors here because we know the input is a
 	// valid PLAIN encoded list of byte array values.
 	minValues, _ := plain.SplitByteArrayList(index.minValues)
@@ -412,7 +437,7 @@ func isMaxByteArrayValue(value []byte) bool {
 func nextByteArrayValue(value []byte) []byte {
 	next := make([]byte, len(value))
 	copy(next, value)
-	for i := len(b) - 1; i > 0; i-- {
+	for i := len(next) - 1; i > 0; i-- {
 		if next[i]++; next[i] != 0 {
 			break
 		}
@@ -455,7 +480,7 @@ func (index *fixedLenByteArrayColumnIndexer) IndexPage(numValues, numNulls int, 
 	index.maxValues = append(index.maxValues, max.ByteArray()...)
 }
 
-func (index *fixedLenByteArrayColumnIndexer) ColumnIndex() format.ColumnIndex {
+func (index *fixedLenByteArrayColumnIndexer) ColumnIndex() ColumnIndex {
 	minValues := splitFixedLenByteArrayList(index.size, index.minValues)
 	maxValues := splitFixedLenByteArrayList(index.size, index.maxValues)
 	return index.columnIndex(
@@ -472,7 +497,7 @@ func newUint32ColumnIndexer(typ Type) uint32ColumnIndexer {
 	return uint32ColumnIndexer{newInt32ColumnIndexer(typ)}
 }
 
-func (index uint32ColumnIndexer) ColumnIndex() format.ColumnIndex {
+func (index uint32ColumnIndexer) ColumnIndex() ColumnIndex {
 	minValues := bits.Int32ToUint32(index.minValues)
 	maxValues := bits.Int32ToUint32(index.maxValues)
 	return index.columnIndex(
@@ -489,7 +514,7 @@ func newUint64ColumnIndexer(typ Type) uint64ColumnIndexer {
 	return uint64ColumnIndexer{newInt64ColumnIndexer(typ)}
 }
 
-func (index uint64ColumnIndexer) ColumnIndex() format.ColumnIndex {
+func (index uint64ColumnIndexer) ColumnIndex() ColumnIndex {
 	minValues := bits.Int64ToUint64(index.minValues)
 	maxValues := bits.Int64ToUint64(index.maxValues)
 	return index.columnIndex(

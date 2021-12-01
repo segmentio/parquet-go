@@ -389,7 +389,7 @@ func (rgw *rowGroupWriter) flush() error {
 			}
 		}
 
-		columnIndex[i] = col.writer.columnIndexer.ColumnIndex()
+		columnIndex[i] = format.ColumnIndex(col.writer.columnIndexer.ColumnIndex())
 		columnChunkTotalUncompressedSize := col.writer.totalUncompressedSize
 		columnChunkTotalCompressedSize := col.writer.totalCompressedSize
 

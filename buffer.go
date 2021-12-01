@@ -1,6 +1,7 @@
 package parquet
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/binary"
 	"errors"
@@ -16,12 +17,28 @@ const (
 )
 
 var (
+	bufioReaderPool   sync.Pool
 	defaultBufferPool bufferPool
 )
 
 var (
 	ErrBufferFull = errors.New("page buffer is full")
 )
+
+func acquireBufioReader(r io.Reader) *bufio.Reader {
+	b, _ := bufioReaderPool.Get().(*bufio.Reader)
+	if b == nil {
+		b = bufio.NewReaderSize(r, defaultBufferSize)
+	} else {
+		b.Reset(r)
+	}
+	return b
+}
+
+func releaseBufioReader(b *bufio.Reader) {
+	b.Reset(nil)
+	bufioReaderPool.Put(b)
+}
 
 type Buffer interface {
 	io.Reader

@@ -1,7 +1,9 @@
 package parquet
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 
 	"github.com/segmentio/parquet/format"
 )
@@ -12,6 +14,7 @@ type ColumnChunks struct {
 	column   *Column
 	index    int
 	metadata *format.ColumnMetaData
+	buffer   *bufio.Reader
 	err      error
 }
 
@@ -50,21 +53,36 @@ func (c *ColumnChunks) Next() bool {
 	return false
 }
 
-// Chunk returns the schema for the chunk that the iterator is currently
-// positioned at. The method returns nil after the iterator reached the end or
-// encountered an error.
-func (c *ColumnChunks) Chunk() *format.ColumnChunk {
-	if c.index >= 0 && c.index < len(c.column.chunks) {
-		return c.column.chunks[c.index]
-	}
-	return nil
-}
-
 // DataPages returns an iterator over the data pages in the column chunk that
 // the iterator is currently positioned at.
 func (c *ColumnChunks) Pages() *ColumnPages {
 	if c.metadata != nil {
 		return newColumnPages(c.column, c.metadata, defaultBufferSize)
+	}
+	return nil
+}
+
+// ReadColumnIndex reads the column index section of the column chunk.
+func (c *ColumnChunks) ReadColumnIndex() (*ColumnIndex, error) {
+	chunk := c.chunk()
+	if chunk == nil {
+		return nil, io.EOF
+	}
+	return c.column.file.readColumnIndex(chunk)
+}
+
+// ReadOffsetIndex reads the offset index section of the column chunk.
+func (c *ColumnChunks) ReadOffsetIndex() (*OffsetIndex, error) {
+	chunk := c.chunk()
+	if chunk == nil {
+		return nil, io.EOF
+	}
+	return c.column.file.readOffsetIndex(chunk)
+}
+
+func (c *ColumnChunks) chunk() *format.ColumnChunk {
+	if c.index >= 0 && c.index < len(c.column.chunks) {
+		return c.column.chunks[c.index]
 	}
 	return nil
 }

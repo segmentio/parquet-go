@@ -1,7 +1,6 @@
 package parquet
 
 import (
-	"bufio"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -54,11 +53,10 @@ func OpenFile(r io.ReaderAt, size int64) (*File, error) {
 	footerSize := int64(binary.LittleEndian.Uint32(f.buffer[:4]))
 	footerData := io.NewSectionReader(r, size-(footerSize+8), footerSize)
 
-	decoder := thrift.NewDecoder(
-		f.protocol.NewReader(bufio.NewReaderSize(footerData, int(footerSize))),
-	)
+	buffer := acquireBufioReader(footerData)
+	defer releaseBufioReader(buffer)
 
-	if err := decoder.Decode(&f.metadata); err != nil {
+	if err := thrift.NewDecoder(f.protocol.NewReader(buffer)).Decode(&f.metadata); err != nil {
 		return nil, fmt.Errorf("reading parquet file metadata: %w", err)
 	}
 
@@ -98,6 +96,28 @@ func (f *File) ReadAt(b []byte, off int64) (int, error) {
 	}
 
 	return f.reader.ReadAt(b, off)
+}
+
+func (f *File) readColumnIndex(chunk *format.ColumnChunk) (*ColumnIndex, error) {
+	columnIndex := new(format.ColumnIndex)
+	columnIndexSection := io.NewSectionReader(f.reader, chunk.ColumnIndexOffset, int64(chunk.ColumnIndexLength))
+
+	buffer := acquireBufioReader(columnIndexSection)
+	defer releaseBufioReader(buffer)
+
+	err := thrift.NewDecoder(f.protocol.NewReader(buffer)).Decode(columnIndex)
+	return (*ColumnIndex)(columnIndex), err
+}
+
+func (f *File) readOffsetIndex(chunk *format.ColumnChunk) (*OffsetIndex, error) {
+	offsetIndex := new(format.OffsetIndex)
+	offsetIndexSection := io.NewSectionReader(f.reader, chunk.OffsetIndexOffset, int64(chunk.OffsetIndexLength))
+
+	buffer := acquireBufioReader(offsetIndexSection)
+	defer releaseBufioReader(buffer)
+
+	err := thrift.NewDecoder(f.protocol.NewReader(buffer)).Decode(offsetIndex)
+	return (*OffsetIndex)(offsetIndex), err
 }
 
 var (
