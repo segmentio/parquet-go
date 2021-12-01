@@ -7,23 +7,6 @@ import (
 	"github.com/segmentio/parquet/format"
 )
 
-// Statistics represent parquet statistics held on data pages.
-type Statistics struct {
-	DistinctCount int
-	NullCount     int
-	MinValue      []byte
-	MaxValue      []byte
-}
-
-func makeStatistics(stats *format.Statistics) Statistics {
-	return Statistics{
-		DistinctCount: int(stats.DistinctCount),
-		NullCount:     int(stats.NullCount),
-		MinValue:      coalesceBytes(stats.MinValue, stats.Min),
-		MaxValue:      coalesceBytes(stats.MaxValue, stats.Max),
-	}
-}
-
 // PageHeader is an interface implemented by parquet page headers.
 type PageHeader interface {
 	fmt.Stringer
@@ -46,11 +29,28 @@ type DataPageHeader interface {
 	// Returns the encoding of the definition level section.
 	DefinitionLevelEncoding() encoding.Encoding
 
-	// Returns the data page statistics.
+	// Returns the number of null values in the page.
+	NullCount() int
+
+	// Returns the minimum value in the page based on the ordering rules of the
+	// column's logical type.
 	//
-	// The MinValue and MaxValue field may hold references to internal byte
-	// slices which should be treated as immutable by the application.
-	Statistics() Statistics
+	// As an optimization, the method may return the same slice across multiple
+	// calls. Programs must treat the returned value as immutable to prevent
+	// unpredicatable behaviors.
+	//
+	// If the page only contains only null values, an empty slice is returned.
+	MinValue() []byte
+
+	// Returns the maximum value in the page based on the ordering rules of the
+	// column's logical type.
+	//
+	// As an optimization, the method may return the same slice across multiple
+	// calls. Programs must treat the returned value as immutable to prevent
+	// unpredicatable behaviors.
+	//
+	// If the page only contains only null values, an empty slice is returned.
+	MaxValue() []byte
 }
 
 // DictionaryPageHeader is an implementation of the PageHeader interface
@@ -100,8 +100,16 @@ func (v1 DataPageHeaderV1) Encoding() encoding.Encoding {
 	return lookupEncoding(v1.header.Encoding)
 }
 
-func (v1 DataPageHeaderV1) Statistics() Statistics {
-	return makeStatistics(&v1.header.Statistics)
+func (v1 DataPageHeaderV1) NullCount() int {
+	return int(v1.header.Statistics.NullCount)
+}
+
+func (v1 DataPageHeaderV1) MinValue() []byte {
+	return v1.header.Statistics.MinValue
+}
+
+func (v1 DataPageHeaderV1) MaxValue() []byte {
+	return v1.header.Statistics.MaxValue
 }
 
 func (v1 DataPageHeaderV1) String() string {
@@ -140,8 +148,16 @@ func (v2 DataPageHeaderV2) Encoding() encoding.Encoding {
 	return lookupEncoding(v2.header.Encoding)
 }
 
-func (v2 DataPageHeaderV2) Statistics() Statistics {
-	return makeStatistics(&v2.header.Statistics)
+func (v2 DataPageHeaderV2) NullCount() int {
+	return int(v2.header.Statistics.NullCount)
+}
+
+func (v2 DataPageHeaderV2) MinValue() []byte {
+	return v2.header.Statistics.MinValue
+}
+
+func (v2 DataPageHeaderV2) MaxValue() []byte {
+	return v2.header.Statistics.MaxValue
 }
 
 func (v2 DataPageHeaderV2) String() string {

@@ -54,6 +54,7 @@ type WriterConfig struct {
 	ColumnPageBuffers  BufferPool
 	PageBufferSize     int
 	DataPageVersion    int
+	DataPageStatistics bool
 	RowGroupTargetSize int64
 }
 
@@ -71,6 +72,7 @@ func (c *WriterConfig) Configure(config *WriterConfig) {
 		ColumnPageBuffers:  coalesceBufferPool(c.ColumnPageBuffers, config.ColumnPageBuffers),
 		PageBufferSize:     coalesceInt(c.PageBufferSize, config.PageBufferSize),
 		DataPageVersion:    coalesceInt(c.DataPageVersion, config.DataPageVersion),
+		DataPageStatistics: config.DataPageStatistics,
 		RowGroupTargetSize: coalesceInt64(c.RowGroupTargetSize, config.RowGroupTargetSize),
 	}
 }
@@ -137,6 +139,16 @@ func ColumnPageBuffers(buffers BufferPool) WriterOption {
 // Defaults to version 2.
 func DataPageVersion(version int) WriterOption {
 	return writerOption(func(config *WriterConfig) { config.DataPageVersion = version })
+}
+
+// DataPageStatistics creates a configuration option which defines whether data
+// page statistics are emitted. This option is useful when generating parquet
+// files that intend to be backward compatible with older readers which may not
+// have the ability to load page statistics from the column index.
+//
+// Defaults to false.
+func DataPageStatistics(enabled bool) WriterOption {
+	return writerOption(func(config *WriterConfig) { config.DataPageStatistics = enabled })
 }
 
 // RowGroupTargetSize creates a configuration option to define the target size of

@@ -147,8 +147,8 @@ var writerTests = []struct {
 		},
 		dump: `row group 0
 --------------------------------------------------------------------------------
-first_name:  BINARY ZSTD DO:4 FPO:55 SZ:114/96/0.84 VC:3 ENC:PLAIN,RLE [more]...
-last_name:   BINARY ZSTD DO:118 FPO:167 SZ:122/104/0.85 VC:3 ENC:PLAIN [more]...
+first_name:  BINARY ZSTD DO:4 FPO:55 SZ:90/72/0.80 VC:3 ENC:PLAIN,RLE, [more]...
+last_name:   BINARY ZSTD DO:94 FPO:143 SZ:86/68/0.79 VC:3 ENC:PLAIN,RL [more]...
 
     first_name TV=3 RL=0 DL=0 DS: 3 DE:PLAIN
     ----------------------------------------------------------------------------
@@ -184,8 +184,8 @@ value 3: R:0 D:0 V:Skywalker
 		},
 		dump: `row group 0
 --------------------------------------------------------------------------------
-first_name:  BINARY ZSTD DO:4 FPO:55 SZ:110/101/0.92 VC:3 ENC:RLE_DICT [more]...
-last_name:   BINARY ZSTD DO:114 FPO:163 SZ:118/109/0.92 VC:3 ENC:RLE_D [more]...
+first_name:  BINARY ZSTD DO:4 FPO:55 SZ:86/77/0.90 VC:3 ENC:RLE_DICTIO [more]...
+last_name:   BINARY ZSTD DO:90 FPO:139 SZ:82/73/0.89 VC:3 ENC:RLE_DICT [more]...
 
     first_name TV=3 RL=0 DL=0 DS: 3 DE:PLAIN
     ----------------------------------------------------------------------------
@@ -240,26 +240,26 @@ value 3: R:0 D:0 V:Skywalker
 		dump: `row group 0
 --------------------------------------------------------------------------------
 contacts:
-.name:              BINARY UNCOMPRESSED DO:0 FPO:4 SZ:145/145/1.00 VC:3 [more]...
-.phoneNumber:       BINARY SNAPPY DO:0 FPO:149 SZ:118/116/0.98 VC:3 EN [more]...
-owner:              BINARY ZSTD DO:0 FPO:267 SZ:127/118/0.93 VC:2 ENC:PLAIN,RLE [more]...
-ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:394 SZ:155/130/0.84 VC:3 ENC:PLAIN,RLE [more]...
+.name:              BINARY UNCOMPRESSED DO:0 FPO:4 SZ:75/75/1.00 VC:3  [more]...
+.phoneNumber:       BINARY SNAPPY DO:0 FPO:79 SZ:58/56/0.97 VC:3 ENC:PLAIN,RLE [more]...
+owner:              BINARY ZSTD DO:0 FPO:137 SZ:69/60/0.87 VC:2 ENC:PLAIN,RLE [more]...
+ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:206 SZ:95/70/0.74 VC:3 ENC:PLAIN,RLE [more]...
 
     contacts.name TV=3 RL=1 DL=1
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[min: Chris Aniszczyk, max:  [more]... VC:3
+    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[no stats for this column] SZ:47 VC:3
 
     contacts.phoneNumber TV=3 RL=1 DL=2
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[min: 555 987 6543, max: 555 [more]... VC:3
+    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[no stats for this column] SZ:28 VC:3
 
     owner TV=2 RL=0 DL=0
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[min: A. Nonymous, max: Juli [more]... VC:2
+    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[no stats for this column] SZ:32 VC:2
 
     ownerPhoneNumbers TV=3 RL=1 DL=1
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[min: 555 123 4567, max: 555 [more]... VC:3
+    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[no stats for this column] SZ:42 VC:3
 
 BINARY contacts.name
 --------------------------------------------------------------------------------

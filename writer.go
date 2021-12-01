@@ -267,6 +267,7 @@ func (rgw *rowGroupWriter) init(node Node, path []string, dataPageType format.Pa
 				maxRepetitionLevel,
 				maxDefinitionLevel,
 				pageWriter,
+				rgw.config.DataPageStatistics,
 				// Data pages in version 2 can omit compression when dictionary
 				// encoding is employed; only the dictionary page needs to be
 				// compressed, the data pages are encoded with the hybrid
@@ -513,10 +514,11 @@ type columnChunkWriter struct {
 		encoder plain.Encoder
 	}
 
-	nullCount    int64
-	numNulls     int32
-	numRows      int32
-	isCompressed bool
+	nullCount      int64
+	numNulls       int32
+	numRows        int32
+	writePageStats bool
+	isCompressed   bool
 
 	totalRowCount         int64
 	totalUncompressedSize int64
@@ -526,7 +528,7 @@ type columnChunkWriter struct {
 	columnIndexer         ColumnIndexer
 }
 
-func newColumnChunkWriter(buffer pageBuffer, codec compress.Codec, enc encoding.Encoder, dataPageType format.PageType, maxRepetitionLevel, maxDefinitionLevel int8, values PageWriter, isCompressed bool) *columnChunkWriter {
+func newColumnChunkWriter(buffer pageBuffer, codec compress.Codec, enc encoding.Encoder, dataPageType format.PageType, maxRepetitionLevel, maxDefinitionLevel int8, values PageWriter, writePageStats, isCompressed bool) *columnChunkWriter {
 	typ := values.Type()
 	ccw := &columnChunkWriter{
 		buffer:             buffer,
@@ -535,6 +537,7 @@ func newColumnChunkWriter(buffer pageBuffer, codec compress.Codec, enc encoding.
 		dataPageType:       dataPageType,
 		maxRepetitionLevel: maxRepetitionLevel,
 		maxDefinitionLevel: maxDefinitionLevel,
+		writePageStats:     writePageStats,
 		isCompressed:       isCompressed,
 		encodings:          make([]format.Encoding, 0, 3),
 		encodingStats:      make([]format.PageEncodingStats, 0, 3),
@@ -650,6 +653,7 @@ func (ccw *columnChunkWriter) flush() error {
 	}
 
 	minValue, maxValue := ccw.values.Bounds()
+	statistics := ccw.makePageStatistics(minValue, maxValue)
 	ccw.columnIndexer.IndexPage(numValues, int(ccw.numNulls), minValue, maxValue)
 
 	ccw.page.encoder.Reset(&ccw.page.uncompressed)
@@ -674,16 +678,6 @@ func (ccw *columnChunkWriter) flush() error {
 		UncompressedPageSize: int32(uncompressedPageSize),
 		CompressedPageSize:   int32(compressedPageSize),
 		CRC:                  int32(ccw.page.checksum.Sum32()),
-	}
-
-	minValueBytes := minValue.Bytes()
-	maxValueBytes := maxValue.Bytes()
-	statistics := format.Statistics{
-		Min:       minValueBytes, // deprecated
-		Max:       maxValueBytes, // deprecated
-		NullCount: int64(ccw.numNulls),
-		MinValue:  minValueBytes,
-		MaxValue:  maxValueBytes,
 	}
 
 	switch ccw.dataPageType {
@@ -820,6 +814,21 @@ func (ccw *columnChunkWriter) writeDictionaryPage(w io.Writer, dict Dictionary) 
 		return err
 	}
 	return nil
+}
+
+func (ccw *columnChunkWriter) makePageStatistics(minValue, maxValue Value) (stats format.Statistics) {
+	if ccw.writePageStats {
+		minValueBytes := minValue.Bytes()
+		maxValueBytes := maxValue.Bytes()
+		stats = format.Statistics{
+			Min:       minValueBytes, // deprecated
+			Max:       maxValueBytes, // deprecated
+			NullCount: int64(ccw.numNulls),
+			MinValue:  minValueBytes,
+			MaxValue:  maxValueBytes,
+		}
+	}
+	return stats
 }
 
 func (ccw *columnChunkWriter) addPageEncoding(pageType format.PageType, encoding format.Encoding) {
