@@ -137,6 +137,7 @@ type rowGroupWriter struct {
 	columns       []*rowGroupColumn
 	colSchema     []format.SchemaElement
 	rowGroups     []format.RowGroup
+	columnIndexes [][]format.ColumnIndex
 	offsetIndexes [][]format.OffsetIndex
 
 	numRows    int64
@@ -295,20 +296,41 @@ func (rgw *rowGroupWriter) close() error {
 		return err
 	}
 
+	// The page index is composed of two sections: column and offset indexes.
+	// They are written after the row groups, right before the footer (which
+	// is written by the parent Writer.Close call.
+	//
+	// This section both writes the page index and generates the values of
+	// ColumnIndexOffset, ColumnIndexLength, OffsetIndexOffset, and
+	// OffsetIndexLength in the corresponding columns of the file metadata.
+	//
+	// Note: the page index is always written, even if we created data pages v1
+	// because the parquet format is backward compatible in this case. Older
+	// readers will simply ignore this section since they do not know how to
+	// decode its content, nor have loaded any metadata to reference it.
 	protocol := new(thrift.CompactProtocol)
 	encoder := thrift.NewEncoder(protocol.NewWriter(&rgw.writer))
 
-	for rowGroupIndex, offsetIndexes := range rgw.offsetIndexes {
-		rowGroup := &rgw.rowGroups[rowGroupIndex]
-
-		for columnIndex := range offsetIndexes {
-			column := &rowGroup.Columns[columnIndex]
-			column.OffsetIndexOffset = rgw.writer.length
-
-			if err := encoder.Encode(&offsetIndexes[columnIndex]); err != nil {
+	for i, columnIndexes := range rgw.columnIndexes {
+		rowGroup := &rgw.rowGroups[i]
+		for j := range columnIndexes {
+			column := &rowGroup.Columns[j]
+			column.ColumnIndexOffset = rgw.writer.length
+			if err := encoder.Encode(&columnIndexes[j]); err != nil {
 				return err
 			}
+			column.ColumnIndexLength = int32(rgw.writer.length - column.ColumnIndexOffset)
+		}
+	}
 
+	for i, offsetIndexes := range rgw.offsetIndexes {
+		rowGroup := &rgw.rowGroups[i]
+		for j := range offsetIndexes {
+			column := &rowGroup.Columns[j]
+			column.OffsetIndexOffset = rgw.writer.length
+			if err := encoder.Encode(&offsetIndexes[j]); err != nil {
+				return err
+			}
 			column.OffsetIndexLength = int32(rgw.writer.length - column.OffsetIndexOffset)
 		}
 	}
@@ -335,6 +357,7 @@ func (rgw *rowGroupWriter) flush() error {
 	totalByteSize := int64(0)
 	totalCompressedSize := int64(0)
 	columns := make([]format.ColumnChunk, len(rgw.columns))
+	columnIndex := make([]format.ColumnIndex, len(rgw.columns))
 	offsetIndex := make([]format.OffsetIndex, len(rgw.columns))
 
 	for i, col := range rgw.columns {
@@ -365,6 +388,7 @@ func (rgw *rowGroupWriter) flush() error {
 			}
 		}
 
+		columnIndex[i] = col.writer.columnIndex
 		columnChunkTotalUncompressedSize := col.writer.totalUncompressedSize
 		columnChunkTotalCompressedSize := col.writer.totalCompressedSize
 
@@ -409,6 +433,7 @@ func (rgw *rowGroupWriter) flush() error {
 		Ordinal:             int16(len(rgw.rowGroups)),
 	})
 
+	rgw.columnIndexes = append(rgw.columnIndexes, columnIndex)
 	rgw.offsetIndexes = append(rgw.offsetIndexes, offsetIndex)
 	rgw.fileOffset += totalCompressedSize
 	return nil
@@ -493,20 +518,19 @@ type columnChunkWriter struct {
 		encoder plain.Encoder
 	}
 
-	minValueBytes []byte
-	maxValueBytes []byte
-	minValue      Value
-	maxValue      Value
-	nullCount     int64
-	numNulls      int32
-	numRows       int32
-	isCompressed  bool
+	minValue     Value
+	maxValue     Value
+	nullCount    int64
+	numNulls     int32
+	numRows      int32
+	isCompressed bool
 
 	totalRowCount         int64
 	totalUncompressedSize int64
 	totalCompressedSize   int64
 	encodings             []format.Encoding
 	encodingStats         []format.PageEncodingStats
+	columnIndex           format.ColumnIndex
 }
 
 func newColumnChunkWriter(buffer pageBuffer, codec compress.Codec, enc encoding.Encoder, dataPageType format.PageType, maxRepetitionLevel, maxDefinitionLevel int8, values PageWriter, isCompressed bool) *columnChunkWriter {
@@ -550,20 +574,18 @@ func (ccw *columnChunkWriter) sortedEncodingStats() []format.PageEncodingStats {
 }
 
 func (ccw *columnChunkWriter) statistics() format.Statistics {
-	ccw.minValueBytes = ccw.minValue.AppendBytes(ccw.minValueBytes[:0])
-	ccw.maxValueBytes = ccw.maxValue.AppendBytes(ccw.maxValueBytes[:0])
+	minValue := ccw.minValue.Bytes()
+	maxValue := ccw.maxValue.Bytes()
 	return format.Statistics{
-		Min:       ccw.minValueBytes, // deprecated
-		Max:       ccw.maxValueBytes, // deprecated
+		Min:       minValue, // deprecated
+		Max:       maxValue, // deprecated
 		NullCount: ccw.nullCount,
-		MinValue:  ccw.minValueBytes,
-		MaxValue:  ccw.maxValueBytes,
+		MinValue:  minValue,
+		MaxValue:  maxValue,
 	}
 }
 
 func (ccw *columnChunkWriter) reset() {
-	ccw.minValueBytes = ccw.minValueBytes[:0]
-	ccw.maxValueBytes = ccw.maxValueBytes[:0]
 	ccw.minValue = Value{}
 	ccw.maxValue = Value{}
 	ccw.nullCount = 0
@@ -574,6 +596,7 @@ func (ccw *columnChunkWriter) reset() {
 	ccw.totalCompressedSize = 0
 	ccw.encodings = ccw.encodings[:2] // keep the original encodings only
 	ccw.encodingStats = ccw.encodingStats[:0]
+	ccw.columnIndex = format.ColumnIndex{}
 }
 
 func (ccw *columnChunkWriter) flush() error {
@@ -633,15 +656,15 @@ func (ccw *columnChunkWriter) flush() error {
 	}
 
 	minValue, maxValue := ccw.values.Bounds()
-	ccw.minValueBytes = minValue.AppendBytes(ccw.minValueBytes[:0])
-	ccw.maxValueBytes = maxValue.AppendBytes(ccw.maxValueBytes[:0])
+	minValue = minValue.Clone()
+	maxValue = maxValue.Clone()
 
 	typ := ccw.values.Type()
 	if ccw.minValue.IsNull() || typ.Less(minValue, ccw.minValue) {
-		ccw.minValue = minValue.Clone()
+		ccw.minValue = minValue
 	}
 	if ccw.maxValue.IsNull() || typ.Less(ccw.maxValue, maxValue) {
-		ccw.maxValue = maxValue.Clone()
+		ccw.maxValue = maxValue
 	}
 
 	ccw.page.encoder.Reset(&ccw.page.uncompressed)
@@ -668,13 +691,14 @@ func (ccw *columnChunkWriter) flush() error {
 		CRC:                  int32(ccw.page.checksum.Sum32()),
 	}
 
+	minValueBytes := minValue.Bytes()
+	maxValueBytes := maxValue.Bytes()
 	statistics := format.Statistics{
-		Min:           ccw.minValueBytes, // deprecated
-		Max:           ccw.maxValueBytes, // deprecated
-		NullCount:     int64(ccw.numNulls),
-		DistinctCount: 0,
-		MinValue:      ccw.minValueBytes,
-		MaxValue:      ccw.maxValueBytes,
+		Min:       minValueBytes, // deprecated
+		Max:       maxValueBytes, // deprecated
+		NullCount: int64(ccw.numNulls),
+		MinValue:  minValueBytes,
+		MaxValue:  maxValueBytes,
 	}
 
 	switch ccw.dataPageType {
@@ -708,6 +732,7 @@ func (ccw *columnChunkWriter) flush() error {
 	ccw.totalRowCount += int64(ccw.numRows)
 	ccw.totalUncompressedSize += int64(headerSize) + int64(uncompressedPageSize)
 	ccw.totalCompressedSize += int64(headerSize) + int64(compressedPageSize)
+	ccw.addPageIndex(int64(numValues), int64(ccw.numNulls), minValue, maxValue)
 	ccw.addPageEncoding(ccw.dataPageType, encoding)
 
 	ccw.values.Reset(ccw.page.encoder)
@@ -811,6 +836,15 @@ func (ccw *columnChunkWriter) writeDictionaryPage(w io.Writer, dict Dictionary) 
 		return err
 	}
 	return nil
+}
+
+func (ccw *columnChunkWriter) addPageIndex(numValues, nullCount int64, minValue, maxValue Value) {
+	ccw.columnIndex = format.ColumnIndex{
+		NullPages:  append(ccw.columnIndex.NullPages, numValues == nullCount),
+		MinValues:  append(ccw.columnIndex.MinValues, minValue.Bytes()),
+		MaxValues:  append(ccw.columnIndex.MaxValues, maxValue.Bytes()),
+		NullCounts: append(ccw.columnIndex.NullCounts, nullCount),
+	}
 }
 
 func (ccw *columnChunkWriter) addPageEncoding(pageType format.PageType, encoding format.Encoding) {
