@@ -410,17 +410,15 @@ func isMaxByteArrayValue(value []byte) bool {
 }
 
 func nextByteArrayValue(value []byte) []byte {
-	b := make([]byte, len(value))
-	copy(b, value)
-
+	next := make([]byte, len(value))
+	copy(next, value)
 	for i := len(b) - 1; i > 0; i-- {
-		if b[i]++; b[i] != 0 {
+		if next[i]++; next[i] != 0 {
 			break
 		}
 		// Overflow: increment the next byte
 	}
-
-	return b
+	return next
 }
 
 type fixedLenByteArrayColumnIndexer struct {
