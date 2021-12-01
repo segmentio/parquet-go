@@ -13,7 +13,6 @@ import (
 type Encoder struct {
 	encoding.NotSupportedEncoder
 	writer io.Writer
-	buffer [8]byte
 	rle    *rle.Encoder
 }
 

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/segmentio/parquet/encoding"
+	"github.com/segmentio/parquet/encoding/bytestreamsplit"
 	"github.com/segmentio/parquet/encoding/dict"
 	"github.com/segmentio/parquet/encoding/plain"
 	"github.com/segmentio/parquet/encoding/rle"
@@ -159,6 +160,7 @@ var floatTests = [...][]float32{
 	{},
 	{0},
 	{1},
+	{0, 1, 0, 1, 0, 2, 3, 4, 5, 6, math.MaxFloat32, math.MaxFloat32, 0},
 	{-1, 0, 1, 0, 2, 3, 4, 5, 6, math.MaxFloat32, math.MaxFloat32, 0},
 }
 
@@ -210,6 +212,11 @@ func TestEncoding(t *testing.T) {
 		{
 			scenario: "RLE_DICTIONARY",
 			encoding: new(dict.Encoding),
+		},
+
+		{
+			scenario: "BYTE_STREAM_SPLIT",
+			encoding: new(bytestreamsplit.Encoding),
 		},
 	} {
 		t.Run(test.scenario, func(t *testing.T) { testEncoding(t, test.encoding) })
@@ -591,7 +598,7 @@ func testFloatEncoding(t *testing.T, e encoding.Encoding) {
 				}
 			}
 
-			if n, err := dec.DecodeFloat(tmp[:]); err != io.EOF {
+			if n, err := dec.DecodeFloat(tmp[:]); err != nil && err != io.EOF {
 				t.Fatal("non-EOF error returned after decoding all the values:", err)
 			} else if n != 0 {
 				t.Fatal("non-zero number of values decoded at EOF:", n)
@@ -736,5 +743,25 @@ func testFixedLenByteArrayEncoding(t *testing.T, e encoding.Encoding) {
 				t.Fatal("non-zero number of values decoded at EOF:", n)
 			}
 		})
+	}
+}
+
+func BenchmarkFloatEncoding(b *testing.B) {
+	buf := new(bytes.Buffer)
+	enc := bytestreamsplit.NewEncoder(buf)
+	dec := bytestreamsplit.NewDecoder(buf)
+
+	for n := 0; n < b.N; n++ {
+		for _, test := range floatTests {
+			tmp := make([]float32, len(test))
+
+			if err := enc.EncodeFloat(test); err != nil {
+				b.Fatal(err)
+			}
+
+			if _, err := dec.DecodeFloat(tmp); err != nil && err != io.EOF {
+				b.Fatal(err)
+			}
+		}
 	}
 }
