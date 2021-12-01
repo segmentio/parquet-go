@@ -1,10 +1,12 @@
 package parquet
 
 import (
+	"bufio"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 
 	"github.com/segmentio/encoding/thrift"
 	"github.com/segmentio/parquet/format"
@@ -51,12 +53,10 @@ func OpenFile(r io.ReaderAt, size int64) (*File, error) {
 	}
 
 	footerSize := int64(binary.LittleEndian.Uint32(f.buffer[:4]))
-	footerData := io.NewSectionReader(r, size-(footerSize+8), footerSize)
+	footerData := acquireBufferedSectionReader(r, size-(footerSize+8), footerSize)
+	defer releaseBufferedSectionReader(footerData)
 
-	buffer := acquireBufioReader(footerData)
-	defer releaseBufioReader(buffer)
-
-	if err := thrift.NewDecoder(f.protocol.NewReader(buffer)).Decode(&f.metadata); err != nil {
+	if err := thrift.NewDecoder(f.protocol.NewReader(footerData)).Decode(&f.metadata); err != nil {
 		return nil, fmt.Errorf("reading parquet file metadata: %w", err)
 	}
 
@@ -100,26 +100,57 @@ func (f *File) ReadAt(b []byte, off int64) (int, error) {
 
 func (f *File) readColumnIndex(chunk *format.ColumnChunk) (*ColumnIndex, error) {
 	columnIndex := new(format.ColumnIndex)
-	columnIndexSection := io.NewSectionReader(f.reader, chunk.ColumnIndexOffset, int64(chunk.ColumnIndexLength))
 
-	buffer := acquireBufioReader(columnIndexSection)
-	defer releaseBufioReader(buffer)
+	section := acquireBufferedSectionReader(f.reader, chunk.ColumnIndexOffset, int64(chunk.ColumnIndexLength))
+	defer releaseBufferedSectionReader(section)
 
-	err := thrift.NewDecoder(f.protocol.NewReader(buffer)).Decode(columnIndex)
+	err := thrift.NewDecoder(f.protocol.NewReader(section)).Decode(columnIndex)
 	return (*ColumnIndex)(columnIndex), err
 }
 
 func (f *File) readOffsetIndex(chunk *format.ColumnChunk) (*OffsetIndex, error) {
 	offsetIndex := new(format.OffsetIndex)
-	offsetIndexSection := io.NewSectionReader(f.reader, chunk.OffsetIndexOffset, int64(chunk.OffsetIndexLength))
 
-	buffer := acquireBufioReader(offsetIndexSection)
-	defer releaseBufioReader(buffer)
+	section := acquireBufferedSectionReader(f.reader, chunk.OffsetIndexOffset, int64(chunk.OffsetIndexLength))
+	defer releaseBufferedSectionReader(section)
 
-	err := thrift.NewDecoder(f.protocol.NewReader(buffer)).Decode(offsetIndex)
+	err := thrift.NewDecoder(f.protocol.NewReader(section)).Decode(offsetIndex)
 	return (*OffsetIndex)(offsetIndex), err
 }
 
 var (
 	_ io.ReaderAt = (*File)(nil)
+
+	bufferedSectionReaderPool sync.Pool
 )
+
+type bufferedSectionReader struct {
+	section io.SectionReader
+	bufio.Reader
+}
+
+func newBufferedSectionReader(r io.ReaderAt, offset, length int64) *bufferedSectionReader {
+	b := &bufferedSectionReader{section: *io.NewSectionReader(r, offset, length)}
+	b.Reader = *bufio.NewReaderSize(&b.section, defaultBufferSize)
+	return b
+}
+
+func (b *bufferedSectionReader) reset(r io.ReaderAt, offset, length int64) {
+	b.section = *io.NewSectionReader(r, offset, length)
+	b.Reader.Reset(&b.section)
+}
+
+func acquireBufferedSectionReader(r io.ReaderAt, offset, length int64) *bufferedSectionReader {
+	b, _ := bufferedSectionReaderPool.Get().(*bufferedSectionReader)
+	if b == nil {
+		b = newBufferedSectionReader(r, offset, length)
+	} else {
+		b.reset(r, offset, length)
+	}
+	return b
+}
+
+func releaseBufferedSectionReader(b *bufferedSectionReader) {
+	b.reset(nil, 0, 0)
+	bufferedSectionReaderPool.Put(b)
+}
