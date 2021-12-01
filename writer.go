@@ -407,16 +407,11 @@ func (rgw *rowGroupWriter) flush() error {
 				TotalCompressedSize:   columnChunkTotalCompressedSize,
 				KeyValueMetadata:      nil,
 				DataPageOffset:        dataPageOffset,
-				IndexPageOffset:       0,
 				DictionaryPageOffset:  dictionaryPageOffset,
 				Statistics:            col.writer.statistics(),
 				EncodingStats:         col.writer.sortedEncodingStats(),
 				BloomFilterOffset:     0,
 			},
-			OffsetIndexOffset: 0,
-			OffsetIndexLength: 0,
-			ColumnIndexOffset: 0,
-			ColumnIndexLength: 0,
 		}
 
 		col.buffer.release()
