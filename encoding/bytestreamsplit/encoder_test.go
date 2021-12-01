@@ -27,7 +27,13 @@ func TestEncoding(t *testing.T) {
 
 	final := make([]float32, 3)
 
-	d.decode32(final)
+	if err := d.read(); err != nil {
+		t.Error(err)
+	}
+
+	if _, err := d.decode32(final); err != nil {
+		t.Error(err)
+	}
 
 	if !reflect.DeepEqual(data, final) {
 		t.Error("decoding result not expected")

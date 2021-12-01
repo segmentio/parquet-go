@@ -745,3 +745,23 @@ func testFixedLenByteArrayEncoding(t *testing.T, e encoding.Encoding) {
 		})
 	}
 }
+
+func BenchmarkFloatEncoding(b *testing.B) {
+	buf := new(bytes.Buffer)
+	enc := bytestreamsplit.NewEncoder(buf)
+	dec := bytestreamsplit.NewDecoder(buf)
+
+	for n := 0; n < b.N; n++ {
+		for _, test := range floatTests {
+			tmp := make([]float32, len(test))
+
+			if err := enc.EncodeFloat(test); err != nil {
+				b.Fatal(err)
+			}
+
+			if _, err := dec.DecodeFloat(tmp); err != nil && err != io.EOF {
+				b.Fatal(err)
+			}
+		}
+	}
+}
