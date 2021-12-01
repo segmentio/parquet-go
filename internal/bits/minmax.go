@@ -61,23 +61,6 @@ func MinMaxInt64(data []int64) (min, max int64) {
 	return min, max
 }
 
-func MinMaxInt96(data [][12]byte) (min, max [12]byte) {
-	if len(data) > 0 {
-		min = data[0]
-		max = data[0]
-
-		for _, v := range data[1:] {
-			if CompareInt96(v, min) < 0 {
-				min = v
-			}
-			if CompareInt96(v, max) > 0 {
-				max = v
-			}
-		}
-	}
-	return min, max
-}
-
 func MinMaxUint32(data []uint32) (min, max uint32) {
 	if len(data) > 0 {
 		min = data[0]

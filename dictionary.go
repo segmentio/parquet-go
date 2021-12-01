@@ -6,6 +6,7 @@ import (
 	"math"
 
 	"github.com/google/uuid"
+	"github.com/segmentio/parquet/deprecated"
 	"github.com/segmentio/parquet/encoding"
 	"github.com/segmentio/parquet/encoding/plain"
 	"github.com/segmentio/parquet/internal/bits"
@@ -258,14 +259,83 @@ func (d *int64Dictionary) Reset() {
 	d.index = nil
 }
 
-type int96Dictionary struct{ *fixedLenByteArrayDictionary }
-
-func newInt96Dictionary(typ Type, bufferSize int) int96Dictionary {
-	return int96Dictionary{newFixedLenByteArrayDictionary(typ, bufferSize)}
+type int96Dictionary struct {
+	typ    Type
+	values []deprecated.Int96
+	index  map[deprecated.Int96]int32
 }
 
-func (d int96Dictionary) Index(i int) Value {
-	return makeValueInt96(*(*int96)(d.value(i)))
+func newInt96Dictionary(typ Type, bufferSize int) *int96Dictionary {
+	const valueItemSize = 12
+	const indexItemSize = 12 + 4 + mapSizeOverheadPerItem
+	capacity := bufferSize / (valueItemSize + indexItemSize)
+	return &int96Dictionary{
+		typ:    typ,
+		values: make([]deprecated.Int96, 0, capacity),
+	}
+}
+
+func (d *int96Dictionary) Type() Type { return d.typ }
+
+func (d *int96Dictionary) Len() int { return len(d.values) }
+
+func (d *int96Dictionary) Index(i int) Value { return makeValueInt96(d.values[i]) }
+
+func (d *int96Dictionary) Insert(v Value) (int, error) { return d.insert(v.Int96()) }
+
+func (d *int96Dictionary) insert(value deprecated.Int96) (int, error) {
+	if index, exists := d.index[value]; exists {
+		return int(index), nil
+	}
+	if d.index == nil {
+		d.index = make(map[deprecated.Int96]int32, cap(d.values))
+	}
+	index := len(d.values)
+	d.index[value] = int32(index)
+	d.values = append(d.values, value)
+	return index, nil
+}
+
+func (d *int96Dictionary) ReadFrom(decoder encoding.Decoder) error {
+	d.Reset()
+
+	if cap(d.values) == 0 {
+		d.values = make([]deprecated.Int96, 0, defaultBufferSize/12)
+	}
+
+	for {
+		if len(d.values) == cap(d.values) {
+			newValues := make([]deprecated.Int96, len(d.values), 2*cap(d.values))
+			copy(newValues, d.values)
+			d.values = newValues
+		}
+
+		n, err := decoder.DecodeInt96(d.values[len(d.values):cap(d.values)])
+		if n > 0 {
+			d.values = d.values[:len(d.values)+n]
+		}
+
+		if err != nil {
+			if err == io.EOF {
+				err = nil
+			} else {
+				err = fmt.Errorf("reading parquet dictionary of int96 values: %w", err)
+			}
+			return err
+		}
+	}
+}
+
+func (d *int96Dictionary) WriteTo(encoder encoding.Encoder) error {
+	if err := encoder.EncodeInt96(d.values); err != nil {
+		return fmt.Errorf("writing parquet dictionary of %d int96 values: %w", d.Len(), err)
+	}
+	return nil
+}
+
+func (d *int96Dictionary) Reset() {
+	d.values = d.values[:0]
+	d.index = nil
 }
 
 type floatDictionary struct{ *int32Dictionary }

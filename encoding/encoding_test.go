@@ -7,6 +7,7 @@ import (
 	"math"
 	"testing"
 
+	"github.com/segmentio/parquet/deprecated"
 	"github.com/segmentio/parquet/encoding"
 	"github.com/segmentio/parquet/encoding/dict"
 	"github.com/segmentio/parquet/encoding/plain"
@@ -149,7 +150,7 @@ var int64Tests = [...][]int64{
 	},
 }
 
-var int96Tests = [...][][12]byte{
+var int96Tests = [...][]deprecated.Int96{
 	{},
 	{{0: 0}},
 	{{0: 1}},
@@ -518,7 +519,7 @@ func testInt96Encoding(t *testing.T, e encoding.Encoding) {
 	buf := new(bytes.Buffer)
 	enc := e.NewEncoder(buf)
 	dec := e.NewDecoder(buf)
-	tmp := [1][12]byte{}
+	tmp := [1]deprecated.Int96{}
 
 	for _, test := range int96Tests {
 		t.Run("", func(t *testing.T) {
@@ -526,7 +527,7 @@ func testInt96Encoding(t *testing.T, e encoding.Encoding) {
 			defer enc.Reset(buf)
 			defer buf.Reset()
 
-			bitWidth := bits.MaxLen96(test)
+			bitWidth := deprecated.MaxLenInt96(test)
 			enc.SetBitWidth(bitWidth)
 			dec.SetBitWidth(bitWidth)
 

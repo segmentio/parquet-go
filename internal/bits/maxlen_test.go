@@ -117,31 +117,3 @@ func TestMaxLen64(t *testing.T) {
 		})
 	}
 }
-
-func TestMaxLen96(t *testing.T) {
-	for _, test := range []struct {
-		data   [][12]byte
-		maxlen int
-	}{
-		{
-			data:   nil,
-			maxlen: 1,
-		},
-
-		{
-			data:   [][12]byte{{}, {}, {}, {}, {}},
-			maxlen: 1,
-		},
-
-		{
-			data:   [][12]byte{{0: 0x01}, {10: 0xFF}, {5: 0x02}, {9: 0xF0}},
-			maxlen: 88,
-		},
-	} {
-		t.Run("", func(t *testing.T) {
-			if maxlen := bits.MaxLen96(test.data); maxlen != test.maxlen {
-				t.Errorf("want=%d got=%d", test.maxlen, maxlen)
-			}
-		})
-	}
-}

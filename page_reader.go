@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/segmentio/parquet/deprecated"
 	"github.com/segmentio/parquet/encoding"
 	"github.com/segmentio/parquet/encoding/plain"
 	"github.com/segmentio/parquet/internal/bits"
@@ -276,7 +277,7 @@ func (r *int64PageReader) Type() Type { return r.typ }
 type int96PageReader struct {
 	typ     Type
 	decoder encoding.Decoder
-	values  []int96
+	values  []deprecated.Int96
 	offset  uint
 }
 
@@ -284,7 +285,7 @@ func newInt96PageReader(typ Type, decoder encoding.Decoder, bufferSize int) *int
 	return &int96PageReader{
 		typ:     typ,
 		decoder: decoder,
-		values:  make([]int96, 0, atLeastOne(bufferSize/12)),
+		values:  make([]deprecated.Int96, 0, atLeastOne(bufferSize/12)),
 	}
 }
 

@@ -265,7 +265,7 @@ func (t int96Type) Kind() Kind { return Int96 }
 func (t int96Type) Length() int { return 96 }
 
 func (t int96Type) Less(v1, v2 Value) bool {
-	return bits.CompareInt96(v1.Int96(), v2.Int96()) < 0
+	return v1.Int96().Less(v2.Int96())
 }
 
 func (t int96Type) PhyiscalType() *format.Type {

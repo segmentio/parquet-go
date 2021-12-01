@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/segmentio/parquet/compress"
+	"github.com/segmentio/parquet/deprecated"
 	"github.com/segmentio/parquet/encoding"
 )
 
@@ -395,6 +396,11 @@ func makeStructField(f reflect.StructField, columnIndex int) (structField, int) 
 }
 
 func nodeOf(t reflect.Type, columnIndex int) (Node, int, traverseFunc) {
+	switch t {
+	case reflect.TypeOf(deprecated.Int96{}):
+		return Leaf(Int96Type), columnIndex + 1, traverseLeaf(Int96, t, columnIndex)
+	}
+
 	switch t.Kind() {
 	case reflect.Bool:
 		return Leaf(BooleanType), columnIndex + 1, traverseLeaf(Boolean, t, columnIndex)
@@ -477,6 +483,12 @@ func traverseLeaf(k Kind, t reflect.Type, columnIndex int) traverseFunc {
 			makeValue = func(v reflect.Value) Value { return makeValueInt64(v.Int()) }
 		case reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uint, reflect.Uintptr:
 			makeValue = func(v reflect.Value) Value { return makeValueInt64(int64(v.Uint())) }
+		}
+
+	case Int96:
+		switch t {
+		case reflect.TypeOf(deprecated.Int96{}):
+			makeValue = func(v reflect.Value) Value { return makeValueInt96(v.Interface().(deprecated.Int96)) }
 		}
 
 	case Float:

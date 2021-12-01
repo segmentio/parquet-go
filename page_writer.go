@@ -6,6 +6,7 @@ import (
 	"math"
 
 	"github.com/google/uuid"
+	"github.com/segmentio/parquet/deprecated"
 	"github.com/segmentio/parquet/encoding"
 	"github.com/segmentio/parquet/encoding/plain"
 	"github.com/segmentio/parquet/internal/bits"
@@ -197,14 +198,14 @@ func (w *int64PageWriter) Reset(encoder encoding.Encoder) {
 type int96PageWriter struct {
 	typ     Type
 	encoder encoding.Encoder
-	values  []int96
+	values  []deprecated.Int96
 }
 
 func newInt96PageWriter(typ Type, encoder encoding.Encoder, bufferSize int) *int96PageWriter {
 	return &int96PageWriter{
 		typ:     typ,
 		encoder: encoder,
-		values:  make([]int96, 0, atLeastOne(bufferSize/12)),
+		values:  make([]deprecated.Int96, 0, atLeastOne(bufferSize/12)),
 	}
 }
 
@@ -214,7 +215,7 @@ func (w *int96PageWriter) NumValues() int { return len(w.values) }
 
 func (w *int96PageWriter) Bounds() (min, max Value) {
 	if len(w.values) > 0 {
-		minInt96, maxInt96 := bits.MinMaxInt96(w.values)
+		minInt96, maxInt96 := deprecated.MinMaxInt96(w.values)
 		min = makeValueInt96(minInt96)
 		max = makeValueInt96(maxInt96)
 	}
