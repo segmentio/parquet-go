@@ -175,6 +175,11 @@ func (node) ChildByName(string) Node       { panic("cannot call ChildByName in l
 func (node) Encoding() []encoding.Encoding { return nil }
 func (node) Compression() []compress.Codec { return nil }
 
+// Leaf returns a leaf node of the given type.
+func Leaf(typ Type) Node {
+	return &leafNode{typ: typ}
+}
+
 type leafNode struct {
 	node
 	typ Type

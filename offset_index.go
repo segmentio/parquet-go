@@ -5,6 +5,11 @@ import "github.com/segmentio/parquet/format"
 // OffsetIndex is the data structure representing offset indexes.
 type OffsetIndex format.OffsetIndex
 
+// NumPages returns the number of pages in the offset index.
+func (index *OffsetIndex) NumPages() int {
+	return len(index.PageLocations)
+}
+
 // PageLocation returns the location of the page at index i.
 //
 // The offset and compressed page size are expressed in bytes, the first row

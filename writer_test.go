@@ -3,9 +3,9 @@ package parquet_test
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
+	"strings"
 	"testing"
 
 	"github.com/hexops/gotextdiff"
@@ -25,97 +25,27 @@ func scanParquetFile(f *os.File) error {
 		return err
 	}
 
-	return scanParquetColumns(p.Root())
+	return scanParquetValues(p.Root())
 }
 
-func scanParquetColumns(col *parquet.Column) error {
-	const bufferSize = 1024
-	chunks := col.Chunks()
-
-	for chunks.Next() {
-		pages := chunks.Pages()
-		dictionary := (parquet.Dictionary)(nil)
-
-		for pages.Next() {
-			switch header := pages.PageHeader().(type) {
-			case parquet.DictionaryPageHeader:
-				decoder := header.Encoding().NewDecoder(pages.PageData())
-				dictionary = col.Type().NewDictionary(0)
-
-				if err := dictionary.ReadFrom(decoder); err != nil {
-					return err
-				}
-
-			case parquet.DataPageHeader:
-				var pageReader parquet.PageReader
-				var pageData = header.Encoding().NewDecoder(pages.PageData())
-
-				if dictionary != nil {
-					pageReader = parquet.NewIndexedPageReader(pageData, bufferSize, dictionary)
-				} else {
-					pageReader = col.Type().NewPageReader(pageData, bufferSize)
-				}
-
-				dataPageReader := parquet.NewDataPageReader(
-					header.RepetitionLevelEncoding().NewDecoder(pages.RepetitionLevels()),
-					header.DefinitionLevelEncoding().NewDecoder(pages.DefinitionLevels()),
-					header.NumValues(),
-					pageReader,
-					col.MaxRepetitionLevel(),
-					col.MaxDefinitionLevel(),
-					bufferSize,
-				)
-
-				for {
-					v, err := dataPageReader.ReadValue()
-					if err != nil {
-						if err != io.EOF {
-							return err
-						}
-						break
-					}
-					fmt.Printf("> %+v\n", v)
-				}
-
-			default:
-				return fmt.Errorf("unsupported page header type: %#v", header)
-			}
-
-			if err := pages.Err(); err != nil {
-				return err
-			}
-		}
-	}
-
-	for _, child := range col.Columns() {
-		if err := scanParquetColumns(child); err != nil {
-			return err
-		}
-	}
-
-	return nil
+func scanParquetValues(col *parquet.Column) error {
+	return forEachColumnValue(col, func(leaf *parquet.Column, value parquet.Value) error {
+		fmt.Printf("%s > %+v\n", strings.Join(leaf.Path(), "."), value)
+		return nil
+	})
 }
 
-func generateParquetFile(dataPageVersion int, rows ...interface{}) ([]byte, error) {
+func generateParquetFile(dataPageVersion int, rows rows) ([]byte, error) {
 	tmp, err := os.CreateTemp("/tmp", "*.parquet")
 	if err != nil {
 		return nil, err
 	}
 	defer tmp.Close()
 	path := tmp.Name()
-	//defer os.Remove(path)
-	fmt.Println(path)
+	defer os.Remove(path)
+	//fmt.Println(path)
 
-	schema := parquet.SchemaOf(rows[0])
-	writer := parquet.NewWriter(tmp, schema, parquet.DataPageVersion(dataPageVersion))
-
-	for _, row := range rows {
-		if err := writer.WriteRow(row); err != nil {
-			return nil, err
-		}
-	}
-
-	if err := writer.Close(); err != nil {
+	if err := writeParquetFile(tmp, dataPageVersion, rows); err != nil {
 		return nil, err
 	}
 
@@ -139,7 +69,7 @@ var writerTests = []struct {
 }{
 	{
 		scenario: "page v1 with dictionary encoding",
-		version:  1,
+		version:  v1,
 		rows: []interface{}{
 			&firstAndLastName{FirstName: "Han", LastName: "Solo"},
 			&firstAndLastName{FirstName: "Leia", LastName: "Skywalker"},
@@ -176,7 +106,7 @@ value 3: R:0 D:0 V:Skywalker
 
 	{ // same as the previous test but uses page v2 where data pages aren't compressed
 		scenario: "page v2 with dictionary encoding",
-		version:  2,
+		version:  v2,
 		rows: []interface{}{
 			&firstAndLastName{FirstName: "Han", LastName: "Solo"},
 			&firstAndLastName{FirstName: "Leia", LastName: "Skywalker"},
@@ -213,7 +143,7 @@ value 3: R:0 D:0 V:Skywalker
 
 	{
 		scenario: "example from the twitter blog",
-		version:  2,
+		version:  v2,
 		rows: []interface{}{
 			AddressBook{
 				Owner: "Julien Le Dem",
@@ -304,7 +234,7 @@ func TestWriter(t *testing.T) {
 		t.Run(test.scenario, func(t *testing.T) {
 			t.Parallel()
 
-			b, err := generateParquetFile(dataPageVersion, rows...)
+			b, err := generateParquetFile(dataPageVersion, makeRows(rows))
 			if err != nil {
 				t.Logf("\n%s", string(b))
 				t.Fatal(err)

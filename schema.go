@@ -396,6 +396,9 @@ func makeStructField(f reflect.StructField, columnIndex int) (structField, int) 
 
 func nodeOf(t reflect.Type, columnIndex int) (Node, int, traverseFunc) {
 	switch t.Kind() {
+	case reflect.Bool:
+		return Leaf(BooleanType), columnIndex + 1, traverseLeaf(Boolean, t, columnIndex)
+
 	case reflect.Int, reflect.Int64:
 		return Int(64), columnIndex + 1, traverseLeaf(Int64, t, columnIndex)
 

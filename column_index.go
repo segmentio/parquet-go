@@ -400,7 +400,7 @@ func (index *byteArrayColumnIndexer) ColumnIndex() ColumnIndex {
 
 const (
 	// TODO: come up with a way to configure this?
-	maxValueSize = 64
+	maxValueSize = 16
 )
 
 func truncateLargeMinByteArrayValues(values [][]byte) {
