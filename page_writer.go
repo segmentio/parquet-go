@@ -1,6 +1,7 @@
 package parquet
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 
@@ -373,10 +374,10 @@ func (w *byteArrayPageWriter) WriteValue(v Value) error {
 		w.setMin(value)
 		w.setMax(value)
 	} else {
-		if string(value) < string(w.min) {
+		if bytes.Compare(value, w.min) < 0 {
 			w.setMin(value)
 		}
-		if string(value) > string(w.max) {
+		if bytes.Compare(value, w.max) > 0 {
 			w.setMax(value)
 		}
 	}

@@ -321,7 +321,7 @@ func (d *byteArrayDictionary) Len() int { return len(d.offset) }
 
 func (d *byteArrayDictionary) Index(i int) Value {
 	offset := d.offset[i]
-	value, _ := plain.SplitByteArray(d.values[offset:])
+	value, _ := plain.NextByteArray(d.values[offset:])
 	return makeValueBytes(ByteArray, value)
 }
 
@@ -381,7 +381,7 @@ func (d *byteArrayDictionary) ReadFrom(decoder encoding.Decoder) error {
 		case io.EOF:
 			return nil
 		case encoding.ErrValueTooLarge:
-			size := 4 + uint32(plain.ByteArrayLength(d.values[len(d.values):len(d.values)+4]))
+			size := 4 + uint32(plain.NextByteArrayLength(d.values[len(d.values):len(d.values)+4]))
 			newValues := make([]byte, len(d.values), bits.NearestPowerOfTwo32(size))
 			copy(newValues, d.values)
 			d.values = newValues

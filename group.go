@@ -66,8 +66,12 @@ func (groupType) Less(Value, Value) bool {
 	panic("cannot compare values on parquet group")
 }
 
+func (groupType) NewColumnIndexer() ColumnIndexer {
+	panic("cannot create column indexer from parquet group")
+}
+
 func (groupType) NewDictionary(int) Dictionary {
-	panic("cannot create dictionary for parquet group")
+	panic("cannot create dictionary from parquet group")
 }
 
 func (groupType) NewPageReader(encoding.Decoder, int) PageReader {

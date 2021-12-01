@@ -103,7 +103,8 @@ func generateParquetFile(dataPageVersion int, rows ...interface{}) ([]byte, erro
 	}
 	defer tmp.Close()
 	path := tmp.Name()
-	defer os.Remove(path)
+	//defer os.Remove(path)
+	fmt.Println(path)
 
 	schema := parquet.SchemaOf(rows[0])
 	writer := parquet.NewWriter(tmp, schema, parquet.DataPageVersion(dataPageVersion))

@@ -388,7 +388,7 @@ func (rgw *rowGroupWriter) flush() error {
 			}
 		}
 
-		columnIndex[i] = col.writer.columnIndex
+		columnIndex[i] = col.writer.columnIndexer.ColumnIndex()
 		columnChunkTotalUncompressedSize := col.writer.totalUncompressedSize
 		columnChunkTotalCompressedSize := col.writer.totalCompressedSize
 
@@ -513,8 +513,6 @@ type columnChunkWriter struct {
 		encoder plain.Encoder
 	}
 
-	minValue     Value
-	maxValue     Value
 	nullCount    int64
 	numNulls     int32
 	numRows      int32
@@ -525,10 +523,11 @@ type columnChunkWriter struct {
 	totalCompressedSize   int64
 	encodings             []format.Encoding
 	encodingStats         []format.PageEncodingStats
-	columnIndex           format.ColumnIndex
+	columnIndexer         ColumnIndexer
 }
 
 func newColumnChunkWriter(buffer pageBuffer, codec compress.Codec, enc encoding.Encoder, dataPageType format.PageType, maxRepetitionLevel, maxDefinitionLevel int8, values PageWriter, isCompressed bool) *columnChunkWriter {
+	typ := values.Type()
 	ccw := &columnChunkWriter{
 		buffer:             buffer,
 		values:             values,
@@ -539,6 +538,7 @@ func newColumnChunkWriter(buffer pageBuffer, codec compress.Codec, enc encoding.
 		isCompressed:       isCompressed,
 		encodings:          make([]format.Encoding, 0, 3),
 		encodingStats:      make([]format.PageEncodingStats, 0, 3),
+		columnIndexer:      typ.NewColumnIndexer(),
 	}
 
 	if maxRepetitionLevel > 0 {
@@ -569,8 +569,9 @@ func (ccw *columnChunkWriter) sortedEncodingStats() []format.PageEncodingStats {
 }
 
 func (ccw *columnChunkWriter) statistics() format.Statistics {
-	minValue := ccw.minValue.Bytes()
-	maxValue := ccw.maxValue.Bytes()
+	min, max := ccw.columnIndexer.Bounds()
+	minValue := min.Bytes()
+	maxValue := max.Bytes()
 	return format.Statistics{
 		Min:       minValue, // deprecated
 		Max:       maxValue, // deprecated
@@ -581,8 +582,6 @@ func (ccw *columnChunkWriter) statistics() format.Statistics {
 }
 
 func (ccw *columnChunkWriter) reset() {
-	ccw.minValue = Value{}
-	ccw.maxValue = Value{}
 	ccw.nullCount = 0
 	ccw.numNulls = 0
 	ccw.numRows = 0
@@ -591,7 +590,7 @@ func (ccw *columnChunkWriter) reset() {
 	ccw.totalCompressedSize = 0
 	ccw.encodings = ccw.encodings[:2] // keep the original encodings only
 	ccw.encodingStats = ccw.encodingStats[:0]
-	ccw.columnIndex = format.ColumnIndex{}
+	ccw.columnIndexer.Reset()
 }
 
 func (ccw *columnChunkWriter) flush() error {
@@ -651,16 +650,7 @@ func (ccw *columnChunkWriter) flush() error {
 	}
 
 	minValue, maxValue := ccw.values.Bounds()
-	minValue = minValue.Clone()
-	maxValue = maxValue.Clone()
-
-	typ := ccw.values.Type()
-	if ccw.minValue.IsNull() || typ.Less(minValue, ccw.minValue) {
-		ccw.minValue = minValue
-	}
-	if ccw.maxValue.IsNull() || typ.Less(ccw.maxValue, maxValue) {
-		ccw.maxValue = maxValue
-	}
+	ccw.columnIndexer.IndexPage(numValues, int(ccw.numNulls), minValue, maxValue)
 
 	ccw.page.encoder.Reset(&ccw.page.uncompressed)
 	if err := ccw.values.Flush(); err != nil {
@@ -727,7 +717,6 @@ func (ccw *columnChunkWriter) flush() error {
 	ccw.totalRowCount += int64(ccw.numRows)
 	ccw.totalUncompressedSize += int64(headerSize) + int64(uncompressedPageSize)
 	ccw.totalCompressedSize += int64(headerSize) + int64(compressedPageSize)
-	ccw.addPageIndex(int64(numValues), int64(ccw.numNulls), minValue, maxValue)
 	ccw.addPageEncoding(ccw.dataPageType, encoding)
 
 	ccw.values.Reset(ccw.page.encoder)
@@ -831,15 +820,6 @@ func (ccw *columnChunkWriter) writeDictionaryPage(w io.Writer, dict Dictionary) 
 		return err
 	}
 	return nil
-}
-
-func (ccw *columnChunkWriter) addPageIndex(numValues, nullCount int64, minValue, maxValue Value) {
-	ccw.columnIndex = format.ColumnIndex{
-		NullPages:  append(ccw.columnIndex.NullPages, numValues == nullCount),
-		MinValues:  append(ccw.columnIndex.MinValues, minValue.Bytes()),
-		MaxValues:  append(ccw.columnIndex.MaxValues, maxValue.Bytes()),
-		NullCounts: append(ccw.columnIndex.NullCounts, nullCount),
-	}
 }
 
 func (ccw *columnChunkWriter) addPageEncoding(pageType format.PageType, encoding format.Encoding) {

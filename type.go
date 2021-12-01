@@ -73,6 +73,9 @@ type Type interface {
 	// mutating the value will result in undefined behavior.
 	ConvertedType() *deprecated.ConvertedType
 
+	// Creates a column indexer for values of this type.
+	NewColumnIndexer() ColumnIndexer
+
 	// Creates a dictionary holding values of this type.
 	NewDictionary(bufferSize int) Dictionary
 
@@ -179,6 +182,10 @@ func (t booleanType) Less(v1, v2 Value) bool {
 	return !v1.Boolean() && v2.Boolean()
 }
 
+func (t booleanType) NewColumnIndexer() ColumnIndexer {
+	return newBooleanColumnIndexer(t)
+}
+
 func (t booleanType) NewDictionary(bufferSize int) Dictionary {
 	return newBooleanDictionary(t)
 }
@@ -203,6 +210,10 @@ func (t int32Type) Less(v1, v2 Value) bool {
 
 func (t int32Type) PhyiscalType() *format.Type {
 	return &physicalTypes[Int32]
+}
+
+func (t int32Type) NewColumnIndexer() ColumnIndexer {
+	return newInt32ColumnIndexer(t)
 }
 
 func (t int32Type) NewDictionary(bufferSize int) Dictionary {
@@ -231,6 +242,10 @@ func (t int64Type) PhyiscalType() *format.Type {
 	return &physicalTypes[Int64]
 }
 
+func (t int64Type) NewColumnIndexer() ColumnIndexer {
+	return newInt64ColumnIndexer(t)
+}
+
 func (t int64Type) NewDictionary(bufferSize int) Dictionary {
 	return newInt64Dictionary(t, bufferSize)
 }
@@ -255,6 +270,10 @@ func (t int96Type) Less(v1, v2 Value) bool {
 
 func (t int96Type) PhyiscalType() *format.Type {
 	return &physicalTypes[Int96]
+}
+
+func (t int96Type) NewColumnIndexer() ColumnIndexer {
+	return newGenericColumnIndexer(t)
 }
 
 func (t int96Type) NewDictionary(bufferSize int) Dictionary {
@@ -283,6 +302,10 @@ func (t floatType) PhyiscalType() *format.Type {
 	return &physicalTypes[Float]
 }
 
+func (t floatType) NewColumnIndexer() ColumnIndexer {
+	return newFloatColumnIndexer(t)
+}
+
 func (t floatType) NewDictionary(bufferSize int) Dictionary {
 	return newFloatDictionary(t, bufferSize)
 }
@@ -304,6 +327,10 @@ func (t doubleType) Length() int { return 64 }
 func (t doubleType) Less(v1, v2 Value) bool { return v1.Double() < v2.Double() }
 
 func (t doubleType) PhyiscalType() *format.Type { return &physicalTypes[Double] }
+
+func (t doubleType) NewColumnIndexer() ColumnIndexer {
+	return newDoubleColumnIndexer(t)
+}
 
 func (t doubleType) NewDictionary(bufferSize int) Dictionary {
 	return newDoubleDictionary(t, bufferSize)
@@ -328,6 +355,10 @@ func (t byteArrayType) Less(v1, v2 Value) bool {
 }
 
 func (t byteArrayType) PhyiscalType() *format.Type { return &physicalTypes[ByteArray] }
+
+func (t byteArrayType) NewColumnIndexer() ColumnIndexer {
+	return newByteArrayColumnIndexer(t)
+}
 
 func (t byteArrayType) NewDictionary(bufferSize int) Dictionary {
 	return newByteArrayDictionary(t, bufferSize)
@@ -356,6 +387,10 @@ func (t *fixedLenByteArrayType) Less(v1, v2 Value) bool {
 
 func (t *fixedLenByteArrayType) PhyiscalType() *format.Type {
 	return &physicalTypes[FixedLenByteArray]
+}
+
+func (t *fixedLenByteArrayType) NewColumnIndexer() ColumnIndexer {
+	return newFixedLenByteArrayColumnIndexer(t)
 }
 
 func (t *fixedLenByteArrayType) NewDictionary(bufferSize int) Dictionary {
@@ -483,6 +518,22 @@ func (t *intType) ConvertedType() *deprecated.ConvertedType {
 	return &convertedTypes[convertedType]
 }
 
+func (t *intType) NewColumnIndexer() ColumnIndexer {
+	if t.IsSigned {
+		if t.BitWidth == 64 {
+			return newInt64ColumnIndexer(t)
+		} else {
+			return newInt32ColumnIndexer(t)
+		}
+	} else {
+		if t.BitWidth == 64 {
+			return newUint64ColumnIndexer(t)
+		} else {
+			return newUint32ColumnIndexer(t)
+		}
+	}
+}
+
 func (t *intType) NewDictionary(bufferSize int) Dictionary {
 	if t.BitWidth == 64 {
 		return newInt64Dictionary(t, bufferSize)
@@ -552,6 +603,10 @@ func (t *decimalType) Less(v1, v2 Value) bool { panic("NOT IMPLEMENTED") }
 
 func (t *decimalType) NewDictionary(bufferSize int) Dictionary { panic("NOT IMPLEMENTED") }
 
+func (t *decimalType) NewColumnIndexer() ColumnIndexer {
+	panic("NOT IMPLEMENTED")
+}
+
 func (t *decimalType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
 	panic("NOT IMPLEMENTED")
 }
@@ -585,6 +640,10 @@ func (t *stringType) LogicalType() *format.LogicalType {
 
 func (t *stringType) ConvertedType() *deprecated.ConvertedType {
 	return &convertedTypes[deprecated.UTF8]
+}
+
+func (t *stringType) NewColumnIndexer() ColumnIndexer {
+	return newByteArrayColumnIndexer(t)
 }
 
 func (t *stringType) NewDictionary(bufferSize int) Dictionary {
@@ -624,6 +683,10 @@ func (t *uuidType) LogicalType() *format.LogicalType {
 
 func (t *uuidType) ConvertedType() *deprecated.ConvertedType { return nil }
 
+func (t *uuidType) NewColumnIndexer() ColumnIndexer {
+	return newFixedLenByteArrayColumnIndexer(t)
+}
+
 func (t *uuidType) NewDictionary(bufferSize int) Dictionary {
 	return uuidDictionary{newFixedLenByteArrayDictionary(t, bufferSize)}
 }
@@ -661,6 +724,10 @@ func (t *enumType) LogicalType() *format.LogicalType {
 
 func (t *enumType) ConvertedType() *deprecated.ConvertedType {
 	return &convertedTypes[deprecated.Enum]
+}
+
+func (t *enumType) NewColumnIndexer() ColumnIndexer {
+	return newByteArrayColumnIndexer(t)
 }
 
 func (t *enumType) NewDictionary(bufferSize int) Dictionary {
@@ -702,6 +769,10 @@ func (t *jsonType) ConvertedType() *deprecated.ConvertedType {
 	return &convertedTypes[deprecated.Json]
 }
 
+func (t *jsonType) NewColumnIndexer() ColumnIndexer {
+	return newByteArrayColumnIndexer(t)
+}
+
 func (t *jsonType) NewDictionary(bufferSize int) Dictionary {
 	return newByteArrayDictionary(t, bufferSize)
 }
@@ -741,6 +812,10 @@ func (t *bsonType) ConvertedType() *deprecated.ConvertedType {
 	return &convertedTypes[deprecated.Bson]
 }
 
+func (t *bsonType) NewColumnIndexer() ColumnIndexer {
+	return newByteArrayColumnIndexer(t)
+}
+
 func (t *bsonType) NewDictionary(bufferSize int) Dictionary {
 	return newByteArrayDictionary(t, bufferSize)
 }
@@ -774,6 +849,10 @@ func (t *dateType) LogicalType() *format.LogicalType {
 
 func (t *dateType) ConvertedType() *deprecated.ConvertedType {
 	return &convertedTypes[deprecated.Date]
+}
+
+func (t *dateType) NewColumnIndexer() ColumnIndexer {
+	return newInt32ColumnIndexer(t)
 }
 
 func (t *dateType) NewDictionary(bufferSize int) Dictionary {
@@ -880,6 +959,14 @@ func (t *timeType) ConvertedType() *deprecated.ConvertedType {
 	}
 }
 
+func (t *timeType) NewColumnIndexer() ColumnIndexer {
+	if t.Unit.Millis != nil {
+		return newInt32ColumnIndexer(t)
+	} else {
+		return newInt64ColumnIndexer(t)
+	}
+}
+
 func (t *timeType) NewDictionary(bufferSize int) Dictionary {
 	if t.Unit.Millis != nil {
 		return newInt32Dictionary(t, bufferSize)
@@ -936,6 +1023,10 @@ func (t *timestampType) ConvertedType() *deprecated.ConvertedType {
 	}
 }
 
+func (t *timestampType) NewColumnIndexer() ColumnIndexer {
+	return newInt64ColumnIndexer(t)
+}
+
 func (t *timestampType) NewDictionary(bufferSize int) Dictionary {
 	return newInt64Dictionary(t, bufferSize)
 }
@@ -975,6 +1066,10 @@ func (t *listType) LogicalType() *format.LogicalType {
 
 func (t *listType) ConvertedType() *deprecated.ConvertedType {
 	return &convertedTypes[deprecated.List]
+}
+
+func (t *listType) NewColumnIndexer() ColumnIndexer {
+	panic("create create a column indexer from parquet LIST type")
 }
 
 func (t *listType) NewDictionary(bufferSize int) Dictionary {
@@ -1023,6 +1118,10 @@ func (t *mapType) ConvertedType() *deprecated.ConvertedType {
 	return &convertedTypes[deprecated.Map]
 }
 
+func (t *mapType) NewColumnIndexer() ColumnIndexer {
+	panic("create create a column indexer from parquet MAP type")
+}
+
 func (t *mapType) NewDictionary(bufferSize int) Dictionary {
 	panic("cannot create dictionary from parquet MAP type")
 }
@@ -1050,6 +1149,10 @@ func (t *nullType) LogicalType() *format.LogicalType {
 }
 
 func (t *nullType) ConvertedType() *deprecated.ConvertedType { return nil }
+
+func (t *nullType) NewColumnIndexer() ColumnIndexer {
+	panic("create create a column indexer from parquet NULL type")
+}
 
 func (t *nullType) NewDictionary(bufferSize int) Dictionary {
 	panic("cannot create dictionary for parquet NULL type")

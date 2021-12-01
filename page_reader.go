@@ -415,7 +415,7 @@ func newByteArrayPageReader(typ Type, decoder encoding.Decoder, bufferSize int) 
 func (r *byteArrayPageReader) ReadValue() (Value, error) {
 	for {
 		if r.remain > 0 {
-			n := plain.ByteArrayLength(r.values[r.offset:])
+			n := plain.NextByteArrayLength(r.values[r.offset:])
 			v := r.values[4+r.offset : 4+r.offset+uint(n)]
 			r.offset += 4 + uint(n)
 			r.remain -= 1
@@ -425,7 +425,7 @@ func (r *byteArrayPageReader) ReadValue() (Value, error) {
 		n, err := r.decoder.DecodeByteArray(r.values)
 		if n == 0 {
 			if err == encoding.ErrValueTooLarge {
-				size := 4 + uint32(plain.ByteArrayLength(r.values))
+				size := 4 + uint32(plain.NextByteArrayLength(r.values))
 				r.values = make([]byte, bits.NearestPowerOfTwo32(size))
 				r.offset = 0
 				r.remain = 0
