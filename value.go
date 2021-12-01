@@ -343,9 +343,13 @@ func (v Value) Clone() Value {
 }
 
 // Bytes returns the binary representation of v.
+//
+// If v is the null value, an nil byte slice is returned.
 func (v Value) Bytes() []byte { return v.AppendBytes(nil) }
 
 // AppendBytes appends the binary representation of v to b.
+//
+// If v is the null value, b is returned unchanged.
 func (v Value) AppendBytes(b []byte) []byte {
 	buf := [12]byte{}
 	switch v.Kind() {
