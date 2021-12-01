@@ -87,6 +87,30 @@ func MaxLenInt96(data []Int96) int {
 	return max
 }
 
+func MinInt96(data []Int96) (min Int96) {
+	if len(data) > 0 {
+		min = data[0]
+		for _, v := range data[1:] {
+			if v.Less(min) {
+				min = v
+			}
+		}
+	}
+	return min
+}
+
+func MaxInt96(data []Int96) (max Int96) {
+	if len(data) > 0 {
+		max = data[0]
+		for _, v := range data[1:] {
+			if max.Less(v) {
+				max = v
+			}
+		}
+	}
+	return max
+}
+
 func MinMaxInt96(data []Int96) (min, max Int96) {
 	if len(data) > 0 {
 		min = data[0]
@@ -101,4 +125,34 @@ func MinMaxInt96(data []Int96) (min, max Int96) {
 		}
 	}
 	return min, max
+}
+
+func OrderOfInt96(data []Int96) int {
+	if len(data) > 0 {
+		if int96AreInAscendingOrder(data) {
+			return +1
+		}
+		if int96AreInDescendingOrder(data) {
+			return -1
+		}
+	}
+	return 0
+}
+
+func int96AreInAscendingOrder(data []Int96) bool {
+	for i := len(data) - 1; i > 0; i-- {
+		if data[i].Less(data[i-1]) {
+			return false
+		}
+	}
+	return true
+}
+
+func int96AreInDescendingOrder(data []Int96) bool {
+	for i := len(data) - 1; i > 0; i-- {
+		if data[i-1].Less(data[i]) {
+			return false
+		}
+	}
+	return true
 }

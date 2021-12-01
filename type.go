@@ -273,7 +273,7 @@ func (t int96Type) PhyiscalType() *format.Type {
 }
 
 func (t int96Type) NewColumnIndexer() ColumnIndexer {
-	return newGenericColumnIndexer(t)
+	return newInt96ColumnIndexer(t)
 }
 
 func (t int96Type) NewDictionary(bufferSize int) Dictionary {
