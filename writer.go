@@ -198,6 +198,9 @@ func (rgw *rowGroupWriter) init(node Node, path []string, dataPageType format.Pa
 		repetitionType = fieldRepetitionTypeOf(node)
 	}
 
+	// For backward compatibility with older readers, the parquet specification
+	// recommends to set the scale and precision on schema elements when the
+	// column is of logical type decimal.
 	logicalType := nodeType.LogicalType()
 	scale, precision := (*int32)(nil), (*int32)(nil)
 	if logicalType != nil && logicalType.Decimal != nil {
