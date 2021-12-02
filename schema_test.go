@@ -60,8 +60,8 @@ func TestSchemaOf(t *testing.T) {
 				Y float32
 			}),
 			print: `message {
-	required float X (DECIMAL(0,9));
-	required float Y (DECIMAL(0,9));
+	required float X;
+	required float Y;
 }`,
 		},
 

@@ -32,6 +32,8 @@ func (k Kind) String() string {
 
 // The Type interface represents logical types of the parquet type system.
 type Type interface {
+	fmt.Stringer
+
 	// Returns the Kind value representing the underlying physical type.
 	Kind() Kind
 
@@ -170,6 +172,8 @@ func (t primitiveType) ConvertedType() *deprecated.ConvertedType { return nil }
 
 type booleanType struct{ primitiveType }
 
+func (t booleanType) String() string { return "BOOLEAN" }
+
 func (t booleanType) Kind() Kind { return Boolean }
 
 func (t booleanType) Length() int { return 1 }
@@ -199,6 +203,8 @@ func (t booleanType) NewPageWriter(encoder encoding.Encoder, bufferSize int) Pag
 }
 
 type int32Type struct{ primitiveType }
+
+func (t int32Type) String() string { return "INT32" }
 
 func (t int32Type) Kind() Kind { return Int32 }
 
@@ -230,6 +236,8 @@ func (t int32Type) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageW
 
 type int64Type struct{ primitiveType }
 
+func (t int64Type) String() string { return "INT64" }
+
 func (t int64Type) Kind() Kind { return Int64 }
 
 func (t int64Type) Length() int { return 64 }
@@ -259,6 +267,8 @@ func (t int64Type) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageW
 }
 
 type int96Type struct{ primitiveType }
+
+func (t int96Type) String() string { return "INT96" }
 
 func (t int96Type) Kind() Kind { return Int96 }
 
@@ -290,6 +300,8 @@ func (t int96Type) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageW
 
 type floatType struct{ primitiveType }
 
+func (t floatType) String() string { return "FLOAT" }
+
 func (t floatType) Kind() Kind { return Float }
 
 func (t floatType) Length() int { return 32 }
@@ -320,6 +332,8 @@ func (t floatType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageW
 
 type doubleType struct{ primitiveType }
 
+func (t doubleType) String() string { return "DOUBLE" }
+
 func (t doubleType) Kind() Kind { return Double }
 
 func (t doubleType) Length() int { return 64 }
@@ -345,6 +359,8 @@ func (t doubleType) NewPageWriter(encoder encoding.Encoder, bufferSize int) Page
 }
 
 type byteArrayType struct{ primitiveType }
+
+func (t byteArrayType) String() string { return "BYTE_ARRAY" }
 
 func (t byteArrayType) Kind() Kind { return ByteArray }
 
@@ -375,6 +391,10 @@ func (t byteArrayType) NewPageWriter(encoder encoding.Encoder, bufferSize int) P
 type fixedLenByteArrayType struct {
 	primitiveType
 	length int
+}
+
+func (t *fixedLenByteArrayType) String() string {
+	return fmt.Sprintf("FIXED_LEN_BYTE_ARRAY(%d)", t.length)
 }
 
 func (t *fixedLenByteArrayType) Kind() Kind { return FixedLenByteArray }
@@ -467,6 +487,8 @@ var unsignedIntTypes = [...]intType{
 }
 
 type intType format.IntType
+
+func (t *intType) String() string { return (*format.IntType)(t).String() }
 
 func (t *intType) Kind() Kind {
 	if t.BitWidth == 64 {
@@ -570,7 +592,14 @@ func (t *intType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWr
 
 // Decimal constructs a leaf node of decimal logical ttype with the given
 // sccale, precision, and underlying type.
+//
+// https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#decimal
 func Decimal(scale, precision int, typ Type) Node {
+	switch typ {
+	case Int32Type, Int64Type:
+	default:
+		panic("DECIMAL node must annotate the INT32 or INT64 types but got " + typ.String())
+	}
 	return Leaf(&decimalType{
 		decimal: format.DecimalType{
 			Scale:     int32(scale),
@@ -584,6 +613,8 @@ type decimalType struct {
 	decimal format.DecimalType
 	Type
 }
+
+func (t *decimalType) String() string { return t.decimal.String() }
 
 func (t *decimalType) LogicalType() *format.LogicalType {
 	return &format.LogicalType{Decimal: &t.decimal}
@@ -599,6 +630,8 @@ func (t *decimalType) ConvertedType() *deprecated.ConvertedType {
 func String() Node { return Leaf(&stringType{}) }
 
 type stringType format.StringType
+
+func (t *stringType) String() string { return (*format.StringType)(t).String() }
 
 func (t *stringType) Kind() Kind { return ByteArray }
 
@@ -643,6 +676,8 @@ func UUID() Node { return Leaf(&uuidType{}) }
 
 type uuidType format.UUIDType
 
+func (t *uuidType) String() string { return (*format.UUIDType)(t).String() }
+
 func (t *uuidType) Kind() Kind { return FixedLenByteArray }
 
 func (t *uuidType) Length() int { return 16 }
@@ -683,6 +718,8 @@ func (t *uuidType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageW
 func Enum() Node { return Leaf(&enumType{}) }
 
 type enumType format.EnumType
+
+func (t *enumType) String() string { return (*format.EnumType)(t).String() }
 
 func (t *enumType) Kind() Kind { return ByteArray }
 
@@ -727,6 +764,8 @@ func JSON() Node { return Leaf(&jsonType{}) }
 
 type jsonType format.JsonType
 
+func (t *jsonType) String() string { return (*jsonType)(t).String() }
+
 func (t *jsonType) Kind() Kind { return ByteArray }
 
 func (t *jsonType) Length() int { return 0 }
@@ -770,6 +809,8 @@ func BSON() Node { return Leaf(&bsonType{}) }
 
 type bsonType format.BsonType
 
+func (t *bsonType) String() string { return (*format.BsonType)(t).String() }
+
 func (t *bsonType) Kind() Kind { return ByteArray }
 
 func (t *bsonType) Length() int { return 0 }
@@ -812,6 +853,8 @@ func (t *bsonType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageW
 func Date() Node { return Leaf(&dateType{}) }
 
 type dateType format.DateType
+
+func (t *dateType) String() string { return (*format.DateType)(t).String() }
 
 func (t *dateType) Kind() Kind { return Int32 }
 
@@ -889,6 +932,10 @@ func Time(unit TimeUnit) Node {
 }
 
 type timeType format.TimeType
+
+func (t *timeType) String() string {
+	return (*format.TimeType)(t).String()
+}
 
 func (t *timeType) Kind() Kind {
 	if t.Unit.Millis != nil {
@@ -978,6 +1025,8 @@ func Timestamp(unit TimeUnit) Node {
 
 type timestampType format.TimestampType
 
+func (t *timestampType) String() string { return (*format.TimestampType)(t).String() }
+
 func (t *timestampType) Kind() Kind { return Int64 }
 
 func (t *timestampType) Length() int { return 64 }
@@ -1030,6 +1079,8 @@ func (listNode) Type() Type { return &listType{} }
 
 type listType format.ListType
 
+func (t *listType) String() string { return (*format.ListType)(t).String() }
+
 func (t *listType) Kind() Kind { panic("cannot call Kind on parquet LIST type") }
 
 func (t *listType) Length() int { return 0 }
@@ -1080,6 +1131,8 @@ func (mapNode) Type() Type { return &mapType{} }
 
 type mapType format.MapType
 
+func (t *mapType) String() string { return (*format.MapType)(t).String() }
+
 func (t *mapType) Kind() Kind { panic("cannot call Kind on parquet MAP type") }
 
 func (t *mapType) Length() int { return 0 }
@@ -1113,6 +1166,8 @@ func (t *mapType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWr
 }
 
 type nullType format.NullType
+
+func (t *nullType) String() string { return (*format.NullType)(t).String() }
 
 func (t *nullType) Kind() Kind { panic("cannot call Kind on parquet NULL type") }
 
