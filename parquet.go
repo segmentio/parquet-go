@@ -1,7 +1,5 @@
 package parquet
 
-type int96 = [12]byte
-
 func atLeastOne(size int) int {
 	return atLeast(size, 1)
 }

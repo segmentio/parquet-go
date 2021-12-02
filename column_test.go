@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/segmentio/parquet"
+	"github.com/segmentio/parquet/deprecated"
 )
 
 func TestColumnPageIndex(t *testing.T) {
@@ -33,6 +34,13 @@ func TestColumnPageIndex(t *testing.T) {
 			scenario: "int64",
 			function: func(t *testing.T) interface{} {
 				return func(rows []struct{ Value int64 }) bool { return testColumnPageIndex(t, makeRows(rows)) }
+			},
+		},
+
+		{
+			scenario: "int96",
+			function: func(t *testing.T) interface{} {
+				return func(rows []struct{ Value deprecated.Int96 }) bool { return testColumnPageIndex(t, makeRows(rows)) }
 			},
 		},
 

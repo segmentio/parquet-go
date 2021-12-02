@@ -3,6 +3,7 @@ package parquet
 import (
 	"bytes"
 
+	"github.com/segmentio/parquet/deprecated"
 	"github.com/segmentio/parquet/encoding/plain"
 	"github.com/segmentio/parquet/format"
 	"github.com/segmentio/parquet/internal/bits"
@@ -91,47 +92,6 @@ func (index *columnIndexer) columnIndex(minValues, maxValues [][]byte, minOrder,
 		MaxValues:     maxValues,
 		BoundaryOrder: boundaryOrderOf(minOrder, maxOrder),
 	}
-}
-
-type genericColumnIndexer struct {
-	columnIndexer
-	minValues []Value
-	maxValues []Value
-}
-
-func newGenericColumnIndexer(typ Type) *genericColumnIndexer {
-	return &genericColumnIndexer{columnIndexer: columnIndexer{typ: typ}}
-}
-
-func (index *genericColumnIndexer) Reset() {
-	index.reset()
-	clearValues(index.minValues)
-	clearValues(index.maxValues)
-	index.minValues = index.minValues[:0]
-	index.maxValues = index.maxValues[:0]
-}
-
-func (index *genericColumnIndexer) Bounds() (min, max Value) {
-	if len(index.minValues) > 0 {
-		min = minValueOf(index.typ, index.minValues)
-		max = maxValueOf(index.typ, index.maxValues)
-	}
-	return min, max
-}
-
-func (index *genericColumnIndexer) IndexPage(numValues, numNulls int, min, max Value) {
-	index.observe(numValues, numNulls)
-	index.minValues = append(index.minValues, min.Clone())
-	index.maxValues = append(index.maxValues, max.Clone())
-}
-
-func (index *genericColumnIndexer) ColumnIndex() ColumnIndex {
-	return index.columnIndex(
-		valuesBytes(index.typ, index.minValues),
-		valuesBytes(index.typ, index.maxValues),
-		orderOfValues(index.typ, index.minValues),
-		orderOfValues(index.typ, index.maxValues),
-	)
 }
 
 type booleanColumnIndexer struct {
@@ -248,6 +208,45 @@ func (index *int64ColumnIndexer) ColumnIndex() ColumnIndex {
 		splitFixedLenByteArrayList(8, bits.Int64ToBytes(index.maxValues)),
 		bits.OrderOfInt64(index.minValues),
 		bits.OrderOfInt64(index.maxValues),
+	)
+}
+
+type int96ColumnIndexer struct {
+	columnIndexer
+	minValues []deprecated.Int96
+	maxValues []deprecated.Int96
+}
+
+func newInt96ColumnIndexer(typ Type) *int96ColumnIndexer {
+	return &int96ColumnIndexer{columnIndexer: columnIndexer{typ: typ}}
+}
+
+func (index *int96ColumnIndexer) Reset() {
+	index.reset()
+	index.minValues = index.minValues[:0]
+	index.maxValues = index.maxValues[:0]
+}
+
+func (index *int96ColumnIndexer) Bounds() (min, max Value) {
+	if len(index.minValues) > 0 {
+		min = makeValueInt96(deprecated.MinInt96(index.minValues))
+		max = makeValueInt96(deprecated.MaxInt96(index.maxValues))
+	}
+	return min, max
+}
+
+func (index *int96ColumnIndexer) IndexPage(numValues, numNulls int, min, max Value) {
+	index.observe(numValues, numNulls)
+	index.minValues = append(index.minValues, min.Int96())
+	index.maxValues = append(index.maxValues, max.Int96())
+}
+
+func (index *int96ColumnIndexer) ColumnIndex() ColumnIndex {
+	return index.columnIndex(
+		splitFixedLenByteArrayList(12, deprecated.Int96ToBytes(index.minValues)),
+		splitFixedLenByteArrayList(12, deprecated.Int96ToBytes(index.maxValues)),
+		deprecated.OrderOfInt96(index.minValues),
+		deprecated.OrderOfInt96(index.maxValues),
 	)
 }
 
@@ -548,89 +547,4 @@ func boundaryOrderOf(minOrder, maxOrder int) format.BoundaryOrder {
 		}
 	}
 	return format.Unordered
-}
-
-func valuesBytes(typ Type, values []Value) [][]byte {
-	valuesBytes := make([][]byte, len(values))
-
-	switch typ.Kind() {
-	case ByteArray, FixedLenByteArray:
-		// For BYTE_ARRAY and FIXED_LEN_BYTE_ARRAY, the parquet value already
-		// references an underlying byte array. We don't have to copy it to a
-		// new buffer and can simply reference it in the returned slice.
-		for i, v := range values {
-			valuesBytes[i] = v.ByteArray()
-		}
-
-	default:
-		buffer := make([]byte, 0, typeSizeOf(typ)*len(values))
-
-		for i, v := range values {
-			offset := len(buffer)
-			buffer = v.AppendBytes(buffer)
-			valuesBytes[i] = buffer[offset:len(buffer):len(buffer)]
-		}
-	}
-
-	return valuesBytes
-}
-
-func minValueOf(typ Type, values []Value) (min Value) {
-	if len(values) > 0 {
-		min = values[0]
-		for _, value := range values[1:] {
-			if typ.Less(value, min) {
-				min = value
-			}
-		}
-	}
-	return min
-}
-
-func maxValueOf(typ Type, values []Value) (max Value) {
-	if len(values) > 0 {
-		max = values[0]
-		for _, value := range values[1:] {
-			if typ.Less(max, value) {
-				max = value
-			}
-		}
-	}
-	return max
-}
-
-func orderOfValues(typ Type, values []Value) int {
-	if len(values) > 0 {
-		if valuesAreInAscendingOrder(typ, values) {
-			return +1
-		}
-		if valuesAreInDescendingOrder(typ, values) {
-			return -1
-		}
-	}
-	return 0
-}
-
-func valuesAreInAscendingOrder(typ Type, values []Value) bool {
-	for i := len(values) - 1; i > 0; i-- {
-		if typ.Less(values[i], values[i-1]) {
-			return false
-		}
-	}
-	return true
-}
-
-func valuesAreInDescendingOrder(typ Type, values []Value) bool {
-	for i := len(values) - 1; i > 0; i-- {
-		if typ.Less(values[i-1], values[i]) {
-			return false
-		}
-	}
-	return true
-}
-
-func clearValues(values []Value) {
-	for i := range values {
-		values[i] = Value{}
-	}
 }
