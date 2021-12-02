@@ -532,7 +532,7 @@ func splitFixedLenByteArrayList(size int, data []byte) [][]byte {
 	for i := range values {
 		j := (i + 0) * size
 		k := (i + 1) * size
-		values[i] = data[j:k]
+		values[i] = data[j:k:k]
 	}
 	return values
 }
