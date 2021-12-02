@@ -42,9 +42,7 @@ func (i Int96) Less(j Int96) bool {
 // Int converts i to a big.Int representation.
 func (i Int96) Int() *big.Int {
 	z := new(big.Int)
-	z.Or(z, big.NewInt(int64(int32(i[2]))))
-	z.Lsh(z, 32)
-	z.Or(z, big.NewInt(int64(i[1])))
+	z.Or(z, big.NewInt(int64(i[2])<<32|int64(i[1])))
 	z.Lsh(z, 32)
 	z.Or(z, big.NewInt(int64(i[0])))
 	return z
@@ -57,16 +55,13 @@ func (i Int96) String() string {
 
 // Len returns the minimum length in bits required to store the value of i.
 func (i Int96) Len() int {
-	n0 := bits.Len32(i[0])
-	n1 := bits.Len32(i[1])
-	n2 := bits.Len32(i[2])
 	switch {
-	case n2 != 0:
-		return n2 + 64
-	case n1 != 0:
-		return n1 + 32
+	case i[2] != 0:
+		return 64 + bits.Len32(i[2])
+	case i[1] != 0:
+		return 32 + bits.Len32(i[1])
 	default:
-		return n0
+		return bits.Len32(i[0])
 	}
 }
 
