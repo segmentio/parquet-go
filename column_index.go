@@ -22,6 +22,9 @@ func (index *ColumnIndex) PageBounds(i int) (minValue, maxValue []byte, nullPage
 	return
 }
 
+// PageNulls returns the number of null values in the page at index i.
+func (index *ColumnIndex) PageNulls(i int) int64 { return index.NullCounts[i] }
+
 // NumPages returns the number of paged in the column index.
 func (index *ColumnIndex) NumPages() int { return len(index.NullPages) }
 

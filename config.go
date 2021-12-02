@@ -5,13 +5,45 @@ import (
 	"strings"
 )
 
+// The FileConfig type carries configuration options for parquet files.
+//
+// FileConfig implements the FileOption interface so it can be used directly
+// as argument to the OpenFile function when needed, for example:
+//
+//	f, err := parquet.OpenFile(reader, size, &parquet.FileConfig{
+//		SkipPageIndex: true,
+//	})
+//
+type FileConfig struct {
+	SkipPageIndex bool
+}
+
+// Apply applies the given list of options to c.
+func (c *FileConfig) Apply(options ...FileOption) {
+	for _, opt := range options {
+		opt.ConfigureFile(c)
+	}
+}
+
+// Configure applies configuration options from c to config.
+func (c *FileConfig) Configure(config *FileConfig) {
+	*config = FileConfig{
+		SkipPageIndex: config.SkipPageIndex,
+	}
+}
+
+// Validate returns a non-nil error if the configuration of c is invalid.
+func (c *FileConfig) Validate() error {
+	return nil
+}
+
 // The ReaderConfig type carries configuration options for parquet readers.
 //
 // ReaderConfig implements the ReaderOption interface so it can be used directly
 // as argument to the NewReader function when needed, for example:
 //
 //	reader := parquet.NewReader(output, schema, &parquet.ReaderConfig{
-//		CreatedBy: "my test program",
+//		PageBufferSize: 8192,
 //	})
 //
 type ReaderConfig struct {
@@ -88,6 +120,12 @@ func (c *WriterConfig) Validate() error {
 	)
 }
 
+// FileOption is an interface implemented by types that carry configuration
+// options for parquet files.
+type FileOption interface {
+	ConfigureFile(*FileConfig)
+}
+
 // ReaderOption is an interface implemented by types that carry configuration
 // options for parquet readers.
 type ReaderOption interface {
@@ -98,6 +136,16 @@ type ReaderOption interface {
 // options for parquet writers.
 type WriterOption interface {
 	ConfigureWriter(*WriterConfig)
+}
+
+// SkipPageIndex is a file configuration option which when set to true, prevents
+// automatically reading the page index when opening a parquet file. This is
+// useful as an optimization when programs know that they will not need to
+// consume the page index.
+//
+// Defaults to false.
+func SkipPageIndex(skip bool) FileOption {
+	return fileOption(func(config *FileConfig) { config.SkipPageIndex = skip })
 }
 
 // PageBufferSize configures the size of column page buffers on parquet readers
@@ -158,6 +206,10 @@ func DataPageStatistics(enabled bool) WriterOption {
 func RowGroupTargetSize(size int64) WriterOption {
 	return writerOption(func(config *WriterConfig) { config.RowGroupTargetSize = size })
 }
+
+type fileOption func(*FileConfig)
+
+func (opt fileOption) ConfigureFile(config *FileConfig) { opt(config) }
 
 type readerOption func(*ReaderConfig)
 

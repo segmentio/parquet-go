@@ -2,6 +2,7 @@ package parquet_test
 
 import (
 	"fmt"
+	"reflect"
 	"testing"
 	"testing/quick"
 
@@ -94,11 +95,11 @@ func testColumnPageIndex(t *testing.T, rows rows) bool {
 			t.Error(err)
 			return false
 		}
-		if err := checkColumnIndex(t, f); err != nil {
+		if err := testColumnIndex(t, f); err != nil {
 			t.Error(err)
 			return false
 		}
-		if err := checkOffsetIndex(t, f); err != nil {
+		if err := testOffsetIndex(t, f); err != nil {
 			t.Error(err)
 			return false
 		}
@@ -106,7 +107,9 @@ func testColumnPageIndex(t *testing.T, rows rows) bool {
 	return true
 }
 
-func checkColumnIndex(t *testing.T, f *parquet.File) error {
+func testColumnIndex(t *testing.T, f *parquet.File) error {
+	columnIndexes := f.ColumnIndexes()
+	i := 0
 	return forEachColumnChunk(f.Root(), func(col *parquet.Column, chunk *parquet.ColumnChunks) error {
 		columnIndex, err := chunk.ReadColumnIndex()
 		if err != nil {
@@ -115,11 +118,20 @@ func checkColumnIndex(t *testing.T, f *parquet.File) error {
 		if n := columnIndex.NumPages(); n <= 0 {
 			return fmt.Errorf("invalid number of pages found in the column index: %d", n)
 		}
+		if i >= len(columnIndexes) {
+			return fmt.Errorf("more column indexes were read when iterating over column chunks than when reading from the file (i=%d,n=%d)", i, len(columnIndexes))
+		}
+		if !reflect.DeepEqual(&columnIndexes[i], columnIndex) {
+			return fmt.Errorf("column index at index %d mismatch:\nfile  = %#v\nchunk = %#v", i, &columnIndexes[i], columnIndex)
+		}
+		i++
 		return nil
 	})
 }
 
-func checkOffsetIndex(t *testing.T, f *parquet.File) error {
+func testOffsetIndex(t *testing.T, f *parquet.File) error {
+	offsetIndexes := f.OffsetIndexes()
+	i := 0
 	return forEachColumnChunk(f.Root(), func(col *parquet.Column, chunk *parquet.ColumnChunks) error {
 		offsetIndex, err := chunk.ReadOffsetIndex()
 		if err != nil {
@@ -128,6 +140,13 @@ func checkOffsetIndex(t *testing.T, f *parquet.File) error {
 		if n := offsetIndex.NumPages(); n <= 0 {
 			return fmt.Errorf("invalid number of pages found in the offset index: %d", n)
 		}
+		if i >= len(offsetIndexes) {
+			return fmt.Errorf("more offset indexes were read when iterating over column chunks than when reading from the file (i=%d,n=%d)", i, len(offsetIndexes))
+		}
+		if !reflect.DeepEqual(&offsetIndexes[i], offsetIndex) {
+			return fmt.Errorf("offset index at index %d mismatch:\nfile  = %#v\nchunk = %#v", i, &offsetIndexes[i], offsetIndex)
+		}
+		i++
 		return nil
 	})
 }

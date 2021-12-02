@@ -11,11 +11,13 @@ import (
 // ColumnChunks is an iterator type exposing chunks of a column within a parquet
 // file.
 type ColumnChunks struct {
-	column   *Column
-	index    int
-	metadata *format.ColumnMetaData
-	buffer   *bufio.Reader
-	err      error
+	column      *Column
+	index       int
+	metadata    *format.ColumnMetaData
+	columnIndex *ColumnIndex
+	offsetIndex *OffsetIndex
+	buffer      *bufio.Reader
+	err         error
 }
 
 func (c *ColumnChunks) close(err error) {
@@ -33,16 +35,28 @@ func (c *ColumnChunks) Err() error {
 func (c *ColumnChunks) Seek(index int) {
 	c.index = index - 1
 	c.metadata = nil
+	c.columnIndex = nil
+	c.offsetIndex = nil
 }
 
 // Next advances the iterator to the next chunk.
 func (c *ColumnChunks) Next() bool {
 	c.metadata = nil
+	c.columnIndex = nil
+	c.offsetIndex = nil
 
 	if c.index++; c.index >= len(c.column.chunks) {
 		return false
 	}
 	chunk := c.column.chunks[c.index]
+
+	if len(c.column.columnIndex) != 0 {
+		c.columnIndex = c.column.columnIndex[c.index]
+	}
+
+	if len(c.column.offsetIndex) != 0 {
+		c.offsetIndex = c.column.offsetIndex[c.index]
+	}
 
 	if chunk.FilePath == "" {
 		c.metadata = &chunk.MetaData
@@ -57,7 +71,7 @@ func (c *ColumnChunks) Next() bool {
 // the iterator is currently positioned at.
 func (c *ColumnChunks) Pages() *ColumnPages {
 	if c.metadata != nil {
-		return newColumnPages(c.column, c.metadata, defaultBufferSize)
+		return newColumnPages(c.column, c.metadata, c.columnIndex, c.offsetIndex, defaultBufferSize)
 	}
 	return nil
 }

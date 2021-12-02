@@ -30,6 +30,10 @@ type ColumnPages struct {
 	protocol thrift.CompactProtocol
 	decoder  thrift.Decoder
 
+	columnIndex *ColumnIndex
+	offsetIndex *OffsetIndex
+	pageIndex   int
+
 	data               io.LimitedReader
 	page               *compressedPageReader
 	repetitionLevels   io.Reader
@@ -51,10 +55,12 @@ type ColumnPages struct {
 	err error
 }
 
-func newColumnPages(column *Column, metadata *format.ColumnMetaData, bufferSize int) *ColumnPages {
+func newColumnPages(column *Column, metadata *format.ColumnMetaData, columnIndex *ColumnIndex, offsetIndex *OffsetIndex, bufferSize int) *ColumnPages {
 	c := &ColumnPages{
-		column: column,
-		codec:  metadata.Codec,
+		column:      column,
+		codec:       metadata.Codec,
+		columnIndex: columnIndex,
+		offsetIndex: offsetIndex,
 	}
 	pageOffset := metadata.DataPageOffset
 	if metadata.DictionaryPageOffset > 0 {
@@ -162,6 +168,7 @@ func (c *ColumnPages) Next() bool {
 		c.err = c.initDataPageV1(c.pageData)
 		c.compressedPageData = c.pageData
 		c.pageHeader = DataPageHeaderV1{header.DataPageHeader}
+		c.setPageStatistics(&header.DataPageHeader.Statistics)
 
 	case format.DataPageV2:
 		c.err = c.initDataPageV2(header)
@@ -181,6 +188,7 @@ func (c *ColumnPages) Next() bool {
 		}
 		c.compressedPageData = &c.data
 		c.pageHeader = DataPageHeaderV2{header.DataPageHeaderV2}
+		c.setPageStatistics(&header.DataPageHeaderV2.Statistics)
 
 	default:
 		c.repetitionLevels = emptyReader{}
@@ -191,7 +199,25 @@ func (c *ColumnPages) Next() bool {
 		c.err = fmt.Errorf("cannot decode page of type %s", header.Type)
 	}
 
+	c.pageIndex++
 	return true
+}
+
+func (c *ColumnPages) setPageStatistics(stats *format.Statistics) {
+	if c.columnIndex != nil {
+		if i := c.pageIndex; i >= 0 && i < c.columnIndex.NumPages() {
+			minValue, maxValue, _ := c.columnIndex.PageBounds(i)
+			if stats.MinValue == nil {
+				stats.MinValue = minValue
+			}
+			if stats.MaxValue == nil {
+				stats.MaxValue = maxValue
+			}
+			if stats.NullCount == 0 {
+				stats.NullCount = c.columnIndex.PageNulls(i)
+			}
+		}
+	}
 }
 
 // RepetitionLevels returns an io.Reader exposing the raw bytes of the
