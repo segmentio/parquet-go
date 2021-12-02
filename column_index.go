@@ -14,7 +14,7 @@ type ColumnIndex format.ColumnIndex
 
 // PageBounds return min/max bounds for the page at index i in the column index.
 // The last returned value is a boolean indicating whether the page only
-// contained null pages, in which case the min/max values are empty byte
+// contained null values, in which case the min/max values are empty byte
 // slices which must be interpreted as the null parquet value.
 func (index *ColumnIndex) PageBounds(i int) (minValue, maxValue []byte, nullPage bool) {
 	minValue = index.MinValues[i]
