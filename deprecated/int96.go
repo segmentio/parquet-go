@@ -65,7 +65,7 @@ func (i Int96) Len() int {
 	}
 }
 
-// Int96ToBytes convers the slice of Int96 values to a slice of bytes sharing
+// Int96ToBytes converts the slice of Int96 values to a slice of bytes sharing
 // the same backing array.
 func Int96ToBytes(data []Int96) []byte {
 	return unsafe.Slice(*(**byte)(unsafe.Pointer(&data)), 12*len(data))

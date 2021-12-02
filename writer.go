@@ -299,7 +299,7 @@ func (rgw *rowGroupWriter) close() error {
 
 	// The page index is composed of two sections: column and offset indexes.
 	// They are written after the row groups, right before the footer (which
-	// is written by the parent Writer.Close call.
+	// is written by the parent Writer.Close call).
 	//
 	// This section both writes the page index and generates the values of
 	// ColumnIndexOffset, ColumnIndexLength, OffsetIndexOffset, and
