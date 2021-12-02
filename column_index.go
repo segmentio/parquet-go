@@ -12,7 +12,7 @@ import (
 // ColumnIndex is the data structure representing column indexes.
 type ColumnIndex format.ColumnIndex
 
-// Page return min/max bounds for the page at index i in the column index.
+// PageBounds return min/max bounds for the page at index i in the column index.
 // The last returned value is a boolean indicating whether the page only
 // contained null pages, in which case the min/max values are empty byte
 // slices which must be interpreted as the null parquet value.

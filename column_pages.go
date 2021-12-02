@@ -14,10 +14,11 @@ import (
 )
 
 var (
-	// Corrupted is an error returned by the Err method of ColumnPages instances
-	// when they encountered a mismatch between the CRC checksum recorded in a
-	// page header and the one computed while reading the page data.
-	Corrupted = errors.New("corrupted")
+	// ErrCorrupted is an error returned by the Err method of ColumnPages
+	// instances when they encountered a mismatch between the CRC checksum
+	// recorded in a page header and the one computed while reading the page
+	// data.
+	ErrCorrupted = errors.New("corrupted")
 )
 
 // ColumnPages is an iterator type used to scan pages of a column chunk.
@@ -106,7 +107,7 @@ func (c *ColumnPages) Err() error {
 		readerChecksum := c.crc32.Sum32()
 
 		if headerChecksum != readerChecksum {
-			return fmt.Errorf("crc32 checksum mismatch: 0x%08X != 0x%08X: %w", headerChecksum, readerChecksum, Corrupted)
+			return fmt.Errorf("crc32 checksum mismatch: 0x%08X != 0x%08X: %w", headerChecksum, readerChecksum, ErrCorrupted)
 		}
 	}
 
@@ -228,7 +229,7 @@ func (c *ColumnPages) RepetitionLevels() io.Reader { return c.repetitionLevels }
 // definition levels in the current data page.
 func (c *ColumnPages) DefinitionLevels() io.Reader { return c.definitionLevels }
 
-// CompressedDataPage returns an io.Reader exposing the raw bytes of the
+// CompressedPageData returns an io.Reader exposing the raw bytes of the
 // current page before decompression.
 //
 // This method is useful to avoid decompressing data pages when doing low-level

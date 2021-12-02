@@ -61,7 +61,7 @@ func (c *Column) Repeated() bool { return schemaRepetitionTypeOf(c.schema) == fo
 // This method contributes to satisfying the Node interface.
 func (c *Column) NumChildren() int { return len(c.columns) }
 
-// Children returns the names of child columns.
+// ChildNames returns the names of child columns.
 //
 // This method contributes to satisfying the Node interface.
 func (c *Column) ChildNames() []string { return c.names }

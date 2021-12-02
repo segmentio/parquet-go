@@ -291,18 +291,6 @@ func (v Value) RepetitionLevel() int8 { return v.repetitionLevel }
 // DefinitionLevel returns the definition level of v.
 func (v Value) DefinitionLevel() int8 { return v.definitionLevel }
 
-// Clone returns a copy of v which shares no pointers: if the underlying
-// type was BYTE_ARRAY or FIXED_LEN_BYTE_ARRAY, the returned Value references
-// a copy of the underlying byte array.
-func (v Value) Clone() Value {
-	switch v.Kind() {
-	case ByteArray, FixedLenByteArray:
-		return makeValueBytes(v.Kind(), v.Bytes())
-	default:
-		return v
-	}
-}
-
 // Bytes returns the binary representation of v.
 //
 // If v is the null value, an nil byte slice is returned.

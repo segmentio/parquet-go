@@ -419,7 +419,7 @@ func (r *byteArrayPageReader) ReadValue() (Value, error) {
 			n := plain.NextByteArrayLength(r.values[r.offset:])
 			v := r.values[4+r.offset : 4+r.offset+uint(n)]
 			r.offset += 4 + uint(n)
-			r.remain -= 1
+			r.remain--
 			return makeValueBytes(ByteArray, v), nil
 		}
 

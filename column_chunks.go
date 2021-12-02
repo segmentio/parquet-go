@@ -67,8 +67,8 @@ func (c *ColumnChunks) Next() bool {
 	return false
 }
 
-// DataPages returns an iterator over the data pages in the column chunk that
-// the iterator is currently positioned at.
+// Pages returns an iterator over the data pages in the column chunk that
+// c is currently positioned at.
 func (c *ColumnChunks) Pages() *ColumnPages {
 	if c.metadata != nil {
 		return newColumnPages(c.column, c.metadata, c.columnIndex, c.offsetIndex, defaultBufferSize)
