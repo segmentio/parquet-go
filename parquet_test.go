@@ -9,11 +9,6 @@ import (
 	"github.com/segmentio/parquet"
 )
 
-const (
-	v1 = 1
-	v2 = 2
-)
-
 func forEachLeafColumn(col *parquet.Column, do func(*parquet.Column) error) error {
 	children := col.Columns()
 
@@ -114,10 +109,10 @@ func forEachColumnValue(col *parquet.Column, do func(*parquet.Column, parquet.Va
 	})
 }
 
-func createParquetFile(dataPageVersion int, rows rows) (*parquet.File, error) {
+func createParquetFile(rows rows, options ...parquet.WriterOption) (*parquet.File, error) {
 	buffer := new(bytes.Buffer)
 
-	if err := writeParquetFile(buffer, v2, rows); err != nil {
+	if err := writeParquetFile(buffer, rows, options...); err != nil {
 		return nil, err
 	}
 
@@ -125,9 +120,9 @@ func createParquetFile(dataPageVersion int, rows rows) (*parquet.File, error) {
 	return parquet.OpenFile(reader, reader.Size())
 }
 
-func writeParquetFile(w io.Writer, dataPageVersion int, rows rows) error {
+func writeParquetFile(w io.Writer, rows rows, options ...parquet.WriterOption) error {
 	schema := parquet.SchemaOf(rows[0])
-	writer := parquet.NewWriter(w, schema, parquet.DataPageVersion(dataPageVersion))
+	writer := parquet.NewWriter(w, schema, options...)
 
 	for _, row := range rows {
 		if err := writer.WriteRow(row); err != nil {

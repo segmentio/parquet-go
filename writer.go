@@ -37,6 +37,7 @@ type Writer struct {
 	rowGroups   rowGroupWriter
 	initialized bool
 	closed      bool
+	metadata    []format.KeyValue
 }
 
 func NewWriter(writer io.Writer, schema *Schema, options ...WriterOption) *Writer {
@@ -52,9 +53,18 @@ func NewWriter(writer io.Writer, schema *Schema, options ...WriterOption) *Write
 	if err != nil {
 		panic(err)
 	}
-	return &Writer{
+
+	w := &Writer{
 		rowGroups: makeRowGroupWriter(writer, schema, config),
+		metadata:  make([]format.KeyValue, 0, len(config.KeyValueMetadata)),
 	}
+
+	for k, v := range config.KeyValueMetadata {
+		w.metadata = append(w.metadata, format.KeyValue{Key: k, Value: v})
+	}
+
+	sortKeyValueMetadata(w.metadata)
+	return w
 }
 
 func (w *Writer) writeMagicHeader() error {
@@ -96,7 +106,7 @@ func (w *Writer) Close() error {
 		Schema:           schema,
 		NumRows:          numRows,
 		RowGroups:        rowGroups,
-		KeyValueMetadata: nil, // TODO
+		KeyValueMetadata: w.metadata,
 		CreatedBy:        createdBy,
 		ColumnOrders:     nil, // TODO
 	})
