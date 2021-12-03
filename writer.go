@@ -40,13 +40,7 @@ type Writer struct {
 }
 
 func NewWriter(writer io.Writer, schema *Schema, options ...WriterOption) *Writer {
-	config := &WriterConfig{
-		// default configuration
-		ColumnPageBuffers:  &defaultBufferPool,
-		PageBufferSize:     1 * 1024 * 1024,
-		DataPageVersion:    2,
-		RowGroupTargetSize: 128 * 1024 * 1024,
-	}
+	config := DefaultWriterConfig()
 	config.Apply(options...)
 	err := config.Validate()
 	if err != nil {
@@ -237,6 +231,7 @@ func (rgw *rowGroupWriter) init(node Node, path []string, dataPageType format.Pa
 			}
 		}
 
+		columnIndexer := nodeType.NewColumnIndexer(rgw.config.ColumnIndexSizeLimit)
 		dictionary := Dictionary(nil)
 		pageWriter := PageWriter(nil)
 		bufferSize := rgw.config.PageBufferSize
@@ -267,6 +262,7 @@ func (rgw *rowGroupWriter) init(node Node, path []string, dataPageType format.Pa
 				maxRepetitionLevel,
 				maxDefinitionLevel,
 				pageWriter,
+				columnIndexer,
 				rgw.config.DataPageStatistics,
 				// Data pages in version 2 can omit compression when dictionary
 				// encoding is employed; only the dictionary page needs to be
@@ -528,8 +524,7 @@ type columnChunkWriter struct {
 	columnIndexer         ColumnIndexer
 }
 
-func newColumnChunkWriter(buffer pageBuffer, codec compress.Codec, enc encoding.Encoder, dataPageType format.PageType, maxRepetitionLevel, maxDefinitionLevel int8, values PageWriter, writePageStats, isCompressed bool) *columnChunkWriter {
-	typ := values.Type()
+func newColumnChunkWriter(buffer pageBuffer, codec compress.Codec, enc encoding.Encoder, dataPageType format.PageType, maxRepetitionLevel, maxDefinitionLevel int8, values PageWriter, index ColumnIndexer, writePageStats, isCompressed bool) *columnChunkWriter {
 	ccw := &columnChunkWriter{
 		buffer:             buffer,
 		values:             values,
@@ -541,7 +536,7 @@ func newColumnChunkWriter(buffer pageBuffer, codec compress.Codec, enc encoding.
 		isCompressed:       isCompressed,
 		encodings:          make([]format.Encoding, 0, 3),
 		encodingStats:      make([]format.PageEncodingStats, 0, 3),
-		columnIndexer:      typ.NewColumnIndexer(),
+		columnIndexer:      index,
 	}
 
 	if maxRepetitionLevel > 0 {

@@ -36,7 +36,7 @@ type File struct {
 func OpenFile(r io.ReaderAt, size int64, options ...FileOption) (*File, error) {
 	b := make([]byte, 8)
 	f := &File{reader: r, size: size}
-	c := &FileConfig{}
+	c := DefaultFileConfig()
 	c.Apply(options...)
 
 	if err := c.Validate(); err != nil {

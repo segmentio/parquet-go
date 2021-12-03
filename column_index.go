@@ -330,14 +330,18 @@ func (index *doubleColumnIndexer) ColumnIndex() ColumnIndex {
 
 type byteArrayColumnIndexer struct {
 	columnIndexer
+	sizeLimit int
 	minValues []byte
 	maxValues []byte
 	min       []byte
 	max       []byte
 }
 
-func newByteArrayColumnIndexer(typ Type) *byteArrayColumnIndexer {
-	return &byteArrayColumnIndexer{columnIndexer: columnIndexer{typ: typ}}
+func newByteArrayColumnIndexer(typ Type, sizeLimit int) *byteArrayColumnIndexer {
+	return &byteArrayColumnIndexer{
+		columnIndexer: columnIndexer{typ: typ},
+		sizeLimit:     sizeLimit,
+	}
 }
 
 func (index *byteArrayColumnIndexer) Reset() {
@@ -390,8 +394,10 @@ func (index *byteArrayColumnIndexer) ColumnIndex() ColumnIndex {
 	// valid PLAIN encoded list of byte array values.
 	minValues, _ := plain.SplitByteArrayList(index.minValues)
 	maxValues, _ := plain.SplitByteArrayList(index.maxValues)
-	truncateLargeMinByteArrayValues(minValues)
-	truncateLargeMaxByteArrayValues(maxValues)
+	if index.sizeLimit > 0 {
+		truncateLargeMinByteArrayValues(minValues, index.sizeLimit)
+		truncateLargeMaxByteArrayValues(maxValues, index.sizeLimit)
+	}
 	return index.columnIndex(
 		minValues,
 		maxValues,
@@ -400,31 +406,49 @@ func (index *byteArrayColumnIndexer) ColumnIndex() ColumnIndex {
 	)
 }
 
-const (
-	// TODO: come up with a way to configure this?
-	maxValueSize = 16
-)
-
-func truncateLargeMinByteArrayValues(values [][]byte) {
+func truncateLargeMinByteArrayValues(values [][]byte, sizeLimit int) {
 	for i, v := range values {
-		if len(v) > maxValueSize {
-			values[i] = v[:maxValueSize]
+		if len(v) > sizeLimit {
+			values[i] = v[:sizeLimit]
 		}
 	}
 }
 
-func truncateLargeMaxByteArrayValues(values [][]byte) {
+func truncateLargeMaxByteArrayValues(values [][]byte, sizeLimit int) {
+	if !hasLongerValuesThanSizeLimit(values, sizeLimit) {
+		return
+	}
+
+	// Rather than allocating a new byte slice for each value that exceeds the
+	// limit, a single buffer is allocated to hold all the values. This makes
+	// the GC cost of this function a constant rather than being linear to the
+	// number of values in the input slice.
+	b := make([]byte, len(values)*sizeLimit)
+
 	for i, v := range values {
-		if len(v) > maxValueSize {
+		if len(v) > sizeLimit {
 			// If v is the max value we cannot truncate it since there are no
 			// shorter byte sequence with a greater value. This condition should
 			// never occur unless the input was especially constructed to trigger
 			// it.
 			if !isMaxByteArrayValue(v) {
-				values[i] = nextByteArrayValue(v[:maxValueSize])
+				j := (i + 0) * sizeLimit
+				k := (i + 1) * sizeLimit
+				x := b[j:k:k]
+				copy(x, v)
+				values[i] = nextByteArrayValue(x)
 			}
 		}
 	}
+}
+
+func hasLongerValuesThanSizeLimit(values [][]byte, sizeLimit int) bool {
+	for _, v := range values {
+		if len(v) > sizeLimit {
+			return true
+		}
+	}
+	return false
 }
 
 func isMaxByteArrayValue(value []byte) bool {
@@ -437,28 +461,28 @@ func isMaxByteArrayValue(value []byte) bool {
 }
 
 func nextByteArrayValue(value []byte) []byte {
-	next := make([]byte, len(value))
-	copy(next, value)
-	for i := len(next) - 1; i > 0; i-- {
-		if next[i]++; next[i] != 0 {
+	for i := len(value) - 1; i > 0; i-- {
+		if value[i]++; value[i] != 0 {
 			break
 		}
 		// Overflow: increment the next byte
 	}
-	return next
+	return value
 }
 
 type fixedLenByteArrayColumnIndexer struct {
 	columnIndexer
 	size      int
+	sizeLimit int
 	minValues []byte
 	maxValues []byte
 }
 
-func newFixedLenByteArrayColumnIndexer(typ Type) *fixedLenByteArrayColumnIndexer {
+func newFixedLenByteArrayColumnIndexer(typ Type, sizeLimit int) *fixedLenByteArrayColumnIndexer {
 	return &fixedLenByteArrayColumnIndexer{
 		columnIndexer: columnIndexer{typ: typ},
 		size:          typ.Length(),
+		sizeLimit:     sizeLimit,
 	}
 }
 
@@ -485,6 +509,10 @@ func (index *fixedLenByteArrayColumnIndexer) IndexPage(numValues, numNulls int, 
 func (index *fixedLenByteArrayColumnIndexer) ColumnIndex() ColumnIndex {
 	minValues := splitFixedLenByteArrayList(index.size, index.minValues)
 	maxValues := splitFixedLenByteArrayList(index.size, index.maxValues)
+	if index.sizeLimit > 0 && index.sizeLimit < index.size {
+		truncateLargeMinByteArrayValues(minValues, index.sizeLimit)
+		truncateLargeMaxByteArrayValues(maxValues, index.sizeLimit)
+	}
 	return index.columnIndex(
 		minValues,
 		maxValues,

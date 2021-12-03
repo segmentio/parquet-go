@@ -5,6 +5,16 @@ import (
 	"strings"
 )
 
+const (
+	DefaultCreatedBy            = "github.com/segmentio/parquet"
+	DefaultColumnIndexSizeLimit = 16
+	DefaultPageBufferSize       = 1 * 1024 * 1024
+	DefaultDataPageVersion      = 2
+	DefaultRowGroupTargetSize   = 128 * 1024 * 1024
+	DefaultDataPageStatistics   = false
+	DefaultSkipPageIndex        = false
+)
+
 // The FileConfig type carries configuration options for parquet files.
 //
 // FileConfig implements the FileOption interface so it can be used directly
@@ -16,6 +26,14 @@ import (
 //
 type FileConfig struct {
 	SkipPageIndex bool
+}
+
+// DefaultFileConfig returns a new FileConfig value initialized with the
+// default file configuration.
+func DefaultFileConfig() *FileConfig {
+	return &FileConfig{
+		SkipPageIndex: DefaultSkipPageIndex,
+	}
 }
 
 // Apply applies the given list of options to c.
@@ -50,6 +68,14 @@ type ReaderConfig struct {
 	PageBufferSize int
 }
 
+// DefaultReaderConfig returns a new ReaderConfig value initialized with the
+// default reader configuration.
+func DefaultReaderConfig() *ReaderConfig {
+	return &ReaderConfig{
+		PageBufferSize: DefaultPageBufferSize,
+	}
+}
+
 // Apply applies the given list of options to c.
 func (c *ReaderConfig) Apply(options ...ReaderOption) {
 	for _, opt := range options {
@@ -82,12 +108,27 @@ func (c *ReaderConfig) Validate() error {
 //	})
 //
 type WriterConfig struct {
-	CreatedBy          string
-	ColumnPageBuffers  BufferPool
-	PageBufferSize     int
-	DataPageVersion    int
-	DataPageStatistics bool
-	RowGroupTargetSize int64
+	CreatedBy            string
+	ColumnPageBuffers    BufferPool
+	ColumnIndexSizeLimit int
+	PageBufferSize       int
+	DataPageVersion      int
+	DataPageStatistics   bool
+	RowGroupTargetSize   int64
+}
+
+// DefaultWriterConfig returns a new WriterConfig value initialized with the
+// default writer configuration.
+func DefaultWriterConfig() *WriterConfig {
+	return &WriterConfig{
+		CreatedBy:            DefaultCreatedBy,
+		ColumnPageBuffers:    &defaultBufferPool,
+		ColumnIndexSizeLimit: DefaultColumnIndexSizeLimit,
+		PageBufferSize:       DefaultPageBufferSize,
+		DataPageVersion:      DefaultDataPageVersion,
+		DataPageStatistics:   DefaultDataPageStatistics,
+		RowGroupTargetSize:   DefaultRowGroupTargetSize,
+	}
 }
 
 // Apply applies the given list of options to c.
@@ -100,12 +141,13 @@ func (c *WriterConfig) Apply(options ...WriterOption) {
 // Configure applies configuration options from c to config.
 func (c *WriterConfig) Configure(config *WriterConfig) {
 	*config = WriterConfig{
-		CreatedBy:          coalesceString(c.CreatedBy, config.CreatedBy),
-		ColumnPageBuffers:  coalesceBufferPool(c.ColumnPageBuffers, config.ColumnPageBuffers),
-		PageBufferSize:     coalesceInt(c.PageBufferSize, config.PageBufferSize),
-		DataPageVersion:    coalesceInt(c.DataPageVersion, config.DataPageVersion),
-		DataPageStatistics: config.DataPageStatistics,
-		RowGroupTargetSize: coalesceInt64(c.RowGroupTargetSize, config.RowGroupTargetSize),
+		CreatedBy:            coalesceString(c.CreatedBy, config.CreatedBy),
+		ColumnPageBuffers:    coalesceBufferPool(c.ColumnPageBuffers, config.ColumnPageBuffers),
+		ColumnIndexSizeLimit: coalesceInt(c.ColumnIndexSizeLimit, config.ColumnIndexSizeLimit),
+		PageBufferSize:       coalesceInt(c.PageBufferSize, config.PageBufferSize),
+		DataPageVersion:      coalesceInt(c.DataPageVersion, config.DataPageVersion),
+		DataPageStatistics:   config.DataPageStatistics,
+		RowGroupTargetSize:   coalesceInt64(c.RowGroupTargetSize, config.RowGroupTargetSize),
 	}
 }
 
@@ -114,6 +156,7 @@ func (c *WriterConfig) Validate() error {
 	const baseName = "parquet.(*WriterConfig)."
 	return errorInvalidConfiguration(
 		validateNotNil(baseName+"ColumnPageBuffers", c.ColumnPageBuffers),
+		validatePositiveInt(baseName+"ColumnIndexSizeLimit", c.ColumnIndexSizeLimit),
 		validatePositiveInt(baseName+"PageBufferSize", c.PageBufferSize),
 		validatePositiveInt64(baseName+"RowGroupTargetSize", c.RowGroupTargetSize),
 		validateOneOfInt(baseName+"DataPageVersion", c.DataPageVersion, 1, 2),
@@ -179,6 +222,14 @@ func CreatedBy(createdBy string) WriterOption {
 // Defaults to using in-memory buffers.
 func ColumnPageBuffers(buffers BufferPool) WriterOption {
 	return writerOption(func(config *WriterConfig) { config.ColumnPageBuffers = buffers })
+}
+
+// ColumnIndexSizeLimit creates a configuration option to customize the size
+// limit of page boundaries recorded in column indexes.
+//
+// Defaults to 16.
+func ColumnIndexSizeLimit(sizeLimit int) WriterOption {
+	return writerOption(func(config *WriterConfig) { config.ColumnIndexSizeLimit = sizeLimit })
 }
 
 // DataPageVersion creates a configuration option which configures the version of
@@ -296,7 +347,7 @@ func errorInvalidConfiguration(reasons ...error) error {
 			if err == nil {
 				err = new(invalidConfiguration)
 			}
-			err.reasons = append(err.reasons, err)
+			err.reasons = append(err.reasons, reason)
 		}
 	}
 
