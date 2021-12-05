@@ -36,7 +36,7 @@ type File struct {
 func OpenFile(r io.ReaderAt, size int64, options ...FileOption) (*File, error) {
 	b := make([]byte, 8)
 	f := &File{reader: r, size: size}
-	c := &FileConfig{}
+	c := DefaultFileConfig()
 	c.Apply(options...)
 
 	if err := c.Validate(); err != nil {
@@ -88,6 +88,23 @@ func OpenFile(r io.ReaderAt, size int64, options ...FileOption) (*File, error) {
 //
 // If the file did not contain a page index, the method returns two empty slices
 // and a nil error.
+//
+// Only leaf columns have indexes, the returned indexes are arranged using the
+// following layout:
+//
+//	+ -------------- +
+//	| col 0: chunk 0 |
+//	+ -------------- +
+//	| col 1: chunk 0 |
+//	+ -------------- +
+//	| ...            |
+//	+ -------------- +
+//	| col 0: chunk 1 |
+//	+ -------------- +
+//	| col 1: chunk 1 |
+//	+ -------------- +
+//	| ...            |
+//	+ -------------- +
 //
 // This method is useful in combination with the SkipPageIndex option to delay
 // reading the page index section until after the file was opened. Note that in

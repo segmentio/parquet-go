@@ -66,7 +66,7 @@ func (groupType) Less(Value, Value) bool {
 	panic("cannot compare values on parquet group")
 }
 
-func (groupType) NewColumnIndexer() ColumnIndexer {
+func (groupType) NewColumnIndexer(int) ColumnIndexer {
 	panic("cannot create column indexer from parquet group")
 }
 
