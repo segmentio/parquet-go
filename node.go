@@ -206,6 +206,53 @@ func fieldRepetitionTypeOf(node Node) *format.FieldRepetitionType {
 	}
 }
 
+type Group map[string]Node
+
+func (g Group) Type() Type { return groupType{} }
+
+func (g Group) Optional() bool { return false }
+
+func (g Group) Repeated() bool { return false }
+
+func (g Group) Required() bool { return true }
+
+func (g Group) NumChildren() int { return len(g) }
+
+func (g Group) ChildNames() []string {
+	names := make([]string, 0, len(g))
+	for name := range g {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func (g Group) ChildByName(name string) Node {
+	n, ok := g[name]
+	if ok {
+		return n
+	}
+	panic("column not found in parquet group: " + name)
+}
+
+func (g Group) Encoding() []encoding.Encoding {
+	encodings := make([]encoding.Encoding, 0, len(g))
+	for _, node := range g {
+		encodings = append(encodings, node.Encoding()...)
+	}
+	sortEncodings(encodings)
+	return dedupeSortedEncodings(encodings)
+}
+
+func (g Group) Compression() []compress.Codec {
+	codecs := make([]compress.Codec, 0, len(g))
+	for _, node := range g {
+		codecs = append(codecs, node.Compression()...)
+	}
+	sortCodecs(codecs)
+	return dedupeSortedCodecs(codecs)
+}
+
 // Traverse implements the parquet node traversal algorithm, which produces the
 // sequence of parquet values for each column of the node schema by calling the
 // given traveral's Traverse method.

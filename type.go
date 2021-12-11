@@ -26,15 +26,19 @@ const (
 	FixedLenByteArray Kind = Kind(format.FixedLenByteArray)
 )
 
-func (k Kind) String() string {
-	return format.Type(k).String()
-}
+// String returns a human-readable representation of the physical type.
+func (k Kind) String() string { return format.Type(k).String() }
 
 // The Type interface represents logical types of the parquet type system.
+//
+// Types are immutable and therefore safe to access from multiple goroutines.
 type Type interface {
-	fmt.Stringer
+	// Returns a human-redable representation of the parquet type.
+	String() string
 
 	// Returns the Kind value representing the underlying physical type.
+	//
+	// The method panics if it is called on a group type.
 	Kind() Kind
 
 	// For integer and floating point physical types, the method returns the
@@ -49,10 +53,23 @@ type Type interface {
 	// Compares two values and returns whether the first one is less than the
 	// other.
 	//
-	// The values Kind must match the type, otherewise the result is undefined.
+	// The values Kind must match the type, otherwise the result is undefined.
+	//
+	// The method panics if it is called on a group type.
 	Less(Value, Value) bool
 
-	// Returns the physical type as a *format.Type value.
+	// ColumnOrder returns the type's column order. For group types, this method
+	// returns nil.
+	//
+	// The order describes the comprison logic implemented by the Less method.
+	//
+	// As an optimization, the method may return the same pointer across
+	// multiple calls. Applications must treat the returned value as immutable,
+	// mutating the value will result in undefined behavior.
+	ColumnOrder() *format.ColumnOrder
+
+	// Returns the physical type as a *format.Type value. For group types, this
+	// method returns nil.
 	//
 	// As an optimization, the method may return the same pointer across
 	// multiple calls. Applications must treat the returned value as immutable,
@@ -68,7 +85,7 @@ type Type interface {
 	LogicalType() *format.LogicalType
 
 	// Returns the logical type's equivaleent converted type. When there are
-	// no equivalent convertted type, the method returns nil.
+	// no equivalent converted type, the method returns nil.
 	//
 	// As an optimization, the method may return the same pointer across
 	// multiple calls. Applications must treat the returned value as immutable,
@@ -82,16 +99,30 @@ type Type interface {
 	// FIXED_LEN_BYTE_ARRAY types currently take this value into account.
 	//
 	// A value of zero or less means no limits.
+	//
+	// The method panics if it is called on a group type.
 	NewColumnIndexer(sizeLimit int) ColumnIndexer
 
 	// Creates a dictionary holding values of this type.
+	//
+	// The method panics if it is called on a group type.
 	NewDictionary(bufferSize int) Dictionary
 
 	// Creates a page writer for values of this type.
+	//
+	// The method panics if it is called on a group type.
 	NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader
 
 	// Creates a page reader for values of this type.
+	//
+	// The method panics if it is called on a group type.
 	NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter
+}
+
+// In the current parquet version supported by this library, only type-defined
+// orders are supported.
+var typeDefinedColumnOrder = format.ColumnOrder{
+	TypeOrder: new(format.TypeDefinedOrder),
 }
 
 var physicalTypes = [...]format.Type{
@@ -171,6 +202,8 @@ func typeLengthOf(t Type) *int32 {
 }
 
 type primitiveType struct{}
+
+func (t primitiveType) ColumnOrder() *format.ColumnOrder { return &typeDefinedColumnOrder }
 
 func (t primitiveType) LogicalType() *format.LogicalType { return nil }
 
@@ -526,6 +559,10 @@ func (t *intType) Less(v1, v2 Value) bool {
 	}
 }
 
+func (t *intType) ColumnOrder() *format.ColumnOrder {
+	return &typeDefinedColumnOrder
+}
+
 func (t *intType) PhyiscalType() *format.Type {
 	if t.BitWidth == 64 {
 		return &physicalTypes[Int64]
@@ -647,6 +684,10 @@ func (t *stringType) Less(v1, v2 Value) bool {
 	return bytes.Compare(v1.ByteArray(), v2.ByteArray()) < 0
 }
 
+func (t *stringType) ColumnOrder() *format.ColumnOrder {
+	return &typeDefinedColumnOrder
+}
+
 func (t *stringType) PhyiscalType() *format.Type {
 	return &physicalTypes[ByteArray]
 }
@@ -692,6 +733,10 @@ func (t *uuidType) Less(v1, v2 Value) bool {
 	return bytes.Compare(v1.ByteArray(), v2.ByteArray()) < 0
 }
 
+func (t *uuidType) ColumnOrder() *format.ColumnOrder {
+	return &typeDefinedColumnOrder
+}
+
 func (t *uuidType) PhyiscalType() *format.Type {
 	return &physicalTypes[ByteArray]
 }
@@ -733,6 +778,10 @@ func (t *enumType) Length() int { return 0 }
 
 func (t *enumType) Less(v1, v2 Value) bool {
 	return bytes.Compare(v1.ByteArray(), v2.ByteArray()) < 0
+}
+
+func (t *enumType) ColumnOrder() *format.ColumnOrder {
+	return &typeDefinedColumnOrder
 }
 
 func (t *enumType) PhyiscalType() *format.Type {
@@ -780,6 +829,10 @@ func (t *jsonType) Less(v1, v2 Value) bool {
 	return bytes.Compare(v1.ByteArray(), v2.ByteArray()) < 0
 }
 
+func (t *jsonType) ColumnOrder() *format.ColumnOrder {
+	return &typeDefinedColumnOrder
+}
+
 func (t *jsonType) PhyiscalType() *format.Type {
 	return &physicalTypes[ByteArray]
 }
@@ -825,6 +878,10 @@ func (t *bsonType) Less(v1, v2 Value) bool {
 	return bytes.Compare(v1.ByteArray(), v2.ByteArray()) < 0
 }
 
+func (t *bsonType) ColumnOrder() *format.ColumnOrder {
+	return &typeDefinedColumnOrder
+}
+
 func (t *bsonType) PhyiscalType() *format.Type {
 	return &physicalTypes[ByteArray]
 }
@@ -867,6 +924,10 @@ func (t *dateType) Kind() Kind { return Int32 }
 func (t *dateType) Length() int { return 32 }
 
 func (t *dateType) Less(v1, v2 Value) bool { return v1.Int32() < v2.Int32() }
+
+func (t *dateType) ColumnOrder() *format.ColumnOrder {
+	return &typeDefinedColumnOrder
+}
 
 func (t *dateType) PhyiscalType() *format.Type { return &physicalTypes[Int32] }
 
@@ -967,6 +1028,10 @@ func (t *timeType) Less(v1, v2 Value) bool {
 	}
 }
 
+func (t *timeType) ColumnOrder() *format.ColumnOrder {
+	return &typeDefinedColumnOrder
+}
+
 func (t *timeType) PhyiscalType() *format.Type {
 	if t.Unit.Millis != nil {
 		return &physicalTypes[Int32]
@@ -1039,6 +1104,8 @@ func (t *timestampType) Length() int { return 64 }
 
 func (t *timestampType) Less(v1, v2 Value) bool { return v1.Int64() < v2.Int64() }
 
+func (t *timestampType) ColumnOrder() *format.ColumnOrder { return &typeDefinedColumnOrder }
+
 func (t *timestampType) PhyiscalType() *format.Type { return &physicalTypes[Int64] }
 
 func (t *timestampType) LogicalType() *format.LogicalType {
@@ -1093,6 +1160,8 @@ func (t *listType) Length() int { return 0 }
 
 func (t *listType) Less(Value, Value) bool { panic("cannot compare values on parquet LIST type") }
 
+func (t *listType) ColumnOrder() *format.ColumnOrder { return nil }
+
 func (t *listType) PhyiscalType() *format.Type { return nil }
 
 func (t *listType) LogicalType() *format.LogicalType {
@@ -1145,6 +1214,8 @@ func (t *mapType) Length() int { return 0 }
 
 func (t *mapType) Less(Value, Value) bool { panic("cannot compare values on parquet MAP type") }
 
+func (t *mapType) ColumnOrder() *format.ColumnOrder { return nil }
+
 func (t *mapType) PhyiscalType() *format.Type { return nil }
 
 func (t *mapType) LogicalType() *format.LogicalType {
@@ -1181,6 +1252,8 @@ func (t *nullType) Length() int { return 0 }
 
 func (t *nullType) Less(Value, Value) bool { panic("cannot compare values on parquet NULL type") }
 
+func (t *nullType) ColumnOrder() *format.ColumnOrder { return nil }
+
 func (t *nullType) PhyiscalType() *format.Type { return nil }
 
 func (t *nullType) LogicalType() *format.LogicalType {
@@ -1204,3 +1277,41 @@ func (t *nullType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageR
 func (t *nullType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
 	panic("cannot create page writer for parquet NULL type")
 }
+
+type groupType struct{}
+
+func (groupType) String() string { return "group" }
+
+func (groupType) Kind() Kind {
+	panic("cannot call Kind on parquet group")
+}
+
+func (groupType) Less(Value, Value) bool {
+	panic("cannot compare values on parquet group")
+}
+
+func (groupType) NewColumnIndexer(int) ColumnIndexer {
+	panic("cannot create column indexer from parquet group")
+}
+
+func (groupType) NewDictionary(int) Dictionary {
+	panic("cannot create dictionary from parquet group")
+}
+
+func (groupType) NewPageReader(encoding.Decoder, int) PageReader {
+	panic("cannot create page reader from parquet group")
+}
+
+func (groupType) NewPageWriter(encoding.Encoder, int) PageWriter {
+	panic("cannot create page writer from parquet group")
+}
+
+func (groupType) Length() int { return 0 }
+
+func (groupType) ColumnOrder() *format.ColumnOrder { return nil }
+
+func (groupType) PhyiscalType() *format.Type { return nil }
+
+func (groupType) LogicalType() *format.LogicalType { return nil }
+
+func (groupType) ConvertedType() *deprecated.ConvertedType { return nil }
