@@ -321,8 +321,8 @@ type SchemaElement struct {
 	// See the DECIMAL converted type for more details.
 	//
 	// This is superseded by using the DecimalType annotation in logicalType.
-	Scale     int32 `thrift:"7,optional"`
-	Precision int32 `thrift:"8,optional"`
+	Scale     *int32 `thrift:"7,optional"`
+	Precision *int32 `thrift:"8,optional"`
 
 	// When the original schema supports field ids, this will save the
 	// original field id in the parquet schema.

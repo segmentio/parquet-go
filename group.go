@@ -58,6 +58,8 @@ func (g Group) Compression() []compress.Codec {
 
 type groupType struct{}
 
+func (groupType) String() string { return "group" }
+
 func (groupType) Kind() Kind {
 	panic("cannot call Kind on parquet group")
 }

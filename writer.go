@@ -202,6 +202,16 @@ func (rgw *rowGroupWriter) init(node Node, path []string, dataPageType format.Pa
 		repetitionType = fieldRepetitionTypeOf(node)
 	}
 
+	// For backward compatibility with older readers, the parquet specification
+	// recommends to set the scale and precision on schema elements when the
+	// column is of logical type decimal.
+	logicalType := nodeType.LogicalType()
+	scale, precision := (*int32)(nil), (*int32)(nil)
+	if logicalType != nil && logicalType.Decimal != nil {
+		scale = &logicalType.Decimal.Scale
+		precision = &logicalType.Decimal.Precision
+	}
+
 	rgw.colSchema = append(rgw.colSchema, format.SchemaElement{
 		Type:           nodeType.PhyiscalType(),
 		TypeLength:     typeLengthOf(nodeType),
@@ -209,7 +219,9 @@ func (rgw *rowGroupWriter) init(node Node, path []string, dataPageType format.Pa
 		Name:           path[len(path)-1],
 		NumChildren:    int32(node.NumChildren()),
 		ConvertedType:  nodeType.ConvertedType(),
-		LogicalType:    nodeType.LogicalType(),
+		Scale:          scale,
+		Precision:      precision,
+		LogicalType:    logicalType,
 	})
 
 	if names := node.ChildNames(); len(names) > 0 {
