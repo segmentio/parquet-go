@@ -115,6 +115,7 @@ type WriterConfig struct {
 	DataPageVersion      int
 	DataPageStatistics   bool
 	RowGroupTargetSize   int64
+	KeyValueMetadata     map[string]string
 }
 
 // DefaultWriterConfig returns a new WriterConfig value initialized with the
@@ -140,6 +141,15 @@ func (c *WriterConfig) Apply(options ...WriterOption) {
 
 // Configure applies configuration options from c to config.
 func (c *WriterConfig) Configure(config *WriterConfig) {
+	keyValueMetadata := config.KeyValueMetadata
+	if len(c.KeyValueMetadata) > 0 {
+		if keyValueMetadata == nil {
+			keyValueMetadata = make(map[string]string, len(c.KeyValueMetadata))
+		}
+		for k, v := range c.KeyValueMetadata {
+			keyValueMetadata[k] = v
+		}
+	}
 	*config = WriterConfig{
 		CreatedBy:            coalesceString(c.CreatedBy, config.CreatedBy),
 		ColumnPageBuffers:    coalesceBufferPool(c.ColumnPageBuffers, config.ColumnPageBuffers),
@@ -148,6 +158,7 @@ func (c *WriterConfig) Configure(config *WriterConfig) {
 		DataPageVersion:      coalesceInt(c.DataPageVersion, config.DataPageVersion),
 		DataPageStatistics:   config.DataPageStatistics,
 		RowGroupTargetSize:   coalesceInt64(c.RowGroupTargetSize, config.RowGroupTargetSize),
+		KeyValueMetadata:     keyValueMetadata,
 	}
 }
 
@@ -256,6 +267,29 @@ func DataPageStatistics(enabled bool) WriterOption {
 // Defaults to 128 MiB.
 func RowGroupTargetSize(size int64) WriterOption {
 	return writerOption(func(config *WriterConfig) { config.RowGroupTargetSize = size })
+}
+
+// KeyValueMetadata creates a configuration option which adds key/value metadata
+// to add to the metadata of parquet files.
+//
+// This option is additive, it may be used multiple times to add more than one
+// key/value pair.
+//
+// Keys are assumed to be unique, if the same key is repeated multiple times the
+// last value is retained. While the parquet format does not require unique keys,
+// this design decision was made to optimize for the most common use case where
+// applications leverage this extension mechanism to associate single values to
+// keys. This may create incompatibilities with other parquet libraries, or may
+// cause some key/value pairs to be lost when open parquet files written with
+// repeated keys. We can revisit this decision if it ever becomes a blocker.
+func KeyValueMetadata(key, value string) WriterOption {
+	return writerOption(func(config *WriterConfig) {
+		if config.KeyValueMetadata == nil {
+			config.KeyValueMetadata = map[string]string{key: value}
+		} else {
+			config.KeyValueMetadata[key] = value
+		}
+	})
 }
 
 type fileOption func(*FileConfig)

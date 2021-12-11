@@ -79,6 +79,8 @@ func OpenFile(r io.ReaderAt, size int64, options ...FileOption) (*File, error) {
 	if f.root, err = openColumns(f); err != nil {
 		return nil, fmt.Errorf("opening columns of parquet file: %w", err)
 	}
+
+	sortKeyValueMetadata(f.metadata.KeyValueMetadata)
 	return f, nil
 }
 
@@ -201,6 +203,14 @@ func (f *File) ColumnIndexes() []ColumnIndex { return f.columnIndexes }
 // If the file did not contain an offset index, the method returns an empty
 // slice and nil error.
 func (f *File) OffsetIndexes() []OffsetIndex { return f.offsetIndexes }
+
+// Lookup returns the value associated with the given key in the file key/value
+// metadata.
+//
+// The ok boolean will be true if the key was found, false otherwise.
+func (f *File) Lookup(key string) (value string, ok bool) {
+	return lookupKeyValueMetadata(f.metadata.KeyValueMetadata, key)
+}
 
 func (f *File) readColumnIndex(chunk *format.ColumnChunk) (*ColumnIndex, error) {
 	columnIndex := new(format.ColumnIndex)

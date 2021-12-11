@@ -98,7 +98,7 @@ func TestColumnPageIndex(t *testing.T) {
 
 func testColumnPageIndex(t *testing.T, rows rows) bool {
 	if len(rows) > 0 {
-		f, err := createParquetFile(v2, rows)
+		f, err := createParquetFile(rows)
 		if err != nil {
 			t.Error(err)
 			return false

@@ -14,6 +14,11 @@ import (
 	"github.com/segmentio/parquet"
 )
 
+const (
+	v1 = 1
+	v2 = 2
+)
+
 func scanParquetFile(f *os.File) error {
 	s, err := f.Stat()
 	if err != nil {
@@ -45,7 +50,7 @@ func generateParquetFile(dataPageVersion int, rows rows) ([]byte, error) {
 	defer os.Remove(path)
 	//fmt.Println(path)
 
-	if err := writeParquetFile(tmp, dataPageVersion, rows); err != nil {
+	if err := writeParquetFile(tmp, rows, parquet.DataPageVersion(dataPageVersion)); err != nil {
 		return nil, err
 	}
 

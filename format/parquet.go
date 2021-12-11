@@ -692,7 +692,7 @@ type PageEncodingStats struct {
 	Count int32 `thrift:"3,required"`
 }
 
-// Description for column metadata
+// Description for column metadata.
 type ColumnMetaData struct {
 	// Type of this column.
 	Type Type `thrift:"1,required"`
