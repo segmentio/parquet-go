@@ -3,15 +3,20 @@ package parquet_test
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
+	"strings"
 	"testing"
 
 	"github.com/hexops/gotextdiff"
 	"github.com/hexops/gotextdiff/myers"
 	"github.com/hexops/gotextdiff/span"
 	"github.com/segmentio/parquet"
+)
+
+const (
+	v1 = 1
+	v2 = 2
 )
 
 func scanParquetFile(f *os.File) error {
@@ -25,78 +30,17 @@ func scanParquetFile(f *os.File) error {
 		return err
 	}
 
-	return scanParquetColumns(p.Root())
+	return scanParquetValues(p.Root())
 }
 
-func scanParquetColumns(col *parquet.Column) error {
-	const bufferSize = 1024
-	chunks := col.Chunks()
-
-	for chunks.Next() {
-		pages := chunks.Pages()
-		dictionary := (parquet.Dictionary)(nil)
-
-		for pages.Next() {
-			switch header := pages.PageHeader().(type) {
-			case parquet.DictionaryPageHeader:
-				decoder := header.Encoding().NewDecoder(pages.PageData())
-				dictionary = col.Type().NewDictionary(0)
-
-				if err := dictionary.ReadFrom(decoder); err != nil {
-					return err
-				}
-
-			case parquet.DataPageHeader:
-				var pageReader parquet.PageReader
-				var pageData = header.Encoding().NewDecoder(pages.PageData())
-
-				if dictionary != nil {
-					pageReader = parquet.NewIndexedPageReader(pageData, bufferSize, dictionary)
-				} else {
-					pageReader = col.Type().NewPageReader(pageData, bufferSize)
-				}
-
-				dataPageReader := parquet.NewDataPageReader(
-					header.RepetitionLevelEncoding().NewDecoder(pages.RepetitionLevels()),
-					header.DefinitionLevelEncoding().NewDecoder(pages.DefinitionLevels()),
-					header.NumValues(),
-					pageReader,
-					col.MaxRepetitionLevel(),
-					col.MaxDefinitionLevel(),
-					bufferSize,
-				)
-
-				for {
-					v, err := dataPageReader.ReadValue()
-					if err != nil {
-						if err != io.EOF {
-							return err
-						}
-						break
-					}
-					fmt.Printf("> %+v\n", v)
-				}
-
-			default:
-				return fmt.Errorf("unsupported page header type: %#v", header)
-			}
-
-			if err := pages.Err(); err != nil {
-				return err
-			}
-		}
-	}
-
-	for _, child := range col.Columns() {
-		if err := scanParquetColumns(child); err != nil {
-			return err
-		}
-	}
-
-	return nil
+func scanParquetValues(col *parquet.Column) error {
+	return forEachColumnValue(col, func(leaf *parquet.Column, value parquet.Value) error {
+		fmt.Printf("%s > %+v\n", strings.Join(leaf.Path(), "."), value)
+		return nil
+	})
 }
 
-func generateParquetFile(dataPageVersion int, rows ...interface{}) ([]byte, error) {
+func generateParquetFile(dataPageVersion int, rows rows) ([]byte, error) {
 	tmp, err := os.CreateTemp("/tmp", "*.parquet")
 	if err != nil {
 		return nil, err
@@ -104,17 +48,9 @@ func generateParquetFile(dataPageVersion int, rows ...interface{}) ([]byte, erro
 	defer tmp.Close()
 	path := tmp.Name()
 	defer os.Remove(path)
+	//fmt.Println(path)
 
-	schema := parquet.SchemaOf(rows[0])
-	writer := parquet.NewWriter(tmp, schema, parquet.DataPageVersion(dataPageVersion))
-
-	for _, row := range rows {
-		if err := writer.WriteRow(row); err != nil {
-			return nil, err
-		}
-	}
-
-	if err := writer.Close(); err != nil {
+	if err := writeParquetFile(tmp, rows, parquet.DataPageVersion(dataPageVersion)); err != nil {
 		return nil, err
 	}
 
@@ -138,7 +74,7 @@ var writerTests = []struct {
 }{
 	{
 		scenario: "page v1 with dictionary encoding",
-		version:  1,
+		version:  v1,
 		rows: []interface{}{
 			&firstAndLastName{FirstName: "Han", LastName: "Solo"},
 			&firstAndLastName{FirstName: "Leia", LastName: "Skywalker"},
@@ -146,8 +82,8 @@ var writerTests = []struct {
 		},
 		dump: `row group 0
 --------------------------------------------------------------------------------
-first_name:  BINARY ZSTD DO:4 FPO:55 SZ:114/96/0.84 VC:3 ENC:PLAIN,RLE [more]...
-last_name:   BINARY ZSTD DO:118 FPO:167 SZ:122/104/0.85 VC:3 ENC:PLAIN [more]...
+first_name:  BINARY ZSTD DO:4 FPO:55 SZ:90/72/0.80 VC:3 ENC:PLAIN,RLE, [more]...
+last_name:   BINARY ZSTD DO:94 FPO:143 SZ:86/68/0.79 VC:3 ENC:PLAIN,RL [more]...
 
     first_name TV=3 RL=0 DL=0 DS: 3 DE:PLAIN
     ----------------------------------------------------------------------------
@@ -175,7 +111,7 @@ value 3: R:0 D:0 V:Skywalker
 
 	{ // same as the previous test but uses page v2 where data pages aren't compressed
 		scenario: "page v2 with dictionary encoding",
-		version:  2,
+		version:  v2,
 		rows: []interface{}{
 			&firstAndLastName{FirstName: "Han", LastName: "Solo"},
 			&firstAndLastName{FirstName: "Leia", LastName: "Skywalker"},
@@ -183,8 +119,8 @@ value 3: R:0 D:0 V:Skywalker
 		},
 		dump: `row group 0
 --------------------------------------------------------------------------------
-first_name:  BINARY ZSTD DO:4 FPO:55 SZ:110/101/0.92 VC:3 ENC:RLE_DICT [more]...
-last_name:   BINARY ZSTD DO:114 FPO:163 SZ:118/109/0.92 VC:3 ENC:RLE_D [more]...
+first_name:  BINARY ZSTD DO:4 FPO:55 SZ:86/77/0.90 VC:3 ENC:RLE_DICTIO [more]...
+last_name:   BINARY ZSTD DO:90 FPO:139 SZ:82/73/0.89 VC:3 ENC:RLE_DICT [more]...
 
     first_name TV=3 RL=0 DL=0 DS: 3 DE:PLAIN
     ----------------------------------------------------------------------------
@@ -212,7 +148,7 @@ value 3: R:0 D:0 V:Skywalker
 
 	{
 		scenario: "example from the twitter blog",
-		version:  2,
+		version:  v2,
 		rows: []interface{}{
 			AddressBook{
 				Owner: "Julien Le Dem",
@@ -239,26 +175,26 @@ value 3: R:0 D:0 V:Skywalker
 		dump: `row group 0
 --------------------------------------------------------------------------------
 contacts:
-.name:              BINARY UNCOMPRESSED DO:0 FPO:4 SZ:145/145/1.00 VC:3 [more]...
-.phoneNumber:       BINARY SNAPPY DO:0 FPO:149 SZ:118/116/0.98 VC:3 EN [more]...
-owner:              BINARY ZSTD DO:0 FPO:267 SZ:127/118/0.93 VC:2 ENC:PLAIN,RLE [more]...
-ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:394 SZ:155/130/0.84 VC:3 ENC:PLAIN,RLE [more]...
+.name:              BINARY UNCOMPRESSED DO:0 FPO:4 SZ:75/75/1.00 VC:3  [more]...
+.phoneNumber:       BINARY SNAPPY DO:0 FPO:79 SZ:58/56/0.97 VC:3 ENC:PLAIN,RLE [more]...
+owner:              BINARY ZSTD DO:0 FPO:137 SZ:69/60/0.87 VC:2 ENC:PLAIN,RLE [more]...
+ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:206 SZ:95/70/0.74 VC:3 ENC:PLAIN,RLE [more]...
 
     contacts.name TV=3 RL=1 DL=1
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[min: Chris Aniszczyk, max:  [more]... VC:3
+    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[no stats for this column] SZ:47 VC:3
 
     contacts.phoneNumber TV=3 RL=1 DL=2
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[min: 555 987 6543, max: 555 [more]... VC:3
+    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[no stats for this column] SZ:28 VC:3
 
     owner TV=2 RL=0 DL=0
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[min: A. Nonymous, max: Juli [more]... VC:2
+    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[no stats for this column] SZ:32 VC:2
 
     ownerPhoneNumbers TV=3 RL=1 DL=1
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[min: 555 123 4567, max: 555 [more]... VC:3
+    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[no stats for this column] SZ:42 VC:3
 
 BINARY contacts.name
 --------------------------------------------------------------------------------
@@ -303,7 +239,7 @@ func TestWriter(t *testing.T) {
 		t.Run(test.scenario, func(t *testing.T) {
 			t.Parallel()
 
-			b, err := generateParquetFile(dataPageVersion, rows...)
+			b, err := generateParquetFile(dataPageVersion, makeRows(rows))
 			if err != nil {
 				t.Logf("\n%s", string(b))
 				t.Fatal(err)

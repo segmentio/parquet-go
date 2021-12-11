@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/segmentio/parquet/deprecated"
 	"github.com/segmentio/parquet/format"
 )
 
@@ -105,7 +106,7 @@ type Encoder interface {
 	EncodeInt64(data []int64) error
 
 	// Encodes an array of 96 bits integer values using this encoder.
-	EncodeInt96(data [][12]byte) error
+	EncodeInt96(data []deprecated.Int96) error
 
 	// Encodes an array of 32 bits floating point values using this encoder.
 	EncodeFloat(data []float32) error
@@ -186,7 +187,7 @@ type Decoder interface {
 	// Decodes an array of 96 bits integer values using this decoder, returning
 	// the number of decoded values, or io.EOF if the end of the underlying
 	// io.Reader was reached.
-	DecodeInt96(data [][12]byte) (int, error)
+	DecodeInt96(data []deprecated.Int96) (int, error)
 
 	// Decodes an array of 32 bits floating point values using this decoder,
 	// returning the number of decoded values, or io.EOF if the end of the

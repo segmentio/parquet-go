@@ -10,6 +10,7 @@ import (
 	"unsafe"
 
 	"github.com/google/uuid"
+	"github.com/segmentio/parquet/deprecated"
 )
 
 // The Value type is similar to the reflect.Value abstraction of Go values, but
@@ -145,12 +146,6 @@ func makeValue(k Kind, v reflect.Value) Value {
 			return makeValueInt64(int64(v.Uint()))
 		}
 
-	case Int96:
-		if vt := v.Type(); vt.Kind() == reflect.Array && vt.Elem().Kind() == reflect.Uint8 && vt.Len() == 12 {
-			b := v.Slice(0, v.Len()).Bytes()
-			return makeValueInt96(*(*int96)(b))
-		}
-
 	case Float:
 		switch v.Kind() {
 		case reflect.Float32:
@@ -209,11 +204,11 @@ func makeValueInt64(value int64) Value {
 	}
 }
 
-func makeValueInt96(value int96) Value {
+func makeValueInt96(value deprecated.Int96) Value {
 	return Value{
 		kind: ^int16(Int96),
-		u64:  binary.LittleEndian.Uint64(value[:8]),
-		u32:  binary.LittleEndian.Uint32(value[8:]),
+		u64:  uint64(value[0]) | (uint64(value[1]) << 32),
+		u32:  value[2],
 	}
 }
 
@@ -262,40 +257,6 @@ func makeValueByteArray(kind Kind, data *byte, size int) Value {
 	}
 }
 
-func makeValueKind(k Kind, b []byte) Value {
-	if b != nil {
-		switch k {
-		case Boolean:
-			if len(b) == 1 {
-				return makeValueBoolean(b[0] != 0)
-			}
-		case Int32:
-			if len(b) == 4 {
-				return makeValueInt32(int32(binary.LittleEndian.Uint32(b)))
-			}
-		case Int64:
-			if len(b) == 8 {
-				return makeValueInt64(int64(binary.LittleEndian.Uint64(b)))
-			}
-		case Int96:
-			if len(b) == 12 {
-				return makeValueInt96(*(*int96)(b))
-			}
-		case Float:
-			if len(b) == 4 {
-				return makeValueFloat(math.Float32frombits(binary.LittleEndian.Uint32(b)))
-			}
-		case Double:
-			if len(b) == 8 {
-				return makeValueDouble(math.Float64frombits(binary.LittleEndian.Uint64(b)))
-			}
-		case ByteArray, FixedLenByteArray:
-			return makeValueBytes(k, b)
-		}
-	}
-	return Value{}
-}
-
 // Kind returns the kind of v, which represents its parquet physical type.
 func (v Value) Kind() Kind { return ^Kind(v.kind) }
 
@@ -312,7 +273,7 @@ func (v Value) Int32() int32 { return int32(v.u32) }
 func (v Value) Int64() int64 { return int64(v.u64) }
 
 // Int96 returns v as a int96, assuming the underlying type is INT96.
-func (v Value) Int96() [12]byte { return makeInt96(v.u64, v.u32) }
+func (v Value) Int96() deprecated.Int96 { return makeInt96(v.u64, v.u32) }
 
 // Float returns v as a float32, assuming the underlying type is FLOAT.
 func (v Value) Float() float32 { return math.Float32frombits(v.u32) }
@@ -330,22 +291,14 @@ func (v Value) RepetitionLevel() int8 { return v.repetitionLevel }
 // DefinitionLevel returns the definition level of v.
 func (v Value) DefinitionLevel() int8 { return v.definitionLevel }
 
-// Clone returns a copy of v which shares no pointers: if the underlying
-// type was BYTE_ARRAY or FIXED_LEN_BYTE_ARRAY, the returned Value references
-// a copy of the underlying byte array.
-func (v Value) Clone() Value {
-	switch v.Kind() {
-	case ByteArray, FixedLenByteArray:
-		return makeValueBytes(v.Kind(), v.Bytes())
-	default:
-		return v
-	}
-}
-
 // Bytes returns the binary representation of v.
+//
+// If v is the null value, an nil byte slice is returned.
 func (v Value) Bytes() []byte { return v.AppendBytes(nil) }
 
 // AppendBytes appends the binary representation of v to b.
+//
+// If v is the null value, b is returned unchanged.
 func (v Value) AppendBytes(b []byte) []byte {
 	buf := [12]byte{}
 	switch v.Kind() {
@@ -473,10 +426,12 @@ func (v Value) Level(repetitionLevel, definitionLevel int8) Value {
 	return v
 }
 
-func makeInt96(lo uint64, hi uint32) (i96 int96) {
-	binary.LittleEndian.PutUint64(i96[:8], uint64(lo))
-	binary.LittleEndian.PutUint32(i96[8:], uint32(hi))
-	return
+func makeInt96(lo uint64, hi uint32) (i96 deprecated.Int96) {
+	return deprecated.Int96{
+		0: uint32(lo),
+		1: uint32(lo >> 32),
+		2: hi,
+	}
 }
 
 // Equal returns true if v1 and v2 are equal.

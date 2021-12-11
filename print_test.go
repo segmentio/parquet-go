@@ -123,16 +123,30 @@ func TestPrint(t *testing.T) {
 		},
 
 		{
-			node: parquet.Group{"ratio": parquet.Decimal(0, 9, parquet.FloatType)},
+			node: parquet.Group{"ratio": parquet.Leaf(parquet.FloatType)},
 			print: `message Test {
-	required float ratio (DECIMAL(0,9));
+	required float ratio;
 }`,
 		},
 
 		{
-			node: parquet.Group{"ratio": parquet.Decimal(0, 18, parquet.DoubleType)},
+			node: parquet.Group{"ratio": parquet.Leaf(parquet.DoubleType)},
 			print: `message Test {
-	required double ratio (DECIMAL(0,18));
+	required double ratio;
+}`,
+		},
+
+		{
+			node: parquet.Group{"cost": parquet.Decimal(0, 9, parquet.Int32Type)},
+			print: `message Test {
+	required int32 cost (DECIMAL(0,9));
+}`,
+		},
+
+		{
+			node: parquet.Group{"cost": parquet.Decimal(0, 18, parquet.Int64Type)},
+			print: `message Test {
+	required int64 cost (DECIMAL(0,18));
 }`,
 		},
 

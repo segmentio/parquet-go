@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/segmentio/parquet/deprecated"
 	"github.com/segmentio/parquet/encoding"
 	"github.com/segmentio/parquet/encoding/rle"
 	"github.com/segmentio/parquet/format"
@@ -49,8 +50,8 @@ func (d *Decoder) DecodeInt64(data []int64) (int, error) {
 	return readFull(d.reader, 8, bits.Int64ToBytes(data))
 }
 
-func (d *Decoder) DecodeInt96(data [][12]byte) (int, error) {
-	return readFull(d.reader, 12, bits.Int96ToBytes(data))
+func (d *Decoder) DecodeInt96(data []deprecated.Int96) (int, error) {
+	return readFull(d.reader, 12, deprecated.Int96ToBytes(data))
 }
 
 func (d *Decoder) DecodeFloat(data []float32) (int, error) {

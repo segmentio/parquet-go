@@ -109,3 +109,29 @@ func printColumns(t *testing.T, col *parquet.Column, indent string) {
 		printColumns(t, child, indent)
 	}
 }
+
+func TestFileKeyValueMetadata(t *testing.T) {
+	type Row struct {
+		Name string
+	}
+
+	f, err := createParquetFile(
+		makeRows([]Row{{Name: "A"}, {Name: "B"}, {Name: "C"}}),
+		parquet.KeyValueMetadata("hello", "ignore this one"),
+		parquet.KeyValueMetadata("hello", "world"),
+		parquet.KeyValueMetadata("answer", "42"),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, want := range [][2]string{
+		{"hello", "world"},
+		{"answer", "42"},
+	} {
+		key, value := want[0], want[1]
+		if found, ok := f.Lookup(key); !ok || found != value {
+			t.Errorf("key/value metadata mismatch: want %q=%q but got %q=%q (found=%t)", key, value, key, found, ok)
+		}
+	}
+}

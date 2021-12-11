@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/segmentio/parquet/deprecated"
 	"github.com/segmentio/parquet/encoding"
 	"github.com/segmentio/parquet/encoding/rle"
 	"github.com/segmentio/parquet/format"
@@ -49,8 +50,8 @@ func (e *Encoder) EncodeInt64(data []int64) error {
 	return err
 }
 
-func (e *Encoder) EncodeInt96(data [][12]byte) error {
-	_, err := e.writer.Write(bits.Int96ToBytes(data))
+func (e *Encoder) EncodeInt96(data []deprecated.Int96) error {
+	_, err := e.writer.Write(deprecated.Int96ToBytes(data))
 	return err
 }
 

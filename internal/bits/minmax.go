@@ -4,6 +4,29 @@ import (
 	"bytes"
 )
 
+func boolEqualAll(data []bool, value bool) bool {
+	for i := range data {
+		if data[i] != value {
+			return false
+		}
+	}
+	return true
+}
+
+func MinMaxBool(data []bool) (min, max bool) {
+	if len(data) > 0 {
+		switch {
+		case boolEqualAll(data, true):
+			min, max = true, true
+		case boolEqualAll(data, false):
+			min, max = false, false
+		default:
+			min, max = false, true
+		}
+	}
+	return min, max
+}
+
 func MinMaxInt32(data []int32) (min, max int32) {
 	if len(data) > 0 {
 		min = data[0]
@@ -31,23 +54,6 @@ func MinMaxInt64(data []int64) (min, max int64) {
 				min = v
 			}
 			if v > max {
-				max = v
-			}
-		}
-	}
-	return min, max
-}
-
-func MinMaxInt96(data [][12]byte) (min, max [12]byte) {
-	if len(data) > 0 {
-		min = data[0]
-		max = data[0]
-
-		for _, v := range data[1:] {
-			if CompareInt96(v, min) < 0 {
-				min = v
-			}
-			if CompareInt96(v, max) > 0 {
 				max = v
 			}
 		}

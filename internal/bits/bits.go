@@ -1,7 +1,6 @@
 package bits
 
 import (
-	"encoding/binary"
 	"math/bits"
 )
 
@@ -59,28 +58,4 @@ func IndexShift32(bitIndex uint) (index, shift uint) {
 
 func IndexShift64(bitIndex uint) (index, shift uint) {
 	return bitIndex / 64, bitIndex % 64
-}
-
-func CompareInt96(v1, v2 [12]byte) int {
-	hi1 := binary.LittleEndian.Uint32(v1[8:])
-	hi2 := binary.LittleEndian.Uint32(v2[8:])
-
-	switch {
-	case hi1 < hi2:
-		return -1
-	case hi1 > hi2:
-		return +1
-	}
-
-	lo1 := binary.LittleEndian.Uint64(v1[:8])
-	lo2 := binary.LittleEndian.Uint64(v2[:8])
-
-	switch {
-	case lo1 < lo2:
-		return -1
-	case lo1 > lo2:
-		return +1
-	default:
-		return 0
-	}
 }

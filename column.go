@@ -26,6 +26,8 @@ type Column struct {
 	names       []string
 	columns     []*Column
 	chunks      []*format.ColumnChunk
+	columnIndex []*ColumnIndex
+	offsetIndex []*OffsetIndex
 	encoding    []encoding.Encoding
 	compression []compress.Codec
 
@@ -59,7 +61,7 @@ func (c *Column) Repeated() bool { return schemaRepetitionTypeOf(c.schema) == fo
 // This method contributes to satisfying the Node interface.
 func (c *Column) NumChildren() int { return len(c.columns) }
 
-// Children returns the names of child columns.
+// ChildNames returns the names of child columns.
 //
 // This method contributes to satisfying the Node interface.
 func (c *Column) ChildNames() []string { return c.names }
@@ -224,12 +226,37 @@ func (cl *columnLoader) open(file *File, path []string) (*Column, error) {
 			cl.columnOrderIndex++
 		}
 
-		c.chunks = make([]*format.ColumnChunk, 0, len(file.metadata.RowGroups))
-		for index, rowGroup := range file.metadata.RowGroups {
-			if cl.rowGroupColumnIndex >= len(rowGroup.Columns) {
-				return nil, fmt.Errorf("row group at index %d does not have enough columns", index)
+		rowGroups := file.metadata.RowGroups
+		rowGroupColumnIndex := cl.rowGroupColumnIndex
+		cl.rowGroupColumnIndex++
+
+		c.chunks = make([]*format.ColumnChunk, 0, len(rowGroups))
+		c.columnIndex = make([]*ColumnIndex, 0, len(rowGroups))
+		c.offsetIndex = make([]*OffsetIndex, 0, len(rowGroups))
+
+		for i, rowGroup := range rowGroups {
+			if rowGroupColumnIndex >= len(rowGroup.Columns) {
+				return nil, fmt.Errorf("row group at index %d does not have enough columns", i)
 			}
-			c.chunks = append(c.chunks, &rowGroup.Columns[cl.rowGroupColumnIndex])
+			c.chunks = append(c.chunks, &rowGroup.Columns[rowGroupColumnIndex])
+		}
+
+		if len(file.columnIndexes) > 0 {
+			for i := range rowGroups {
+				if rowGroupColumnIndex >= len(file.columnIndexes) {
+					return nil, fmt.Errorf("row group at index %d does not have enough column index pages", i)
+				}
+				c.columnIndex = append(c.columnIndex, &file.columnIndexes[rowGroupColumnIndex])
+			}
+		}
+
+		if len(file.offsetIndexes) > 0 {
+			for i := range rowGroups {
+				if rowGroupColumnIndex >= len(file.offsetIndexes) {
+					return nil, fmt.Errorf("row group at index %d does not have enough offset index pages", i)
+				}
+				c.offsetIndex = append(c.offsetIndex, &file.offsetIndexes[rowGroupColumnIndex])
+			}
 		}
 
 		c.encoding = make([]encoding.Encoding, 0, len(c.chunks))
@@ -247,8 +274,6 @@ func (cl *columnLoader) open(file *File, path []string) (*Column, error) {
 		}
 		sortCodecs(c.compression)
 		c.compression = dedupeSortedCodecs(c.compression)
-
-		cl.rowGroupColumnIndex++
 		return c, nil
 	}
 

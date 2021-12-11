@@ -1,11 +1,14 @@
 package parquet
 
 import (
+	"fmt"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/segmentio/parquet/compress"
+	"github.com/segmentio/parquet/deprecated"
 	"github.com/segmentio/parquet/encoding"
 )
 
@@ -43,6 +46,14 @@ type Schema struct {
 //	list     | for slice types, use the parquet LIST logical type
 //	enum     | for string types, use the parquet ENUM logical type
 //	uuid     | for string and [16]byte types, use the parquet UUID logical type
+//	decimal  | for int32 and int64 types, use the parquet DECIMAL logical type
+//
+// The decimal tag must be followed by two ineger parameters, the first integer
+// representing the scale and the second the precision; for example:
+//
+//	type Item struct {
+//		Cost int64 `parquet:"cost,decimal(0,3)"`
+//	}
 //
 // Invalid combination of struct tags and Go types, or repeating options will
 // cause the function to panic.
@@ -320,6 +331,7 @@ func makeStructField(f reflect.StructField, columnIndex int) (structField, int) 
 		for tag != "" {
 			option := ""
 			option, tag = split(tag)
+			option, args := splitOptionArgs(option)
 
 			switch option {
 			case "optional":
@@ -374,6 +386,22 @@ func makeStructField(f reflect.StructField, columnIndex int) (structField, int) 
 					throwInvalidFieldTag(f, option)
 				}
 
+			case "decimal":
+				scale, precision, err := parseDecimalArgs(args)
+				if err != nil {
+					throwInvalidFieldTag(f, option+args)
+				}
+				var baseType Type
+				switch f.Type.Kind() {
+				case reflect.Int32:
+					baseType = Int32Type
+				case reflect.Int64:
+					baseType = Int64Type
+				default:
+					throwInvalidFieldTag(f, option)
+				}
+				setNode(Decimal(scale, precision, baseType), traverseLeaf(baseType.Kind(), f.Type, columnIndex))
+
 			default:
 				throwUnknownFieldTag(f, option)
 			}
@@ -395,7 +423,15 @@ func makeStructField(f reflect.StructField, columnIndex int) (structField, int) 
 }
 
 func nodeOf(t reflect.Type, columnIndex int) (Node, int, traverseFunc) {
+	switch t {
+	case reflect.TypeOf(deprecated.Int96{}):
+		return Leaf(Int96Type), columnIndex + 1, traverseLeaf(Int96, t, columnIndex)
+	}
+
 	switch t.Kind() {
+	case reflect.Bool:
+		return Leaf(BooleanType), columnIndex + 1, traverseLeaf(Boolean, t, columnIndex)
+
 	case reflect.Int, reflect.Int64:
 		return Int(64), columnIndex + 1, traverseLeaf(Int64, t, columnIndex)
 
@@ -409,10 +445,10 @@ func nodeOf(t reflect.Type, columnIndex int) (Node, int, traverseFunc) {
 		return Uint(t.Bits()), columnIndex + 1, traverseLeaf(Int32, t, columnIndex)
 
 	case reflect.Float32:
-		return Decimal(0, 9, FloatType), columnIndex + 1, traverseLeaf(Float, t, columnIndex)
+		return Leaf(FloatType), columnIndex + 1, traverseLeaf(Float, t, columnIndex)
 
 	case reflect.Float64:
-		return Decimal(0, 18, DoubleType), columnIndex + 1, traverseLeaf(Double, t, columnIndex)
+		return Leaf(DoubleType), columnIndex + 1, traverseLeaf(Double, t, columnIndex)
 
 	case reflect.String:
 		return String(), columnIndex + 1, traverseLeaf(ByteArray, t, columnIndex)
@@ -446,6 +482,35 @@ func split(s string) (head, tail string) {
 	return
 }
 
+func splitOptionArgs(s string) (option, args string) {
+	if i := strings.IndexByte(s, '('); i >= 0 {
+		return s[:i], s[i:]
+	} else {
+		return s, "()"
+	}
+}
+
+func parseDecimalArgs(args string) (scale, precision int, err error) {
+	if !strings.HasPrefix(args, "(") || !strings.HasSuffix(args, ")") {
+		return 0, 0, fmt.Errorf("malformed decimal args: %s", args)
+	}
+	args = strings.TrimPrefix(args, "(")
+	args = strings.TrimSuffix(args, ")")
+	parts := strings.Split(args, ",")
+	if len(parts) != 2 {
+		return 0, 0, fmt.Errorf("malformed decimal args: (%s)", args)
+	}
+	s, err := strconv.ParseInt(parts[0], 10, 32)
+	if err != nil {
+		return 0, 0, err
+	}
+	p, err := strconv.ParseInt(parts[1], 10, 32)
+	if err != nil {
+		return 0, 0, err
+	}
+	return int(s), int(p), nil
+}
+
 type traverseFunc func(levels levels, value reflect.Value, traversal Traversal) error
 
 func traverseLeaf(k Kind, t reflect.Type, columnIndex int) traverseFunc {
@@ -474,6 +539,12 @@ func traverseLeaf(k Kind, t reflect.Type, columnIndex int) traverseFunc {
 			makeValue = func(v reflect.Value) Value { return makeValueInt64(v.Int()) }
 		case reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uint, reflect.Uintptr:
 			makeValue = func(v reflect.Value) Value { return makeValueInt64(int64(v.Uint())) }
+		}
+
+	case Int96:
+		switch t {
+		case reflect.TypeOf(deprecated.Int96{}):
+			makeValue = func(v reflect.Value) Value { return makeValueInt96(v.Interface().(deprecated.Int96)) }
 		}
 
 	case Float:

@@ -32,6 +32,8 @@ func (k Kind) String() string {
 
 // The Type interface represents logical types of the parquet type system.
 type Type interface {
+	fmt.Stringer
+
 	// Returns the Kind value representing the underlying physical type.
 	Kind() Kind
 
@@ -72,6 +74,15 @@ type Type interface {
 	// multiple calls. Applications must treat the returned value as immutable,
 	// mutating the value will result in undefined behavior.
 	ConvertedType() *deprecated.ConvertedType
+
+	// Creates a column indexer for values of this type.
+	//
+	// The size limit is a hint to the column indexer that it is allowed to
+	// truncate the page boundaries to the given size. Only BYTE_ARRAY and
+	// FIXED_LEN_BYTE_ARRAY types currently take this value into account.
+	//
+	// A value of zero or less means no limits.
+	NewColumnIndexer(sizeLimit int) ColumnIndexer
 
 	// Creates a dictionary holding values of this type.
 	NewDictionary(bufferSize int) Dictionary
@@ -167,6 +178,8 @@ func (t primitiveType) ConvertedType() *deprecated.ConvertedType { return nil }
 
 type booleanType struct{ primitiveType }
 
+func (t booleanType) String() string { return "BOOLEAN" }
+
 func (t booleanType) Kind() Kind { return Boolean }
 
 func (t booleanType) Length() int { return 1 }
@@ -177,6 +190,10 @@ func (t booleanType) PhyiscalType() *format.Type {
 
 func (t booleanType) Less(v1, v2 Value) bool {
 	return !v1.Boolean() && v2.Boolean()
+}
+
+func (t booleanType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
+	return newBooleanColumnIndexer(t)
 }
 
 func (t booleanType) NewDictionary(bufferSize int) Dictionary {
@@ -193,6 +210,8 @@ func (t booleanType) NewPageWriter(encoder encoding.Encoder, bufferSize int) Pag
 
 type int32Type struct{ primitiveType }
 
+func (t int32Type) String() string { return "INT32" }
+
 func (t int32Type) Kind() Kind { return Int32 }
 
 func (t int32Type) Length() int { return 32 }
@@ -203,6 +222,10 @@ func (t int32Type) Less(v1, v2 Value) bool {
 
 func (t int32Type) PhyiscalType() *format.Type {
 	return &physicalTypes[Int32]
+}
+
+func (t int32Type) NewColumnIndexer(sizeLimit int) ColumnIndexer {
+	return newInt32ColumnIndexer(t)
 }
 
 func (t int32Type) NewDictionary(bufferSize int) Dictionary {
@@ -219,6 +242,8 @@ func (t int32Type) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageW
 
 type int64Type struct{ primitiveType }
 
+func (t int64Type) String() string { return "INT64" }
+
 func (t int64Type) Kind() Kind { return Int64 }
 
 func (t int64Type) Length() int { return 64 }
@@ -229,6 +254,10 @@ func (t int64Type) Less(v1, v2 Value) bool {
 
 func (t int64Type) PhyiscalType() *format.Type {
 	return &physicalTypes[Int64]
+}
+
+func (t int64Type) NewColumnIndexer(sizeLimit int) ColumnIndexer {
+	return newInt64ColumnIndexer(t)
 }
 
 func (t int64Type) NewDictionary(bufferSize int) Dictionary {
@@ -245,16 +274,22 @@ func (t int64Type) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageW
 
 type int96Type struct{ primitiveType }
 
+func (t int96Type) String() string { return "INT96" }
+
 func (t int96Type) Kind() Kind { return Int96 }
 
 func (t int96Type) Length() int { return 96 }
 
 func (t int96Type) Less(v1, v2 Value) bool {
-	return bits.CompareInt96(v1.Int96(), v2.Int96()) < 0
+	return v1.Int96().Less(v2.Int96())
 }
 
 func (t int96Type) PhyiscalType() *format.Type {
 	return &physicalTypes[Int96]
+}
+
+func (t int96Type) NewColumnIndexer(sizeLimit int) ColumnIndexer {
+	return newInt96ColumnIndexer(t)
 }
 
 func (t int96Type) NewDictionary(bufferSize int) Dictionary {
@@ -271,6 +306,8 @@ func (t int96Type) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageW
 
 type floatType struct{ primitiveType }
 
+func (t floatType) String() string { return "FLOAT" }
+
 func (t floatType) Kind() Kind { return Float }
 
 func (t floatType) Length() int { return 32 }
@@ -281,6 +318,10 @@ func (t floatType) Less(v1, v2 Value) bool {
 
 func (t floatType) PhyiscalType() *format.Type {
 	return &physicalTypes[Float]
+}
+
+func (t floatType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
+	return newFloatColumnIndexer(t)
 }
 
 func (t floatType) NewDictionary(bufferSize int) Dictionary {
@@ -297,6 +338,8 @@ func (t floatType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageW
 
 type doubleType struct{ primitiveType }
 
+func (t doubleType) String() string { return "DOUBLE" }
+
 func (t doubleType) Kind() Kind { return Double }
 
 func (t doubleType) Length() int { return 64 }
@@ -304,6 +347,10 @@ func (t doubleType) Length() int { return 64 }
 func (t doubleType) Less(v1, v2 Value) bool { return v1.Double() < v2.Double() }
 
 func (t doubleType) PhyiscalType() *format.Type { return &physicalTypes[Double] }
+
+func (t doubleType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
+	return newDoubleColumnIndexer(t)
+}
 
 func (t doubleType) NewDictionary(bufferSize int) Dictionary {
 	return newDoubleDictionary(t, bufferSize)
@@ -319,6 +366,8 @@ func (t doubleType) NewPageWriter(encoder encoding.Encoder, bufferSize int) Page
 
 type byteArrayType struct{ primitiveType }
 
+func (t byteArrayType) String() string { return "BYTE_ARRAY" }
+
 func (t byteArrayType) Kind() Kind { return ByteArray }
 
 func (t byteArrayType) Length() int { return 0 }
@@ -328,6 +377,10 @@ func (t byteArrayType) Less(v1, v2 Value) bool {
 }
 
 func (t byteArrayType) PhyiscalType() *format.Type { return &physicalTypes[ByteArray] }
+
+func (t byteArrayType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
+	return newByteArrayColumnIndexer(t, sizeLimit)
+}
 
 func (t byteArrayType) NewDictionary(bufferSize int) Dictionary {
 	return newByteArrayDictionary(t, bufferSize)
@@ -346,6 +399,10 @@ type fixedLenByteArrayType struct {
 	length int
 }
 
+func (t *fixedLenByteArrayType) String() string {
+	return fmt.Sprintf("FIXED_LEN_BYTE_ARRAY(%d)", t.length)
+}
+
 func (t *fixedLenByteArrayType) Kind() Kind { return FixedLenByteArray }
 
 func (t *fixedLenByteArrayType) Length() int { return t.length }
@@ -356,6 +413,10 @@ func (t *fixedLenByteArrayType) Less(v1, v2 Value) bool {
 
 func (t *fixedLenByteArrayType) PhyiscalType() *format.Type {
 	return &physicalTypes[FixedLenByteArray]
+}
+
+func (t *fixedLenByteArrayType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
+	return newFixedLenByteArrayColumnIndexer(t, sizeLimit)
 }
 
 func (t *fixedLenByteArrayType) NewDictionary(bufferSize int) Dictionary {
@@ -391,7 +452,7 @@ func FixedLenByteArrayType(length int) Type {
 //
 // The bit width must be one of 8, 16, 32, 64, or the function will panic.
 func Int(bitWidth int) Node {
-	return &leafNode{typ: integerType(bitWidth, &signedIntTypes)}
+	return Leaf(integerType(bitWidth, &signedIntTypes))
 }
 
 // Uint constructts a leaf node of unsigned integer logical type of the given
@@ -399,7 +460,7 @@ func Int(bitWidth int) Node {
 //
 // The bit width must be one of 8, 16, 32, 64, or the function will panic.
 func Uint(bitWidth int) Node {
-	return &leafNode{typ: integerType(bitWidth, &unsignedIntTypes)}
+	return Leaf(integerType(bitWidth, &unsignedIntTypes))
 }
 
 func integerType(bitWidth int, types *[4]intType) *intType {
@@ -432,6 +493,8 @@ var unsignedIntTypes = [...]intType{
 }
 
 type intType format.IntType
+
+func (t *intType) String() string { return (*format.IntType)(t).String() }
 
 func (t *intType) Kind() Kind {
 	if t.BitWidth == 64 {
@@ -476,11 +539,29 @@ func (t *intType) LogicalType() *format.LogicalType {
 }
 
 func (t *intType) ConvertedType() *deprecated.ConvertedType {
-	convertedType := int(deprecated.Uint8) + (int(t.BitWidth) / 8)
+	convertedType := bits.Len8(int8(t.BitWidth)/8) - 1 // 8=>0, 16=>1, 32=>2, 64=>4
 	if t.IsSigned {
 		convertedType += int(deprecated.Int8)
+	} else {
+		convertedType += int(deprecated.Uint8)
 	}
 	return &convertedTypes[convertedType]
+}
+
+func (t *intType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
+	if t.IsSigned {
+		if t.BitWidth == 64 {
+			return newInt64ColumnIndexer(t)
+		} else {
+			return newInt32ColumnIndexer(t)
+		}
+	} else {
+		if t.BitWidth == 64 {
+			return newUint64ColumnIndexer(t)
+		} else {
+			return newUint32ColumnIndexer(t)
+		}
+	}
 }
 
 func (t *intType) NewDictionary(bufferSize int) Dictionary {
@@ -517,28 +598,29 @@ func (t *intType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWr
 
 // Decimal constructs a leaf node of decimal logical ttype with the given
 // sccale, precision, and underlying type.
+//
+// https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#decimal
 func Decimal(scale, precision int, typ Type) Node {
-	return &leafNode{
-		typ: &decimalType{
-			decimal: format.DecimalType{
-				Scale:     int32(scale),
-				Precision: int32(precision),
-			},
-			typ: typ,
-		},
+	switch typ {
+	case Int32Type, Int64Type:
+	default:
+		panic("DECIMAL node must annotate the INT32 or INT64 types but got " + typ.String())
 	}
+	return Leaf(&decimalType{
+		decimal: format.DecimalType{
+			Scale:     int32(scale),
+			Precision: int32(precision),
+		},
+		Type: typ,
+	})
 }
 
 type decimalType struct {
 	decimal format.DecimalType
-	typ     Type
+	Type
 }
 
-func (t *decimalType) Kind() Kind { return t.typ.Kind() }
-
-func (t *decimalType) Length() int { return t.typ.Length() }
-
-func (t *decimalType) PhyiscalType() *format.Type { return t.typ.PhyiscalType() }
+func (t *decimalType) String() string { return t.decimal.String() }
 
 func (t *decimalType) LogicalType() *format.LogicalType {
 	return &format.LogicalType{Decimal: &t.decimal}
@@ -548,24 +630,14 @@ func (t *decimalType) ConvertedType() *deprecated.ConvertedType {
 	return &convertedTypes[deprecated.Decimal]
 }
 
-func (t *decimalType) Less(v1, v2 Value) bool { panic("NOT IMPLEMENTED") }
-
-func (t *decimalType) NewDictionary(bufferSize int) Dictionary { panic("NOT IMPLEMENTED") }
-
-func (t *decimalType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
-	panic("NOT IMPLEMENTED")
-}
-
-func (t *decimalType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
-	panic("NOT IMPLEMENTED")
-}
-
 // String constructs a leaf node of UTF8 logical type.
 //
 // https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#string
-func String() Node { return &leafNode{typ: &stringType{}} }
+func String() Node { return Leaf(&stringType{}) }
 
 type stringType format.StringType
+
+func (t *stringType) String() string { return (*format.StringType)(t).String() }
 
 func (t *stringType) Kind() Kind { return ByteArray }
 
@@ -587,6 +659,10 @@ func (t *stringType) ConvertedType() *deprecated.ConvertedType {
 	return &convertedTypes[deprecated.UTF8]
 }
 
+func (t *stringType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
+	return newByteArrayColumnIndexer(t, sizeLimit)
+}
+
 func (t *stringType) NewDictionary(bufferSize int) Dictionary {
 	return newByteArrayDictionary(t, bufferSize)
 }
@@ -602,9 +678,11 @@ func (t *stringType) NewPageWriter(encoder encoding.Encoder, bufferSize int) Pag
 // UUID constructs a leaf node of UUID logical type.
 //
 // https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#uuid
-func UUID() Node { return &leafNode{typ: &uuidType{}} }
+func UUID() Node { return Leaf(&uuidType{}) }
 
 type uuidType format.UUIDType
+
+func (t *uuidType) String() string { return (*format.UUIDType)(t).String() }
 
 func (t *uuidType) Kind() Kind { return FixedLenByteArray }
 
@@ -624,6 +702,10 @@ func (t *uuidType) LogicalType() *format.LogicalType {
 
 func (t *uuidType) ConvertedType() *deprecated.ConvertedType { return nil }
 
+func (t *uuidType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
+	return newFixedLenByteArrayColumnIndexer(t, sizeLimit)
+}
+
 func (t *uuidType) NewDictionary(bufferSize int) Dictionary {
 	return uuidDictionary{newFixedLenByteArrayDictionary(t, bufferSize)}
 }
@@ -639,9 +721,11 @@ func (t *uuidType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageW
 // Enum constructs a leaf node with a logical type representing enumerations.
 //
 // https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#enum
-func Enum() Node { return &leafNode{typ: &enumType{}} }
+func Enum() Node { return Leaf(&enumType{}) }
 
 type enumType format.EnumType
+
+func (t *enumType) String() string { return (*format.EnumType)(t).String() }
 
 func (t *enumType) Kind() Kind { return ByteArray }
 
@@ -663,6 +747,10 @@ func (t *enumType) ConvertedType() *deprecated.ConvertedType {
 	return &convertedTypes[deprecated.Enum]
 }
 
+func (t *enumType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
+	return newByteArrayColumnIndexer(t, sizeLimit)
+}
+
 func (t *enumType) NewDictionary(bufferSize int) Dictionary {
 	return newByteArrayDictionary(t, bufferSize)
 }
@@ -678,9 +766,11 @@ func (t *enumType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageW
 // JSON constructs a leaf node of JSON logical type.
 //
 // https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#json
-func JSON() Node { return &leafNode{typ: &jsonType{}} }
+func JSON() Node { return Leaf(&jsonType{}) }
 
 type jsonType format.JsonType
+
+func (t *jsonType) String() string { return (*jsonType)(t).String() }
 
 func (t *jsonType) Kind() Kind { return ByteArray }
 
@@ -702,6 +792,10 @@ func (t *jsonType) ConvertedType() *deprecated.ConvertedType {
 	return &convertedTypes[deprecated.Json]
 }
 
+func (t *jsonType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
+	return newByteArrayColumnIndexer(t, sizeLimit)
+}
+
 func (t *jsonType) NewDictionary(bufferSize int) Dictionary {
 	return newByteArrayDictionary(t, bufferSize)
 }
@@ -717,9 +811,11 @@ func (t *jsonType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageW
 // BSON constructs a leaf node of BSON logical type.
 //
 // https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#bson
-func BSON() Node { return &leafNode{typ: &bsonType{}} }
+func BSON() Node { return Leaf(&bsonType{}) }
 
 type bsonType format.BsonType
+
+func (t *bsonType) String() string { return (*format.BsonType)(t).String() }
 
 func (t *bsonType) Kind() Kind { return ByteArray }
 
@@ -741,6 +837,10 @@ func (t *bsonType) ConvertedType() *deprecated.ConvertedType {
 	return &convertedTypes[deprecated.Bson]
 }
 
+func (t *bsonType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
+	return newByteArrayColumnIndexer(t, sizeLimit)
+}
+
 func (t *bsonType) NewDictionary(bufferSize int) Dictionary {
 	return newByteArrayDictionary(t, bufferSize)
 }
@@ -756,9 +856,11 @@ func (t *bsonType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageW
 // Date constructs a leaf node of DATE logical type.
 //
 // https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#date
-func Date() Node { return &leafNode{typ: &dateType{}} }
+func Date() Node { return Leaf(&dateType{}) }
 
 type dateType format.DateType
+
+func (t *dateType) String() string { return (*format.DateType)(t).String() }
 
 func (t *dateType) Kind() Kind { return Int32 }
 
@@ -774,6 +876,10 @@ func (t *dateType) LogicalType() *format.LogicalType {
 
 func (t *dateType) ConvertedType() *deprecated.ConvertedType {
 	return &convertedTypes[deprecated.Date]
+}
+
+func (t *dateType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
+	return newInt32ColumnIndexer(t)
 }
 
 func (t *dateType) NewDictionary(bufferSize int) Dictionary {
@@ -828,10 +934,14 @@ func (u *nanosecond) TimeUnit() format.TimeUnit {
 //
 // https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#time
 func Time(unit TimeUnit) Node {
-	return &leafNode{typ: &timeType{IsAdjustedToUTC: true, Unit: unit.TimeUnit()}}
+	return Leaf(&timeType{IsAdjustedToUTC: true, Unit: unit.TimeUnit()})
 }
 
 type timeType format.TimeType
+
+func (t *timeType) String() string {
+	return (*format.TimeType)(t).String()
+}
 
 func (t *timeType) Kind() Kind {
 	if t.Unit.Millis != nil {
@@ -880,6 +990,14 @@ func (t *timeType) ConvertedType() *deprecated.ConvertedType {
 	}
 }
 
+func (t *timeType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
+	if t.Unit.Millis != nil {
+		return newInt32ColumnIndexer(t)
+	} else {
+		return newInt64ColumnIndexer(t)
+	}
+}
+
 func (t *timeType) NewDictionary(bufferSize int) Dictionary {
 	if t.Unit.Millis != nil {
 		return newInt32Dictionary(t, bufferSize)
@@ -908,10 +1026,12 @@ func (t *timeType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageW
 //
 // https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#timestamp
 func Timestamp(unit TimeUnit) Node {
-	return &leafNode{typ: &timestampType{IsAdjustedToUTC: true, Unit: unit.TimeUnit()}}
+	return Leaf(&timestampType{IsAdjustedToUTC: true, Unit: unit.TimeUnit()})
 }
 
 type timestampType format.TimestampType
+
+func (t *timestampType) String() string { return (*format.TimestampType)(t).String() }
 
 func (t *timestampType) Kind() Kind { return Int64 }
 
@@ -934,6 +1054,10 @@ func (t *timestampType) ConvertedType() *deprecated.ConvertedType {
 	default:
 		return nil
 	}
+}
+
+func (t *timestampType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
+	return newInt64ColumnIndexer(t)
 }
 
 func (t *timestampType) NewDictionary(bufferSize int) Dictionary {
@@ -961,6 +1085,8 @@ func (listNode) Type() Type { return &listType{} }
 
 type listType format.ListType
 
+func (t *listType) String() string { return (*format.ListType)(t).String() }
+
 func (t *listType) Kind() Kind { panic("cannot call Kind on parquet LIST type") }
 
 func (t *listType) Length() int { return 0 }
@@ -975,6 +1101,10 @@ func (t *listType) LogicalType() *format.LogicalType {
 
 func (t *listType) ConvertedType() *deprecated.ConvertedType {
 	return &convertedTypes[deprecated.List]
+}
+
+func (t *listType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
+	panic("create create a column indexer from parquet LIST type")
 }
 
 func (t *listType) NewDictionary(bufferSize int) Dictionary {
@@ -1007,6 +1137,8 @@ func (mapNode) Type() Type { return &mapType{} }
 
 type mapType format.MapType
 
+func (t *mapType) String() string { return (*format.MapType)(t).String() }
+
 func (t *mapType) Kind() Kind { panic("cannot call Kind on parquet MAP type") }
 
 func (t *mapType) Length() int { return 0 }
@@ -1023,6 +1155,10 @@ func (t *mapType) ConvertedType() *deprecated.ConvertedType {
 	return &convertedTypes[deprecated.Map]
 }
 
+func (t *mapType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
+	panic("create create a column indexer from parquet MAP type")
+}
+
 func (t *mapType) NewDictionary(bufferSize int) Dictionary {
 	panic("cannot create dictionary from parquet MAP type")
 }
@@ -1037,6 +1173,8 @@ func (t *mapType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWr
 
 type nullType format.NullType
 
+func (t *nullType) String() string { return (*format.NullType)(t).String() }
+
 func (t *nullType) Kind() Kind { panic("cannot call Kind on parquet NULL type") }
 
 func (t *nullType) Length() int { return 0 }
@@ -1050,6 +1188,10 @@ func (t *nullType) LogicalType() *format.LogicalType {
 }
 
 func (t *nullType) ConvertedType() *deprecated.ConvertedType { return nil }
+
+func (t *nullType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
+	panic("create create a column indexer from parquet NULL type")
+}
 
 func (t *nullType) NewDictionary(bufferSize int) Dictionary {
 	panic("cannot create dictionary for parquet NULL type")

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/segmentio/parquet/deprecated"
 	"github.com/segmentio/parquet/encoding"
 	"github.com/segmentio/parquet/encoding/plain"
 	"github.com/segmentio/parquet/internal/bits"
@@ -276,7 +277,7 @@ func (r *int64PageReader) Type() Type { return r.typ }
 type int96PageReader struct {
 	typ     Type
 	decoder encoding.Decoder
-	values  []int96
+	values  []deprecated.Int96
 	offset  uint
 }
 
@@ -284,7 +285,7 @@ func newInt96PageReader(typ Type, decoder encoding.Decoder, bufferSize int) *int
 	return &int96PageReader{
 		typ:     typ,
 		decoder: decoder,
-		values:  make([]int96, 0, atLeastOne(bufferSize/12)),
+		values:  make([]deprecated.Int96, 0, atLeastOne(bufferSize/12)),
 	}
 }
 
@@ -415,17 +416,17 @@ func newByteArrayPageReader(typ Type, decoder encoding.Decoder, bufferSize int) 
 func (r *byteArrayPageReader) ReadValue() (Value, error) {
 	for {
 		if r.remain > 0 {
-			n := plain.ByteArrayLength(r.values[r.offset:])
+			n := plain.NextByteArrayLength(r.values[r.offset:])
 			v := r.values[4+r.offset : 4+r.offset+uint(n)]
 			r.offset += 4 + uint(n)
-			r.remain -= 1
+			r.remain--
 			return makeValueBytes(ByteArray, v), nil
 		}
 
 		n, err := r.decoder.DecodeByteArray(r.values)
 		if n == 0 {
 			if err == encoding.ErrValueTooLarge {
-				size := 4 + uint32(plain.ByteArrayLength(r.values))
+				size := 4 + uint32(plain.NextByteArrayLength(r.values))
 				r.values = make([]byte, bits.NearestPowerOfTwo32(size))
 				r.offset = 0
 				r.remain = 0

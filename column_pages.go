@@ -14,10 +14,11 @@ import (
 )
 
 var (
-	// Corrupted is an error returned by the Err method of ColumnPages instances
-	// when they encountered a mismatch between the CRC checksum recorded in a
-	// page header and the one computed while reading the page data.
-	Corrupted = errors.New("corrupted")
+	// ErrCorrupted is an error returned by the Err method of ColumnPages
+	// instances when they encountered a mismatch between the CRC checksum
+	// recorded in a page header and the one computed while reading the page
+	// data.
+	ErrCorrupted = errors.New("corrupted")
 )
 
 // ColumnPages is an iterator type used to scan pages of a column chunk.
@@ -29,6 +30,10 @@ type ColumnPages struct {
 	codec    format.CompressionCodec
 	protocol thrift.CompactProtocol
 	decoder  thrift.Decoder
+
+	columnIndex *ColumnIndex
+	offsetIndex *OffsetIndex
+	pageIndex   int
 
 	data               io.LimitedReader
 	page               *compressedPageReader
@@ -51,10 +56,12 @@ type ColumnPages struct {
 	err error
 }
 
-func newColumnPages(column *Column, metadata *format.ColumnMetaData, bufferSize int) *ColumnPages {
+func newColumnPages(column *Column, metadata *format.ColumnMetaData, columnIndex *ColumnIndex, offsetIndex *OffsetIndex, bufferSize int) *ColumnPages {
 	c := &ColumnPages{
-		column: column,
-		codec:  metadata.Codec,
+		column:      column,
+		codec:       metadata.Codec,
+		columnIndex: columnIndex,
+		offsetIndex: offsetIndex,
 	}
 	pageOffset := metadata.DataPageOffset
 	if metadata.DictionaryPageOffset > 0 {
@@ -100,7 +107,7 @@ func (c *ColumnPages) Err() error {
 		readerChecksum := c.crc32.Sum32()
 
 		if headerChecksum != readerChecksum {
-			return fmt.Errorf("crc32 checksum mismatch: 0x%08X != 0x%08X: %w", headerChecksum, readerChecksum, Corrupted)
+			return fmt.Errorf("crc32 checksum mismatch: 0x%08X != 0x%08X: %w", headerChecksum, readerChecksum, ErrCorrupted)
 		}
 	}
 
@@ -162,6 +169,7 @@ func (c *ColumnPages) Next() bool {
 		c.err = c.initDataPageV1(c.pageData)
 		c.compressedPageData = c.pageData
 		c.pageHeader = DataPageHeaderV1{header.DataPageHeader}
+		c.setPageStatistics(&header.DataPageHeader.Statistics)
 
 	case format.DataPageV2:
 		c.err = c.initDataPageV2(header)
@@ -181,6 +189,7 @@ func (c *ColumnPages) Next() bool {
 		}
 		c.compressedPageData = &c.data
 		c.pageHeader = DataPageHeaderV2{header.DataPageHeaderV2}
+		c.setPageStatistics(&header.DataPageHeaderV2.Statistics)
 
 	default:
 		c.repetitionLevels = emptyReader{}
@@ -191,7 +200,25 @@ func (c *ColumnPages) Next() bool {
 		c.err = fmt.Errorf("cannot decode page of type %s", header.Type)
 	}
 
+	c.pageIndex++
 	return true
+}
+
+func (c *ColumnPages) setPageStatistics(stats *format.Statistics) {
+	if c.columnIndex != nil {
+		if i := c.pageIndex; i >= 0 && i < c.columnIndex.NumPages() {
+			minValue, maxValue, _ := c.columnIndex.PageBounds(i)
+			if stats.MinValue == nil {
+				stats.MinValue = minValue
+			}
+			if stats.MaxValue == nil {
+				stats.MaxValue = maxValue
+			}
+			if stats.NullCount == 0 {
+				stats.NullCount = c.columnIndex.PageNulls(i)
+			}
+		}
+	}
 }
 
 // RepetitionLevels returns an io.Reader exposing the raw bytes of the
@@ -202,7 +229,7 @@ func (c *ColumnPages) RepetitionLevels() io.Reader { return c.repetitionLevels }
 // definition levels in the current data page.
 func (c *ColumnPages) DefinitionLevels() io.Reader { return c.definitionLevels }
 
-// CompressedDataPage returns an io.Reader exposing the raw bytes of the
+// CompressedPageData returns an io.Reader exposing the raw bytes of the
 // current page before decompression.
 //
 // This method is useful to avoid decompressing data pages when doing low-level
