@@ -34,7 +34,7 @@ type PageWriter interface {
 	// Flush must be called explicitly when calling WriteValue returns
 	// ErrBufferFull, or when no more values will be written.
 	//
-	// The design decision of requiring explicit flushes was made to given
+	// The design decision of requiring explicit flushes was made to give
 	// applications the opportunity to gather the number and bounds of values
 	// before flushing the buffers.
 	Flush() error
