@@ -88,6 +88,7 @@ func (w *Writer) Close() error {
 
 	numRows := int64(0)
 	schema := w.rowGroups.colSchema
+	columnOrders := w.rowGroups.colOrders
 	rowGroups := w.rowGroups.rowGroups
 	createdBy := w.rowGroups.config.CreatedBy
 
@@ -102,7 +103,7 @@ func (w *Writer) Close() error {
 		RowGroups:        rowGroups,
 		KeyValueMetadata: w.metadata,
 		CreatedBy:        createdBy,
-		ColumnOrders:     nil, // TODO
+		ColumnOrders:     columnOrders,
 	})
 	if err != nil {
 		return err
@@ -139,6 +140,7 @@ type rowGroupWriter struct {
 	config *WriterConfig
 
 	columns       []*rowGroupColumn
+	colOrders     []format.ColumnOrder
 	colSchema     []format.SchemaElement
 	rowGroups     []format.RowGroup
 	columnIndexes [][]format.ColumnIndex
@@ -296,6 +298,7 @@ func (rgw *rowGroupWriter) init(node Node, path []string, dataPageType format.Pa
 		}
 
 		rgw.columns = append(rgw.columns, column)
+		rgw.colOrders = append(rgw.colOrders, *nodeType.ColumnOrder())
 	}
 }
 
