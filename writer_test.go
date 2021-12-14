@@ -66,6 +66,12 @@ type firstAndLastName struct {
 	LastName  string `parquet:"last_name,dict,zstd"`
 }
 
+type timeseries struct {
+	Name      string  `parquet:"name,plain"`
+	Timestamp int64   `parquet:"timestamp,delta"`
+	Value     float64 `parquet:"value"`
+}
+
 var writerTests = []struct {
 	scenario string
 	version  int
@@ -143,6 +149,83 @@ BINARY last_name
 value 1: R:0 D:0 V:Solo
 value 2: R:0 D:0 V:Skywalker
 value 3: R:0 D:0 V:Skywalker
+`,
+	},
+
+	{
+		scenario: "timeseries with delta encoding",
+		version:  v2,
+		rows: []interface{}{
+			timeseries{Name: "http_request_total", Timestamp: 1639444033, Value: 100},
+			timeseries{Name: "http_request_total", Timestamp: 1639444058, Value: 0},
+			timeseries{Name: "http_request_total", Timestamp: 1639444085, Value: 42},
+			timeseries{Name: "http_request_total", Timestamp: 1639444093, Value: 1},
+			timeseries{Name: "http_request_total", Timestamp: 1639444101, Value: 2},
+			timeseries{Name: "http_request_total", Timestamp: 1639444108, Value: 5},
+			timeseries{Name: "http_request_total", Timestamp: 1639444133, Value: 4},
+			timeseries{Name: "http_request_total", Timestamp: 1639444137, Value: 5},
+			timeseries{Name: "http_request_total", Timestamp: 1639444141, Value: 6},
+			timeseries{Name: "http_request_total", Timestamp: 1639444144, Value: 10},
+		},
+		dump: `row group 0
+--------------------------------------------------------------------------------
+name:       BINARY UNCOMPRESSED DO:0 FPO:4 SZ:250/250/1.00 VC:10 ENC:RLE,PLAIN [more]...
+timestamp:  INT64 UNCOMPRESSED DO:0 FPO:254 SZ:544/544/1.00 VC:10 ENC: [more]...
+value:      DOUBLE UNCOMPRESSED DO:0 FPO:798 SZ:110/110/1.00 VC:10 ENC:RLE,PLAIN [more]...
+
+    name TV=10 RL=0 DL=0
+    ----------------------------------------------------------------------------
+    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[no stats for this column] SZ:220 [more]...
+
+    timestamp TV=10 RL=0 DL=0
+    ----------------------------------------------------------------------------
+    page 0:  DLE:RLE RLE:RLE VLE:DELTA_BINARY_PACKED ST:[no stats for  [more]... VC:10
+
+    value TV=10 RL=0 DL=0
+    ----------------------------------------------------------------------------
+    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[no stats for this column] SZ:80 VC:10
+
+BINARY name
+--------------------------------------------------------------------------------
+*** row group 1 of 1, values 1 to 10 ***
+value 1:  R:0 D:0 V:http_request_total
+value 2:  R:0 D:0 V:http_request_total
+value 3:  R:0 D:0 V:http_request_total
+value 4:  R:0 D:0 V:http_request_total
+value 5:  R:0 D:0 V:http_request_total
+value 6:  R:0 D:0 V:http_request_total
+value 7:  R:0 D:0 V:http_request_total
+value 8:  R:0 D:0 V:http_request_total
+value 9:  R:0 D:0 V:http_request_total
+value 10: R:0 D:0 V:http_request_total
+
+INT64 timestamp
+--------------------------------------------------------------------------------
+*** row group 1 of 1, values 1 to 10 ***
+value 1:  R:0 D:0 V:1639444033
+value 2:  R:0 D:0 V:1639444033
+value 3:  R:0 D:0 V:1639444058
+value 4:  R:0 D:0 V:1639444085
+value 5:  R:0 D:0 V:1639444093
+value 6:  R:0 D:0 V:1639444101
+value 7:  R:0 D:0 V:1639444108
+value 8:  R:0 D:0 V:1639444133
+value 9:  R:0 D:0 V:1639444137
+value 10: R:0 D:0 V:1639444141
+
+DOUBLE value
+--------------------------------------------------------------------------------
+*** row group 1 of 1, values 1 to 10 ***
+value 1:  R:0 D:0 V:100.0
+value 2:  R:0 D:0 V:0.0
+value 3:  R:0 D:0 V:42.0
+value 4:  R:0 D:0 V:1.0
+value 5:  R:0 D:0 V:2.0
+value 6:  R:0 D:0 V:5.0
+value 7:  R:0 D:0 V:4.0
+value 8:  R:0 D:0 V:5.0
+value 9:  R:0 D:0 V:6.0
+value 10: R:0 D:0 V:10.0
 `,
 	},
 

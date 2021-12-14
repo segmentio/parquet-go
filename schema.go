@@ -42,6 +42,7 @@ type Schema struct {
 //	brotli   | sets the parquet column compression codec to brotli
 //	lz4      | sets the parquet column compression codec to lz4
 //	zstd     | sets the parquet column compression codec to zstd
+//	plain    | enables the plain encoding (no-op default)
 //	dict     | enables dictionary encoding on the parquet column
 //	delta    | enables delta encoding on the parquet column
 //	list     | for slice types, use the parquet LIST logical type
@@ -364,6 +365,9 @@ func makeStructField(f reflect.StructField, columnIndex int) (structField, int) 
 
 			case "zstd":
 				setCompression(&Zstd)
+
+			case "plain":
+				setEncoding(&Plain)
 
 			case "dict":
 				setEncoding(&RLEDictionary)
