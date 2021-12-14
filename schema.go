@@ -43,7 +43,7 @@ type Schema struct {
 //	lz4      | sets the parquet column compression codec to lz4
 //	zstd     | sets the parquet column compression codec to zstd
 //	dict     | enables dictionary encoding on the parquet column
-//	delta    | enabled delta encoding on the parquet column
+//	delta    | enables delta encoding on the parquet column
 //	list     | for slice types, use the parquet LIST logical type
 //	enum     | for string types, use the parquet ENUM logical type
 //	uuid     | for string and [16]byte types, use the parquet UUID logical type
