@@ -59,23 +59,19 @@ func (e *ByteArrayEncoder) EncodeByteArray(data []byte) error {
 }
 
 func prefixLength(base, data []byte) int {
-	if bytes.HasPrefix(data, base) {
-		return len(base)
-	}
-	if bytes.HasPrefix(base, data) {
-		return len(data)
-	}
+	return binarySearchPrefixLength(len(base)/2, base, data)
+}
 
-	n := len(base)
-	if n > len(data) {
-		n = len(data)
+func binarySearchPrefixLength(max int, base, data []byte) int {
+	if len(base) == 0 {
+		return 0
 	}
-
-	for i := 0; i < n; i++ {
-		if base[i] != data[i] {
-			return i
+	if bytes.HasPrefix(data, base[:max]) {
+		if max == len(base) {
+			return max
 		}
+		return binarySearchPrefixLength((len(base)-max)/2+max+1, base, data)
+	} else {
+		return binarySearchPrefixLength(max/2, base[:max-1], data)
 	}
-
-	return n
 }
