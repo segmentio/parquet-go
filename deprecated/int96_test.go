@@ -95,12 +95,12 @@ func TestMaxLenInt96(t *testing.T) {
 	}{
 		{
 			data:   nil,
-			maxlen: 1,
+			maxlen: 0,
 		},
 
 		{
 			data:   []deprecated.Int96{{}, {}, {}, {}, {}},
-			maxlen: 1,
+			maxlen: 0,
 		},
 
 		{
