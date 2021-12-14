@@ -5,6 +5,7 @@ import (
 
 	"github.com/segmentio/parquet/encoding"
 	"github.com/segmentio/parquet/encoding/bytestreamsplit"
+	"github.com/segmentio/parquet/encoding/delta"
 	"github.com/segmentio/parquet/encoding/dict"
 	"github.com/segmentio/parquet/encoding/plain"
 	"github.com/segmentio/parquet/encoding/rle"
@@ -26,16 +27,20 @@ var (
 	// writers which used the PLAIN_DICTIONARY encoding.
 	Dict dict.Encoding
 
+	// DeltaBinaryPacked is the delta binary packed parquet encoding.
+	DeltaBinaryPacked delta.BinaryPackedEncoding
+
 	// ByteStreamSplit is an encoding for floating-point data.
 	ByteStreamSplit bytestreamsplit.Encoding
 
 	// Table indexing the encodings supported by this package.
 	encodings = [...]encoding.Encoding{
-		format.Plain:           &Plain,
-		format.PlainDictionary: Dict.PlainEncoding(),
-		format.RLE:             &RLE,
-		format.RLEDictionary:   &Dict,
-		format.ByteStreamSplit: &ByteStreamSplit,
+		format.Plain:             &Plain,
+		format.PlainDictionary:   Dict.PlainEncoding(),
+		format.RLE:               &RLE,
+		format.RLEDictionary:     &Dict,
+		format.DeltaBinaryPacked: &DeltaBinaryPacked,
+		format.ByteStreamSplit:   &ByteStreamSplit,
 	}
 )
 

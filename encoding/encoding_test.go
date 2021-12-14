@@ -10,6 +10,7 @@ import (
 	"github.com/segmentio/parquet/deprecated"
 	"github.com/segmentio/parquet/encoding"
 	"github.com/segmentio/parquet/encoding/bytestreamsplit"
+	"github.com/segmentio/parquet/encoding/delta"
 	"github.com/segmentio/parquet/encoding/dict"
 	"github.com/segmentio/parquet/encoding/plain"
 	"github.com/segmentio/parquet/encoding/rle"
@@ -213,6 +214,11 @@ func TestEncoding(t *testing.T) {
 		{
 			scenario: "RLE_DICTIONARY",
 			encoding: new(dict.Encoding),
+		},
+
+		{
+			scenario: "DELTA_BINARY_PACKED",
+			encoding: new(delta.BinaryPackedEncoding),
 		},
 
 		{
