@@ -87,6 +87,9 @@ func (e dictionaryEncoder) Encoding() format.Encoding {
 
 func (e dictionaryEncoder) EncodeInt32(data []int32) error {
 	bitWidth := bits.MaxLen32(data)
+	if bitWidth == 0 {
+		bitWidth = 1
+	}
 	if err := e.encodeBitWidth(bitWidth); err != nil {
 		return err
 	}

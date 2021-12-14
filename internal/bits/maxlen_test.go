@@ -13,12 +13,12 @@ func TestMaxLen8(t *testing.T) {
 	}{
 		{
 			data:   nil,
-			maxlen: 1,
+			maxlen: 0,
 		},
 
 		{
 			data:   []int8{0, 0, 0, 0, 0},
-			maxlen: 1,
+			maxlen: 0,
 		},
 
 		{
@@ -41,12 +41,12 @@ func TestMaxLen16(t *testing.T) {
 	}{
 		{
 			data:   nil,
-			maxlen: 1,
+			maxlen: 0,
 		},
 
 		{
 			data:   []int16{0, 0, 0, 0, 0},
-			maxlen: 1,
+			maxlen: 0,
 		},
 
 		{
@@ -69,12 +69,12 @@ func TestMaxLen32(t *testing.T) {
 	}{
 		{
 			data:   nil,
-			maxlen: 1,
+			maxlen: 0,
 		},
 
 		{
 			data:   []int32{0, 0, 0, 0, 0},
-			maxlen: 1,
+			maxlen: 0,
 		},
 
 		{
@@ -97,12 +97,12 @@ func TestMaxLen64(t *testing.T) {
 	}{
 		{
 			data:   nil,
-			maxlen: 1,
+			maxlen: 0,
 		},
 
 		{
 			data:   []int64{0, 0, 0, 0, 0},
-			maxlen: 1,
+			maxlen: 0,
 		},
 
 		{

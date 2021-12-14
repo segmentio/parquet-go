@@ -24,7 +24,6 @@ const (
 	headerBufferSize    = 32
 	blockBufferSize     = 8 * blockSize64
 	bitWidthsBufferSize = 2 * numMiniBlock64
-	miniBlockBufferSize = 8 * miniBlockSize64
 )
 
 type BinaryPackedEncoder struct {
@@ -33,7 +32,7 @@ type BinaryPackedEncoder struct {
 	header    [headerBufferSize]byte
 	block     [blockBufferSize]byte
 	bitWidths [bitWidthsBufferSize]byte
-	miniBlock [miniBlockBufferSize]byte
+	miniBlock bits.Writer
 }
 
 func NewBinaryPackedEncoder(w io.Writer) *BinaryPackedEncoder {
@@ -44,6 +43,7 @@ func NewBinaryPackedEncoder(w io.Writer) *BinaryPackedEncoder {
 
 func (e *BinaryPackedEncoder) Reset(w io.Writer) {
 	e.writer = w
+	e.miniBlock.Reset(w)
 }
 
 func (e *BinaryPackedEncoder) Encoding() format.Encoding {
@@ -56,11 +56,17 @@ func (e *BinaryPackedEncoder) EncodeInt32(data []int32) error {
 		firstValue = data[0]
 	}
 
-	if err := e.encodeBlockHeader(blockSize32, numMiniBlock32, len(data), int64(firstValue)); err != nil {
+	if err := e.encodeHeader(blockSize32, numMiniBlock32, len(data), int64(firstValue)); err != nil {
 		return err
 	}
 
+	if len(data) <= 1 {
+		return nil
+	}
+
+	data = data[1:]
 	lastValue := firstValue
+
 	for len(data) > 0 {
 		block := bits.BytesToInt32(e.block[:])
 		for i := range block {
@@ -70,19 +76,36 @@ func (e *BinaryPackedEncoder) EncodeInt32(data []int32) error {
 		n := copy(block, data)
 		data = data[n:]
 
-		for i, v := range block {
+		for i, v := range block[:n] {
 			block[i], lastValue = v-lastValue, v
 		}
 
-		minDelta := bits.MinInt32(block)
-		bits.SubInt32(block, minDelta)
+		minDelta := bits.MinInt32(block[:n])
+		bits.SubInt32(block[:n], minDelta)
 
 		bitWidths := e.bitWidths[:numMiniBlock32]
 		for i := range bitWidths {
-			bitWidths[i] = byte(bits.MaxLen32(block[i*miniBlockSize32 : (i+1)*miniBlockSize32]))
+			j := (i + 0) * miniBlockSize32
+			k := (i + 1) * miniBlockSize32
+			bitWidths[i] = byte(bits.MaxLen32(block[j:k]))
 		}
 
-		if err := e.encodeBlock(int64(minDelta), bitWidths, bits.Int32ToBytes(block), 32, 4*miniBlockSize32); err != nil {
+		if err := e.encodeBlock(int64(minDelta), bitWidths); err != nil {
+			return err
+		}
+
+		for i, bitWidth := range bitWidths {
+			if bitWidth != 0 {
+				j := (i + 0) * miniBlockSize32
+				k := (i + 1) * miniBlockSize32
+
+				for _, bits := range block[j:k] {
+					e.miniBlock.WriteBits(uint64(bits), uint(bitWidth))
+				}
+			}
+		}
+
+		if err := e.miniBlock.Flush(); err != nil {
 			return err
 		}
 	}
@@ -96,11 +119,17 @@ func (e *BinaryPackedEncoder) EncodeInt64(data []int64) error {
 		firstValue = data[0]
 	}
 
-	if err := e.encodeBlockHeader(blockSize64, numMiniBlock64, len(data), firstValue); err != nil {
+	if err := e.encodeHeader(blockSize64, numMiniBlock64, len(data), firstValue); err != nil {
 		return err
 	}
 
+	if len(data) <= 1 {
+		return nil
+	}
+
+	data = data[1:]
 	lastValue := firstValue
+
 	for len(data) > 0 {
 		block := bits.BytesToInt64(e.block[:])
 		for i := range block {
@@ -110,7 +139,7 @@ func (e *BinaryPackedEncoder) EncodeInt64(data []int64) error {
 		n := copy(block, data)
 		data = data[n:]
 
-		for i, v := range block {
+		for i, v := range block[:n] {
 			block[i], lastValue = v-lastValue, v
 		}
 
@@ -119,10 +148,27 @@ func (e *BinaryPackedEncoder) EncodeInt64(data []int64) error {
 
 		bitWidths := e.bitWidths[:numMiniBlock64]
 		for i := range bitWidths {
-			bitWidths[i] = byte(bits.MaxLen64(block[i*miniBlockSize64 : (i+1)*miniBlockSize64]))
+			j := (i + 0) * miniBlockSize32
+			k := (i + 1) * miniBlockSize32
+			bitWidths[i] = byte(bits.MaxLen64(block[j:k]))
 		}
 
-		if err := e.encodeBlock(minDelta, bitWidths, bits.Int64ToBytes(block), 64, 8*miniBlockSize64); err != nil {
+		if err := e.encodeBlock(minDelta, bitWidths); err != nil {
+			return err
+		}
+
+		for i, bitWidth := range bitWidths {
+			if bitWidth != 0 {
+				j := (i + 0) * miniBlockSize64
+				k := (i + 1) * miniBlockSize64
+
+				for _, bits := range block[j:k] {
+					e.miniBlock.WriteBits(uint64(bits), uint(bitWidth))
+				}
+			}
+		}
+
+		if err := e.miniBlock.Flush(); err != nil {
 			return err
 		}
 	}
@@ -130,7 +176,7 @@ func (e *BinaryPackedEncoder) EncodeInt64(data []int64) error {
 	return nil
 }
 
-func (e *BinaryPackedEncoder) encodeBlockHeader(blockSize, numMiniBlock, totalValues int, firstValue int64) error {
+func (e *BinaryPackedEncoder) encodeHeader(blockSize, numMiniBlock, totalValues int, firstValue int64) error {
 	b := e.header[:]
 	n := 0
 	n += binary.PutUvarint(b[n:], uint64(blockSize))
@@ -141,31 +187,12 @@ func (e *BinaryPackedEncoder) encodeBlockHeader(blockSize, numMiniBlock, totalVa
 	return err
 }
 
-func (e *BinaryPackedEncoder) encodeBlock(minDelta int64, bitWidths []byte, block []byte, blockWidth, miniBlockSize uint) error {
-	_ = block[:miniBlockSize*uint(len(bitWidths))]
-
+func (e *BinaryPackedEncoder) encodeBlock(minDelta int64, bitWidths []byte) error {
 	b := e.header[:]
 	n := binary.PutVarint(b, minDelta)
 	if _, err := e.writer.Write(b[:n]); err != nil {
 		return err
 	}
-	if _, err := e.writer.Write(bitWidths); err != nil {
-		return err
-	}
-
-	for i, bitWidth := range bitWidths {
-		if bitWidth == 0 {
-			continue
-		}
-		n := bits.Pack(e.miniBlock[:], uint(bitWidth),
-			block[uint(i)*miniBlockSize:(uint(i)+1)*miniBlockSize],
-			blockWidth,
-		)
-		_, err := e.writer.Write(e.miniBlock[:bits.ByteCount(uint(n)*uint(bitWidth))])
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+	_, err := e.writer.Write(bitWidths)
+	return err
 }

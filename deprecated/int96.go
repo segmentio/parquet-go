@@ -72,7 +72,7 @@ func Int96ToBytes(data []Int96) []byte {
 }
 
 func MaxLenInt96(data []Int96) int {
-	max := 1
+	max := 0
 	for i := range data {
 		n := data[i].Len()
 		if n > max {
