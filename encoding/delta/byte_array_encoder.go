@@ -63,15 +63,16 @@ func prefixLength(base, data []byte) int {
 }
 
 func binarySearchPrefixLength(max int, base, data []byte) int {
-	if len(base) == 0 {
-		return 0
-	}
-	if bytes.HasPrefix(data, base[:max]) {
-		if max == len(base) {
-			return max
+	for len(base) > 0 {
+		if bytes.HasPrefix(data, base[:max]) {
+			if max == len(base) {
+				return max
+			}
+			max += (len(base)-max)/2 + 1
+		} else {
+			base = base[:max-1]
+			max /= 2
 		}
-		return binarySearchPrefixLength((len(base)-max)/2+max+1, base, data)
-	} else {
-		return binarySearchPrefixLength(max/2, base[:max-1], data)
 	}
+	return 0
 }
