@@ -67,7 +67,7 @@ type firstAndLastName struct {
 }
 
 type timeseries struct {
-	Name      string  `parquet:"name,plain"`
+	Name      string  `parquet:"name,dict"`
 	Timestamp int64   `parquet:"timestamp,delta"`
 	Value     float64 `parquet:"value"`
 }
@@ -169,21 +169,21 @@ value 3: R:0 D:0 V:Skywalker
 		},
 		dump: `row group 0
 --------------------------------------------------------------------------------
-name:       BINARY UNCOMPRESSED DO:0 FPO:4 SZ:250/250/1.00 VC:10 ENC:RLE,PLAIN [more]...
-timestamp:  INT64 UNCOMPRESSED DO:0 FPO:254 SZ:544/544/1.00 VC:10 ENC: [more]...
-value:      DOUBLE UNCOMPRESSED DO:0 FPO:798 SZ:110/110/1.00 VC:10 ENC:RLE,PLAIN [more]...
+name:       BINARY UNCOMPRESSED DO:4 FPO:45 SZ:72/72/1.00 VC:10 ENC:RL [more]...
+timestamp:  INT64 UNCOMPRESSED DO:0 FPO:76 SZ:62/62/1.00 VC:10 ENC:DEL [more]...
+value:      DOUBLE UNCOMPRESSED DO:0 FPO:138 SZ:110/110/1.00 VC:10 ENC:PLAIN,RLE [more]...
 
-    name TV=10 RL=0 DL=0
+    name TV=10 RL=0 DL=0 DS: 1 DE:PLAIN
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[no stats for this column] SZ:220 [more]...
+    page 0:                   DLE:RLE RLE:RLE VLE:RLE_DICTIONARY ST:[n [more]... VC:10
 
     timestamp TV=10 RL=0 DL=0
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:DELTA_BINARY_PACKED ST:[no stats for  [more]... VC:10
+    page 0:                   DLE:RLE RLE:RLE VLE:DELTA_BINARY_PACKED  [more]... VC:10
 
     value TV=10 RL=0 DL=0
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[no stats for this column] SZ:80 VC:10
+    page 0:                   DLE:RLE RLE:RLE VLE:PLAIN ST:[no stats f [more]... VC:10
 
 BINARY name
 --------------------------------------------------------------------------------
@@ -203,15 +203,15 @@ INT64 timestamp
 --------------------------------------------------------------------------------
 *** row group 1 of 1, values 1 to 10 ***
 value 1:  R:0 D:0 V:1639444033
-value 2:  R:0 D:0 V:1639444033
-value 3:  R:0 D:0 V:1639444058
-value 4:  R:0 D:0 V:1639444085
-value 5:  R:0 D:0 V:1639444093
-value 6:  R:0 D:0 V:1639444101
-value 7:  R:0 D:0 V:1639444108
-value 8:  R:0 D:0 V:1639444133
-value 9:  R:0 D:0 V:1639444137
-value 10: R:0 D:0 V:1639444141
+value 2:  R:0 D:0 V:1639444058
+value 3:  R:0 D:0 V:1639444085
+value 4:  R:0 D:0 V:1639444093
+value 5:  R:0 D:0 V:1639444101
+value 6:  R:0 D:0 V:1639444108
+value 7:  R:0 D:0 V:1639444133
+value 8:  R:0 D:0 V:1639444137
+value 9:  R:0 D:0 V:1639444141
+value 10: R:0 D:0 V:1639444144
 
 DOUBLE value
 --------------------------------------------------------------------------------
@@ -258,26 +258,26 @@ value 10: R:0 D:0 V:10.0
 		dump: `row group 0
 --------------------------------------------------------------------------------
 contacts:
-.name:              BINARY UNCOMPRESSED DO:0 FPO:4 SZ:75/75/1.00 VC:3  [more]...
-.phoneNumber:       BINARY SNAPPY DO:0 FPO:79 SZ:58/56/0.97 VC:3 ENC:RLE,PLAIN [more]...
-owner:              BINARY ZSTD DO:0 FPO:137 SZ:69/60/0.87 VC:2 ENC:RLE,PLAIN [more]...
-ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:206 SZ:95/70/0.74 VC:3 ENC:RLE,PLAIN [more]...
+.name:              BINARY UNCOMPRESSED DO:0 FPO:4 SZ:81/81/1.00 VC:3  [more]...
+.phoneNumber:       BINARY SNAPPY DO:0 FPO:85 SZ:59/57/0.97 VC:3 ENC:R [more]...
+owner:              BINARY ZSTD DO:0 FPO:144 SZ:75/66/0.88 VC:2 ENC:RL [more]...
+ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:219 SZ:102/77/0.75 VC:3 ENC:R [more]...
 
     contacts.name TV=3 RL=1 DL=1
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[no stats for this column] SZ:47 VC:3
+    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:3
 
     contacts.phoneNumber TV=3 RL=1 DL=2
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[no stats for this column] SZ:28 VC:3
+    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:3
 
     owner TV=2 RL=0 DL=0
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[no stats for this column] SZ:32 VC:2
+    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:2
 
     ownerPhoneNumbers TV=3 RL=1 DL=1
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[no stats for this column] SZ:42 VC:3
+    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:3
 
 BINARY contacts.name
 --------------------------------------------------------------------------------

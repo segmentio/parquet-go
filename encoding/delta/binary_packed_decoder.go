@@ -20,10 +20,10 @@ type BinaryPackedDecoder struct {
 	totalValues   int
 	lastValue     int64
 	bitWidths     []byte
-	miniBlocks    []byte
 	blockValues   []int64
 	valueIndex    int
 	blockIndex    int
+	miniBlocks    bits.Reader
 }
 
 func NewBinaryPackedDecoder(r io.Reader) *BinaryPackedDecoder {
@@ -36,14 +36,21 @@ func (d *BinaryPackedDecoder) Reset(r io.Reader) {
 	*d = BinaryPackedDecoder{
 		reader:      d.reader,
 		bitWidths:   d.bitWidths[:0],
-		miniBlocks:  d.miniBlocks[:0],
 		blockValues: d.blockValues[:0],
+		valueIndex:  -1,
 	}
+
+	if cap(d.blockValues) == 0 {
+		d.blockValues = make([]int64, 0, blockSize32)
+	}
+
 	if d.reader == nil {
 		d.reader = bufio.NewReaderSize(r, 4096)
 	} else {
 		d.reader.Reset(r)
 	}
+
+	d.miniBlocks.Reset(d.reader)
 }
 
 func (e *BinaryPackedDecoder) Encoding() format.Encoding {
@@ -55,6 +62,9 @@ func (d *BinaryPackedDecoder) DecodeInt32(data []int32) (int, error) {
 
 	for len(data) > 0 {
 		if err := d.decode(); err != nil {
+			if err == io.EOF && decoded > 0 {
+				break
+			}
 			return decoded, err
 		}
 
@@ -90,6 +100,9 @@ func (d *BinaryPackedDecoder) DecodeInt64(data []int64) (int, error) {
 
 	for len(data) > 0 {
 		if err := d.decode(); err != nil {
+			if err == io.EOF && decoded > 0 {
+				break
+			}
 			return decoded, err
 		}
 
@@ -112,11 +125,12 @@ func (d *BinaryPackedDecoder) DecodeInt64(data []int64) (int, error) {
 }
 
 func (d *BinaryPackedDecoder) decode() error {
-	for d.valueIndex == d.totalValues {
-		blockSize, numMiniBlock, totalValues, firstValue, err := d.decodeBlockHeader()
+	if d.valueIndex < 0 {
+		blockSize, numMiniBlock, totalValues, firstValue, err := d.decodeHeader()
 		if err != nil {
 			return err
 		}
+
 		d.blockSize = blockSize
 		d.numMiniBlock = numMiniBlock
 		d.miniBlockSize = blockSize / numMiniBlock
@@ -124,9 +138,19 @@ func (d *BinaryPackedDecoder) decode() error {
 		d.lastValue = firstValue
 		d.valueIndex = 0
 		d.blockIndex = 0
+
+		if d.totalValues > 0 {
+			d.blockValues = append(d.blockValues[:0], firstValue)
+		}
+
+		return nil
 	}
 
-	if d.blockIndex == 0 || d.blockIndex == d.blockSize {
+	if d.valueIndex == d.totalValues {
+		return io.EOF
+	}
+
+	if d.blockIndex == 0 || d.blockIndex == len(d.blockValues) {
 		d.blockIndex = 0
 		if err := d.decodeBlock(); err != nil {
 			return err
@@ -136,7 +160,7 @@ func (d *BinaryPackedDecoder) decode() error {
 	return nil
 }
 
-func (d *BinaryPackedDecoder) decodeBlockHeader() (blockSize, numMiniBlock, totalValues int, firstValue int64, err error) {
+func (d *BinaryPackedDecoder) decodeHeader() (blockSize, numMiniBlock, totalValues int, firstValue int64, err error) {
 	var u uint64
 
 	if u, err = binary.ReadUvarint(d.reader); err != nil {
@@ -180,43 +204,49 @@ func (d *BinaryPackedDecoder) decodeBlock() error {
 		return fmt.Errorf("DELTA_BINARY_PACKED: reading min delta: %w", err)
 	}
 
-	d.bitWidths = resize(d.bitWidths, d.numMiniBlock)
+	if cap(d.bitWidths) < d.numMiniBlock {
+		d.bitWidths = make([]byte, d.numMiniBlock)
+	} else {
+		d.bitWidths = d.bitWidths[:d.numMiniBlock]
+	}
+
 	if _, err := io.ReadFull(d.reader, d.bitWidths); err != nil {
 		return fmt.Errorf("DELTA_BINARY_PACKED: reading bit widths: %w", err)
 	}
 
-	miniBlockSize := uint(d.miniBlockSize)
-	miniBlockBytes := 0
-	for _, bitWidth := range d.bitWidths {
-		miniBlockBytes += bits.ByteCount(uint(bitWidth) * miniBlockSize)
-	}
-
-	d.miniBlocks = resize(d.miniBlocks, miniBlockBytes)
-	if _, err := io.ReadFull(d.reader, d.miniBlocks); err != nil {
-		return fmt.Errorf("DELTA_BINARY_PACKED: reading mini blocks: %w", err)
-	}
-
-	d.blockValues = bits.BytesToInt64(resize(bits.Int64ToBytes(d.blockValues), 8*d.blockSize))
-	src := d.miniBlocks
-	dst := bits.Int64ToBytes(d.blockValues)
-	for _, bitWidth := range d.bitWidths {
-		if bitWidth == 0 {
-			i := bits.ByteCount(miniBlockSize * 64)
-			b := dst[:i]
-			for j := range b {
-				b[j] = 0
-			}
-			dst = dst[i:]
-		} else {
-			i := bits.ByteCount(miniBlockSize * 64)
-			j := bits.ByteCount(miniBlockSize * uint(bitWidth))
-			bits.Pack(dst[:i], 64, src[:j], uint(bitWidth))
-			dst = dst[i:]
-			src = src[j:]
-		}
+	if cap(d.blockValues) < d.blockSize {
+		d.blockValues = make([]int64, d.blockSize)
+	} else {
+		d.blockValues = d.blockValues[:d.blockSize]
 	}
 
 	blockValues := d.blockValues
+	for i := range blockValues {
+		blockValues[i] = 0
+	}
+
+	for i, bitWidth := range d.bitWidths {
+		if bitWidth != 0 {
+			j := (i + 0) * d.miniBlockSize
+			k := (i + 1) * d.miniBlockSize
+			n := k - j
+			r := d.totalValues - d.valueIndex
+			if n > r {
+				n = r
+			}
+
+			for x := range blockValues[j:k] {
+				v, _, err := d.miniBlocks.ReadBits(uint(bitWidth))
+				if err != nil {
+					err = dontExpectEOF(err)
+					err = fmt.Errorf("DELTA_BINARY_PACKED: reading mini blocks: %w", err)
+					return err
+				}
+				blockValues[j+x] = int64(v)
+			}
+		}
+	}
+
 	if remain := d.totalValues - d.valueIndex; len(blockValues) > remain {
 		blockValues = blockValues[:remain]
 	}
@@ -235,13 +265,4 @@ func dontExpectEOF(err error) error {
 		err = io.ErrUnexpectedEOF
 	}
 	return err
-}
-
-func resize(buf []byte, size int) []byte {
-	if cap(buf) < size {
-		buf = make([]byte, size)
-	} else {
-		buf = buf[:size]
-	}
-	return buf
 }

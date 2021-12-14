@@ -31,17 +31,21 @@ var (
 	// DeltaBinaryPacked is the delta binary packed parquet encoding.
 	DeltaBinaryPacked delta.BinaryPackedEncoding
 
+	// DeltaLengthByteArray is the delta length byte array parquet encoding.
+	DeltaLengthByteArray delta.LengthByteArrayEncoding
+
 	// ByteStreamSplit is an encoding for floating-point data.
 	ByteStreamSplit bytestreamsplit.Encoding
 
 	// Table indexing the encodings supported by this package.
 	encodings = [...]encoding.Encoding{
-		format.Plain:             &Plain,
-		format.PlainDictionary:   &PlainDictionary,
-		format.RLE:               &RLE,
-		format.RLEDictionary:     &RLEDictionary,
-		format.DeltaBinaryPacked: &DeltaBinaryPacked,
-		format.ByteStreamSplit:   &ByteStreamSplit,
+		format.Plain:                &Plain,
+		format.PlainDictionary:      &PlainDictionary,
+		format.RLE:                  &RLE,
+		format.RLEDictionary:        &RLEDictionary,
+		format.DeltaBinaryPacked:    &DeltaBinaryPacked,
+		format.DeltaLengthByteArray: &DeltaLengthByteArray,
+		format.ByteStreamSplit:      &ByteStreamSplit,
 	}
 )
 

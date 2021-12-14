@@ -66,7 +66,7 @@ func (e *Encoder) EncodeDouble(data []float64) error {
 }
 
 func (e *Encoder) EncodeByteArray(data []byte) error {
-	if _, err := ScanByteArrayList(data, len(data)/4, func(value []byte) error {
+	if _, err := ScanByteArrayList(data, All, func(value []byte) error {
 		return nil
 	}); err != nil {
 		return err

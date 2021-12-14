@@ -13,6 +13,7 @@ import (
 	"github.com/segmentio/parquet/encoding/delta"
 	"github.com/segmentio/parquet/encoding/plain"
 	"github.com/segmentio/parquet/encoding/rle"
+	"github.com/segmentio/parquet/format"
 	"github.com/segmentio/parquet/internal/bits"
 )
 
@@ -221,6 +222,11 @@ func TestEncoding(t *testing.T) {
 		},
 
 		{
+			scenario: "DELTA_LENGTH_BYTE_ARRAY",
+			encoding: new(delta.LengthByteArrayEncoding),
+		},
+
+		{
 			scenario: "BYTE_STREAM_SPLIT",
 			encoding: new(bytestreamsplit.Encoding),
 		},
@@ -307,6 +313,10 @@ func testFormatEncoding(t *testing.T, e encoding.Encoding) {
 }
 
 func testBooleanEncoding(t *testing.T, e encoding.Encoding) {
+	if !e.CanEncode(format.Boolean) {
+		t.Skipf("%s cannot encode boolean values", e)
+	}
+
 	buf := new(bytes.Buffer)
 	enc := e.NewEncoder(buf)
 	dec := e.NewDecoder(buf)
@@ -348,6 +358,10 @@ func testBooleanEncoding(t *testing.T, e encoding.Encoding) {
 }
 
 func testInt8Encoding(t *testing.T, e encoding.Encoding) {
+	if !e.CanEncode(format.Int32) {
+		t.Skipf("%s cannot encode int32 values", e)
+	}
+
 	buf := new(bytes.Buffer)
 	enc := e.NewEncoder(buf)
 	dec := e.NewDecoder(buf)
@@ -360,6 +374,9 @@ func testInt8Encoding(t *testing.T, e encoding.Encoding) {
 			defer buf.Reset()
 
 			bitWidth := bits.MaxLen8(test)
+			if bitWidth == 0 {
+				bitWidth = 1
+			}
 			enc.SetBitWidth(bitWidth)
 			dec.SetBitWidth(bitWidth)
 
@@ -393,6 +410,10 @@ func testInt8Encoding(t *testing.T, e encoding.Encoding) {
 }
 
 func testInt16Encoding(t *testing.T, e encoding.Encoding) {
+	if !e.CanEncode(format.Int32) {
+		t.Skipf("%s cannot encode int32 values", e)
+	}
+
 	buf := new(bytes.Buffer)
 	enc := e.NewEncoder(buf)
 	dec := e.NewDecoder(buf)
@@ -405,6 +426,9 @@ func testInt16Encoding(t *testing.T, e encoding.Encoding) {
 			defer buf.Reset()
 
 			bitWidth := bits.MaxLen16(test)
+			if bitWidth == 0 {
+				bitWidth = 1
+			}
 			enc.SetBitWidth(bitWidth)
 			dec.SetBitWidth(bitWidth)
 
@@ -438,6 +462,10 @@ func testInt16Encoding(t *testing.T, e encoding.Encoding) {
 }
 
 func testInt32Encoding(t *testing.T, e encoding.Encoding) {
+	if !e.CanEncode(format.Int32) {
+		t.Skipf("%s cannot encode int32 values", e)
+	}
+
 	buf := new(bytes.Buffer)
 	enc := e.NewEncoder(buf)
 	dec := e.NewDecoder(buf)
@@ -450,6 +478,9 @@ func testInt32Encoding(t *testing.T, e encoding.Encoding) {
 			defer buf.Reset()
 
 			bitWidth := bits.MaxLen32(test)
+			if bitWidth == 0 {
+				bitWidth = 1
+			}
 			enc.SetBitWidth(bitWidth)
 			dec.SetBitWidth(bitWidth)
 
@@ -483,6 +514,10 @@ func testInt32Encoding(t *testing.T, e encoding.Encoding) {
 }
 
 func testInt64Encoding(t *testing.T, e encoding.Encoding) {
+	if !e.CanEncode(format.Int64) {
+		t.Skipf("%s cannot encode int64 values", e)
+	}
+
 	buf := new(bytes.Buffer)
 	enc := e.NewEncoder(buf)
 	dec := e.NewDecoder(buf)
@@ -495,6 +530,9 @@ func testInt64Encoding(t *testing.T, e encoding.Encoding) {
 			defer buf.Reset()
 
 			bitWidth := bits.MaxLen64(test)
+			if bitWidth == 0 {
+				bitWidth = 1
+			}
 			enc.SetBitWidth(bitWidth)
 			dec.SetBitWidth(bitWidth)
 
@@ -528,6 +566,10 @@ func testInt64Encoding(t *testing.T, e encoding.Encoding) {
 }
 
 func testInt96Encoding(t *testing.T, e encoding.Encoding) {
+	if !e.CanEncode(format.Int96) {
+		t.Skipf("%s cannot encode int96 values", e)
+	}
+
 	buf := new(bytes.Buffer)
 	enc := e.NewEncoder(buf)
 	dec := e.NewDecoder(buf)
@@ -540,6 +582,9 @@ func testInt96Encoding(t *testing.T, e encoding.Encoding) {
 			defer buf.Reset()
 
 			bitWidth := deprecated.MaxLenInt96(test)
+			if bitWidth == 0 {
+				bitWidth = 1
+			}
 			enc.SetBitWidth(bitWidth)
 			dec.SetBitWidth(bitWidth)
 
@@ -573,6 +618,10 @@ func testInt96Encoding(t *testing.T, e encoding.Encoding) {
 }
 
 func testFloatEncoding(t *testing.T, e encoding.Encoding) {
+	if !e.CanEncode(format.Float) {
+		t.Skipf("%s cannot encode float values", e)
+	}
+
 	buf := new(bytes.Buffer)
 	enc := e.NewEncoder(buf)
 	dec := e.NewDecoder(buf)
@@ -614,6 +663,10 @@ func testFloatEncoding(t *testing.T, e encoding.Encoding) {
 }
 
 func testDoubleEncoding(t *testing.T, e encoding.Encoding) {
+	if !e.CanEncode(format.Double) {
+		t.Skipf("%s cannot encode double values", e)
+	}
+
 	buf := new(bytes.Buffer)
 	enc := e.NewEncoder(buf)
 	dec := e.NewDecoder(buf)
@@ -655,6 +708,10 @@ func testDoubleEncoding(t *testing.T, e encoding.Encoding) {
 }
 
 func testByteArrayEncoding(t *testing.T, e encoding.Encoding) {
+	if !e.CanEncode(format.ByteArray) {
+		t.Skipf("%s cannot encode byte array values", e)
+	}
+
 	buf := new(bytes.Buffer)
 	enc := e.NewEncoder(buf)
 	dec := e.NewDecoder(buf)
@@ -711,6 +768,10 @@ func testByteArrayEncoding(t *testing.T, e encoding.Encoding) {
 }
 
 func testFixedLenByteArrayEncoding(t *testing.T, e encoding.Encoding) {
+	if !e.CanEncode(format.FixedLenByteArray) {
+		t.Skipf("%s cannot encode fixed-length byte array values", e)
+	}
+
 	buf := new(bytes.Buffer)
 	enc := e.NewEncoder(buf)
 	dec := e.NewDecoder(buf)
