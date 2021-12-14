@@ -44,10 +44,14 @@ func (d *BinaryPackedDecoder) Reset(r io.Reader) {
 		d.blockValues = make([]int64, 0, blockSize32)
 	}
 
-	if d.reader == nil {
-		d.reader = bufio.NewReaderSize(r, 4096)
-	} else {
+	if d.reader != nil {
 		d.reader.Reset(r)
+	} else if r != nil {
+		if br, _ := r.(*bufio.Reader); br != nil {
+			d.reader = br
+		} else {
+			d.reader = bufio.NewReaderSize(r, defaultBufferSize)
+		}
 	}
 
 	d.miniBlocks.Reset(d.reader)
