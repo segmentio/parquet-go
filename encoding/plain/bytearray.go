@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	// All is a constant to pass to SanByteArrayList to apply no limist to the
+	// All is a constant to pass to SanByteArrayList to apply no limit to the
 	// number of values scanned.
 	All = math.MaxInt32
 )
