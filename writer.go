@@ -240,19 +240,25 @@ func (rgw *rowGroupWriter) init(node Node, path []string, dataPageType format.Pa
 		// footprint; keep it simple for now.
 		encoding := encoding.Encoding(&Plain)
 		compressionCodec := compress.Codec(&Uncompressed)
+		// The parquet-format documentation states that the
+		// DELTA_LENGTH_BYTE_ARRAY is always preferred to PLAIN when
+		// encoding BYTE_ARRAY values. We apply it as a default if
+		// none were explicitly specified, which gives the application
+		// the opportunity to override this behavior if needed.
+		//
+		// https://github.com/apache/parquet-format/blob/master/Encodings.md#delta-length-byte-array-delta_length_byte_array--6
+		if nodeType.Kind() == ByteArray {
+			encoding = &DeltaLengthByteArray
+		}
 
 		for _, enc := range node.Encoding() {
-			if enc.Encoding() != format.Plain {
-				encoding = enc
-				break
-			}
+			encoding = enc
+			break
 		}
 
 		for _, codec := range node.Compression() {
-			if codec.CompressionCodec() != format.Uncompressed {
-				compressionCodec = codec
-				break
-			}
+			compressionCodec = codec
+			break
 		}
 
 		columnIndexer := nodeType.NewColumnIndexer(rgw.config.ColumnIndexSizeLimit)

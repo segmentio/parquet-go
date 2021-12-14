@@ -4,7 +4,6 @@ package encoding
 
 import (
 	"errors"
-	"fmt"
 	"io"
 
 	"github.com/segmentio/parquet/deprecated"
@@ -41,7 +40,8 @@ var (
 //
 // Encoding instances must be safe to use concurrently from multiple goroutines.
 type Encoding interface {
-	fmt.Stringer
+	// Returns a human-redable name for the encoding.
+	String() string
 
 	// Returns the parquet code representing the encoding.
 	Encoding() format.Encoding

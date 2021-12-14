@@ -3,6 +3,13 @@ package plain
 import (
 	"encoding/binary"
 	"fmt"
+	"math"
+)
+
+const (
+	// All is a constant to pass to SanByteArrayList to apply no limit to the
+	// number of values scanned.
+	All = math.MaxInt32
 )
 
 // NextByteArrayLength returns the length of the PLAIN byte array starting at
@@ -70,13 +77,13 @@ func JoinByteArrayList(values [][]byte) []byte {
 // The returned slice references sub-slices of the input buffer, no copies of
 // the values are made.
 func SplitByteArrayList(buffer []byte) ([][]byte, error) {
-	n, err := ScanByteArrayList(buffer, len(buffer)/4, func(value []byte) error { return nil })
+	n, err := ScanByteArrayList(buffer, All, func(value []byte) error { return nil })
 	if err != nil {
 		return nil, err
 	}
 	values := make([][]byte, n)
 	offset := 0
-	ScanByteArrayList(buffer, len(buffer)/4, func(value []byte) error {
+	ScanByteArrayList(buffer, All, func(value []byte) error {
 		values[offset] = value
 		offset++
 		return nil

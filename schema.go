@@ -42,7 +42,9 @@ type Schema struct {
 //	brotli   | sets the parquet column compression codec to brotli
 //	lz4      | sets the parquet column compression codec to lz4
 //	zstd     | sets the parquet column compression codec to zstd
+//	plain    | enables the plain encoding (no-op default)
 //	dict     | enables dictionary encoding on the parquet column
+//	delta    | enables delta encoding on the parquet column
 //	list     | for slice types, use the parquet LIST logical type
 //	enum     | for string types, use the parquet ENUM logical type
 //	uuid     | for string and [16]byte types, use the parquet UUID logical type
@@ -282,17 +284,22 @@ func throwUnknownFieldTag(f reflect.StructField, tag string) {
 	panic("struct has unrecognized '" + tag + "' parquet tag: " + structFieldString(f))
 }
 
+func throwInvalidStructField(msg string, field reflect.StructField) {
+	panic(msg + ": " + structFieldString(field))
+}
+
 func makeStructField(f reflect.StructField, columnIndex int) (structField, int) {
 	var (
 		field     = structField{index: f.Index}
 		optional  bool
+		list      bool
 		encodings []encoding.Encoding
 		codecs    []compress.Codec
 	)
 
 	setNode := func(node Node, traverse traverseFunc) {
 		if field.Node != nil {
-			panic("struct field has multiple logical parquet types declared: " + structFieldString(f))
+			throwInvalidStructField("struct field has multiple logical parquet types declared", f)
 		}
 		field.Node = node
 		field.traverse = traverse
@@ -300,15 +307,22 @@ func makeStructField(f reflect.StructField, columnIndex int) (structField, int) 
 
 	setOptional := func() {
 		if optional {
-			panic("struct field has multiple declaration of the optional tag: " + structFieldString(f))
+			throwInvalidStructField("struct field has multiple declaration of the optional tag", f)
 		}
 		optional = true
+	}
+
+	setList := func() {
+		if list {
+			throwInvalidStructField("struct field has multiple declaration of the list tag", f)
+		}
+		list = true
 	}
 
 	setEncoding := func(enc encoding.Encoding) {
 		for _, e := range encodings {
 			if e.Encoding() == enc.Encoding() {
-				panic("struct field has encoding declared multiple times: " + structFieldString(f))
+				throwInvalidStructField("struct field has encoding declared multiple times", f)
 			}
 		}
 		encodings = append(encodings, enc)
@@ -317,7 +331,7 @@ func makeStructField(f reflect.StructField, columnIndex int) (structField, int) 
 	setCompression := func(codec compress.Codec) {
 		for _, c := range codecs {
 			if c.CompressionCodec() == codec.CompressionCodec() {
-				panic("struct field has compression codecs declared multiple times: " + structFieldString(f))
+				throwInvalidStructField("struct field has compression codecs declared multiple times", f)
 			}
 		}
 		codecs = append(codecs, codec)
@@ -352,14 +366,26 @@ func makeStructField(f reflect.StructField, columnIndex int) (structField, int) 
 			case "zstd":
 				setCompression(&Zstd)
 
+			case "plain":
+				setEncoding(&Plain)
+
 			case "dict":
-				setEncoding(&Dict)
+				setEncoding(&RLEDictionary)
+
+			case "delta":
+				switch f.Type.Kind() {
+				case reflect.Int, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint32, reflect.Uint64:
+					setEncoding(&DeltaBinaryPacked)
+				default:
+					throwInvalidFieldTag(f, option)
+				}
 
 			case "list":
 				switch f.Type.Kind() {
 				case reflect.Slice:
 					element, columnIndex, traverse = nodeOf(f.Type.Elem(), columnIndex)
-					setNode(List(element), traverseSlice(traverse))
+					setNode(element, traverse)
+					setList()
 				default:
 					throwInvalidFieldTag(f, option)
 				}
@@ -412,13 +438,19 @@ func makeStructField(f reflect.StructField, columnIndex int) (structField, int) 
 		field.Node, columnIndex, field.traverse = nodeOf(f.Type, columnIndex)
 	}
 
+	field.Node = Compressed(field.Node, codecs...)
+	field.Node = Encoded(field.Node, encodings...)
+
+	if list {
+		field.Node = List(field.Node)
+		field.traverse = traverseSlice(field.traverse)
+	}
+
 	if optional {
 		field.Node = Optional(field.Node)
 		field.traverse = traverseOptional(field.traverse)
 	}
 
-	field.Node = Compressed(field.Node, codecs...)
-	field.Node = Encoded(field.Node, encodings...)
 	return field, columnIndex
 }
 
