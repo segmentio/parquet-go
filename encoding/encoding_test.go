@@ -207,12 +207,12 @@ func TestEncoding(t *testing.T) {
 
 		{
 			scenario: "PLAIN_DICTIONARY",
-			encoding: new(plain.DictEncoding),
+			encoding: new(plain.DictionaryEncoding),
 		},
 
 		{
 			scenario: "RLE_DICTIONARY",
-			encoding: new(rle.DictEncoding),
+			encoding: new(rle.DictionaryEncoding),
 		},
 
 		{

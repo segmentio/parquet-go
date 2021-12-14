@@ -9,44 +9,44 @@ import (
 	"github.com/segmentio/parquet/internal/bits"
 )
 
-type DictEncoding struct {
+type DictionaryEncoding struct {
 }
 
-func (e *DictEncoding) Encoding() format.Encoding {
+func (e *DictionaryEncoding) Encoding() format.Encoding {
 	return format.RLEDictionary
 }
 
-func (e *DictEncoding) CanEncode(t format.Type) bool {
+func (e *DictionaryEncoding) CanEncode(t format.Type) bool {
 	return true
 }
 
-func (e *DictEncoding) NewDecoder(r io.Reader) encoding.Decoder {
-	return dictDecoder{rle: NewDecoder(r)}
+func (e *DictionaryEncoding) NewDecoder(r io.Reader) encoding.Decoder {
+	return dictionaryDecoder{rle: NewDecoder(r)}
 }
 
-func (e *DictEncoding) NewEncoder(w io.Writer) encoding.Encoder {
-	return dictEncoder{rle: NewEncoder(w)}
+func (e *DictionaryEncoding) NewEncoder(w io.Writer) encoding.Encoder {
+	return dictionaryEncoder{rle: NewEncoder(w)}
 }
 
-func (e *DictEncoding) String() string {
+func (e *DictionaryEncoding) String() string {
 	return "RLE_DICTIONARY"
 }
 
-type dictDecoder struct {
+type dictionaryDecoder struct {
 	encoding.NotSupportedDecoder
 	rle *Decoder
 }
 
-func (d dictDecoder) Reset(r io.Reader) {
+func (d dictionaryDecoder) Reset(r io.Reader) {
 	d.rle.Reset(r)
 	d.rle.SetBitWidth(0)
 }
 
-func (d dictDecoder) Encoding() format.Encoding {
+func (d dictionaryDecoder) Encoding() format.Encoding {
 	return format.RLEDictionary
 }
 
-func (d dictDecoder) DecodeInt32(data []int32) (int, error) {
+func (d dictionaryDecoder) DecodeInt32(data []int32) (int, error) {
 	if d.rle.BitWidth() == 0 {
 		bitWidth, err := d.decodeBitWidth()
 		if err != nil {
@@ -57,7 +57,7 @@ func (d dictDecoder) DecodeInt32(data []int32) (int, error) {
 	return d.rle.DecodeInt32(data)
 }
 
-func (d dictDecoder) decodeBitWidth() (int, error) {
+func (d dictionaryDecoder) decodeBitWidth() (int, error) {
 	b, err := d.rle.ReadByte()
 	switch err {
 	case nil:
@@ -72,20 +72,20 @@ func (d dictDecoder) decodeBitWidth() (int, error) {
 	}
 }
 
-type dictEncoder struct {
+type dictionaryEncoder struct {
 	encoding.NotSupportedEncoder
 	rle *Encoder
 }
 
-func (e dictEncoder) Reset(w io.Writer) {
+func (e dictionaryEncoder) Reset(w io.Writer) {
 	e.rle.Reset(w)
 }
 
-func (e dictEncoder) Encoding() format.Encoding {
+func (e dictionaryEncoder) Encoding() format.Encoding {
 	return format.RLEDictionary
 }
 
-func (e dictEncoder) EncodeInt32(data []int32) error {
+func (e dictionaryEncoder) EncodeInt32(data []int32) error {
 	bitWidth := bits.MaxLen32(data)
 	if err := e.encodeBitWidth(bitWidth); err != nil {
 		return err
@@ -94,6 +94,6 @@ func (e dictEncoder) EncodeInt32(data []int32) error {
 	return e.rle.EncodeInt32(data)
 }
 
-func (e dictEncoder) encodeBitWidth(bitWidth int) error {
+func (e dictionaryEncoder) encodeBitWidth(bitWidth int) error {
 	return e.rle.WriteByte(byte(bitWidth))
 }

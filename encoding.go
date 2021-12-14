@@ -23,10 +23,10 @@ var (
 	// This encoding should not be used anymore in parquet 2.0 and later,
 	// it is implemented for backwards compatibility to support reading
 	// files that were encoded with older parquet libraries.
-	PlainDictionary plain.DictEncoding
+	PlainDictionary plain.DictionaryEncoding
 
 	// RLEDictionary is the RLE dictionary parquet encoding.
-	RLEDictionary rle.DictEncoding
+	RLEDictionary rle.DictionaryEncoding
 
 	// DeltaBinaryPacked is the delta binary packed parquet encoding.
 	DeltaBinaryPacked delta.BinaryPackedEncoding
