@@ -366,7 +366,7 @@ func makeStructField(f reflect.StructField, columnIndex int) (structField, int) 
 				setCompression(&Zstd)
 
 			case "dict":
-				setEncoding(&Dict)
+				setEncoding(&RLEDictionary)
 
 			case "delta":
 				switch f.Type.Kind() {
