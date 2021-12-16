@@ -165,21 +165,21 @@ func makeValue(k Kind, v reflect.Value) Value {
 		}
 
 	case ByteArray:
-		switch vt := v.Type(); vt.Kind() {
+		switch v.Kind() {
 		case reflect.String:
 			return makeValueString(k, v.String())
 		case reflect.Slice:
-			if vt.Elem().Kind() == reflect.Uint8 {
+			if v.Type().Elem().Kind() == reflect.Uint8 {
 				return makeValueBytes(k, v.Bytes())
 			}
 		}
 
 	case FixedLenByteArray:
-		switch vt := v.Type(); vt.Kind() {
+		switch v.Kind() {
 		case reflect.String: // uuid
 			return makeValueString(k, v.String())
 		case reflect.Array:
-			if vt.Elem().Kind() == reflect.Uint8 {
+			if v.Type().Elem().Kind() == reflect.Uint8 {
 				return makeValueFixedLenByteArray(v)
 			}
 		}
