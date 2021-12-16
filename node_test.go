@@ -27,9 +27,15 @@ func BenchmarkTraverse(b *testing.B) {
 	schema := parquet.SchemaOf(row)
 
 	for i := 0; i < b.N; i++ {
-		schema.Traverse(row, parquet.TraversalFunc(func(columnIndex int, value parquet.Value) error {
+		schema.Traverse(row, traversalFunc(func(columnIndex int, value parquet.Value) error {
 			//
 			return nil
 		}))
 	}
+}
+
+type traversalFunc func(int, parquet.Value) error
+
+func (f traversalFunc) Traverse(columnIndex int, value parquet.Value) error {
+	return f(columnIndex, value)
 }

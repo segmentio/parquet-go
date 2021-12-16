@@ -511,7 +511,7 @@ func TestSchemaTraversal(t *testing.T) {
 				delete(values, columnIndex)
 			}
 
-			err := schema.Traverse(test.input, parquet.TraversalFunc(func(columnIndex int, value parquet.Value) error {
+			err := schema.Traverse(test.input, traversalFunc(func(columnIndex int, value parquet.Value) error {
 				values[columnIndex] = append(values[columnIndex], value)
 				return nil
 			}))

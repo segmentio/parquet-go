@@ -436,6 +436,73 @@ func makeInt96(lo uint64, hi uint32) (i96 deprecated.Int96) {
 	}
 }
 
+func assignValue(dst reflect.Value, src Value) error {
+	dstKind := dst.Kind()
+	srcKind := src.Kind()
+
+	switch srcKind {
+	case Boolean:
+		switch dstKind {
+		case reflect.Boolean:
+			dst.SetBool(src.Boolean())
+			return nil
+		}
+
+	case Int32:
+		v := int64(src.Int32())
+		switch dstKind {
+		case reflect.Int8, reflect.Int16, reflect.Int32:
+			dst.SetInt(int64(v))
+			return nil
+		case reflect.Uint8, reflect.Uint16, reflect.Uint32:
+			dst.SetUint(uint64(v))
+			return nil
+		}
+
+	case Int64:
+		v := src.Int64()
+		switch dstKind {
+		case reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Int:
+			dst.SetInt(v)
+			return nil
+		case reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uint, reflect.Uintptr:
+			dst.SetUint(uint64(v))
+			return nil
+		}
+
+	case Int96:
+
+	case ByteArray:
+		v := src.ByteArray()
+		switch dstKind {
+		case reflect.String:
+			dst.SetString(string(v))
+			return nil
+		case reflect.Slice:
+			if v.Type().Elem().Kind() == reflect.Uint8 {
+				dst.SetBytes(v)
+				return nil
+			}
+		}
+
+	case FixedLenByteArray:
+		v := src.ByteArray()
+		switch dstKind {
+		case reflect.Array:
+			if v.Type().Elem().Kind() == reflect.Uint8 && v.Len() == len(v) {
+				// TODO?
+			}
+		case reflect.Slice:
+			if v.Type().Elem().Kind() == reflect.Uint8 {
+				dst.SetBytes(v)
+				return nil
+			}
+		}
+	}
+
+	return fmt.Errorf("cannot assign parquet value of type %s to go value of type %s", srcKind.String(), dst.Type())
+}
+
 // Equal returns true if v1 and v2 are equal.
 //
 // Values are considered equal if they are of the same physical typee and hold

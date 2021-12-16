@@ -78,16 +78,17 @@ func NamedSchemaOf(name string, model interface{}) *Schema {
 func namedSchemaOf(name string, model reflect.Value) *Schema {
 	switch t := model.Type(); t.Kind() {
 	case reflect.Struct:
-		return newSchema(name, structNodeOf(t))
+		return NewSchema(name, structNodeOf(t))
 	case reflect.Ptr:
 		if elem := t.Elem(); elem.Kind() == reflect.Struct {
-			return newSchema(name, structNodeOf(elem))
+			return NewSchema(name, structNodeOf(elem))
 		}
 	}
 	panic("cannot construct parquet schema from value of type " + model.Type().String())
 }
 
-func newSchema(name string, root Node) *Schema {
+// NewSchema constructs a new Schema object with the given name and root node.
+func NewSchema(name string, root Node) *Schema {
 	return &Schema{
 		name:     name,
 		root:     root,
@@ -96,10 +97,8 @@ func newSchema(name string, root Node) *Schema {
 }
 
 func makeTraverseFunc(node Node) (traverse traverseFunc) {
-	if node.NumChildren() == 0 { // message{}
-		traverse = func(levels, reflect.Value, Traversal) error {
-			return nil
-		}
+	if isLeaf(node) { // message{}
+		traverse = func(levels, reflect.Value, Traversal) error { return nil }
 	} else {
 		_, traverse = traverseFuncOf(0, node)
 	}
@@ -567,15 +566,6 @@ type Traversal interface {
 	// The repetition and definition levels of the parquet value will be set
 	// according to the structure of the input Go value.
 	Traverse(columnIndex int, value Value) error
-}
-
-// TraversalFunc is an implementation of the Traverse interface for regular
-// Go functions and methods.
-type TraversalFunc func(int, Value) error
-
-// Traverse satisfies the Traversal interface.
-func (f TraversalFunc) Traverse(columnIndex int, value Value) error {
-	return f(columnIndex, value)
 }
 
 type levels struct {
