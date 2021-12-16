@@ -146,6 +146,12 @@ func makeValue(k Kind, v reflect.Value) Value {
 			return makeValueInt64(int64(v.Uint()))
 		}
 
+	case Int96:
+		switch v.Type() {
+		case reflect.TypeOf(deprecated.Int96{}):
+			return makeValueInt96(v.Interface().(deprecated.Int96))
+		}
+
 	case Float:
 		switch v.Kind() {
 		case reflect.Float32:

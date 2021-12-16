@@ -507,45 +507,25 @@ func TestSchemaTraversal(t *testing.T) {
 
 			t.Logf("\n%s\n", schema)
 
-			methods := []struct {
-				scenario string
-				traverse func(interface{}, parquet.Traversal) error
-			}{
-				{
-					scenario: "generic",
-					traverse: func(value interface{}, traversal parquet.Traversal) error {
-						return parquet.Traverse(schema, value, traversal)
-					},
-				},
-				{
-					scenario: "optimized",
-					traverse: schema.Traverse,
-				},
+			for columnIndex := range values {
+				delete(values, columnIndex)
 			}
 
-			for _, method := range methods {
-				t.Run(method.scenario, func(t *testing.T) {
-					for columnIndex := range values {
-						delete(values, columnIndex)
-					}
+			err := schema.Traverse(test.input, parquet.TraversalFunc(func(columnIndex int, value parquet.Value) error {
+				values[columnIndex] = append(values[columnIndex], value)
+				return nil
+			}))
+			if err != nil {
+				t.Fatal(err)
+			}
 
-					err := method.traverse(test.input, parquet.TraversalFunc(func(columnIndex int, value parquet.Value) error {
-						values[columnIndex] = append(values[columnIndex], value)
-						return nil
-					}))
-					if err != nil {
-						t.Fatal(err)
-					}
+			for columnIndex, expect := range test.values {
+				assertEqualValues(t, columnIndex, expect, values[columnIndex])
+				delete(values, columnIndex)
+			}
 
-					for columnIndex, expect := range test.values {
-						assertEqualValues(t, columnIndex, expect, values[columnIndex])
-						delete(values, columnIndex)
-					}
-
-					for columnIndex, unexpected := range values {
-						t.Errorf("unexpected column index %d found with %d values in it", columnIndex, len(unexpected))
-					}
-				})
+			for columnIndex, unexpected := range values {
+				t.Errorf("unexpected column index %d found with %d values in it", columnIndex, len(unexpected))
 			}
 		})
 	}

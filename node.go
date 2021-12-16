@@ -1,7 +1,6 @@
 package parquet
 
 import (
-	"fmt"
 	"reflect"
 	"sort"
 
@@ -15,6 +14,9 @@ import (
 // Nodes carry the type of values, as well as properties like whether the values
 // are optional or repeat. Nodes with one or more children represent parquet
 // groups and therefore do not have a logical type.
+//
+// Nodes are immutable values and therefore safe to use concurrently from
+// multiple goroutines.
 type Node interface {
 	// For leaf nodes, returns the type of values of the parquet column.
 	//
@@ -38,6 +40,9 @@ type Node interface {
 	// Returns the sorted list of child node namees.
 	//
 	// The method returns an empty slice on leaf nodes.
+	//
+	// As an optimization, the returned slice may be the same across calls to
+	// this method. Applications should treat the return value as immutable.
 	ChildNames() []string
 
 	// Returns the child node associated with the given name.
@@ -45,17 +50,66 @@ type Node interface {
 	// The method panics if it is called on a leaf node.
 	ChildByName(name string) Node
 
+	// ValueByName is returns the sub-value with the givne name in base.
+	ValueByName(base reflect.Value, name string) reflect.Value
+
 	// Returns the list of encodings used by the node and its children.
 	//
 	// The method may return an empty slice to indicate that only the plain
 	// encoding is used.
+	//
+	// As an optimization, the returned slice may be the same across calls to
+	// this method. Applications should treat the return value as immutable.
 	Encoding() []encoding.Encoding
 
 	// Returns the list of compression codecs used by the node and its children.
 	//
 	// The method may return an empty slice to indicate that no compression was
 	// configured on the node.
+	//
+	// As an optimization, the returned slice may be the same across calls to
+	// this method. Applications should treat the return value as immutable.
 	Compression() []compress.Codec
+}
+
+// IndexedNode is an extension of the Node interface implemented by types which
+// support indexing child nodes by their position.
+type IndexedNode interface {
+	Node
+
+	// ChildByIndex returns the child node at the given index.
+	ChildByIndex(index int) Node
+
+	// ValueByIndex returns the sub-value of base at the given index.
+	ValueByIndex(base reflect.Value, index int) reflect.Value
+}
+
+// WrappedNode is an extension of the Node interface implemented by types which
+// wrap another underlying node.
+type WrappedNode interface {
+	Node
+	// Unwrap returns the underlying base node.
+	//
+	// Note that Unwrap is not intended to recursively unwrap multple layers of
+	// wrappers, it returns the immediate next layer.
+	Unwrap() Node
+}
+
+type wrappedNode struct{ Node }
+
+func (w wrappedNode) Unwrap() Node { return w.Node }
+
+func wrap(node Node) wrappedNode { return wrappedNode{node} }
+
+func unwrap(node Node) Node {
+	for {
+		if w, ok := node.(WrappedNode); ok {
+			node = w.Unwrap()
+		} else {
+			break
+		}
+	}
+	return node
 }
 
 // Encoded wraps the node passed as argument to add the given list of encodings.
@@ -66,7 +120,7 @@ func Encoded(node Node, encodings ...encoding.Encoding) Node {
 	if len(encodings) == 0 {
 		return node
 	}
-	if node.NumChildren() != 0 {
+	if !isLeaf(node) {
 		panic("cannot add encodings to a non-leaf node")
 	}
 	kind := node.Type().Kind()
@@ -76,19 +130,29 @@ func Encoded(node Node, encodings ...encoding.Encoding) Node {
 		}
 	}
 	encodings = append([]encoding.Encoding{}, encodings...)
+	encodings = append(encodings, node.Encoding()...)
+	sortEncodings(encodings)
+	encodings = dedupeSortedEncodings(encodings)
 	return &encodedNode{
-		Node:      node,
-		encodings: encodings[:len(encodings):len(encodings)],
+		wrappedNode: wrap(node),
+		encodings:   encodings[:len(encodings):len(encodings)],
 	}
 }
 
 type encodedNode struct {
-	Node
+	wrappedNode
 	encodings []encoding.Encoding
 }
 
 func (n *encodedNode) Encoding() []encoding.Encoding {
-	encodings := append(n.encodings, n.Node.Encoding()...)
+	if isLeaf(n) {
+		return n.encodings
+	}
+	childNames := n.ChildNames()
+	encodings := make([]encoding.Encoding, 0, len(childNames))
+	for _, name := range childNames {
+		encodings = append(encodings, n.ChildByName(name).Encoding()...)
+	}
 	sortEncodings(encodings)
 	return dedupeSortedEncodings(encodings)
 }
@@ -101,23 +165,34 @@ func Compressed(node Node, codecs ...compress.Codec) Node {
 	if len(codecs) == 0 {
 		return node
 	}
-	if node.NumChildren() != 0 {
+	if !isLeaf(node) {
 		panic("cannot add compression codecs to a non-leaf node")
 	}
 	codecs = append([]compress.Codec{}, codecs...)
+	codecs = append(codecs, node.Compression()...)
+	codecs = codecs[:len(codecs):len(codecs)]
+	sortCodecs(codecs)
+	codecs = dedupeSortedCodecs(codecs)
 	return &compressedNode{
-		Node:   node,
-		codecs: codecs[:len(codecs):len(codecs)],
+		wrappedNode: wrap(node),
+		codecs:      codecs[:len(codecs):len(codecs)],
 	}
 }
 
 type compressedNode struct {
-	Node
+	wrappedNode
 	codecs []compress.Codec
 }
 
 func (n *compressedNode) Compression() []compress.Codec {
-	compression := append(n.codecs, n.Node.Compression()...)
+	if isLeaf(n) {
+		return n.codecs
+	}
+	childNames := n.ChildNames()
+	compression := make([]compress.Codec, 0, len(childNames))
+	for _, name := range childNames {
+		compression = append(compression, n.ChildByName(name).Compression()...)
+	}
 	sortCodecs(compression)
 	return dedupeSortedCodecs(compression)
 }
@@ -127,10 +202,10 @@ func Optional(node Node) Node {
 	if node.Optional() {
 		return node
 	}
-	return &optionalNode{node}
+	return &optionalNode{wrap(node)}
 }
 
-type optionalNode struct{ Node }
+type optionalNode struct{ wrappedNode }
 
 func (opt *optionalNode) Optional() bool { return true }
 func (opt *optionalNode) Repeated() bool { return false }
@@ -141,10 +216,10 @@ func Repeated(node Node) Node {
 	if node.Repeated() {
 		return node
 	}
-	return &repeatedNode{node}
+	return &repeatedNode{wrap(node)}
 }
 
-type repeatedNode struct{ Node }
+type repeatedNode struct{ wrappedNode }
 
 func (rep *repeatedNode) Optional() bool { return false }
 func (rep *repeatedNode) Repeated() bool { return true }
@@ -155,10 +230,10 @@ func Required(node Node) Node {
 	if node.Required() {
 		return node
 	}
-	return &requiredNode{node}
+	return &requiredNode{wrap(node)}
 }
 
-type requiredNode struct{ Node }
+type requiredNode struct{ wrappedNode }
 
 func (req *requiredNode) Optional() bool { return false }
 func (req *requiredNode) Repeated() bool { return false }
@@ -169,9 +244,6 @@ type node struct{}
 func (node) Optional() bool                { return false }
 func (node) Repeated() bool                { return false }
 func (node) Required() bool                { return true }
-func (node) NumChildren() int              { return 0 }
-func (node) ChildNames() []string          { return nil }
-func (node) ChildByName(string) Node       { panic("cannot call ChildByName in leaf parquet node") }
 func (node) Encoding() []encoding.Encoding { return nil }
 func (node) Compression() []compress.Codec { return nil }
 
@@ -180,12 +252,28 @@ func Leaf(typ Type) Node {
 	return &leafNode{typ: typ}
 }
 
+func isLeaf(node Node) bool {
+	return node.NumChildren() == 0
+}
+
 type leafNode struct {
 	node
 	typ Type
 }
 
 func (n *leafNode) Type() Type { return n.typ }
+
+func (n *leafNode) NumChildren() int { return 0 }
+
+func (n *leafNode) ChildNames() []string { return nil }
+
+func (n *leafNode) ChildByName(string) Node {
+	panic("cannot call ChildByName on leaf parquet node")
+}
+
+func (n *leafNode) ValueByName(reflect.Value, string) reflect.Value {
+	panic("cannot call ValueByName on leaf parquet node")
+}
 
 var repetitionTypes = [...]format.FieldRepetitionType{
 	0: format.Required,
@@ -235,6 +323,10 @@ func (g Group) ChildByName(name string) Node {
 	panic("column not found in parquet group: " + name)
 }
 
+func (g Group) ValueByName(base reflect.Value, name string) reflect.Value {
+	return base.MapIndex(reflect.ValueOf(name))
+}
+
 func (g Group) Encoding() []encoding.Encoding {
 	encodings := make([]encoding.Encoding, 0, len(g))
 	for _, node := range g {
@@ -253,132 +345,8 @@ func (g Group) Compression() []compress.Codec {
 	return dedupeSortedCodecs(codecs)
 }
 
-// Traverse implements the parquet node traversal algorithm, which produces the
-// sequence of parquet values for each column of the node schema by calling the
-// given traveral's Traverse method.
-//
-// This function is a generic impelementation, it works with any Node value and
-// dynamically matches the schema by introspecting the given Go value. As a
-// result, it has a higher overhead than using a generated parquet schema.
-// In contexts where the compute footprint of the program should be minimized,
-// creating a parquet schema from a Go struct and using the
-// parquet.(*Schema).Traverse method will yield must better results.
-func Traverse(node Node, value interface{}, traversal Traversal) error {
-	_, err := traverse(node, levels{}, reflect.ValueOf(value), traversal)
-	return err
-}
-
 type levels struct {
-	columnIndex     int32
 	repetitionDepth int8
 	repetitionLevel int8
 	definitionLevel int8
-}
-
-func traverse(node Node, levels levels, value reflect.Value, traversal Traversal) (int32, error) {
-	var err error
-
-	optional := node.Optional()
-	repeated := node.Repeated()
-
-	if optional {
-		if value.IsValid() {
-			if value.IsZero() {
-				value = reflect.Value{}
-			} else {
-				levels.definitionLevel++
-			}
-		}
-	}
-
-	for value.IsValid() && value.Kind() == reflect.Ptr {
-		if !value.IsNil() {
-			value = value.Elem()
-		} else {
-			value = reflect.Value{}
-		}
-	}
-
-	if logicalType := node.Type().LogicalType(); logicalType != nil {
-		switch {
-		case logicalType.List != nil:
-			node = node.ChildByName("list").ChildByName("element")
-			repeated = true
-		}
-	}
-
-	if repeated {
-		if value.IsValid() && value.Kind() != reflect.Slice {
-			return levels.columnIndex, fmt.Errorf("cannot traverse non-repeated node with value of type " + value.Type().String())
-		}
-
-		numValues := 0
-		if value.IsValid() {
-			numValues = value.Len()
-			levels.repetitionDepth++
-			if !value.IsNil() {
-				levels.definitionLevel++
-			}
-		}
-
-		if numValues == 0 {
-			value = reflect.Value{}
-		} else {
-			columnIndex := int32(0)
-			// Remove the `repeated` attribute of the node so the recusrive call
-			// does not re-enter this branch.
-			node = Required(node)
-
-			for i := 0; i < numValues; i++ {
-				columnIndex, err = traverse(node, levels, value.Index(i), traversal)
-				levels.repetitionLevel = levels.repetitionDepth
-			}
-
-			return columnIndex, err
-		}
-	}
-
-	if node.NumChildren() == 0 {
-		if levels.repetitionLevel > 127 {
-			panic("cannot represent parquet schema with more than 127 repetition levels")
-		}
-		if levels.definitionLevel > 127 {
-			panic("cannot represent parquet schema with more than 127 definition levels")
-		}
-		v := makeValue(node.Type().Kind(), value)
-		v.repetitionLevel = int8(levels.repetitionLevel)
-		v.definitionLevel = int8(levels.definitionLevel)
-		err = traversal.Traverse(int(levels.columnIndex), v)
-		levels.columnIndex++
-	} else {
-		index := reflect.Value.MapIndex
-
-		if !value.IsValid() {
-			index = func(reflect.Value, reflect.Value) reflect.Value { return reflect.Value{} }
-		} else if value.Kind() == reflect.Struct {
-			fields := structFieldsOf(value.Type())
-
-			index = func(structValue, fieldName reflect.Value) reflect.Value {
-				f := fieldName.String()
-				i := sort.Search(len(fields), func(i int) bool { return fields[i].Name >= f })
-
-				if i < len(fields) {
-					return structValue.FieldByIndex(fields[i].Index)
-				}
-
-				return reflect.Value{}
-			}
-		}
-
-		names := node.ChildNames()
-		for i := range names {
-			k := reflect.ValueOf(&names[i]).Elem()
-			levels.columnIndex, err = traverse(node.ChildByName(names[i]), levels, index(value, k), traversal)
-			if err != nil {
-				break
-			}
-		}
-	}
-
-	return levels.columnIndex, err
 }

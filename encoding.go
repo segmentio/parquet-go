@@ -77,6 +77,11 @@ func dedupeSortedEncodings(encodings []encoding.Encoding) []encoding.Encoding {
 			}
 		}
 
+		clear := encodings[i+1:]
+		for i := range clear {
+			clear[i] = nil
+		}
+
 		encodings = encodings[:i+1]
 	}
 	return encodings

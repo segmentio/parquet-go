@@ -162,6 +162,11 @@ func dedupeSortedCodecs(codecs []compress.Codec) []compress.Codec {
 			}
 		}
 
+		clear := codecs[i+1:]
+		for i := range clear {
+			clear[i] = nil
+		}
+
 		codecs = codecs[:i+1]
 	}
 	return codecs

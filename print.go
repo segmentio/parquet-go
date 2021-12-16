@@ -19,7 +19,7 @@ func PrintIndent(w io.Writer, name string, node Node, pattern, newline string) e
 		pw.WriteString(" {")
 	}
 
-	if node.NumChildren() > 0 {
+	if !isLeaf(node) {
 		pi := &printIndent{
 			pattern: pattern,
 			newline: newline,
@@ -50,7 +50,7 @@ func printWithIndent(w io.StringWriter, name string, node Node, indent *printInd
 		w.WriteString("required ")
 	}
 
-	if node.NumChildren() == 0 {
+	if isLeaf(node) {
 		switch node.Type().Kind() {
 		case Boolean:
 			w.WriteString("boolean ")

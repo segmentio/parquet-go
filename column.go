@@ -2,6 +2,7 @@ package parquet
 
 import (
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -114,6 +115,14 @@ func (c *Column) MaxRepetitionLevel() int8 { return c.maxRepetitionLevel }
 // MaxDefinitionLevel returns the maximum value of definition levels on this
 // column.
 func (c *Column) MaxDefinitionLevel() int8 { return c.maxDefinitionLevel }
+
+// ValueByName is returns the sub-value with the givne name in base.
+func (c *Column) ValueByName(base reflect.Value, name string) reflect.Value {
+	if len(c.columns) == 0 { // leaf?
+		panic("cannot call ValueByName on leaf column")
+	}
+	return base.MapIndex(reflect.ValueOf(name))
+}
 
 // String returns a human-redable string representation of the oclumn.
 func (c *Column) String() string {
