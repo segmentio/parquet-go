@@ -344,9 +344,3 @@ func (g Group) Compression() []compress.Codec {
 	sortCodecs(codecs)
 	return dedupeSortedCodecs(codecs)
 }
-
-type levels struct {
-	repetitionDepth int8
-	repetitionLevel int8
-	definitionLevel int8
-}
