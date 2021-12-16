@@ -251,7 +251,7 @@ func (s *structNode) ValueByIndex(base reflect.Value, index int) reflect.Value {
 		return base.MapIndex(reflect.ValueOf(&s.names[index]).Elem())
 	default:
 		// Assume the structure matches, the method will panic if it does not.
-		return base.FieldByIndex(s.fields[index].index)
+		return s.fields[index].lookup(base)
 	}
 }
 
@@ -271,7 +271,7 @@ var (
 
 type structField struct {
 	wrappedNode
-	index []int
+	lookup func(reflect.Value) reflect.Value
 }
 
 func structFieldString(f reflect.StructField) string {
@@ -290,9 +290,30 @@ func throwInvalidStructField(msg string, field reflect.StructField) {
 	panic(msg + ": " + structFieldString(field))
 }
 
+func fieldByIndex(index []int) func(reflect.Value) reflect.Value {
+	if len(index) == 1 {
+		// Fast path for the common case where the field is not embedded.
+		i := index[0]
+		return func(v reflect.Value) reflect.Value { return v.Field(i) }
+	}
+	return func(v reflect.Value) reflect.Value {
+		for _, i := range index {
+			if v = v.Field(i); v.Kind() == reflect.Ptr {
+				if v.IsNil() {
+					v = reflect.Value{}
+					break
+				} else {
+					v = v.Elem()
+				}
+			}
+		}
+		return v
+	}
+}
+
 func makeStructField(f reflect.StructField) structField {
 	var (
-		field     = structField{index: f.Index}
+		field     = structField{lookup: fieldByIndex(f.Index)}
 		optional  bool
 		list      bool
 		encodings []encoding.Encoding
