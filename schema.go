@@ -17,9 +17,9 @@ import (
 // Schema implements the Node interface to represent the root node of a parquet
 // schema.
 type Schema struct {
-	name     string
-	root     Node
-	traverse traverseFunc
+	name        string
+	root        Node
+	deconstruct deconstructFunc
 }
 
 // SchemaOf constructs a parquet schema from a Go value.
@@ -90,19 +90,19 @@ func namedSchemaOf(name string, model reflect.Value) *Schema {
 // NewSchema constructs a new Schema object with the given name and root node.
 func NewSchema(name string, root Node) *Schema {
 	return &Schema{
-		name:     name,
-		root:     root,
-		traverse: makeTraverseFunc(root),
+		name:        name,
+		root:        root,
+		deconstruct: makeDeconstructFunc(root),
 	}
 }
 
-func makeTraverseFunc(node Node) (traverse traverseFunc) {
+func makeDeconstructFunc(node Node) (deconstruct deconstructFunc) {
 	if isLeaf(node) { // message{}
-		traverse = func(levels, reflect.Value, Traversal) error { return nil }
+		deconstruct = func(row Row, _ levels, _ reflect.Value) (Row, error) { return row, nil }
 	} else {
-		_, traverse = traverseFuncOf(0, node)
+		_, deconstruct = deconstructFuncOf(0, node)
 	}
-	return traverse
+	return deconstruct
 }
 
 // Name returns the name of s.
@@ -147,15 +147,8 @@ func (s *Schema) String() string {
 	return b.String()
 }
 
-// Traverse is the implementation of the traversal algorithm which converts
-// Go values into a sequence of column index + parquet value pairs by calling
-// the given traversal callback.
-//
-// The type of the Go value must match the parquet schema or the method will
-// panic.
-//
-// The traversal callback must not be nil or the method will panic.
-func (s *Schema) Traverse(value interface{}, traversal Traversal) error {
+// Deconstruct deconstructs a Go value and appends it to a row.
+func (s *Schema) Deconstruct(row Row, value interface{}) (Row, error) {
 	v := reflect.ValueOf(value)
 
 	if v.Kind() == reflect.Ptr {
@@ -166,7 +159,21 @@ func (s *Schema) Traverse(value interface{}, traversal Traversal) error {
 		}
 	}
 
-	return s.traverse(levels{}, v, traversal)
+	return s.deconstruct(row, levels{}, v)
+}
+
+// Reconstruct reconstructs a Go value from a row.
+func (s *Schema) Reconstruct(value interface{}, row Row) error {
+	v := reflect.ValueOf(value)
+
+	if v.Kind() != reflect.Ptr {
+		return fmt.Errorf("cannot construct row into go value of non-pointer type %s", v.Type())
+	}
+	if v.IsNil() {
+		return fmt.Errorf("cannot reconstruct row into nil pointer of type %s", v.Type())
+	}
+
+	return nil
 }
 
 type structNode struct {
@@ -555,150 +562,4 @@ func parseDecimalArgs(args string) (scale, precision int, err error) {
 		return 0, 0, err
 	}
 	return int(s), int(p), nil
-}
-
-// Traversal is an interface used to implement the parquet schema traversal
-// algorithm.
-type Traversal interface {
-	// The Traverse method is called for each column index and parquet value
-	// when traversing a Go value with its parquet schema.
-	//
-	// The repetition and definition levels of the parquet value will be set
-	// according to the structure of the input Go value.
-	Traverse(columnIndex int, value Value) error
-}
-
-type levels struct {
-	repetitionDepth int8
-	repetitionLevel int8
-	definitionLevel int8
-}
-
-type traverseFunc func(levels levels, value reflect.Value, traversal Traversal) error
-
-func traverseFuncOf(columnIndex int, node Node) (int, traverseFunc) {
-	optional := node.Optional()
-	repeated := node.Repeated()
-
-	if optional {
-		return traverseFuncOfOptional(columnIndex, node)
-	}
-
-	if logicalType := node.Type().LogicalType(); logicalType != nil {
-		switch {
-		case logicalType.List != nil:
-			elem := node.ChildByName("list").ChildByName("element")
-			return traverseFuncOf(columnIndex, Repeated(elem))
-		}
-	}
-
-	if repeated {
-		return traverseFuncOfRepeated(columnIndex, node)
-	}
-
-	return traverseFuncOfRequired(columnIndex, node)
-}
-
-func traverseFuncOfOptional(columnIndex int, node Node) (int, traverseFunc) {
-	columnIndex, traverse := traverseFuncOf(columnIndex, Required(node))
-	return columnIndex, func(levels levels, value reflect.Value, traversal Traversal) error {
-		if value.IsValid() {
-			if value.IsZero() {
-				value = reflect.Value{}
-			} else {
-				if value.Kind() == reflect.Ptr {
-					value = value.Elem()
-				}
-				levels.definitionLevel++
-			}
-		}
-		return traverse(levels, value, traversal)
-	}
-}
-
-func traverseFuncOfRepeated(columnIndex int, node Node) (int, traverseFunc) {
-	columnIndex, traverse := traverseFuncOf(columnIndex, Required(node))
-	return columnIndex, func(levels levels, value reflect.Value, traversal Traversal) error {
-		var numValues int
-		var err error
-
-		if value.IsValid() {
-			numValues = value.Len()
-			levels.repetitionDepth++
-			if !value.IsNil() {
-				levels.definitionLevel++
-			}
-		}
-
-		if numValues == 0 {
-			err = traverse(levels, reflect.Value{}, traversal)
-		} else {
-			for i := 0; i < numValues && err == nil; i++ {
-				err = traverse(levels, value.Index(i), traversal)
-				levels.repetitionLevel = levels.repetitionDepth
-			}
-		}
-
-		return err
-	}
-}
-
-func traverseFuncOfRequired(columnIndex int, node Node) (int, traverseFunc) {
-	switch {
-	case isLeaf(node):
-		return traverseFuncOfLeaf(columnIndex, node)
-	default:
-		return traverseFuncOfGroup(columnIndex, node)
-	}
-}
-
-func traverseFuncOfGroup(columnIndex int, node Node) (int, traverseFunc) {
-	names := node.ChildNames()
-	funcs := make([]traverseFunc, len(names))
-
-	for i, name := range names {
-		columnIndex, funcs[i] = traverseFuncOf(columnIndex, node.ChildByName(name))
-	}
-
-	valueByIndex := func(base reflect.Value, index int) reflect.Value {
-		return node.ValueByName(base, names[index])
-	}
-
-	switch n := unwrap(node).(type) {
-	case IndexedNode:
-		valueByIndex = n.ValueByIndex
-	}
-
-	return columnIndex, func(levels levels, value reflect.Value, traversal Traversal) error {
-		valueAt := valueByIndex
-
-		if !value.IsValid() {
-			valueAt = func(base reflect.Value, _ int) reflect.Value {
-				return base
-			}
-		}
-
-		for i, f := range funcs {
-			if err := f(levels, valueAt(value, i), traversal); err != nil {
-				return err
-			}
-		}
-
-		return nil
-	}
-}
-
-func traverseFuncOfLeaf(columnIndex int, node Node) (int, traverseFunc) {
-	kind := node.Type().Kind()
-	return columnIndex + 1, func(levels levels, value reflect.Value, traversal Traversal) error {
-		var v Value
-
-		if value.IsValid() {
-			v = makeValue(kind, value)
-		}
-
-		v.repetitionLevel = levels.repetitionLevel
-		v.definitionLevel = levels.definitionLevel
-		return traversal.Traverse(columnIndex, v)
-	}
 }

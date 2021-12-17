@@ -27,10 +27,11 @@ type Value struct {
 	u64 uint64
 	u32 uint32
 	// type
-	kind int16 // XOR(Kind) so the zero-value is <null>
+	kind int8 // XOR(Kind) so the zero-value is <null>
 	// levels
 	definitionLevel int8
 	repetitionLevel int8
+	columnIndex     int8 // XOR so the zero-value is -1
 }
 
 // The ValueReader interface is implemented by types that read sequences of
@@ -185,7 +186,7 @@ func makeValue(k Kind, v reflect.Value) Value {
 }
 
 func makeValueBoolean(value bool) Value {
-	v := Value{kind: ^int16(Boolean)}
+	v := Value{kind: ^int8(Boolean)}
 	if value {
 		v.u32 = 1
 	}
@@ -194,21 +195,21 @@ func makeValueBoolean(value bool) Value {
 
 func makeValueInt32(value int32) Value {
 	return Value{
-		kind: ^int16(Int32),
+		kind: ^int8(Int32),
 		u32:  uint32(value),
 	}
 }
 
 func makeValueInt64(value int64) Value {
 	return Value{
-		kind: ^int16(Int64),
+		kind: ^int8(Int64),
 		u64:  uint64(value),
 	}
 }
 
 func makeValueInt96(value deprecated.Int96) Value {
 	return Value{
-		kind: ^int16(Int96),
+		kind: ^int8(Int96),
 		u64:  uint64(value[0]) | (uint64(value[1]) << 32),
 		u32:  value[2],
 	}
@@ -216,14 +217,14 @@ func makeValueInt96(value deprecated.Int96) Value {
 
 func makeValueFloat(value float32) Value {
 	return Value{
-		kind: ^int16(Float),
+		kind: ^int8(Float),
 		u32:  math.Float32bits(value),
 	}
 }
 
 func makeValueDouble(value float64) Value {
 	return Value{
-		kind: ^int16(Double),
+		kind: ^int8(Double),
 		u64:  math.Float64bits(value),
 	}
 }
@@ -253,7 +254,7 @@ func makeValueFixedLenByteArray(v reflect.Value) Value {
 
 func makeValueByteArray(kind Kind, data *byte, size int) Value {
 	return Value{
-		kind: ^int16(kind),
+		kind: ^int8(kind),
 		ptr:  data,
 		u64:  uint64(size),
 	}
@@ -292,6 +293,11 @@ func (v Value) RepetitionLevel() int8 { return v.repetitionLevel }
 
 // DefinitionLevel returns the definition level of v.
 func (v Value) DefinitionLevel() int8 { return v.definitionLevel }
+
+// ColumnIndex returns the column index within the row that v was created from.
+//
+// Returns -1 if the value does not carry a column index.
+func (v Value) ColumnIndex() int8 { return ^v.columnIndex }
 
 // Bytes returns the binary representation of v.
 //
@@ -428,6 +434,15 @@ func (v Value) Level(repetitionLevel, definitionLevel int8) Value {
 	return v
 }
 
+// Column returns v with the column index set to the given value.
+func (v Value) Column(columnIndex int8) Value {
+	if columnIndex < 0 {
+		panic("cannot create a value with a negative repetition level")
+	}
+	v.columnIndex = ^columnIndex
+	return v
+}
+
 func makeInt96(lo uint64, hi uint32) (i96 deprecated.Int96) {
 	return deprecated.Int96{
 		0: uint32(lo),
@@ -436,6 +451,7 @@ func makeInt96(lo uint64, hi uint32) (i96 deprecated.Int96) {
 	}
 }
 
+/*
 func assignValue(dst reflect.Value, src Value) error {
 	dstKind := dst.Kind()
 	srcKind := src.Kind()
@@ -502,6 +518,7 @@ func assignValue(dst reflect.Value, src Value) error {
 
 	return fmt.Errorf("cannot assign parquet value of type %s to go value of type %s", srcKind.String(), dst.Type())
 }
+*/
 
 // Equal returns true if v1 and v2 are equal.
 //

@@ -148,6 +148,7 @@ type rowGroupWriter struct {
 
 	numRows    int64
 	fileOffset int64
+	rowBuffer  [MaxColumnIndex]Value
 }
 
 type rowGroupColumn struct {
@@ -462,28 +463,28 @@ func (rgw *rowGroupWriter) flush() error {
 	return nil
 }
 
-type rowGroupTraversal struct{ *rowGroupWriter }
-
-func (rgw rowGroupTraversal) Traverse(columnIndex int, value Value) error {
-	col := rgw.columns[columnIndex]
-	col.writer.writeValue(value)
-	col.numValues++
-	return nil
-}
-
 func (rgw *rowGroupWriter) writeRow(row interface{}) error {
 	if len(rgw.columns) == 0 {
 		return io.ErrClosedPipe
 	}
 
-	if err := rgw.schema.Traverse(row, rowGroupTraversal{
-		rowGroupWriter: rgw,
-	}); err != nil {
+	rowbuf, err := rgw.schema.Deconstruct(rgw.rowBuffer[:0], row)
+	if err != nil {
 		return err
 	}
 
-	for _, col := range rgw.columns {
-		col.writer.numRows++
+	for _, value := range rowbuf {
+		column := rgw.columns[value.ColumnIndex()]
+		column.writer.writeValue(value)
+		column.numValues++
+	}
+
+	for i := range rowbuf {
+		rowbuf[i] = Value{}
+	}
+
+	for _, column := range rgw.columns {
+		column.writer.numRows++
 	}
 
 	rgw.numRows++
