@@ -148,7 +148,7 @@ type rowGroupWriter struct {
 
 	numRows    int64
 	fileOffset int64
-	rowBuffer  [MaxColumnIndex]Value
+	rowBuffer  []Value
 }
 
 type rowGroupColumn struct {
@@ -173,6 +173,7 @@ func makeRowGroupWriter(writer io.Writer, schema *Schema, config *WriterConfig) 
 		// Assume this is the first row group in the file, it starts after the
 		// "PAR1" magic number.
 		fileOffset: 4,
+		rowBuffer:  make(Row, 0, MaxColumnIndex),
 	}
 
 	dataPageType := format.DataPage
@@ -463,24 +464,24 @@ func (rgw *rowGroupWriter) flush() error {
 	return nil
 }
 
-func (rgw *rowGroupWriter) writeRow(row interface{}) error {
+func (rgw *rowGroupWriter) writeRow(row interface{}) (err error) {
 	if len(rgw.columns) == 0 {
 		return io.ErrClosedPipe
 	}
 
-	rowbuf, err := rgw.schema.Deconstruct(rgw.rowBuffer[:0], row)
+	rgw.rowBuffer, err = rgw.schema.Deconstruct(rgw.rowBuffer[:0], row)
 	if err != nil {
 		return err
 	}
 
-	for _, value := range rowbuf {
+	for _, value := range rgw.rowBuffer {
 		column := rgw.columns[value.ColumnIndex()]
 		column.writer.writeValue(value)
 		column.numValues++
 	}
 
-	for i := range rowbuf {
-		rowbuf[i] = Value{}
+	for i := range rgw.rowBuffer {
+		rgw.rowBuffer[i] = Value{}
 	}
 
 	for _, column := range rgw.columns {
