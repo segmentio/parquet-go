@@ -430,7 +430,7 @@ func TestDeconstructionReconstruction(t *testing.T) {
 		t.Run(test.scenario, func(t *testing.T) {
 			schema := parquet.SchemaOf(test.input)
 			row := schema.Deconstruct(nil, test.input)
-			values := row.Columns()
+			values := columnsOf(row)
 
 			t.Logf("\n%s\n", schema)
 
@@ -456,6 +456,21 @@ func TestDeconstructionReconstruction(t *testing.T) {
 			}
 		})
 	}
+}
+
+func columnsOf(row parquet.Row) [][]parquet.Value {
+	maxColumnIndex := 0
+	for _, value := range row {
+		if columnIndex := int(value.ColumnIndex()); columnIndex > maxColumnIndex {
+			maxColumnIndex = columnIndex
+		}
+	}
+	columns := make([][]parquet.Value, maxColumnIndex+1)
+	for _, value := range row {
+		columnIndex := value.ColumnIndex()
+		columns[columnIndex] = append(columns[columnIndex], value)
+	}
+	return columns
 }
 
 func assertEqualValues(t *testing.T, columnIndex int, want, got []parquet.Value) {

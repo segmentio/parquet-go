@@ -21,31 +21,6 @@ const (
 // position in the row.
 type Row []Value
 
-// Columns splits the row into lists of values groups by column index.
-func (row Row) Columns() [][]Value {
-	maxColumnIndex := 0
-	for _, value := range row {
-		if columnIndex := int(value.ColumnIndex()); columnIndex > maxColumnIndex {
-			maxColumnIndex = columnIndex
-		}
-	}
-	columns := make([][]Value, maxColumnIndex+1)
-	for _, value := range row {
-		columnIndex := value.ColumnIndex()
-		columns[columnIndex] = append(columns[columnIndex], value)
-	}
-	return columns
-}
-
-func (row Row) isColumnRange(columnIndex int) bool {
-	for i, v := range row {
-		if int(v.ColumnIndex()) != (columnIndex + i) {
-			return false
-		}
-	}
-	return true
-}
-
 func (row Row) indexOf(columnIndex int) int {
 	for i, v := range row {
 		if c := int(v.ColumnIndex()); c == columnIndex {
