@@ -469,10 +469,7 @@ func (rgw *rowGroupWriter) writeRow(row interface{}) (err error) {
 		return io.ErrClosedPipe
 	}
 
-	rgw.rowBuffer, err = rgw.schema.Deconstruct(rgw.rowBuffer[:0], row)
-	if err != nil {
-		return err
-	}
+	rgw.rowBuffer = rgw.schema.Deconstruct(rgw.rowBuffer[:0], row)
 
 	for _, value := range rgw.rowBuffer {
 		column := rgw.columns[value.ColumnIndex()]

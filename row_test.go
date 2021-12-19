@@ -1,13 +1,14 @@
 package parquet_test
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/segmentio/parquet"
 )
 
-func TestDeconstruction(t *testing.T) {
+func TestDeconstructionReconstruction(t *testing.T) {
 	type Person struct {
 		FirstName string
 		LastName  string
@@ -418,16 +419,23 @@ func TestDeconstruction(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.scenario, func(t *testing.T) {
 			schema := parquet.SchemaOf(test.input)
-			t.Logf("\n%s\n", schema)
-
-			row, err := schema.Deconstruct(nil, test.input)
-			if err != nil {
-				t.Fatal(err)
-			}
+			row := schema.Deconstruct(nil, test.input)
 			values := row.Columns()
+
+			t.Logf("\n%s\n", schema)
 
 			for columnIndex, expect := range test.values {
 				assertEqualValues(t, columnIndex, expect, values[columnIndex])
+			}
+
+			newValue := reflect.New(reflect.TypeOf(test.input))
+			if err := schema.Reconstruct(newValue.Interface(), row); err != nil {
+				t.Errorf("reconstruction of the parquet row into a go value failed:\n\t%v", err)
+			} else if !reflect.DeepEqual(newValue.Elem().Interface(), test.input) {
+				t.Errorf("reconstruction of the parquet row into a go value produced the wrong output:\nwant = %#v\ngot  = %#v", test.input, newValue.Elem())
+			}
+
+			for columnIndex := range test.values {
 				values[columnIndex] = nil
 			}
 
@@ -495,6 +503,37 @@ func BenchmarkDeconstruct(b *testing.B) {
 	buffer := parquet.Row{}
 
 	for i := 0; i < b.N; i++ {
-		buffer, _ = schema.Deconstruct(buffer[:0], row)
+		buffer = schema.Deconstruct(buffer[:0], row)
+	}
+}
+
+func BenchmarkReconstruct(b *testing.B) {
+	row := &AddressBook{
+		Owner: "Julien Le Dem",
+		OwnerPhoneNumbers: []string{
+			"555 123 4567",
+			"555 666 1337",
+		},
+		Contacts: []Contact{
+			{
+				Name:        "Dmitriy Ryaboy",
+				PhoneNumber: "555 987 6543",
+			},
+			{
+				Name: "Chris Aniszczyk",
+			},
+		},
+	}
+
+	schema := parquet.SchemaOf(row)
+	values := schema.Deconstruct(nil, row)
+	buffer := AddressBook{}
+
+	for i := 0; i < b.N; i++ {
+		buffer = AddressBook{}
+
+		if err := schema.Reconstruct(&buffer, values); err != nil {
+			b.Fatal(err)
+		}
 	}
 }

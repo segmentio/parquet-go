@@ -335,6 +335,8 @@ func (v Value) AppendBytes(b []byte) []byte {
 //
 // The following formatting options are supported:
 //
+//	%c  prints the column index
+//	%+c prints the column index, prefixed with "C:"
 //	%d	prints the definition level
 //	%+d	prints the definition level, prefixed with "D:"
 //	%r	prints the repetition level
@@ -344,23 +346,29 @@ func (v Value) AppendBytes(b []byte) []byte {
 //	%s	prints the string representation of v
 //	%+s	prints the string representation of v, prefixed with "V:"
 //	%v	same as %s
-//	%+v	same as %+s
+//	%+v	prints a verbose representation of v
 //	%#v	prints a Go value representation of v
 //
 // Format satisfies the fmt.Formatter interface.
 func (v Value) Format(w fmt.State, r rune) {
 	switch r {
+	case 'c':
+		if w.Flag('+') {
+			io.WriteString(w, "C:")
+		}
+		fmt.Fprint(w, v.ColumnIndex())
+
 	case 'd':
 		if w.Flag('+') {
 			io.WriteString(w, "D:")
 		}
-		fmt.Fprint(w, v.definitionLevel)
+		fmt.Fprint(w, v.DefinitionLevel())
 
 	case 'r':
 		if w.Flag('+') {
 			io.WriteString(w, "R:")
 		}
-		fmt.Fprint(w, v.repetitionLevel)
+		fmt.Fprint(w, v.RepetitionLevel())
 
 	case 'q':
 		if w.Flag('+') {
@@ -399,9 +407,9 @@ func (v Value) Format(w fmt.State, r rune) {
 	case 'v':
 		switch {
 		case w.Flag('+'):
-			fmt.Fprintf(w, "%+[1]d %+[1]r %+[1]s", v)
+			fmt.Fprintf(w, "%+[1]c %+[1]d %+[1]r %+[1]s", v)
 		case w.Flag('#'):
-			fmt.Fprintf(w, "parquet.Value{%+[1]d,%+[1]d,%+[1]s}", v)
+			fmt.Fprintf(w, "parquet.Value{%+[1]c,%+[1]d,%+[1]r,%+[1]s}", v)
 		default:
 			v.Format(w, 's')
 		}
@@ -451,17 +459,25 @@ func makeInt96(lo uint64, hi uint32) (i96 deprecated.Int96) {
 	}
 }
 
-/*
 func assignValue(dst reflect.Value, src Value) error {
+	if src.IsNull() {
+		dst.Set(reflect.Zero(dst.Type()))
+		return nil
+	}
+
 	dstKind := dst.Kind()
 	srcKind := src.Kind()
 
+	var val reflect.Value
 	switch srcKind {
 	case Boolean:
+		v := src.Boolean()
 		switch dstKind {
-		case reflect.Boolean:
-			dst.SetBool(src.Boolean())
+		case reflect.Bool:
+			dst.SetBool(v)
 			return nil
+		default:
+			val = reflect.ValueOf(v)
 		}
 
 	case Int32:
@@ -473,6 +489,8 @@ func assignValue(dst reflect.Value, src Value) error {
 		case reflect.Uint8, reflect.Uint16, reflect.Uint32:
 			dst.SetUint(uint64(v))
 			return nil
+		default:
+			val = reflect.ValueOf(v)
 		}
 
 	case Int64:
@@ -484,9 +502,32 @@ func assignValue(dst reflect.Value, src Value) error {
 		case reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uint, reflect.Uintptr:
 			dst.SetUint(uint64(v))
 			return nil
+		default:
+			val = reflect.ValueOf(v)
 		}
 
 	case Int96:
+		val = reflect.ValueOf(src.Int96())
+
+	case Float:
+		v := src.Float()
+		switch dstKind {
+		case reflect.Float32, reflect.Float64:
+			dst.SetFloat(float64(v))
+			return nil
+		default:
+			val = reflect.ValueOf(v)
+		}
+
+	case Double:
+		v := src.Double()
+		switch dstKind {
+		case reflect.Float32, reflect.Float64:
+			dst.SetFloat(v)
+			return nil
+		default:
+			val = reflect.ValueOf(v)
+		}
 
 	case ByteArray:
 		v := src.ByteArray()
@@ -495,30 +536,39 @@ func assignValue(dst reflect.Value, src Value) error {
 			dst.SetString(string(v))
 			return nil
 		case reflect.Slice:
-			if v.Type().Elem().Kind() == reflect.Uint8 {
+			if dst.Type().Elem().Kind() == reflect.Uint8 {
 				dst.SetBytes(v)
 				return nil
 			}
+		default:
+			val = reflect.ValueOf(v)
 		}
 
 	case FixedLenByteArray:
 		v := src.ByteArray()
 		switch dstKind {
 		case reflect.Array:
-			if v.Type().Elem().Kind() == reflect.Uint8 && v.Len() == len(v) {
-				// TODO?
+			if dst.Type().Elem().Kind() == reflect.Uint8 && dst.Len() == len(v) {
+				reflect.Copy(dst, reflect.ValueOf(v))
+				return nil
 			}
 		case reflect.Slice:
-			if v.Type().Elem().Kind() == reflect.Uint8 {
+			if dst.Type().Elem().Kind() == reflect.Uint8 {
 				dst.SetBytes(v)
 				return nil
 			}
+		default:
+			val = reflect.ValueOf(v)
 		}
+	}
+
+	if val.IsValid() && val.Type().AssignableTo(dst.Type()) {
+		dst.Set(val)
+		return nil
 	}
 
 	return fmt.Errorf("cannot assign parquet value of type %s to go value of type %s", srcKind.String(), dst.Type())
 }
-*/
 
 // Equal returns true if v1 and v2 are equal.
 //
@@ -555,50 +605,3 @@ var (
 	_ fmt.Formatter = Value{}
 	_ fmt.Stringer  = Value{}
 )
-
-/*
-type ValueIter struct {
-	reader ValueReader
-	value  Value
-	err    error
-}
-
-func NewValueIter(r ValueReader) *ValueIter {
-	return &ValueIter{reader: r}
-}
-
-func (it *ValueIter) Reset(r ValueReader) {
-	it.reader, it.value, it.err = r, Value{}, nil
-}
-
-func (it *ValueIter) Next() bool {
-	if it.reader == nil {
-		return false
-	}
-
-	v, err := it.reader.ReadValue()
-	if err != nil {
-		if it.err != io.EOF {
-			it.err = err
-		}
-		it.reader = nil
-		it.value = Value{}
-		return false
-	}
-
-	it.value = v
-	return true
-}
-
-func (it *ValueIter) Done() bool {
-	return it.reader == nil
-}
-
-func (it *ValueIter) Err() error {
-	return it.err
-}
-
-func (it *ValueIter) Value() Value {
-	return it.value
-}
-*/

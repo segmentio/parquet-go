@@ -1,6 +1,7 @@
 package parquet
 
 import (
+	"fmt"
 	"math"
 	"reflect"
 )
@@ -36,40 +37,48 @@ func (row Row) Columns() [][]Value {
 	return columns
 }
 
+func (row Row) isColumnRange(columnIndex int) bool {
+	for i, v := range row {
+		if int(v.ColumnIndex()) != (columnIndex + i) {
+			return false
+		}
+	}
+	return true
+}
+
+func (row Row) indexOf(columnIndex int) int {
+	for i, v := range row {
+		if c := int(v.ColumnIndex()); c == columnIndex {
+			return i
+		}
+	}
+	return len(row)
+}
+
 type levels struct {
 	repetitionDepth int8
 	repetitionLevel int8
 	definitionLevel int8
 }
 
-type deconstructFunc func(Row, levels, reflect.Value) (Row, error)
+type deconstructFunc func(Row, levels, reflect.Value) Row
 
 func deconstructFuncOf(columnIndex int, node Node) (int, deconstructFunc) {
-	optional := node.Optional()
-	repeated := node.Repeated()
-
-	if optional {
+	switch {
+	case node.Optional():
 		return deconstructFuncOfOptional(columnIndex, node)
-	}
-
-	if logicalType := node.Type().LogicalType(); logicalType != nil {
-		switch {
-		case logicalType.List != nil:
-			elem := node.ChildByName("list").ChildByName("element")
-			return deconstructFuncOf(columnIndex, Repeated(elem))
-		}
-	}
-
-	if repeated {
+	case isList(node):
+		return deconstructFuncOf(columnIndex, Repeated(listElementOf(node)))
+	case node.Repeated():
 		return deconstructFuncOfRepeated(columnIndex, node)
+	default:
+		return deconstructFuncOfRequired(columnIndex, node)
 	}
-
-	return deconstructFuncOfRequired(columnIndex, node)
 }
 
 func deconstructFuncOfOptional(columnIndex int, node Node) (int, deconstructFunc) {
 	columnIndex, deconstruct := deconstructFuncOf(columnIndex, Required(node))
-	return columnIndex, func(row Row, levels levels, value reflect.Value) (Row, error) {
+	return columnIndex, func(row Row, levels levels, value reflect.Value) Row {
 		if value.IsValid() {
 			if value.IsZero() {
 				value = reflect.Value{}
@@ -86,9 +95,8 @@ func deconstructFuncOfOptional(columnIndex int, node Node) (int, deconstructFunc
 
 func deconstructFuncOfRepeated(columnIndex int, node Node) (int, deconstructFunc) {
 	columnIndex, deconstruct := deconstructFuncOf(columnIndex, Required(node))
-	return columnIndex, func(row Row, levels levels, value reflect.Value) (Row, error) {
-		var numValues int
-		var err error
+	return columnIndex, func(row Row, levels levels, value reflect.Value) Row {
+		numValues := 0
 
 		if value.IsValid() {
 			numValues = value.Len()
@@ -99,15 +107,15 @@ func deconstructFuncOfRepeated(columnIndex int, node Node) (int, deconstructFunc
 		}
 
 		if numValues == 0 {
-			row, err = deconstruct(row, levels, reflect.Value{})
-		} else {
-			for i := 0; i < numValues && err == nil; i++ {
-				row, err = deconstruct(row, levels, value.Index(i))
-				levels.repetitionLevel = levels.repetitionDepth
-			}
+			return deconstruct(row, levels, reflect.Value{})
 		}
 
-		return row, err
+		for i := 0; i < numValues; i++ {
+			row = deconstruct(row, levels, value.Index(i))
+			levels.repetitionLevel = levels.repetitionDepth
+		}
+
+		return row
 	}
 }
 
@@ -128,8 +136,8 @@ func deconstructFuncOfGroup(columnIndex int, node Node) (int, deconstructFunc) {
 		columnIndex, funcs[i] = deconstructFuncOf(columnIndex, node.ChildByName(name))
 	}
 
-	valueByIndex := func(base reflect.Value, index int) reflect.Value {
-		return node.ValueByName(base, names[index])
+	valueByIndex := func(value reflect.Value, index int) reflect.Value {
+		return node.ValueByName(value, names[index])
 	}
 
 	switch n := unwrap(node).(type) {
@@ -137,23 +145,20 @@ func deconstructFuncOfGroup(columnIndex int, node Node) (int, deconstructFunc) {
 		valueByIndex = n.ValueByIndex
 	}
 
-	return columnIndex, func(row Row, levels levels, value reflect.Value) (Row, error) {
-		var valueAt = valueByIndex
-		var err error
+	return columnIndex, func(row Row, levels levels, value reflect.Value) Row {
+		valueAt := valueByIndex
 
 		if !value.IsValid() {
-			valueAt = func(base reflect.Value, _ int) reflect.Value {
-				return base
+			valueAt = func(value reflect.Value, _ int) reflect.Value {
+				return value
 			}
 		}
 
 		for i, f := range funcs {
-			if row, err = f(row, levels, valueAt(value, i)); err != nil {
-				break
-			}
+			row = f(row, levels, valueAt(value, i))
 		}
 
-		return row, err
+		return row
 	}
 }
 
@@ -163,8 +168,8 @@ func deconstructFuncOfLeaf(columnIndex int, node Node) (int, deconstructFunc) {
 	}
 	kind := node.Type().Kind()
 	valueColumnIndex := ^int8(columnIndex)
-	return columnIndex + 1, func(row Row, levels levels, value reflect.Value) (Row, error) {
-		var v Value
+	return columnIndex + 1, func(row Row, levels levels, value reflect.Value) Row {
+		v := Value{}
 
 		if value.IsValid() {
 			v = makeValue(kind, value)
@@ -173,6 +178,146 @@ func deconstructFuncOfLeaf(columnIndex int, node Node) (int, deconstructFunc) {
 		v.repetitionLevel = levels.repetitionLevel
 		v.definitionLevel = levels.definitionLevel
 		v.columnIndex = valueColumnIndex
-		return append(row, v), nil
+		return append(row, v)
+	}
+}
+
+type reconstructFunc func(reflect.Value, levels, Row) error
+
+func reconstructFuncOf(columnIndex int, node Node) (int, reconstructFunc) {
+	switch {
+	case node.Optional():
+		return reconstructFuncOfOptional(columnIndex, node)
+	case isList(node):
+		return reconstructFuncOf(columnIndex, Repeated(listElementOf(node)))
+	case node.Repeated():
+		return reconstructFuncOfRepeated(columnIndex, node)
+	default:
+		return reconstructFuncOfRequired(columnIndex, node)
+	}
+}
+
+func reconstructFuncOfOptional(columnIndex int, node Node) (int, reconstructFunc) {
+	nextColumnIndex, reconstruct := reconstructFuncOf(columnIndex, Required(node))
+	return nextColumnIndex, func(value reflect.Value, levels levels, row Row) error {
+		if len(row) > 0 && row[0].definitionLevel == levels.definitionLevel {
+			return nil
+		}
+
+		if value.Kind() == reflect.Ptr {
+			if value.IsNil() {
+				value.Set(reflect.New(value.Type().Elem()))
+			}
+			value = value.Elem()
+		}
+
+		levels.definitionLevel++
+		return reconstruct(value, levels, row)
+	}
+}
+
+func reconstructFuncOfRepeated(columnIndex int, node Node) (int, reconstructFunc) {
+	nextColumnIndex, reconstruct := reconstructFuncOf(columnIndex, Required(node))
+	maxColumnIndex := nextColumnIndex - 1
+	return nextColumnIndex, func(value reflect.Value, levels levels, row Row) error {
+		if value.Kind() != reflect.Slice {
+			return fmt.Errorf("cannot reconstruct repeated parquet column into go value of type %s", value.Type())
+		}
+
+		if len(row) > 0 && row[0].definitionLevel == levels.definitionLevel {
+			return nil
+		}
+
+		zero := reflect.Zero(value.Type().Elem())
+		elem := reflect.Value{}
+		levels.definitionLevel++
+		levels.repetitionLevel++
+
+		if len(row) == 1 &&
+			row[0].IsNull() &&
+			row[0].definitionLevel == levels.definitionLevel &&
+			row[0].repetitionLevel < levels.repetitionLevel {
+			value.Set(reflect.MakeSlice(value.Type(), 0, 0))
+			return nil
+		}
+
+		for n := 0; len(row) > 0; n++ {
+			i := row.indexOf(maxColumnIndex) + 1
+			if i > len(row) {
+				return fmt.Errorf("cannot reconstruct repeated parquet column from row missing column index %d", maxColumnIndex)
+			}
+
+			if row[0].repetitionLevel <= levels.repetitionLevel {
+				value.Set(reflect.Append(value, zero))
+				elem = value.Index(value.Len() - 1)
+			}
+
+			if !elem.IsValid() {
+				return fmt.Errorf("cannot reconstruct repeated parquet column from row missing a repetition level instructing to create the first record (first repetition level is %d)", row[0].repetitionLevel)
+			}
+
+			if err := reconstruct(elem, levels, row[:i]); err != nil {
+				return err
+			}
+
+			row = row[i:]
+		}
+
+		return nil
+	}
+}
+
+func reconstructFuncOfRequired(columnIndex int, node Node) (int, reconstructFunc) {
+	switch {
+	case isLeaf(node):
+		return reconstructFuncOfLeaf(columnIndex, node)
+	default:
+		return reconstructFuncOfGroup(columnIndex, node)
+	}
+}
+
+func reconstructFuncOfGroup(columnIndex int, node Node) (int, reconstructFunc) {
+	names := node.ChildNames()
+	funcs := make([]reconstructFunc, len(names))
+	columnIndexes := make([]int, len(names))
+
+	for i, name := range names {
+		columnIndex, funcs[i] = reconstructFuncOf(columnIndex, node.ChildByName(name))
+		columnIndexes[i] = columnIndex
+	}
+
+	valueByIndex := func(value reflect.Value, index int) reflect.Value {
+		return node.ValueByName(value, names[index])
+	}
+
+	switch n := unwrap(node).(type) {
+	case IndexedNode:
+		valueByIndex = n.ValueByIndex
+	}
+
+	return columnIndex, func(value reflect.Value, levels levels, row Row) error {
+		valueAt := valueByIndex
+
+		for i, f := range funcs {
+			n := row.indexOf(columnIndexes[i])
+			if err := f(valueAt(value, i), levels, row[:n]); err != nil {
+				return fmt.Errorf("%s → %w", names[i], err)
+			}
+			row = row[n:]
+		}
+
+		return nil
+	}
+}
+
+func reconstructFuncOfLeaf(columnIndex int, node Node) (int, reconstructFunc) {
+	return columnIndex + 1, func(value reflect.Value, _ levels, row Row) error {
+		if len(row) != 1 {
+			return fmt.Errorf("no value found in parquet row for column %d", columnIndex)
+		}
+		if int(row[0].ColumnIndex()) != columnIndex {
+			return fmt.Errorf("no values found in parquet row for column %d", columnIndex)
+		}
+		return assignValue(value, row[0])
 	}
 }

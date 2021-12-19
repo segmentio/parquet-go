@@ -20,6 +20,7 @@ type Schema struct {
 	name        string
 	root        Node
 	deconstruct deconstructFunc
+	reconstruct reconstructFunc
 }
 
 // SchemaOf constructs a parquet schema from a Go value.
@@ -93,16 +94,22 @@ func NewSchema(name string, root Node) *Schema {
 		name:        name,
 		root:        root,
 		deconstruct: makeDeconstructFunc(root),
+		reconstruct: makeReconstructFunc(root),
 	}
 }
 
 func makeDeconstructFunc(node Node) (deconstruct deconstructFunc) {
-	if isLeaf(node) { // message{}
-		deconstruct = func(row Row, _ levels, _ reflect.Value) (Row, error) { return row, nil }
-	} else {
+	if !isLeaf(node) {
 		_, deconstruct = deconstructFuncOf(0, node)
 	}
 	return deconstruct
+}
+
+func makeReconstructFunc(node Node) (reconstruct reconstructFunc) {
+	if !isLeaf(node) {
+		_, reconstruct = reconstructFuncOf(0, node)
+	}
+	return reconstruct
 }
 
 // Name returns the name of s.
@@ -148,9 +155,11 @@ func (s *Schema) String() string {
 }
 
 // Deconstruct deconstructs a Go value and appends it to a row.
-func (s *Schema) Deconstruct(row Row, value interface{}) (Row, error) {
+//
+// The method panics is the structure of the go value does not match the
+// parquet schema.
+func (s *Schema) Deconstruct(row Row, value interface{}) Row {
 	v := reflect.ValueOf(value)
-
 	if v.Kind() == reflect.Ptr {
 		if v.IsNil() {
 			v = reflect.Value{}
@@ -158,22 +167,35 @@ func (s *Schema) Deconstruct(row Row, value interface{}) (Row, error) {
 			v = v.Elem()
 		}
 	}
-
-	return s.deconstruct(row, levels{}, v)
+	if s.deconstruct != nil {
+		row = s.deconstruct(row, levels{}, v)
+	}
+	return row
 }
 
 // Reconstruct reconstructs a Go value from a row.
+//
+// The go value passed as first argument must be a non-nil pointer for the
+// row to be decoded into.
+//
+// The method panics if the structure of the go value and parquet row do not
+// match.
 func (s *Schema) Reconstruct(value interface{}, row Row) error {
 	v := reflect.ValueOf(value)
-
+	if !v.IsValid() {
+		panic("cannot reconstruct row into go value of type <nil>")
+	}
 	if v.Kind() != reflect.Ptr {
-		return fmt.Errorf("cannot construct row into go value of non-pointer type %s", v.Type())
+		panic("cannot reconstruct row into go value of non-pointer type " + v.Type().String())
 	}
 	if v.IsNil() {
-		return fmt.Errorf("cannot reconstruct row into nil pointer of type %s", v.Type())
+		panic("cannot reconstruct row into nil pointer of type " + v.Type().String())
 	}
-
-	return nil
+	var err error
+	if s.reconstruct != nil {
+		err = s.reconstruct(v.Elem(), levels{}, row)
+	}
+	return err
 }
 
 type structNode struct {
@@ -254,11 +276,15 @@ func (s *structNode) ValueByName(base reflect.Value, name string) reflect.Value 
 func (s *structNode) ValueByIndex(base reflect.Value, index int) reflect.Value {
 	switch base.Kind() {
 	case reflect.Map:
-		return base.MapIndex(reflect.ValueOf(&s.names[index]).Elem())
+		if index >= 0 && index < len(s.names) {
+			return base.MapIndex(reflect.ValueOf(&s.names[index]).Elem())
+		}
 	default:
-		// Assume the structure matches, the method will panic if it does not.
-		return s.fields[index].lookup(base)
+		if index >= 0 && index < len(s.fields) {
+			return s.fields[index].lookup(base)
+		}
 	}
+	return reflect.Value{}
 }
 
 func (s *structNode) indexOf(name string) int {

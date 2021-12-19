@@ -45,7 +45,8 @@ type Node interface {
 	// this method. Applications should treat the return value as immutable.
 	ChildNames() []string
 
-	// Returns the child node associated with the given name.
+	// Returns the child node associated with the given name, or nil if the
+	// name did not exist.
 	//
 	// The method panics if it is called on a leaf node.
 	ChildByName(name string) Node
@@ -252,10 +253,6 @@ func Leaf(typ Type) Node {
 	return &leafNode{typ: typ}
 }
 
-func isLeaf(node Node) bool {
-	return node.NumChildren() == 0
-}
-
 type leafNode struct {
 	node
 	typ Type
@@ -316,11 +313,7 @@ func (g Group) ChildNames() []string {
 }
 
 func (g Group) ChildByName(name string) Node {
-	n, ok := g[name]
-	if ok {
-		return n
-	}
-	panic("column not found in parquet group: " + name)
+	return g[name]
 }
 
 func (g Group) ValueByName(base reflect.Value, name string) reflect.Value {
@@ -343,4 +336,70 @@ func (g Group) Compression() []compress.Codec {
 	}
 	sortCodecs(codecs)
 	return dedupeSortedCodecs(codecs)
+}
+
+func isLeaf(node Node) bool {
+	return node.NumChildren() == 0
+}
+
+func isList(node Node) bool {
+	logicalType := node.Type().LogicalType()
+	return logicalType != nil && logicalType.List != nil
+}
+
+func numColumnsOf(node Node) int {
+	return maxColumnIndexOf(node, 0)
+}
+
+func maxColumnIndexOf(node Node, columnIndex int) int {
+	if isLeaf(node) {
+		return columnIndex + 1
+	}
+
+	if indexedNode, ok := unwrap(node).(IndexedNode); ok {
+		for i, n := 0, indexedNode.NumChildren(); i < n; i++ {
+			columnIndex = maxColumnIndexOf(indexedNode.ChildByIndex(i), columnIndex)
+		}
+	} else {
+		for _, name := range node.ChildNames() {
+			columnIndex = maxColumnIndexOf(node.ChildByName(name), columnIndex)
+		}
+	}
+
+	return columnIndex
+}
+
+func forEachColumnOf(node Node, do func(int, []int, []string, []Node, Node)) {
+	forEachColumn(0, nil, nil, nil, node, do)
+}
+
+func forEachColumn(columnIndex int, index []int, names []string, path []Node, node Node, do func(int, []int, []string, []Node, Node)) int {
+	if isLeaf(node) {
+		do(columnIndex, index, names, path, node)
+		return columnIndex + 1
+	}
+
+	path = append(path[:len(path):len(path)], node)
+	index = index[:len(index):len(index)]
+	names = names[:len(names):len(names)]
+
+	for i, name := range node.ChildNames() {
+		columnIndex = forEachColumn(columnIndex,
+			append(index, i),
+			append(names, name),
+			path, node.ChildByName(name), do)
+	}
+
+	return columnIndex
+}
+
+func listElementOf(node Node) Node {
+	if !isLeaf(node) {
+		if list := node.ChildByName("list"); list != nil {
+			if elem := list.ChildByName("element"); elem != nil {
+				return elem
+			}
+		}
+	}
+	panic("node with logical type LIST is not composed of a .list.element")
 }
