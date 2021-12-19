@@ -228,8 +228,7 @@ func reconstructFuncOfRepeated(columnIndex int, node Node) (int, reconstructFunc
 			return nil
 		}
 
-		zero := reflect.Zero(value.Type().Elem())
-		elem := reflect.Value{}
+		typ := value.Type()
 		levels.definitionLevel++
 		levels.repetitionLevel++
 
@@ -237,19 +236,23 @@ func reconstructFuncOfRepeated(columnIndex int, node Node) (int, reconstructFunc
 			row[0].IsNull() &&
 			row[0].definitionLevel == levels.definitionLevel &&
 			row[0].repetitionLevel < levels.repetitionLevel {
-			value.Set(reflect.MakeSlice(value.Type(), 0, 0))
+			value.Set(reflect.MakeSlice(typ, 0, 0))
 			return nil
 		}
 
-		for n := 0; len(row) > 0; n++ {
+		t := typ.Elem()
+		elem := reflect.Value{}
+		zero := reflect.Zero(t)
+		size := t.Size()
+
+		for len(row) > 0 {
 			i := row.indexOf(maxColumnIndex) + 1
 			if i > len(row) {
 				return fmt.Errorf("cannot reconstruct repeated parquet column from row missing column index %d", maxColumnIndex)
 			}
 
 			if row[0].repetitionLevel <= levels.repetitionLevel {
-				value.Set(reflect.Append(value, zero))
-				elem = value.Index(value.Len() - 1)
+				elem = reflectAppend(value, zero, size)
 			}
 
 			if !elem.IsValid() {
