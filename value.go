@@ -593,9 +593,12 @@ func copyBytes(b []byte) []byte {
 
 // Equal returns true if v1 and v2 are equal.
 //
-// Values are considered equal if they are of the same physical typee and hold
+// Values are considered equal if they are of the same physical type and hold
 // the same Go values. For BYTE_ARRAY and FIXED_LEN_BYTE_ARRAY, the content of
 // the underlying byte arrays are tested for equality.
+//
+// Note that the repetition levels, definition levels, and column indexes are
+// not compared by this function.
 func Equal(v1, v2 Value) bool {
 	if v1.kind != v2.kind {
 		return false

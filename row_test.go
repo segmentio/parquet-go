@@ -497,13 +497,12 @@ func assertEqualValues(t *testing.T, columnIndex int, want, got []parquet.Value)
 		if !parquet.Equal(v1, v2) {
 			t.Errorf("values at index %d mismatch in column %d: want=%#v got=%#v", i, columnIndex, v1, v2)
 		}
-
-		// TODO: check column index
-
+		if columnIndex != int(v2.ColumnIndex()) {
+			t.Errorf("column index mismatch in column %d: want=%d got=%#v", i, columnIndex, v2)
+		}
 		if v1.RepetitionLevel() != v2.RepetitionLevel() {
 			t.Errorf("repetition levels at index %d mismatch in column %d: want=%#v got=%#v", i, columnIndex, v1, v2)
 		}
-
 		if v1.DefinitionLevel() != v2.DefinitionLevel() {
 			t.Errorf("definition levels at index %d mismatch in column %d: want=%#v got=%#v", i, columnIndex, v1, v2)
 		}
