@@ -6,7 +6,9 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 
+	"github.com/google/uuid"
 	"github.com/segmentio/parquet/compress"
 	"github.com/segmentio/parquet/deprecated"
 	"github.com/segmentio/parquet/encoding"
@@ -55,7 +57,7 @@ type Schema struct {
 // representing the scale and the second the precision; for example:
 //
 //	type Item struct {
-//		Cost int64 `parquet:"cost,decimal(0,3)"`
+//		Cost int64 `parquet:"cost,decimal(0:3)"`
 //	}
 //
 // Invalid combination of struct tags and Go types, or repeating options will
@@ -63,29 +65,35 @@ type Schema struct {
 //
 // The schema name is the Go type name of the value.
 func SchemaOf(model interface{}) *Schema {
-	t := reflect.TypeOf(model)
-	if t.Kind() == reflect.Ptr {
-		t = t.Elem()
-	}
-	return NamedSchemaOf(t.Name(), model)
+	t := dereference(reflect.TypeOf(model))
+	return namedSchemaOf(t.Name(), t)
 }
 
 // NamedSchemaOf is like SchemaOf but allows the program to customize the name
 // of the parquet schema.
 func NamedSchemaOf(name string, model interface{}) *Schema {
-	return namedSchemaOf(name, reflect.ValueOf(model))
+	return namedSchemaOf(name, dereference(reflect.TypeOf(model)))
 }
 
-func namedSchemaOf(name string, model reflect.Value) *Schema {
-	switch t := model.Type(); t.Kind() {
-	case reflect.Struct:
-		return NewSchema(name, structNodeOf(t))
-	case reflect.Ptr:
-		if elem := t.Elem(); elem.Kind() == reflect.Struct {
-			return NewSchema(name, structNodeOf(elem))
-		}
+var cachedSchemas atomic.Value // map[reflect.Type]*Schema
+
+func namedSchemaOf(name string, model reflect.Type) *Schema {
+	cache, _ := cachedSchemas.Load().(map[reflect.Type]*Schema)
+	schema, _ := cache[model]
+	if schema != nil {
+		return schema
 	}
-	panic("cannot construct parquet schema from value of type " + model.Type().String())
+	if model.Kind() != reflect.Struct {
+		panic("cannot construct parquet schema from value of type " + model.String())
+	}
+	schema = NewSchema(name, structNodeOf(model))
+	newCache := make(map[reflect.Type]*Schema, len(cache)+1)
+	newCache[model] = schema
+	for typ, schema := range cache {
+		newCache[typ] = schema
+	}
+	cachedSchemas.Store(newCache)
+	return schema
 }
 
 // NewSchema constructs a new Schema object with the given name and root node.
@@ -96,6 +104,13 @@ func NewSchema(name string, root Node) *Schema {
 		deconstruct: makeDeconstructFunc(root),
 		reconstruct: makeReconstructFunc(root),
 	}
+}
+
+func dereference(t reflect.Type) reflect.Type {
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+	return t
 }
 
 func makeDeconstructFunc(node Node) (deconstruct deconstructFunc) {
@@ -507,6 +522,8 @@ func nodeOf(t reflect.Type) Node {
 	switch t {
 	case reflect.TypeOf(deprecated.Int96{}):
 		return Leaf(Int96Type)
+	case reflect.TypeOf(uuid.UUID{}):
+		return UUID()
 	}
 
 	switch t.Kind() {
@@ -541,11 +558,15 @@ func nodeOf(t reflect.Type) Node {
 		return structNodeOf(t)
 
 	case reflect.Slice:
-		return Repeated(nodeOf(t.Elem()))
+		if elem := t.Elem(); elem.Kind() == reflect.Uint8 { // []byte?
+			return Leaf(ByteArrayType)
+		} else {
+			return Repeated(nodeOf(elem))
+		}
 
 	case reflect.Array:
-		if t.Elem().Kind() == reflect.Uint8 && t.Len() == 16 {
-			return UUID()
+		if t.Elem().Kind() == reflect.Uint8 {
+			return Leaf(FixedLenByteArrayType(t.Len()))
 		}
 	}
 
@@ -575,7 +596,7 @@ func parseDecimalArgs(args string) (scale, precision int, err error) {
 	}
 	args = strings.TrimPrefix(args, "(")
 	args = strings.TrimSuffix(args, ")")
-	parts := strings.Split(args, ",")
+	parts := strings.Split(args, ":")
 	if len(parts) != 2 {
 		return 0, 0, fmt.Errorf("malformed decimal args: (%s)", args)
 	}

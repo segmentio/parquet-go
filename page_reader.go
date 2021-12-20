@@ -80,15 +80,14 @@ func (r *DataPageReader) ReadValue() (Value, error) {
 	var repetitionLevel int8
 	var definitionLevel int8
 
-	switch {
-	case r.maxRepetitionLevel > 0:
+	if r.maxRepetitionLevel > 0 {
 		repetitionLevel, err = r.repetition.ReadLevel()
 		if err != nil {
 			return val, fmt.Errorf("reading parquet repetition level: %w", err)
 		}
-		fallthrough
+	}
 
-	case r.maxDefinitionLevel > 0:
+	if r.maxDefinitionLevel > 0 {
 		definitionLevel, err = r.definition.ReadLevel()
 		if err != nil {
 			return val, fmt.Errorf("reading parquet definition level: %w", err)

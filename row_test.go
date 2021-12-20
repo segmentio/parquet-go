@@ -43,6 +43,14 @@ func TestDeconstructionReconstruction(t *testing.T) {
 		List1 []List1 `parquet:",list"`
 	}
 
+	type nestedListsLevel1 struct {
+		Level2 []string `parquet:"level2"`
+	}
+
+	type nestedLists struct {
+		Level1 []nestedListsLevel1 `parquet:"level1"`
+	}
+
 	tests := []struct {
 		scenario string
 		input    interface{}

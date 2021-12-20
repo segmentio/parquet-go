@@ -71,7 +71,23 @@ func (c *Column) ChildNames() []string { return c.names }
 // name passed as argument.
 //
 // This method contributes to satisfying the Node interface.
-func (c *Column) ChildByName(name string) Node { return c.Column(name) }
+func (c *Column) ChildByName(name string) Node {
+	if child := c.Column(name); child != nil {
+		return child
+	}
+	return nil
+}
+
+// ChildByIndex returns a Node value representing the child column at the given
+// index.
+//
+// This method contributes to satisfying the IndexedNode interface.
+func (c *Column) ChildByIndex(index int) Node {
+	if index >= 0 && index < len(c.columns) {
+		return c.columns[index]
+	}
+	return nil
+}
 
 // Encoding returns the encodings used by this column.
 func (c *Column) Encoding() []encoding.Encoding { return c.encoding }
@@ -116,12 +132,18 @@ func (c *Column) MaxRepetitionLevel() int8 { return c.maxRepetitionLevel }
 // column.
 func (c *Column) MaxDefinitionLevel() int8 { return c.maxDefinitionLevel }
 
-// ValueByName is returns the sub-value with the givne name in base.
+// ValueByName returns the sub-value with the given name in base.
 func (c *Column) ValueByName(base reflect.Value, name string) reflect.Value {
 	if len(c.columns) == 0 { // leaf?
 		panic("cannot call ValueByName on leaf column")
 	}
 	return base.MapIndex(reflect.ValueOf(name))
+}
+
+// ValueByIndex returns the sub-value in base for the child column at the given
+// index.
+func (c *Column) ValueByIndex(base reflect.Value, index int) reflect.Value {
+	return c.ValueByName(base, c.columns[index].Name())
 }
 
 // String returns a human-redable string representation of the oclumn.
@@ -150,6 +172,16 @@ func (c *Column) String() string {
 			c.schema.RepetitionType,
 			c.maxRepetitionLevel,
 			c.maxDefinitionLevel)
+	}
+}
+
+func (c *Column) forEachLeaf(do func(*Column)) {
+	if len(c.columns) == 0 {
+		do(c)
+	} else {
+		for _, child := range c.columns {
+			child.forEachLeaf(do)
+		}
 	}
 }
 
@@ -482,5 +514,6 @@ func schemaRepetitionTypeOf(s *format.SchemaElement) format.FieldRepetitionType 
 }
 
 var (
-	_ Node = (*Column)(nil)
+	_ Node        = (*Column)(nil)
+	_ IndexedNode = (*Column)(nil)
 )

@@ -6,25 +6,6 @@ import (
 	"github.com/segmentio/parquet"
 )
 
-type nestedListsLevel1 struct {
-	Level2 []string `parquet:"level2"`
-}
-
-type nestedLists struct {
-	Level1 []nestedListsLevel1 `parquet:"level1"`
-}
-
-type Contact struct {
-	Name        string `parquet:"name"`
-	PhoneNumber string `parquet:"phoneNumber,optional,snappy"`
-}
-
-type AddressBook struct {
-	Owner             string    `parquet:"owner,zstd"`
-	OwnerPhoneNumbers []string  `parquet:"ownerPhoneNumbers,gzip"`
-	Contacts          []Contact `parquet:"contacts"`
-}
-
 func TestSchemaOf(t *testing.T) {
 	tests := []struct {
 		value interface{}

@@ -118,6 +118,9 @@ var int32Tests = [...][]int32{
 		6, 6, 6, 7, 7, 7, 8, 8,
 		8, 9, 9, 9,
 	},
+	{ // a sequence that triggered a bug in the delta binary packed encoding
+		24, 36, 47, 32, 29, 4, 9, 20, 2, 18,
+	},
 }
 
 var int64Tests = [...][]int64{

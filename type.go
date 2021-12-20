@@ -217,12 +217,12 @@ func (t booleanType) Kind() Kind { return Boolean }
 
 func (t booleanType) Length() int { return 1 }
 
-func (t booleanType) PhyiscalType() *format.Type {
-	return &physicalTypes[Boolean]
-}
-
 func (t booleanType) Less(v1, v2 Value) bool {
 	return !v1.Boolean() && v2.Boolean()
+}
+
+func (t booleanType) PhyiscalType() *format.Type {
+	return &physicalTypes[Boolean]
 }
 
 func (t booleanType) NewColumnIndexer(sizeLimit int) ColumnIndexer {

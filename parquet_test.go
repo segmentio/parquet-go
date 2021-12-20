@@ -9,6 +9,17 @@ import (
 	"github.com/segmentio/parquet"
 )
 
+type Contact struct {
+	Name        string `parquet:"name"`
+	PhoneNumber string `parquet:"phoneNumber,optional,snappy"`
+}
+
+type AddressBook struct {
+	Owner             string    `parquet:"owner,zstd"`
+	OwnerPhoneNumbers []string  `parquet:"ownerPhoneNumbers,gzip"`
+	Contacts          []Contact `parquet:"contacts"`
+}
+
 func forEachLeafColumn(col *parquet.Column, do func(*parquet.Column) error) error {
 	children := col.Columns()
 

@@ -447,7 +447,26 @@ func (v Value) Column(columnIndex int8) Value {
 	if columnIndex < 0 {
 		panic("cannot create a value with a negative repetition level")
 	}
+	v.setColumnIndex(columnIndex)
+	return v
+}
+
+func (v *Value) setColumnIndex(columnIndex int8) {
 	v.columnIndex = ^columnIndex
+}
+
+// Clone returns a copy of v which does not share any pointers with it.
+func (v Value) Clone() Value {
+	switch k := v.Kind(); k {
+	case ByteArray, FixedLenByteArray:
+		repetitionLevel := v.repetitionLevel
+		definitionLevel := v.definitionLevel
+		columnIndex := v.columnIndex
+		v = makeValueBytes(k, v.Bytes())
+		v.repetitionLevel = repetitionLevel
+		v.definitionLevel = definitionLevel
+		v.columnIndex = columnIndex
+	}
 	return v
 }
 
@@ -537,7 +556,7 @@ func assignValue(dst reflect.Value, src Value) error {
 			return nil
 		case reflect.Slice:
 			if dst.Type().Elem().Kind() == reflect.Uint8 {
-				dst.SetBytes(v)
+				dst.SetBytes(copyBytes(v))
 				return nil
 			}
 		default:
@@ -554,7 +573,7 @@ func assignValue(dst reflect.Value, src Value) error {
 			}
 		case reflect.Slice:
 			if dst.Type().Elem().Kind() == reflect.Uint8 {
-				dst.SetBytes(v)
+				dst.SetBytes(copyBytes(v))
 				return nil
 			}
 		default:
@@ -568,6 +587,12 @@ func assignValue(dst reflect.Value, src Value) error {
 	}
 
 	return fmt.Errorf("cannot assign parquet value of type %s to go value of type %s", srcKind.String(), dst.Type())
+}
+
+func copyBytes(b []byte) []byte {
+	c := make([]byte, len(b))
+	copy(c, b)
+	return c
 }
 
 // Equal returns true if v1 and v2 are equal.
