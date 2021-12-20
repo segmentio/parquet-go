@@ -2,6 +2,7 @@ package parquet_test
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"math/rand"
 	"reflect"
@@ -165,10 +166,16 @@ func TestReader(t *testing.T) {
 	for _, test := range readerTests {
 		t.Run(test.scenario, func(t *testing.T) {
 			const N = 100
-			for i := 0; i < N; i++ {
-				t.Run("", func(t *testing.T) {
+
+			rowType := reflect.TypeOf(test.model)
+			rowPtr := reflect.New(rowType)
+			rowZero := reflect.Zero(rowType)
+			rowValue := rowPtr.Elem()
+
+			for n := 1; n < N; n++ {
+				t.Run(fmt.Sprintf("N=%d", n), func(t *testing.T) {
 					defer buf.Reset()
-					rows := rowsOf(N, test.model)
+					rows := rowsOf(n, test.model)
 
 					if err := writeParquetFile(buf, rows); err != nil {
 						t.Fatal(err)
@@ -176,10 +183,6 @@ func TestReader(t *testing.T) {
 
 					file.Reset(buf.Bytes())
 					r := parquet.NewReader(file, file.Size())
-					rowType := reflect.TypeOf(rows[0])
-					rowPtr := reflect.New(rowType)
-					rowZero := reflect.Zero(rowType)
-					rowValue := rowPtr.Elem()
 
 					for i, v := range rows {
 						if err := r.ReadRow(rowPtr.Interface()); err != nil {
@@ -201,5 +204,43 @@ func TestReader(t *testing.T) {
 }
 
 func BenchmarkReader(b *testing.B) {
+	buf := new(bytes.Buffer)
+	file := bytes.NewReader(nil)
 
+	for _, test := range readerTests {
+		b.Run(test.scenario, func(b *testing.B) {
+			const N = 1000
+			defer buf.Reset()
+			rows := rowsOf(N, test.model)
+
+			if err := writeParquetFile(buf, rows); err != nil {
+				b.Fatal(err)
+			}
+			file.Reset(buf.Bytes())
+			f, err := parquet.OpenFile(file, file.Size())
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			rowType := reflect.TypeOf(test.model)
+			rowPtr := reflect.New(rowType)
+			rowZero := reflect.Zero(rowType)
+			rowValue := rowPtr.Elem()
+
+			b.ResetTimer()
+			r := parquet.NewFileReader(f)
+			p := rowPtr.Interface()
+
+			for i := 0; i < b.N; i++ {
+				if err := r.ReadRow(p); err != nil {
+					if err == io.EOF {
+						r.Reset()
+					} else {
+						b.Fatal(err)
+					}
+				}
+				rowValue.Set(rowZero)
+			}
+		})
+	}
 }

@@ -14,12 +14,13 @@ type Reader struct {
 	buffers [][]Value
 	indexes []int
 	values  []Value
+	err     error
 }
 
 func NewReader(r io.ReaderAt, size int64, options ...ReaderOption) *Reader {
 	f, err := OpenFile(r, size)
 	if err != nil {
-		panic(err)
+		return &Reader{err: err}
 	}
 	return NewFileReader(f, options...)
 }
@@ -30,7 +31,7 @@ func NewFileReader(file *File, options ...ReaderOption) *Reader {
 	}
 	config.Apply(options...)
 	if err := config.Validate(); err != nil {
-		panic(err)
+		return &Reader{err: err}
 	}
 	root := file.Root()
 	columns := make([]*columnChunkReader, 0, numColumnsOf(root))
@@ -47,7 +48,17 @@ func NewFileReader(file *File, options ...ReaderOption) *Reader {
 	}
 }
 
+func (r *Reader) Reset() {
+	for _, c := range r.columns {
+		c.reset()
+	}
+}
+
 func (r *Reader) ReadRow(row interface{}) error {
+	if r.err != nil {
+		return r.err
+	}
+
 	if rowType := dereference(reflect.TypeOf(row)); rowType.Kind() == reflect.Struct && (r.seen == nil || r.seen != rowType) {
 		schema := namedSchemaOf(r.schema.Name(), rowType)
 		if !Match(schema, r.schema) {
@@ -175,15 +186,14 @@ func newColumnChunkReader(column *Column, config *ReaderConfig) *columnChunkRead
 	return ccr
 }
 
-func (ccr *columnChunkReader) Close() error {
-	ccr.chunks.close(nil)
+func (ccr *columnChunkReader) reset() {
+	ccr.chunks.Seek(0)
 	ccr.pages = nil
 	ccr.reader = nil
 	ccr.dictionary = nil
 	ccr.numPages = 0
 	ccr.peeked = false
 	ccr.cursor = Value{}
-	return nil
 }
 
 func (ccr *columnChunkReader) readValue() (Value, error) {
