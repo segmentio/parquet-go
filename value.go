@@ -447,12 +447,8 @@ func (v Value) Column(columnIndex int8) Value {
 	if columnIndex < 0 {
 		panic("cannot create a value with a negative repetition level")
 	}
-	v.setColumnIndex(columnIndex)
-	return v
-}
-
-func (v *Value) setColumnIndex(columnIndex int8) {
 	v.columnIndex = ^columnIndex
+	return v
 }
 
 // Clone returns a copy of v which does not share any pointers with it.

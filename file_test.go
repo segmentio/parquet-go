@@ -85,6 +85,7 @@ func printColumns(t *testing.T, col *parquet.Column, indent string) {
 					pageReader,
 					col.MaxRepetitionLevel(),
 					col.MaxDefinitionLevel(),
+					col.Index(),
 					bufferSize,
 				)
 

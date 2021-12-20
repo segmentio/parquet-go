@@ -75,12 +75,6 @@ func (r *Reader) ReadRow(row interface{}) error {
 		}
 	}
 
-	for i, b := range r.buffers {
-		for j := range b {
-			b[j].setColumnIndex(int8(i))
-		}
-	}
-
 	for i := range r.indexes {
 		r.indexes[i] = 0
 	}
@@ -144,11 +138,8 @@ func flattenRow(row Row, indexes []int, buffers [][]Value, col *Column, columnIn
 }
 
 type columnChunkReader struct {
-	bufferSize         int
-	typ                Type
-	maxRepetitionLevel int8
-	maxDefinitionLevel int8
-
+	bufferSize int
+	column     *Column
 	chunks     *ColumnChunks
 	pages      *ColumnPages
 	reader     *DataPageReader
@@ -163,20 +154,21 @@ type columnChunkReader struct {
 
 func newColumnChunkReader(column *Column, config *ReaderConfig) *columnChunkReader {
 	ccr := &columnChunkReader{
-		bufferSize:         config.PageBufferSize,
-		typ:                column.Type(),
-		maxRepetitionLevel: column.MaxRepetitionLevel(),
-		maxDefinitionLevel: column.MaxDefinitionLevel(),
-		chunks:             column.Chunks(),
+		bufferSize: config.PageBufferSize,
+		column:     column,
+		chunks:     column.Chunks(),
 	}
 
-	if column.MaxRepetitionLevel() > 0 {
+	maxRepetitionLevel := column.MaxRepetitionLevel()
+	maxDefinitionLevel := column.MaxDefinitionLevel()
+
+	if maxRepetitionLevel > 0 {
 		ccr.readRowValues = (*columnChunkReader).readRowRepeatedValues
 	} else {
 		ccr.readRowValues = (*columnChunkReader).readRowValue
 	}
 
-	if ccr.maxRepetitionLevel > 0 || ccr.maxDefinitionLevel > 0 {
+	if maxRepetitionLevel > 0 || maxDefinitionLevel > 0 {
 		ccr.bufferSize /= 2
 	}
 
@@ -275,7 +267,7 @@ readNextPage:
 					return row, fmt.Errorf("the dictionary must be in the first page but one was found after reading %d pages", ccr.numPages)
 				}
 
-				ccr.dictionary = ccr.typ.NewDictionary(0)
+				ccr.dictionary = ccr.column.Type().NewDictionary(0)
 				if err := ccr.dictionary.ReadFrom(
 					header.Encoding().NewDecoder(ccr.pages.PageData()),
 				); err != nil {
@@ -292,7 +284,7 @@ readNextPage:
 				if ccr.dictionary != nil {
 					pageReader = NewIndexedPageReader(pageData, ccr.bufferSize, ccr.dictionary)
 				} else {
-					pageReader = ccr.typ.NewPageReader(pageData, ccr.bufferSize)
+					pageReader = ccr.column.Type().NewPageReader(pageData, ccr.bufferSize)
 				}
 
 				ccr.reader = NewDataPageReader(
@@ -300,8 +292,9 @@ readNextPage:
 					header.DefinitionLevelEncoding().NewDecoder(ccr.pages.DefinitionLevels()),
 					header.NumValues(),
 					pageReader,
-					ccr.maxRepetitionLevel,
-					ccr.maxDefinitionLevel,
+					ccr.column.MaxRepetitionLevel(),
+					ccr.column.MaxDefinitionLevel(),
+					ccr.column.Index(),
 					ccr.bufferSize,
 				)
 

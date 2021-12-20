@@ -76,7 +76,7 @@ func deconstructFuncOfRepeated(columnIndex int, node Node) (int, deconstructFunc
 		if value.IsValid() {
 			numValues = value.Len()
 			levels.repetitionDepth++
-			if !value.IsNil() {
+			if numValues > 0 { // !value.IsNil() {
 				levels.definitionLevel++
 			}
 		}
@@ -195,15 +195,17 @@ func reconstructFuncOfRepeated(columnIndex int, node Node) (int, reconstructFunc
 	nextColumnIndex, reconstruct := reconstructFuncOf(columnIndex, Required(node))
 	maxColumnIndex := nextColumnIndex - 1
 	return nextColumnIndex, func(value reflect.Value, levels levels, row Row) error {
-		if value.Kind() != reflect.Slice {
+		typ := value.Type()
+
+		if typ.Kind() != reflect.Slice {
 			return fmt.Errorf("cannot reconstruct repeated parquet column into go value of type %s", value.Type())
 		}
 
 		if len(row) > 0 && row[0].definitionLevel == levels.definitionLevel {
+			value.Set(reflect.MakeSlice(typ, 0, 0))
 			return nil
 		}
 
-		typ := value.Type()
 		levels.definitionLevel++
 		levels.repetitionLevel++
 

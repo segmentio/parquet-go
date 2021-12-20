@@ -38,11 +38,12 @@ type DataPageReader struct {
 	remain             int
 	maxRepetitionLevel int8
 	maxDefinitionLevel int8
+	columnIndex        int8
 	repetition         levelReader
 	definition         levelReader
 }
 
-func NewDataPageReader(repetition, definition encoding.Decoder, numValues int, page PageReader, maxRepetitionLevel, maxDefinitionLevel int8, bufferSize int) *DataPageReader {
+func NewDataPageReader(repetition, definition encoding.Decoder, numValues int, page PageReader, maxRepetitionLevel, maxDefinitionLevel, columnIndex int8, bufferSize int) *DataPageReader {
 	repetitionBufferSize := 0
 	definitionBufferSize := 0
 
@@ -65,6 +66,7 @@ func NewDataPageReader(repetition, definition encoding.Decoder, numValues int, p
 		remain:             numValues,
 		maxRepetitionLevel: maxRepetitionLevel,
 		maxDefinitionLevel: maxDefinitionLevel,
+		columnIndex:        ^columnIndex,
 		repetition:         makeLevelReader(repetition, repetitionBufferSize),
 		definition:         makeLevelReader(definition, definitionBufferSize),
 	}
@@ -100,6 +102,7 @@ func (r *DataPageReader) ReadValue() (Value, error) {
 
 	val.repetitionLevel = repetitionLevel
 	val.definitionLevel = definitionLevel
+	val.columnIndex = r.columnIndex
 	r.remain--
 	return val, err
 }

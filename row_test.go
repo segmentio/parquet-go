@@ -87,7 +87,7 @@ func TestDeconstructionReconstruction(t *testing.T) {
 			input: struct {
 				Symbols []string
 			}{
-				Symbols: nil,
+				Symbols: []string{},
 			},
 			values: [][]parquet.Value{
 				0: {parquet.ValueOf(nil).Level(0, 0)},
@@ -275,9 +275,9 @@ func TestDeconstructionReconstruction(t *testing.T) {
 			input: List0{
 				List1: []List1{
 					{List2: []List2{{Value: "A"}, {Value: "B"}}},
-					{List2: []List2{}},
+					{List2: []List2{}}, // parquet doesn't differentiate between empty repeated and a nil list
 					{List2: []List2{{Value: "C"}}},
-					{List2: nil},
+					{List2: []List2{}},
 					{List2: []List2{{Value: "D"}, {Value: "E"}, {Value: "F"}}},
 					{List2: []List2{{Value: "G"}, {Value: "H"}, {Value: "I"}}},
 				},
@@ -286,7 +286,7 @@ func TestDeconstructionReconstruction(t *testing.T) {
 				{
 					parquet.ValueOf("A").Level(0, 3),
 					parquet.ValueOf("B").Level(2, 3),
-					parquet.ValueOf(nil).Level(1, 2),
+					parquet.ValueOf(nil).Level(1, 1),
 					parquet.ValueOf("C").Level(1, 3),
 					parquet.ValueOf(nil).Level(1, 1),
 					parquet.ValueOf("D").Level(1, 3),
@@ -495,21 +495,17 @@ func assertEqualValues(t *testing.T, columnIndex int, want, got []parquet.Value)
 		v1, v2 := want[i], got[i]
 
 		if !parquet.Equal(v1, v2) {
-			t.Errorf("values at index %d mismatch in column %d: want=%s got=%s", i, columnIndex, v1, v2)
+			t.Errorf("values at index %d mismatch in column %d: want=%#v got=%#v", i, columnIndex, v1, v2)
 		}
 
+		// TODO: check column index
+
 		if v1.RepetitionLevel() != v2.RepetitionLevel() {
-			t.Errorf("repetition levels at index %d mismatch in column %d: want=%d got=%d",
-				i, columnIndex,
-				v1.RepetitionLevel(),
-				v2.RepetitionLevel())
+			t.Errorf("repetition levels at index %d mismatch in column %d: want=%#v got=%#v", i, columnIndex, v1, v2)
 		}
 
 		if v1.DefinitionLevel() != v2.DefinitionLevel() {
-			t.Errorf("definition levels at index %d mismatch in column %d: want=%d got=%d",
-				i, columnIndex,
-				v1.DefinitionLevel(),
-				v2.DefinitionLevel())
+			t.Errorf("definition levels at index %d mismatch in column %d: want=%#v got=%#v", i, columnIndex, v1, v2)
 		}
 	}
 }

@@ -35,6 +35,7 @@ type Column struct {
 	depth              int8
 	maxRepetitionLevel int8
 	maxDefinitionLevel int8
+	index              int8
 }
 
 // Schema returns the underlying schema element of c.
@@ -122,7 +123,7 @@ func (c *Column) Column(name string) *Column {
 func (c *Column) Chunks() *ColumnChunks { return &ColumnChunks{column: c, index: -1} }
 
 // Depth returns the position of the column relative to the root.
-func (c *Column) Depth() int { return int(c.depth) }
+func (c *Column) Depth() int8 { return c.depth }
 
 // MaxRepetitionLevel returns the maximum value of repetition levels on this
 // column.
@@ -131,6 +132,10 @@ func (c *Column) MaxRepetitionLevel() int8 { return c.maxRepetitionLevel }
 // MaxDefinitionLevel returns the maximum value of definition levels on this
 // column.
 func (c *Column) MaxDefinitionLevel() int8 { return c.maxDefinitionLevel }
+
+// Index returns the position of the column in a row. Only leaf columns have a
+// column index, the method returns -1 when called on non-leaf columns.
+func (c *Column) Index() int8 { return c.index }
 
 // ValueByName returns the sub-value with the given name in base.
 func (c *Column) ValueByName(base reflect.Value, name string) reflect.Value {
@@ -207,11 +212,25 @@ func openColumns(file *File) (*Column, error) {
 		}
 	}
 
-	return c, setMaxLevels(c, 0, 0, 0)
+	_, err = c.setLevels(0, 0, 0, 0)
+	return c, err
 }
 
-func setMaxLevels(col *Column, depth, repetition, definition int8) error {
-	switch schemaRepetitionTypeOf(col.schema) {
+func (c *Column) setLevels(depth, repetition, definition, index int8) (int8, error) {
+	if depth < 0 {
+		return -1, fmt.Errorf("cannot represent parquet columns with more than 127 nested levels: %s", join(c.path))
+	}
+	if index < 0 {
+		return -1, fmt.Errorf("cannot represent parquet rows with more than 127 columns: %s", join(c.path))
+	}
+	if repetition < 0 {
+		return -1, fmt.Errorf("cannot represent parquet columns with more than 127 repetition levels: %s", join(c.path))
+	}
+	if definition < 0 {
+		return -1, fmt.Errorf("cannot represent parquet columns with more than 127 definition levels: %s", join(c.path))
+	}
+
+	switch schemaRepetitionTypeOf(c.schema) {
 	case format.Optional:
 		definition++
 	case format.Repeated:
@@ -219,28 +238,25 @@ func setMaxLevels(col *Column, depth, repetition, definition int8) error {
 		definition++
 	}
 
-	col.depth = depth
-	col.maxRepetitionLevel = repetition
-	col.maxDefinitionLevel = definition
+	c.depth = depth
+	c.maxRepetitionLevel = repetition
+	c.maxDefinitionLevel = definition
 	depth++
 
-	if depth < 0 {
-		return fmt.Errorf("cannot represent parquet columns with more than 127 nested levels: %s", join(col.path))
-	}
-	if repetition < 0 {
-		return fmt.Errorf("cannot represent parquet columns with more than 127 repetition levels: %s", join(col.path))
-	}
-	if definition < 0 {
-		return fmt.Errorf("cannot represent parquet columns with more than 127 definition levels: %s", join(col.path))
+	if len(c.columns) > 0 {
+		c.index = -1
+	} else {
+		c.index = index
+		index++
 	}
 
-	for _, c := range col.columns {
-		if err := setMaxLevels(c, depth, repetition, definition); err != nil {
-			return err
+	var err error
+	for _, child := range c.columns {
+		if index, err = child.setLevels(depth, repetition, definition, index); err != nil {
+			return -1, err
 		}
 	}
-
-	return nil
+	return index, nil
 }
 
 type columnLoader struct {

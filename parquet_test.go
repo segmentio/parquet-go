@@ -83,6 +83,7 @@ func forEachColumnPage(col *parquet.Column, do func(*parquet.Column, *parquet.Da
 					pageReader,
 					leaf.MaxRepetitionLevel(),
 					leaf.MaxDefinitionLevel(),
+					leaf.Index(),
 					bufferSize,
 				)
 

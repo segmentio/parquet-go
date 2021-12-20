@@ -164,34 +164,42 @@ func TestReader(t *testing.T) {
 
 	for _, test := range readerTests {
 		t.Run(test.scenario, func(t *testing.T) {
-			defer buf.Reset()
-			const N = 10
-			rows := rowsOf(N, test.model)
+			const N = 100
+			for i := 0; i < N; i++ {
+				t.Run("", func(t *testing.T) {
+					defer buf.Reset()
+					rows := rowsOf(N, test.model)
 
-			if err := writeParquetFile(buf, rows); err != nil {
-				t.Fatal(err)
-			}
+					if err := writeParquetFile(buf, rows); err != nil {
+						t.Fatal(err)
+					}
 
-			file.Reset(buf.Bytes())
-			r := parquet.NewReader(file, file.Size())
-			rowType := reflect.TypeOf(rows[0])
-			rowPtr := reflect.New(rowType)
-			rowZero := reflect.Zero(rowType)
-			rowValue := rowPtr.Elem()
+					file.Reset(buf.Bytes())
+					r := parquet.NewReader(file, file.Size())
+					rowType := reflect.TypeOf(rows[0])
+					rowPtr := reflect.New(rowType)
+					rowZero := reflect.Zero(rowType)
+					rowValue := rowPtr.Elem()
 
-			for i, v := range rows {
-				if err := r.ReadRow(rowPtr.Interface()); err != nil {
-					t.Fatal(err)
-				}
-				if !reflect.DeepEqual(rowValue.Interface(), v) {
-					t.Errorf("row mismatch at index %d\nwant = %+v\ngot  = %+v", i, v, rowValue.Interface())
-				}
-				rowValue.Set(rowZero)
-			}
+					for i, v := range rows {
+						if err := r.ReadRow(rowPtr.Interface()); err != nil {
+							t.Fatal(err)
+						}
+						if !reflect.DeepEqual(rowValue.Interface(), v) {
+							t.Errorf("row mismatch at index %d\nwant = %+v\ngot  = %+v", i, v, rowValue.Interface())
+						}
+						rowValue.Set(rowZero)
+					}
 
-			if err := r.ReadRow(rowPtr.Interface()); err != io.EOF {
-				t.Errorf("expected EOF after reading all values but got: %v", err)
+					if err := r.ReadRow(rowPtr.Interface()); err != io.EOF {
+						t.Errorf("expected EOF after reading all values but got: %v", err)
+					}
+				})
 			}
 		})
 	}
+}
+
+func BenchmarkReader(b *testing.B) {
+
 }
