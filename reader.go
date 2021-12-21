@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+
+	"github.com/segmentio/parquet/encoding"
 )
 
 type Reader struct {
@@ -12,9 +14,10 @@ type Reader struct {
 	seen    reflect.Type
 	columns []*columnChunkReader
 	buffers [][]Value
-	indexes []int
+	indexes []uint
 	values  []Value
 	err     error
+	flatten flattenRowFunc
 }
 
 func NewReader(r io.ReaderAt, size int64, options ...ReaderOption) *Reader {
@@ -38,13 +41,15 @@ func NewFileReader(file *File, options ...ReaderOption) *Reader {
 	root.forEachLeaf(func(column *Column) {
 		columns = append(columns, newColumnChunkReader(column, config))
 	})
+	_, flatten := flattenRowFuncOf(0, root)
 	return &Reader{
 		file:    file,
 		schema:  NewSchema(root.Name(), root),
 		columns: columns,
 		buffers: make([][]Value, len(columns)),
-		indexes: make([]int, len(columns)),
+		indexes: make([]uint, len(columns)),
 		values:  make([]Value, 0, len(columns)),
+		flatten: flatten,
 	}
 }
 
@@ -73,10 +78,14 @@ func (r *Reader) ReadRow(row interface{}) error {
 	var err error
 	defer func() {
 		for i, b := range r.buffers {
-			clearRow(b)
+			for j := range b {
+				b[j] = Value{}
+			}
 			r.buffers[i] = b[:0]
 		}
-		clearRow(r.values)
+		for i := range r.values {
+			r.values[i] = Value{}
+		}
 		r.values = r.values[:0]
 	}()
 
@@ -90,62 +99,105 @@ func (r *Reader) ReadRow(row interface{}) error {
 		r.indexes[i] = 0
 	}
 
-	r.values, _ = flattenRow(r.values, r.indexes, r.buffers, r.file.Root(), 0, 0)
+	r.values, _ = r.flatten(r.values, r.indexes, r.buffers)
 	return r.schema.Reconstruct(row, r.values)
 }
 
-func clearRow(row []Value) {
-	for i := range row {
-		row[i] = Value{}
+type flattenRowFunc func(row Row, indexes []uint, buffers [][]Value) (Row, int)
+
+func flattenRowFuncOf(columnIndex int, column *Column) (int, flattenRowFunc) {
+	if column.Repeated() {
+		if isLeaf(column) {
+			return flattenRowFuncOfRepeatedLeaf(columnIndex, column)
+		} else {
+			return flattenRowFuncOfRepeatedGroup(columnIndex, column)
+		}
+	} else {
+		if isLeaf(column) {
+			return flattenRowFuncOfLeaf(columnIndex, column)
+		} else {
+			return flattenRowFuncOfGroup(columnIndex, column)
+		}
 	}
 }
 
-func flattenRow(row Row, indexes []int, buffers [][]Value, col *Column, columnIndex, repetitionLevel int) (Row, int) {
-	if len(col.columns) == 0 {
-		repeated := col.Repeated()
+//go:noinline
+func flattenRowFuncOfLeaf(columnIndex int, column *Column) (int, flattenRowFunc) {
+	return columnIndex + 1, func(row Row, indexes []uint, buffers [][]Value) (Row, int) {
 		i := indexes[columnIndex]
 		b := buffers[columnIndex]
 
-		if i < len(b) {
-			for {
+		if i < uint(len(b)) {
+			row = append(row, b[i])
+			indexes[columnIndex]++
+		}
+
+		return row, int(uint(len(b)) - indexes[columnIndex])
+	}
+}
+
+//go:noinline
+func flattenRowFuncOfRepeatedLeaf(columnIndex int, column *Column) (int, flattenRowFunc) {
+	maxRepetitionLevel := column.MaxRepetitionLevel()
+	return columnIndex + 1, func(row Row, indexes []uint, buffers [][]Value) (Row, int) {
+		i := indexes[columnIndex]
+		b := buffers[columnIndex]
+
+		if i < uint(len(b)) {
+			// repetition level = 0
+			row = append(row, b[i])
+			i++
+
+			for i < uint(len(b)) && b[i].repetitionLevel == maxRepetitionLevel {
 				row = append(row, b[i])
 				i++
-				indexes[columnIndex]++
-				if !repeated || i == len(b) || b[i].repetitionLevel < int8(repetitionLevel) {
-					break
-				}
 			}
 		}
 
-		columnIndex++
-	} else {
-		startIndex := columnIndex
-		repeated := col.Repeated()
-		if repeated {
-			repetitionLevel++
+		indexes[columnIndex] = i
+		return row, int(uint(len(b)) - i)
+	}
+}
+
+//go:noinline
+func flattenRowFuncOfGroup(columnIndex int, column *Column) (int, flattenRowFunc) {
+	funcs, columnIndex := makeFlattenRowFuncOfGroup(columnIndex, column)
+	return columnIndex, func(row Row, indexes []uint, buffers [][]Value) (Row, int) {
+		remain, rem := 0, 0
+
+		for _, f := range funcs {
+			row, rem = f(row, indexes, buffers)
+			remain += rem
 		}
 
+		return row, remain
+	}
+}
+
+//go:noinline
+func flattenRowFuncOfRepeatedGroup(columnIndex int, column *Column) (int, flattenRowFunc) {
+	funcs, columnIndex := makeFlattenRowFuncOfGroup(columnIndex, column)
+	return columnIndex, func(row Row, indexes []uint, buffers [][]Value) (Row, int) {
 		for {
-			for _, child := range col.columns {
-				row, columnIndex = flattenRow(row, indexes, buffers, child, columnIndex, repetitionLevel)
+			remain, rem := 0, 0
+			for _, f := range funcs {
+				row, rem = f(row, indexes, buffers)
+				remain += rem
 			}
-			if !repeated {
-				break
+			if remain == 0 {
+				return row, 0
 			}
-
-			available, consumed := 0, 0
-			for i := startIndex; i < columnIndex; i++ {
-				available += len(buffers[i])
-				consumed += indexes[i]
-			}
-			if consumed == available {
-				break
-			}
-
-			columnIndex = startIndex
 		}
 	}
-	return row, columnIndex
+}
+
+func makeFlattenRowFuncOfGroup(columnIndex int, column *Column) ([]flattenRowFunc, int) {
+	children := column.Children()
+	funcs := make([]flattenRowFunc, len(children))
+	for i, child := range children {
+		columnIndex, funcs[i] = flattenRowFuncOf(columnIndex, child)
+	}
+	return funcs, columnIndex
 }
 
 type columnChunkReader struct {
@@ -154,8 +206,20 @@ type columnChunkReader struct {
 	chunks     *ColumnChunks
 	pages      *ColumnPages
 	reader     *DataPageReader
+	values     bufferedValueReader
 	dictionary Dictionary
 	numPages   int
+
+	page struct {
+		decoder encoding.Decoder
+		reader  PageReader
+	}
+	repetition struct {
+		decoder encoding.Decoder
+	}
+	definition struct {
+		decoder encoding.Decoder
+	}
 
 	peeked bool
 	cursor Value
@@ -168,6 +232,9 @@ func newColumnChunkReader(column *Column, config *ReaderConfig) *columnChunkRead
 		bufferSize: config.PageBufferSize,
 		column:     column,
 		chunks:     column.Chunks(),
+		values: bufferedValueReader{
+			buffer: make([]Value, 0, 170),
+		},
 	}
 
 	maxRepetitionLevel := column.MaxRepetitionLevel()
@@ -190,6 +257,7 @@ func (ccr *columnChunkReader) reset() {
 	ccr.chunks.Seek(0)
 	ccr.pages = nil
 	ccr.reader = nil
+	ccr.values.Reset(nil)
 	ccr.dictionary = nil
 	ccr.numPages = 0
 	ccr.peeked = false
@@ -207,13 +275,13 @@ func (ccr *columnChunkReader) peekValue() (Value, error) {
 		return ccr.cursor, nil
 	}
 
-	v, err := ccr.reader.ReadValue()
+	v, err := ccr.values.ReadValue()
 	if err != nil {
 		return Value{}, err
 	}
 
 	ccr.peeked = true
-	ccr.cursor = v.Clone() // TODO: optimize
+	ccr.cursor = v
 	return ccr.cursor, nil
 }
 
@@ -223,7 +291,7 @@ func (ccr *columnChunkReader) nextValue() {
 }
 
 func (ccr *columnChunkReader) readRowValue(row Row) (Row, error) {
-	v, err := ccr.reader.ReadValue()
+	v, err := ccr.values.ReadValue()
 	if err == nil {
 		row = append(row, v)
 	}
@@ -259,7 +327,6 @@ readNextValue:
 		var err error
 		if row, err = ccr.readRowValues(ccr, row); err != nil {
 			if err == io.EOF {
-				ccr.reader = nil
 				goto readNextPage
 			}
 		}
@@ -271,46 +338,22 @@ readNextPage:
 		if !ccr.pages.Next() {
 			ccr.pages = nil
 		} else {
+			var err error
+
 			switch header := ccr.pages.PageHeader().(type) {
 			case DictionaryPageHeader:
 				if ccr.numPages != 0 {
-					return row, fmt.Errorf("the dictionary must be in the first page but one was found after reading %d pages", ccr.numPages)
+					err = fmt.Errorf("the dictionary must be in the first page but one was found after reading %d pages", ccr.numPages)
+				} else {
+					err = ccr.readDictionaryPage(header)
 				}
-
-				ccr.dictionary = ccr.column.Type().NewDictionary(0)
-				if err := ccr.dictionary.ReadFrom(
-					header.Encoding().NewDecoder(ccr.pages.PageData()),
-				); err != nil {
+				if err != nil {
 					return row, err
 				}
-
-				ccr.numPages++
 				goto readNextPage
-
 			case DataPageHeader:
-				pageReader := (PageReader)(nil)
-				pageData := header.Encoding().NewDecoder(ccr.pages.PageData())
-
-				if ccr.dictionary != nil {
-					pageReader = NewIndexedPageReader(pageData, ccr.bufferSize, ccr.dictionary)
-				} else {
-					pageReader = ccr.column.Type().NewPageReader(pageData, ccr.bufferSize)
-				}
-
-				ccr.reader = NewDataPageReader(
-					header.RepetitionLevelEncoding().NewDecoder(ccr.pages.RepetitionLevels()),
-					header.DefinitionLevelEncoding().NewDecoder(ccr.pages.DefinitionLevels()),
-					header.NumValues(),
-					pageReader,
-					ccr.column.MaxRepetitionLevel(),
-					ccr.column.MaxDefinitionLevel(),
-					ccr.column.Index(),
-					ccr.bufferSize,
-				)
-
-				ccr.numPages++
+				ccr.readDataPage(header)
 				goto readNextValue
-
 			default:
 				return row, fmt.Errorf("unsupported page header type: %#v", header)
 			}
@@ -323,4 +366,66 @@ readNextPage:
 
 	ccr.pages = ccr.chunks.Pages()
 	goto readNextPage
+}
+
+func (ccr *columnChunkReader) readDictionaryPage(header DictionaryPageHeader) error {
+	ccr.dictionary = ccr.column.Type().NewDictionary(0)
+	if err := ccr.dictionary.ReadFrom(
+		header.Encoding().NewDecoder(ccr.pages.PageData()),
+	); err != nil {
+		return err
+	}
+	ccr.numPages++
+	return nil
+}
+
+func (ccr *columnChunkReader) readDataPage(header DataPageHeader) {
+	ccr.page.decoder = resetDecoder(ccr.page.decoder, header.Encoding(), ccr.pages.PageData())
+
+	if ccr.page.reader != nil {
+		ccr.page.reader.Reset(ccr.page.decoder)
+	} else {
+		if ccr.dictionary != nil {
+			ccr.page.reader = NewIndexedPageReader(ccr.page.decoder, ccr.bufferSize, ccr.dictionary)
+		} else {
+			ccr.page.reader = ccr.column.Type().NewPageReader(ccr.page.decoder, ccr.bufferSize)
+		}
+	}
+
+	maxRepetitionLevel := ccr.column.MaxRepetitionLevel()
+	maxDefinitionLevel := ccr.column.MaxDefinitionLevel()
+
+	if maxRepetitionLevel > 0 {
+		ccr.repetition.decoder = resetDecoder(ccr.repetition.decoder, header.RepetitionLevelEncoding(), ccr.pages.RepetitionLevels())
+	}
+	if maxDefinitionLevel > 0 {
+		ccr.definition.decoder = resetDecoder(ccr.definition.decoder, header.DefinitionLevelEncoding(), ccr.pages.DefinitionLevels())
+	}
+
+	if ccr.reader != nil {
+		ccr.reader.Reset(ccr.repetition.decoder, ccr.definition.decoder, header.NumValues(), ccr.page.reader)
+	} else {
+		ccr.reader = NewDataPageReader(
+			ccr.repetition.decoder,
+			ccr.definition.decoder,
+			header.NumValues(),
+			ccr.page.reader,
+			maxRepetitionLevel,
+			maxDefinitionLevel,
+			ccr.column.Index(),
+			ccr.bufferSize,
+		)
+		ccr.values.Reset(ccr.reader)
+	}
+
+	ccr.numPages++
+}
+
+func resetDecoder(decoder encoding.Decoder, encoding encoding.Encoding, input io.Reader) encoding.Decoder {
+	if decoder == nil || encoding.Encoding() != decoder.Encoding() {
+		decoder = encoding.NewDecoder(input)
+	} else {
+		decoder.Reset(input)
+	}
+	return decoder
 }

@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"reflect"
+	"strconv"
 	"unsafe"
 
 	"github.com/google/uuid"
@@ -48,6 +49,22 @@ type ValueWriter interface {
 	// Writes the next value to the sequence, returning a non-nil error if the
 	// write failed.
 	WriteValue(Value) error
+}
+
+// ValueBatchReader is an interface implemented by types that support reading
+// batches of values.
+type ValueBatchReader interface {
+	// Read values into the buffer passed as argument and return the number of
+	// values read. When all values have been read, the error will be io.EOF.
+	ReadValueBatch([]Value) (int, error)
+}
+
+// ValueBatchWriter is an interface implemented by types that support reading
+// batches of values.
+type ValueBatchWriter interface {
+	// Write values from the buffer passed as argument and returns the number
+	// of values written.
+	WriteValueBatch([]Value) (int, error)
 }
 
 // ValueOf constructs a parquet value from a Go value v.
@@ -249,6 +266,8 @@ func makeValueFixedLenByteArray(v reflect.Value) Value {
 		u.Elem().Set(v)
 		v = u
 	}
+	// TODO: unclear if the conversion to unsafe.Pointer from
+	// reflect.Value.Pointer is safe here.
 	return makeValueByteArray(FixedLenByteArray, (*byte)(unsafe.Pointer(v.Pointer())), t.Len())
 }
 
@@ -286,6 +305,9 @@ func (v Value) Double() float64 { return math.Float64frombits(v.u64) }
 
 // ByteArray returns v as a []byte, assuming the underlying type is either
 // BYTE_ARRAY or FIXED_LEN_BYTE_ARRAY.
+//
+// The application must treat the returned byte slice as a read-only value,
+// mutating the content will result in undefined behaviors.
 func (v Value) ByteArray() []byte { return unsafe.Slice(v.ptr, int(v.u64)) }
 
 // RepetitionLevel returns the repetition level of v.
@@ -418,7 +440,29 @@ func (v Value) Format(w fmt.State, r rune) {
 
 // String returns a string representation of v.
 func (v Value) String() string {
-	return fmt.Sprintf("%s", v)
+	switch v.Kind() {
+	case Boolean:
+		return strconv.FormatBool(v.Boolean())
+	case Int32:
+		return strconv.FormatInt(int64(v.Int32()), 10)
+	case Int64:
+		return strconv.FormatInt(v.Int64(), 10)
+	case Int96:
+		return v.Int96().String()
+	case Float:
+		return strconv.FormatFloat(float64(v.Float()), 'g', -1, 32)
+	case Double:
+		return strconv.FormatFloat(v.Double(), 'g', -1, 32)
+	case ByteArray, FixedLenByteArray:
+		// As an optimizations for the common case of using String on UTF8
+		// columns we convert the byte array to a string without copying the
+		// underlying data to a new memory location. This is safe as long as the
+		// application respects the requirement to not mutate the byte slices
+		// returned when calling ByteArray.
+		return unsafeBytesToString(v.ByteArray())
+	default:
+		return "<null>"
+	}
 }
 
 // GoString returns a Go value string representation of v.
@@ -455,13 +499,8 @@ func (v Value) Column(columnIndex int8) Value {
 func (v Value) Clone() Value {
 	switch k := v.Kind(); k {
 	case ByteArray, FixedLenByteArray:
-		repetitionLevel := v.repetitionLevel
-		definitionLevel := v.definitionLevel
-		columnIndex := v.columnIndex
-		v = makeValueBytes(k, v.Bytes())
-		v.repetitionLevel = repetitionLevel
-		v.definitionLevel = definitionLevel
-		v.columnIndex = columnIndex
+		b := copyBytes(v.ByteArray())
+		v.ptr = *(**byte)(unsafe.Pointer(&b))
 	}
 	return v
 }
@@ -548,11 +587,15 @@ func assignValue(dst reflect.Value, src Value) error {
 		v := src.ByteArray()
 		switch dstKind {
 		case reflect.String:
-			dst.SetString(string(v))
+			// The parquet value is being assigned to a Go string, which is an
+			// immutable object. As an optimization we avoid allocating a new
+			// backing array and instead take a reference to the byte slice
+			// pointed at by the parquet value (which is also immutable).
+			dst.SetString(unsafeBytesToString(v))
 			return nil
 		case reflect.Slice:
 			if dst.Type().Elem().Kind() == reflect.Uint8 {
-				dst.SetBytes(copyBytes(v))
+				dst.SetBytes(v)
 				return nil
 			}
 		default:
@@ -564,12 +607,18 @@ func assignValue(dst reflect.Value, src Value) error {
 		switch dstKind {
 		case reflect.Array:
 			if dst.Type().Elem().Kind() == reflect.Uint8 && dst.Len() == len(v) {
-				reflect.Copy(dst, reflect.ValueOf(v))
+				// This code could be implemented as a call to reflect.Copy but
+				// it would require creating a reflect.Value from v which causes
+				// the heap allocation to pack the []byte value. To avoid this
+				// overhead we instead convert the reflect.Value holding the
+				// destination array into a byte slice which allows us to use
+				// a more efficient call to copy.
+				copy(unsafeByteArray(dst, len(v)), v)
 				return nil
 			}
 		case reflect.Slice:
 			if dst.Type().Elem().Kind() == reflect.Uint8 {
-				dst.SetBytes(copyBytes(v))
+				dst.SetBytes(v)
 				return nil
 			}
 		default:
@@ -589,6 +638,18 @@ func copyBytes(b []byte) []byte {
 	c := make([]byte, len(b))
 	copy(c, b)
 	return c
+}
+
+func unsafeBytesToString(b []byte) string {
+	return *(*string)(unsafe.Pointer(&b))
+}
+
+func unsafePointerOf(v reflect.Value) unsafe.Pointer {
+	return (*iface)(unsafe.Pointer(&v)).ptr
+}
+
+func unsafeByteArray(v reflect.Value, n int) []byte {
+	return unsafe.Slice((*byte)(unsafePointerOf(v)), n)
 }
 
 // Equal returns true if v1 and v2 are equal.
@@ -629,3 +690,56 @@ var (
 	_ fmt.Formatter = Value{}
 	_ fmt.Stringer  = Value{}
 )
+
+type bufferedValueReader struct {
+	reader ValueBatchReader
+	buffer []Value
+	offset int
+}
+
+func (b *bufferedValueReader) Reset(r ValueBatchReader) {
+	b.reader = r
+	b.buffer = b.buffer[:0]
+	b.offset = 0
+}
+
+func (b *bufferedValueReader) ReadValue() (Value, error) {
+	for {
+		if b.offset >= 0 && b.offset < len(b.buffer) {
+			v := b.buffer[b.offset]
+			b.offset++
+			return v, nil
+		}
+		if err := b.fill(); err != nil {
+			return Value{}, err
+		}
+	}
+}
+
+func (b *bufferedValueReader) ReadValueBatch(values []Value) (int, error) {
+	read := 0
+	for {
+		n := copy(values[read:], b.buffer[b.offset:])
+		read += n
+		b.offset += n
+		if read == len(values) {
+			return read, nil
+		}
+		if err := b.fill(); err != nil {
+			return read, err
+		}
+	}
+}
+
+func (b *bufferedValueReader) fill() error {
+	if b.reader == nil {
+		return io.EOF
+	}
+	n, err := b.reader.ReadValueBatch(b.buffer[:cap(b.buffer)])
+	if n == 0 {
+		return err
+	}
+	b.buffer = b.buffer[:n]
+	b.offset = 0
+	return nil
+}

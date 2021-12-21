@@ -37,6 +37,13 @@ type Dictionary interface {
 	// recorded.
 	Insert(Value) (int, error)
 
+	// Given an array of dictionary indexes, lookup the values into the array
+	// of values passed as second argument.
+	//
+	// The method panics if len(indexes) > len(values), or one of the indexes
+	// is negative or greater than the highest index in the dictionary.
+	Lookup(indexes []int32, values []Value)
+
 	// Reads the dictionary from the decoder passed as argument.
 	//
 	// The dictionary is cleared prior to loading the values so that its final
@@ -74,6 +81,12 @@ func (d *booleanDictionary) Insert(v Value) (int, error) {
 		return 1, nil
 	} else {
 		return 0, nil
+	}
+}
+
+func (d *booleanDictionary) Lookup(indexes []int32, values []Value) {
+	for i, j := range indexes {
+		values[i] = d.Index(int(j))
 	}
 }
 
@@ -136,6 +149,12 @@ func (d *int32Dictionary) insert(value int32) (int, error) {
 	d.index[value] = int32(index)
 	d.values = append(d.values, value)
 	return index, nil
+}
+
+func (d *int32Dictionary) Lookup(indexes []int32, values []Value) {
+	for i, j := range indexes {
+		values[i] = d.Index(int(j))
+	}
 }
 
 func (d *int32Dictionary) ReadFrom(decoder encoding.Decoder) error {
@@ -217,6 +236,12 @@ func (d *int64Dictionary) insert(value int64) (int, error) {
 	return index, nil
 }
 
+func (d *int64Dictionary) Lookup(indexes []int32, values []Value) {
+	for i, j := range indexes {
+		values[i] = d.Index(int(j))
+	}
+}
+
 func (d *int64Dictionary) ReadFrom(decoder encoding.Decoder) error {
 	d.Reset()
 
@@ -296,6 +321,12 @@ func (d *int96Dictionary) insert(value deprecated.Int96) (int, error) {
 	return index, nil
 }
 
+func (d *int96Dictionary) Lookup(indexes []int32, values []Value) {
+	for i, j := range indexes {
+		values[i] = d.Index(int(j))
+	}
+}
+
 func (d *int96Dictionary) ReadFrom(decoder encoding.Decoder) error {
 	d.Reset()
 
@@ -352,6 +383,12 @@ func (d floatDictionary) Insert(v Value) (int, error) {
 	return d.insert(int32(math.Float32bits(v.Float())))
 }
 
+func (d floatDictionary) Lookup(indexes []int32, values []Value) {
+	for i, j := range indexes {
+		values[i] = d.Index(int(j))
+	}
+}
+
 type doubleDictionary struct{ *int64Dictionary }
 
 func newDoubleDictionary(typ Type, bufferSize int) doubleDictionary {
@@ -364,6 +401,12 @@ func (d doubleDictionary) Index(i int) Value {
 
 func (d doubleDictionary) Insert(v Value) (int, error) {
 	return d.insert(int64(math.Float64bits(v.Double())))
+}
+
+func (d doubleDictionary) Lookup(indexes []int32, values []Value) {
+	for i, j := range indexes {
+		values[i] = d.Index(int(j))
+	}
 }
 
 type byteArrayDictionary struct {
@@ -392,7 +435,7 @@ func (d *byteArrayDictionary) Len() int { return len(d.offset) }
 func (d *byteArrayDictionary) Index(i int) Value {
 	offset := d.offset[i]
 	value, _ := plain.NextByteArray(d.values[offset:])
-	return makeValueBytes(ByteArray, value)
+	return makeValueBytes(ByteArray, copyBytes(value))
 }
 
 func (d *byteArrayDictionary) Insert(v Value) (int, error) {
@@ -415,6 +458,12 @@ func (d *byteArrayDictionary) insert(value []byte) (int, error) {
 	d.index[stringValue] = int32(index)
 	d.offset = append(d.offset, int32(offset))
 	return index, nil
+}
+
+func (d *byteArrayDictionary) Lookup(indexes []int32, values []Value) {
+	for i, j := range indexes {
+		values[i] = d.Index(int(j))
+	}
 }
 
 func (d *byteArrayDictionary) ReadFrom(decoder encoding.Decoder) error {
@@ -452,7 +501,7 @@ func (d *byteArrayDictionary) ReadFrom(decoder encoding.Decoder) error {
 			return nil
 		case encoding.ErrValueTooLarge:
 			size := 4 + uint32(plain.NextByteArrayLength(d.values[len(d.values):len(d.values)+4]))
-			newValues := make([]byte, len(d.values), bits.NearestPowerOfTwo32(size))
+			newValues := make([]byte, len(d.values), bits.NearestPowerOfTwo32(uint32(len(d.values))+size))
 			copy(newValues, d.values)
 			d.values = newValues
 		default:
@@ -497,7 +546,7 @@ func (d *fixedLenByteArrayDictionary) Type() Type { return d.typ }
 func (d *fixedLenByteArrayDictionary) Len() int { return len(d.values) / d.size }
 
 func (d *fixedLenByteArrayDictionary) Index(i int) Value {
-	return makeValueBytes(FixedLenByteArray, d.value(i))
+	return makeValueBytes(FixedLenByteArray, copyBytes(d.value(i)))
 }
 
 func (d *fixedLenByteArrayDictionary) value(i int) []byte {
@@ -520,6 +569,12 @@ func (d *fixedLenByteArrayDictionary) insert(value []byte) (int, error) {
 	d.values = append(d.values, value...)
 	d.index[bits.BytesToString(d.values[n:])] = int32(i)
 	return i, nil
+}
+
+func (d *fixedLenByteArrayDictionary) Lookup(indexes []int32, values []Value) {
+	for i, j := range indexes {
+		values[i] = d.Index(int(j))
+	}
 }
 
 func (d *fixedLenByteArrayDictionary) ReadFrom(decoder encoding.Decoder) error {
@@ -602,6 +657,7 @@ type indexedPageReader struct {
 	decoder encoding.Decoder
 	values  []int32
 	offset  uint
+	batch   [1]Value
 }
 
 func (r *indexedPageReader) Type() Type { return r.typ }
@@ -613,21 +669,43 @@ func (r *indexedPageReader) Reset(decoder encoding.Decoder) {
 }
 
 func (r *indexedPageReader) ReadValue() (Value, error) {
-	for {
-		if r.offset < uint(len(r.values)) {
-			index := int(r.values[r.offset])
+	_, err := r.ReadValueBatch(r.batch[:])
+	v := r.batch[0]
+	r.batch[0] = Value{}
+	return v, err
+}
 
-			if index >= 0 && index < r.dict.Len() {
-				r.offset++
-				return r.dict.Index(index), nil
+func (r *indexedPageReader) ReadValueBatch(values []Value) (int, error) {
+	i := 0
+	for {
+		for r.offset < uint(len(r.values)) && i < len(values) {
+			count := uint(len(r.values)) - r.offset
+			limit := uint(len(values) - i)
+
+			if count > limit {
+				count = limit
 			}
 
-			return Value{}, fmt.Errorf("reading value from indexed page: index out of bounds: %d/%d", index, r.dict.Len())
+			indexes := r.values[r.offset : r.offset+count]
+			dictLen := r.dict.Len()
+			for _, index := range indexes {
+				if index < 0 || int(index) >= dictLen {
+					return i, fmt.Errorf("reading value from indexed page: index out of bounds: %d/%d", index, dictLen)
+				}
+			}
+
+			r.dict.Lookup(indexes, values[i:])
+			r.offset += count
+			i += int(count)
+		}
+
+		if i == len(values) {
+			return i, nil
 		}
 
 		n, err := r.decoder.DecodeInt32(r.values[:cap(r.values)])
 		if n == 0 {
-			return Value{}, err
+			return i, err
 		}
 
 		r.values = r.values[:n]

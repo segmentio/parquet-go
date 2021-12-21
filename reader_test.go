@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"math"
 	"math/rand"
 	"reflect"
 	"testing"
@@ -48,6 +49,10 @@ type fixedLenByteArrayColumn struct {
 
 type stringColumn struct {
 	Value string
+}
+
+type indexedStringColumn struct {
+	Value string `parquet:",dict"`
 }
 
 type uuidColumn struct {
@@ -144,6 +149,11 @@ var readerTests = []struct {
 	},
 
 	{
+		scenario: "STRING (dict)",
+		model:    indexedStringColumn{},
+	},
+
+	{
 		scenario: "UUID",
 		model:    uuidColumn{},
 	},
@@ -209,7 +219,7 @@ func BenchmarkReader(b *testing.B) {
 
 	for _, test := range readerTests {
 		b.Run(test.scenario, func(b *testing.B) {
-			const N = 1000
+			const N = 10000
 			defer buf.Reset()
 			rows := rowsOf(N, test.model)
 
@@ -241,6 +251,8 @@ func BenchmarkReader(b *testing.B) {
 				}
 				rowValue.Set(rowZero)
 			}
+
+			b.SetBytes(int64(math.Ceil(float64(file.Size()) / N)))
 		})
 	}
 }
