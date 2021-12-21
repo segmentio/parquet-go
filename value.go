@@ -686,11 +686,6 @@ func Equal(v1, v2 Value) bool {
 	}
 }
 
-var (
-	_ fmt.Formatter = Value{}
-	_ fmt.Stringer  = Value{}
-)
-
 type bufferedValueReader struct {
 	reader ValueBatchReader
 	buffer []Value
@@ -710,41 +705,20 @@ func (b *bufferedValueReader) ReadValue() (Value, error) {
 			b.offset++
 			return v, nil
 		}
-		if err := b.fill(); err != nil {
+		if b.reader == nil {
+			return Value{}, io.EOF
+		}
+		n, err := b.reader.ReadValueBatch(b.buffer[:cap(b.buffer)])
+		if n == 0 {
 			return Value{}, err
 		}
+		b.buffer = b.buffer[:n]
+		b.offset = 0
 	}
-}
-
-func (b *bufferedValueReader) ReadValueBatch(values []Value) (int, error) {
-	read := 0
-	for {
-		n := copy(values[read:], b.buffer[b.offset:])
-		read += n
-		b.offset += n
-		if read == len(values) {
-			return read, nil
-		}
-		if err := b.fill(); err != nil {
-			return read, err
-		}
-	}
-}
-
-func (b *bufferedValueReader) fill() error {
-	if b.reader == nil {
-		return io.EOF
-	}
-	n, err := b.reader.ReadValueBatch(b.buffer[:cap(b.buffer)])
-	if n == 0 {
-		return err
-	}
-	b.buffer = b.buffer[:n]
-	b.offset = 0
-	return nil
 }
 
 var (
-	_ ValueReader      = (*bufferedValueReader)(nil)
-	_ ValueBatchReader = (*bufferedValueReader)(nil)
+	_ fmt.Formatter = Value{}
+	_ fmt.Stringer  = Value{}
+	_ ValueReader   = (*bufferedValueReader)(nil)
 )
