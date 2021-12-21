@@ -33,7 +33,7 @@ type Reader struct {
 	seen    reflect.Type
 	columns []*columnChunkReader
 	values  []Value
-	reader  columnTreeReader
+	read    columnReaderFunc
 }
 
 // NewReader constructs a parquet reader reading rows from the given
@@ -69,13 +69,13 @@ func NewReader(r io.ReaderAt, options ...ReaderOption) *Reader {
 		columns = append(columns, newColumnChunkReader(column, config))
 	})
 
-	_, reader := columnTreeReaderOf(0, root, columns)
+	_, read := columnReaderFuncOf(0, root, columns)
 	return &Reader{
 		file:    f,
 		schema:  NewSchema(root.Name(), root),
 		columns: columns,
 		values:  make([]Value, 0, len(columns)),
-		reader:  reader,
+		read:    read,
 	}
 }
 
@@ -111,7 +111,7 @@ func (r *Reader) Reset() {
 
 // ReadRow reads the next row from r. The type of the row must match the schema
 // of the underlying parquet file or an error will be returned.
-func (r *Reader) ReadRow(row interface{}) error {
+func (r *Reader) ReadRow(row interface{}) (err error) {
 	if rowType := dereference(reflect.TypeOf(row)); rowType.Kind() == reflect.Struct {
 		if r.seen == nil || r.seen != rowType {
 			schema := namedSchemaOf(r.schema.Name(), rowType)
@@ -124,164 +124,101 @@ func (r *Reader) ReadRow(row interface{}) error {
 			r.seen = rowType
 		}
 	}
-
-	var err error
-	r.reader.next()
-	r.values, err = r.reader.read(r.values[:0])
-	//fmt.Printf("row = %+v (%v)\n", r.values, err)
+	r.values, err = r.read(r.values[:0], 0)
 	if err != nil {
 		return err
+	}
+	if len(r.values) == 0 {
+		return io.EOF
 	}
 	return r.schema.Reconstruct(row, r.values)
 }
 
 type columnTreeReader interface {
-	next()
-	read(Row) (Row, error)
+	read(Row, int8) (Row, error)
 }
 
-func columnTreeReaderOf(columnIndex int, column *Column, readers []*columnChunkReader) (int, columnTreeReader) {
+type columnReaderFunc func(Row, int8) (Row, error)
+
+func columnReaderFuncOf(columnIndex int, column *Column, readers []*columnChunkReader) (int, columnReaderFunc) {
+	var reader columnReaderFunc
 	if column.NumChildren() == 0 {
-		repetitionLevel := column.MaxRepetitionLevel()
-		if repetitionLevel == 0 {
-			return columnIndex + 1, &leafReader{
-				column: readers[columnIndex],
+		columnIndex, reader = columnReaderFuncOfLeaf(columnIndex, column, readers)
+	} else {
+		columnIndex, reader = columnReaderFuncOfGroup(columnIndex, column, readers)
+	}
+	if column.Repeated() {
+		reader = columnReaderFuncOfRepeated(column, reader)
+	}
+	return columnIndex, reader
+}
+
+//go:noinline
+func columnReaderFuncOfRepeated(column *Column, reader columnReaderFunc) columnReaderFunc {
+	repetitionLevel := column.MaxRepetitionLevel()
+	return func(row Row, level int8) (Row, error) {
+		var err error
+		for {
+			n := len(row)
+			if row, err = reader(row, level); err != nil {
+				return row, err
 			}
-		} else {
-			return columnIndex + 1, &repeatedLeafReader{
-				repetitionLevel: repetitionLevel,
-				column:          readers[columnIndex],
+			if n == len(row) {
+				return row, nil
 			}
+			level = repetitionLevel
 		}
 	}
-	children := make([]columnTreeReader, column.NumChildren())
-	for i, child := range column.Children() {
-		columnIndex, children[i] = columnTreeReaderOf(columnIndex, child, readers)
+}
+
+//go:noinline
+func columnReaderFuncOfGroup(columnIndex int, column *Column, readers []*columnChunkReader) (int, columnReaderFunc) {
+	children := column.Children()
+	group := make([]columnReaderFunc, len(children))
+	for i, child := range children {
+		columnIndex, group[i] = columnReaderFuncOf(columnIndex, child, readers)
 	}
-	return columnIndex, &repeatedGroupReader{
-		children: children,
-		done:     make([]bool, len(children)),
-	}
-}
-
-type leafReader struct {
-	done   bool
-	column *columnChunkReader
-}
-
-func (leaf *leafReader) next() {
-	leaf.done = false
-}
-
-func (leaf *leafReader) read(row Row) (Row, error) {
-	if !leaf.done {
-		leaf.done = true
-		v, err := leaf.column.readValue()
-		if err != nil {
-			return row, err
-		}
-		row = append(row, v)
-	}
-	return row, nil
-}
-
-type repeatedLeafReader struct {
-	init            bool
-	done            bool
-	repetitionLevel int8
-	column          *columnChunkReader
-}
-
-func (leaf *repeatedLeafReader) next() {
-	leaf.init = false
-	leaf.done = false
-}
-
-func (leaf *repeatedLeafReader) read(row Row) (Row, error) {
-	if leaf.done {
-		return row, nil
-	}
-
-	if !leaf.init { // v.repetitionLevel <= leaf.repetitionLevel
-		leaf.init = true
-		v, err := leaf.column.peekValue()
-		if err != nil {
-			return row, err
-		}
-		leaf.column.nextValue()
-		return append(row, v), nil
-	}
-
-	v, err := leaf.column.peekValue()
-	if err != nil {
-		if err == io.EOF {
-			leaf.done, err = true, nil
+	return columnIndex, func(row Row, level int8) (Row, error) {
+		var err error
+		for _, child := range group {
+			if row, err = child(row, level); err != nil {
+				break
+			}
 		}
 		return row, err
 	}
-	if v.repetitionLevel != leaf.repetitionLevel {
-		leaf.done = true
+}
+
+//go:noinline
+func columnReaderFuncOfLeaf(columnIndex int, column *Column, readers []*columnChunkReader) (int, columnReaderFunc) {
+	repetitionLevel := column.MaxRepetitionLevel()
+	leaf := readers[columnIndex]
+	columnIndex++
+
+	if repetitionLevel == 0 {
+		return columnIndex, func(row Row, _ int8) (Row, error) {
+			v, err := leaf.readValue()
+			if err != nil {
+				return row, err
+			}
+			return append(row, v), nil
+		}
+	}
+
+	return columnIndex, func(row Row, level int8) (Row, error) {
+		v, err := leaf.peekValue()
+		if err != nil {
+			if level == repetitionLevel && err == io.EOF {
+				err = nil
+			}
+			return row, err
+		}
+		if level < repetitionLevel || v.repetitionLevel == repetitionLevel {
+			row = append(row, v)
+			leaf.nextValue()
+		}
 		return row, nil
 	}
-	leaf.column.nextValue()
-	return append(row, v), nil
-}
-
-type groupReader struct {
-	done     bool
-	children []columnTreeReader
-}
-
-func (group *groupReader) next() {
-	group.done = false
-}
-
-func (group *groupReader) read(row Row) (Row, error) {
-	var err error
-	for _, child := range group.children {
-		if row, err = child.read(row); err != nil {
-			break
-		}
-	}
-	return row, err
-}
-
-type repeatedGroupReader struct {
-	children []columnTreeReader
-	done     []bool
-}
-
-func (group *repeatedGroupReader) next() {
-	for _, r := range group.children {
-		r.next()
-	}
-	for i := range group.done {
-		group.done[i] = false
-	}
-}
-
-func (group *repeatedGroupReader) read(row Row) (Row, error) {
-	readers := group.children
-	done := group.done[:len(readers)]
-	eof := 0
-
-	for eof < len(readers) {
-		eof = 0
-		for i, r := range readers {
-			if done[i] {
-				eof++
-			} else {
-				var err error
-				var n = len(row)
-				if row, err = r.read(row); err != nil {
-					return row, err
-				}
-				done[i] = len(row) == n
-			}
-		}
-	}
-
-	return row, nil
 }
 
 type columnChunkReader struct {
@@ -347,12 +284,12 @@ func (ccr *columnChunkReader) peekValue() (Value, error) {
 
 	v, err := ccr.readValue()
 	if err != nil {
-		return Value{}, err
+		return v, err
 	}
 
 	ccr.peeked = true
 	ccr.cursor = v
-	return ccr.cursor, nil
+	return v, nil
 }
 
 func (ccr *columnChunkReader) nextValue() {
@@ -362,15 +299,19 @@ func (ccr *columnChunkReader) nextValue() {
 
 func (ccr *columnChunkReader) readValue() (Value, error) {
 readNextValue:
-	if ccr.reader != nil {
-		v, err := ccr.values.ReadValue()
-		if err != nil {
-			if err == io.EOF {
-				goto readNextPage
-			}
-		}
-		return v, err
+	// Manually inline the buffered value read because the cast is too high
+	// for the compiler in ReadValue. This gives a ~10% increase in throughput.
+	if ccr.values.offset >= 0 && ccr.values.offset < len(ccr.values.buffer) {
+		v := ccr.values.buffer[ccr.values.offset]
+		ccr.values.offset++
+		return v, nil
 	}
+
+	v, err := ccr.values.ReadValue()
+	if err != nil && err == io.EOF {
+		goto readNextPage
+	}
+	return v, err
 
 readNextPage:
 	if ccr.pages != nil {
