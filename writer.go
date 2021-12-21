@@ -18,7 +18,7 @@ import (
 // A Writer uses a parquet schema and sequence of Go values to produce a parquet
 // file to an io.Writer.
 //
-// This example shows how to typically use parquet writers:
+// This example showcases a typical use of parquet writers:
 //
 //	schema := parquet.SchemaOf(rows[0])
 //	writer := parquet.NewWriter(output, schema)

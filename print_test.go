@@ -18,6 +18,13 @@ func TestPrint(t *testing.T) {
 		},
 
 		{
+			node: parquet.Group{"on": parquet.Leaf(parquet.BooleanType)},
+			print: `message Test {
+	required boolean on;
+}`,
+		},
+
+		{
 			node: parquet.Group{"name": parquet.String()},
 			print: `message Test {
 	required binary name (STRING);

@@ -230,7 +230,86 @@ value 10: R:0 D:0 V:10.0
 	},
 
 	{
-		scenario: "example from the twitter blog",
+		scenario: "example from the twitter blog (v1)",
+		version:  v1,
+		rows: []interface{}{
+			AddressBook{
+				Owner: "Julien Le Dem",
+				OwnerPhoneNumbers: []string{
+					"555 123 4567",
+					"555 666 1337",
+				},
+				Contacts: []Contact{
+					{
+						Name:        "Dmitriy Ryaboy",
+						PhoneNumber: "555 987 6543",
+					},
+					{
+						Name: "Chris Aniszczyk",
+					},
+				},
+			},
+			AddressBook{
+				Owner:             "A. Nonymous",
+				OwnerPhoneNumbers: nil,
+			},
+		},
+
+		dump: `row group 0
+--------------------------------------------------------------------------------
+contacts:
+.name:              BINARY UNCOMPRESSED DO:0 FPO:4 SZ:84/84/1.00 VC:3  [more]...
+.phoneNumber:       BINARY SNAPPY DO:0 FPO:88 SZ:62/60/0.97 VC:3 ENC:R [more]...
+owner:              BINARY ZSTD DO:0 FPO:150 SZ:70/61/0.87 VC:2 ENC:RL [more]...
+ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:220 SZ:105/80/0.76 VC:3 ENC:R [more]...
+
+    contacts.name TV=3 RL=1 DL=1
+    ----------------------------------------------------------------------------
+    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:61
+
+    contacts.phoneNumber TV=3 RL=1 DL=2
+    ----------------------------------------------------------------------------
+    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:37
+
+    owner TV=2 RL=0 DL=0
+    ----------------------------------------------------------------------------
+    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:38
+
+    ownerPhoneNumbers TV=3 RL=1 DL=1
+    ----------------------------------------------------------------------------
+    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:56
+
+BINARY contacts.name
+--------------------------------------------------------------------------------
+*** row group 1 of 1, values 1 to 3 ***
+value 1: R:0 D:1 V:Dmitriy Ryaboy
+value 2: R:1 D:1 V:Chris Aniszczyk
+value 3: R:0 D:0 V:<null>
+
+BINARY contacts.phoneNumber
+--------------------------------------------------------------------------------
+*** row group 1 of 1, values 1 to 3 ***
+value 1: R:0 D:2 V:555 987 6543
+value 2: R:1 D:1 V:<null>
+value 3: R:0 D:0 V:<null>
+
+BINARY owner
+--------------------------------------------------------------------------------
+*** row group 1 of 1, values 1 to 2 ***
+value 1: R:0 D:0 V:Julien Le Dem
+value 2: R:0 D:0 V:A. Nonymous
+
+BINARY ownerPhoneNumbers
+--------------------------------------------------------------------------------
+*** row group 1 of 1, values 1 to 3 ***
+value 1: R:0 D:1 V:555 123 4567
+value 2: R:1 D:1 V:555 666 1337
+value 3: R:0 D:0 V:<null>
+`,
+	},
+
+	{
+		scenario: "example from the twitter blog (v2)",
 		version:  v2,
 		rows: []interface{}{
 			AddressBook{

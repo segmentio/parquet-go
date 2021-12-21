@@ -8,27 +8,56 @@ import (
 	"github.com/segmentio/parquet/encoding"
 )
 
+// A Reader reads Go values from parquet files.
+//
+// This example showcases a typical use of parquet readers:
+//
+//	reader := parquet.NewReader(file)
+//	rows := []RowType{}
+//	for {
+//		row := RowType{}
+//		err := reader.ReadRow(&row)
+//		if err != nil {
+//			if err == io.EOF {
+//				break
+//			}
+//			...
+//		}
+//		rows = append(rows, row)
+//	}
+//
+//
 type Reader struct {
+	err     error
 	file    *File
 	schema  *Schema
 	seen    reflect.Type
 	columns []*columnChunkReader
-	buffers [][]Value
 	indexes []uint
+	buffers [][]Value
 	values  []Value
-	err     error
 	flatten flattenRowFunc
 }
 
-func NewReader(r io.ReaderAt, size int64, options ...ReaderOption) *Reader {
-	f, err := OpenFile(r, size)
-	if err != nil {
-		return &Reader{err: err}
+// NewReader constructs a parquet reader reading rows from the given
+// io.ReaderAt.
+//
+// In order to read parquet rows, the io.ReaderAt must be converted to a
+// parquet.File. If r is already a parquet.File it is used directly; otherwise,
+// the io.ReaderAt value is expected to either have a `Size() int64` method or
+// implement io.Seeker in order to determine its size.
+func NewReader(r io.ReaderAt, options ...ReaderOption) *Reader {
+	f, _ := r.(*File)
+	if f == nil {
+		n, err := sizeOf(r)
+		if err != nil {
+			return &Reader{err: err}
+		}
+		if f, err = OpenFile(r, n); err != nil {
+			return &Reader{err: err}
+		}
 	}
-	return NewFileReader(f, options...)
-}
 
-func NewFileReader(file *File, options ...ReaderOption) *Reader {
 	config := &ReaderConfig{
 		PageBufferSize: DefaultPageBufferSize,
 	}
@@ -36,29 +65,54 @@ func NewFileReader(file *File, options ...ReaderOption) *Reader {
 	if err := config.Validate(); err != nil {
 		return &Reader{err: err}
 	}
-	root := file.Root()
+
+	root := f.Root()
 	columns := make([]*columnChunkReader, 0, numColumnsOf(root))
 	root.forEachLeaf(func(column *Column) {
 		columns = append(columns, newColumnChunkReader(column, config))
 	})
+
 	_, flatten := flattenRowFuncOf(0, root)
 	return &Reader{
-		file:    file,
+		file:    f,
 		schema:  NewSchema(root.Name(), root),
 		columns: columns,
-		buffers: make([][]Value, len(columns)),
 		indexes: make([]uint, len(columns)),
+		buffers: make([][]Value, len(columns)),
 		values:  make([]Value, 0, len(columns)),
 		flatten: flatten,
 	}
 }
 
+func sizeOf(r io.ReaderAt) (int64, error) {
+	switch f := r.(type) {
+	case interface{ Size() int64 }:
+		return f.Size(), nil
+	case io.Seeker:
+		off, err := f.Seek(0, io.SeekCurrent)
+		if err != nil {
+			return 0, err
+		}
+		end, err := f.Seek(0, io.SeekEnd)
+		if err != nil {
+			return 0, err
+		}
+		_, err = f.Seek(off, io.SeekStart)
+		return end, err
+	default:
+		return 0, fmt.Errorf("cannot determine length of %T", r)
+	}
+}
+
+// Reset repositions the reader at the beginning of the underlying parquet file.
 func (r *Reader) Reset() {
 	for _, c := range r.columns {
 		c.reset()
 	}
 }
 
+// ReadRow reads the next row from r. The type of the row must match the schema
+// of the underlying parquet file or an error will be returned.
 func (r *Reader) ReadRow(row interface{}) error {
 	if r.err != nil {
 		return r.err

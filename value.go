@@ -743,3 +743,8 @@ func (b *bufferedValueReader) fill() error {
 	b.offset = 0
 	return nil
 }
+
+var (
+	_ ValueReader      = (*bufferedValueReader)(nil)
+	_ ValueBatchReader = (*bufferedValueReader)(nil)
+)

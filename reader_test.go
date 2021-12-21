@@ -192,7 +192,7 @@ func TestReader(t *testing.T) {
 					}
 
 					file.Reset(buf.Bytes())
-					r := parquet.NewReader(file, file.Size())
+					r := parquet.NewReader(file)
 
 					for i, v := range rows {
 						if err := r.ReadRow(rowPtr.Interface()); err != nil {
@@ -238,7 +238,7 @@ func BenchmarkReader(b *testing.B) {
 			rowValue := rowPtr.Elem()
 
 			b.ResetTimer()
-			r := parquet.NewFileReader(f)
+			r := parquet.NewReader(f)
 			p := rowPtr.Interface()
 
 			for i := 0; i < b.N; i++ {

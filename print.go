@@ -150,17 +150,6 @@ type printWriter struct {
 	err    error
 }
 
-func (w *printWriter) Write(b []byte) (int, error) {
-	if w.err != nil {
-		return 0, w.err
-	}
-	n, err := w.writer.Write(b)
-	if err != nil {
-		w.err = err
-	}
-	return n, err
-}
-
 func (w *printWriter) WriteString(s string) (int, error) {
 	if w.err != nil {
 		return 0, w.err

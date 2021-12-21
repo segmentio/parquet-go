@@ -30,6 +30,17 @@ func (row Row) indexOf(columnIndex int) int {
 	return len(row)
 }
 
+// =============================================================================
+// Functions returning closures are marked with "go:noinline" below to prevent
+// losing naming information of the closure in stack traces.
+//
+// Because some of the functions are very short (simply return a closure), the
+// compiler inlines when at their call site, which result in the closure being
+// named something like parquet.deconstructFuncOf.func2 instead of the original
+// parquet.deconstructFuncOfLeaf.func1; the latter being much more meanginful
+// when reading CPU or memory profiles.
+// =============================================================================
+
 type levels struct {
 	repetitionDepth int8
 	repetitionLevel int8
@@ -51,6 +62,7 @@ func deconstructFuncOf(columnIndex int, node Node) (int, deconstructFunc) {
 	}
 }
 
+//go:noinline
 func deconstructFuncOfOptional(columnIndex int, node Node) (int, deconstructFunc) {
 	columnIndex, deconstruct := deconstructFuncOf(columnIndex, Required(node))
 	return columnIndex, func(row Row, levels levels, value reflect.Value) Row {
@@ -68,6 +80,7 @@ func deconstructFuncOfOptional(columnIndex int, node Node) (int, deconstructFunc
 	}
 }
 
+//go:noinline
 func deconstructFuncOfRepeated(columnIndex int, node Node) (int, deconstructFunc) {
 	columnIndex, deconstruct := deconstructFuncOf(columnIndex, Required(node))
 	return columnIndex, func(row Row, levels levels, value reflect.Value) Row {
@@ -103,6 +116,7 @@ func deconstructFuncOfRequired(columnIndex int, node Node) (int, deconstructFunc
 	}
 }
 
+//go:noinline
 func deconstructFuncOfGroup(columnIndex int, node Node) (int, deconstructFunc) {
 	names := node.ChildNames()
 	funcs := make([]deconstructFunc, len(names))
@@ -137,6 +151,7 @@ func deconstructFuncOfGroup(columnIndex int, node Node) (int, deconstructFunc) {
 	}
 }
 
+//go:noinline
 func deconstructFuncOfLeaf(columnIndex int, node Node) (int, deconstructFunc) {
 	if columnIndex > MaxColumnIndex {
 		panic("row cannot be deconstructed because it has more than 127 columns")
@@ -172,6 +187,7 @@ func reconstructFuncOf(columnIndex int, node Node) (int, reconstructFunc) {
 	}
 }
 
+//go:noinline
 func reconstructFuncOfOptional(columnIndex int, node Node) (int, reconstructFunc) {
 	nextColumnIndex, reconstruct := reconstructFuncOf(columnIndex, Required(node))
 	return nextColumnIndex, func(value reflect.Value, levels levels, row Row) error {
@@ -191,6 +207,7 @@ func reconstructFuncOfOptional(columnIndex int, node Node) (int, reconstructFunc
 	}
 }
 
+//go:noinline
 func reconstructFuncOfRepeated(columnIndex int, node Node) (int, reconstructFunc) {
 	nextColumnIndex, reconstruct := reconstructFuncOf(columnIndex, Required(node))
 	maxColumnIndex := nextColumnIndex - 1
@@ -256,6 +273,7 @@ func reconstructFuncOfRequired(columnIndex int, node Node) (int, reconstructFunc
 	}
 }
 
+//go:noinline
 func reconstructFuncOfGroup(columnIndex int, node Node) (int, reconstructFunc) {
 	names := node.ChildNames()
 	funcs := make([]reconstructFunc, len(names))
@@ -290,6 +308,7 @@ func reconstructFuncOfGroup(columnIndex int, node Node) (int, reconstructFunc) {
 	}
 }
 
+//go:noinline
 func reconstructFuncOfLeaf(columnIndex int, node Node) (int, reconstructFunc) {
 	return columnIndex + 1, func(value reflect.Value, _ levels, row Row) error {
 		if len(row) != 1 {
