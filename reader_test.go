@@ -74,6 +74,26 @@ type contact struct {
 	PhoneNumber utf8string
 }
 
+type listColumn2 struct {
+	Value utf8string `parquet:",optional"`
+}
+
+type listColumn1 struct {
+	List2 []listColumn2 `parquet:",list"`
+}
+
+type listColumn0 struct {
+	List1 []listColumn1 `parquet:",list"`
+}
+
+type nestedListColumnLevel1 struct {
+	Level2 []utf8string `parquet:"level2"`
+}
+
+type nestedListColumn struct {
+	Level1 []nestedListColumnLevel1 `parquet:"level1"`
+}
+
 type utf8string string
 
 func (utf8string) Generate(rand *rand.Rand, size int) reflect.Value {
@@ -167,6 +187,26 @@ var readerTests = []struct {
 		scenario: "AddressBook",
 		model:    addressBook{},
 	},
+
+	{
+		scenario: "one optional level",
+		model:    listColumn2{},
+	},
+
+	{
+		scenario: "one one repeated level",
+		model:    listColumn1{},
+	},
+
+	{
+		scenario: "two repeated levels",
+		model:    listColumn0{},
+	},
+
+	{
+		scenario: "multiple repeated levels",
+		model:    listColumn0{},
+	},
 }
 
 func TestReader(t *testing.T) {
@@ -175,7 +215,7 @@ func TestReader(t *testing.T) {
 
 	for _, test := range readerTests {
 		t.Run(test.scenario, func(t *testing.T) {
-			const N = 100
+			const N = 42
 
 			rowType := reflect.TypeOf(test.model)
 			rowPtr := reflect.New(rowType)

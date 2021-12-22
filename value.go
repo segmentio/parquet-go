@@ -689,7 +689,7 @@ func Equal(v1, v2 Value) bool {
 type bufferedValueReader struct {
 	reader ValueBatchReader
 	buffer []Value
-	offset int
+	offset uint
 }
 
 func (b *bufferedValueReader) Reset(r ValueBatchReader) {
@@ -700,7 +700,7 @@ func (b *bufferedValueReader) Reset(r ValueBatchReader) {
 
 func (b *bufferedValueReader) ReadValue() (Value, error) {
 	for {
-		if b.offset >= 0 && b.offset < len(b.buffer) {
+		if b.offset < uint(len(b.buffer)) {
 			v := b.buffer[b.offset]
 			b.offset++
 			return v, nil

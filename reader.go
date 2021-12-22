@@ -125,6 +125,7 @@ func (r *Reader) ReadRow(row interface{}) (err error) {
 		}
 	}
 	r.values, err = r.read(r.values[:0], 0)
+	//fmt.Printf(". %+v %v\n", r.values, err)
 	if err != nil {
 		return err
 	}
@@ -182,6 +183,7 @@ func columnReaderFuncOfGroup(columnIndex int, column *Column, readers []*columnC
 		var err error
 		for _, child := range group {
 			if row, err = child(row, level); err != nil {
+				err = columnReadError(column, err)
 				break
 			}
 		}
@@ -199,7 +201,7 @@ func columnReaderFuncOfLeaf(columnIndex int, column *Column, readers []*columnCh
 		return columnIndex, func(row Row, _ int8) (Row, error) {
 			v, err := leaf.readValue()
 			if err != nil {
-				return row, err
+				return row, columnReadError(column, err)
 			}
 			return append(row, v), nil
 		}
@@ -208,16 +210,27 @@ func columnReaderFuncOfLeaf(columnIndex int, column *Column, readers []*columnCh
 	return columnIndex, func(row Row, level int8) (Row, error) {
 		v, err := leaf.peekValue()
 		if err != nil {
-			if level == repetitionLevel && err == io.EOF {
+			if level > 0 && err == io.EOF {
 				err = nil
+			} else {
+				err = columnReadError(column, err)
 			}
 			return row, err
 		}
-		if level < repetitionLevel || v.repetitionLevel == repetitionLevel {
-			row = append(row, v)
+		if v.repetitionLevel == level {
 			leaf.nextValue()
+			row = append(row, v)
 		}
 		return row, nil
+	}
+}
+
+func columnReadError(col *Column, err error) error {
+	switch err {
+	case nil, io.EOF:
+		return err
+	default:
+		return fmt.Errorf("%s → %w", col.Name(), err)
 	}
 }
 
@@ -301,7 +314,7 @@ func (ccr *columnChunkReader) readValue() (Value, error) {
 readNextValue:
 	// Manually inline the buffered value read because the cast is too high
 	// for the compiler in ReadValue. This gives a ~10% increase in throughput.
-	if ccr.values.offset >= 0 && ccr.values.offset < len(ccr.values.buffer) {
+	if ccr.values.offset < uint(len(ccr.values.buffer)) {
 		v := ccr.values.buffer[ccr.values.offset]
 		ccr.values.offset++
 		return v, nil
