@@ -33,7 +33,7 @@ type Reader struct {
 	seen    reflect.Type
 	columns []*columnChunkReader
 	values  []Value
-	read    columnReaderFunc
+	read    columnReadFunc
 }
 
 // NewReader constructs a parquet reader reading rows from the given
@@ -69,13 +69,12 @@ func NewReader(r io.ReaderAt, options ...ReaderOption) *Reader {
 		columns = append(columns, newColumnChunkReader(column, config))
 	})
 
-	_, read := columnReaderFuncOf(0, root, columns)
 	return &Reader{
 		file:    f,
 		schema:  NewSchema(root.Name(), root),
 		columns: columns,
 		values:  make([]Value, 0, len(columns)),
-		read:    read,
+		read:    columnReadFuncOf(root, columns),
 	}
 }
 
@@ -125,7 +124,6 @@ func (r *Reader) ReadRow(row interface{}) (err error) {
 		}
 	}
 	r.values, err = r.read(r.values[:0], 0)
-	//fmt.Printf(". %+v %v\n", r.values, err)
 	if err != nil {
 		return err
 	}
@@ -139,23 +137,23 @@ type columnTreeReader interface {
 	read(Row, int8) (Row, error)
 }
 
-type columnReaderFunc func(Row, int8) (Row, error)
+type columnReadFunc func(Row, int8) (Row, error)
 
-func columnReaderFuncOf(columnIndex int, column *Column, readers []*columnChunkReader) (int, columnReaderFunc) {
-	var reader columnReaderFunc
+func columnReadFuncOf(column *Column, readers []*columnChunkReader) columnReadFunc {
+	var reader columnReadFunc
 	if column.NumChildren() == 0 {
-		columnIndex, reader = columnReaderFuncOfLeaf(columnIndex, column, readers)
+		reader = columnReadFuncOfLeaf(column, readers)
 	} else {
-		columnIndex, reader = columnReaderFuncOfGroup(columnIndex, column, readers)
+		reader = columnReadFuncOfGroup(column, readers)
 	}
 	if column.Repeated() {
-		reader = columnReaderFuncOfRepeated(column, reader)
+		reader = columnReadFuncOfRepeated(column, reader)
 	}
-	return columnIndex, reader
+	return reader
 }
 
 //go:noinline
-func columnReaderFuncOfRepeated(column *Column, reader columnReaderFunc) columnReaderFunc {
+func columnReadFuncOfRepeated(column *Column, reader columnReadFunc) columnReadFunc {
 	repetitionLevel := column.MaxRepetitionLevel()
 	return func(row Row, level int8) (Row, error) {
 		var err error
@@ -173,13 +171,13 @@ func columnReaderFuncOfRepeated(column *Column, reader columnReaderFunc) columnR
 }
 
 //go:noinline
-func columnReaderFuncOfGroup(columnIndex int, column *Column, readers []*columnChunkReader) (int, columnReaderFunc) {
+func columnReadFuncOfGroup(column *Column, readers []*columnChunkReader) columnReadFunc {
 	children := column.Children()
-	group := make([]columnReaderFunc, len(children))
+	group := make([]columnReadFunc, len(children))
 	for i, child := range children {
-		columnIndex, group[i] = columnReaderFuncOf(columnIndex, child, readers)
+		group[i] = columnReadFuncOf(child, readers)
 	}
-	return columnIndex, func(row Row, level int8) (Row, error) {
+	return func(row Row, level int8) (Row, error) {
 		var err error
 		for _, child := range group {
 			if row, err = child(row, level); err != nil {
@@ -192,13 +190,12 @@ func columnReaderFuncOfGroup(columnIndex int, column *Column, readers []*columnC
 }
 
 //go:noinline
-func columnReaderFuncOfLeaf(columnIndex int, column *Column, readers []*columnChunkReader) (int, columnReaderFunc) {
+func columnReadFuncOfLeaf(column *Column, readers []*columnChunkReader) columnReadFunc {
 	repetitionLevel := column.MaxRepetitionLevel()
-	leaf := readers[columnIndex]
-	columnIndex++
+	leaf := readers[column.Index()]
 
 	if repetitionLevel == 0 {
-		return columnIndex, func(row Row, _ int8) (Row, error) {
+		return func(row Row, _ int8) (Row, error) {
 			v, err := leaf.readValue()
 			if err != nil {
 				return row, columnReadError(column, err)
@@ -207,7 +204,7 @@ func columnReaderFuncOfLeaf(columnIndex int, column *Column, readers []*columnCh
 		}
 	}
 
-	return columnIndex, func(row Row, level int8) (Row, error) {
+	return func(row Row, level int8) (Row, error) {
 		v, err := leaf.peekValue()
 		if err != nil {
 			if level > 0 && err == io.EOF {
