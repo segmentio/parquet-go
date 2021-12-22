@@ -172,9 +172,8 @@ func columnReadFuncOfRepeated(column *Column, read columnReadFunc) columnReadFun
 
 //go:noinline
 func columnReadFuncOfGroup(column *Column, readers []*columnChunkReader) columnReadFunc {
-	children := column.Children()
-	group := make([]columnReadFunc, len(children))
-	for i, child := range children {
+	group := make([]columnReadFunc, column.NumChildren())
+	for i, child := range column.Children() {
 		group[i] = columnReadFuncOf(child, readers)
 	}
 	return func(row Row, level int8) (Row, error) {
