@@ -153,13 +153,13 @@ func columnReadFuncOf(column *Column, readers []*columnChunkReader) columnReadFu
 }
 
 //go:noinline
-func columnReadFuncOfRepeated(column *Column, reader columnReadFunc) columnReadFunc {
+func columnReadFuncOfRepeated(column *Column, read columnReadFunc) columnReadFunc {
 	repetitionLevel := column.MaxRepetitionLevel()
 	return func(row Row, level int8) (Row, error) {
 		var err error
 		for {
 			n := len(row)
-			if row, err = reader(row, level); err != nil {
+			if row, err = read(row, level); err != nil {
 				return row, err
 			}
 			if n == len(row) {
@@ -179,8 +179,8 @@ func columnReadFuncOfGroup(column *Column, readers []*columnChunkReader) columnR
 	}
 	return func(row Row, level int8) (Row, error) {
 		var err error
-		for _, child := range group {
-			if row, err = child(row, level); err != nil {
+		for _, read := range group {
+			if row, err = read(row, level); err != nil {
 				err = columnReadError(column, err)
 				break
 			}
