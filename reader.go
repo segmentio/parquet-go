@@ -191,10 +191,9 @@ func columnReadFuncOfGroup(column *Column, readers []*columnChunkReader) columnR
 
 //go:noinline
 func columnReadFuncOfLeaf(column *Column, readers []*columnChunkReader) columnReadFunc {
-	repetitionLevel := column.MaxRepetitionLevel()
 	leaf := readers[column.Index()]
 
-	if repetitionLevel == 0 {
+	if column.MaxRepetitionLevel() == 0 {
 		return func(row Row, _ int8) (Row, error) {
 			v, err := leaf.readValue()
 			if err != nil {
