@@ -172,15 +172,22 @@ func columnReadFuncOfRepeated(column *Column, read columnReadFunc) columnReadFun
 
 //go:noinline
 func columnReadFuncOfGroup(column *Column, readers []*columnChunkReader) columnReadFunc {
-	group := make([]columnReadFunc, column.NumChildren())
-	for i, child := range column.Children() {
+	children := column.Children()
+	if len(children) == 1 {
+		// Small optimization for a somewhat common case of groups with a single
+		// column (like nested list elements for example); there is no need to
+		// loop over the group of a single element, we can simply skip to calling
+		// the inner read function.
+		return columnReadFuncOf(children[0], readers)
+	}
+	group := make([]columnReadFunc, len(children))
+	for i, child := range children {
 		group[i] = columnReadFuncOf(child, readers)
 	}
 	return func(row Row, level int8) (Row, error) {
 		var err error
 		for _, read := range group {
 			if row, err = read(row, level); err != nil {
-				err = columnReadError(column, err)
 				break
 			}
 		}
@@ -196,7 +203,7 @@ func columnReadFuncOfLeaf(column *Column, readers []*columnChunkReader) columnRe
 		return func(row Row, _ int8) (Row, error) {
 			v, err := leaf.readValue()
 			if err != nil {
-				return row, columnReadError(column, err)
+				return row, err
 			}
 			return append(row, v), nil
 		}
@@ -207,8 +214,6 @@ func columnReadFuncOfLeaf(column *Column, readers []*columnChunkReader) columnRe
 		if err != nil {
 			if level > 0 && err == io.EOF {
 				err = nil
-			} else {
-				err = columnReadError(column, err)
 			}
 			return row, err
 		}
@@ -217,15 +222,6 @@ func columnReadFuncOfLeaf(column *Column, readers []*columnChunkReader) columnRe
 			row = append(row, v)
 		}
 		return row, nil
-	}
-}
-
-func columnReadError(col *Column, err error) error {
-	switch err {
-	case nil, io.EOF:
-		return err
-	default:
-		return fmt.Errorf("%s → %w", col.Name(), err)
 	}
 }
 
