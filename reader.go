@@ -271,8 +271,10 @@ func newColumnChunkReader(column *Column, config *ReaderConfig) *columnChunkRead
 }
 
 func (ccr *columnChunkReader) reset() {
+	if ccr.pages != nil {
+		ccr.pages.close(io.EOF)
+	}
 	ccr.chunks.Seek(0)
-	ccr.pages = nil
 	ccr.reader = nil
 	ccr.values.Reset(nil)
 	ccr.dictionary = nil
@@ -320,7 +322,12 @@ readNextValue:
 readNextPage:
 	if ccr.pages != nil {
 		if !ccr.pages.Next() {
-			ccr.pages = nil
+			// Here the page count needs to be reset because we are changing the
+			// column chunk and we may have to read another dictionary page.
+			ccr.numPages = 0
+			if ccr.dictionary != nil {
+				ccr.dictionary.Reset()
+			}
 		} else {
 			var err error
 
@@ -348,15 +355,18 @@ readNextPage:
 		return Value{}, io.EOF
 	}
 
-	ccr.pages = ccr.chunks.Pages()
+	ccr.pages = ccr.chunks.PagesTo(ccr.pages)
 	goto readNextPage
 }
 
 func (ccr *columnChunkReader) readDictionaryPage(header DictionaryPageHeader) error {
-	ccr.dictionary = ccr.column.Type().NewDictionary(0)
-	if err := ccr.dictionary.ReadFrom(
-		header.Encoding().NewDecoder(ccr.pages.PageData()),
-	); err != nil {
+	if ccr.dictionary == nil {
+		ccr.dictionary = ccr.column.Type().NewDictionary(0)
+	} else {
+		ccr.dictionary.Reset()
+	}
+	decoder := header.Encoding().NewDecoder(ccr.pages.PageData())
+	if err := ccr.dictionary.ReadFrom(decoder); err != nil {
 		return err
 	}
 	ccr.numPages++
