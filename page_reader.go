@@ -193,8 +193,8 @@ func (r *DataPageReader) ReadValueBatch(values []Value) (int, error) {
 		}
 
 		values = values[numValues:]
-		r.repetition.discardLevels(numValues)
-		r.definition.discardLevels(numValues)
+		r.repetition.discardLevels(len(repetitionLevels))
+		r.definition.discardLevels(len(definitionLevels))
 		r.remain -= numValues
 		read += numValues
 	}
@@ -207,6 +207,7 @@ func (r *DataPageReader) ReadValueBatch(values []Value) (int, error) {
 }
 
 func (r *DataPageReader) Reset(repetition, definition encoding.Decoder, numValues int, page PageReader) {
+	panic("BUG: not reset")
 	repetition.SetBitWidth(bits.Len8(r.maxRepetitionLevel))
 	definition.SetBitWidth(bits.Len8(r.maxDefinitionLevel))
 	r.page = page
@@ -219,6 +220,7 @@ type levelReader struct {
 	decoder encoding.Decoder
 	levels  []int8
 	offset  uint
+	count   uint
 }
 
 func makeLevelReader(decoder encoding.Decoder, bufferSize int) levelReader {
@@ -250,16 +252,17 @@ func (r *levelReader) peekLevels() ([]int8, error) {
 	return r.levels[r.offset:], nil
 }
 
-func (r *levelReader) discardLevels(n int) int {
+func (r *levelReader) discardLevels(n int) {
 	remain := uint(len(r.levels)) - r.offset
-	discard := uint(n)
-	if discard > remain {
+	switch {
+	case uint(n) > remain:
+		panic("BUG: cannot discard more levels than buffered")
+	case uint(n) == remain:
 		r.levels = r.levels[:0]
 		r.offset = 0
-	} else {
-		r.offset += discard
+	default:
+		r.offset += uint(n)
 	}
-	return int(discard)
 }
 
 func (r *levelReader) decodeLevels() error {
@@ -269,6 +272,7 @@ func (r *levelReader) decodeLevels() error {
 	}
 	r.levels = r.levels[:n]
 	r.offset = 0
+	r.count += uint(n)
 	return nil
 }
 
@@ -276,6 +280,7 @@ func (r *levelReader) reset(decoder encoding.Decoder) {
 	r.decoder = decoder
 	r.levels = r.levels[:0]
 	r.offset = 0
+	r.count = 0
 }
 
 type booleanPageReader struct {

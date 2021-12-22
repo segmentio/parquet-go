@@ -271,9 +271,10 @@ func newColumnChunkReader(column *Column, config *ReaderConfig) *columnChunkRead
 }
 
 func (ccr *columnChunkReader) reset() {
-	if ccr.pages != nil {
-		ccr.pages.close(io.EOF)
-	}
+	// if ccr.pages != nil {
+	// 	ccr.pages.close(io.EOF)
+	// }
+	ccr.pages = nil
 	ccr.chunks.Seek(0)
 	ccr.reader = nil
 	ccr.values.Reset(nil)
@@ -325,9 +326,10 @@ readNextPage:
 			// Here the page count needs to be reset because we are changing the
 			// column chunk and we may have to read another dictionary page.
 			ccr.numPages = 0
-			if ccr.dictionary != nil {
-				ccr.dictionary.Reset()
-			}
+			ccr.dictionary = nil
+			// if ccr.dictionary != nil {
+			// 	ccr.dictionary.Reset()
+			// }
 		} else {
 			var err error
 
@@ -355,16 +357,18 @@ readNextPage:
 		return Value{}, io.EOF
 	}
 
-	ccr.pages = ccr.chunks.PagesTo(ccr.pages)
+	//ccr.pages = ccr.chunks.PagesTo(ccr.pages)
+	ccr.pages = ccr.chunks.Pages()
 	goto readNextPage
 }
 
 func (ccr *columnChunkReader) readDictionaryPage(header DictionaryPageHeader) error {
-	if ccr.dictionary == nil {
-		ccr.dictionary = ccr.column.Type().NewDictionary(0)
-	} else {
-		ccr.dictionary.Reset()
-	}
+	ccr.dictionary = ccr.column.Type().NewDictionary(0)
+	// if ccr.dictionary == nil {
+	// 	ccr.dictionary = ccr.column.Type().NewDictionary(0)
+	// } else {
+	// 	ccr.dictionary.Reset()
+	// }
 	decoder := header.Encoding().NewDecoder(ccr.pages.PageData())
 	if err := ccr.dictionary.ReadFrom(decoder); err != nil {
 		return err
@@ -376,14 +380,19 @@ func (ccr *columnChunkReader) readDictionaryPage(header DictionaryPageHeader) er
 func (ccr *columnChunkReader) readDataPage(header DataPageHeader) {
 	ccr.page.decoder = resetDecoder(ccr.page.decoder, header.Encoding(), ccr.pages.PageData())
 
-	if ccr.page.reader != nil {
-		ccr.page.reader.Reset(ccr.page.decoder)
+	// if ccr.page.reader != nil {
+	// 	ccr.page.reader.Reset(ccr.page.decoder)
+	// } else {
+	// 	if ccr.dictionary != nil {
+	// 		ccr.page.reader = NewIndexedPageReader(ccr.page.decoder, ccr.bufferSize, ccr.dictionary)
+	// 	} else {
+	// 		ccr.page.reader = ccr.column.Type().NewPageReader(ccr.page.decoder, ccr.bufferSize)
+	// 	}
+	// }
+	if ccr.dictionary != nil {
+		ccr.page.reader = NewIndexedPageReader(ccr.page.decoder, ccr.bufferSize, ccr.dictionary)
 	} else {
-		if ccr.dictionary != nil {
-			ccr.page.reader = NewIndexedPageReader(ccr.page.decoder, ccr.bufferSize, ccr.dictionary)
-		} else {
-			ccr.page.reader = ccr.column.Type().NewPageReader(ccr.page.decoder, ccr.bufferSize)
-		}
+		ccr.page.reader = ccr.column.Type().NewPageReader(ccr.page.decoder, ccr.bufferSize)
 	}
 
 	maxRepetitionLevel := ccr.column.MaxRepetitionLevel()
@@ -396,30 +405,31 @@ func (ccr *columnChunkReader) readDataPage(header DataPageHeader) {
 		ccr.definition.decoder = resetDecoder(ccr.definition.decoder, header.DefinitionLevelEncoding(), ccr.pages.DefinitionLevels())
 	}
 
-	if ccr.reader != nil {
-		ccr.reader.Reset(ccr.repetition.decoder, ccr.definition.decoder, header.NumValues(), ccr.page.reader)
-	} else {
-		ccr.reader = NewDataPageReader(
-			ccr.repetition.decoder,
-			ccr.definition.decoder,
-			header.NumValues(),
-			ccr.page.reader,
-			maxRepetitionLevel,
-			maxDefinitionLevel,
-			ccr.column.Index(),
-			ccr.bufferSize,
-		)
-	}
+	// if ccr.reader != nil {
+	// 	ccr.reader.Reset(ccr.repetition.decoder, ccr.definition.decoder, header.NumValues(), ccr.page.reader)
+	// } else {
+	ccr.reader = NewDataPageReader(
+		ccr.repetition.decoder,
+		ccr.definition.decoder,
+		header.NumValues(),
+		ccr.page.reader,
+		maxRepetitionLevel,
+		maxDefinitionLevel,
+		ccr.column.Index(),
+		ccr.bufferSize,
+	)
+	// }
 
 	ccr.values.Reset(ccr.reader)
 	ccr.numPages++
 }
 
 func resetDecoder(decoder encoding.Decoder, encoding encoding.Encoding, input io.Reader) encoding.Decoder {
-	if decoder == nil || encoding.Encoding() != decoder.Encoding() {
-		decoder = encoding.NewDecoder(input)
-	} else {
-		decoder.Reset(input)
-	}
-	return decoder
+	return encoding.NewDecoder(input)
+	// if decoder == nil || encoding.Encoding() != decoder.Encoding() {
+	// 	decoder = encoding.NewDecoder(input)
+	// } else {
+	// 	decoder.Reset(input)
+	// }
+	// return decoder
 }

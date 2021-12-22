@@ -194,7 +194,7 @@ var readerTests = []struct {
 	},
 
 	{
-		scenario: "one one repeated level",
+		scenario: "one repeated level",
 		model:    listColumn1{},
 	},
 
@@ -259,7 +259,7 @@ func BenchmarkReader(b *testing.B) {
 
 	for _, test := range readerTests {
 		b.Run(test.scenario, func(b *testing.B) {
-			const N = 10000
+			const N = 2042
 			defer buf.Reset()
 			rows := rowsOf(N, test.model)
 
@@ -280,13 +280,15 @@ func BenchmarkReader(b *testing.B) {
 			b.ResetTimer()
 			r := parquet.NewReader(f)
 			p := rowPtr.Interface()
+			fmt.Println("=== TEST ===")
 
 			for i := 0; i < b.N; i++ {
 				if err := r.ReadRow(p); err != nil {
 					if err == io.EOF {
+						fmt.Println("RESET")
 						r.Reset()
 					} else {
-						b.Fatal(err)
+						b.Fatalf("%d/%d: %v", i, b.N, err)
 					}
 				}
 				rowValue.Set(rowZero)

@@ -63,6 +63,10 @@ type Writer struct {
 	buffer []byte
 }
 
+func (w *Writer) Buffered() int {
+	return len(w.buffer)
+}
+
 func (w *Writer) Reset(ww io.Writer) {
 	w.writer = ww
 	w.length = 0

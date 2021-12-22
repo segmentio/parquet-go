@@ -8,41 +8,24 @@ import (
 	"github.com/segmentio/parquet/internal/bits"
 )
 
-// Large enougth to hold 64 x int64
-const bitPackBufferSize = 512
-
 type bitPackRunDecoder struct {
-	reader io.LimitedReader
-	// Offset and length of values read into the buffer, and number of values
-	// left to be consumed.
-	offset uint
-	length uint
-	remain uint
-	// The bit width of values read by the encoder, and capacity of the buffer,
-	// which is computed to be the greatest multiple of 8 x bit-width.
+	source   io.LimitedReader
+	reader   bits.Reader
+	remain   uint
 	bitWidth uint
-	capacity uint
-	// Buffer where bits are loaded from the io.Reader; the size is large enough
-	// to contain 64 int64 values, since bit-pack integers are encoded in chunks
-	// of 8 values. Most of the time the source bit-width is a lot smaller than
-	// 64 bits (commonly 2-3 bits), so a lot more values get loaded in each read
-	// from the io.Reader.
-	buffer [bitPackBufferSize]byte
 }
 
 func (d *bitPackRunDecoder) String() string { return "BIT_PACK" }
 
 func (d *bitPackRunDecoder) reset(r io.Reader, bitWidth, numValues uint) {
-	d.reader.R = r
-	d.reader.N = int64(bits.ByteCount(numValues * bitWidth))
-	d.offset = 0
-	d.length = 0
-	d.remain = 0
+	d.source.R = r
+	d.source.N = int64(bits.ByteCount(numValues * bitWidth))
+	d.reader.Reset(&d.source)
+	d.remain = numValues
 	d.bitWidth = bitWidth
-	d.capacity = (bitPackBufferSize / (8 * bitWidth)) * 8 * bitWidth
 }
 
-func (d *bitPackRunDecoder) decode(dst []byte, dstWidth uint) (int, error) {
+func (d *bitPackRunDecoder) decode(dst []byte, dstWidth uint) (n int, err error) {
 	dstBitCount := bits.BitCount(len(dst))
 
 	if dstWidth < 8 || dstWidth > 64 || OnesCount(dstWidth) != 1 {
@@ -59,46 +42,86 @@ func (d *bitPackRunDecoder) decode(dst []byte, dstWidth uint) (int, error) {
 			d.bitWidth, dstWidth)
 	}
 
-	numValues := 0
-	dstSize := bits.ByteCount(dstWidth)
-
-	for len(dst) != 0 {
-		if d.remain != 0 {
-			n := bits.Pack(dst, dstWidth, d.buffer[d.offset:d.length], d.bitWidth)
-			bitOffset := (d.offset * 8) + (d.bitWidth * uint(n))
-			index, shift := bits.IndexShift8(bitOffset)
-			bits.ShiftRight(d.buffer[index:d.length], shift)
-			d.offset = index
-			d.remain -= uint(n)
-			dst = dst[n*dstSize:]
-			numValues += n
-			continue
-		}
-
-		n, err := io.ReadFull(&d.reader, d.buffer[:d.capacity])
-		if err != nil && n == 0 {
-			return numValues, err
-		}
-		if ((bits.BitCount(n) / d.bitWidth) % 8) != 0 {
-			return numValues, fmt.Errorf("BIT_PACK decoder expects sequences of 8 values but %d were read", bits.BitCount(n)/d.bitWidth)
-		}
-
-		d.offset = 0
-		d.length = uint(n)
-		d.remain = bits.BitCount(n) / d.bitWidth
+	switch dstWidth {
+	case 8:
+		n, err = d.decodeInt8(bits.BytesToInt8(dst), d.bitWidth)
+	case 16:
+		n, err = d.decodeInt16(bits.BytesToInt16(dst), d.bitWidth)
+	case 32:
+		n, err = d.decodeInt32(bits.BytesToInt32(dst), d.bitWidth)
+	case 64:
+		n, err = d.decodeInt64(bits.BytesToInt64(dst), d.bitWidth)
+	default:
+		panic("BUG: unsupported destination bit-width")
 	}
 
-	return numValues, nil
+	if d.remain -= uint(n); d.remain == 0 {
+		err = io.EOF
+	} else if err != nil {
+		if err == io.EOF {
+			err = io.ErrUnexpectedEOF
+		}
+	}
+
+	return n, err
+}
+
+func (d *bitPackRunDecoder) decodeInt8(dst []int8, bitWidth uint) (n int, err error) {
+	for uint(n) < d.remain && n < len(dst) {
+		b, _, err := d.reader.ReadBits(bitWidth)
+		if err != nil {
+			return int(n), err
+		}
+		dst[n] = int8(b)
+		n++
+	}
+	return int(n), nil
+}
+
+func (d *bitPackRunDecoder) decodeInt16(dst []int16, bitWidth uint) (n int, err error) {
+	for uint(n) < d.remain && n < len(dst) {
+		b, _, err := d.reader.ReadBits(bitWidth)
+		if err != nil {
+			return n, err
+		}
+		dst[n] = int16(b)
+		n++
+	}
+	return n, nil
+}
+
+func (d *bitPackRunDecoder) decodeInt32(dst []int32, bitWidth uint) (n int, err error) {
+	for uint(n) < d.remain && n < len(dst) {
+		b, _, err := d.reader.ReadBits(bitWidth)
+		if err != nil {
+			return n, err
+		}
+		dst[n] = int32(b)
+		n++
+	}
+	return n, nil
+}
+
+func (d *bitPackRunDecoder) decodeInt64(dst []int64, bitWidth uint) (n int, err error) {
+	for uint(n) < d.remain && n < len(dst) {
+		b, _, err := d.reader.ReadBits(bitWidth)
+		if err != nil {
+			return n, err
+		}
+		dst[n] = int64(b)
+		n++
+	}
+	return n, nil
 }
 
 type bitPackRunEncoder struct {
-	writer   io.Writer
+	writer   bits.Writer
 	bitWidth uint
-	buffer   [bitPackBufferSize]byte
 }
 
 func (e *bitPackRunEncoder) reset(w io.Writer, bitWidth uint) {
-	e.writer, e.bitWidth = w, bitWidth
+	e.writer.Reset(w)
+	e.bitWidth = bitWidth
 }
 
 func (e *bitPackRunEncoder) encode(src []byte, srcWidth uint) error {
@@ -121,27 +144,42 @@ func (e *bitPackRunEncoder) encode(src []byte, srcWidth uint) error {
 			srcWidth, e.bitWidth)
 	}
 
-	if srcWidth == e.bitWidth {
-		_, err := e.writer.Write(src)
-		return err
+	switch srcWidth {
+	case 8:
+		e.encodeInt8(bits.BytesToInt8(src), e.bitWidth)
+	case 16:
+		e.encodeInt16(bits.BytesToInt16(src), e.bitWidth)
+	case 32:
+		e.encodeInt32(bits.BytesToInt32(src), e.bitWidth)
+	case 64:
+		e.encodeInt64(bits.BytesToInt64(src), e.bitWidth)
+	default:
+		panic("BUG: unsupported source bit-width")
 	}
 
-	bytesPerLoop := (bitPackBufferSize / (8 * e.bitWidth)) * (8 * srcWidth)
+	return e.writer.Flush()
+}
 
-	for len(src) > 0 {
-		i := bytesPerLoop
-		if i > uint(len(src)) {
-			i = uint(len(src))
-		}
-
-		n := bits.Pack(e.buffer[:], e.bitWidth, src[:i], srcWidth)
-		_, err := e.writer.Write(e.buffer[:bits.ByteCount(uint(n)*e.bitWidth)])
-		if err != nil {
-			return err
-		}
-
-		src = src[i:]
+func (e *bitPackRunEncoder) encodeInt8(src []int8, bitWidth uint) {
+	for _, v := range src {
+		e.writer.WriteBits(uint64(v), bitWidth)
 	}
+}
 
-	return nil
+func (e *bitPackRunEncoder) encodeInt16(src []int16, bitWidth uint) {
+	for _, v := range src {
+		e.writer.WriteBits(uint64(v), bitWidth)
+	}
+}
+
+func (e *bitPackRunEncoder) encodeInt32(src []int32, bitWidth uint) {
+	for _, v := range src {
+		e.writer.WriteBits(uint64(v), bitWidth)
+	}
+}
+
+func (e *bitPackRunEncoder) encodeInt64(src []int64, bitWidth uint) {
+	for _, v := range src {
+		e.writer.WriteBits(uint64(v), bitWidth)
+	}
 }
