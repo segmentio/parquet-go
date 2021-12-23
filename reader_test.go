@@ -86,12 +86,13 @@ type listColumn0 struct {
 	List1 []listColumn1 `parquet:",list"`
 }
 
-type nestedListColumnLevel1 struct {
-	Level2 []utf8string `parquet:"level2"`
+type nestedListColumn1 struct {
+	Level3 []utf8string `parquet:"level3"`
 }
 
 type nestedListColumn struct {
-	Level1 []nestedListColumnLevel1 `parquet:"level1"`
+	Level1 []nestedListColumn1 `parquet:"level1"`
+	Level2 []utf8string        `parquet:"level2"`
 }
 
 type utf8string string
@@ -204,8 +205,13 @@ var readerTests = []struct {
 	},
 
 	{
-		scenario: "multiple repeated levels",
+		scenario: "three repeated levels",
 		model:    listColumn0{},
+	},
+
+	{
+		scenario: "nested lists",
+		model:    nestedListColumn{},
 	},
 }
 
