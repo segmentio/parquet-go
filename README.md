@@ -63,15 +63,34 @@ if err := writer.Close(); err != nil {
 }
 ```
 
-### Reading Parquet Rows: [parquet.Reader]()
+### Reading Parquet Files: [parquet.Reader]()
 
-TODO
+The `parquet.Reader` type supports reading rows from parquet files into Go
+values. When reading rows, the schema is already determined by metadata within
+the file; the reader knows how to leverage this information so the application
+does not need to explicitly declare the schema of values that will be read.
+However, the reader will validate that the schemas of the file and Go value
+are compatible.
 
-### Reading Parquet Columns: [parquet.Scanner]()
+This example shows how a `parquet.Reader` is typically used:
 
-TODO
+```go
+reader := parquet.NewReader(file)
 
-### Reading Parquet Files: [parquet.File]()
+for {
+    row := new(RowType)
+    err := reader.ReadRow(row)
+    if err != nil {
+        if err == io.EOF {
+            break
+        }
+        ...
+    }
+    ...
+}
+```
+
+### Inspecting Parquet Files: [parquet.File]()
 
 Sometimes, lower-level APIs can be useful to leverage the columnar layout of
 parquet files. The `parquet.File` type is intended to provide such features to
