@@ -34,7 +34,7 @@ func TestPrint(t *testing.T) {
 		{
 			node: parquet.Group{"uuid": parquet.UUID()},
 			print: `message Test {
-	required fixed_len_byte_array uuid (UUID);
+	required fixed_len_byte_array(16) uuid (UUID);
 }`,
 		},
 

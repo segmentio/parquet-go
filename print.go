@@ -2,6 +2,7 @@ package parquet
 
 import (
 	"io"
+	"strconv"
 )
 
 func Print(w io.Writer, name string, node Node) error {
@@ -51,7 +52,8 @@ func printWithIndent(w io.StringWriter, name string, node Node, indent *printInd
 	}
 
 	if isLeaf(node) {
-		switch node.Type().Kind() {
+		t := node.Type()
+		switch t.Kind() {
 		case Boolean:
 			w.WriteString("boolean ")
 		case Int32:
@@ -67,7 +69,9 @@ func printWithIndent(w io.StringWriter, name string, node Node, indent *printInd
 		case ByteArray:
 			w.WriteString("binary ")
 		case FixedLenByteArray:
-			w.WriteString("fixed_len_byte_array ")
+			w.WriteString("fixed_len_byte_array(")
+			w.WriteString(strconv.Itoa(t.Length()))
+			w.WriteString(") ")
 		default:
 			w.WriteString("<?> ")
 		}
