@@ -150,12 +150,12 @@ type Decoder interface {
 	Encoding() format.Encoding
 
 	// Decodes an array of boolean values using this decoder, returning
-	// the number of decoded values, or io.EOF if the end of the underlying
+	// the number of decoded values, and io.EOF if the end of the underlying
 	// io.Reader was reached.
 	DecodeBoolean(data []bool) (int, error)
 
 	// Decodes an array of 8 bits integer values using this decoder, returning
-	// the number of decoded values, or io.EOF if the end of the underlying
+	// the number of decoded values, and io.EOF if the end of the underlying
 	// io.Reader was reached.
 	//
 	// The parquet type system does not have a 8 bits integers, this method
@@ -165,7 +165,7 @@ type Decoder interface {
 	DecodeInt8(data []int8) (int, error)
 
 	// Decodes an array of 16 bits integer values using this decoder, returning
-	// the number of decoded values, or io.EOF if the end of the underlying
+	// the number of decoded values, and io.EOF if the end of the underlying
 	// io.Reader was reached.
 	//
 	// The parquet type system does not have a 16 bits integers, this method
@@ -175,32 +175,32 @@ type Decoder interface {
 	DecodeInt16(data []int16) (int, error)
 
 	// Decodes an array of 32 bits integer values using this decoder, returning
-	// the number of decoded values, or io.EOF if the end of the underlying
+	// the number of decoded values, and io.EOF if the end of the underlying
 	// io.Reader was reached.
 	DecodeInt32(data []int32) (int, error)
 
 	// Decodes an array of 64 bits integer values using this decoder, returning
-	// the number of decoded values, or io.EOF if the end of the underlying
+	// the number of decoded values, and io.EOF if the end of the underlying
 	// io.Reader was reached.
 	DecodeInt64(data []int64) (int, error)
 
 	// Decodes an array of 96 bits integer values using this decoder, returning
-	// the number of decoded values, or io.EOF if the end of the underlying
+	// the number of decoded values, and io.EOF if the end of the underlying
 	// io.Reader was reached.
 	DecodeInt96(data []deprecated.Int96) (int, error)
 
 	// Decodes an array of 32 bits floating point values using this decoder,
-	// returning the number of decoded values, or io.EOF if the end of the
+	// returning the number of decoded values, and io.EOF if the end of the
 	// underlying io.Reader was reached.
 	DecodeFloat(data []float32) (int, error)
 
 	// Decodes an array of 64 bits floating point values using this decoder,
-	// returning the number of decoded values, or io.EOF if the end of the
+	// returning the number of decoded values, and io.EOF if the end of the
 	// underlying io.Reader was reached.
 	DecodeDouble(data []float64) (int, error)
 
 	// Decodes an array of variable length byte array values using this decoder,
-	// returning the number of decoded values, or io.EOF if the end of the
+	// returning the number of decoded values, and io.EOF if the end of the
 	// underlying io.Reader was reached.
 	//
 	// The values are written to the `data` buffer using the PLAIN encoding, and
@@ -210,7 +210,7 @@ type Decoder interface {
 	DecodeByteArray(data []byte) (int, error)
 
 	// Decodes an array of fixed length byte array values using this decoder,
-	// returning the number of decoded values, or io.EOF if the end of the
+	// returning the number of decoded values, and io.EOF if the end of the
 	// underlying io.Reader was reached.
 	DecodeFixedLenByteArray(size int, data []byte) (int, error)
 

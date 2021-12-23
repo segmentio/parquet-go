@@ -34,7 +34,9 @@ func TestBitPack(t *testing.T) {
 			for i, value := range data {
 				n, err := dec.decode(bits.Uint64ToBytes(tmp[:]), 64)
 				if err != nil {
-					t.Fatal("decoding:", err)
+					if err != io.EOF || n == 0 {
+						t.Fatal("decoding:", err)
+					}
 				}
 				if n != 1 {
 					t.Fatalf("wrong number of values decoded at index %d/%d: want=1 got=%d", i, len(data), n)
