@@ -201,26 +201,48 @@ func columnReadFuncOfLeaf(column *Column, readers []*columnChunkReader) columnRe
 
 	if column.MaxRepetitionLevel() == 0 {
 		return func(row Row, _ int8) (Row, error) {
-			v, err := leaf.readValue()
-			if err != nil {
-				return row, err
+			// Manually inline the buffered value read because the cast is too high
+			// for the compiler in ReadValue. This gives a ~20% increase in throughput.
+			if leaf.values.offset < uint(len(leaf.values.buffer)) {
+				row = append(row, leaf.values.buffer[leaf.values.offset])
+				leaf.values.offset++
+				return row, nil
 			}
-			return append(row, v), nil
+			v, err := leaf.readValue()
+			if err == nil {
+				row = append(row, v)
+			}
+			return row, err
 		}
 	}
 
 	return func(row Row, level int8) (Row, error) {
-		v, err := leaf.peekValue()
-		if err != nil {
-			if level > 0 && err == io.EOF {
-				err = nil
+		var v Value
+		var err error
+
+		if leaf.peeked {
+			v = leaf.cursor
+		} else {
+			if leaf.values.offset < uint(len(leaf.values.buffer)) {
+				v = leaf.values.buffer[leaf.values.offset]
+				leaf.values.offset++
+			} else if v, err = leaf.readValue(); err != nil {
+				if level > 0 && err == io.EOF {
+					err = nil
+				}
+				return row, err
 			}
-			return row, err
 		}
+
 		if v.repetitionLevel == level {
-			leaf.nextValue()
+			leaf.peeked = false
+			leaf.cursor = Value{}
 			row = append(row, v)
+		} else {
+			leaf.peeked = true
+			leaf.cursor = v
 		}
+
 		return row, nil
 	}
 }
@@ -283,36 +305,8 @@ func (ccr *columnChunkReader) reset() {
 	ccr.cursor = Value{}
 }
 
-func (ccr *columnChunkReader) peekValue() (Value, error) {
-	if ccr.peeked {
-		return ccr.cursor, nil
-	}
-
-	v, err := ccr.readValue()
-	if err != nil {
-		return v, err
-	}
-
-	ccr.peeked = true
-	ccr.cursor = v
-	return v, nil
-}
-
-func (ccr *columnChunkReader) nextValue() {
-	ccr.peeked = false
-	ccr.cursor = Value{}
-}
-
 func (ccr *columnChunkReader) readValue() (Value, error) {
 readNextValue:
-	// Manually inline the buffered value read because the cast is too high
-	// for the compiler in ReadValue. This gives a ~10% increase in throughput.
-	if ccr.values.offset < uint(len(ccr.values.buffer)) {
-		v := ccr.values.buffer[ccr.values.offset]
-		ccr.values.offset++
-		return v, nil
-	}
-
 	v, err := ccr.values.ReadValue()
 	if err != nil {
 		if err == io.EOF {
