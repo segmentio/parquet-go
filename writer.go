@@ -487,10 +487,10 @@ func (rgw *rowGroupWriter) writeRow(row Row) (err error) {
 		return io.ErrClosedPipe
 	}
 
-	for _, value := range row {
-		c := &rgw.columns[value.ColumnIndex()]
+	for _, v := range row {
+		c := &rgw.columns[v.ColumnIndex()]
 		w := c.writer
-		if err := w.insert(w, value); err != nil {
+		if err := w.insert(w, v); err != nil {
 			return err
 		}
 		c.numValues++
@@ -529,6 +529,7 @@ type columnChunkWriter struct {
 	maxDefinitionLevel int8
 
 	tx struct {
+		nulls  int
 		values []Value
 		levels struct {
 			repetition []int8
@@ -667,13 +668,15 @@ func (ccw *columnChunkWriter) reset() {
 }
 
 func (ccw *columnChunkWriter) insertOptional(value Value) error {
-	ccw.levels.definition = append(ccw.levels.definition, value.definitionLevel)
+	if err := ccw.writeValue(value); err != nil {
+		return err
+	}
 	if value.IsNull() {
 		ccw.nullCount++
 		ccw.numNulls++
-		return nil
 	}
-	return ccw.writeValue(value)
+	ccw.levels.definition = append(ccw.levels.definition, value.definitionLevel)
+	return nil
 }
 
 func (ccw *columnChunkWriter) commitOptional() error {
@@ -684,8 +687,7 @@ func (ccw *columnChunkWriter) insertRepeated(value Value) error {
 	ccw.tx.levels.repetition = append(ccw.tx.levels.repetition, value.repetitionLevel)
 	ccw.tx.levels.definition = append(ccw.tx.levels.definition, value.definitionLevel)
 	if value.IsNull() {
-		ccw.nullCount++
-		ccw.numNulls++
+		ccw.tx.nulls++
 	} else {
 		ccw.tx.values = append(ccw.tx.values, value)
 	}
@@ -697,6 +699,7 @@ func (ccw *columnChunkWriter) commitRepeated() error {
 		for i := range ccw.tx.values {
 			ccw.tx.values[i] = Value{}
 		}
+		ccw.tx.nulls = 0
 		ccw.tx.values = ccw.tx.values[:0]
 		ccw.tx.levels.repetition = ccw.tx.levels.repetition[:0]
 		ccw.tx.levels.definition = ccw.tx.levels.definition[:0]
@@ -705,6 +708,8 @@ func (ccw *columnChunkWriter) commitRepeated() error {
 	if err == nil {
 		ccw.levels.repetition = append(ccw.levels.repetition, ccw.tx.levels.repetition...)
 		ccw.levels.definition = append(ccw.levels.definition, ccw.tx.levels.definition...)
+		ccw.nullCount += int64(ccw.tx.nulls)
+		ccw.numNulls += int32(ccw.tx.nulls)
 	}
 	return err
 }
