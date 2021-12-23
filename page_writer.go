@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/google/uuid"
 	"github.com/segmentio/parquet/deprecated"
 	"github.com/segmentio/parquet/encoding"
 	"github.com/segmentio/parquet/encoding/plain"
@@ -14,8 +13,13 @@ import (
 
 // PageWriter is an interface implemented by types which support writing valuees
 // to a buffer and flushing it to an underlying encoder.
+//
+// PageWriter implements both ValueWriter and ValueBatchWriter as a mechanism to
+// append values to the buffer; both methods are atomic operations, the values
+// are either all written or none are and ErrBufferFull is returned.
 type PageWriter interface {
 	ValueWriter
+	ValueBatchWriter
 
 	// Returns the type values written to the underlying page.
 	Type() Type
@@ -90,12 +94,22 @@ func (w *booleanPageWriter) Bounds() (min, max Value) {
 	return min, max
 }
 
-func (w *booleanPageWriter) WriteValue(v Value) error {
+func (w *booleanPageWriter) WriteValue(value Value) error {
 	if len(w.values) == cap(w.values) {
 		return ErrBufferFull
 	}
-	w.values = append(w.values, v.Boolean())
+	w.values = append(w.values, value.Boolean())
 	return nil
+}
+
+func (w *booleanPageWriter) WriteValueBatch(values []Value) (int, error) {
+	if len(w.values) > 0 && (cap(w.values)-len(w.values)) < len(values) {
+		return 0, ErrBufferFull
+	}
+	for _, value := range values {
+		w.values = append(w.values, value.Boolean())
+	}
+	return len(values), nil
 }
 
 func (w *booleanPageWriter) Flush() error {
@@ -134,12 +148,22 @@ func (w *int32PageWriter) Bounds() (min, max Value) {
 	return min, max
 }
 
-func (w *int32PageWriter) WriteValue(v Value) error {
+func (w *int32PageWriter) WriteValue(value Value) error {
 	if len(w.values) == cap(w.values) {
 		return ErrBufferFull
 	}
-	w.values = append(w.values, v.Int32())
+	w.values = append(w.values, value.Int32())
 	return nil
+}
+
+func (w *int32PageWriter) WriteValueBatch(values []Value) (int, error) {
+	if len(w.values) > 0 && (cap(w.values)-len(w.values)) < len(values) {
+		return 0, ErrBufferFull
+	}
+	for _, value := range values {
+		w.values = append(w.values, value.Int32())
+	}
+	return len(values), nil
 }
 
 func (w *int32PageWriter) Flush() error {
@@ -178,12 +202,22 @@ func (w *int64PageWriter) Bounds() (min, max Value) {
 	return min, max
 }
 
-func (w *int64PageWriter) WriteValue(v Value) error {
+func (w *int64PageWriter) WriteValue(value Value) error {
 	if len(w.values) == cap(w.values) {
 		return ErrBufferFull
 	}
-	w.values = append(w.values, v.Int64())
+	w.values = append(w.values, value.Int64())
 	return nil
+}
+
+func (w *int64PageWriter) WriteValueBatch(values []Value) (int, error) {
+	if len(w.values) > 0 && (cap(w.values)-len(w.values)) < len(values) {
+		return 0, ErrBufferFull
+	}
+	for _, value := range values {
+		w.values = append(w.values, value.Int64())
+	}
+	return len(values), nil
 }
 
 func (w *int64PageWriter) Flush() error {
@@ -222,12 +256,22 @@ func (w *int96PageWriter) Bounds() (min, max Value) {
 	return min, max
 }
 
-func (w *int96PageWriter) WriteValue(v Value) error {
+func (w *int96PageWriter) WriteValue(value Value) error {
 	if len(w.values) == cap(w.values) {
 		return ErrBufferFull
 	}
-	w.values = append(w.values, v.Int96())
+	w.values = append(w.values, value.Int96())
 	return nil
+}
+
+func (w *int96PageWriter) WriteValueBatch(values []Value) (int, error) {
+	if len(w.values) > 0 && (cap(w.values)-len(w.values)) < len(values) {
+		return 0, ErrBufferFull
+	}
+	for _, value := range values {
+		w.values = append(w.values, value.Int96())
+	}
+	return len(values), nil
 }
 
 func (w *int96PageWriter) Flush() error {
@@ -266,12 +310,22 @@ func (w *floatPageWriter) Bounds() (min, max Value) {
 	return min, max
 }
 
-func (w *floatPageWriter) WriteValue(v Value) error {
+func (w *floatPageWriter) WriteValue(value Value) error {
 	if len(w.values) == cap(w.values) {
 		return ErrBufferFull
 	}
-	w.values = append(w.values, v.Float())
+	w.values = append(w.values, value.Float())
 	return nil
+}
+
+func (w *floatPageWriter) WriteValueBatch(values []Value) (int, error) {
+	if len(w.values) > 0 && (cap(w.values)-len(w.values)) < len(values) {
+		return 0, ErrBufferFull
+	}
+	for _, value := range values {
+		w.values = append(w.values, value.Float())
+	}
+	return len(values), nil
 }
 
 func (w *floatPageWriter) Flush() error {
@@ -310,12 +364,22 @@ func (w *doublePageWriter) Bounds() (min, max Value) {
 	return min, max
 }
 
-func (w *doublePageWriter) WriteValue(v Value) error {
+func (w *doublePageWriter) WriteValue(value Value) error {
 	if len(w.values) == cap(w.values) {
 		return ErrBufferFull
 	}
-	w.values = append(w.values, v.Double())
+	w.values = append(w.values, value.Double())
 	return nil
+}
+
+func (w *doublePageWriter) WriteValueBatch(values []Value) (int, error) {
+	if len(w.values) > 0 && (cap(w.values)-len(w.values)) < len(values) {
+		return 0, ErrBufferFull
+	}
+	for _, value := range values {
+		w.values = append(w.values, value.Double())
+	}
+	return len(values), nil
 }
 
 func (w *doublePageWriter) Flush() error {
@@ -356,35 +420,65 @@ func (w *byteArrayPageWriter) Bounds() (min, max Value) {
 	return min, max
 }
 
-func (w *byteArrayPageWriter) WriteValue(v Value) error {
-	value := v.ByteArray()
+func (w *byteArrayPageWriter) WriteValue(value Value) error {
+	b := value.ByteArray()
 
-	if len(value) > (math.MaxInt32 - 4) {
-		return fmt.Errorf("cannot write value of length %d to parquet byte array page", len(value))
+	if len(b) > (math.MaxInt32 - 4) {
+		return fmt.Errorf("cannot write value of length %d to parquet byte array page", len(b))
 	}
 
-	if (cap(w.values) - len(w.values)) < (4 + len(value)) {
+	if (cap(w.values) - len(w.values)) < (4 + len(b)) {
 		if len(w.values) > 0 {
 			return ErrBufferFull
 		}
 	}
 
-	w.values = plain.AppendByteArray(w.values, value)
+	w.write(b)
+	return nil
+}
 
-	if w.count == 0 {
-		w.setMin(value)
-		w.setMax(value)
-	} else {
-		if bytes.Compare(value, w.min) < 0 {
-			w.setMin(value)
-		}
-		if bytes.Compare(value, w.max) > 0 {
-			w.setMax(value)
-		}
+func (w *byteArrayPageWriter) WriteValueBatch(values []Value) (int, error) {
+	if len(values) == 0 {
+		return 0, nil
 	}
 
+	totalSize := 0
+
+	for _, value := range values {
+		b := value.ByteArray()
+
+		if len(b) > (math.MaxInt32 - 4) {
+			return 0, fmt.Errorf("cannot write value of length %d to parquet byte array page", len(b))
+		}
+
+		totalSize += 4 + len(b)
+	}
+
+	if w.count > 0 && (cap(w.values)-len(w.values)) < totalSize {
+		return 0, ErrBufferFull
+	}
+
+	for _, value := range values {
+		w.write(value.ByteArray())
+	}
+
+	return len(values), nil
+}
+
+func (w *byteArrayPageWriter) write(b []byte) {
+	w.values = plain.AppendByteArray(w.values, b)
+	if w.count == 0 {
+		w.setMin(b)
+		w.setMax(b)
+	} else {
+		if bytes.Compare(b, w.min) < 0 {
+			w.setMin(b)
+		}
+		if bytes.Compare(b, w.max) > 0 {
+			w.setMax(b)
+		}
+	}
 	w.count++
-	return nil
 }
 
 func (w *byteArrayPageWriter) setMin(min []byte) {
@@ -442,21 +536,39 @@ func (w *fixedLenByteArrayPageWriter) Bounds() (min, max Value) {
 	return min, max
 }
 
-func (w *fixedLenByteArrayPageWriter) WriteValue(v Value) error {
-	return w.write(v.ByteArray())
-}
+func (w *fixedLenByteArrayPageWriter) WriteValue(value Value) error {
+	b := value.ByteArray()
 
-func (w *fixedLenByteArrayPageWriter) write(value []byte) error {
-	if len(value) != w.size {
-		return fmt.Errorf("cannot write value of size %d to fixed length parquet page of size %d", len(value), w.size)
+	if len(b) != w.size {
+		return fmt.Errorf("cannot write value of size %d to fixed length parquet page of size %d", len(b), w.size)
 	}
 
-	if (cap(w.data) - len(w.data)) < len(value) {
+	if (cap(w.data) - len(w.data)) < len(b) {
 		return ErrBufferFull
 	}
 
-	w.data = append(w.data, value...)
+	w.data = append(w.data, b...)
 	return nil
+}
+
+func (w *fixedLenByteArrayPageWriter) WriteValueBatch(values []Value) (int, error) {
+	for _, value := range values {
+		if b := value.ByteArray(); len(b) != w.size {
+			return 0, fmt.Errorf("cannot write value of size %d to fixed length parquet page of size %d", len(b), w.size)
+		}
+	}
+
+	n := len(w.data) / w.size
+	c := cap(w.data) / w.size
+	if n > 0 && (c-n) < len(values) {
+		return 0, ErrBufferFull
+	}
+
+	for _, value := range values {
+		w.data = append(w.data, value.ByteArray()...)
+	}
+
+	return len(values), nil
 }
 
 func (w *fixedLenByteArrayPageWriter) Flush() error {
@@ -501,26 +613,6 @@ func (w uint64PageWriter) Bounds() (min, max Value) {
 	return min, max
 }
 
-// uuidPageWriter is a specialization for nodes of the logical UUID type which
-// supports parsing string representations of UUIDs into their fixed length 16
-// bytes array.
-//
-// The specialization is implemented as an adapter on top of the generic writer
-// for pages of fixed length byte arrays.
-type uuidPageWriter struct{ *fixedLenByteArrayPageWriter }
-
-func (w uuidPageWriter) WriteValue(v Value) error {
-	b := v.ByteArray()
-	if len(b) != 16 {
-		u, err := uuid.ParseBytes(b)
-		if err != nil {
-			return err
-		}
-		b = u[:]
-	}
-	return w.write(b)
-}
-
 var (
 	_ PageWriter = (*booleanPageWriter)(nil)
 	_ PageWriter = (*int32PageWriter)(nil)
@@ -532,5 +624,4 @@ var (
 	_ PageWriter = (*fixedLenByteArrayPageWriter)(nil)
 	_ PageWriter = uint32PageWriter{}
 	_ PageWriter = uint64PageWriter{}
-	_ PageWriter = uuidPageWriter{}
 )

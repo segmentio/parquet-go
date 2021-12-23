@@ -296,7 +296,12 @@ func (s *structNode) ValueByIndex(base reflect.Value, index int) reflect.Value {
 		}
 	default:
 		if index >= 0 && index < len(s.fields) {
-			return s.fields[index].lookup(base)
+			f := &s.fields[index]
+			if len(f.index) == 1 {
+				return base.Field(f.index[0])
+			} else {
+				return fieldByIndex(base, f.index)
+			}
 		}
 	}
 	return reflect.Value{}
@@ -312,13 +317,29 @@ func (s *structNode) indexOf(name string) int {
 	return i
 }
 
+// fieldByIndex is like reflect.Value.FieldByIndex but returns the zero-value of
+// reflect.Value if one of the fields was a nil pointer instead of panicking.
+func fieldByIndex(v reflect.Value, index []int) reflect.Value {
+	for _, i := range index {
+		if v = v.Field(i); v.Kind() == reflect.Ptr {
+			if v.IsNil() {
+				v = reflect.Value{}
+				break
+			} else {
+				v = v.Elem()
+			}
+		}
+	}
+	return v
+}
+
 var (
 	_ IndexedNode = (*structNode)(nil)
 )
 
 type structField struct {
 	wrappedNode
-	lookup func(reflect.Value) reflect.Value
+	index []int
 }
 
 func structFieldString(f reflect.StructField) string {
@@ -337,30 +358,9 @@ func throwInvalidStructField(msg string, field reflect.StructField) {
 	panic(msg + ": " + structFieldString(field))
 }
 
-func fieldByIndex(index []int) func(reflect.Value) reflect.Value {
-	if len(index) == 1 {
-		// Fast path for the common case where the field is not embedded.
-		i := index[0]
-		return func(v reflect.Value) reflect.Value { return v.Field(i) }
-	}
-	return func(v reflect.Value) reflect.Value {
-		for _, i := range index {
-			if v = v.Field(i); v.Kind() == reflect.Ptr {
-				if v.IsNil() {
-					v = reflect.Value{}
-					break
-				} else {
-					v = v.Elem()
-				}
-			}
-		}
-		return v
-	}
-}
-
 func makeStructField(f reflect.StructField) structField {
 	var (
-		field     = structField{lookup: fieldByIndex(f.Index)}
+		field     = structField{index: f.Index}
 		optional  bool
 		list      bool
 		encodings []encoding.Encoding
@@ -468,8 +468,6 @@ func makeStructField(f reflect.StructField) structField {
 
 			case "uuid":
 				switch f.Type.Kind() {
-				case reflect.String:
-					setNode(UUID())
 				case reflect.Array:
 					if f.Type.Elem().Kind() != reflect.Uint8 || f.Type.Len() != 16 {
 						throwInvalidFieldTag(f, option)

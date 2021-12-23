@@ -280,12 +280,10 @@ func BenchmarkReader(b *testing.B) {
 			b.ResetTimer()
 			r := parquet.NewReader(f)
 			p := rowPtr.Interface()
-			fmt.Println("=== TEST ===")
 
 			for i := 0; i < b.N; i++ {
 				if err := r.ReadRow(p); err != nil {
 					if err == io.EOF {
-						fmt.Println("RESET")
 						r.Reset()
 					} else {
 						b.Fatalf("%d/%d: %v", i, b.N, err)

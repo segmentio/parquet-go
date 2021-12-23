@@ -239,10 +239,10 @@ type columnChunkReader struct {
 		decoder encoding.Decoder
 		reader  PageReader
 	}
-	repetition struct {
+	repetitions struct {
 		decoder encoding.Decoder
 	}
-	definition struct {
+	definitions struct {
 		decoder encoding.Decoder
 	}
 
@@ -271,15 +271,14 @@ func newColumnChunkReader(column *Column, config *ReaderConfig) *columnChunkRead
 }
 
 func (ccr *columnChunkReader) reset() {
-	// if ccr.pages != nil {
-	// 	ccr.pages.close(io.EOF)
-	// }
-	ccr.pages = nil
+	if ccr.pages != nil {
+		ccr.pages.close(io.EOF)
+	}
+
 	ccr.chunks.Seek(0)
-	ccr.reader = nil
 	ccr.values.Reset(nil)
-	ccr.dictionary = nil
 	ccr.numPages = 0
+
 	ccr.peeked = false
 	ccr.cursor = Value{}
 }
@@ -315,8 +314,11 @@ readNextValue:
 	}
 
 	v, err := ccr.values.ReadValue()
-	if err != nil && err == io.EOF {
-		goto readNextPage
+	if err != nil {
+		if err == io.EOF {
+			goto readNextPage
+		}
+		err = fmt.Errorf("%s: %w", join(ccr.column.Path()), err)
 	}
 	return v, err
 
@@ -326,10 +328,9 @@ readNextPage:
 			// Here the page count needs to be reset because we are changing the
 			// column chunk and we may have to read another dictionary page.
 			ccr.numPages = 0
-			ccr.dictionary = nil
-			// if ccr.dictionary != nil {
-			// 	ccr.dictionary.Reset()
-			// }
+			if ccr.dictionary != nil {
+				ccr.dictionary.Reset()
+			}
 		} else {
 			var err error
 
@@ -357,18 +358,16 @@ readNextPage:
 		return Value{}, io.EOF
 	}
 
-	//ccr.pages = ccr.chunks.PagesTo(ccr.pages)
-	ccr.pages = ccr.chunks.Pages()
+	ccr.pages = ccr.chunks.PagesTo(ccr.pages)
 	goto readNextPage
 }
 
 func (ccr *columnChunkReader) readDictionaryPage(header DictionaryPageHeader) error {
-	ccr.dictionary = ccr.column.Type().NewDictionary(0)
-	// if ccr.dictionary == nil {
-	// 	ccr.dictionary = ccr.column.Type().NewDictionary(0)
-	// } else {
-	// 	ccr.dictionary.Reset()
-	// }
+	if ccr.dictionary == nil {
+		ccr.dictionary = ccr.column.Type().NewDictionary(0)
+	} else {
+		ccr.dictionary.Reset()
+	}
 	decoder := header.Encoding().NewDecoder(ccr.pages.PageData())
 	if err := ccr.dictionary.ReadFrom(decoder); err != nil {
 		return err
@@ -378,58 +377,45 @@ func (ccr *columnChunkReader) readDictionaryPage(header DictionaryPageHeader) er
 }
 
 func (ccr *columnChunkReader) readDataPage(header DataPageHeader) {
-	ccr.page.decoder = resetDecoder(ccr.page.decoder, header.Encoding(), ccr.pages.PageData())
+	ccr.repetitions.decoder = makeDecoder(ccr.repetitions.decoder, header.RepetitionLevelEncoding(), ccr.pages.RepetitionLevels())
+	ccr.definitions.decoder = makeDecoder(ccr.definitions.decoder, header.DefinitionLevelEncoding(), ccr.pages.DefinitionLevels())
+	ccr.page.decoder = makeDecoder(ccr.page.decoder, header.Encoding(), ccr.pages.PageData())
 
-	// if ccr.page.reader != nil {
-	// 	ccr.page.reader.Reset(ccr.page.decoder)
-	// } else {
-	// 	if ccr.dictionary != nil {
-	// 		ccr.page.reader = NewIndexedPageReader(ccr.page.decoder, ccr.bufferSize, ccr.dictionary)
-	// 	} else {
-	// 		ccr.page.reader = ccr.column.Type().NewPageReader(ccr.page.decoder, ccr.bufferSize)
-	// 	}
-	// }
-	if ccr.dictionary != nil {
-		ccr.page.reader = NewIndexedPageReader(ccr.page.decoder, ccr.bufferSize, ccr.dictionary)
+	if ccr.page.reader != nil {
+		ccr.page.reader.Reset(ccr.page.decoder)
 	} else {
-		ccr.page.reader = ccr.column.Type().NewPageReader(ccr.page.decoder, ccr.bufferSize)
+		if ccr.dictionary != nil {
+			ccr.page.reader = NewIndexedPageReader(ccr.page.decoder, ccr.bufferSize, ccr.dictionary)
+		} else {
+			ccr.page.reader = ccr.column.Type().NewPageReader(ccr.page.decoder, ccr.bufferSize)
+		}
 	}
 
-	maxRepetitionLevel := ccr.column.MaxRepetitionLevel()
-	maxDefinitionLevel := ccr.column.MaxDefinitionLevel()
-
-	if maxRepetitionLevel > 0 {
-		ccr.repetition.decoder = resetDecoder(ccr.repetition.decoder, header.RepetitionLevelEncoding(), ccr.pages.RepetitionLevels())
+	numValues := header.NumValues()
+	if ccr.reader != nil {
+		ccr.reader.Reset(ccr.repetitions.decoder, ccr.definitions.decoder, numValues, ccr.page.reader)
+	} else {
+		ccr.reader = NewDataPageReader(
+			ccr.repetitions.decoder,
+			ccr.definitions.decoder,
+			numValues,
+			ccr.page.reader,
+			ccr.column.MaxRepetitionLevel(),
+			ccr.column.MaxDefinitionLevel(),
+			ccr.column.Index(),
+			ccr.bufferSize,
+		)
 	}
-	if maxDefinitionLevel > 0 {
-		ccr.definition.decoder = resetDecoder(ccr.definition.decoder, header.DefinitionLevelEncoding(), ccr.pages.DefinitionLevels())
-	}
-
-	// if ccr.reader != nil {
-	// 	ccr.reader.Reset(ccr.repetition.decoder, ccr.definition.decoder, header.NumValues(), ccr.page.reader)
-	// } else {
-	ccr.reader = NewDataPageReader(
-		ccr.repetition.decoder,
-		ccr.definition.decoder,
-		header.NumValues(),
-		ccr.page.reader,
-		maxRepetitionLevel,
-		maxDefinitionLevel,
-		ccr.column.Index(),
-		ccr.bufferSize,
-	)
-	// }
 
 	ccr.values.Reset(ccr.reader)
 	ccr.numPages++
 }
 
-func resetDecoder(decoder encoding.Decoder, encoding encoding.Encoding, input io.Reader) encoding.Decoder {
-	return encoding.NewDecoder(input)
-	// if decoder == nil || encoding.Encoding() != decoder.Encoding() {
-	// 	decoder = encoding.NewDecoder(input)
-	// } else {
-	// 	decoder.Reset(input)
-	// }
-	// return decoder
+func makeDecoder(decoder encoding.Decoder, encoding encoding.Encoding, input io.Reader) encoding.Decoder {
+	if decoder == nil || encoding.Encoding() != decoder.Encoding() {
+		decoder = encoding.NewDecoder(input)
+	} else {
+		decoder.Reset(input)
+	}
+	return decoder
 }

@@ -91,10 +91,10 @@ func (c *ColumnPages) close(err error) {
 	c.header = nil
 	c.data.R = nil
 	c.data.N = 0
-	c.repetitionLevels = nil
-	c.definitionLevels = nil
-	c.compressedPageData = nil
-	c.pageData = nil
+	c.repetitionLevels = emptyReader{}
+	c.definitionLevels = emptyReader{}
+	c.compressedPageData = emptyReader{}
+	c.pageData = emptyReader{}
 	c.pageHeader = nil
 	c.v1.repetitions.reset()
 	c.v1.definitions.reset()

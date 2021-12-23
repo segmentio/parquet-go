@@ -63,9 +63,21 @@ func (e *runLengthRunEncoder) encode(src []byte, srcWidth uint) error {
 	// sequence of repeated values of the given bit width; we pack the first
 	// value only into the encoder's buffer to adjust the bit width then write
 	// it to the underlying io.Writer.
-	i := bits.ByteCount(e.bitWidth)
-	j := bits.ByteCount(srcWidth)
-	bits.Pack(e.buffer[:i], e.bitWidth, src[:j], srcWidth)
-	_, err := e.writer.Write(e.buffer[:i])
+	v := uint64(0)
+	switch srcWidth {
+	case 8:
+		v = uint64(src[0])
+	case 16:
+		v = uint64(binary.LittleEndian.Uint16(src))
+	case 32:
+		v = uint64(binary.LittleEndian.Uint32(src))
+	case 64:
+		v = binary.LittleEndian.Uint64(src)
+	default:
+		panic("BUG: unsupported source bit-width")
+	}
+	v &= (1 << uint64(e.bitWidth)) - 1
+	binary.LittleEndian.PutUint64(e.buffer[:], v)
+	_, err := e.writer.Write(e.buffer[:bits.ByteCount(e.bitWidth)])
 	return err
 }

@@ -40,11 +40,11 @@ type DataPageReader struct {
 	maxRepetitionLevel int8
 	maxDefinitionLevel int8
 	columnIndex        int8
-	repetition         levelReader
-	definition         levelReader
+	repetitions        levelReader
+	definitions        levelReader
 }
 
-func NewDataPageReader(repetition, definition encoding.Decoder, numValues int, page PageReader, maxRepetitionLevel, maxDefinitionLevel, columnIndex int8, bufferSize int) *DataPageReader {
+func NewDataPageReader(repetitions, definitions encoding.Decoder, numValues int, page PageReader, maxRepetitionLevel, maxDefinitionLevel, columnIndex int8, bufferSize int) *DataPageReader {
 	repetitionBufferSize := 0
 	definitionBufferSize := 0
 
@@ -60,22 +60,26 @@ func NewDataPageReader(repetition, definition encoding.Decoder, numValues int, p
 		definitionBufferSize = bufferSize
 	}
 
-	if repetition != nil {
-		repetition.SetBitWidth(bits.Len8(maxRepetitionLevel))
-	}
-	if definition != nil {
-		definition.SetBitWidth(bits.Len8(maxDefinitionLevel))
-	}
-
+	repetitions.SetBitWidth(bits.Len8(maxRepetitionLevel))
+	definitions.SetBitWidth(bits.Len8(maxDefinitionLevel))
 	return &DataPageReader{
 		page:               page,
 		remain:             numValues,
 		maxRepetitionLevel: maxRepetitionLevel,
 		maxDefinitionLevel: maxDefinitionLevel,
 		columnIndex:        ^columnIndex,
-		repetition:         makeLevelReader(repetition, repetitionBufferSize),
-		definition:         makeLevelReader(definition, definitionBufferSize),
+		repetitions:        makeLevelReader(repetitions, repetitionBufferSize),
+		definitions:        makeLevelReader(definitions, definitionBufferSize),
 	}
+}
+
+func (r *DataPageReader) Reset(repetitions, definitions encoding.Decoder, numValues int, page PageReader) {
+	repetitions.SetBitWidth(bits.Len8(r.maxRepetitionLevel))
+	definitions.SetBitWidth(bits.Len8(r.maxDefinitionLevel))
+	r.page = page
+	r.remain = numValues
+	r.repetitions.reset(repetitions)
+	r.definitions.reset(definitions)
 }
 
 func (r *DataPageReader) ReadValue() (Value, error) {
@@ -89,14 +93,14 @@ func (r *DataPageReader) ReadValue() (Value, error) {
 	var definitionLevel int8
 
 	if r.maxRepetitionLevel > 0 {
-		repetitionLevel, err = r.repetition.readLevel()
+		repetitionLevel, err = r.repetitions.readLevel()
 		if err != nil {
 			return val, fmt.Errorf("reading parquet repetition level: %w", err)
 		}
 	}
 
 	if r.maxDefinitionLevel > 0 {
-		definitionLevel, err = r.definition.readLevel()
+		definitionLevel, err = r.definitions.readLevel()
 		if err != nil {
 			return val, fmt.Errorf("reading parquet definition level: %w", err)
 		}
@@ -128,7 +132,7 @@ func (r *DataPageReader) ReadValueBatch(values []Value) (int, error) {
 		}
 
 		if r.maxRepetitionLevel > 0 {
-			repetitionLevels, err = r.repetition.peekLevels()
+			repetitionLevels, err = r.repetitions.peekLevels()
 			if err != nil {
 				return read, fmt.Errorf("reading parquet repetition level from data page: %w", err)
 			}
@@ -138,7 +142,7 @@ func (r *DataPageReader) ReadValueBatch(values []Value) (int, error) {
 		}
 
 		if r.maxDefinitionLevel > 0 {
-			definitionLevels, err = r.definition.peekLevels()
+			definitionLevels, err = r.definitions.peekLevels()
 			if err != nil {
 				return read, fmt.Errorf("reading parquet definition level from data page: %w", err)
 			}
@@ -150,11 +154,9 @@ func (r *DataPageReader) ReadValueBatch(values []Value) (int, error) {
 		if len(repetitionLevels) > 0 {
 			repetitionLevels = repetitionLevels[:numValues]
 		}
-
 		if len(definitionLevels) > 0 {
 			definitionLevels = definitionLevels[:numValues]
 		}
-
 		for _, d := range definitionLevels {
 			if d != r.maxDefinitionLevel {
 				numNulls++
@@ -193,8 +195,8 @@ func (r *DataPageReader) ReadValueBatch(values []Value) (int, error) {
 		}
 
 		values = values[numValues:]
-		r.repetition.discardLevels(len(repetitionLevels))
-		r.definition.discardLevels(len(definitionLevels))
+		r.repetitions.discardLevels(len(repetitionLevels))
+		r.definitions.discardLevels(len(definitionLevels))
 		r.remain -= numValues
 		read += numValues
 	}
@@ -204,16 +206,6 @@ func (r *DataPageReader) ReadValueBatch(values []Value) (int, error) {
 	}
 
 	return read, nil
-}
-
-func (r *DataPageReader) Reset(repetition, definition encoding.Decoder, numValues int, page PageReader) {
-	panic("BUG: not reset")
-	repetition.SetBitWidth(bits.Len8(r.maxRepetitionLevel))
-	definition.SetBitWidth(bits.Len8(r.maxDefinitionLevel))
-	r.page = page
-	r.remain = numValues
-	r.repetition.reset(repetition)
-	r.definition.reset(definition)
 }
 
 type levelReader struct {

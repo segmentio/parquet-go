@@ -5,7 +5,6 @@ import (
 	"io"
 	"math"
 
-	"github.com/google/uuid"
 	"github.com/segmentio/parquet/deprecated"
 	"github.com/segmentio/parquet/encoding"
 	"github.com/segmentio/parquet/encoding/plain"
@@ -619,20 +618,6 @@ func (d *fixedLenByteArrayDictionary) Reset() {
 	d.index = nil
 }
 
-type uuidDictionary struct{ *fixedLenByteArrayDictionary }
-
-func (d uuidDictionary) Insert(v Value) (int, error) {
-	b := v.ByteArray()
-	if len(b) != 16 {
-		u, err := uuid.ParseBytes(b)
-		if err != nil {
-			return -1, err
-		}
-		b = u[:]
-	}
-	return d.insert(b)
-}
-
 func NewIndexedPageReader(decoder encoding.Decoder, bufferSize int, dict Dictionary) PageReader {
 	return &indexedPageReader{
 		typ:     dict.Type(),
@@ -750,6 +735,16 @@ func (w *indexedPageWriter) WriteValue(value Value) error {
 	return nil
 }
 
+func (w *indexedPageWriter) WriteValueBatch(values []Value) (n int, err error) {
+	for _, value := range values {
+		if err := w.WriteValue(value); err != nil {
+			return n, err
+		}
+		n++
+	}
+	return n, nil
+}
+
 func (w *indexedPageWriter) Flush() error {
 	defer func() { w.values = w.values[:0] }()
 	return w.encoder.EncodeInt32(w.values)
@@ -771,4 +766,6 @@ var (
 	_ Dictionary = (*doubleDictionary)(nil)
 	_ Dictionary = (*byteArrayDictionary)(nil)
 	_ Dictionary = (*fixedLenByteArrayDictionary)(nil)
+	_ PageReader = (*indexedPageReader)(nil)
+	_ PageWriter = (*indexedPageWriter)(nil)
 )

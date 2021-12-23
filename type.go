@@ -752,7 +752,7 @@ func (t *uuidType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 }
 
 func (t *uuidType) NewDictionary(bufferSize int) Dictionary {
-	return uuidDictionary{newFixedLenByteArrayDictionary(t, bufferSize)}
+	return newFixedLenByteArrayDictionary(t, bufferSize)
 }
 
 func (t *uuidType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
@@ -760,7 +760,7 @@ func (t *uuidType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageR
 }
 
 func (t *uuidType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
-	return uuidPageWriter{newFixedLenByteArrayPageWriter(t, encoder, bufferSize)}
+	return newFixedLenByteArrayPageWriter(t, encoder, bufferSize)
 }
 
 // Enum constructs a leaf node with a logical type representing enumerations.
