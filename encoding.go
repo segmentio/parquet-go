@@ -49,7 +49,11 @@ var (
 	}
 )
 
-func lookupEncoding(enc format.Encoding) encoding.Encoding {
+// LookupEncoding returns the parquet encoding associated with the given code.
+//
+// The function never returns nil. If the encoding is not supported,
+// encoding.NotSupported is returned.
+func LookupEncoding(enc format.Encoding) encoding.Encoding {
 	if enc >= 0 && int(enc) < len(encodings) {
 		if e := encodings[enc]; e != nil {
 			return e
