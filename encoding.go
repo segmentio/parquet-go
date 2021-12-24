@@ -34,6 +34,9 @@ var (
 	// DeltaLengthByteArray is the delta length byte array parquet encoding.
 	DeltaLengthByteArray delta.LengthByteArrayEncoding
 
+	// DeltaByteArray is the delta byte array parquet encoding.
+	DeltaByteArray delta.ByteArrayEncoding
+
 	// ByteStreamSplit is an encoding for floating-point data.
 	ByteStreamSplit bytestreamsplit.Encoding
 
@@ -45,6 +48,7 @@ var (
 		format.RLEDictionary:        &RLEDictionary,
 		format.DeltaBinaryPacked:    &DeltaBinaryPacked,
 		format.DeltaLengthByteArray: &DeltaLengthByteArray,
+		format.DeltaByteArray:       &DeltaByteArray,
 		format.ByteStreamSplit:      &ByteStreamSplit,
 	}
 )
