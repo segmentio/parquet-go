@@ -159,7 +159,7 @@ type rowGroupWriter struct {
 	writer countWriter
 	config *WriterConfig
 
-	columns       []rowGroupColumn
+	columns       []rowGroupWriterColumn
 	colOrders     []format.ColumnOrder
 	colSchema     []format.SchemaElement
 	rowGroups     []format.RowGroup
@@ -170,7 +170,7 @@ type rowGroupWriter struct {
 	fileOffset int64
 }
 
-type rowGroupColumn struct {
+type rowGroupWriterColumn struct {
 	typ        format.Type
 	codec      format.CompressionCodec
 	path       []string
@@ -295,7 +295,7 @@ func (rgw *rowGroupWriter) init(node Node, path []string, dataPageType format.Pa
 		}
 
 		buffer := &bufferPoolPageWriter{pool: rgw.config.ColumnPageBuffers}
-		column := rowGroupColumn{
+		column := rowGroupWriterColumn{
 			typ:                format.Type(nodeType.Kind()),
 			codec:              compressionCodec.CompressionCodec(),
 			path:               path,
