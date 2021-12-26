@@ -241,7 +241,7 @@ func TestReader(t *testing.T) {
 					r := parquet.NewReader(file)
 
 					for i, v := range rows {
-						if err := r.ReadRow(rowPtr.Interface()); err != nil {
+						if err := r.Read(rowPtr.Interface()); err != nil {
 							t.Fatal(err)
 						}
 						if !reflect.DeepEqual(rowValue.Interface(), v) {
@@ -250,7 +250,7 @@ func TestReader(t *testing.T) {
 						rowValue.Set(rowZero)
 					}
 
-					if err := r.ReadRow(rowPtr.Interface()); err != io.EOF {
+					if err := r.Read(rowPtr.Interface()); err != io.EOF {
 						t.Errorf("expected EOF after reading all values but got: %v", err)
 					}
 				})
@@ -288,7 +288,7 @@ func BenchmarkReader(b *testing.B) {
 			p := rowPtr.Interface()
 
 			for i := 0; i < b.N; i++ {
-				if err := r.ReadRow(p); err != nil {
+				if err := r.Read(p); err != nil {
 					if err == io.EOF {
 						r.Reset()
 					} else {

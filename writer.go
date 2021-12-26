@@ -24,7 +24,7 @@ import (
 //	writer := parquet.NewWriter(output, schema)
 //
 //	for _, row := range rows {
-//		if err := writer.WriteRow(row); err != nil {
+//		if err := writer.Write(row); err != nil {
 //			...
 //		}
 //	}
@@ -122,11 +122,11 @@ func (w *Writer) Close() error {
 	return err
 }
 
-// WriteRow is called to write another row to the parquet file.
+// Write is called to write another row to the parquet file.
 //
 // The method uses the parquet schema configured on w to traverse the Go value
 // and decompose it into a set of columns and values.
-func (w *Writer) WriteRow(row interface{}) error {
+func (w *Writer) Write(row interface{}) error {
 	if !w.initialized {
 		w.initialized = true
 
@@ -146,8 +146,14 @@ func (w *Writer) WriteRow(row interface{}) error {
 	}
 
 	w.values = w.schema.Deconstruct(w.values[:0], row)
-	return w.rowGroups.writeRow(w.values)
+	return w.WriteRow(w.values)
 }
+
+// WriteRow is called to write another row to the parquet file.
+//
+// The row is expected to contain values for each column of the writer's schema,
+// in the order produced by the parquet.(*Schema).Deconstruct method.
+func (w *Writer) WriteRow(row Row) error { return w.rowGroups.writeRow(row) }
 
 type rowGroupWriter struct {
 	writer countWriter

@@ -16,7 +16,7 @@ import (
 //	rows := []RowType{}
 //	for {
 //		row := RowType{}
-//		err := reader.ReadRow(&row)
+//		err := reader.Read(&row)
 //		if err != nil {
 //			if err == io.EOF {
 //				break
@@ -108,9 +108,11 @@ func (r *Reader) Reset() {
 	}
 }
 
-// ReadRow reads the next row from r. The type of the row must match the schema
+// Read reads the next row from r. The type of the row must match the schema
 // of the underlying parquet file or an error will be returned.
-func (r *Reader) ReadRow(row interface{}) (err error) {
+//
+// The method returns io.EOF when no more rows can be read from r.
+func (r *Reader) Read(row interface{}) (err error) {
 	if rowType := dereference(reflect.TypeOf(row)); rowType.Kind() == reflect.Struct {
 		if r.seen == nil || r.seen != rowType {
 			schema := namedSchemaOf(r.schema.Name(), rowType)
@@ -123,14 +125,26 @@ func (r *Reader) ReadRow(row interface{}) (err error) {
 			r.seen = rowType
 		}
 	}
-	r.values, err = r.read(r.values[:0], 0)
+	r.values, err = r.ReadRow(r.values[:0])
 	if err != nil {
 		return err
 	}
-	if len(r.values) == 0 {
-		return io.EOF
-	}
 	return r.schema.Reconstruct(row, r.values)
+}
+
+// ReadRow reads the next row from r and appends in to the given Row buffer.
+//
+// The returned values are laid out in the order expected by the
+// parquet.(*Schema).Reconstrct method.
+//
+// The method returns io.EOF when no more rows can be read from r.
+func (r *Reader) ReadRow(buf Row) (Row, error) {
+	n := len(buf)
+	buf, err := r.read(buf, 0)
+	if err == nil && len(buf) == n {
+		err = io.EOF
+	}
+	return buf, err
 }
 
 type columnTreeReader interface {
