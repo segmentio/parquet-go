@@ -214,9 +214,7 @@ func rowGroupColumnPageWithLevels(column RowGroupColumn, maxRepetitionLevel, max
 			j++
 		}
 		if j < len(definitionLevels) {
-			if i != j {
-				column.Swap(n, n+(j-i))
-			}
+			column.Swap(n, j)
 			n++
 		}
 		i = j + 1

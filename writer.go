@@ -177,11 +177,7 @@ type rowGroupWriterColumn struct {
 	dictionary Dictionary
 	buffer     *bufferPoolPageWriter
 	writer     *columnChunkWriter
-
-	maxDefinitionLevel int8
-	maxRepetitionLevel int8
-
-	numValues int64
+	numValues  int64
 }
 
 func makeRowGroupWriter(writer io.Writer, schema *Schema, config *WriterConfig) rowGroupWriter {
@@ -282,27 +278,32 @@ func (rgw *rowGroupWriter) init(node Node, path []string, dataPageType format.Pa
 
 		columnIndexer := nodeType.NewColumnIndexer(rgw.config.ColumnIndexSizeLimit)
 		dictionary := Dictionary(nil)
-		pageBuffer := RowGroupColumn(nil)
+		column := RowGroupColumn(nil)
 		bufferSize := rgw.config.PageBufferSize
 		encoder := encoding.NewEncoder(nil)
 
 		switch encoding.Encoding() {
 		case format.PlainDictionary, format.RLEDictionary:
 			dictionary = nodeType.NewDictionary(bufferSize)
-			pageBuffer = NewIndexedRowGroupColumn(dictionary, bufferSize)
+			column = NewIndexedRowGroupColumn(dictionary, bufferSize)
 		default:
-			pageBuffer = nodeType.NewRowGroupColumn(bufferSize)
+			column = nodeType.NewRowGroupColumn(bufferSize)
+		}
+
+		switch {
+		case maxRepetitionLevel > 0:
+			column = newRepeatedRowGroupColumn(column, maxRepetitionLevel, maxDefinitionLevel, nullsGoLast)
+		case maxDefinitionLevel > 0:
+			column = newOptionalRowGroupColumn(column, maxDefinitionLevel, nullsGoLast)
 		}
 
 		buffer := &bufferPoolPageWriter{pool: rgw.config.ColumnPageBuffers}
-		column := rowGroupWriterColumn{
-			typ:                format.Type(nodeType.Kind()),
-			codec:              compressionCodec.CompressionCodec(),
-			path:               path,
-			dictionary:         dictionary,
-			buffer:             buffer,
-			maxRepetitionLevel: maxRepetitionLevel,
-			maxDefinitionLevel: maxDefinitionLevel,
+		rgw.columns = append(rgw.columns, rowGroupWriterColumn{
+			typ:        format.Type(nodeType.Kind()),
+			codec:      compressionCodec.CompressionCodec(),
+			path:       path,
+			dictionary: dictionary,
+			buffer:     buffer,
 			writer: newColumnChunkWriter(
 				buffer,
 				compressionCodec,
@@ -310,7 +311,7 @@ func (rgw *rowGroupWriter) init(node Node, path []string, dataPageType format.Pa
 				dataPageType,
 				maxRepetitionLevel,
 				maxDefinitionLevel,
-				pageBuffer,
+				column,
 				columnIndexer,
 				rgw.config.DataPageStatistics,
 				// Data pages in version 2 can omit compression when dictionary
@@ -320,9 +321,8 @@ func (rgw *rowGroupWriter) init(node Node, path []string, dataPageType format.Pa
 				// compression layer.
 				compressionCodec.CompressionCodec() != format.Uncompressed && (dataPageType != format.DataPageV2 || dictionary == nil),
 			),
-		}
+		})
 
-		rgw.columns = append(rgw.columns, column)
 		rgw.colOrders = append(rgw.colOrders, *nodeType.ColumnOrder())
 	}
 }
@@ -525,6 +525,7 @@ func (rgw *rowGroupWriter) writeRow(row Row) (err error) {
 type columnChunkWriter struct {
 	insert func(*columnChunkWriter, []Value) error
 	commit func(*columnChunkWriter) error
+	values []Value
 
 	buffer      pageBuffer
 	column      RowGroupColumn
@@ -534,19 +535,8 @@ type columnChunkWriter struct {
 	maxRepetitionLevel int8
 	maxDefinitionLevel int8
 
-	tx struct {
-		nulls  int
-		values []Value
-		levels struct {
-			repetition []int8
-			definition []int8
-		}
-	}
-
 	levels struct {
-		repetition []int8
-		definition []int8
-		encoder    encoding.Encoder
+		encoder encoding.Encoder
 		// In data pages v1, the repetition and definition levels are prefixed
 		// with the 4 bytes length of the sections. While the parquet-format
 		// documentation indicates that the length prefix is part of the hybrid
@@ -576,10 +566,9 @@ type columnChunkWriter struct {
 		encoder plain.Encoder
 	}
 
+	nullCount      int64
 	maxValues      int32
 	numValues      int32
-	nullCount      int64
-	numNulls       int32
 	numRows        int32
 	writePageStats bool
 	isCompressed   bool
@@ -608,30 +597,15 @@ func newColumnChunkWriter(buffer pageBuffer, codec compress.Codec, enc encoding.
 		maxValues:          int32(column.Cap()),
 	}
 
-	switch {
-	case maxRepetitionLevel == 0 && maxDefinitionLevel == 0:
-		ccw.insert = (*columnChunkWriter).writeValues
-		ccw.commit = func(*columnChunkWriter) error { return nil }
-
-	case maxRepetitionLevel > 0:
+	if maxRepetitionLevel > 0 {
 		ccw.insert = (*columnChunkWriter).insertRepeated
 		ccw.commit = (*columnChunkWriter).commitRepeated
-		const defaultTxBufferSize = 10
-		ccw.tx.values = make([]Value, 0, defaultTxBufferSize)
-		ccw.tx.levels.repetition = make([]int8, 0, defaultTxBufferSize)
-		ccw.tx.levels.definition = make([]int8, 0, defaultTxBufferSize)
-
-	case maxDefinitionLevel > 0:
-		ccw.insert = (*columnChunkWriter).insertOptional
-		ccw.commit = (*columnChunkWriter).commitOptional
+		ccw.values = make([]Value, 0, 10)
+	} else {
+		ccw.insert = (*columnChunkWriter).writeValues
+		ccw.commit = func(*columnChunkWriter) error { return nil }
 	}
 
-	if maxRepetitionLevel > 0 {
-		ccw.levels.repetition = make([]int8, 0, defaultLevelBufferSize)
-	}
-	if maxDefinitionLevel > 0 {
-		ccw.levels.definition = make([]int8, 0, defaultLevelBufferSize)
-	}
 	if maxRepetitionLevel > 0 || maxDefinitionLevel > 0 {
 		ccw.levels.encoder = RLE.NewEncoder(nil)
 	}
@@ -666,7 +640,7 @@ func (ccw *columnChunkWriter) statistics() format.Statistics {
 
 func (ccw *columnChunkWriter) reset() {
 	ccw.nullCount = 0
-	ccw.numNulls = 0
+	ccw.numValues = 0
 	ccw.numRows = 0
 	ccw.totalRowCount = 0
 	ccw.totalUncompressedSize = 0
@@ -676,59 +650,23 @@ func (ccw *columnChunkWriter) reset() {
 	ccw.columnIndexer.Reset()
 }
 
-func (ccw *columnChunkWriter) insertOptional(values []Value) error {
-	if err := ccw.writeValues(values); err != nil {
-		return err
-	}
-	for _, value := range values {
-		if value.IsNull() {
-			ccw.nullCount++
-			ccw.numNulls++
-		}
-		ccw.levels.definition = append(ccw.levels.definition, value.definitionLevel)
-	}
-	return nil
-}
-
-func (ccw *columnChunkWriter) commitOptional() error {
-	return nil
-}
-
 func (ccw *columnChunkWriter) insertRepeated(values []Value) error {
-	for _, value := range values {
-		ccw.tx.levels.repetition = append(ccw.tx.levels.repetition, value.repetitionLevel)
-		ccw.tx.levels.definition = append(ccw.tx.levels.definition, value.definitionLevel)
-		if value.IsNull() {
-			ccw.tx.nulls++
-		} else {
-			ccw.tx.values = append(ccw.tx.values, value)
-		}
-	}
+	ccw.values = append(ccw.values, values...)
 	return nil
 }
 
 func (ccw *columnChunkWriter) commitRepeated() error {
 	defer func() {
-		for i := range ccw.tx.values {
-			ccw.tx.values[i] = Value{}
+		for i := range ccw.values {
+			ccw.values[i] = Value{}
 		}
-		ccw.tx.nulls = 0
-		ccw.tx.values = ccw.tx.values[:0]
-		ccw.tx.levels.repetition = ccw.tx.levels.repetition[:0]
-		ccw.tx.levels.definition = ccw.tx.levels.definition[:0]
+		ccw.values = ccw.values[:0]
 	}()
-	err := ccw.writeValues(ccw.tx.values)
-	if err == nil {
-		ccw.levels.repetition = append(ccw.levels.repetition, ccw.tx.levels.repetition...)
-		ccw.levels.definition = append(ccw.levels.definition, ccw.tx.levels.definition...)
-		ccw.nullCount += int64(ccw.tx.nulls)
-		ccw.numNulls += int32(ccw.tx.nulls)
-	}
-	return err
+	return ccw.writeValues(ccw.values)
 }
 
 func (ccw *columnChunkWriter) writeValues(values []Value) error {
-	if ccw.numValues > 0 && ccw.numValues >= ccw.maxValues {
+	if ccw.numValues > 0 && (ccw.numValues+int32(len(values))) > ccw.maxValues {
 		if err := ccw.flush(); err != nil {
 			return err
 		}
@@ -746,24 +684,15 @@ func (ccw *columnChunkWriter) flush() error {
 	defer func() {
 		ccw.column.Reset()
 		ccw.numValues = 0
-		ccw.numNulls = 0
 		ccw.numRows = 0
-		ccw.levels.repetition = ccw.levels.repetition[:0]
-		ccw.levels.definition = ccw.levels.definition[:0]
 	}()
 	return ccw.write(ccw.column.Page())
 }
 
 func (ccw *columnChunkWriter) write(page Page) error {
-	numValues := page.NumValues() + int(ccw.numNulls)
+	numValues := page.NumValues()
 	if numValues == 0 {
 		return nil
-	}
-
-	if ccw.maxRepetitionLevel > 0 && numValues != len(ccw.levels.repetition) {
-		panic(fmt.Errorf("BUG: number of values and repetition levels differ: numValues=%d numNulls=%d repetitionLevels=%d definitionLevels=%d",
-			numValues, ccw.numNulls, len(ccw.levels.repetition), len(ccw.levels.definition),
-		))
 	}
 
 	ccw.page.buffer.Reset()
@@ -777,14 +706,14 @@ func (ccw *columnChunkWriter) write(page Page) error {
 			ccw.page.uncompressed.Reset(&ccw.page.checksum)
 			ccw.levels.encoder.Reset(&ccw.page.uncompressed)
 			ccw.levels.encoder.SetBitWidth(bits.Len8(ccw.maxRepetitionLevel))
-			ccw.levels.encoder.EncodeInt8(ccw.levels.repetition)
+			ccw.levels.encoder.EncodeInt8(page.RepetitionLevels())
 			repetitionLevelsByteLength = int32(ccw.page.uncompressed.length)
 		}
 		if ccw.maxDefinitionLevel > 0 {
 			ccw.page.uncompressed.Reset(&ccw.page.checksum)
 			ccw.levels.encoder.Reset(&ccw.page.uncompressed)
 			ccw.levels.encoder.SetBitWidth(bits.Len8(ccw.maxDefinitionLevel))
-			ccw.levels.encoder.EncodeInt8(ccw.levels.definition)
+			ccw.levels.encoder.EncodeInt8(page.DefinitionLevels())
 			definitionLevelsByteLength = int32(ccw.page.uncompressed.length)
 		}
 	}
@@ -804,21 +733,22 @@ func (ccw *columnChunkWriter) write(page Page) error {
 			ccw.levels.v1.Reset(&ccw.page.uncompressed)
 			ccw.levels.encoder.Reset(&ccw.levels.v1)
 			ccw.levels.encoder.SetBitWidth(bits.Len8(ccw.maxRepetitionLevel))
-			ccw.levels.encoder.EncodeInt8(ccw.levels.repetition)
+			ccw.levels.encoder.EncodeInt8(page.RepetitionLevels())
 			ccw.levels.v1.Close()
 		}
 		if ccw.maxDefinitionLevel > 0 {
 			ccw.levels.v1.Reset(&ccw.page.uncompressed)
 			ccw.levels.encoder.Reset(&ccw.levels.v1)
 			ccw.levels.encoder.SetBitWidth(bits.Len8(ccw.maxDefinitionLevel))
-			ccw.levels.encoder.EncodeInt8(ccw.levels.definition)
+			ccw.levels.encoder.EncodeInt8(page.DefinitionLevels())
 			ccw.levels.v1.Close()
 		}
 	}
 
+	numNulls := page.NumNulls()
 	minValue, maxValue := page.Bounds()
-	statistics := ccw.makePageStatistics(minValue, maxValue)
-	ccw.columnIndexer.IndexPage(numValues, int(ccw.numNulls), minValue, maxValue)
+	statistics := ccw.makePageStatistics(numNulls, minValue, maxValue)
+	ccw.columnIndexer.IndexPage(numValues, numNulls, minValue, maxValue)
 
 	ccw.page.encoder.Reset(&ccw.page.uncompressed)
 	if err := page.WriteTo(ccw.page.encoder); err != nil {
@@ -856,7 +786,7 @@ func (ccw *columnChunkWriter) write(page Page) error {
 	case format.DataPageV2:
 		pageHeader.DataPageHeaderV2 = &format.DataPageHeaderV2{
 			NumValues:                  int32(numValues),
-			NumNulls:                   ccw.numNulls,
+			NumNulls:                   int32(numNulls),
 			NumRows:                    ccw.numRows,
 			Encoding:                   encoding,
 			DefinitionLevelsByteLength: definitionLevelsByteLength,
@@ -872,6 +802,7 @@ func (ccw *columnChunkWriter) write(page Page) error {
 
 	rowIndex := ccw.totalRowCount
 	headerSize := ccw.header.buffer.Len()
+	ccw.nullCount += int64(numNulls)
 	ccw.totalRowCount += int64(ccw.numRows)
 	ccw.totalUncompressedSize += int64(headerSize) + int64(uncompressedPageSize)
 	ccw.totalCompressedSize += int64(headerSize) + int64(compressedPageSize)
@@ -944,14 +875,14 @@ func (ccw *columnChunkWriter) writeDictionaryPage(w io.Writer, dict Dictionary) 
 	return nil
 }
 
-func (ccw *columnChunkWriter) makePageStatistics(minValue, maxValue Value) (stats format.Statistics) {
+func (ccw *columnChunkWriter) makePageStatistics(numNulls int, minValue, maxValue Value) (stats format.Statistics) {
 	if ccw.writePageStats {
 		minValueBytes := minValue.Bytes()
 		maxValueBytes := maxValue.Bytes()
 		stats = format.Statistics{
 			Min:       minValueBytes, // deprecated
 			Max:       maxValueBytes, // deprecated
-			NullCount: int64(ccw.numNulls),
+			NullCount: int64(numNulls),
 			MinValue:  minValueBytes,
 			MaxValue:  maxValueBytes,
 		}
