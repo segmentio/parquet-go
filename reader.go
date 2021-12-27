@@ -393,7 +393,7 @@ func (ccr *columnChunkReader) readDataPage(header DataPageHeader) {
 		ccr.page.reader.Reset(ccr.page.decoder)
 	} else {
 		if ccr.dictionary != nil {
-			ccr.page.reader = NewIndexedPageReader(ccr.page.decoder, ccr.bufferSize, ccr.dictionary)
+			ccr.page.reader = NewIndexedPageReader(ccr.dictionary, ccr.page.decoder, ccr.bufferSize)
 		} else {
 			ccr.page.reader = ccr.column.Type().NewPageReader(ccr.page.decoder, ccr.bufferSize)
 		}

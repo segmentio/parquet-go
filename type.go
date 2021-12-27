@@ -116,7 +116,12 @@ type Type interface {
 	// Creates a page reader for values of this type.
 	//
 	// The method panics if it is called on a group type.
-	NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter
+	NewPageWriter(bufferSize int) PageWriter
+
+	// Creates a row group group column for values of this type.
+	//
+	// The method panics if it is called on a group type.
+	NewRowGroupColumn(bufferSize int) RowGroupColumn
 }
 
 // In the current parquet version supported by this library, only type-defined
@@ -237,8 +242,12 @@ func (t booleanType) NewPageReader(decoder encoding.Decoder, bufferSize int) Pag
 	return newBooleanPageReader(t, decoder, bufferSize)
 }
 
-func (t booleanType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
-	return newBooleanPageWriter(t, encoder, bufferSize)
+func (t booleanType) NewPageWriter(bufferSize int) PageWriter {
+	return newBooleanPageWriter(t, bufferSize)
+}
+
+func (t booleanType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
+	return newBooleanRowGroupColumn(t, bufferSize)
 }
 
 type int32Type struct{ primitiveType }
@@ -269,8 +278,12 @@ func (t int32Type) NewPageReader(decoder encoding.Decoder, bufferSize int) PageR
 	return newInt32PageReader(t, decoder, bufferSize)
 }
 
-func (t int32Type) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
-	return newInt32PageWriter(t, encoder, bufferSize)
+func (t int32Type) NewPageWriter(bufferSize int) PageWriter {
+	return newInt32PageWriter(t, bufferSize)
+}
+
+func (t int32Type) NewRowGroupColumn(bufferSize int) RowGroupColumn {
+	return newInt32RowGroupColumn(t, bufferSize)
 }
 
 type int64Type struct{ primitiveType }
@@ -301,8 +314,12 @@ func (t int64Type) NewPageReader(decoder encoding.Decoder, bufferSize int) PageR
 	return newInt64PageReader(t, decoder, bufferSize)
 }
 
-func (t int64Type) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
-	return newInt64PageWriter(t, encoder, bufferSize)
+func (t int64Type) NewPageWriter(bufferSize int) PageWriter {
+	return newInt64PageWriter(t, bufferSize)
+}
+
+func (t int64Type) NewRowGroupColumn(bufferSize int) RowGroupColumn {
+	return newInt64RowGroupColumn(t, bufferSize)
 }
 
 type int96Type struct{ primitiveType }
@@ -333,8 +350,12 @@ func (t int96Type) NewPageReader(decoder encoding.Decoder, bufferSize int) PageR
 	return newInt96PageReader(t, decoder, bufferSize)
 }
 
-func (t int96Type) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
-	return newInt96PageWriter(t, encoder, bufferSize)
+func (t int96Type) NewPageWriter(bufferSize int) PageWriter {
+	return newInt96PageWriter(t, bufferSize)
+}
+
+func (t int96Type) NewRowGroupColumn(bufferSize int) RowGroupColumn {
+	return newInt96RowGroupColumn(t, bufferSize)
 }
 
 type floatType struct{ primitiveType }
@@ -365,8 +386,12 @@ func (t floatType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageR
 	return newFloatPageReader(t, decoder, bufferSize)
 }
 
-func (t floatType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
-	return newFloatPageWriter(t, encoder, bufferSize)
+func (t floatType) NewPageWriter(bufferSize int) PageWriter {
+	return newFloatPageWriter(t, bufferSize)
+}
+
+func (t floatType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
+	return newFloatRowGroupColumn(t, bufferSize)
 }
 
 type doubleType struct{ primitiveType }
@@ -393,8 +418,12 @@ func (t doubleType) NewPageReader(decoder encoding.Decoder, bufferSize int) Page
 	return newDoublePageReader(t, decoder, bufferSize)
 }
 
-func (t doubleType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
-	return newDoublePageWriter(t, encoder, bufferSize)
+func (t doubleType) NewPageWriter(bufferSize int) PageWriter {
+	return newDoublePageWriter(t, bufferSize)
+}
+
+func (t doubleType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
+	return newDoubleRowGroupColumn(t, bufferSize)
 }
 
 type byteArrayType struct{ primitiveType }
@@ -423,8 +452,12 @@ func (t byteArrayType) NewPageReader(decoder encoding.Decoder, bufferSize int) P
 	return newByteArrayPageReader(t, decoder, bufferSize)
 }
 
-func (t byteArrayType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
-	return newByteArrayPageWriter(t, encoder, bufferSize)
+func (t byteArrayType) NewPageWriter(bufferSize int) PageWriter {
+	return newByteArrayPageWriter(t, bufferSize)
+}
+
+func (t byteArrayType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
+	return newByteArrayRowGroupColumn(t, bufferSize)
 }
 
 type fixedLenByteArrayType struct {
@@ -460,8 +493,12 @@ func (t *fixedLenByteArrayType) NewPageReader(decoder encoding.Decoder, bufferSi
 	return newFixedLenByteArrayPageReader(t, decoder, bufferSize)
 }
 
-func (t *fixedLenByteArrayType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
-	return newFixedLenByteArrayPageWriter(t, encoder, bufferSize)
+func (t *fixedLenByteArrayType) NewPageWriter(bufferSize int) PageWriter {
+	return newFixedLenByteArrayPageWriter(t, bufferSize)
+}
+
+func (t *fixedLenByteArrayType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
+	return newFixedLenByteArrayRowGroupColumn(t, bufferSize)
 }
 
 var (
@@ -617,18 +654,34 @@ func (t *intType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageRe
 	}
 }
 
-func (t *intType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
+func (t *intType) NewPageWriter(bufferSize int) PageWriter {
 	if t.IsSigned {
 		if t.BitWidth == 64 {
-			return newInt64PageWriter(t, encoder, bufferSize)
+			return newInt64PageWriter(t, bufferSize)
 		} else {
-			return newInt32PageWriter(t, encoder, bufferSize)
+			return newInt32PageWriter(t, bufferSize)
 		}
 	} else {
 		if t.BitWidth == 64 {
-			return newUint64PageWriter(t, encoder, bufferSize)
+			return newUint64PageWriter(t, bufferSize)
 		} else {
-			return newUint32PageWriter(t, encoder, bufferSize)
+			return newUint32PageWriter(t, bufferSize)
+		}
+	}
+}
+
+func (t *intType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
+	if t.IsSigned {
+		if t.BitWidth == 64 {
+			return newInt64RowGroupColumn(t, bufferSize)
+		} else {
+			return newInt32RowGroupColumn(t, bufferSize)
+		}
+	} else {
+		if t.BitWidth == 64 {
+			return newUint64RowGroupColumn(t, bufferSize)
+		} else {
+			return newUint32RowGroupColumn(t, bufferSize)
 		}
 	}
 }
@@ -712,8 +765,12 @@ func (t *stringType) NewPageReader(decoder encoding.Decoder, bufferSize int) Pag
 	return newByteArrayPageReader(t, decoder, bufferSize)
 }
 
-func (t *stringType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
-	return newByteArrayPageWriter(t, encoder, bufferSize)
+func (t *stringType) NewPageWriter(bufferSize int) PageWriter {
+	return newByteArrayPageWriter(t, bufferSize)
+}
+
+func (t *stringType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
+	return newByteArrayRowGroupColumn(t, bufferSize)
 }
 
 // UUID constructs a leaf node of UUID logical type.
@@ -759,8 +816,12 @@ func (t *uuidType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageR
 	return newFixedLenByteArrayPageReader(t, decoder, bufferSize)
 }
 
-func (t *uuidType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
-	return newFixedLenByteArrayPageWriter(t, encoder, bufferSize)
+func (t *uuidType) NewPageWriter(bufferSize int) PageWriter {
+	return newFixedLenByteArrayPageWriter(t, bufferSize)
+}
+
+func (t *uuidType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
+	return newFixedLenByteArrayRowGroupColumn(t, bufferSize)
 }
 
 // Enum constructs a leaf node with a logical type representing enumerations.
@@ -808,8 +869,12 @@ func (t *enumType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageR
 	return newByteArrayPageReader(t, decoder, bufferSize)
 }
 
-func (t *enumType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
-	return newByteArrayPageWriter(t, encoder, bufferSize)
+func (t *enumType) NewPageWriter(bufferSize int) PageWriter {
+	return newByteArrayPageWriter(t, bufferSize)
+}
+
+func (t *enumType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
+	return newByteArrayRowGroupColumn(t, bufferSize)
 }
 
 // JSON constructs a leaf node of JSON logical type.
@@ -857,8 +922,12 @@ func (t *jsonType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageR
 	return newByteArrayPageReader(t, decoder, bufferSize)
 }
 
-func (t *jsonType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
-	return newByteArrayPageWriter(t, encoder, bufferSize)
+func (t *jsonType) NewPageWriter(bufferSize int) PageWriter {
+	return newByteArrayPageWriter(t, bufferSize)
+}
+
+func (t *jsonType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
+	return newByteArrayRowGroupColumn(t, bufferSize)
 }
 
 // BSON constructs a leaf node of BSON logical type.
@@ -906,8 +975,12 @@ func (t *bsonType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageR
 	return newByteArrayPageReader(t, decoder, bufferSize)
 }
 
-func (t *bsonType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
-	return newByteArrayPageWriter(t, encoder, bufferSize)
+func (t *bsonType) NewPageWriter(bufferSize int) PageWriter {
+	return newByteArrayPageWriter(t, bufferSize)
+}
+
+func (t *bsonType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
+	return newByteArrayRowGroupColumn(t, bufferSize)
 }
 
 // Date constructs a leaf node of DATE logical type.
@@ -951,8 +1024,12 @@ func (t *dateType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageR
 	return newInt32PageReader(t, decoder, bufferSize)
 }
 
-func (t *dateType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
-	return newInt32PageWriter(t, encoder, bufferSize)
+func (t *dateType) NewPageWriter(bufferSize int) PageWriter {
+	return newInt32PageWriter(t, bufferSize)
+}
+
+func (t *dateType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
+	return newInt32RowGroupColumn(t, bufferSize)
 }
 
 // TimeUnit represents units of time in the parquet type system.
@@ -1079,11 +1156,19 @@ func (t *timeType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageR
 	}
 }
 
-func (t *timeType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
+func (t *timeType) NewPageWriter(bufferSize int) PageWriter {
 	if t.Unit.Millis != nil {
-		return newInt32PageWriter(t, encoder, bufferSize)
+		return newInt32PageWriter(t, bufferSize)
 	} else {
-		return newInt64PageWriter(t, encoder, bufferSize)
+		return newInt64PageWriter(t, bufferSize)
+	}
+}
+
+func (t *timeType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
+	if t.Unit.Millis != nil {
+		return newInt32RowGroupColumn(t, bufferSize)
+	} else {
+		return newInt64RowGroupColumn(t, bufferSize)
 	}
 }
 
@@ -1135,8 +1220,12 @@ func (t *timestampType) NewPageReader(decoder encoding.Decoder, bufferSize int) 
 	return newInt64PageReader(t, decoder, bufferSize)
 }
 
-func (t *timestampType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
-	return newInt64PageWriter(t, encoder, bufferSize)
+func (t *timestampType) NewPageWriter(bufferSize int) PageWriter {
+	return newInt64PageWriter(t, bufferSize)
+}
+
+func (t *timestampType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
+	return newInt64RowGroupColumn(t, bufferSize)
 }
 
 // List constructs a node eof LIST logical type.
@@ -1184,8 +1273,12 @@ func (t *listType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageR
 	panic("cannot create page reader from parquet LIST type")
 }
 
-func (t *listType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
+func (t *listType) NewPageWriter(bufferSize int) PageWriter {
 	panic("cannot create page writer from parquet LIST type")
+}
+
+func (t *listType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
+	panic("cannot create row group column from parquet LIST type")
 }
 
 // Map constructs a node of MAP logical type.
@@ -1238,8 +1331,12 @@ func (t *mapType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageRe
 	panic("cannot create page reader from parquet MAP type")
 }
 
-func (t *mapType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
+func (t *mapType) NewPageWriter(bufferSize int) PageWriter {
 	panic("cannot create page writer from parquet MAP type")
+}
+
+func (t *mapType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
+	panic("cannot create row group column from parquet MAP type")
 }
 
 type nullType format.NullType
@@ -1267,15 +1364,19 @@ func (t *nullType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 }
 
 func (t *nullType) NewDictionary(bufferSize int) Dictionary {
-	panic("cannot create dictionary for parquet NULL type")
+	panic("cannot create dictionary from parquet NULL type")
 }
 
 func (t *nullType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
-	panic("cannot create page reader for parquet NULL type")
+	panic("cannot create page reader from parquet NULL type")
 }
 
-func (t *nullType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
-	panic("cannot create page writer for parquet NULL type")
+func (t *nullType) NewPageWriter(bufferSize int) PageWriter {
+	panic("cannot create page writer from parquet NULL type")
+}
+
+func (t *nullType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
+	panic("cannot create row group column from parquet NULL type")
 }
 
 type groupType struct{}
@@ -1302,8 +1403,12 @@ func (groupType) NewPageReader(encoding.Decoder, int) PageReader {
 	panic("cannot create page reader from parquet group")
 }
 
-func (groupType) NewPageWriter(encoding.Encoder, int) PageWriter {
+func (groupType) NewPageWriter(int) PageWriter {
 	panic("cannot create page writer from parquet group")
+}
+
+func (t groupType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
+	panic("cannot create row group column from parquet group")
 }
 
 func (groupType) Length() int { return 0 }

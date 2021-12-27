@@ -71,7 +71,7 @@ func forEachColumnPage(col *parquet.Column, do func(*parquet.Column, *parquet.Da
 				var pageData = header.Encoding().NewDecoder(pages.PageData())
 
 				if dictionary != nil {
-					pageReader = parquet.NewIndexedPageReader(pageData, bufferSize, dictionary)
+					pageReader = parquet.NewIndexedPageReader(dictionary, pageData, bufferSize)
 				} else {
 					pageReader = leaf.Type().NewPageReader(pageData, bufferSize)
 				}

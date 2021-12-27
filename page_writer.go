@@ -1,14 +1,11 @@
 package parquet
 
 import (
-	"bytes"
 	"fmt"
 	"math"
 
 	"github.com/segmentio/parquet/deprecated"
-	"github.com/segmentio/parquet/encoding"
 	"github.com/segmentio/parquet/encoding/plain"
-	"github.com/segmentio/parquet/internal/bits"
 )
 
 // PageWriter is an interface implemented by types which support writing valuees
@@ -18,81 +15,40 @@ import (
 // append values to the buffer; both methods are atomic operations, the values
 // are either all written or none are and ErrBufferFull is returned.
 type PageWriter interface {
-	ValueWriter
-	ValueBatchWriter
-
 	// Returns the type values written to the underlying page.
 	Type() Type
 
-	// Returns the number of values currently buffered in the writer.
-	NumValues() int
-
-	// Returns the min and max values currently bufffered in the writter.
+	// Page returns a Page value containing the values have have been written to
+	// the writer.
 	//
-	// When no values have been written, or the writer was flushed, the min and
-	// max values are both null.
-	Bounds() (min, max Value)
-
-	// Flushes all buffered values to the underlying encoder.
-	//
-	// Flush must be called explicitly when calling WriteValue returns
-	// ErrBufferFull, or when no more values will be written.
-	//
-	// The design decision of requiring explicit flushes was made to give
-	// applications the opportunity to gather the number and bounds of values
-	// before flushing the buffers.
-	Flush() error
+	// The returned page shares the writer's underlying buffer, it remains valid
+	// to use until the next call to Reset.
+	Page() Page
 
 	// Resets the encoder used to write values to the parquet page. This method
 	// is useful to allow reusing writers. Calling this method drops all values
 	// previously buffered by the writer.
-	Reset(encoding.Encoder)
+	Reset()
+
+	ValueWriter
+
+	ValueBatchWriter
 }
 
-type booleanPageWriter struct {
-	typ     Type
-	encoder encoding.Encoder
-	values  []bool
-}
+type booleanPageWriter struct{ booleanPage }
 
-func newBooleanPageWriter(typ Type, encoder encoding.Encoder, bufferSize int) *booleanPageWriter {
+func newBooleanPageWriter(typ Type, bufferSize int) *booleanPageWriter {
 	return &booleanPageWriter{
-		typ:     typ,
-		encoder: encoder,
-		values:  make([]bool, 0, atLeastOne(bufferSize)),
+		booleanPage: booleanPage{
+			typ:    typ,
+			values: make([]bool, 0, atLeastOne(bufferSize)),
+		},
 	}
 }
 
-func (w *booleanPageWriter) Type() Type { return w.typ }
+func (w *booleanPageWriter) Page() Page { return &w.booleanPage }
 
-func (w *booleanPageWriter) NumValues() int { return len(w.values) }
-
-func (w *booleanPageWriter) Bounds() (min, max Value) {
-	if len(w.values) > 0 {
-		min = makeValueBoolean(false)
-		max = makeValueBoolean(false)
-		hasFalse, hasTrue := false, false
-
-		for _, value := range w.values {
-			if value {
-				hasTrue = true
-			} else {
-				hasFalse = true
-			}
-			if hasTrue && hasFalse {
-				break
-			}
-		}
-
-		if !hasFalse {
-			min = makeValueBoolean(true)
-		}
-		if hasTrue {
-			max = makeValueBoolean(true)
-		}
-	}
-	return min, max
-}
+func (w *booleanPageWriter) Reset() { w.values = w.values[:0] }
 
 func (w *booleanPageWriter) WriteValue(value Value) error {
 	if len(w.values) == cap(w.values) {
@@ -112,41 +68,20 @@ func (w *booleanPageWriter) WriteValueBatch(values []Value) (int, error) {
 	return len(values), nil
 }
 
-func (w *booleanPageWriter) Flush() error {
-	defer func() { w.values = w.values[:0] }()
-	return w.encoder.EncodeBoolean(w.values)
-}
+type int32PageWriter struct{ int32Page }
 
-func (w *booleanPageWriter) Reset(encoder encoding.Encoder) {
-	w.encoder, w.values = encoder, w.values[:0]
-}
-
-type int32PageWriter struct {
-	typ     Type
-	encoder encoding.Encoder
-	values  []int32
-}
-
-func newInt32PageWriter(typ Type, encoder encoding.Encoder, bufferSize int) *int32PageWriter {
+func newInt32PageWriter(typ Type, bufferSize int) *int32PageWriter {
 	return &int32PageWriter{
-		typ:     typ,
-		encoder: encoder,
-		values:  make([]int32, 0, atLeastOne(bufferSize/4)),
+		int32Page: int32Page{
+			typ:    typ,
+			values: make([]int32, 0, atLeastOne(bufferSize/4)),
+		},
 	}
 }
 
-func (w *int32PageWriter) Type() Type { return w.typ }
+func (w *int32PageWriter) Page() Page { return &w.int32Page }
 
-func (w *int32PageWriter) NumValues() int { return len(w.values) }
-
-func (w *int32PageWriter) Bounds() (min, max Value) {
-	if len(w.values) > 0 {
-		minInt32, maxInt32 := bits.MinMaxInt32(w.values)
-		min = makeValueInt32(minInt32)
-		max = makeValueInt32(maxInt32)
-	}
-	return min, max
-}
+func (w *int32PageWriter) Reset() { w.values = w.values[:0] }
 
 func (w *int32PageWriter) WriteValue(value Value) error {
 	if len(w.values) == cap(w.values) {
@@ -166,41 +101,20 @@ func (w *int32PageWriter) WriteValueBatch(values []Value) (int, error) {
 	return len(values), nil
 }
 
-func (w *int32PageWriter) Flush() error {
-	defer func() { w.values = w.values[:0] }()
-	return w.encoder.EncodeInt32(w.values)
-}
+type int64PageWriter struct{ int64Page }
 
-func (w *int32PageWriter) Reset(encoder encoding.Encoder) {
-	w.encoder, w.values = encoder, w.values[:0]
-}
-
-type int64PageWriter struct {
-	typ     Type
-	encoder encoding.Encoder
-	values  []int64
-}
-
-func newInt64PageWriter(typ Type, encoder encoding.Encoder, bufferSize int) *int64PageWriter {
+func newInt64PageWriter(typ Type, bufferSize int) *int64PageWriter {
 	return &int64PageWriter{
-		typ:     typ,
-		encoder: encoder,
-		values:  make([]int64, 0, atLeastOne(bufferSize/8)),
+		int64Page: int64Page{
+			typ:    typ,
+			values: make([]int64, 0, atLeastOne(bufferSize/8)),
+		},
 	}
 }
 
-func (w *int64PageWriter) Type() Type { return w.typ }
+func (w *int64PageWriter) Page() Page { return &w.int64Page }
 
-func (w *int64PageWriter) NumValues() int { return len(w.values) }
-
-func (w *int64PageWriter) Bounds() (min, max Value) {
-	if len(w.values) > 0 {
-		minInt64, maxInt64 := bits.MinMaxInt64(w.values)
-		min = makeValueInt64(minInt64)
-		max = makeValueInt64(maxInt64)
-	}
-	return min, max
-}
+func (w *int64PageWriter) Reset() { w.values = w.values[:0] }
 
 func (w *int64PageWriter) WriteValue(value Value) error {
 	if len(w.values) == cap(w.values) {
@@ -220,41 +134,20 @@ func (w *int64PageWriter) WriteValueBatch(values []Value) (int, error) {
 	return len(values), nil
 }
 
-func (w *int64PageWriter) Flush() error {
-	defer func() { w.values = w.values[:0] }()
-	return w.encoder.EncodeInt64(w.values)
-}
+type int96PageWriter struct{ int96Page }
 
-func (w *int64PageWriter) Reset(encoder encoding.Encoder) {
-	w.encoder, w.values = encoder, w.values[:0]
-}
-
-type int96PageWriter struct {
-	typ     Type
-	encoder encoding.Encoder
-	values  []deprecated.Int96
-}
-
-func newInt96PageWriter(typ Type, encoder encoding.Encoder, bufferSize int) *int96PageWriter {
+func newInt96PageWriter(typ Type, bufferSize int) *int96PageWriter {
 	return &int96PageWriter{
-		typ:     typ,
-		encoder: encoder,
-		values:  make([]deprecated.Int96, 0, atLeastOne(bufferSize/12)),
+		int96Page: int96Page{
+			typ:    typ,
+			values: make([]deprecated.Int96, 0, atLeastOne(bufferSize/12)),
+		},
 	}
 }
 
-func (w *int96PageWriter) Type() Type { return w.typ }
+func (w *int96PageWriter) Page() Page { return &w.int96Page }
 
-func (w *int96PageWriter) NumValues() int { return len(w.values) }
-
-func (w *int96PageWriter) Bounds() (min, max Value) {
-	if len(w.values) > 0 {
-		minInt96, maxInt96 := deprecated.MinMaxInt96(w.values)
-		min = makeValueInt96(minInt96)
-		max = makeValueInt96(maxInt96)
-	}
-	return min, max
-}
+func (w *int96PageWriter) Reset() { w.values = w.values[:0] }
 
 func (w *int96PageWriter) WriteValue(value Value) error {
 	if len(w.values) == cap(w.values) {
@@ -274,41 +167,20 @@ func (w *int96PageWriter) WriteValueBatch(values []Value) (int, error) {
 	return len(values), nil
 }
 
-func (w *int96PageWriter) Flush() error {
-	defer func() { w.values = w.values[:0] }()
-	return w.encoder.EncodeInt96(w.values)
-}
+type floatPageWriter struct{ floatPage }
 
-func (w *int96PageWriter) Reset(encoder encoding.Encoder) {
-	w.encoder, w.values = encoder, w.values[:0]
-}
-
-type floatPageWriter struct {
-	typ     Type
-	encoder encoding.Encoder
-	values  []float32
-}
-
-func newFloatPageWriter(typ Type, encoder encoding.Encoder, bufferSize int) *floatPageWriter {
+func newFloatPageWriter(typ Type, bufferSize int) *floatPageWriter {
 	return &floatPageWriter{
-		typ:     typ,
-		encoder: encoder,
-		values:  make([]float32, 0, atLeastOne(bufferSize/4)),
+		floatPage: floatPage{
+			typ:    typ,
+			values: make([]float32, 0, atLeastOne(bufferSize/4)),
+		},
 	}
 }
 
-func (w *floatPageWriter) Type() Type { return w.typ }
+func (w *floatPageWriter) Page() Page { return &w.floatPage }
 
-func (w *floatPageWriter) NumValues() int { return len(w.values) }
-
-func (w *floatPageWriter) Bounds() (min, max Value) {
-	if len(w.values) > 0 {
-		minFloat, maxFloat := bits.MinMaxFloat32(w.values)
-		min = makeValueFloat(minFloat)
-		max = makeValueFloat(maxFloat)
-	}
-	return min, max
-}
+func (w *floatPageWriter) Reset() { w.values = w.values[:0] }
 
 func (w *floatPageWriter) WriteValue(value Value) error {
 	if len(w.values) == cap(w.values) {
@@ -328,41 +200,20 @@ func (w *floatPageWriter) WriteValueBatch(values []Value) (int, error) {
 	return len(values), nil
 }
 
-func (w *floatPageWriter) Flush() error {
-	defer func() { w.values = w.values[:0] }()
-	return w.encoder.EncodeFloat(w.values)
-}
+type doublePageWriter struct{ doublePage }
 
-func (w *floatPageWriter) Reset(encoder encoding.Encoder) {
-	w.encoder, w.values = encoder, w.values[:0]
-}
-
-type doublePageWriter struct {
-	typ     Type
-	encoder encoding.Encoder
-	values  []float64
-}
-
-func newDoublePageWriter(typ Type, encoder encoding.Encoder, bufferSize int) *doublePageWriter {
+func newDoublePageWriter(typ Type, bufferSize int) *doublePageWriter {
 	return &doublePageWriter{
-		typ:     typ,
-		encoder: encoder,
-		values:  make([]float64, 0, atLeastOne(bufferSize/8)),
+		doublePage: doublePage{
+			typ:    typ,
+			values: make([]float64, 0, atLeastOne(bufferSize/8)),
+		},
 	}
 }
 
-func (w *doublePageWriter) Type() Type { return w.typ }
+func (w *doublePageWriter) Page() Page { return &w.doublePage }
 
-func (w *doublePageWriter) NumValues() int { return len(w.values) }
-
-func (w *doublePageWriter) Bounds() (min, max Value) {
-	if len(w.values) > 0 {
-		minDouble, maxDouble := bits.MinMaxFloat64(w.values)
-		min = makeValueDouble(minDouble)
-		max = makeValueDouble(maxDouble)
-	}
-	return min, max
-}
+func (w *doublePageWriter) Reset() { w.values = w.values[:0] }
 
 func (w *doublePageWriter) WriteValue(value Value) error {
 	if len(w.values) == cap(w.values) {
@@ -382,43 +233,20 @@ func (w *doublePageWriter) WriteValueBatch(values []Value) (int, error) {
 	return len(values), nil
 }
 
-func (w *doublePageWriter) Flush() error {
-	defer func() { w.values = w.values[:0] }()
-	return w.encoder.EncodeDouble(w.values)
-}
+type byteArrayPageWriter struct{ byteArrayPage }
 
-func (w *doublePageWriter) Reset(encoder encoding.Encoder) {
-	w.encoder, w.values = encoder, w.values[:0]
-}
-
-type byteArrayPageWriter struct {
-	typ     Type
-	encoder encoding.Encoder
-	values  []byte
-	min     []byte
-	max     []byte
-	count   int
-}
-
-func newByteArrayPageWriter(typ Type, encoder encoding.Encoder, bufferSize int) *byteArrayPageWriter {
+func newByteArrayPageWriter(typ Type, bufferSize int) *byteArrayPageWriter {
 	return &byteArrayPageWriter{
-		typ:     typ,
-		encoder: encoder,
-		values:  make([]byte, 0, atLeast(bufferSize, 4)),
+		byteArrayPage: byteArrayPage{
+			typ:    typ,
+			values: make([]byte, 0, atLeast(bufferSize, 4)),
+		},
 	}
 }
 
-func (w *byteArrayPageWriter) Type() Type { return w.typ }
+func (w *byteArrayPageWriter) Page() Page { return &w.byteArrayPage }
 
-func (w *byteArrayPageWriter) NumValues() int { return w.count }
-
-func (w *byteArrayPageWriter) Bounds() (min, max Value) {
-	if w.count > 0 {
-		min = makeValueBytes(ByteArray, w.min)
-		max = makeValueBytes(ByteArray, w.max)
-	}
-	return min, max
-}
+func (w *byteArrayPageWriter) Reset() { w.values, w.count = w.values[:0], 0 }
 
 func (w *byteArrayPageWriter) WriteValue(value Value) error {
 	b := value.ByteArray()
@@ -433,7 +261,8 @@ func (w *byteArrayPageWriter) WriteValue(value Value) error {
 		}
 	}
 
-	w.write(b)
+	w.values = plain.AppendByteArray(w.values, b)
+	w.count++
 	return nil
 }
 
@@ -459,82 +288,29 @@ func (w *byteArrayPageWriter) WriteValueBatch(values []Value) (int, error) {
 	}
 
 	for _, value := range values {
-		w.write(value.ByteArray())
+		w.values = plain.AppendByteArray(w.values, value.ByteArray())
 	}
 
+	w.count += len(values)
 	return len(values), nil
 }
 
-func (w *byteArrayPageWriter) write(b []byte) {
-	w.values = plain.AppendByteArray(w.values, b)
-	if w.count == 0 {
-		w.setMin(b)
-		w.setMax(b)
-	} else {
-		if bytes.Compare(b, w.min) < 0 {
-			w.setMin(b)
-		}
-		if bytes.Compare(b, w.max) > 0 {
-			w.setMax(b)
-		}
-	}
-	w.count++
-}
+type fixedLenByteArrayPageWriter struct{ fixedLenByteArrayPage }
 
-func (w *byteArrayPageWriter) setMin(min []byte) {
-	w.min = append(w.min[:0], min...)
-}
-
-func (w *byteArrayPageWriter) setMax(max []byte) {
-	w.max = append(w.max[:0], max...)
-}
-
-func (w *byteArrayPageWriter) Flush() error {
-	defer func() { w.values = w.values[:0] }()
-	return w.encoder.EncodeByteArray(w.values)
-}
-
-func (w *byteArrayPageWriter) Reset(encoder encoding.Encoder) {
-	w.encoder = encoder
-	w.values = w.values[:0]
-	w.min = w.min[:0]
-	w.max = w.max[:0]
-	w.count = 0
-}
-
-type fixedLenByteArrayPageWriter struct {
-	typ     Type
-	encoder encoding.Encoder
-	size    int
-	data    []byte
-	min     []byte
-	max     []byte
-}
-
-func newFixedLenByteArrayPageWriter(typ Type, encoder encoding.Encoder, bufferSize int) *fixedLenByteArrayPageWriter {
+func newFixedLenByteArrayPageWriter(typ Type, bufferSize int) *fixedLenByteArrayPageWriter {
 	size := typ.Length()
 	return &fixedLenByteArrayPageWriter{
-		typ:     typ,
-		encoder: encoder,
-		size:    size,
-		data:    make([]byte, 0, atLeast((bufferSize/size)*size, size)),
-		min:     make([]byte, size),
-		max:     make([]byte, size),
+		fixedLenByteArrayPage: fixedLenByteArrayPage{
+			typ:  typ,
+			size: size,
+			data: make([]byte, 0, atLeast((bufferSize/size)*size, size)),
+		},
 	}
 }
 
-func (w *fixedLenByteArrayPageWriter) Type() Type { return w.typ }
+func (w *fixedLenByteArrayPageWriter) Page() Page { return &w.fixedLenByteArrayPage }
 
-func (w *fixedLenByteArrayPageWriter) NumValues() int { return len(w.data) / w.size }
-
-func (w *fixedLenByteArrayPageWriter) Bounds() (min, max Value) {
-	if len(w.data) > 0 {
-		minValue, maxValue := bits.MinMaxFixedLenByteArray(w.size, w.data)
-		min = makeValueBytes(FixedLenByteArray, minValue)
-		max = makeValueBytes(FixedLenByteArray, maxValue)
-	}
-	return min, max
-}
+func (w *fixedLenByteArrayPageWriter) Reset() { w.data = w.data[:0] }
 
 func (w *fixedLenByteArrayPageWriter) WriteValue(value Value) error {
 	b := value.ByteArray()
@@ -571,47 +347,24 @@ func (w *fixedLenByteArrayPageWriter) WriteValueBatch(values []Value) (int, erro
 	return len(values), nil
 }
 
-func (w *fixedLenByteArrayPageWriter) Flush() error {
-	defer func() { w.data = w.data[:0] }()
-	return w.encoder.EncodeFixedLenByteArray(w.size, w.data)
-}
-
-func (w *fixedLenByteArrayPageWriter) Reset(encoder encoding.Encoder) {
-	w.encoder, w.data = encoder, w.data[:0]
-}
-
 // The following two specializations for unsigned integer types are needed to
 // apply an unsigned comparison when looking up the min and max page values.
 
 type uint32PageWriter struct{ *int32PageWriter }
 
-func newUint32PageWriter(typ Type, encoder encoding.Encoder, bufferSize int) uint32PageWriter {
-	return uint32PageWriter{newInt32PageWriter(typ, encoder, bufferSize)}
+func newUint32PageWriter(typ Type, bufferSize int) uint32PageWriter {
+	return uint32PageWriter{newInt32PageWriter(typ, bufferSize)}
 }
 
-func (w uint32PageWriter) Bounds() (min, max Value) {
-	if len(w.values) > 0 {
-		minUint32, maxUint32 := bits.MinMaxUint32(bits.Int32ToUint32(w.values))
-		min = makeValueInt32(int32(minUint32))
-		max = makeValueInt32(int32(maxUint32))
-	}
-	return min, max
-}
+func (w uint32PageWriter) Page() Page { return uint32Page{&w.int32Page} }
 
 type uint64PageWriter struct{ *int64PageWriter }
 
-func newUint64PageWriter(typ Type, encoder encoding.Encoder, bufferSize int) uint64PageWriter {
-	return uint64PageWriter{newInt64PageWriter(typ, encoder, bufferSize)}
+func newUint64PageWriter(typ Type, bufferSize int) uint64PageWriter {
+	return uint64PageWriter{newInt64PageWriter(typ, bufferSize)}
 }
 
-func (w uint64PageWriter) Bounds() (min, max Value) {
-	if len(w.values) > 0 {
-		minUint64, maxUint64 := bits.MinMaxUint64(bits.Int64ToUint64(w.values))
-		min = makeValueInt64(int64(minUint64))
-		max = makeValueInt64(int64(maxUint64))
-	}
-	return min, max
-}
+func (w uint64PageWriter) Page() Page { return uint64Page{&w.int64Page} }
 
 var (
 	_ PageWriter = (*booleanPageWriter)(nil)

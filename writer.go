@@ -289,9 +289,9 @@ func (rgw *rowGroupWriter) init(node Node, path []string, dataPageType format.Pa
 		switch encoding.Encoding() {
 		case format.PlainDictionary, format.RLEDictionary:
 			dictionary = nodeType.NewDictionary(bufferSize)
-			pageWriter = NewIndexedPageWriter(encoder, bufferSize, dictionary)
+			pageWriter = NewIndexedPageWriter(dictionary, bufferSize)
 		default:
-			pageWriter = nodeType.NewPageWriter(encoder, bufferSize)
+			pageWriter = nodeType.NewPageWriter(bufferSize)
 		}
 
 		buffer := &bufferPoolPageWriter{pool: rgw.config.ColumnPageBuffers}
@@ -761,24 +761,27 @@ func (ccw *columnChunkWriter) writeValueBatch(values []Value) error {
 }
 
 func (ccw *columnChunkWriter) flush() error {
-	numValues := ccw.writer.NumValues() + int(ccw.numNulls)
-	if numValues == 0 {
-		return nil
-	}
-
-	if ccw.maxRepetitionLevel > 0 && numValues != len(ccw.levels.repetition) {
-		panic(fmt.Errorf("BUG: number of values and repetition levels differ: numValues=%d numNulls=%d repetitionLevels=%d defintionLevels=%d",
-			numValues, ccw.numNulls, len(ccw.levels.repetition), len(ccw.levels.definition),
-		))
-	}
-
 	defer func() {
-		ccw.writer.Reset(ccw.page.encoder)
+		ccw.writer.Reset()
 		ccw.numNulls = 0
 		ccw.numRows = 0
 		ccw.levels.repetition = ccw.levels.repetition[:0]
 		ccw.levels.definition = ccw.levels.definition[:0]
 	}()
+	return ccw.write(ccw.writer.Page())
+}
+
+func (ccw *columnChunkWriter) write(page Page) error {
+	numValues := page.NumValues() + int(ccw.numNulls)
+	if numValues == 0 {
+		return nil
+	}
+
+	if ccw.maxRepetitionLevel > 0 && numValues != len(ccw.levels.repetition) {
+		panic(fmt.Errorf("BUG: number of values and repetition levels differ: numValues=%d numNulls=%d repetitionLevels=%d definitionLevels=%d",
+			numValues, ccw.numNulls, len(ccw.levels.repetition), len(ccw.levels.definition),
+		))
+	}
 
 	ccw.page.buffer.Reset()
 	ccw.page.checksum.Reset(&ccw.page.buffer)
@@ -830,12 +833,12 @@ func (ccw *columnChunkWriter) flush() error {
 		}
 	}
 
-	minValue, maxValue := ccw.writer.Bounds()
+	minValue, maxValue := page.Bounds()
 	statistics := ccw.makePageStatistics(minValue, maxValue)
 	ccw.columnIndexer.IndexPage(numValues, int(ccw.numNulls), minValue, maxValue)
 
 	ccw.page.encoder.Reset(&ccw.page.uncompressed)
-	if err := ccw.writer.Flush(); err != nil {
+	if err := page.WriteTo(ccw.page.encoder); err != nil {
 		return err
 	}
 	if ccw.page.compressed != nil {

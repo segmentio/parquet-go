@@ -49,7 +49,7 @@ type Dictionary interface {
 	// content contains only the entries read from the decoder.
 	ReadFrom(encoding.Decoder) error
 
-	// Wrties the dictionary to the encoder passed as argument.
+	// Writes the dictionary to the encoder passed as argument.
 	WriteTo(encoding.Encoder) error
 
 	// Resets the dictionary to its initial state, removing all values.
@@ -434,7 +434,7 @@ func (d *byteArrayDictionary) Len() int { return len(d.offset) }
 func (d *byteArrayDictionary) Index(i int) Value {
 	offset := d.offset[i]
 	value, _ := plain.NextByteArray(d.values[offset:])
-	return makeValueBytes(ByteArray, copyBytes(value))
+	return makeValueBytes(ByteArray, value)
 }
 
 func (d *byteArrayDictionary) Insert(v Value) (int, error) {
@@ -545,7 +545,7 @@ func (d *fixedLenByteArrayDictionary) Type() Type { return d.typ }
 func (d *fixedLenByteArrayDictionary) Len() int { return len(d.values) / d.size }
 
 func (d *fixedLenByteArrayDictionary) Index(i int) Value {
-	return makeValueBytes(FixedLenByteArray, copyBytes(d.value(i)))
+	return makeValueBytes(FixedLenByteArray, d.value(i))
 }
 
 func (d *fixedLenByteArrayDictionary) value(i int) []byte {
@@ -618,20 +618,11 @@ func (d *fixedLenByteArrayDictionary) Reset() {
 	d.index = nil
 }
 
-func NewIndexedPageReader(decoder encoding.Decoder, bufferSize int, dict Dictionary) PageReader {
+func NewIndexedPageReader(dict Dictionary, decoder encoding.Decoder, bufferSize int) PageReader {
 	return &indexedPageReader{
 		typ:     dict.Type(),
 		dict:    dict,
 		decoder: decoder,
-		values:  make([]int32, 0, atLeastOne(bufferSize/4)),
-	}
-}
-
-func NewIndexedPageWriter(encoder encoding.Encoder, bufferSize int, dict Dictionary) PageWriter {
-	return &indexedPageWriter{
-		typ:     dict.Type(),
-		dict:    dict,
-		encoder: encoder,
 		values:  make([]int32, 0, atLeastOne(bufferSize/4)),
 	}
 }
@@ -698,39 +689,26 @@ func (r *indexedPageReader) ReadValueBatch(values []Value) (int, error) {
 	}
 }
 
-type indexedPageWriter struct {
-	typ     Type
-	dict    Dictionary
-	encoder encoding.Encoder
-	values  []int32
-	min     Value
-	max     Value
+func NewIndexedPageWriter(dict Dictionary, bufferSize int) PageWriter {
+	return &indexedPageWriter{
+		indexedPage: indexedPage{
+			dict:   dict,
+			values: make([]int32, 0, atLeastOne(bufferSize/4)),
+		},
+	}
 }
 
-func (w *indexedPageWriter) Type() Type { return w.typ }
+type indexedPageWriter struct{ indexedPage }
 
-func (w *indexedPageWriter) NumValues() int { return len(w.values) }
+func (w *indexedPageWriter) Page() Page { return &w.indexedPage }
 
-func (w *indexedPageWriter) Bounds() (min, max Value) { return w.min, w.max }
+func (w *indexedPageWriter) Reset() { w.values = w.values[:0] }
 
 func (w *indexedPageWriter) WriteValue(value Value) error {
 	i, err := w.dict.Insert(value)
 	if err != nil {
 		return err
 	}
-
-	if len(w.values) == 0 {
-		w.min = w.dict.Index(i)
-		w.max = w.min
-	} else {
-		if w.typ.Less(value, w.min) {
-			w.min = w.dict.Index(i)
-		}
-		if w.typ.Less(w.max, value) {
-			w.max = w.dict.Index(i)
-		}
-	}
-
 	w.values = append(w.values, int32(i))
 	return nil
 }
@@ -745,17 +723,49 @@ func (w *indexedPageWriter) WriteValueBatch(values []Value) (n int, err error) {
 	return n, nil
 }
 
-func (w *indexedPageWriter) Flush() error {
-	defer func() { w.values = w.values[:0] }()
-	return w.encoder.EncodeInt32(w.values)
+type indexedPage struct {
+	dict   Dictionary
+	values []int32
 }
 
-func (w *indexedPageWriter) Reset(encoder encoding.Encoder) {
-	w.encoder = encoder
-	w.values = w.values[:0]
-	w.min = Value{}
-	w.max = Value{}
+func newIndexedPage(dict Dictionary, values []int32) *indexedPage {
+	return &indexedPage{dict: dict, values: values}
 }
+
+func (page *indexedPage) Type() Type { return page.dict.Type() }
+
+func (page *indexedPage) NumValues() int { return len(page.values) }
+
+func (page *indexedPage) NumNulls() int { return 0 }
+
+func (page *indexedPage) Bounds() (min, max Value) {
+	if len(page.values) > 0 {
+		min = page.dict.Index(int(page.values[0]))
+		max = min
+		typ := page.Type()
+
+		for _, i := range page.values[1:] {
+			value := page.dict.Index(int(i))
+			switch {
+			case typ.Less(value, min):
+				min = value
+			case typ.Less(max, value):
+				max = value
+			}
+		}
+	}
+	return min, max
+}
+
+func (page *indexedPage) Slice(i, j int) Page {
+	return newIndexedPage(page.dict, page.values[i:j])
+}
+
+func (page *indexedPage) RepetitionLevels() []int8 { return nil }
+
+func (page *indexedPage) DefinitionLevels() []int8 { return nil }
+
+func (page *indexedPage) WriteTo(enc encoding.Encoder) error { return enc.EncodeInt32(page.values) }
 
 var (
 	_ Dictionary = (*booleanDictionary)(nil)
@@ -768,4 +778,5 @@ var (
 	_ Dictionary = (*fixedLenByteArrayDictionary)(nil)
 	_ PageReader = (*indexedPageReader)(nil)
 	_ PageWriter = (*indexedPageWriter)(nil)
+	_ Page       = (*indexedPage)(nil)
 )

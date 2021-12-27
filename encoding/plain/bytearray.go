@@ -108,18 +108,20 @@ func NextByteArray(buffer []byte) (value, remain []byte) {
 // of PLAIN byte array values.
 func ScanByteArrayList(buffer []byte, limit int, scan func([]byte) error) (int, error) {
 	var remain = limit
+	var maxLen = len(buffer) - 4
 	var err error
 
-	for len(buffer) >= 4 && remain > 0 {
-		n := 4 + NextByteArrayLength(buffer)
-		if len(buffer) < n {
-			err = fmt.Errorf("invalid PLAIN byte array sequence has value of length %d but only %d bytes remain to be read", n-4, len(buffer)-4)
+	for i := 0; i <= maxLen && remain > 0; {
+		n := NextByteArrayLength(buffer[i:])
+		j := i + 4 + n
+		if j > len(buffer) {
+			err = fmt.Errorf("invalid PLAIN byte array sequence has value of length %d but only %d bytes remain to be read", n, len(buffer)-(i+4))
 			break
 		}
-		if err = scan(buffer[4:n:n]); err != nil {
+		if err = scan(buffer[i+4 : j : j]); err != nil {
 			break
 		}
-		buffer = buffer[n:]
+		i = j
 		remain--
 	}
 

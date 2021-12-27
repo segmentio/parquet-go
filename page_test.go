@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/segmentio/parquet"
+	"github.com/segmentio/parquet/encoding"
 )
 
 var pageReadWriteTests = []struct {
@@ -157,7 +158,7 @@ func TestPageReadWrite(t *testing.T) {
 				dec := parquet.Plain.NewDecoder(buf)
 				enc := parquet.Plain.NewEncoder(buf)
 				pr := test.typ.NewPageReader(dec, 32)
-				pw := test.typ.NewPageWriter(enc, 1024)
+				pw := test.typ.NewPageWriter(1024)
 
 				for _, values := range test.values {
 					t.Run("", func(t *testing.T) {
@@ -166,9 +167,9 @@ func TestPageReadWrite(t *testing.T) {
 							dec.Reset(buf)
 							enc.Reset(buf)
 							pr.Reset(dec)
-							pw.Reset(enc)
+							pw.Reset()
 						}()
-						testPageReadWrite(t, pr, pw, values)
+						testPageReadWrite(t, pr, pw, enc, values)
 					})
 				}
 			})
@@ -178,8 +179,8 @@ func TestPageReadWrite(t *testing.T) {
 				buf := new(bytes.Buffer)
 				dec := parquet.Plain.NewDecoder(buf)
 				enc := parquet.Plain.NewEncoder(buf)
-				pr := parquet.NewIndexedPageReader(dec, 32, dict)
-				pw := parquet.NewIndexedPageWriter(enc, 1024, dict)
+				pr := parquet.NewIndexedPageReader(dict, dec, 32)
+				pw := parquet.NewIndexedPageWriter(dict, 1024)
 
 				for _, values := range test.values {
 					t.Run("", func(t *testing.T) {
@@ -188,9 +189,9 @@ func TestPageReadWrite(t *testing.T) {
 							dec.Reset(buf)
 							enc.Reset(buf)
 							pr.Reset(dec)
-							pw.Reset(enc)
+							pw.Reset()
 						}()
-						testPageReadWrite(t, pr, pw, values)
+						testPageReadWrite(t, pr, pw, enc, values)
 					})
 				}
 			})
@@ -198,7 +199,7 @@ func TestPageReadWrite(t *testing.T) {
 	}
 }
 
-func testPageReadWrite(t *testing.T, r parquet.PageReader, w parquet.PageWriter, values []interface{}) {
+func testPageReadWrite(t *testing.T, r parquet.PageReader, w parquet.PageWriter, e encoding.Encoder, values []interface{}) {
 	typ := r.Type()
 	minValue := parquet.Value{}
 	maxValue := parquet.Value{}
@@ -216,8 +217,9 @@ func testPageReadWrite(t *testing.T, r parquet.PageReader, w parquet.PageWriter,
 		}
 	}
 
-	numValues := w.NumValues()
-	min, max := w.Bounds()
+	p := w.Page()
+	numValues := p.NumValues()
+	min, max := p.Bounds()
 	if !parquet.Equal(min, minValue) {
 		t.Errorf("min value mismatch: want=%v got=%v", minValue, min)
 	}
@@ -225,7 +227,7 @@ func testPageReadWrite(t *testing.T, r parquet.PageReader, w parquet.PageWriter,
 		t.Errorf("max value mismatch: want=%v got=%v", maxValue, max)
 	}
 
-	if err := w.Flush(); err != nil {
+	if err := p.WriteTo(e); err != nil {
 		t.Fatal("flushing page writer:", err)
 	}
 

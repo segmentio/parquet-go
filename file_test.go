@@ -73,7 +73,7 @@ func printColumns(t *testing.T, col *parquet.Column, indent string) {
 				var pageData = header.Encoding().NewDecoder(pages.PageData())
 
 				if dictionary != nil {
-					pageReader = parquet.NewIndexedPageReader(pageData, bufferSize, dictionary)
+					pageReader = parquet.NewIndexedPageReader(dictionary, pageData, bufferSize)
 				} else {
 					pageReader = col.Type().NewPageReader(pageData, bufferSize)
 				}

@@ -3,11 +3,14 @@ package parquet
 import (
 	"fmt"
 	"strings"
+
+	"github.com/segmentio/parquet/format"
 )
 
 const (
 	DefaultCreatedBy            = "github.com/segmentio/parquet"
 	DefaultColumnIndexSizeLimit = 16
+	DefaultColumnBufferSize     = 1 * 1024 * 1024
 	DefaultPageBufferSize       = 1 * 1024 * 1024
 	DefaultDataPageVersion      = 2
 	DefaultRowGroupTargetSize   = 128 * 1024 * 1024
@@ -44,7 +47,7 @@ func (c *FileConfig) Apply(options ...FileOption) {
 }
 
 // Configure applies configuration options from c to config.
-func (c *FileConfig) Configure(config *FileConfig) {
+func (c *FileConfig) ConfigureFile(config *FileConfig) {
 	*config = FileConfig{
 		SkipPageIndex: config.SkipPageIndex,
 	}
@@ -84,7 +87,7 @@ func (c *ReaderConfig) Apply(options ...ReaderOption) {
 }
 
 // Configure applies configuration options from c to config.
-func (c *ReaderConfig) Configure(config *ReaderConfig) {
+func (c *ReaderConfig) ConfigureReader(config *ReaderConfig) {
 	*config = ReaderConfig{
 		PageBufferSize: coalesceInt(c.PageBufferSize, config.PageBufferSize),
 	}
@@ -140,7 +143,7 @@ func (c *WriterConfig) Apply(options ...WriterOption) {
 }
 
 // Configure applies configuration options from c to config.
-func (c *WriterConfig) Configure(config *WriterConfig) {
+func (c *WriterConfig) ConfigureWriter(config *WriterConfig) {
 	keyValueMetadata := config.KeyValueMetadata
 	if len(c.KeyValueMetadata) > 0 {
 		if keyValueMetadata == nil {
@@ -174,6 +177,49 @@ func (c *WriterConfig) Validate() error {
 	)
 }
 
+// The RowGroupConfig type carries configuration options for parquet row groups.
+//
+// RowGroupConfig implements the RowGroupOption interface so it can be used
+// directly as argument to the NewRowGroup function when needed, for example:
+//
+//	rowGroup := parquet.NewRowGroup(schema, &parquet.RowGroupConfig{
+//		ColumnBufferSize: 8 * 1024 * 1024,
+//	})
+//
+type RowGroupConfig struct {
+	ColumnBufferSize int
+	SortingColumns   []format.SortingColumn
+}
+
+// DefaultRowGroupConfig returns a new RowGroupConfig value initialized with the
+// default row group configuration.
+func DefaultRowGroupConfig() *RowGroupConfig {
+	return &RowGroupConfig{
+		ColumnBufferSize: DefaultColumnBufferSize,
+	}
+}
+
+// Validate returns a non-nil error if the configuration of c is invalid.
+func (c *RowGroupConfig) Validate() error {
+	const baseName = "parquet.(*RowGroupConfig)."
+	return errorInvalidConfiguration(
+		validatePositiveInt(baseName+"ColumnBufferSize", c.ColumnBufferSize),
+	)
+}
+
+func (c *RowGroupConfig) Apply(schema Node, options ...RowGroupOption) {
+	for _, opt := range options {
+		opt.ConfigureRowGroup(schema, c)
+	}
+}
+
+func (c *RowGroupConfig) ConfigureRowGroup(schema Node, config *RowGroupConfig) {
+	*config = RowGroupConfig{
+		ColumnBufferSize: coalesceInt(c.ColumnBufferSize, config.ColumnBufferSize),
+		SortingColumns:   c.SortingColumns,
+	}
+}
+
 // FileOption is an interface implemented by types that carry configuration
 // options for parquet files.
 type FileOption interface {
@@ -190,6 +236,12 @@ type ReaderOption interface {
 // options for parquet writers.
 type WriterOption interface {
 	ConfigureWriter(*WriterConfig)
+}
+
+// RowGroupOption is an interface implemented by types that carryconfiguration
+// options for parquet row groups.
+type RowGroupOption interface {
+	ConfigureRowGroup(Node, *RowGroupConfig)
 }
 
 // SkipPageIndex is a file configuration option which when set to true, prevents
@@ -292,6 +344,28 @@ func KeyValueMetadata(key, value string) WriterOption {
 	})
 }
 
+// SortinColumns creates a configuration option which defines the sorting order
+// of columns in a row group.
+//
+// The order of sorting columns passed as argument defines the ordering
+// hierarchy; when elements are equal in the first column, the second column is
+// used to order rows, etc...
+func SortingColumns(sortingColumns ...SortingColumn) RowGroupOption {
+	return rowGroupOption(func(schema Node, config *RowGroupConfig) {
+		columns := columnPathsOf(schema)
+
+		for _, sortingColumn := range sortingColumns {
+			if columnIndex := columnIndexOf(columns, sortingColumn.Path()); columnIndex >= 0 {
+				config.SortingColumns = append(config.SortingColumns, format.SortingColumn{
+					ColumnIdx:  int32(columnIndex),
+					Descending: sortingColumn.Descending(),
+					NullsFirst: sortingColumn.NullsFirst(),
+				})
+			}
+		}
+	})
+}
+
 type fileOption func(*FileConfig)
 
 func (opt fileOption) ConfigureFile(config *FileConfig) { opt(config) }
@@ -303,6 +377,58 @@ func (opt readerOption) ConfigureReader(config *ReaderConfig) { opt(config) }
 type writerOption func(*WriterConfig)
 
 func (opt writerOption) ConfigureWriter(config *WriterConfig) { opt(config) }
+
+type rowGroupOption func(Node, *RowGroupConfig)
+
+func (opt rowGroupOption) ConfigureRowGroup(schema Node, config *RowGroupConfig) {
+	opt(schema, config)
+}
+
+func columnPathsOf(node Node) [][]string {
+	n := numColumnsOf(node)
+	d := 10 // TODO: compute node depth?
+	return appendColumnPathsOf(make([][]string, 0, n), node, make([]string, 0, d))
+}
+
+func appendColumnPathsOf(columns [][]string, node Node, path []string) [][]string {
+	if isLeaf(node) {
+		return append(columns, copyPath(path))
+	}
+	i := len(path)
+	path = append(path, "")
+	for _, name := range node.ChildNames() {
+		path[i] = name
+		columns = appendColumnPathsOf(columns, node.ChildByName(name), path)
+	}
+	return columns
+}
+
+func copyPath(path []string) []string {
+	newPath := make([]string, len(path))
+	copy(newPath, path)
+	return newPath
+}
+
+func columnIndexOf(columns [][]string, path []string) int {
+	for i, column := range columns {
+		if pathEqual(column, path) {
+			return i
+		}
+	}
+	return -1
+}
+
+func pathEqual(p1, p2 []string) bool {
+	if len(p1) != len(p2) {
+		return false
+	}
+	for i := range p1 {
+		if p1[i] != p2[i] {
+			return false
+		}
+	}
+	return true
+}
 
 func coalesceInt(i1, i2 int) int {
 	if i1 != 0 {
@@ -408,3 +534,12 @@ func (err *invalidConfiguration) Error() string {
 	}
 	return errorString
 }
+
+var (
+	_ FileOption     = (*FileConfig)(nil)
+	_ ReaderOption   = (*ReaderConfig)(nil)
+	_ WriterOption   = (*WriterConfig)(nil)
+	_ RowGroupOption = (*RowGroupConfig)(nil)
+	_ ReaderOption   = PageBufferSize(0)
+	_ WriterOption   = PageBufferSize(0)
+)
