@@ -206,19 +206,22 @@ func isNull(i int, maxDefinitionLevel int8, definitionLevels []int8) bool {
 	return definitionLevels[i] != maxDefinitionLevel
 }
 
-func stripNulls(column RowGroupColumn, maxDefinitionLevel int8, definitionLevels []int8) int {
-	offset := 0
-	for i := 0; i < len(definitionLevels); offset++ {
+func rowGroupColumnPageWithLevels(column RowGroupColumn, maxRepetitionLevel, maxDefinitionLevel int8, repetitionLevels, definitionLevels []int8) Page {
+	n := 0
+	for i := 0; i < len(definitionLevels); {
 		j := i
-		for j < len(definitionLevels) && definitionLevels[j] != maxDefinitionLevel {
+		for j < len(definitionLevels) && isNull(j, maxDefinitionLevel, definitionLevels) {
 			j++
 		}
-		if i != j {
-			column.Swap(offset, offset+(j-i))
+		if j < len(definitionLevels) {
+			if i != j {
+				column.Swap(n, n+(j-i))
+			}
+			n++
 		}
 		i = j + 1
 	}
-	return offset
+	return newPageWithLevels(column.Page().Slice(0, n), maxRepetitionLevel, maxDefinitionLevel, repetitionLevels, definitionLevels)
 }
 
 type descendingRowGroupColumn struct{ RowGroupColumn }
@@ -227,16 +230,16 @@ func (col *descendingRowGroupColumn) Less(i, j int) bool { return col.RowGroupCo
 
 type optionalRowGroupColumn struct {
 	base               RowGroupColumn
-	definitionLevels   []int8
 	maxDefinitionLevel int8
+	definitionLevels   []int8
 	nullOrdering       nullOrdering
 }
 
 func newOptionalRowGroupColumn(base RowGroupColumn, maxDefinitionLevel int8, nullOrdering nullOrdering) *optionalRowGroupColumn {
 	return &optionalRowGroupColumn{
 		base:               base,
-		definitionLevels:   make([]int8, 0, base.Cap()),
 		maxDefinitionLevel: maxDefinitionLevel,
+		definitionLevels:   make([]int8, 0, base.Cap()),
 		nullOrdering:       nullOrdering,
 	}
 }
@@ -244,8 +247,7 @@ func newOptionalRowGroupColumn(base RowGroupColumn, maxDefinitionLevel int8, nul
 func (col *optionalRowGroupColumn) Type() Type { return col.base.Type() }
 
 func (col *optionalRowGroupColumn) Page() Page {
-	n := stripNulls(col.base, col.maxDefinitionLevel, col.definitionLevels)
-	return newPageWithLevels(col.base.Page().Slice(0, n), 0, col.maxDefinitionLevel, nil, col.definitionLevels)
+	return rowGroupColumnPageWithLevels(col.base, 0, col.maxDefinitionLevel, nil, col.definitionLevels)
 }
 
 func (col *optionalRowGroupColumn) Reset() {
@@ -282,12 +284,11 @@ func (col *optionalRowGroupColumn) WriteValueBatch(values []Value) (int, error) 
 
 type repeatedRowGroupColumn struct {
 	base               RowGroupColumn
+	maxRepetitionLevel int8
+	maxDefinitionLevel int8
 	rows               []region
 	repetitionLevels   []int8
 	definitionLevels   []int8
-	maxRepetitionLevel int8
-	maxDefinitionLevel int8
-	offset             uint32
 	nullOrdering       nullOrdering
 }
 
@@ -300,11 +301,11 @@ func newRepeatedRowGroupColumn(base RowGroupColumn, maxRepetitionLevel, maxDefin
 	n := base.Cap()
 	return &repeatedRowGroupColumn{
 		base:               base,
+		maxRepetitionLevel: maxRepetitionLevel,
+		maxDefinitionLevel: maxDefinitionLevel,
 		rows:               make([]region, 0, n/8),
 		repetitionLevels:   make([]int8, 0, n),
 		definitionLevels:   make([]int8, 0, n),
-		maxRepetitionLevel: maxRepetitionLevel,
-		maxDefinitionLevel: maxDefinitionLevel,
 		nullOrdering:       nullOrdering,
 	}
 }
@@ -312,8 +313,7 @@ func newRepeatedRowGroupColumn(base RowGroupColumn, maxRepetitionLevel, maxDefin
 func (col *repeatedRowGroupColumn) Type() Type { return col.base.Type() }
 
 func (col *repeatedRowGroupColumn) Page() Page {
-	n := stripNulls(col.base, col.maxDefinitionLevel, col.definitionLevels)
-	return newPageWithLevels(col.base.Page().Slice(0, n), col.maxRepetitionLevel, col.maxDefinitionLevel, col.repetitionLevels, col.definitionLevels)
+	return rowGroupColumnPageWithLevels(col.base, col.maxRepetitionLevel, col.maxDefinitionLevel, col.repetitionLevels, col.definitionLevels)
 }
 
 func (col *repeatedRowGroupColumn) Reset() {
@@ -321,7 +321,6 @@ func (col *repeatedRowGroupColumn) Reset() {
 	col.rows = col.rows[:0]
 	col.repetitionLevels = col.repetitionLevels[:0]
 	col.definitionLevels = col.definitionLevels[:0]
-	col.offset = 0
 }
 
 func (col *repeatedRowGroupColumn) Size() int64 {
@@ -359,14 +358,13 @@ func (col *repeatedRowGroupColumn) WriteValueBatch(values []Value) (int, error) 
 	n, err := col.base.WriteValueBatch(values)
 	if err == nil {
 		col.rows = append(col.rows, region{
-			offset: col.offset,
+			offset: uint32(len(col.repetitionLevels)),
 			length: uint32(n),
 		})
 		for _, v := range values {
 			col.repetitionLevels = append(col.repetitionLevels, v.RepetitionLevel())
 			col.definitionLevels = append(col.definitionLevels, v.DefinitionLevel())
 		}
-		col.offset += uint32(n)
 	}
 	return n, err
 }
