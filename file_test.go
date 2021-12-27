@@ -53,6 +53,7 @@ func printColumns(t *testing.T, col *parquet.Column, indent string) {
 
 	const bufferSize = 1024
 	chunks := col.Chunks()
+	values := make([]parquet.Value, 10)
 
 	for chunks.Next() {
 		pages := chunks.Pages()
@@ -90,7 +91,7 @@ func printColumns(t *testing.T, col *parquet.Column, indent string) {
 				)
 
 				for {
-					_, err := dataPageReader.ReadValue()
+					_, err := dataPageReader.ReadValues(values)
 					if err != nil {
 						if err != io.EOF {
 							t.Error(err)

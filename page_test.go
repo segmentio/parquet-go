@@ -200,7 +200,7 @@ func TestPageReadWrite(t *testing.T) {
 }
 
 type pageWriter interface {
-	parquet.ValueBatchWriter
+	parquet.ValueWriter
 	Page() parquet.Page
 }
 
@@ -213,7 +213,7 @@ func testPageReadWrite(t *testing.T, r parquet.PageReader, w pageWriter, e encod
 		batch[i] = parquet.ValueOf(values[i])
 	}
 
-	if n, err := w.WriteValueBatch(batch); err != nil {
+	if n, err := w.WriteValues(batch); err != nil {
 		t.Fatal("writing value to page writer:", err)
 	} else if n != len(batch) {
 		t.Fatalf("wrong number of values written: want=%d got=%d", len(batch), n)
@@ -251,19 +251,23 @@ func testPageReadWrite(t *testing.T, r parquet.PageReader, w pageWriter, e encod
 		t.Fatal("flushing page writer:", err)
 	}
 
+	v := [1]parquet.Value{}
 	i := 0
 	for {
-		v, err := r.ReadValue()
+		n, err := r.ReadValues(v[:])
 		if err != nil {
 			if err == io.EOF {
 				break
 			}
 			t.Fatal("reading value from page reader:", err)
 		}
+		if n != 1 {
+			t.Fatalf("reading value from page reader returned the wrong count: want=1 got=%d", n)
+		}
 
 		if i < len(values) {
-			if !parquet.Equal(v, parquet.ValueOf(values[i])) {
-				t.Errorf("value at index %d mismatches: want=%v got=%v", i, values[i], v)
+			if !parquet.Equal(v[0], parquet.ValueOf(values[i])) {
+				t.Errorf("value at index %d mismatches: want=%v got=%v", i, values[i], v[0])
 			}
 		}
 

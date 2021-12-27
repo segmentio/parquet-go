@@ -61,7 +61,7 @@ type RowGroupColumn interface {
 
 	Swap(i, j int)
 
-	ValueBatchWriter
+	ValueWriter
 }
 
 func NewRowGroup(schema Node, options ...RowGroupOption) *RowGroup {
@@ -175,7 +175,7 @@ func (rg *RowGroup) WriteRow(row Row) error {
 	}
 
 	for columnIndex, values := range rg.values {
-		if _, err := rg.columns[columnIndex].WriteValueBatch(values); err != nil {
+		if _, err := rg.columns[columnIndex].WriteValues(values); err != nil {
 			return err
 		}
 	}
@@ -272,8 +272,8 @@ func (col *optionalRowGroupColumn) Swap(i, j int) {
 	col.definitionLevels[i], col.definitionLevels[j] = col.definitionLevels[j], col.definitionLevels[i]
 }
 
-func (col *optionalRowGroupColumn) WriteValueBatch(values []Value) (int, error) {
-	n, err := col.base.WriteValueBatch(values)
+func (col *optionalRowGroupColumn) WriteValues(values []Value) (int, error) {
+	n, err := col.base.WriteValues(values)
 	if err == nil {
 		for _, v := range values {
 			col.definitionLevels = append(col.definitionLevels, v.DefinitionLevel())
@@ -354,8 +354,8 @@ func (col *repeatedRowGroupColumn) Swap(i, j int) {
 	col.rows[i], col.rows[j] = col.rows[j], col.rows[i]
 }
 
-func (col *repeatedRowGroupColumn) WriteValueBatch(values []Value) (int, error) {
-	n, err := col.base.WriteValueBatch(values)
+func (col *repeatedRowGroupColumn) WriteValues(values []Value) (int, error) {
+	n, err := col.base.WriteValues(values)
 	if err == nil {
 		col.rows = append(col.rows, region{
 			offset: uint32(len(col.repetitionLevels)),
@@ -409,7 +409,7 @@ func (col *booleanRowGroupColumn) Swap(i, j int) {
 	col.values[i], col.values[j] = col.values[j], col.values[i]
 }
 
-func (col *booleanRowGroupColumn) WriteValueBatch(values []Value) (int, error) {
+func (col *booleanRowGroupColumn) WriteValues(values []Value) (int, error) {
 	for _, v := range values {
 		col.values = append(col.values, v.Boolean())
 	}
@@ -445,7 +445,7 @@ func (col *int32RowGroupColumn) Swap(i, j int) {
 	col.values[i], col.values[j] = col.values[j], col.values[i]
 }
 
-func (col *int32RowGroupColumn) WriteValueBatch(values []Value) (int, error) {
+func (col *int32RowGroupColumn) WriteValues(values []Value) (int, error) {
 	for _, v := range values {
 		col.values = append(col.values, v.Int32())
 	}
@@ -481,7 +481,7 @@ func (col *int64RowGroupColumn) Swap(i, j int) {
 	col.values[i], col.values[j] = col.values[j], col.values[i]
 }
 
-func (col *int64RowGroupColumn) WriteValueBatch(values []Value) (int, error) {
+func (col *int64RowGroupColumn) WriteValues(values []Value) (int, error) {
 	for _, v := range values {
 		col.values = append(col.values, v.Int64())
 	}
@@ -517,7 +517,7 @@ func (col *int96RowGroupColumn) Swap(i, j int) {
 	col.values[i], col.values[j] = col.values[j], col.values[i]
 }
 
-func (col *int96RowGroupColumn) WriteValueBatch(values []Value) (int, error) {
+func (col *int96RowGroupColumn) WriteValues(values []Value) (int, error) {
 	for _, v := range values {
 		col.values = append(col.values, v.Int96())
 	}
@@ -553,7 +553,7 @@ func (col *floatRowGroupColumn) Swap(i, j int) {
 	col.values[i], col.values[j] = col.values[j], col.values[i]
 }
 
-func (col *floatRowGroupColumn) WriteValueBatch(values []Value) (int, error) {
+func (col *floatRowGroupColumn) WriteValues(values []Value) (int, error) {
 	for _, v := range values {
 		col.values = append(col.values, v.Float())
 	}
@@ -589,7 +589,7 @@ func (col *doubleRowGroupColumn) Swap(i, j int) {
 	col.values[i], col.values[j] = col.values[j], col.values[i]
 }
 
-func (col *doubleRowGroupColumn) WriteValueBatch(values []Value) (int, error) {
+func (col *doubleRowGroupColumn) WriteValues(values []Value) (int, error) {
 	for _, v := range values {
 		col.values = append(col.values, v.Double())
 	}
@@ -623,7 +623,7 @@ func (col *byteArrayRowGroupColumn) Less(i, j int) bool { return col.values.Less
 
 func (col *byteArrayRowGroupColumn) Swap(i, j int) { col.values.Swap(i, j) }
 
-func (col *byteArrayRowGroupColumn) WriteValueBatch(values []Value) (int, error) {
+func (col *byteArrayRowGroupColumn) WriteValues(values []Value) (int, error) {
 	for _, v := range values {
 		col.values.Push(v.ByteArray())
 	}
@@ -676,7 +676,7 @@ func (col *fixedLenByteArrayRowGroupColumn) index(i int) []byte {
 	return col.data[j:k:k]
 }
 
-func (col *fixedLenByteArrayRowGroupColumn) WriteValueBatch(values []Value) (int, error) {
+func (col *fixedLenByteArrayRowGroupColumn) WriteValues(values []Value) (int, error) {
 	for _, v := range values {
 		col.data = append(col.data, v.ByteArray()...)
 	}

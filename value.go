@@ -35,36 +35,20 @@ type Value struct {
 	columnIndex     int8 // XOR so the zero-value is -1
 }
 
-// The ValueReader interface is implemented by types that read sequences of
-// parquet values.
-type ValueReader interface {
-	// Reads the next value from the sequence, or returns io.EOF when the end
-	// of the sequence was reached, or another error if no values could be read.
-	ReadValue() (Value, error)
-}
-
-// The ValueWriter interface is implemented by types that write sequences of
-// parquet values.
-type ValueWriter interface {
-	// Writes the next value to the sequence, returning a non-nil error if the
-	// write failed.
-	WriteValue(Value) error
-}
-
-// ValueBatchReader is an interface implemented by types that support reading
+// ValueReader is an interface implemented by types that support reading
 // batches of values.
-type ValueBatchReader interface {
+type ValueReader interface {
 	// Read values into the buffer passed as argument and return the number of
 	// values read. When all values have been read, the error will be io.EOF.
-	ReadValueBatch([]Value) (int, error)
+	ReadValues([]Value) (int, error)
 }
 
-// ValueBatchWriter is an interface implemented by types that support reading
+// ValueWriter is an interface implemented by types that support reading
 // batches of values.
-type ValueBatchWriter interface {
+type ValueWriter interface {
 	// Write values from the buffer passed as argument and returns the number
 	// of values written.
-	WriteValueBatch([]Value) (int, error)
+	WriteValues([]Value) (int, error)
 }
 
 // ValueOf constructs a parquet value from a Go value v.
@@ -686,39 +670,7 @@ func Equal(v1, v2 Value) bool {
 	}
 }
 
-type bufferedValueReader struct {
-	reader ValueBatchReader
-	buffer []Value
-	offset uint
-}
-
-func (b *bufferedValueReader) Reset(r ValueBatchReader) {
-	b.reader = r
-	b.buffer = b.buffer[:0]
-	b.offset = 0
-}
-
-func (b *bufferedValueReader) ReadValue() (Value, error) {
-	for {
-		if b.offset < uint(len(b.buffer)) {
-			v := b.buffer[b.offset]
-			b.offset++
-			return v, nil
-		}
-		if b.reader == nil {
-			return Value{}, io.EOF
-		}
-		n, err := b.reader.ReadValueBatch(b.buffer[:cap(b.buffer)])
-		if n == 0 {
-			return Value{}, err
-		}
-		b.buffer = b.buffer[:n]
-		b.offset = 0
-	}
-}
-
 var (
 	_ fmt.Formatter = Value{}
 	_ fmt.Stringer  = Value{}
-	_ ValueReader   = (*bufferedValueReader)(nil)
 )

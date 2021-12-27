@@ -105,16 +105,19 @@ func forEachColumnPage(col *parquet.Column, do func(*parquet.Column, *parquet.Da
 
 func forEachColumnValue(col *parquet.Column, do func(*parquet.Column, parquet.Value) error) error {
 	return forEachColumnPage(col, func(leaf *parquet.Column, page *parquet.DataPageReader) error {
+		values := make([]parquet.Value, 10)
 		for {
-			v, err := page.ReadValue()
+			n, err := page.ReadValues(values)
 			if err != nil {
 				if err != io.EOF {
 					return err
 				}
 				break
 			}
-			if err := do(leaf, v); err != nil {
-				return err
+			for i := 0; i < n; i++ {
+				if err := do(leaf, values[i]); err != nil {
+					return err
+				}
 			}
 		}
 		return nil

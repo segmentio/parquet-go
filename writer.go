@@ -493,10 +493,10 @@ func (rgw *rowGroupWriter) writeRow(row Row) (err error) {
 		return io.ErrClosedPipe
 	}
 
-	for _, v := range row {
-		c := &rgw.columns[v.ColumnIndex()]
+	for i := range row {
+		c := &rgw.columns[row[i].ColumnIndex()]
 		w := c.writer
-		if err := w.insert(w, v); err != nil {
+		if err := w.insert(w, row[i:i+1]); err != nil {
 			return err
 		}
 		c.numValues++
@@ -523,7 +523,7 @@ func (rgw *rowGroupWriter) writeRow(row Row) (err error) {
 }
 
 type columnChunkWriter struct {
-	insert func(*columnChunkWriter, Value) error
+	insert func(*columnChunkWriter, []Value) error
 	commit func(*columnChunkWriter) error
 
 	buffer      pageBuffer
@@ -607,8 +607,8 @@ func newColumnChunkWriter(buffer pageBuffer, codec compress.Codec, enc encoding.
 
 	switch {
 	case maxRepetitionLevel == 0 && maxDefinitionLevel == 0:
-		ccw.insert = (*columnChunkWriter).insertRequired
-		ccw.commit = (*columnChunkWriter).commitRequired
+		ccw.insert = (*columnChunkWriter).writeValues
+		ccw.commit = func(*columnChunkWriter) error { return nil }
 
 	case maxRepetitionLevel > 0:
 		ccw.insert = (*columnChunkWriter).insertRepeated
@@ -673,15 +673,17 @@ func (ccw *columnChunkWriter) reset() {
 	ccw.columnIndexer.Reset()
 }
 
-func (ccw *columnChunkWriter) insertOptional(value Value) error {
-	if err := ccw.writeValue(value); err != nil {
+func (ccw *columnChunkWriter) insertOptional(values []Value) error {
+	if err := ccw.writeValues(values); err != nil {
 		return err
 	}
-	if value.IsNull() {
-		ccw.nullCount++
-		ccw.numNulls++
+	for _, value := range values {
+		if value.IsNull() {
+			ccw.nullCount++
+			ccw.numNulls++
+		}
+		ccw.levels.definition = append(ccw.levels.definition, value.definitionLevel)
 	}
-	ccw.levels.definition = append(ccw.levels.definition, value.definitionLevel)
 	return nil
 }
 
@@ -689,13 +691,15 @@ func (ccw *columnChunkWriter) commitOptional() error {
 	return nil
 }
 
-func (ccw *columnChunkWriter) insertRepeated(value Value) error {
-	ccw.tx.levels.repetition = append(ccw.tx.levels.repetition, value.repetitionLevel)
-	ccw.tx.levels.definition = append(ccw.tx.levels.definition, value.definitionLevel)
-	if value.IsNull() {
-		ccw.tx.nulls++
-	} else {
-		ccw.tx.values = append(ccw.tx.values, value)
+func (ccw *columnChunkWriter) insertRepeated(values []Value) error {
+	for _, value := range values {
+		ccw.tx.levels.repetition = append(ccw.tx.levels.repetition, value.repetitionLevel)
+		ccw.tx.levels.definition = append(ccw.tx.levels.definition, value.definitionLevel)
+		if value.IsNull() {
+			ccw.tx.nulls++
+		} else {
+			ccw.tx.values = append(ccw.tx.values, value)
+		}
 	}
 	return nil
 }
@@ -710,7 +714,7 @@ func (ccw *columnChunkWriter) commitRepeated() error {
 		ccw.tx.levels.repetition = ccw.tx.levels.repetition[:0]
 		ccw.tx.levels.definition = ccw.tx.levels.definition[:0]
 	}()
-	err := ccw.writeValueBatch(ccw.tx.values)
+	err := ccw.writeValues(ccw.tx.values)
 	if err == nil {
 		ccw.levels.repetition = append(ccw.levels.repetition, ccw.tx.levels.repetition...)
 		ccw.levels.definition = append(ccw.levels.definition, ccw.tx.levels.definition...)
@@ -720,33 +724,9 @@ func (ccw *columnChunkWriter) commitRepeated() error {
 	return err
 }
 
-func (ccw *columnChunkWriter) insertRequired(value Value) error {
-	return ccw.writeValue(value)
-}
-
-func (ccw *columnChunkWriter) commitRequired() error {
-	return nil
-}
-
-func (ccw *columnChunkWriter) writeValue(value Value) error {
+func (ccw *columnChunkWriter) writeValues(values []Value) error {
 	for {
-		switch err := ccw.writer.WriteValue(value); err {
-		case nil:
-			ccw.numRows++
-			return nil
-		case ErrBufferFull:
-			if err := ccw.flush(); err != nil {
-				return err
-			}
-		default:
-			return err
-		}
-	}
-}
-
-func (ccw *columnChunkWriter) writeValueBatch(values []Value) error {
-	for {
-		switch _, err := ccw.writer.WriteValueBatch(values); err {
+		switch _, err := ccw.writer.WriteValues(values); err {
 		case nil:
 			ccw.numRows++
 			return nil

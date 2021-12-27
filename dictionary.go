@@ -33,7 +33,7 @@ type Dictionary interface {
 
 	// Inserts a value to the dictionary, returning the index at which it was
 	// recorded.
-	Insert(Value) (int, error)
+	Insert(Value) int
 
 	// Given an array of dictionary indexes, lookup the values into the array
 	// of values passed as second argument.
@@ -74,11 +74,11 @@ func (d *booleanDictionary) Len() int { return 2 }
 
 func (d *booleanDictionary) Index(i int) Value { return makeValueBoolean(d.values[i]) }
 
-func (d *booleanDictionary) Insert(v Value) (int, error) {
+func (d *booleanDictionary) Insert(v Value) int {
 	if v.Boolean() {
-		return 1, nil
+		return 1
 	} else {
-		return 0, nil
+		return 0
 	}
 }
 
@@ -134,11 +134,11 @@ func (d *int32Dictionary) Len() int { return len(d.values) }
 
 func (d *int32Dictionary) Index(i int) Value { return makeValueInt32(d.values[i]) }
 
-func (d *int32Dictionary) Insert(v Value) (int, error) { return d.insert(v.Int32()) }
+func (d *int32Dictionary) Insert(v Value) int { return d.insert(v.Int32()) }
 
-func (d *int32Dictionary) insert(value int32) (int, error) {
+func (d *int32Dictionary) insert(value int32) int {
 	if index, exists := d.index[value]; exists {
-		return int(index), nil
+		return int(index)
 	}
 	if d.index == nil {
 		d.index = make(map[int32]int32, cap(d.values))
@@ -146,7 +146,7 @@ func (d *int32Dictionary) insert(value int32) (int, error) {
 	index := len(d.values)
 	d.index[value] = int32(index)
 	d.values = append(d.values, value)
-	return index, nil
+	return index
 }
 
 func (d *int32Dictionary) Lookup(indexes []int32, values []Value) {
@@ -219,11 +219,11 @@ func (d *int64Dictionary) Len() int { return len(d.values) }
 
 func (d *int64Dictionary) Index(i int) Value { return makeValueInt64(d.values[i]) }
 
-func (d *int64Dictionary) Insert(v Value) (int, error) { return d.insert(v.Int64()) }
+func (d *int64Dictionary) Insert(v Value) int { return d.insert(v.Int64()) }
 
-func (d *int64Dictionary) insert(value int64) (int, error) {
+func (d *int64Dictionary) insert(value int64) int {
 	if index, exists := d.index[value]; exists {
-		return int(index), nil
+		return int(index)
 	}
 	if d.index == nil {
 		d.index = make(map[int64]int32, cap(d.values))
@@ -231,7 +231,7 @@ func (d *int64Dictionary) insert(value int64) (int, error) {
 	index := len(d.values)
 	d.index[value] = int32(index)
 	d.values = append(d.values, value)
-	return index, nil
+	return index
 }
 
 func (d *int64Dictionary) Lookup(indexes []int32, values []Value) {
@@ -304,11 +304,11 @@ func (d *int96Dictionary) Len() int { return len(d.values) }
 
 func (d *int96Dictionary) Index(i int) Value { return makeValueInt96(d.values[i]) }
 
-func (d *int96Dictionary) Insert(v Value) (int, error) { return d.insert(v.Int96()) }
+func (d *int96Dictionary) Insert(v Value) int { return d.insert(v.Int96()) }
 
-func (d *int96Dictionary) insert(value deprecated.Int96) (int, error) {
+func (d *int96Dictionary) insert(value deprecated.Int96) int {
 	if index, exists := d.index[value]; exists {
-		return int(index), nil
+		return int(index)
 	}
 	if d.index == nil {
 		d.index = make(map[deprecated.Int96]int32, cap(d.values))
@@ -316,7 +316,7 @@ func (d *int96Dictionary) insert(value deprecated.Int96) (int, error) {
 	index := len(d.values)
 	d.index[value] = int32(index)
 	d.values = append(d.values, value)
-	return index, nil
+	return index
 }
 
 func (d *int96Dictionary) Lookup(indexes []int32, values []Value) {
@@ -377,7 +377,7 @@ func (d floatDictionary) Index(i int) Value {
 	return makeValueFloat(math.Float32frombits(uint32(d.values[i])))
 }
 
-func (d floatDictionary) Insert(v Value) (int, error) {
+func (d floatDictionary) Insert(v Value) int {
 	return d.insert(int32(math.Float32bits(v.Float())))
 }
 
@@ -397,7 +397,7 @@ func (d doubleDictionary) Index(i int) Value {
 	return makeValueDouble(math.Float64frombits(uint64(d.values[i])))
 }
 
-func (d doubleDictionary) Insert(v Value) (int, error) {
+func (d doubleDictionary) Insert(v Value) int {
 	return d.insert(int64(math.Float64bits(v.Double())))
 }
 
@@ -427,22 +427,20 @@ func (d *byteArrayDictionary) Len() int { return d.values.Len() }
 
 func (d *byteArrayDictionary) Index(i int) Value { return makeValueBytes(ByteArray, d.values.Index(i)) }
 
-func (d *byteArrayDictionary) Insert(v Value) (int, error) { return d.insert(v.ByteArray()) }
+func (d *byteArrayDictionary) Insert(v Value) int { return d.insert(v.ByteArray()) }
 
-func (d *byteArrayDictionary) insert(value []byte) (int, error) {
+func (d *byteArrayDictionary) insert(value []byte) int {
 	if index, exists := d.index[string(value)]; exists {
-		return int(index), nil
+		return int(index)
 	}
-
 	d.values.Push(value)
 	index := d.values.Len() - 1
 	stringValue := bits.BytesToString(d.values.Index(index))
-
 	if d.index == nil {
 		d.index = make(map[string]int32, d.values.Cap())
 	}
 	d.index[stringValue] = int32(index)
-	return index, nil
+	return index
 }
 
 func (d *byteArrayDictionary) Lookup(indexes []int32, values []Value) {
@@ -509,13 +507,13 @@ func (d *fixedLenByteArrayDictionary) value(i int) []byte {
 	return d.values[i*d.size : (i+1)*d.size]
 }
 
-func (d *fixedLenByteArrayDictionary) Insert(v Value) (int, error) {
+func (d *fixedLenByteArrayDictionary) Insert(v Value) int {
 	return d.insert(v.ByteArray())
 }
 
-func (d *fixedLenByteArrayDictionary) insert(value []byte) (int, error) {
+func (d *fixedLenByteArrayDictionary) insert(value []byte) int {
 	if index, exists := d.index[string(value)]; exists {
-		return int(index), nil
+		return int(index)
 	}
 	if d.index == nil {
 		d.index = make(map[string]int32, cap(d.values)/d.size)
@@ -524,7 +522,7 @@ func (d *fixedLenByteArrayDictionary) insert(value []byte) (int, error) {
 	n := len(d.values)
 	d.values = append(d.values, value...)
 	d.index[bits.BytesToString(d.values[n:])] = int32(i)
-	return i, nil
+	return i
 }
 
 func (d *fixedLenByteArrayDictionary) Lookup(indexes []int32, values []Value) {
@@ -601,14 +599,7 @@ func (r *indexedPageReader) Reset(decoder encoding.Decoder) {
 	r.offset = 0
 }
 
-func (r *indexedPageReader) ReadValue() (Value, error) {
-	_, err := r.ReadValueBatch(r.batch[:])
-	v := r.batch[0]
-	r.batch[0] = Value{}
-	return v, err
-}
-
-func (r *indexedPageReader) ReadValueBatch(values []Value) (int, error) {
+func (r *indexedPageReader) ReadValues(values []Value) (int, error) {
 	i := 0
 	for {
 		for r.offset < uint(len(r.values)) && i < len(values) {
@@ -661,20 +652,9 @@ func (w *indexedPageWriter) Page() Page { return &w.indexedPage }
 
 func (w *indexedPageWriter) Reset() { w.values = w.values[:0] }
 
-func (w *indexedPageWriter) WriteValue(value Value) error {
-	i, err := w.dict.Insert(value)
-	if err != nil {
-		return err
-	}
-	w.values = append(w.values, int32(i))
-	return nil
-}
-
-func (w *indexedPageWriter) WriteValueBatch(values []Value) (n int, err error) {
+func (w *indexedPageWriter) WriteValues(values []Value) (n int, err error) {
 	for _, value := range values {
-		if err := w.WriteValue(value); err != nil {
-			return n, err
-		}
+		w.values = append(w.values, int32(w.dict.Insert(value)))
 		n++
 	}
 	return n, nil

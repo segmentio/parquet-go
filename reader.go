@@ -217,9 +217,9 @@ func columnReadFuncOfLeaf(column *Column, readers []*columnChunkReader) columnRe
 		return func(row Row, _ int8) (Row, error) {
 			// Manually inline the buffered value read because the cast is too high
 			// for the compiler in ReadValue. This gives a ~20% increase in throughput.
-			if leaf.values.offset < uint(len(leaf.values.buffer)) {
-				row = append(row, leaf.values.buffer[leaf.values.offset])
-				leaf.values.offset++
+			if leaf.offset < uint(len(leaf.values)) {
+				row = append(row, leaf.values[leaf.offset])
+				leaf.offset++
 				return row, nil
 			}
 			v, err := leaf.readValue()
@@ -237,9 +237,9 @@ func columnReadFuncOfLeaf(column *Column, readers []*columnChunkReader) columnRe
 		if leaf.peeked {
 			v = leaf.cursor
 		} else {
-			if leaf.values.offset < uint(len(leaf.values.buffer)) {
-				v = leaf.values.buffer[leaf.values.offset]
-				leaf.values.offset++
+			if leaf.offset < uint(len(leaf.values)) {
+				v = leaf.values[leaf.offset]
+				leaf.offset++
 			} else if v, err = leaf.readValue(); err != nil {
 				if level > 0 && err == io.EOF {
 					err = nil
@@ -267,9 +267,11 @@ type columnChunkReader struct {
 	chunks     *ColumnChunks
 	pages      *ColumnPages
 	reader     *DataPageReader
-	values     bufferedValueReader
 	dictionary Dictionary
 	numPages   int
+
+	values []Value
+	offset uint
 
 	page struct {
 		decoder encoding.Decoder
@@ -291,9 +293,7 @@ func newColumnChunkReader(column *Column, config *ReaderConfig) *columnChunkRead
 		bufferSize: config.PageBufferSize,
 		column:     column,
 		chunks:     column.Chunks(),
-		values: bufferedValueReader{
-			buffer: make([]Value, 0, 170),
-		},
+		values:     make([]Value, 0, 170),
 	}
 
 	maxRepetitionLevel := column.MaxRepetitionLevel()
@@ -312,7 +312,8 @@ func (ccr *columnChunkReader) reset() {
 	}
 
 	ccr.chunks.Seek(0)
-	ccr.values.Reset(nil)
+	ccr.values = ccr.values[:0]
+	ccr.offset = 0
 	ccr.numPages = 0
 
 	ccr.peeked = false
@@ -321,14 +322,25 @@ func (ccr *columnChunkReader) reset() {
 
 func (ccr *columnChunkReader) readValue() (Value, error) {
 readNextValue:
-	v, err := ccr.values.ReadValue()
-	if err != nil {
-		if err == io.EOF {
-			goto readNextPage
+	for {
+		if ccr.offset < uint(len(ccr.values)) {
+			v := ccr.values[ccr.offset]
+			ccr.offset++
+			return v, nil
 		}
-		err = fmt.Errorf("%s: %w", join(ccr.column.Path()), err)
+		if ccr.reader == nil {
+			break
+		}
+		n, err := ccr.reader.ReadValues(ccr.values[:cap(ccr.values)])
+		if n == 0 {
+			if err == io.EOF {
+				break
+			}
+			return Value{}, fmt.Errorf("%s: %w", join(ccr.column.Path()), err)
+		}
+		ccr.values = ccr.values[:n]
+		ccr.offset = 0
 	}
-	return v, err
 
 readNextPage:
 	if ccr.pages != nil {
@@ -415,7 +427,6 @@ func (ccr *columnChunkReader) readDataPage(header DataPageHeader) {
 		)
 	}
 
-	ccr.values.Reset(ccr.reader)
 	ccr.numPages++
 }
 

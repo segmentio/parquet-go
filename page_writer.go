@@ -30,10 +30,8 @@ type PageWriter interface {
 	// previously buffered by the writer.
 	Reset()
 
-	// PageWriter implements ValueWriter and ValueBatchWriter to allow writing
-	// values to the page.
+	// PageWriter implements ValueWriter to allow writing values to the page.
 	ValueWriter
-	ValueBatchWriter
 }
 
 type booleanPageWriter struct{ booleanPage }
@@ -51,15 +49,7 @@ func (w *booleanPageWriter) Page() Page { return &w.booleanPage }
 
 func (w *booleanPageWriter) Reset() { w.values = w.values[:0] }
 
-func (w *booleanPageWriter) WriteValue(value Value) error {
-	if len(w.values) == cap(w.values) {
-		return ErrBufferFull
-	}
-	w.values = append(w.values, value.Boolean())
-	return nil
-}
-
-func (w *booleanPageWriter) WriteValueBatch(values []Value) (int, error) {
+func (w *booleanPageWriter) WriteValues(values []Value) (int, error) {
 	if len(w.values) > 0 && (cap(w.values)-len(w.values)) < len(values) {
 		return 0, ErrBufferFull
 	}
@@ -84,15 +74,7 @@ func (w *int32PageWriter) Page() Page { return &w.int32Page }
 
 func (w *int32PageWriter) Reset() { w.values = w.values[:0] }
 
-func (w *int32PageWriter) WriteValue(value Value) error {
-	if len(w.values) == cap(w.values) {
-		return ErrBufferFull
-	}
-	w.values = append(w.values, value.Int32())
-	return nil
-}
-
-func (w *int32PageWriter) WriteValueBatch(values []Value) (int, error) {
+func (w *int32PageWriter) WriteValues(values []Value) (int, error) {
 	if len(w.values) > 0 && (cap(w.values)-len(w.values)) < len(values) {
 		return 0, ErrBufferFull
 	}
@@ -117,15 +99,7 @@ func (w *int64PageWriter) Page() Page { return &w.int64Page }
 
 func (w *int64PageWriter) Reset() { w.values = w.values[:0] }
 
-func (w *int64PageWriter) WriteValue(value Value) error {
-	if len(w.values) == cap(w.values) {
-		return ErrBufferFull
-	}
-	w.values = append(w.values, value.Int64())
-	return nil
-}
-
-func (w *int64PageWriter) WriteValueBatch(values []Value) (int, error) {
+func (w *int64PageWriter) WriteValues(values []Value) (int, error) {
 	if len(w.values) > 0 && (cap(w.values)-len(w.values)) < len(values) {
 		return 0, ErrBufferFull
 	}
@@ -150,15 +124,7 @@ func (w *int96PageWriter) Page() Page { return &w.int96Page }
 
 func (w *int96PageWriter) Reset() { w.values = w.values[:0] }
 
-func (w *int96PageWriter) WriteValue(value Value) error {
-	if len(w.values) == cap(w.values) {
-		return ErrBufferFull
-	}
-	w.values = append(w.values, value.Int96())
-	return nil
-}
-
-func (w *int96PageWriter) WriteValueBatch(values []Value) (int, error) {
+func (w *int96PageWriter) WriteValues(values []Value) (int, error) {
 	if len(w.values) > 0 && (cap(w.values)-len(w.values)) < len(values) {
 		return 0, ErrBufferFull
 	}
@@ -183,15 +149,7 @@ func (w *floatPageWriter) Page() Page { return &w.floatPage }
 
 func (w *floatPageWriter) Reset() { w.values = w.values[:0] }
 
-func (w *floatPageWriter) WriteValue(value Value) error {
-	if len(w.values) == cap(w.values) {
-		return ErrBufferFull
-	}
-	w.values = append(w.values, value.Float())
-	return nil
-}
-
-func (w *floatPageWriter) WriteValueBatch(values []Value) (int, error) {
+func (w *floatPageWriter) WriteValues(values []Value) (int, error) {
 	if len(w.values) > 0 && (cap(w.values)-len(w.values)) < len(values) {
 		return 0, ErrBufferFull
 	}
@@ -216,15 +174,7 @@ func (w *doublePageWriter) Page() Page { return &w.doublePage }
 
 func (w *doublePageWriter) Reset() { w.values = w.values[:0] }
 
-func (w *doublePageWriter) WriteValue(value Value) error {
-	if len(w.values) == cap(w.values) {
-		return ErrBufferFull
-	}
-	w.values = append(w.values, value.Double())
-	return nil
-}
-
-func (w *doublePageWriter) WriteValueBatch(values []Value) (int, error) {
+func (w *doublePageWriter) WriteValues(values []Value) (int, error) {
 	if len(w.values) > 0 && (cap(w.values)-len(w.values)) < len(values) {
 		return 0, ErrBufferFull
 	}
@@ -249,22 +199,7 @@ func (w *byteArrayPageWriter) Page() Page { return &w.byteArrayPage }
 
 func (w *byteArrayPageWriter) Reset() { w.values.Reset() }
 
-func (w *byteArrayPageWriter) WriteValue(value Value) error {
-	b := value.ByteArray()
-
-	if len(b) > math.MaxInt32 {
-		return fmt.Errorf("cannot write value of length %d to parquet byte array page", len(b))
-	}
-
-	if w.values.Len() == w.values.Cap() {
-		return ErrBufferFull
-	}
-
-	w.values.Push(b)
-	return nil
-}
-
-func (w *byteArrayPageWriter) WriteValueBatch(values []Value) (int, error) {
+func (w *byteArrayPageWriter) WriteValues(values []Value) (int, error) {
 	if len(values) == 0 {
 		return 0, nil
 	}
@@ -303,22 +238,7 @@ func (w *fixedLenByteArrayPageWriter) Page() Page { return &w.fixedLenByteArrayP
 
 func (w *fixedLenByteArrayPageWriter) Reset() { w.data = w.data[:0] }
 
-func (w *fixedLenByteArrayPageWriter) WriteValue(value Value) error {
-	b := value.ByteArray()
-
-	if len(b) != w.size {
-		return fmt.Errorf("cannot write value of size %d to fixed length parquet page of size %d", len(b), w.size)
-	}
-
-	if (cap(w.data) - len(w.data)) < len(b) {
-		return ErrBufferFull
-	}
-
-	w.data = append(w.data, b...)
-	return nil
-}
-
-func (w *fixedLenByteArrayPageWriter) WriteValueBatch(values []Value) (int, error) {
+func (w *fixedLenByteArrayPageWriter) WriteValues(values []Value) (int, error) {
 	for _, value := range values {
 		if b := value.ByteArray(); len(b) != w.size {
 			return 0, fmt.Errorf("cannot write value of size %d to fixed length parquet page of size %d", len(b), w.size)
