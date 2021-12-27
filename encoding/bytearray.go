@@ -102,6 +102,10 @@ func (list *ByteArrayList) Range(f func([]byte) bool) {
 	}
 }
 
+func (list *ByteArrayList) Size() int64 {
+	return 8*int64(len(list.slices)) + int64(len(list.values))
+}
+
 func (list *ByteArrayList) Cap() int {
 	return cap(list.slices)
 }

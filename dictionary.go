@@ -691,6 +691,8 @@ func newIndexedPage(dict Dictionary, values []int32) *indexedPage {
 
 func (page *indexedPage) Type() Type { return page.dict.Type() }
 
+func (page *indexedPage) Size() int64 { return 4 * int64(len(page.values)) }
+
 func (page *indexedPage) NumValues() int { return len(page.values) }
 
 func (page *indexedPage) NumNulls() int { return 0 }

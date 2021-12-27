@@ -11,6 +11,9 @@ type Page interface {
 	// Returns the type values written to the underlying page.
 	Type() Type
 
+	// Returns the size of the page in memory (in bytes).
+	Size() int64
+
 	// Returns the number of values currently buffered in the page.
 	NumValues() int
 
@@ -51,6 +54,10 @@ func newPageWithLevels(page Page, maxRepetitionLevel, maxDefinitionLevel int8, d
 	}
 }
 
+func (page *pageWithLevels) Size() int64 {
+	return page.Page.Size() + int64(len(page.repetitionLevels)) + int64(len(page.definitionLevels))
+}
+
 func (page *pageWithLevels) NumNulls() int {
 	numNulls := 0
 	for _, def := range page.definitionLevels {
@@ -84,6 +91,8 @@ func newBooleanPage(typ Type, values []bool) *booleanPage {
 }
 
 func (page *booleanPage) Type() Type { return page.typ }
+
+func (page *booleanPage) Size() int64 { return int64(len(page.values)) }
 
 func (page *booleanPage) NumValues() int { return len(page.values) }
 
@@ -135,6 +144,8 @@ func newInt32Page(typ Type, values []int32) *int32Page {
 
 func (page *int32Page) Type() Type { return page.typ }
 
+func (page *int32Page) Size() int64 { return 4 * int64(len(page.values)) }
+
 func (page *int32Page) NumValues() int { return len(page.values) }
 
 func (page *int32Page) NumNulls() int { return 0 }
@@ -166,6 +177,8 @@ func newInt64Page(typ Type, values []int64) *int64Page {
 }
 
 func (page *int64Page) Type() Type { return page.typ }
+
+func (page *int64Page) Size() int64 { return 8 * int64(len(page.values)) }
 
 func (page *int64Page) NumValues() int { return len(page.values) }
 
@@ -199,6 +212,8 @@ func newInt96Page(typ Type, values []deprecated.Int96) *int96Page {
 
 func (page *int96Page) Type() Type { return page.typ }
 
+func (page *int96Page) Size() int64 { return 12 * int64(len(page.values)) }
+
 func (page *int96Page) NumValues() int { return len(page.values) }
 
 func (page *int96Page) NumNulls() int { return 0 }
@@ -230,6 +245,8 @@ func newFloatPage(typ Type, values []float32) *floatPage {
 }
 
 func (page *floatPage) Type() Type { return page.typ }
+
+func (page *floatPage) Size() int64 { return 4 * int64(len(page.values)) }
 
 func (page *floatPage) NumValues() int { return len(page.values) }
 
@@ -263,6 +280,8 @@ func newDoublePage(typ Type, values []float64) *doublePage {
 
 func (page *doublePage) Type() Type { return page.typ }
 
+func (page *doublePage) Size() int64 { return 8 * int64(len(page.values)) }
+
 func (page *doublePage) NumValues() int { return len(page.values) }
 
 func (page *doublePage) NumNulls() int { return 0 }
@@ -294,6 +313,8 @@ func newByteArrayPage(typ Type, values encoding.ByteArrayList) *byteArrayPage {
 }
 
 func (page *byteArrayPage) Type() Type { return page.typ }
+
+func (page *byteArrayPage) Size() int64 { return page.values.Size() }
 
 func (page *byteArrayPage) NumValues() int { return page.values.Len() }
 
@@ -347,6 +368,8 @@ func newFixedLenByteArrayPage(typ Type, data []byte) *fixedLenByteArrayPage {
 }
 
 func (page *fixedLenByteArrayPage) Type() Type { return page.typ }
+
+func (page *fixedLenByteArrayPage) Size() int64 { return int64(len(page.data)) }
 
 func (page *fixedLenByteArrayPage) NumValues() int { return len(page.data) / page.size }
 

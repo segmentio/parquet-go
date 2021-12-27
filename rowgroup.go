@@ -5,6 +5,7 @@ import (
 	"sort"
 
 	"github.com/segmentio/parquet/deprecated"
+	"github.com/segmentio/parquet/encoding"
 	"github.com/segmentio/parquet/format"
 )
 
@@ -256,6 +257,11 @@ type repeatedRowGroupColumn struct {
 	base RowGroupColumn
 	rows []region
 	rep  []int8
+}
+
+type region struct {
+	offset uint32
+	length uint32
 }
 
 func newRepeatedRowGroupColumn(base RowGroupColumn) *repeatedRowGroupColumn {
@@ -533,62 +539,33 @@ func (col *doubleRowGroupColumn) WriteValueBatch(values []Value) (int, error) {
 
 type byteArrayRowGroupColumn struct {
 	typ    Type
-	slices []region
-	values []byte
-}
-
-type region struct {
-	offset uint32
-	length uint32
+	values encoding.ByteArrayList
 }
 
 func newByteArrayRowGroupColumn(typ Type, bufferSize int) *byteArrayRowGroupColumn {
-	const estimatedAverageValueLength = 16
-	const sizeOfRegion = 8
 	return &byteArrayRowGroupColumn{
 		typ:    typ,
-		slices: make([]region, 0, (bufferSize/estimatedAverageValueLength)/sizeOfRegion),
-		values: make([]byte, 0, bufferSize-(bufferSize/estimatedAverageValueLength)),
+		values: encoding.MakeByteArrayList(bufferSize / 16),
 	}
 }
 
 func (col *byteArrayRowGroupColumn) Type() Type { return col.typ }
 
-func (col *byteArrayRowGroupColumn) Reset() {
-	col.slices = col.slices[:0]
-	col.values = col.values[:0]
-}
+func (col *byteArrayRowGroupColumn) Reset() { col.values.Reset() }
 
-func (col *byteArrayRowGroupColumn) Size() int64 {
-	return 8*int64(len(col.slices)) + int64(len(col.values))
-}
+func (col *byteArrayRowGroupColumn) Size() int64 { return col.values.Size() }
 
-func (col *byteArrayRowGroupColumn) Cap() int { return cap(col.slices) }
+func (col *byteArrayRowGroupColumn) Cap() int { return col.values.Cap() }
 
-func (col *byteArrayRowGroupColumn) Len() int { return len(col.slices) }
+func (col *byteArrayRowGroupColumn) Len() int { return col.values.Len() }
 
-func (col *byteArrayRowGroupColumn) Less(i, j int) bool {
-	return bytes.Compare(col.index(i), col.index(j)) < 0
-}
+func (col *byteArrayRowGroupColumn) Less(i, j int) bool { return col.values.Less(i, j) }
 
-func (col *byteArrayRowGroupColumn) Swap(i, j int) {
-	col.slices[i], col.slices[j] = col.slices[j], col.slices[i]
-}
-
-func (col *byteArrayRowGroupColumn) index(i int) []byte {
-	s := col.slices[i]
-	return col.values[s.offset : s.offset+s.length]
-}
+func (col *byteArrayRowGroupColumn) Swap(i, j int) { col.values.Swap(i, j) }
 
 func (col *byteArrayRowGroupColumn) WriteValueBatch(values []Value) (int, error) {
 	for _, v := range values {
-		b := v.ByteArray()
-		s := region{
-			offset: uint32(len(col.values)),
-			length: uint32(len(b)),
-		}
-		col.slices = append(col.slices, s)
-		col.values = append(col.values, b...)
+		col.values.Push(v.ByteArray())
 	}
 	return len(values), nil
 }
