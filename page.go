@@ -1,11 +1,8 @@
 package parquet
 
 import (
-	"bytes"
-
 	"github.com/segmentio/parquet/deprecated"
 	"github.com/segmentio/parquet/encoding"
-	"github.com/segmentio/parquet/encoding/plain"
 	"github.com/segmentio/parquet/internal/bits"
 )
 
@@ -289,77 +286,34 @@ func (page *doublePage) WriteTo(enc encoding.Encoder) error { return enc.EncodeD
 
 type byteArrayPage struct {
 	typ    Type
-	count  int
-	values []byte
+	values encoding.ByteArrayList
 }
 
-func newByteArrayPage(typ Type, count int, values []byte) *byteArrayPage {
-	return &byteArrayPage{
-		typ:    typ,
-		count:  count,
-		values: values,
-	}
+func newByteArrayPage(typ Type, values encoding.ByteArrayList) *byteArrayPage {
+	return &byteArrayPage{typ: typ, values: values}
 }
-
-/*
-type byteArraySlice struct{ i, j uint32 }
-
-type ByteArrayList struct {
-	slices []byteArraySlice
-	values []byte
-}
-
-func (list *ByteArrayList) Reset() {
-	list.slices = list.slices[:0]
-	list.values = list.values[:0]
-}
-
-func (list *ByteArrayList) Push(b []byte) {
-	list.slices = append(list.slices, byteArrayList{
-		i: uint32(len(list.values)),
-		j: uint32(len(list.values) + len(b)),
-	})
-	list.values = append(list.values, b...)
-}
-
-func (list *ByteArrayList) Index(i int) []byte {
-	s := list.slices[i]
-	v := list.values[s.i:s.j:s.j]
-	return v
-}
-
-func (list *ByteArrayList) Len() int {
-	return len(list.slices)
-}
-
-func (list *ByteArrayList) Less(i, j int) bool {
-	return string(list.Index(i)) < string(list.Index(j))
-}
-
-func (list *ByteArrayList) Swap(i, j int) bool {
-	list.slices[i], list.slices[j] = list.slices[j], list.slices[i]
-}
-*/
 
 func (page *byteArrayPage) Type() Type { return page.typ }
 
-func (page *byteArrayPage) NumValues() int { return page.count }
+func (page *byteArrayPage) NumValues() int { return page.values.Len() }
 
 func (page *byteArrayPage) NumNulls() int { return 0 }
 
 func (page *byteArrayPage) Bounds() (min, max Value) {
-	if page.count > 0 {
-		minBytes, values := plain.NextByteArray(page.values)
+	if page.values.Len() > 0 {
+		minBytes := page.values.Index(0)
 		maxBytes := minBytes
-		plain.ScanByteArrayList(values, plain.All, func(value []byte) error {
+
+		for i := 1; i < page.values.Len(); i++ {
+			v := page.values.Index(i)
 			switch {
-			case bytes.Compare(value, minBytes) < 0:
-				minBytes = value
-			case bytes.Compare(value, maxBytes) > 0:
-				maxBytes = value
+			case string(v) < string(minBytes):
+				minBytes = v
+			case string(v) > string(maxBytes):
+				maxBytes = v
 			}
-			return nil
-		})
+		}
+
 		min = makeValueBytes(ByteArray, minBytes).Clone()
 		max = makeValueBytes(ByteArray, maxBytes).Clone()
 	}
@@ -367,19 +321,7 @@ func (page *byteArrayPage) Bounds() (min, max Value) {
 }
 
 func (page *byteArrayPage) Slice(i, j int) Page {
-	startOffset, endOffset, offset, count := 0, 0, 0, 0
-	plain.ScanByteArrayList(page.values, plain.All, func(value []byte) error {
-		if count == i {
-			startOffset = offset
-		}
-		count++
-		offset += 4 + len(value)
-		if count == j {
-			endOffset = offset
-		}
-		return nil
-	})
-	return newByteArrayPage(page.typ, j-i, page.values[startOffset:endOffset])
+	return newByteArrayPage(page.typ, page.values.Slice(i, j))
 }
 
 func (page *byteArrayPage) RepetitionLevels() []int8 { return nil }

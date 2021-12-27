@@ -1,6 +1,7 @@
 package plain
 
 import (
+	"encoding/binary"
 	"fmt"
 	"io"
 
@@ -14,6 +15,7 @@ import (
 type Encoder struct {
 	encoding.NotSupportedEncoder
 	writer io.Writer
+	buffer [4]byte
 	rle    *rle.Encoder
 }
 
@@ -65,13 +67,17 @@ func (e *Encoder) EncodeDouble(data []float64) error {
 	return err
 }
 
-func (e *Encoder) EncodeByteArray(data []byte) error {
-	if _, err := ScanByteArrayList(data, All, func(value []byte) error {
-		return nil
-	}); err != nil {
-		return err
-	}
-	_, err := e.writer.Write(data)
+func (e *Encoder) EncodeByteArray(data encoding.ByteArrayList) (err error) {
+	data.Range(func(value []byte) bool {
+		binary.LittleEndian.PutUint32(e.buffer[:4], uint32(len(value)))
+		if _, err = e.writer.Write(e.buffer[:4]); err != nil {
+			return false
+		}
+		if _, err = e.writer.Write(value); err != nil {
+			return false
+		}
+		return true
+	})
 	return err
 }
 

@@ -5,7 +5,7 @@ import (
 	"math"
 
 	"github.com/segmentio/parquet/deprecated"
-	"github.com/segmentio/parquet/encoding/plain"
+	"github.com/segmentio/parquet/encoding"
 )
 
 // PageWriter is an interface implemented by types which support writing valuees
@@ -30,8 +30,9 @@ type PageWriter interface {
 	// previously buffered by the writer.
 	Reset()
 
+	// PageWriter implements ValueWriter and ValueBatchWriter to allow writing
+	// values to the page.
 	ValueWriter
-
 	ValueBatchWriter
 }
 
@@ -239,30 +240,27 @@ func newByteArrayPageWriter(typ Type, bufferSize int) *byteArrayPageWriter {
 	return &byteArrayPageWriter{
 		byteArrayPage: byteArrayPage{
 			typ:    typ,
-			values: make([]byte, 0, atLeast(bufferSize, 4)),
+			values: encoding.MakeByteArrayList(atLeastOne(bufferSize / 16)),
 		},
 	}
 }
 
 func (w *byteArrayPageWriter) Page() Page { return &w.byteArrayPage }
 
-func (w *byteArrayPageWriter) Reset() { w.values, w.count = w.values[:0], 0 }
+func (w *byteArrayPageWriter) Reset() { w.values.Reset() }
 
 func (w *byteArrayPageWriter) WriteValue(value Value) error {
 	b := value.ByteArray()
 
-	if len(b) > (math.MaxInt32 - 4) {
+	if len(b) > math.MaxInt32 {
 		return fmt.Errorf("cannot write value of length %d to parquet byte array page", len(b))
 	}
 
-	if (cap(w.values) - len(w.values)) < (4 + len(b)) {
-		if len(w.values) > 0 {
-			return ErrBufferFull
-		}
+	if w.values.Len() == w.values.Cap() {
+		return ErrBufferFull
 	}
 
-	w.values = plain.AppendByteArray(w.values, b)
-	w.count++
+	w.values.Push(b)
 	return nil
 }
 
@@ -271,27 +269,20 @@ func (w *byteArrayPageWriter) WriteValueBatch(values []Value) (int, error) {
 		return 0, nil
 	}
 
-	totalSize := 0
-
 	for _, value := range values {
-		b := value.ByteArray()
-
-		if len(b) > (math.MaxInt32 - 4) {
+		if b := value.ByteArray(); len(b) > math.MaxInt32 {
 			return 0, fmt.Errorf("cannot write value of length %d to parquet byte array page", len(b))
 		}
-
-		totalSize += 4 + len(b)
 	}
 
-	if w.count > 0 && (cap(w.values)-len(w.values)) < totalSize {
+	if w.values.Len() > 0 && len(values) > (w.values.Cap()-w.values.Len()) {
 		return 0, ErrBufferFull
 	}
 
 	for _, value := range values {
-		w.values = plain.AppendByteArray(w.values, value.ByteArray())
+		w.values.Push(value.ByteArray())
 	}
 
-	w.count += len(values)
 	return len(values), nil
 }
 

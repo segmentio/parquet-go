@@ -7,7 +7,6 @@ import (
 
 	"github.com/segmentio/parquet/deprecated"
 	"github.com/segmentio/parquet/encoding"
-	"github.com/segmentio/parquet/encoding/plain"
 	"github.com/segmentio/parquet/internal/bits"
 )
 
@@ -410,52 +409,39 @@ func (d doubleDictionary) Lookup(indexes []int32, values []Value) {
 
 type byteArrayDictionary struct {
 	typ    Type
-	values []byte
-	offset []int32
+	values encoding.ByteArrayList
 	index  map[string]int32
 }
 
 func newByteArrayDictionary(typ Type, bufferSize int) *byteArrayDictionary {
-	const valueItemSize = 20
-	const offsetItemsize = 4
-	const indexItemSize = 16 + 4 + mapSizeOverheadPerItem
-	capacity := bufferSize / (valueItemSize + offsetItemsize + indexItemSize)
+	capacity := bufferSize / 16
 	return &byteArrayDictionary{
 		typ:    typ,
-		values: make([]byte, 0, capacity*valueItemSize),
-		offset: make([]int32, 0, capacity),
+		values: encoding.MakeByteArrayList(atLeastOne(capacity)),
 	}
 }
 
 func (d *byteArrayDictionary) Type() Type { return d.typ }
 
-func (d *byteArrayDictionary) Len() int { return len(d.offset) }
+func (d *byteArrayDictionary) Len() int { return d.values.Len() }
 
-func (d *byteArrayDictionary) Index(i int) Value {
-	offset := d.offset[i]
-	value, _ := plain.NextByteArray(d.values[offset:])
-	return makeValueBytes(ByteArray, value)
-}
+func (d *byteArrayDictionary) Index(i int) Value { return makeValueBytes(ByteArray, d.values.Index(i)) }
 
-func (d *byteArrayDictionary) Insert(v Value) (int, error) {
-	return d.insert(v.ByteArray())
-}
+func (d *byteArrayDictionary) Insert(v Value) (int, error) { return d.insert(v.ByteArray()) }
 
 func (d *byteArrayDictionary) insert(value []byte) (int, error) {
 	if index, exists := d.index[string(value)]; exists {
 		return int(index), nil
 	}
 
-	offset := len(d.values)
-	d.values = plain.AppendByteArray(d.values, value)
-	stringValue := bits.BytesToString(d.values[offset+4:])
+	d.values.Push(value)
+	index := d.values.Len() - 1
+	stringValue := bits.BytesToString(d.values.Index(index))
 
 	if d.index == nil {
-		d.index = make(map[string]int32, cap(d.offset))
+		d.index = make(map[string]int32, d.values.Cap())
 	}
-	index := len(d.offset)
 	d.index[stringValue] = int32(index)
-	d.offset = append(d.offset, int32(offset))
 	return index, nil
 }
 
@@ -467,44 +453,16 @@ func (d *byteArrayDictionary) Lookup(indexes []int32, values []Value) {
 
 func (d *byteArrayDictionary) ReadFrom(decoder encoding.Decoder) error {
 	d.Reset()
-
-	if cap(d.values) == 0 {
-		d.values = make([]byte, 0, defaultBufferSize)
-	}
-
 	for {
-		if (cap(d.values) - len(d.values)) < 4 {
-			newValues := make([]byte, len(d.values), bits.NearestPowerOfTwo(len(d.values)+4))
-			copy(newValues, d.values)
-			d.values = newValues
+		if d.values.Len() == d.values.Cap() {
+			d.values.Grow(d.values.Len())
 		}
-
-		buffer := d.values[len(d.values):cap(d.values)]
-		n, err := decoder.DecodeByteArray(buffer)
-		if n > 0 {
-			offset := len(d.values)
-			_, err := plain.ScanByteArrayList(buffer, n, func(value []byte) error {
-				d.offset = append(d.offset, int32(offset))
-				offset += 4 + len(value)
-				return nil
-			})
-			d.values = d.values[:offset]
-			if err != nil {
-				return fmt.Errorf("reading parquet dictionary of binary values: %w", err)
+		_, err := decoder.DecodeByteArray(&d.values)
+		if err != nil {
+			if err == io.EOF {
+				err = nil
 			}
-		}
-
-		switch err {
-		case nil:
-		case io.EOF:
-			return nil
-		case encoding.ErrValueTooLarge:
-			size := 4 + uint32(plain.NextByteArrayLength(d.values[len(d.values):len(d.values)+4]))
-			newValues := make([]byte, len(d.values), bits.NearestPowerOfTwo32(uint32(len(d.values))+size))
-			copy(newValues, d.values)
-			d.values = newValues
-		default:
-			return fmt.Errorf("reading parquet dictionary of binary values: %w", err)
+			return err
 		}
 	}
 }
@@ -517,8 +475,7 @@ func (d *byteArrayDictionary) WriteTo(encoder encoding.Encoder) error {
 }
 
 func (d *byteArrayDictionary) Reset() {
-	d.values = d.values[:0]
-	d.offset = d.offset[:0]
+	d.values.Reset()
 	d.index = nil
 }
 

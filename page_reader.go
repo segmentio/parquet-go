@@ -6,7 +6,6 @@ import (
 
 	"github.com/segmentio/parquet/deprecated"
 	"github.com/segmentio/parquet/encoding"
-	"github.com/segmentio/parquet/encoding/plain"
 	"github.com/segmentio/parquet/internal/bits"
 )
 
@@ -590,16 +589,15 @@ func (r *doublePageReader) Type() Type { return r.typ }
 type byteArrayPageReader struct {
 	typ     Type
 	decoder encoding.Decoder
-	values  []byte
-	offset  uint
-	remain  uint
+	values  encoding.ByteArrayList
+	index   int
 }
 
 func newByteArrayPageReader(typ Type, decoder encoding.Decoder, bufferSize int) *byteArrayPageReader {
 	return &byteArrayPageReader{
 		typ:     typ,
 		decoder: decoder,
-		values:  make([]byte, atLeast(bufferSize, 4)),
+		values:  encoding.MakeByteArrayList(atLeastOne(bufferSize / 16)),
 	}
 }
 
@@ -612,12 +610,9 @@ func (r *byteArrayPageReader) ReadValue() (Value, error) {
 func (r *byteArrayPageReader) ReadValueBatch(values []Value) (int, error) {
 	i := 0
 	for {
-		for r.remain > 0 && i < len(values) {
-			n := plain.NextByteArrayLength(r.values[r.offset:])
-			v := r.values[4+r.offset : 4+r.offset+uint(n)]
-			r.offset += 4 + uint(n)
-			r.remain--
-			values[i] = makeValueBytes(ByteArray, copyBytes(v))
+		for r.index < r.values.Len() && i < len(values) {
+			values[i] = makeValueBytes(ByteArray, r.values.Index(r.index)).Clone()
+			r.index++
 			i++
 		}
 
@@ -625,27 +620,20 @@ func (r *byteArrayPageReader) ReadValueBatch(values []Value) (int, error) {
 			return i, nil
 		}
 
-		n, err := r.decoder.DecodeByteArray(r.values)
-		if n == 0 {
-			if err == encoding.ErrValueTooLarge {
-				size := 4 + uint32(plain.NextByteArrayLength(r.values))
-				r.values = make([]byte, bits.NearestPowerOfTwo32(size))
-				r.offset = 0
-				r.remain = 0
-				continue
-			}
+		r.values.Reset()
+		n, err := r.decoder.DecodeByteArray(&r.values)
+		if err != nil && n == 0 {
 			return i, err
 		}
 
-		r.offset = 0
-		r.remain = uint(n)
+		r.index = 0
 	}
 }
 
 func (r *byteArrayPageReader) Reset(decoder encoding.Decoder) {
 	r.decoder = decoder
-	r.offset = 0
-	r.remain = 0
+	r.values.Reset()
+	r.index = 0
 }
 
 func (r *byteArrayPageReader) Type() Type { return r.typ }

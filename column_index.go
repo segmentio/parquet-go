@@ -1,10 +1,8 @@
 package parquet
 
 import (
-	"bytes"
-
 	"github.com/segmentio/parquet/deprecated"
-	"github.com/segmentio/parquet/encoding/plain"
+	"github.com/segmentio/parquet/encoding"
 	"github.com/segmentio/parquet/format"
 	"github.com/segmentio/parquet/internal/bits"
 )
@@ -331,10 +329,8 @@ func (index *doubleColumnIndexer) ColumnIndex() ColumnIndex {
 type byteArrayColumnIndexer struct {
 	columnIndexer
 	sizeLimit int
-	minValues []byte
-	maxValues []byte
-	min       []byte
-	max       []byte
+	minValues encoding.ByteArrayList
+	maxValues encoding.ByteArrayList
 }
 
 func newByteArrayColumnIndexer(typ Type, sizeLimit int) *byteArrayColumnIndexer {
@@ -346,54 +342,42 @@ func newByteArrayColumnIndexer(typ Type, sizeLimit int) *byteArrayColumnIndexer 
 
 func (index *byteArrayColumnIndexer) Reset() {
 	index.reset()
-	index.minValues = index.minValues[:0]
-	index.maxValues = index.maxValues[:0]
-	index.min = index.min[:0]
-	index.max = index.max[:0]
+	index.minValues.Reset()
+	index.maxValues.Reset()
 }
 
 func (index *byteArrayColumnIndexer) Bounds() (min, max Value) {
-	if len(index.minValues) > 0 {
-		min = makeValueBytes(ByteArray, index.min)
-		max = makeValueBytes(ByteArray, index.max)
+	if index.minValues.Len() > 0 {
+		minBytes := index.minValues.Index(0)
+		maxBytes := index.maxValues.Index(0)
+
+		for i := 1; i < index.minValues.Len(); i++ {
+			if v := index.minValues.Index(i); string(v) < string(minBytes) {
+				minBytes = v
+			}
+		}
+
+		for i := 1; i < index.maxValues.Len(); i++ {
+			if v := index.maxValues.Index(i); string(v) > string(maxBytes) {
+				maxBytes = v
+			}
+		}
+
+		min = makeValueBytes(ByteArray, minBytes).Clone()
+		max = makeValueBytes(ByteArray, maxBytes).Clone()
 	}
 	return min, max
 }
 
 func (index *byteArrayColumnIndexer) IndexPage(numValues, numNulls int, min, max Value) {
 	index.observe(numValues, numNulls)
-	minValue := min.ByteArray()
-	maxValue := max.ByteArray()
-
-	if len(index.minValues) == 0 {
-		index.setMin(minValue)
-		index.setMax(maxValue)
-	} else {
-		if bytes.Compare(minValue, index.min) < 0 {
-			index.setMin(minValue)
-		}
-		if bytes.Compare(maxValue, index.max) > 0 {
-			index.setMax(maxValue)
-		}
-	}
-
-	index.minValues = plain.AppendByteArray(index.minValues, minValue)
-	index.maxValues = plain.AppendByteArray(index.maxValues, maxValue)
-}
-
-func (index *byteArrayColumnIndexer) setMin(min []byte) {
-	index.min = append(index.min[:0], min...)
-}
-
-func (index *byteArrayColumnIndexer) setMax(max []byte) {
-	index.max = append(index.max[:0], max...)
+	index.minValues.Push(min.ByteArray())
+	index.maxValues.Push(max.ByteArray())
 }
 
 func (index *byteArrayColumnIndexer) ColumnIndex() ColumnIndex {
-	// It is safe to ignore the errors here because we know the input is a
-	// valid PLAIN encoded list of byte array values.
-	minValues, _ := plain.SplitByteArrayList(index.minValues)
-	maxValues, _ := plain.SplitByteArrayList(index.maxValues)
+	minValues := index.minValues.Split()
+	maxValues := index.maxValues.Split()
 	if index.sizeLimit > 0 {
 		truncateLargeMinByteArrayValues(minValues, index.sizeLimit)
 		truncateLargeMaxByteArrayValues(maxValues, index.sizeLimit)

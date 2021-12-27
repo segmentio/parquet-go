@@ -6,7 +6,6 @@ import (
 	"math"
 
 	"github.com/segmentio/parquet/encoding"
-	"github.com/segmentio/parquet/encoding/plain"
 	"github.com/segmentio/parquet/format"
 )
 
@@ -30,27 +29,27 @@ func (e *LengthByteArrayEncoder) Encoding() format.Encoding {
 	return format.DeltaLengthByteArray
 }
 
-func (e *LengthByteArrayEncoder) EncodeByteArray(data []byte) error {
+func (e *LengthByteArrayEncoder) EncodeByteArray(data encoding.ByteArrayList) (err error) {
 	e.lengths = e.lengths[:0]
 
-	_, err := plain.ScanByteArrayList(data, plain.All, func(value []byte) error {
+	data.Range(func(value []byte) bool {
 		if len(value) > math.MaxInt32 {
-			return fmt.Errorf("DELTA_LENGTH_BYTE_ARRAY: byte array of length %d is too large to be encoded", len(value))
+			err = fmt.Errorf("DELTA_LENGTH_BYTE_ARRAY: byte array of length %d is too large to be encoded", len(value))
+			return false
 		}
 		e.lengths = append(e.lengths, int32(len(value)))
-		return nil
+		return true
 	})
 	if err != nil {
 		return err
 	}
-
-	if err := e.binpack.EncodeInt32(e.lengths); err != nil {
+	if err = e.binpack.EncodeInt32(e.lengths); err != nil {
 		return err
 	}
 
-	_, err = plain.ScanByteArrayList(data, plain.All, func(value []byte) error {
-		_, werr := e.binpack.writer.Write(value)
-		return werr
+	data.Range(func(value []byte) bool {
+		_, err = e.binpack.writer.Write(value)
+		return err == nil
 	})
 	return err
 }
