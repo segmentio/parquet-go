@@ -199,16 +199,27 @@ func TestPageReadWrite(t *testing.T) {
 	}
 }
 
-func testPageReadWrite(t *testing.T, r parquet.PageReader, w parquet.PageWriter, e encoding.Encoder, values []interface{}) {
+type pageWriter interface {
+	parquet.ValueBatchWriter
+	Page() parquet.Page
+}
+
+func testPageReadWrite(t *testing.T, r parquet.PageReader, w pageWriter, e encoding.Encoder, values []interface{}) {
 	typ := r.Type()
 	minValue := parquet.Value{}
 	maxValue := parquet.Value{}
+	batch := make([]parquet.Value, len(values))
+	for i := range values {
+		batch[i] = parquet.ValueOf(values[i])
+	}
 
-	for _, v := range values {
-		value := parquet.ValueOf(v)
-		if err := w.WriteValue(value); err != nil {
-			t.Fatal("writing value to page writer:", err)
-		}
+	if n, err := w.WriteValueBatch(batch); err != nil {
+		t.Fatal("writing value to page writer:", err)
+	} else if n != len(batch) {
+		t.Fatalf("wrong number of values written: want=%d got=%d", len(batch), n)
+	}
+
+	for _, value := range batch {
 		if minValue.IsNull() || typ.Less(value, minValue) {
 			minValue = value
 		}
@@ -219,6 +230,15 @@ func testPageReadWrite(t *testing.T, r parquet.PageReader, w parquet.PageWriter,
 
 	p := w.Page()
 	numValues := p.NumValues()
+	if numValues != len(values) {
+		t.Errorf("number of values mistmatch: want=%d got=%d", len(values), numValues)
+	}
+
+	numNulls := p.NumNulls()
+	if numNulls != 0 {
+		t.Errorf("number of nulls mismatch: want=0 got=%d", numNulls)
+	}
+
 	min, max := p.Bounds()
 	if !parquet.Equal(min, minValue) {
 		t.Errorf("min value mismatch: want=%v got=%v", minValue, min)

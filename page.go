@@ -37,16 +37,16 @@ type Page interface {
 }
 
 type pageWithLevels struct {
-	Page
+	base               Page
 	maxRepetitionLevel int8
 	maxDefinitionLevel int8
 	definitionLevels   []int8
 	repetitionLevels   []int8
 }
 
-func newPageWithLevels(page Page, maxRepetitionLevel, maxDefinitionLevel int8, definitionLevels, repetitionLevels []int8) *pageWithLevels {
+func newPageWithLevels(base Page, maxRepetitionLevel, maxDefinitionLevel int8, repetitionLevels, definitionLevels []int8) *pageWithLevels {
 	return &pageWithLevels{
-		Page:               page,
+		base:               base,
 		maxRepetitionLevel: maxRepetitionLevel,
 		maxDefinitionLevel: maxDefinitionLevel,
 		definitionLevels:   definitionLevels,
@@ -54,9 +54,13 @@ func newPageWithLevels(page Page, maxRepetitionLevel, maxDefinitionLevel int8, d
 	}
 }
 
+func (page *pageWithLevels) Type() Type { return page.base.Type() }
+
 func (page *pageWithLevels) Size() int64 {
-	return page.Page.Size() + int64(len(page.repetitionLevels)) + int64(len(page.definitionLevels))
+	return page.base.Size() + int64(len(page.repetitionLevels)) + int64(len(page.definitionLevels))
 }
+
+func (page *pageWithLevels) NumValues() int { return len(page.definitionLevels) }
 
 func (page *pageWithLevels) NumNulls() int {
 	numNulls := 0
@@ -68,18 +72,22 @@ func (page *pageWithLevels) NumNulls() int {
 	return numNulls
 }
 
-func (page *pageWithLevels) RepetitionLevels() []int8 { return page.repetitionLevels }
-
-func (page *pageWithLevels) DefinitionLevels() []int8 { return page.definitionLevels }
+func (page *pageWithLevels) Bounds() (min, max Value) { return page.base.Bounds() }
 
 func (page *pageWithLevels) Slice(i, j int) Page {
-	return newPageWithLevels(page.Page.Slice(i, j),
+	return newPageWithLevels(page.base.Slice(i, j),
 		page.maxRepetitionLevel,
 		page.maxDefinitionLevel,
 		page.definitionLevels[i:j],
 		page.repetitionLevels[i:j],
 	)
 }
+
+func (page *pageWithLevels) RepetitionLevels() []int8 { return page.repetitionLevels }
+
+func (page *pageWithLevels) DefinitionLevels() []int8 { return page.definitionLevels }
+
+func (page *pageWithLevels) WriteTo(enc encoding.Encoder) error { return page.base.WriteTo(enc) }
 
 type booleanPage struct {
 	typ    Type

@@ -216,7 +216,9 @@ func (c *RowGroupConfig) Apply(schema Node, options ...RowGroupOption) {
 func (c *RowGroupConfig) ConfigureRowGroup(schema Node, config *RowGroupConfig) {
 	*config = RowGroupConfig{
 		ColumnBufferSize: coalesceInt(c.ColumnBufferSize, config.ColumnBufferSize),
-		SortingColumns:   c.SortingColumns,
+	}
+	if c.SortingColumns != nil {
+		config.SortingColumns = c.SortingColumns
 	}
 }
 

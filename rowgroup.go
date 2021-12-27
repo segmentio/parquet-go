@@ -44,6 +44,26 @@ type RowGroup struct {
 	numRows int
 }
 
+type RowGroupColumn interface {
+	Type() Type
+
+	Page() Page
+
+	Reset()
+
+	Size() int64
+
+	Cap() int
+
+	Len() int
+
+	Less(i, j int) bool
+
+	Swap(i, j int)
+
+	ValueBatchWriter
+}
+
 func NewRowGroup(schema Node, options ...RowGroupOption) *RowGroup {
 	config := DefaultRowGroupConfig()
 	config.Apply(schema, options...)
@@ -65,8 +85,8 @@ func (rg *RowGroup) init(node Node, repetitionLevel, definitionLevel int8, confi
 		definitionLevel++
 	}
 
-	if !isLeaf(node) {
-		nullsFirst := false
+	if isLeaf(node) {
+		nullOrdering := nullsGoLast
 		columnIndex := len(rg.columns)
 		column := node.Type().NewRowGroupColumn(config.ColumnBufferSize)
 
@@ -75,21 +95,18 @@ func (rg *RowGroup) init(node Node, repetitionLevel, definitionLevel int8, confi
 				if ordering.Descending {
 					column = &descendingRowGroupColumn{RowGroupColumn: column}
 				}
-				nullsFirst = ordering.NullsFirst
+				if ordering.NullsFirst {
+					nullOrdering = nullsGoFirst
+				}
 				break
 			}
 		}
 
-		if definitionLevel > 0 {
-			if nullsFirst {
-				column = newOptionalRowGroupColumnNullsFirst(column, definitionLevel)
-			} else {
-				column = newOptionalRowGroupColumn(column, definitionLevel)
-			}
-		}
-
-		if repetitionLevel > 0 {
-			column = newRepeatedRowGroupColumn(column)
+		switch {
+		case repetitionLevel > 0:
+			column = newRepeatedRowGroupColumn(column, repetitionLevel, definitionLevel, nullOrdering)
+		case definitionLevel > 0:
+			column = newOptionalRowGroupColumn(column, definitionLevel, nullOrdering)
 		}
 
 		rg.columns = append(rg.columns, column)
@@ -167,96 +184,111 @@ func (rg *RowGroup) WriteRow(row Row) error {
 	return nil
 }
 
-type RowGroupColumn interface {
-	Type() Type
+type nullOrdering func(RowGroupColumn, int, int, int8, []int8) bool
 
-	Size() int64
-
-	Cap() int
-
-	Len() int
-
-	Less(i, j int) bool
-
-	Swap(i, j int)
-
-	//Pages(pageSize int) []Page
-
-	Reset()
-
-	ValueBatchWriter
+func nullsGoFirst(column RowGroupColumn, i, j int, maxDefinitionLevel int8, definitionLevels []int8) bool {
+	if isNull(i, maxDefinitionLevel, definitionLevels) {
+		return !isNull(j, maxDefinitionLevel, definitionLevels)
+	} else {
+		return !isNull(j, maxDefinitionLevel, definitionLevels) && column.Less(i, j)
+	}
 }
 
-type descendingRowGroupColumn struct {
-	RowGroupColumn
+func nullsGoLast(column RowGroupColumn, i, j int, maxDefinitionLevel int8, definitionLevels []int8) bool {
+	if isNull(i, maxDefinitionLevel, definitionLevels) {
+		return false
+	} else {
+		return isNull(j, maxDefinitionLevel, definitionLevels) || column.Less(i, j)
+	}
 }
 
-func (col *descendingRowGroupColumn) Less(i, j int) bool {
-	return col.RowGroupColumn.Less(j, i)
+func isNull(i int, maxDefinitionLevel int8, definitionLevels []int8) bool {
+	return definitionLevels[i] != maxDefinitionLevel
 }
+
+func stripNulls(column RowGroupColumn, maxDefinitionLevel int8, definitionLevels []int8) int {
+	offset := 0
+	for i := 0; i < len(definitionLevels); offset++ {
+		j := i
+		for j < len(definitionLevels) && definitionLevels[j] != maxDefinitionLevel {
+			j++
+		}
+		if i != j {
+			column.Swap(offset, offset+(j-i))
+		}
+		i = j + 1
+	}
+	return offset
+}
+
+type descendingRowGroupColumn struct{ RowGroupColumn }
+
+func (col *descendingRowGroupColumn) Less(i, j int) bool { return col.RowGroupColumn.Less(j, i) }
 
 type optionalRowGroupColumn struct {
-	base  RowGroupColumn
-	def   []int8
-	level int8
+	base               RowGroupColumn
+	definitionLevels   []int8
+	maxDefinitionLevel int8
+	nullOrdering       nullOrdering
 }
 
-func newOptionalRowGroupColumn(base RowGroupColumn, definitionLevel int8) *optionalRowGroupColumn {
+func newOptionalRowGroupColumn(base RowGroupColumn, maxDefinitionLevel int8, nullOrdering nullOrdering) *optionalRowGroupColumn {
 	return &optionalRowGroupColumn{
-		base:  base,
-		def:   make([]int8, 0, base.Cap()),
-		level: definitionLevel,
+		base:               base,
+		definitionLevels:   make([]int8, 0, base.Cap()),
+		maxDefinitionLevel: maxDefinitionLevel,
+		nullOrdering:       nullOrdering,
 	}
 }
 
 func (col *optionalRowGroupColumn) Type() Type { return col.base.Type() }
 
-func (col *optionalRowGroupColumn) Reset() {
-	col.base.Reset()
-	col.def = col.def[:0]
+func (col *optionalRowGroupColumn) Page() Page {
+	n := stripNulls(col.base, col.maxDefinitionLevel, col.definitionLevels)
+	return newPageWithLevels(col.base.Page().Slice(0, n), 0, col.maxDefinitionLevel, nil, col.definitionLevels)
 }
 
-func (col *optionalRowGroupColumn) Size() int64 { return col.base.Size() + int64(len(col.def)) }
+func (col *optionalRowGroupColumn) Reset() {
+	col.base.Reset()
+	col.definitionLevels = col.definitionLevels[:0]
+}
 
-func (col *optionalRowGroupColumn) Cap() int { return cap(col.def) }
+func (col *optionalRowGroupColumn) Size() int64 {
+	return col.base.Size() + int64(len(col.definitionLevels))
+}
 
-func (col *optionalRowGroupColumn) Len() int { return len(col.def) }
+func (col *optionalRowGroupColumn) Cap() int { return cap(col.definitionLevels) }
+
+func (col *optionalRowGroupColumn) Len() int { return len(col.definitionLevels) }
 
 func (col *optionalRowGroupColumn) Less(i, j int) bool {
-	return !col.isNull(i) && (col.isNull(j) || col.base.Less(i, j))
+	return col.nullOrdering(col.base, i, j, col.maxDefinitionLevel, col.definitionLevels)
 }
 
 func (col *optionalRowGroupColumn) Swap(i, j int) {
 	col.base.Swap(i, j)
-	col.def[i], col.def[j] = col.def[j], col.def[i]
+	col.definitionLevels[i], col.definitionLevels[j] = col.definitionLevels[j], col.definitionLevels[i]
 }
 
 func (col *optionalRowGroupColumn) WriteValueBatch(values []Value) (int, error) {
 	n, err := col.base.WriteValueBatch(values)
 	if err == nil {
 		for _, v := range values {
-			col.def = append(col.def, v.DefinitionLevel())
+			col.definitionLevels = append(col.definitionLevels, v.DefinitionLevel())
 		}
 	}
 	return n, err
 }
 
-func (col *optionalRowGroupColumn) isNull(i int) bool { return col.def[i] != col.level }
-
-type optionalRowGroupColumnNullsFirst struct{ *optionalRowGroupColumn }
-
-func newOptionalRowGroupColumnNullsFirst(base RowGroupColumn, definitionLevel int8) optionalRowGroupColumnNullsFirst {
-	return optionalRowGroupColumnNullsFirst{newOptionalRowGroupColumn(base, definitionLevel)}
-}
-
-func (col optionalRowGroupColumnNullsFirst) Less(i, j int) bool {
-	return col.isNull(i) && (!col.isNull(j) || col.base.Less(i, j))
-}
-
 type repeatedRowGroupColumn struct {
-	base RowGroupColumn
-	rows []region
-	rep  []int8
+	base               RowGroupColumn
+	rows               []region
+	repetitionLevels   []int8
+	definitionLevels   []int8
+	maxRepetitionLevel int8
+	maxDefinitionLevel int8
+	offset             uint32
+	nullOrdering       nullOrdering
 }
 
 type region struct {
@@ -264,25 +296,36 @@ type region struct {
 	length uint32
 }
 
-func newRepeatedRowGroupColumn(base RowGroupColumn) *repeatedRowGroupColumn {
+func newRepeatedRowGroupColumn(base RowGroupColumn, maxRepetitionLevel, maxDefinitionLevel int8, nullOrdering nullOrdering) *repeatedRowGroupColumn {
 	n := base.Cap()
 	return &repeatedRowGroupColumn{
-		base: base,
-		rows: make([]region, 0, n/8),
-		rep:  make([]int8, 0, n),
+		base:               base,
+		rows:               make([]region, 0, n/8),
+		repetitionLevels:   make([]int8, 0, n),
+		definitionLevels:   make([]int8, 0, n),
+		maxRepetitionLevel: maxRepetitionLevel,
+		maxDefinitionLevel: maxDefinitionLevel,
+		nullOrdering:       nullOrdering,
 	}
 }
 
 func (col *repeatedRowGroupColumn) Type() Type { return col.base.Type() }
 
+func (col *repeatedRowGroupColumn) Page() Page {
+	n := stripNulls(col.base, col.maxDefinitionLevel, col.definitionLevels)
+	return newPageWithLevels(col.base.Page().Slice(0, n), col.maxRepetitionLevel, col.maxDefinitionLevel, col.repetitionLevels, col.definitionLevels)
+}
+
 func (col *repeatedRowGroupColumn) Reset() {
 	col.base.Reset()
 	col.rows = col.rows[:0]
-	col.rep = col.rep[:0]
+	col.repetitionLevels = col.repetitionLevels[:0]
+	col.definitionLevels = col.definitionLevels[:0]
+	col.offset = 0
 }
 
 func (col *repeatedRowGroupColumn) Size() int64 {
-	return 8*int64(len(col.rows)) + int64(len(col.rep)) + col.base.Size()
+	return 8*int64(len(col.rows)) + int64(len(col.repetitionLevels)) + int64(len(col.definitionLevels)) + col.base.Size()
 }
 
 func (col *repeatedRowGroupColumn) Cap() int { return cap(col.rows) }
@@ -292,14 +335,15 @@ func (col *repeatedRowGroupColumn) Len() int { return len(col.rows) }
 func (col *repeatedRowGroupColumn) Less(i, j int) bool {
 	row1 := col.rows[i]
 	row2 := col.rows[j]
+	less := col.nullOrdering
 
 	for k := uint32(0); k < row1.length && k < row2.length; k++ {
 		x := int(row1.offset + k)
 		y := int(row2.offset + k)
 		switch {
-		case col.base.Less(x, y):
+		case less(col.base, x, y, col.maxDefinitionLevel, col.definitionLevels):
 			return true
-		case col.base.Less(y, x):
+		case less(col.base, y, x, col.maxDefinitionLevel, col.definitionLevels):
 			return false
 		}
 	}
@@ -315,29 +359,41 @@ func (col *repeatedRowGroupColumn) WriteValueBatch(values []Value) (int, error) 
 	n, err := col.base.WriteValueBatch(values)
 	if err == nil {
 		col.rows = append(col.rows, region{
-			offset: uint32(len(col.rep)),
+			offset: col.offset,
 			length: uint32(n),
 		})
 		for _, v := range values {
-			col.rep = append(col.rep, v.RepetitionLevel())
+			col.repetitionLevels = append(col.repetitionLevels, v.RepetitionLevel())
+			col.definitionLevels = append(col.definitionLevels, v.DefinitionLevel())
 		}
+		col.offset += uint32(n)
 	}
 	return n, err
 }
 
-type booleanRowGroupColumn struct {
-	typ    Type
-	values []bool
+func splitRange(length, count int, do func(i, j, k int)) {
+	for i, j := 0, 0; count > 0; i++ {
+		n := (length - j) / count
+		do(i, j, j+n)
+		j += n
+		count--
+	}
 }
+
+type booleanRowGroupColumn struct{ booleanPage }
 
 func newBooleanRowGroupColumn(typ Type, bufferSize int) *booleanRowGroupColumn {
 	return &booleanRowGroupColumn{
-		typ:    typ,
-		values: make([]bool, 0, bufferSize),
+		booleanPage: booleanPage{
+			typ:    typ,
+			values: make([]bool, 0, bufferSize),
+		},
 	}
 }
 
 func (col *booleanRowGroupColumn) Type() Type { return col.typ }
+
+func (col *booleanRowGroupColumn) Page() Page { return &col.booleanPage }
 
 func (col *booleanRowGroupColumn) Reset() { col.values = col.values[:0] }
 
@@ -362,19 +418,20 @@ func (col *booleanRowGroupColumn) WriteValueBatch(values []Value) (int, error) {
 	return len(values), nil
 }
 
-type int32RowGroupColumn struct {
-	typ    Type
-	values []int32
-}
+type int32RowGroupColumn struct{ int32Page }
 
 func newInt32RowGroupColumn(typ Type, bufferSize int) *int32RowGroupColumn {
 	return &int32RowGroupColumn{
-		typ:    typ,
-		values: make([]int32, 0, bufferSize/4),
+		int32Page: int32Page{
+			typ:    typ,
+			values: make([]int32, 0, bufferSize/4),
+		},
 	}
 }
 
 func (col *int32RowGroupColumn) Type() Type { return col.typ }
+
+func (col *int32RowGroupColumn) Page() Page { return &col.int32Page }
 
 func (col *int32RowGroupColumn) Reset() { col.values = col.values[:0] }
 
@@ -397,19 +454,20 @@ func (col *int32RowGroupColumn) WriteValueBatch(values []Value) (int, error) {
 	return len(values), nil
 }
 
-type int64RowGroupColumn struct {
-	typ    Type
-	values []int64
-}
+type int64RowGroupColumn struct{ int64Page }
 
 func newInt64RowGroupColumn(typ Type, bufferSize int) *int64RowGroupColumn {
 	return &int64RowGroupColumn{
-		typ:    typ,
-		values: make([]int64, 0, bufferSize/8),
+		int64Page: int64Page{
+			typ:    typ,
+			values: make([]int64, 0, bufferSize/8),
+		},
 	}
 }
 
 func (col *int64RowGroupColumn) Type() Type { return col.typ }
+
+func (col *int64RowGroupColumn) Page() Page { return &col.int64Page }
 
 func (col *int64RowGroupColumn) Reset() { col.values = col.values[:0] }
 
@@ -432,19 +490,20 @@ func (col *int64RowGroupColumn) WriteValueBatch(values []Value) (int, error) {
 	return len(values), nil
 }
 
-type int96RowGroupColumn struct {
-	typ    Type
-	values []deprecated.Int96
-}
+type int96RowGroupColumn struct{ int96Page }
 
 func newInt96RowGroupColumn(typ Type, bufferSize int) *int96RowGroupColumn {
 	return &int96RowGroupColumn{
-		typ:    typ,
-		values: make([]deprecated.Int96, 0, bufferSize/12),
+		int96Page: int96Page{
+			typ:    typ,
+			values: make([]deprecated.Int96, 0, bufferSize/12),
+		},
 	}
 }
 
 func (col *int96RowGroupColumn) Type() Type { return col.typ }
+
+func (col *int96RowGroupColumn) Page() Page { return &col.int96Page }
 
 func (col *int96RowGroupColumn) Reset() { col.values = col.values[:0] }
 
@@ -467,19 +526,20 @@ func (col *int96RowGroupColumn) WriteValueBatch(values []Value) (int, error) {
 	return len(values), nil
 }
 
-type floatRowGroupColumn struct {
-	typ    Type
-	values []float32
-}
+type floatRowGroupColumn struct{ floatPage }
 
 func newFloatRowGroupColumn(typ Type, bufferSize int) *floatRowGroupColumn {
 	return &floatRowGroupColumn{
-		typ:    typ,
-		values: make([]float32, 0, bufferSize/4),
+		floatPage: floatPage{
+			typ:    typ,
+			values: make([]float32, 0, bufferSize/4),
+		},
 	}
 }
 
 func (col *floatRowGroupColumn) Type() Type { return col.typ }
+
+func (col *floatRowGroupColumn) Page() Page { return &col.floatPage }
 
 func (col *floatRowGroupColumn) Reset() { col.values = col.values[:0] }
 
@@ -502,19 +562,20 @@ func (col *floatRowGroupColumn) WriteValueBatch(values []Value) (int, error) {
 	return len(values), nil
 }
 
-type doubleRowGroupColumn struct {
-	typ    Type
-	values []float64
-}
+type doubleRowGroupColumn struct{ doublePage }
 
 func newDoubleRowGroupColumn(typ Type, bufferSize int) *doubleRowGroupColumn {
 	return &doubleRowGroupColumn{
-		typ:    typ,
-		values: make([]float64, 0, bufferSize/8),
+		doublePage: doublePage{
+			typ:    typ,
+			values: make([]float64, 0, bufferSize/8),
+		},
 	}
 }
 
 func (col *doubleRowGroupColumn) Type() Type { return col.typ }
+
+func (col *doubleRowGroupColumn) Page() Page { return &col.doublePage }
 
 func (col *doubleRowGroupColumn) Reset() { col.values = col.values[:0] }
 
@@ -537,19 +598,20 @@ func (col *doubleRowGroupColumn) WriteValueBatch(values []Value) (int, error) {
 	return len(values), nil
 }
 
-type byteArrayRowGroupColumn struct {
-	typ    Type
-	values encoding.ByteArrayList
-}
+type byteArrayRowGroupColumn struct{ byteArrayPage }
 
 func newByteArrayRowGroupColumn(typ Type, bufferSize int) *byteArrayRowGroupColumn {
 	return &byteArrayRowGroupColumn{
-		typ:    typ,
-		values: encoding.MakeByteArrayList(bufferSize / 16),
+		byteArrayPage: byteArrayPage{
+			typ:    typ,
+			values: encoding.MakeByteArrayList(bufferSize / 16),
+		},
 	}
 }
 
 func (col *byteArrayRowGroupColumn) Type() Type { return col.typ }
+
+func (col *byteArrayRowGroupColumn) Page() Page { return &col.byteArrayPage }
 
 func (col *byteArrayRowGroupColumn) Reset() { col.values.Reset() }
 
@@ -571,31 +633,33 @@ func (col *byteArrayRowGroupColumn) WriteValueBatch(values []Value) (int, error)
 }
 
 type fixedLenByteArrayRowGroupColumn struct {
-	size   uint
-	typ    Type
-	tmp    []byte
-	values []byte
+	fixedLenByteArrayPage
+	tmp []byte
 }
 
 func newFixedLenByteArrayRowGroupColumn(typ Type, bufferSize int) *fixedLenByteArrayRowGroupColumn {
-	size := uint(typ.Length())
+	size := typ.Length()
 	return &fixedLenByteArrayRowGroupColumn{
-		size:   size,
-		typ:    typ,
-		tmp:    make([]byte, size),
-		values: make([]byte, 0, bufferSize),
+		fixedLenByteArrayPage: fixedLenByteArrayPage{
+			size: size,
+			typ:  typ,
+			data: make([]byte, 0, bufferSize),
+		},
+		tmp: make([]byte, size),
 	}
 }
 
 func (col *fixedLenByteArrayRowGroupColumn) Type() Type { return col.typ }
 
-func (col *fixedLenByteArrayRowGroupColumn) Reset() { col.values = col.values[:0] }
+func (col *fixedLenByteArrayRowGroupColumn) Page() Page { return &col.fixedLenByteArrayPage }
 
-func (col *fixedLenByteArrayRowGroupColumn) Size() int64 { return int64(len(col.values)) }
+func (col *fixedLenByteArrayRowGroupColumn) Reset() { col.data = col.data[:0] }
 
-func (col *fixedLenByteArrayRowGroupColumn) Cap() int { return cap(col.values) / int(col.size) }
+func (col *fixedLenByteArrayRowGroupColumn) Size() int64 { return int64(len(col.data)) }
 
-func (col *fixedLenByteArrayRowGroupColumn) Len() int { return len(col.values) / int(col.size) }
+func (col *fixedLenByteArrayRowGroupColumn) Cap() int { return cap(col.data) / col.size }
+
+func (col *fixedLenByteArrayRowGroupColumn) Len() int { return len(col.data) / col.size }
 
 func (col *fixedLenByteArrayRowGroupColumn) Less(i, j int) bool {
 	return bytes.Compare(col.index(i), col.index(j)) < 0
@@ -609,12 +673,14 @@ func (col *fixedLenByteArrayRowGroupColumn) Swap(i, j int) {
 }
 
 func (col *fixedLenByteArrayRowGroupColumn) index(i int) []byte {
-	return col.values[uint(i)*col.size : uint(i+1)*col.size]
+	j := (i + 0) * col.size
+	k := (i + 1) * col.size
+	return col.data[j:k:k]
 }
 
 func (col *fixedLenByteArrayRowGroupColumn) WriteValueBatch(values []Value) (int, error) {
 	for _, v := range values {
-		col.values = append(col.values, v.ByteArray()...)
+		col.data = append(col.data, v.ByteArray()...)
 	}
 	return len(values), nil
 }
@@ -625,6 +691,10 @@ func newUint32RowGroupColumn(typ Type, bufferSize int) uint32RowGroupColumn {
 	return uint32RowGroupColumn{newInt32RowGroupColumn(typ, bufferSize)}
 }
 
+func (col uint32RowGroupColumn) Page() Page {
+	return uint32Page{&col.int32Page}
+}
+
 func (col uint32RowGroupColumn) Less(i, j int) bool {
 	return uint32(col.values[i]) < uint32(col.values[j])
 }
@@ -633,6 +703,10 @@ type uint64RowGroupColumn struct{ *int64RowGroupColumn }
 
 func newUint64RowGroupColumn(typ Type, bufferSize int) uint64RowGroupColumn {
 	return uint64RowGroupColumn{newInt64RowGroupColumn(typ, bufferSize)}
+}
+
+func (col uint64RowGroupColumn) Page() Page {
+	return uint64Page{&col.int64Page}
 }
 
 func (col uint64RowGroupColumn) Less(i, j int) bool {
