@@ -282,16 +282,16 @@ func (rgw *rowGroupWriter) init(node Node, path []string, dataPageType format.Pa
 
 		columnIndexer := nodeType.NewColumnIndexer(rgw.config.ColumnIndexSizeLimit)
 		dictionary := Dictionary(nil)
-		pageWriter := PageWriter(nil)
+		pageBuffer := RowGroupColumn(nil)
 		bufferSize := rgw.config.PageBufferSize
 		encoder := encoding.NewEncoder(nil)
 
 		switch encoding.Encoding() {
 		case format.PlainDictionary, format.RLEDictionary:
 			dictionary = nodeType.NewDictionary(bufferSize)
-			pageWriter = NewIndexedPageWriter(dictionary, bufferSize)
+			pageBuffer = NewIndexedRowGroupColumn(dictionary, bufferSize)
 		default:
-			pageWriter = nodeType.NewPageWriter(bufferSize)
+			pageBuffer = nodeType.NewRowGroupColumn(bufferSize)
 		}
 
 		buffer := &bufferPoolPageWriter{pool: rgw.config.ColumnPageBuffers}
@@ -310,7 +310,7 @@ func (rgw *rowGroupWriter) init(node Node, path []string, dataPageType format.Pa
 				dataPageType,
 				maxRepetitionLevel,
 				maxDefinitionLevel,
-				pageWriter,
+				pageBuffer,
 				columnIndexer,
 				rgw.config.DataPageStatistics,
 				// Data pages in version 2 can omit compression when dictionary
@@ -527,7 +527,7 @@ type columnChunkWriter struct {
 	commit func(*columnChunkWriter) error
 
 	buffer      pageBuffer
-	writer      PageWriter
+	column      RowGroupColumn
 	compression compress.Codec
 
 	dataPageType       format.PageType
@@ -576,6 +576,8 @@ type columnChunkWriter struct {
 		encoder plain.Encoder
 	}
 
+	maxValues      int32
+	numValues      int32
 	nullCount      int64
 	numNulls       int32
 	numRows        int32
@@ -590,10 +592,10 @@ type columnChunkWriter struct {
 	columnIndexer         ColumnIndexer
 }
 
-func newColumnChunkWriter(buffer pageBuffer, codec compress.Codec, enc encoding.Encoder, dataPageType format.PageType, maxRepetitionLevel, maxDefinitionLevel int8, writer PageWriter, columnIndexer ColumnIndexer, writePageStats, isCompressed bool) *columnChunkWriter {
+func newColumnChunkWriter(buffer pageBuffer, codec compress.Codec, enc encoding.Encoder, dataPageType format.PageType, maxRepetitionLevel, maxDefinitionLevel int8, column RowGroupColumn, columnIndexer ColumnIndexer, writePageStats, isCompressed bool) *columnChunkWriter {
 	ccw := &columnChunkWriter{
 		buffer:             buffer,
-		writer:             writer,
+		column:             column,
 		compression:        codec,
 		dataPageType:       dataPageType,
 		maxRepetitionLevel: maxRepetitionLevel,
@@ -603,6 +605,7 @@ func newColumnChunkWriter(buffer pageBuffer, codec compress.Codec, enc encoding.
 		encodings:          make([]format.Encoding, 0, 3),
 		encodingStats:      make([]format.PageEncodingStats, 0, 3),
 		columnIndexer:      columnIndexer,
+		maxValues:          int32(column.Cap()),
 	}
 
 	switch {
@@ -725,30 +728,30 @@ func (ccw *columnChunkWriter) commitRepeated() error {
 }
 
 func (ccw *columnChunkWriter) writeValues(values []Value) error {
-	for {
-		switch _, err := ccw.writer.WriteValues(values); err {
-		case nil:
-			ccw.numRows++
-			return nil
-		case ErrBufferFull:
-			if err := ccw.flush(); err != nil {
-				return err
-			}
-		default:
+	if ccw.numValues > 0 && ccw.numValues >= ccw.maxValues {
+		if err := ccw.flush(); err != nil {
 			return err
 		}
 	}
+	_, err := ccw.column.WriteValues(values)
+	if err != nil {
+		return err
+	}
+	ccw.numValues += int32(len(values))
+	ccw.numRows++
+	return nil
 }
 
 func (ccw *columnChunkWriter) flush() error {
 	defer func() {
-		ccw.writer.Reset()
+		ccw.column.Reset()
+		ccw.numValues = 0
 		ccw.numNulls = 0
 		ccw.numRows = 0
 		ccw.levels.repetition = ccw.levels.repetition[:0]
 		ccw.levels.definition = ccw.levels.definition[:0]
 	}()
-	return ccw.write(ccw.writer.Page())
+	return ccw.write(ccw.column.Page())
 }
 
 func (ccw *columnChunkWriter) write(page Page) error {

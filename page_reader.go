@@ -609,6 +609,17 @@ func (r *fixedLenByteArrayPageReader) Reset(decoder encoding.Decoder) {
 
 func (r *fixedLenByteArrayPageReader) Type() Type { return r.typ }
 
+func atLeastOne(size int) int {
+	return atLeast(size, 1)
+}
+
+func atLeast(size, least int) int {
+	if size < least {
+		return least
+	}
+	return size
+}
+
 var (
 	_ ValueReader = (*DataPageReader)(nil)
 	_ PageReader  = (*int32PageReader)(nil)

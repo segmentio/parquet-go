@@ -414,10 +414,9 @@ type byteArrayDictionary struct {
 }
 
 func newByteArrayDictionary(typ Type, bufferSize int) *byteArrayDictionary {
-	capacity := bufferSize / 16
 	return &byteArrayDictionary{
 		typ:    typ,
-		values: encoding.MakeByteArrayList(atLeastOne(capacity)),
+		values: encoding.MakeByteArrayList(atLeastOne(bufferSize / 16)),
 	}
 }
 
@@ -637,29 +636,6 @@ func (r *indexedPageReader) ReadValues(values []Value) (int, error) {
 	}
 }
 
-func NewIndexedPageWriter(dict Dictionary, bufferSize int) PageWriter {
-	return &indexedPageWriter{
-		indexedPage: indexedPage{
-			dict:   dict,
-			values: make([]int32, 0, atLeastOne(bufferSize/4)),
-		},
-	}
-}
-
-type indexedPageWriter struct{ indexedPage }
-
-func (w *indexedPageWriter) Page() Page { return &w.indexedPage }
-
-func (w *indexedPageWriter) Reset() { w.values = w.values[:0] }
-
-func (w *indexedPageWriter) WriteValues(values []Value) (n int, err error) {
-	for _, value := range values {
-		w.values = append(w.values, int32(w.dict.Insert(value)))
-		n++
-	}
-	return n, nil
-}
-
 type indexedPage struct {
 	dict   Dictionary
 	values []int32
@@ -706,16 +682,56 @@ func (page *indexedPage) DefinitionLevels() []int8 { return nil }
 
 func (page *indexedPage) WriteTo(enc encoding.Encoder) error { return enc.EncodeInt32(page.values) }
 
+func NewIndexedRowGroupColumn(dict Dictionary, bufferSize int) RowGroupColumn {
+	return &indexedRowGroupColumn{
+		indexedPage: indexedPage{
+			dict:   dict,
+			values: make([]int32, 0, bufferSize/4),
+		},
+	}
+}
+
+type indexedRowGroupColumn struct{ indexedPage }
+
+func (col *indexedRowGroupColumn) Page() Page { return &col.indexedPage }
+
+func (col *indexedRowGroupColumn) Reset() { col.values = col.values[:0] }
+
+func (col *indexedRowGroupColumn) Size() int64 { return 4 * int64(len(col.values)) }
+
+func (col *indexedRowGroupColumn) Cap() int { return cap(col.values) }
+
+func (col *indexedRowGroupColumn) Len() int { return len(col.values) }
+
+func (col *indexedRowGroupColumn) Less(i, j int) bool {
+	u := col.dict.Index(int(col.values[i]))
+	v := col.dict.Index(int(col.values[j]))
+	t := col.dict.Type()
+	return t.Less(u, v)
+}
+
+func (col *indexedRowGroupColumn) Swap(i, j int) {
+	col.values[i], col.values[j] = col.values[j], col.values[i]
+}
+
+func (col *indexedRowGroupColumn) WriteValues(values []Value) (n int, err error) {
+	for _, value := range values {
+		col.values = append(col.values, int32(col.dict.Insert(value)))
+		n++
+	}
+	return n, nil
+}
+
 var (
-	_ Dictionary = (*booleanDictionary)(nil)
-	_ Dictionary = (*int32Dictionary)(nil)
-	_ Dictionary = (*int64Dictionary)(nil)
-	_ Dictionary = (*int96Dictionary)(nil)
-	_ Dictionary = (*floatDictionary)(nil)
-	_ Dictionary = (*doubleDictionary)(nil)
-	_ Dictionary = (*byteArrayDictionary)(nil)
-	_ Dictionary = (*fixedLenByteArrayDictionary)(nil)
-	_ PageReader = (*indexedPageReader)(nil)
-	_ PageWriter = (*indexedPageWriter)(nil)
-	_ Page       = (*indexedPage)(nil)
+	_ Dictionary     = (*booleanDictionary)(nil)
+	_ Dictionary     = (*int32Dictionary)(nil)
+	_ Dictionary     = (*int64Dictionary)(nil)
+	_ Dictionary     = (*int96Dictionary)(nil)
+	_ Dictionary     = (*floatDictionary)(nil)
+	_ Dictionary     = (*doubleDictionary)(nil)
+	_ Dictionary     = (*byteArrayDictionary)(nil)
+	_ Dictionary     = (*fixedLenByteArrayDictionary)(nil)
+	_ PageReader     = (*indexedPageReader)(nil)
+	_ Page           = (*indexedPage)(nil)
+	_ RowGroupColumn = (*indexedRowGroupColumn)(nil)
 )

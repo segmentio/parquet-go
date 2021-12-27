@@ -158,7 +158,7 @@ func TestPageReadWrite(t *testing.T) {
 				dec := parquet.Plain.NewDecoder(buf)
 				enc := parquet.Plain.NewEncoder(buf)
 				pr := test.typ.NewPageReader(dec, 32)
-				pw := test.typ.NewPageWriter(1024)
+				pw := test.typ.NewRowGroupColumn(1024)
 
 				for _, values := range test.values {
 					t.Run("", func(t *testing.T) {
@@ -180,7 +180,7 @@ func TestPageReadWrite(t *testing.T) {
 				dec := parquet.Plain.NewDecoder(buf)
 				enc := parquet.Plain.NewEncoder(buf)
 				pr := parquet.NewIndexedPageReader(dict, dec, 32)
-				pw := parquet.NewIndexedPageWriter(dict, 1024)
+				pw := parquet.NewIndexedRowGroupColumn(dict, 1024)
 
 				for _, values := range test.values {
 					t.Run("", func(t *testing.T) {
@@ -199,12 +199,7 @@ func TestPageReadWrite(t *testing.T) {
 	}
 }
 
-type pageWriter interface {
-	parquet.ValueWriter
-	Page() parquet.Page
-}
-
-func testPageReadWrite(t *testing.T, r parquet.PageReader, w pageWriter, e encoding.Encoder, values []interface{}) {
+func testPageReadWrite(t *testing.T, r parquet.PageReader, w parquet.RowGroupColumn, e encoding.Encoder, values []interface{}) {
 	typ := r.Type()
 	minValue := parquet.Value{}
 	maxValue := parquet.Value{}

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sort"
 	"sync"
 
 	"github.com/segmentio/encoding/thrift"
@@ -267,4 +268,20 @@ func acquireBufferedSectionReader(r io.ReaderAt, offset, length int64) *buffered
 func releaseBufferedSectionReader(b *bufferedSectionReader) {
 	b.reset(nil, 0, 0)
 	bufferedSectionReaderPool.Put(b)
+}
+
+func sortKeyValueMetadata(keyValueMetadata []format.KeyValue) {
+	sort.Slice(keyValueMetadata, func(i, j int) bool {
+		return keyValueMetadata[i].Key < keyValueMetadata[j].Key
+	})
+}
+
+func lookupKeyValueMetadata(keyValueMetadata []format.KeyValue, key string) (value string, ok bool) {
+	i := sort.Search(len(keyValueMetadata), func(i int) bool {
+		return keyValueMetadata[i].Key >= key
+	})
+	if i == len(keyValueMetadata) || keyValueMetadata[i].Key != key {
+		return "", false
+	}
+	return keyValueMetadata[i].Value, true
 }

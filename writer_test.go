@@ -169,13 +169,14 @@ value 3: R:0 D:0 V:Skywalker
 		},
 		dump: `row group 0
 --------------------------------------------------------------------------------
-name:       BINARY UNCOMPRESSED DO:4 FPO:45 SZ:72/72/1.00 VC:10 ENC:RL [more]...
-timestamp:  INT64 UNCOMPRESSED DO:0 FPO:76 SZ:278/278/1.00 VC:10 ENC:D [more]...
-value:      DOUBLE UNCOMPRESSED DO:0 FPO:354 SZ:220/220/1.00 VC:10 ENC:PLAIN,RLE [more]...
+name:       BINARY UNCOMPRESSED DO:4 FPO:45 SZ:101/101/1.00 VC:10 ENC: [more]...
+timestamp:  INT64 UNCOMPRESSED DO:0 FPO:105 SZ:278/278/1.00 VC:10 ENC: [more]...
+value:      DOUBLE UNCOMPRESSED DO:0 FPO:383 SZ:220/220/1.00 VC:10 ENC:PLAIN,RLE [more]...
 
     name TV=10 RL=0 DL=0 DS: 1 DE:PLAIN
     ----------------------------------------------------------------------------
-    page 0:                   DLE:RLE RLE:RLE VLE:RLE_DICTIONARY ST:[n [more]... VC:10
+    page 0:                   DLE:RLE RLE:RLE VLE:RLE_DICTIONARY ST:[n [more]... VC:5
+    page 1:                   DLE:RLE RLE:RLE VLE:RLE_DICTIONARY ST:[n [more]... VC:5
 
     timestamp TV=10 RL=0 DL=0
     ----------------------------------------------------------------------------
@@ -266,18 +267,20 @@ value 10: R:0 D:0 V:10.0
 		dump: `row group 0
 --------------------------------------------------------------------------------
 contacts:
-.name:              BINARY UNCOMPRESSED DO:0 FPO:4 SZ:84/84/1.00 VC:3  [more]...
-.phoneNumber:       BINARY SNAPPY DO:0 FPO:88 SZ:62/60/0.97 VC:3 ENC:R [more]...
-owner:              BINARY ZSTD DO:0 FPO:150 SZ:98/80/0.82 VC:2 ENC:RL [more]...
-ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:248 SZ:105/80/0.76 VC:3 ENC:R [more]...
+.name:              BINARY UNCOMPRESSED DO:0 FPO:4 SZ:120/120/1.00 VC:3 [more]...
+.phoneNumber:       BINARY SNAPPY DO:0 FPO:124 SZ:100/96/0.96 VC:3 ENC [more]...
+owner:              BINARY ZSTD DO:0 FPO:224 SZ:98/80/0.82 VC:2 ENC:RL [more]...
+ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:322 SZ:166/116/0.70 VC:3 ENC: [more]...
 
     contacts.name TV=3 RL=1 DL=1
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:61
+    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:57
+    page 1:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:17
 
     contacts.phoneNumber TV=3 RL=1 DL=2
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:37
+    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:33
+    page 1:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:17
 
     owner TV=2 RL=0 DL=0
     ----------------------------------------------------------------------------
@@ -286,7 +289,8 @@ ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:248 SZ:105/80/0.76 VC:3 ENC:R [more]...
 
     ownerPhoneNumbers TV=3 RL=1 DL=1
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:56
+    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:52
+    page 1:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:17
 
 BINARY contacts.name
 --------------------------------------------------------------------------------
@@ -346,18 +350,20 @@ value 3: R:0 D:0 V:<null>
 		dump: `row group 0
 --------------------------------------------------------------------------------
 contacts:
-.name:              BINARY UNCOMPRESSED DO:0 FPO:4 SZ:81/81/1.00 VC:3  [more]...
-.phoneNumber:       BINARY SNAPPY DO:0 FPO:85 SZ:59/57/0.97 VC:3 ENC:R [more]...
-owner:              BINARY ZSTD DO:0 FPO:144 SZ:108/90/0.83 VC:2 ENC:R [more]...
-ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:252 SZ:102/77/0.75 VC:3 ENC:R [more]...
+.name:              BINARY UNCOMPRESSED DO:0 FPO:4 SZ:114/114/1.00 VC:3 [more]...
+.phoneNumber:       BINARY SNAPPY DO:0 FPO:118 SZ:94/90/0.96 VC:3 ENC: [more]...
+owner:              BINARY ZSTD DO:0 FPO:212 SZ:108/90/0.83 VC:2 ENC:R [more]...
+ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:320 SZ:159/109/0.69 VC:3 ENC: [more]...
 
     contacts.name TV=3 RL=1 DL=1
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:3
+    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:2
+    page 1:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:1
 
     contacts.phoneNumber TV=3 RL=1 DL=2
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:3
+    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:2
+    page 1:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:1
 
     owner TV=2 RL=0 DL=0
     ----------------------------------------------------------------------------
@@ -366,7 +372,8 @@ ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:252 SZ:102/77/0.75 VC:3 ENC:R [more]...
 
     ownerPhoneNumbers TV=3 RL=1 DL=1
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:3
+    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:2
+    page 1:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:1
 
 BINARY contacts.name
 --------------------------------------------------------------------------------

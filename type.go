@@ -113,11 +113,6 @@ type Type interface {
 	// The method panics if it is called on a group type.
 	NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader
 
-	// Creates a page reader for values of this type.
-	//
-	// The method panics if it is called on a group type.
-	NewPageWriter(bufferSize int) PageWriter
-
 	// Creates a row group group column for values of this type.
 	//
 	// The method panics if it is called on a group type.
@@ -242,10 +237,6 @@ func (t booleanType) NewPageReader(decoder encoding.Decoder, bufferSize int) Pag
 	return newBooleanPageReader(t, decoder, bufferSize)
 }
 
-func (t booleanType) NewPageWriter(bufferSize int) PageWriter {
-	return newBooleanPageWriter(t, bufferSize)
-}
-
 func (t booleanType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
 	return newBooleanRowGroupColumn(t, bufferSize)
 }
@@ -276,10 +267,6 @@ func (t int32Type) NewDictionary(bufferSize int) Dictionary {
 
 func (t int32Type) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
 	return newInt32PageReader(t, decoder, bufferSize)
-}
-
-func (t int32Type) NewPageWriter(bufferSize int) PageWriter {
-	return newInt32PageWriter(t, bufferSize)
 }
 
 func (t int32Type) NewRowGroupColumn(bufferSize int) RowGroupColumn {
@@ -314,10 +301,6 @@ func (t int64Type) NewPageReader(decoder encoding.Decoder, bufferSize int) PageR
 	return newInt64PageReader(t, decoder, bufferSize)
 }
 
-func (t int64Type) NewPageWriter(bufferSize int) PageWriter {
-	return newInt64PageWriter(t, bufferSize)
-}
-
 func (t int64Type) NewRowGroupColumn(bufferSize int) RowGroupColumn {
 	return newInt64RowGroupColumn(t, bufferSize)
 }
@@ -348,10 +331,6 @@ func (t int96Type) NewDictionary(bufferSize int) Dictionary {
 
 func (t int96Type) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
 	return newInt96PageReader(t, decoder, bufferSize)
-}
-
-func (t int96Type) NewPageWriter(bufferSize int) PageWriter {
-	return newInt96PageWriter(t, bufferSize)
 }
 
 func (t int96Type) NewRowGroupColumn(bufferSize int) RowGroupColumn {
@@ -386,10 +365,6 @@ func (t floatType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageR
 	return newFloatPageReader(t, decoder, bufferSize)
 }
 
-func (t floatType) NewPageWriter(bufferSize int) PageWriter {
-	return newFloatPageWriter(t, bufferSize)
-}
-
 func (t floatType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
 	return newFloatRowGroupColumn(t, bufferSize)
 }
@@ -416,10 +391,6 @@ func (t doubleType) NewDictionary(bufferSize int) Dictionary {
 
 func (t doubleType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
 	return newDoublePageReader(t, decoder, bufferSize)
-}
-
-func (t doubleType) NewPageWriter(bufferSize int) PageWriter {
-	return newDoublePageWriter(t, bufferSize)
 }
 
 func (t doubleType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
@@ -450,10 +421,6 @@ func (t byteArrayType) NewDictionary(bufferSize int) Dictionary {
 
 func (t byteArrayType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
 	return newByteArrayPageReader(t, decoder, bufferSize)
-}
-
-func (t byteArrayType) NewPageWriter(bufferSize int) PageWriter {
-	return newByteArrayPageWriter(t, bufferSize)
 }
 
 func (t byteArrayType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
@@ -491,10 +458,6 @@ func (t *fixedLenByteArrayType) NewDictionary(bufferSize int) Dictionary {
 
 func (t *fixedLenByteArrayType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
 	return newFixedLenByteArrayPageReader(t, decoder, bufferSize)
-}
-
-func (t *fixedLenByteArrayType) NewPageWriter(bufferSize int) PageWriter {
-	return newFixedLenByteArrayPageWriter(t, bufferSize)
 }
 
 func (t *fixedLenByteArrayType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
@@ -654,22 +617,6 @@ func (t *intType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageRe
 	}
 }
 
-func (t *intType) NewPageWriter(bufferSize int) PageWriter {
-	if t.IsSigned {
-		if t.BitWidth == 64 {
-			return newInt64PageWriter(t, bufferSize)
-		} else {
-			return newInt32PageWriter(t, bufferSize)
-		}
-	} else {
-		if t.BitWidth == 64 {
-			return newUint64PageWriter(t, bufferSize)
-		} else {
-			return newUint32PageWriter(t, bufferSize)
-		}
-	}
-}
-
 func (t *intType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
 	if t.IsSigned {
 		if t.BitWidth == 64 {
@@ -765,10 +712,6 @@ func (t *stringType) NewPageReader(decoder encoding.Decoder, bufferSize int) Pag
 	return newByteArrayPageReader(t, decoder, bufferSize)
 }
 
-func (t *stringType) NewPageWriter(bufferSize int) PageWriter {
-	return newByteArrayPageWriter(t, bufferSize)
-}
-
 func (t *stringType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
 	return newByteArrayRowGroupColumn(t, bufferSize)
 }
@@ -814,10 +757,6 @@ func (t *uuidType) NewDictionary(bufferSize int) Dictionary {
 
 func (t *uuidType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
 	return newFixedLenByteArrayPageReader(t, decoder, bufferSize)
-}
-
-func (t *uuidType) NewPageWriter(bufferSize int) PageWriter {
-	return newFixedLenByteArrayPageWriter(t, bufferSize)
 }
 
 func (t *uuidType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
@@ -869,10 +808,6 @@ func (t *enumType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageR
 	return newByteArrayPageReader(t, decoder, bufferSize)
 }
 
-func (t *enumType) NewPageWriter(bufferSize int) PageWriter {
-	return newByteArrayPageWriter(t, bufferSize)
-}
-
 func (t *enumType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
 	return newByteArrayRowGroupColumn(t, bufferSize)
 }
@@ -920,10 +855,6 @@ func (t *jsonType) NewDictionary(bufferSize int) Dictionary {
 
 func (t *jsonType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
 	return newByteArrayPageReader(t, decoder, bufferSize)
-}
-
-func (t *jsonType) NewPageWriter(bufferSize int) PageWriter {
-	return newByteArrayPageWriter(t, bufferSize)
 }
 
 func (t *jsonType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
@@ -975,10 +906,6 @@ func (t *bsonType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageR
 	return newByteArrayPageReader(t, decoder, bufferSize)
 }
 
-func (t *bsonType) NewPageWriter(bufferSize int) PageWriter {
-	return newByteArrayPageWriter(t, bufferSize)
-}
-
 func (t *bsonType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
 	return newByteArrayRowGroupColumn(t, bufferSize)
 }
@@ -1022,10 +949,6 @@ func (t *dateType) NewDictionary(bufferSize int) Dictionary {
 
 func (t *dateType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
 	return newInt32PageReader(t, decoder, bufferSize)
-}
-
-func (t *dateType) NewPageWriter(bufferSize int) PageWriter {
-	return newInt32PageWriter(t, bufferSize)
 }
 
 func (t *dateType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
@@ -1156,14 +1079,6 @@ func (t *timeType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageR
 	}
 }
 
-func (t *timeType) NewPageWriter(bufferSize int) PageWriter {
-	if t.Unit.Millis != nil {
-		return newInt32PageWriter(t, bufferSize)
-	} else {
-		return newInt64PageWriter(t, bufferSize)
-	}
-}
-
 func (t *timeType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
 	if t.Unit.Millis != nil {
 		return newInt32RowGroupColumn(t, bufferSize)
@@ -1220,10 +1135,6 @@ func (t *timestampType) NewPageReader(decoder encoding.Decoder, bufferSize int) 
 	return newInt64PageReader(t, decoder, bufferSize)
 }
 
-func (t *timestampType) NewPageWriter(bufferSize int) PageWriter {
-	return newInt64PageWriter(t, bufferSize)
-}
-
 func (t *timestampType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
 	return newInt64RowGroupColumn(t, bufferSize)
 }
@@ -1271,10 +1182,6 @@ func (t *listType) NewDictionary(bufferSize int) Dictionary {
 
 func (t *listType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
 	panic("cannot create page reader from parquet LIST type")
-}
-
-func (t *listType) NewPageWriter(bufferSize int) PageWriter {
-	panic("cannot create page writer from parquet LIST type")
 }
 
 func (t *listType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
@@ -1331,10 +1238,6 @@ func (t *mapType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageRe
 	panic("cannot create page reader from parquet MAP type")
 }
 
-func (t *mapType) NewPageWriter(bufferSize int) PageWriter {
-	panic("cannot create page writer from parquet MAP type")
-}
-
 func (t *mapType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
 	panic("cannot create row group column from parquet MAP type")
 }
@@ -1371,10 +1274,6 @@ func (t *nullType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageR
 	panic("cannot create page reader from parquet NULL type")
 }
 
-func (t *nullType) NewPageWriter(bufferSize int) PageWriter {
-	panic("cannot create page writer from parquet NULL type")
-}
-
 func (t *nullType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
 	panic("cannot create row group column from parquet NULL type")
 }
@@ -1401,10 +1300,6 @@ func (groupType) NewDictionary(int) Dictionary {
 
 func (groupType) NewPageReader(encoding.Decoder, int) PageReader {
 	panic("cannot create page reader from parquet group")
-}
-
-func (groupType) NewPageWriter(int) PageWriter {
-	panic("cannot create page writer from parquet group")
 }
 
 func (t groupType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
