@@ -602,17 +602,15 @@ func (rgw *rowGroupWriter) writeRowGroup(rowGroup *RowGroup) error {
 	if err := rgw.flush(nil); err != nil {
 		return err
 	}
-
 	defer rowGroup.Reset()
-	numRows := rowGroup.Len()
 
 	for i, col := range rowGroup.columns {
-		if err := rgw.columns[i].chunks.writePage(numRows, col.Page()); err != nil {
+		if err := rgw.columns[i].chunks.writePage(col.Page()); err != nil {
 			return err
 		}
 	}
 
-	rgw.numRows = int64(numRows)
+	rgw.numRows = int64(rowGroup.Len())
 	return rgw.flush(rowGroup.sorting)
 }
 
@@ -663,7 +661,6 @@ type columnChunkWriter struct {
 	nullCount      int64
 	maxValues      int32
 	numValues      int32
-	numRows        int32
 	writePageStats bool
 	isCompressed   bool
 
@@ -720,7 +717,6 @@ func (ccw *columnChunkWriter) reset() {
 	ccw.column.Reset()
 	ccw.nullCount = 0
 	ccw.numValues = 0
-	ccw.numRows = 0
 	ccw.totalRowCount = 0
 	ccw.totalUncompressedSize = 0
 	ccw.totalCompressedSize = 0
@@ -776,7 +772,6 @@ func (ccw *columnChunkWriter) writeValues(values []Value) error {
 		return err
 	}
 	ccw.numValues += int32(len(values))
-	ccw.numRows++
 	return nil
 }
 
@@ -784,12 +779,11 @@ func (ccw *columnChunkWriter) flush() error {
 	defer func() {
 		ccw.column.Reset()
 		ccw.numValues = 0
-		ccw.numRows = 0
 	}()
-	return ccw.writePage(int(ccw.numRows), ccw.column.Page())
+	return ccw.writePage(ccw.column.Page())
 }
 
-func (ccw *columnChunkWriter) writePage(numRows int, page Page) error {
+func (ccw *columnChunkWriter) writePage(page Page) error {
 	numValues := page.NumValues()
 	if numValues == 0 {
 		return nil
@@ -806,14 +800,18 @@ func (ccw *columnChunkWriter) writePage(numRows int, page Page) error {
 			ccw.page.uncompressed.Reset(&ccw.page.checksum)
 			ccw.levels.encoder.Reset(&ccw.page.uncompressed)
 			ccw.levels.encoder.SetBitWidth(bits.Len8(ccw.maxRepetitionLevel))
-			ccw.levels.encoder.EncodeInt8(page.RepetitionLevels())
+			if err := page.WriteRepetitionLevelsTo(ccw.levels.encoder); err != nil {
+				return err
+			}
 			repetitionLevelsByteLength = int32(ccw.page.uncompressed.length)
 		}
 		if ccw.maxDefinitionLevel > 0 {
 			ccw.page.uncompressed.Reset(&ccw.page.checksum)
 			ccw.levels.encoder.Reset(&ccw.page.uncompressed)
 			ccw.levels.encoder.SetBitWidth(bits.Len8(ccw.maxDefinitionLevel))
-			ccw.levels.encoder.EncodeInt8(page.DefinitionLevels())
+			if err := page.WriteDefinitionLevelsTo(ccw.levels.encoder); err != nil {
+				return err
+			}
 			definitionLevelsByteLength = int32(ccw.page.uncompressed.length)
 		}
 	}
@@ -833,14 +831,18 @@ func (ccw *columnChunkWriter) writePage(numRows int, page Page) error {
 			ccw.levels.v1.Reset(&ccw.page.uncompressed)
 			ccw.levels.encoder.Reset(&ccw.levels.v1)
 			ccw.levels.encoder.SetBitWidth(bits.Len8(ccw.maxRepetitionLevel))
-			ccw.levels.encoder.EncodeInt8(page.RepetitionLevels())
+			if err := page.WriteRepetitionLevelsTo(ccw.levels.encoder); err != nil {
+				return err
+			}
 			ccw.levels.v1.Close()
 		}
 		if ccw.maxDefinitionLevel > 0 {
 			ccw.levels.v1.Reset(&ccw.page.uncompressed)
 			ccw.levels.encoder.Reset(&ccw.levels.v1)
 			ccw.levels.encoder.SetBitWidth(bits.Len8(ccw.maxDefinitionLevel))
-			ccw.levels.encoder.EncodeInt8(page.DefinitionLevels())
+			if err := page.WriteDefinitionLevelsTo(ccw.levels.encoder); err != nil {
+				return err
+			}
 			ccw.levels.v1.Close()
 		}
 	}
@@ -874,6 +876,7 @@ func (ccw *columnChunkWriter) writePage(numRows int, page Page) error {
 		CRC:                  int32(ccw.page.checksum.Sum32()),
 	}
 
+	numRows := page.NumRows()
 	switch ccw.dataPageType {
 	case format.DataPage:
 		pageHeader.DataPageHeader = &format.DataPageHeader{

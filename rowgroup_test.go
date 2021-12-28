@@ -238,11 +238,7 @@ func descending(typ parquet.Type, values []parquet.Value) {
 func testRowGroup(t *testing.T, node parquet.Node, reader parquet.ValueReader, rowGroup *parquet.RowGroup, encoder encoding.Encoder, values []interface{}, sortFunc sortFunc) {
 	repetitionLevel := int8(0)
 	definitionLevel := int8(0)
-	switch {
-	case node.Repeated():
-		repetitionLevel = 1
-		definitionLevel = 1
-	case node.Optional():
+	if !node.Required() {
 		definitionLevel = 1
 	}
 
@@ -255,12 +251,12 @@ func testRowGroup(t *testing.T, node parquet.Node, reader parquet.ValueReader, r
 
 	for i := range batch {
 		if err := rowGroup.WriteRow(batch[i : i+1]); err != nil {
-			t.Fatal("writing value to row group:", err)
+			t.Fatalf("writing value to row group: %v", err)
 		}
 	}
 
 	if numRows := rowGroup.Len(); numRows != len(batch) {
-		t.Errorf("number of rows mismatch: want=%d got=%d", len(batch), numRows)
+		t.Fatalf("number of rows mismatch: want=%d got=%d", len(batch), numRows)
 	}
 
 	typ := node.Type()
@@ -278,46 +274,54 @@ func testRowGroup(t *testing.T, node parquet.Node, reader parquet.ValueReader, r
 
 	page := rowGroup.Column(0).Page()
 	numValues := page.NumValues()
-	if numValues != len(values) {
-		t.Errorf("number of values mistmatch: want=%d got=%d", len(values), numValues)
+	if numValues != len(batch) {
+		t.Fatalf("number of values mistmatch: want=%d got=%d", len(batch), numValues)
 	}
 
 	numNulls := page.NumNulls()
 	if numNulls != 0 {
-		t.Errorf("number of nulls mismatch: want=0 got=%d", numNulls)
+		t.Fatalf("number of nulls mismatch: want=0 got=%d", numNulls)
 	}
 
 	min, max := page.Bounds()
 	if !parquet.Equal(min, minValue) {
-		t.Errorf("min value mismatch: want=%v got=%v", minValue, min)
+		t.Fatalf("min value mismatch: want=%v got=%v", minValue, min)
 	}
 	if !parquet.Equal(max, maxValue) {
-		t.Errorf("max value mismatch: want=%v got=%v", maxValue, max)
+		t.Fatalf("max value mismatch: want=%v got=%v", maxValue, max)
 	}
 
 	if err := page.WriteTo(encoder); err != nil {
-		t.Fatal("flushing page writer:", err)
+		t.Fatalf("flushing page writer: %v", err)
 	}
+
+	// We writes a single value per row, so num values = num rows for all pages
+	// including repeated ones, which makes it OK to slice the pages using the
+	// number of values as a proxy for the row indexes.
+	halfValues := numValues / 2
 
 	for _, test := range [...]struct {
 		scenario string
-		values   parquet.ValueReader
+		values   []parquet.Value
+		reader   parquet.ValueReader
 	}{
-		{scenario: "page", values: parquet.NewValueReader(page, 0, page.NumValues())},
-		{scenario: "test", values: reader},
+		{"test", batch, reader},
+		{"page", batch, parquet.NewValueReader(page, 0, numValues)},
+		{"head", batch[:halfValues], parquet.NewValueReader(page.Slice(0, halfValues), 0, halfValues)},
+		{"tail", batch[halfValues:], parquet.NewValueReader(page.Slice(halfValues, numValues), 0, numValues-halfValues)},
 	} {
 		v := [1]parquet.Value{}
 		i := 0
 
 		for {
-			n, err := test.values.ReadValues(v[:])
+			n, err := test.reader.ReadValues(v[:])
 			if n > 0 {
 				if n != 1 {
 					t.Fatalf("reading value from %q reader returned the wrong count: want=1 got=%d", test.scenario, n)
 				}
-				if i < len(batch) {
-					if !parquet.Equal(v[0], batch[i]) {
-						t.Errorf("%q value at index %d mismatches: want=%v got=%v", test.scenario, i, batch[i], v[0])
+				if i < len(test.values) {
+					if !parquet.Equal(v[0], test.values[i]) {
+						t.Fatalf("%q value at index %d mismatches: want=%v got=%v", test.scenario, i, test.values[i], v[0])
 					}
 				}
 				i++
@@ -330,8 +334,8 @@ func testRowGroup(t *testing.T, node parquet.Node, reader parquet.ValueReader, r
 			}
 		}
 
-		if i != numValues {
-			t.Errorf("wrong number of values read from %q reader: want=%d got=%d", test.scenario, numValues, i)
+		if i != len(test.values) {
+			t.Errorf("wrong number of values read from %q reader: want=%d got=%d", test.scenario, len(test.values), i)
 		}
 	}
 }

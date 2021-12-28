@@ -377,8 +377,9 @@ type repeatedRowGroupColumn struct {
 	rows               []region
 	repetitionLevels   []int8
 	definitionLevels   []int8
-	nullOrdering       nullOrdering
+	buffer             []Value
 	reordering         *repeatedRowGroupColumn
+	nullOrdering       nullOrdering
 }
 
 type region struct {
@@ -440,8 +441,14 @@ func (col *repeatedRowGroupColumn) Page() Page {
 		if col.reordering == nil {
 			col.reordering = col.Clone().(*repeatedRowGroupColumn)
 		}
+
+		maxLen := maxRowLengthOf(col.rows)
+		if maxLen > uint32(cap(col.buffer)) {
+			col.buffer = make([]Value, maxLen)
+		}
+
 		column := col.reordering
-		buffer := make([]Value, 0, maxRowLengthOf(col.rows))
+		buffer := col.buffer[:maxLen]
 		page := base.Page()
 		column.Reset()
 
@@ -451,18 +458,20 @@ func (col *repeatedRowGroupColumn) Page() Page {
 			if err != nil && n < len(values) {
 				return &errorPage{err: fmt.Errorf("reordering values of repeated column: %w", err)}
 			}
-			n, err = column.base.WriteValues(values)
-			column.rows = append(column.rows, column.row(n))
-			column.repetitionLevels = append(column.repetitionLevels, col.repetitionLevels[row.offset:row.offset+uint32(n)]...)
-			column.definitionLevels = append(column.definitionLevels, col.definitionLevels[row.offset:row.offset+uint32(n)]...)
-			if err != nil {
+			if _, err := column.base.WriteValues(values); err != nil {
 				return &errorPage{err: fmt.Errorf("reordering values of repeated column: %w", err)}
 			}
 		}
 
+		for _, row := range col.rows {
+			column.rows = append(column.rows, column.row(int(row.length)))
+			column.repetitionLevels = append(column.repetitionLevels, col.repetitionLevels[row.offset:row.offset+row.length]...)
+			column.definitionLevels = append(column.definitionLevels, col.definitionLevels[row.offset:row.offset+row.length]...)
+		}
+
 		base = column.base
 		repetitionLevels = column.repetitionLevels
-		definitionLevels = column.repetitionLevels
+		definitionLevels = column.definitionLevels
 	}
 
 	return newRepeatedPage(
