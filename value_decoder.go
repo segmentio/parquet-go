@@ -294,7 +294,7 @@ func (r *byteArrayValueDecoder) ReadValues(values []Value) (int, error) {
 	i := 0
 	for {
 		for r.index < r.values.Len() && i < len(values) {
-			values[i] = makeValueBytes(ByteArray, r.values.Index(r.index)).Clone()
+			values[i] = makeValueBytes(ByteArray, copyBytes(r.values.Index(r.index)))
 			r.index++
 			i++
 		}

@@ -582,7 +582,7 @@ func assignValue(dst reflect.Value, src Value) error {
 			return nil
 		case reflect.Slice:
 			if dst.Type().Elem().Kind() == reflect.Uint8 {
-				dst.SetBytes(v)
+				dst.SetBytes(copyBytes(v))
 				return nil
 			}
 		default:
@@ -605,7 +605,7 @@ func assignValue(dst reflect.Value, src Value) error {
 			}
 		case reflect.Slice:
 			if dst.Type().Elem().Kind() == reflect.Uint8 {
-				dst.SetBytes(v)
+				dst.SetBytes(copyBytes(v))
 				return nil
 			}
 		default:

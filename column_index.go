@@ -352,8 +352,8 @@ func (index *byteArrayColumnIndexer) Bounds() (min, max Value) {
 			}
 		}
 
-		min = makeValueBytes(ByteArray, minBytes).Clone()
-		max = makeValueBytes(ByteArray, maxBytes).Clone()
+		min = makeValueBytes(ByteArray, minBytes)
+		max = makeValueBytes(ByteArray, maxBytes)
 	}
 	return min, max
 }
