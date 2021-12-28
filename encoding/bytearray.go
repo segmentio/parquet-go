@@ -17,11 +17,28 @@ type ByteArrayList struct {
 
 type slice struct{ i, j uint32 }
 
+func (s slice) len() int { return int(s.j - s.i) }
+
 func MakeByteArrayList(capacity int) ByteArrayList {
 	return ByteArrayList{
 		slices: make([]slice, 0, capacity),
 		values: make([]byte, 0, 8*capacity),
 	}
+}
+
+func (list *ByteArrayList) Clone() ByteArrayList {
+	size := 0
+	for _, s := range list.slices {
+		size += s.len()
+	}
+	clone := ByteArrayList{
+		slices: make([]slice, 0, len(list.slices)),
+		values: make([]byte, 0, size),
+	}
+	for _, s := range list.slices {
+		clone.Push(list.slice(s))
+	}
+	return clone
 }
 
 func (list *ByteArrayList) Split() [][]byte {
@@ -103,7 +120,11 @@ func (list *ByteArrayList) Range(f func([]byte) bool) {
 }
 
 func (list *ByteArrayList) Size() int64 {
-	return 8*int64(len(list.slices)) + int64(len(list.values))
+	size := int64(0)
+	for _, s := range list.slices {
+		size += 8 + int64(s.len())
+	}
+	return size
 }
 
 func (list *ByteArrayList) Cap() int {

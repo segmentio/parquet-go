@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"io"
 	"math"
+	"sort"
 	"testing"
 
 	"github.com/segmentio/parquet"
 	"github.com/segmentio/parquet/encoding"
 )
 
-var pageReadWriteTests = []struct {
+var rowGroupTests = [...]struct {
 	scenario string
 	typ      parquet.Type
 	values   [][]interface{}
@@ -150,8 +151,8 @@ var pageReadWriteTests = []struct {
 	},
 }
 
-func TestPageReadWrite(t *testing.T) {
-	for _, test := range pageReadWriteTests {
+func TestRowGroup(t *testing.T) {
+	for _, test := range rowGroupTests {
 		t.Run(test.scenario, func(t *testing.T) {
 			for _, config := range [...]struct {
 				scenario string
@@ -161,20 +162,59 @@ func TestPageReadWrite(t *testing.T) {
 				{scenario: "indexed", typ: test.typ.NewDictionary(0).Type()},
 			} {
 				t.Run(config.scenario, func(t *testing.T) {
-					buf := new(bytes.Buffer)
-					dec := parquet.Plain.NewDecoder(buf)
-					enc := parquet.Plain.NewEncoder(buf)
-					pr := config.typ.NewValueDecoder(32)
-					pw := config.typ.NewRowGroupColumn(1024)
+					for _, mod := range [...]struct {
+						scenario string
+						function func(parquet.Node) parquet.Node
+					}{
+						{scenario: "optional", function: parquet.Optional},
+						{scenario: "repeated", function: parquet.Repeated},
+						{scenario: "required", function: parquet.Required},
+					} {
+						t.Run(mod.scenario, func(t *testing.T) {
+							for _, ordering := range [...]struct {
+								scenario string
+								sorting  parquet.SortingColumn
+								sortFunc func(parquet.Type, []parquet.Value)
+							}{
+								{scenario: "unordered", sorting: nil, sortFunc: unordered},
+								{scenario: "ascending", sorting: parquet.Ascending("data"), sortFunc: ascending},
+								{scenario: "descending", sorting: parquet.Descending("data"), sortFunc: descending},
+							} {
+								t.Run(ordering.scenario, func(t *testing.T) {
+									schema := parquet.NewSchema("test", parquet.Group{
+										"data": mod.function(parquet.Leaf(config.typ)),
+									})
 
-					for _, values := range test.values {
-						t.Run("", func(t *testing.T) {
-							buf.Reset()
-							dec.Reset(buf)
-							enc.Reset(buf)
-							pr.Reset(dec)
-							pw.Reset()
-							testPageReadWrite(t, config.typ, pr, pw, enc, values)
+									options := []parquet.RowGroupOption{
+										schema,
+										parquet.ColumnBufferSize(1024),
+									}
+									if ordering.sorting != nil {
+										options = append(options, parquet.SortingColumns(ordering.sorting))
+									}
+
+									buffer := new(bytes.Buffer)
+									decoder := parquet.Plain.NewDecoder(buffer)
+									encoder := parquet.Plain.NewEncoder(buffer)
+									reader := config.typ.NewValueDecoder(32)
+									rowGroup := parquet.NewRowGroup(options...)
+
+									reset := func() {
+										buffer.Reset()
+										decoder.Reset(buffer)
+										encoder.Reset(buffer)
+										reader.Reset(decoder)
+										rowGroup.Reset()
+									}
+
+									for _, values := range test.values {
+										t.Run("", func(t *testing.T) {
+											reset()
+											testRowGroup(t, schema.ChildByName("data"), reader, rowGroup, encoder, values, ordering.sortFunc)
+										})
+									}
+								})
+							}
 						})
 					}
 				})
@@ -183,20 +223,47 @@ func TestPageReadWrite(t *testing.T) {
 	}
 }
 
-func testPageReadWrite(t *testing.T, typ parquet.Type, r parquet.ValueReader, w parquet.RowGroupColumn, e encoding.Encoder, values []interface{}) {
+type sortFunc func(parquet.Type, []parquet.Value)
+
+func unordered(typ parquet.Type, values []parquet.Value) {}
+
+func ascending(typ parquet.Type, values []parquet.Value) {
+	sort.Slice(values, func(i, j int) bool { return typ.Less(values[i], values[j]) })
+}
+
+func descending(typ parquet.Type, values []parquet.Value) {
+	sort.Slice(values, func(i, j int) bool { return typ.Less(values[j], values[i]) })
+}
+
+func testRowGroup(t *testing.T, node parquet.Node, reader parquet.ValueReader, rowGroup *parquet.RowGroup, encoder encoding.Encoder, values []interface{}, sortFunc sortFunc) {
+	repetitionLevel := int8(0)
+	definitionLevel := int8(0)
+	switch {
+	case node.Repeated():
+		repetitionLevel = 1
+		definitionLevel = 1
+	case node.Optional():
+		definitionLevel = 1
+	}
+
 	minValue := parquet.Value{}
 	maxValue := parquet.Value{}
 	batch := make([]parquet.Value, len(values))
 	for i := range values {
-		batch[i] = parquet.ValueOf(values[i])
+		batch[i] = parquet.ValueOf(values[i]).Level(repetitionLevel, definitionLevel).Column(0)
 	}
 
-	if n, err := w.WriteValues(batch); err != nil {
-		t.Fatal("writing value to page writer:", err)
-	} else if n != len(batch) {
-		t.Fatalf("wrong number of values written: want=%d got=%d", len(batch), n)
+	for i := range batch {
+		if err := rowGroup.WriteRow(batch[i : i+1]); err != nil {
+			t.Fatal("writing value to row group:", err)
+		}
 	}
 
+	if numRows := rowGroup.Len(); numRows != len(batch) {
+		t.Errorf("number of rows mismatch: want=%d got=%d", len(batch), numRows)
+	}
+
+	typ := node.Type()
 	for _, value := range batch {
 		if minValue.IsNull() || typ.Less(value, minValue) {
 			minValue = value
@@ -206,18 +273,21 @@ func testPageReadWrite(t *testing.T, typ parquet.Type, r parquet.ValueReader, w 
 		}
 	}
 
-	p := w.Page()
-	numValues := p.NumValues()
+	sortFunc(typ, batch)
+	sort.Sort(rowGroup)
+
+	page := rowGroup.Column(0).Page()
+	numValues := page.NumValues()
 	if numValues != len(values) {
 		t.Errorf("number of values mistmatch: want=%d got=%d", len(values), numValues)
 	}
 
-	numNulls := p.NumNulls()
+	numNulls := page.NumNulls()
 	if numNulls != 0 {
 		t.Errorf("number of nulls mismatch: want=0 got=%d", numNulls)
 	}
 
-	min, max := p.Bounds()
+	min, max := page.Bounds()
 	if !parquet.Equal(min, minValue) {
 		t.Errorf("min value mismatch: want=%v got=%v", minValue, min)
 	}
@@ -225,7 +295,7 @@ func testPageReadWrite(t *testing.T, typ parquet.Type, r parquet.ValueReader, w 
 		t.Errorf("max value mismatch: want=%v got=%v", maxValue, max)
 	}
 
-	if err := p.WriteTo(e); err != nil {
+	if err := page.WriteTo(encoder); err != nil {
 		t.Fatal("flushing page writer:", err)
 	}
 
@@ -233,8 +303,8 @@ func testPageReadWrite(t *testing.T, typ parquet.Type, r parquet.ValueReader, w 
 		scenario string
 		values   parquet.ValueReader
 	}{
-		{scenario: "page", values: p.Values()},
-		{scenario: "test", values: r},
+		{scenario: "page", values: parquet.NewValueReader(page, 0, page.NumValues())},
+		{scenario: "test", values: reader},
 	} {
 		v := [1]parquet.Value{}
 		i := 0
@@ -245,9 +315,9 @@ func testPageReadWrite(t *testing.T, typ parquet.Type, r parquet.ValueReader, w 
 				if n != 1 {
 					t.Fatalf("reading value from %q reader returned the wrong count: want=1 got=%d", test.scenario, n)
 				}
-				if i < len(values) {
-					if !parquet.Equal(v[0], parquet.ValueOf(values[i])) {
-						t.Errorf("%q value at index %d mismatches: want=%v got=%v", test.scenario, i, values[i], v[0])
+				if i < len(batch) {
+					if !parquet.Equal(v[0], batch[i]) {
+						t.Errorf("%q value at index %d mismatches: want=%v got=%v", test.scenario, i, batch[i], v[0])
 					}
 				}
 				i++

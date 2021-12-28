@@ -3,8 +3,6 @@ package parquet
 import (
 	"fmt"
 	"strings"
-
-	"github.com/segmentio/parquet/format"
 )
 
 const (
@@ -119,6 +117,7 @@ type WriterConfig struct {
 	DataPageStatistics   bool
 	RowGroupTargetSize   int64
 	KeyValueMetadata     map[string]string
+	Schema               *Schema
 }
 
 // DefaultWriterConfig returns a new WriterConfig value initialized with the
@@ -162,6 +161,7 @@ func (c *WriterConfig) ConfigureWriter(config *WriterConfig) {
 		DataPageStatistics:   config.DataPageStatistics,
 		RowGroupTargetSize:   coalesceInt64(c.RowGroupTargetSize, config.RowGroupTargetSize),
 		KeyValueMetadata:     keyValueMetadata,
+		Schema:               coalesceSchema(c.Schema, config.Schema),
 	}
 }
 
@@ -182,13 +182,14 @@ func (c *WriterConfig) Validate() error {
 // RowGroupConfig implements the RowGroupOption interface so it can be used
 // directly as argument to the NewRowGroup function when needed, for example:
 //
-//	rowGroup := parquet.NewRowGroup(schema, &parquet.RowGroupConfig{
+//	rowGroup := parquet.NewRowGroup(&parquet.RowGroupConfig{
 //		ColumnBufferSize: 8 * 1024 * 1024,
 //	})
 //
 type RowGroupConfig struct {
 	ColumnBufferSize int
-	SortingColumns   []format.SortingColumn
+	SortingColumns   []SortingColumn
+	Schema           *Schema
 }
 
 // DefaultRowGroupConfig returns a new RowGroupConfig value initialized with the
@@ -207,18 +208,17 @@ func (c *RowGroupConfig) Validate() error {
 	)
 }
 
-func (c *RowGroupConfig) Apply(schema Node, options ...RowGroupOption) {
+func (c *RowGroupConfig) Apply(options ...RowGroupOption) {
 	for _, opt := range options {
-		opt.ConfigureRowGroup(schema, c)
+		opt.ConfigureRowGroup(c)
 	}
 }
 
-func (c *RowGroupConfig) ConfigureRowGroup(schema Node, config *RowGroupConfig) {
+func (c *RowGroupConfig) ConfigureRowGroup(config *RowGroupConfig) {
 	*config = RowGroupConfig{
 		ColumnBufferSize: coalesceInt(c.ColumnBufferSize, config.ColumnBufferSize),
-	}
-	if c.SortingColumns != nil {
-		config.SortingColumns = c.SortingColumns
+		SortingColumns:   coalesceSortingColumns(c.SortingColumns, config.SortingColumns),
+		Schema:           coalesceSchema(c.Schema, config.Schema),
 	}
 }
 
@@ -243,7 +243,7 @@ type WriterOption interface {
 // RowGroupOption is an interface implemented by types that carryconfiguration
 // options for parquet row groups.
 type RowGroupOption interface {
-	ConfigureRowGroup(Node, *RowGroupConfig)
+	ConfigureRowGroup(*RowGroupConfig)
 }
 
 // SkipPageIndex is a file configuration option which when set to true, prevents
@@ -346,6 +346,14 @@ func KeyValueMetadata(key, value string) WriterOption {
 	})
 }
 
+// ColumnBufferSize creates a configuration option which defines the size of
+// row group column buffers.
+//
+// Defaults to 1 MiB.
+func ColumnBufferSize(size int) RowGroupOption {
+	return rowGroupOption(func(config *RowGroupConfig) { config.ColumnBufferSize = size })
+}
+
 // SortinColumns creates a configuration option which defines the sorting order
 // of columns in a row group.
 //
@@ -353,19 +361,7 @@ func KeyValueMetadata(key, value string) WriterOption {
 // hierarchy; when elements are equal in the first column, the second column is
 // used to order rows, etc...
 func SortingColumns(sortingColumns ...SortingColumn) RowGroupOption {
-	return rowGroupOption(func(schema Node, config *RowGroupConfig) {
-		columns := columnPathsOf(schema)
-
-		for _, sortingColumn := range sortingColumns {
-			if columnIndex := columnIndexOf(columns, sortingColumn.Path()); columnIndex >= 0 {
-				config.SortingColumns = append(config.SortingColumns, format.SortingColumn{
-					ColumnIdx:  int32(columnIndex),
-					Descending: sortingColumn.Descending(),
-					NullsFirst: sortingColumn.NullsFirst(),
-				})
-			}
-		}
-	})
+	return rowGroupOption(func(config *RowGroupConfig) { config.SortingColumns = sortingColumns })
 }
 
 type fileOption func(*FileConfig)
@@ -380,57 +376,9 @@ type writerOption func(*WriterConfig)
 
 func (opt writerOption) ConfigureWriter(config *WriterConfig) { opt(config) }
 
-type rowGroupOption func(Node, *RowGroupConfig)
+type rowGroupOption func(*RowGroupConfig)
 
-func (opt rowGroupOption) ConfigureRowGroup(schema Node, config *RowGroupConfig) {
-	opt(schema, config)
-}
-
-func columnPathsOf(node Node) [][]string {
-	n := numColumnsOf(node)
-	d := 10 // TODO: compute node depth?
-	return appendColumnPathsOf(make([][]string, 0, n), node, make([]string, 0, d))
-}
-
-func appendColumnPathsOf(columns [][]string, node Node, path []string) [][]string {
-	if isLeaf(node) {
-		return append(columns, copyPath(path))
-	}
-	i := len(path)
-	path = append(path, "")
-	for _, name := range node.ChildNames() {
-		path[i] = name
-		columns = appendColumnPathsOf(columns, node.ChildByName(name), path)
-	}
-	return columns
-}
-
-func copyPath(path []string) []string {
-	newPath := make([]string, len(path))
-	copy(newPath, path)
-	return newPath
-}
-
-func columnIndexOf(columns [][]string, path []string) int {
-	for i, column := range columns {
-		if pathEqual(column, path) {
-			return i
-		}
-	}
-	return -1
-}
-
-func pathEqual(p1, p2 []string) bool {
-	if len(p1) != len(p2) {
-		return false
-	}
-	for i := range p1 {
-		if p1[i] != p2[i] {
-			return false
-		}
-	}
-	return true
-}
+func (opt rowGroupOption) ConfigureRowGroup(config *RowGroupConfig) { opt(config) }
 
 func coalesceInt(i1, i2 int) int {
 	if i1 != 0 {
@@ -465,6 +413,20 @@ func coalesceBufferPool(p1, p2 BufferPool) BufferPool {
 		return p1
 	}
 	return p2
+}
+
+func coalesceSchema(s1, s2 *Schema) *Schema {
+	if s1 != nil {
+		return s1
+	}
+	return s2
+}
+
+func coalesceSortingColumns(s1, s2 []SortingColumn) []SortingColumn {
+	if s1 != nil {
+		return s1
+	}
+	return s2
 }
 
 func validatePositiveInt(optionName string, optionValue int) error {

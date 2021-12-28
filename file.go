@@ -272,7 +272,14 @@ func releaseBufferedSectionReader(b *bufferedSectionReader) {
 
 func sortKeyValueMetadata(keyValueMetadata []format.KeyValue) {
 	sort.Slice(keyValueMetadata, func(i, j int) bool {
-		return keyValueMetadata[i].Key < keyValueMetadata[j].Key
+		switch {
+		case keyValueMetadata[i].Key < keyValueMetadata[j].Key:
+			return true
+		case keyValueMetadata[i].Key > keyValueMetadata[j].Key:
+			return false
+		default:
+			return keyValueMetadata[i].Value < keyValueMetadata[j].Value
+		}
 	})
 }
 

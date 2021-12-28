@@ -133,7 +133,7 @@ func createParquetFile(rows rows, options ...parquet.WriterOption) (*parquet.Fil
 
 func writeParquetFile(w io.Writer, rows rows, options ...parquet.WriterOption) error {
 	schema := parquet.SchemaOf(rows[0])
-	writer := parquet.NewWriter(w, schema, options...)
+	writer := parquet.NewWriter(w, append(options, schema)...)
 
 	for _, row := range rows {
 		if err := writer.Write(row); err != nil {

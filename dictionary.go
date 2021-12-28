@@ -700,8 +700,6 @@ func newIndexedPage(dict Dictionary, values []int32) *indexedPage {
 	return &indexedPage{dict: dict, values: values}
 }
 
-func (page *indexedPage) Size() int64 { return 4 * int64(len(page.values)) }
-
 func (page *indexedPage) NumValues() int { return len(page.values) }
 
 func (page *indexedPage) NumNulls() int { return 0 }
@@ -739,6 +737,19 @@ func (page *indexedPage) DefinitionLevels() []int8 { return nil }
 
 func (page *indexedPage) WriteTo(enc encoding.Encoder) error { return enc.EncodeInt32(page.values) }
 
+func (page *indexedPage) ReadValuesAt(offset int, values []Value) (n int, err error) {
+	if offset < len(page.values) {
+		n = min(len(values), len(page.values)-offset)
+		for i := 0; i < n; i++ {
+			values[i] = page.dict.Index(int(page.values[offset+i]))
+		}
+	}
+	if offset+n >= len(page.values) {
+		err = io.EOF
+	}
+	return n, err
+}
+
 type indexedValueReader struct {
 	dict   Dictionary
 	values []int32
@@ -750,9 +761,9 @@ func (r *indexedValueReader) ReadValues(values []Value) (n int, err error) {
 		values[i] = r.dict.Index(int(r.values[i]))
 	}
 	if r.values = r.values[n:]; len(r.values) == 0 {
-		return n, io.EOF
+		err = io.EOF
 	}
-	return n, nil
+	return n, err
 }
 
 type indexedRowGroupColumn struct{ indexedPage }
@@ -762,6 +773,15 @@ func newIndexedRowGroupColumn(dict Dictionary, bufferSize int) *indexedRowGroupC
 		indexedPage: indexedPage{
 			dict:   dict,
 			values: make([]int32, 0, bufferSize/4),
+		},
+	}
+}
+
+func (col *indexedRowGroupColumn) Clone() RowGroupColumn {
+	return &indexedRowGroupColumn{
+		indexedPage: indexedPage{
+			dict:   col.dict,
+			values: append([]int32{}, col.values...),
 		},
 	}
 }
@@ -836,11 +856,6 @@ func (r *indexedValueDecoder) ReadValues(values []Value) (int, error) {
 
 			r.dict.Lookup(indexes, values[i:])
 			r.offset += count
-
-			for j, v := range values[i : i+int(count)] {
-				values[j] = v.Clone()
-			}
-
 			i += int(count)
 		}
 

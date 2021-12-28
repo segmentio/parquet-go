@@ -43,6 +43,13 @@ type ValueReader interface {
 	ReadValues([]Value) (int, error)
 }
 
+// ValueReaderAt is similar to ValueReader but instead of reading the next
+// batch of balues, the application must specify the index at which it wants to
+// read values from.
+type ValueReaderAt interface {
+	ReadValuesAt(int, []Value) (int, error)
+}
+
 // ValueWriter is an interface implemented by types that support reading
 // batches of values.
 type ValueWriter interface {
@@ -571,11 +578,7 @@ func assignValue(dst reflect.Value, src Value) error {
 		v := src.ByteArray()
 		switch dstKind {
 		case reflect.String:
-			// The parquet value is being assigned to a Go string, which is an
-			// immutable object. As an optimization we avoid allocating a new
-			// backing array and instead take a reference to the byte slice
-			// pointed at by the parquet value (which is also immutable).
-			dst.SetString(unsafeBytesToString(v))
+			dst.SetString(string(v))
 			return nil
 		case reflect.Slice:
 			if dst.Type().Elem().Kind() == reflect.Uint8 {
@@ -668,6 +671,35 @@ func Equal(v1, v2 Value) bool {
 	default:
 		return false
 	}
+}
+
+// NewValueReader constructs a ValueReader exposing values between offset and
+// offset+length.
+func NewValueReader(values ValueReaderAt, offset, length int) ValueReader {
+	return &valueReader{
+		values: values,
+		offset: offset,
+		length: length,
+	}
+}
+
+type valueReader struct {
+	values ValueReaderAt
+	offset int
+	length int
+}
+
+func (r *valueReader) ReadValues(values []Value) (int, error) {
+	if len(values) > r.length {
+		values = values[:r.length]
+	}
+	n, err := r.values.ReadValuesAt(r.offset, values)
+	r.offset += n
+	r.length -= n
+	if err == nil && r.length == 0 {
+		err = io.EOF
+	}
+	return n, err
 }
 
 var (

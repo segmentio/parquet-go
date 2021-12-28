@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync/atomic"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/segmentio/parquet/compress"
@@ -75,11 +75,11 @@ func NamedSchemaOf(name string, model interface{}) *Schema {
 	return namedSchemaOf(name, dereference(reflect.TypeOf(model)))
 }
 
-var cachedSchemas atomic.Value // map[reflect.Type]*Schema
+var cachedSchemas sync.Map // map[reflect.Type]*Schema
 
 func namedSchemaOf(name string, model reflect.Type) *Schema {
-	cache, _ := cachedSchemas.Load().(map[reflect.Type]*Schema)
-	schema, _ := cache[model]
+	cached, _ := cachedSchemas.Load(model)
+	schema, _ := cached.(*Schema)
 	if schema != nil {
 		return schema
 	}
@@ -87,12 +87,9 @@ func namedSchemaOf(name string, model reflect.Type) *Schema {
 		panic("cannot construct parquet schema from value of type " + model.String())
 	}
 	schema = NewSchema(name, structNodeOf(model))
-	newCache := make(map[reflect.Type]*Schema, len(cache)+1)
-	newCache[model] = schema
-	for typ, schema := range cache {
-		newCache[typ] = schema
+	if actual, loaded := cachedSchemas.LoadOrStore(model, schema); loaded {
+		schema = actual.(*Schema)
 	}
-	cachedSchemas.Store(newCache)
 	return schema
 }
 
@@ -114,6 +111,9 @@ func dereference(t reflect.Type) reflect.Type {
 }
 
 func makeDeconstructFunc(node Node) (deconstruct deconstructFunc) {
+	if schema, _ := node.(*Schema); schema != nil {
+		return schema.deconstruct
+	}
 	if !isLeaf(node) {
 		_, deconstruct = deconstructFuncOf(0, node)
 	}
@@ -121,11 +121,24 @@ func makeDeconstructFunc(node Node) (deconstruct deconstructFunc) {
 }
 
 func makeReconstructFunc(node Node) (reconstruct reconstructFunc) {
+	if schema, _ := node.(*Schema); schema != nil {
+		return schema.reconstruct
+	}
 	if !isLeaf(node) {
 		_, reconstruct = reconstructFuncOf(0, node)
 	}
 	return reconstruct
 }
+
+// ConfigureWriter satisfies the WriterOption interface, allowing Schema
+// instances to be passed to NewWriter to predeclare the schema of the
+// output parquet file.
+func (s *Schema) ConfigureRowGroup(config *RowGroupConfig) { config.Schema = s }
+
+// ConfigureWriter satisfies the WriterOption interface, allowing Schema
+// instances to be passed to NewWriter to predeclare the schema of the
+// output parquet file.
+func (s *Schema) ConfigureWriter(config *WriterConfig) { config.Schema = s }
 
 // Name returns the name of s.
 func (s *Schema) Name() string { return s.name }
@@ -332,10 +345,6 @@ func fieldByIndex(v reflect.Value, index []int) reflect.Value {
 	}
 	return v
 }
-
-var (
-	_ IndexedNode = (*structNode)(nil)
-)
 
 type structField struct {
 	wrappedNode
@@ -608,3 +617,9 @@ func parseDecimalArgs(args string) (scale, precision int, err error) {
 	}
 	return int(s), int(p), nil
 }
+
+var (
+	_ RowGroupOption = (*Schema)(nil)
+	_ WriterOption   = (*Schema)(nil)
+	_ IndexedNode    = (*structNode)(nil)
+)
