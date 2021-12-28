@@ -153,50 +153,37 @@ var pageReadWriteTests = []struct {
 func TestPageReadWrite(t *testing.T) {
 	for _, test := range pageReadWriteTests {
 		t.Run(test.scenario, func(t *testing.T) {
-			t.Run("plain", func(t *testing.T) {
-				buf := new(bytes.Buffer)
-				dec := parquet.Plain.NewDecoder(buf)
-				enc := parquet.Plain.NewEncoder(buf)
-				pr := test.typ.NewValueDecoder(32)
-				pw := test.typ.NewRowGroupColumn(1024)
+			for _, config := range [...]struct {
+				scenario string
+				typ      parquet.Type
+			}{
+				{scenario: "plain", typ: test.typ},
+				{scenario: "indexed", typ: test.typ.NewDictionary(0).Type()},
+			} {
+				t.Run(config.scenario, func(t *testing.T) {
+					buf := new(bytes.Buffer)
+					dec := parquet.Plain.NewDecoder(buf)
+					enc := parquet.Plain.NewEncoder(buf)
+					pr := config.typ.NewValueDecoder(32)
+					pw := config.typ.NewRowGroupColumn(1024)
 
-				for _, values := range test.values {
-					t.Run("", func(t *testing.T) {
-						buf.Reset()
-						dec.Reset(buf)
-						enc.Reset(buf)
-						pr.Reset(dec)
-						pw.Reset()
-						testPageReadWrite(t, test.typ, pr, pw, enc, values)
-					})
-				}
-			})
-
-			t.Run("indexed", func(t *testing.T) {
-				dict := test.typ.NewDictionary(0)
-				typ := dict.Type()
-				buf := new(bytes.Buffer)
-				dec := parquet.Plain.NewDecoder(buf)
-				enc := parquet.Plain.NewEncoder(buf)
-				pr := typ.NewValueDecoder(32)
-				pw := typ.NewRowGroupColumn(1024)
-
-				for _, values := range test.values {
-					t.Run("", func(t *testing.T) {
-						buf.Reset()
-						dec.Reset(buf)
-						enc.Reset(buf)
-						pr.Reset(dec)
-						pw.Reset()
-						testPageReadWrite(t, typ, pr, pw, enc, values)
-					})
-				}
-			})
+					for _, values := range test.values {
+						t.Run("", func(t *testing.T) {
+							buf.Reset()
+							dec.Reset(buf)
+							enc.Reset(buf)
+							pr.Reset(dec)
+							pw.Reset()
+							testPageReadWrite(t, config.typ, pr, pw, enc, values)
+						})
+					}
+				})
+			}
 		})
 	}
 }
 
-func testPageReadWrite(t *testing.T, typ parquet.Type, r parquet.ValueDecoder, w parquet.RowGroupColumn, e encoding.Encoder, values []interface{}) {
+func testPageReadWrite(t *testing.T, typ parquet.Type, r parquet.ValueReader, w parquet.RowGroupColumn, e encoding.Encoder, values []interface{}) {
 	minValue := parquet.Value{}
 	maxValue := parquet.Value{}
 	batch := make([]parquet.Value, len(values))
@@ -242,30 +229,39 @@ func testPageReadWrite(t *testing.T, typ parquet.Type, r parquet.ValueDecoder, w
 		t.Fatal("flushing page writer:", err)
 	}
 
-	v := [1]parquet.Value{}
-	i := 0
-	for {
-		n, err := r.ReadValues(v[:])
-		if err != nil {
-			if err == io.EOF {
-				break
+	for _, test := range [...]struct {
+		scenario string
+		values   parquet.ValueReader
+	}{
+		{scenario: "page", values: p.Values()},
+		{scenario: "test", values: r},
+	} {
+		v := [1]parquet.Value{}
+		i := 0
+
+		for {
+			n, err := test.values.ReadValues(v[:])
+			if n > 0 {
+				if n != 1 {
+					t.Fatalf("reading value from %q reader returned the wrong count: want=1 got=%d", test.scenario, n)
+				}
+				if i < len(values) {
+					if !parquet.Equal(v[0], parquet.ValueOf(values[i])) {
+						t.Errorf("%q value at index %d mismatches: want=%v got=%v", test.scenario, i, values[i], v[0])
+					}
+				}
+				i++
 			}
-			t.Fatal("reading value from page reader:", err)
-		}
-		if n != 1 {
-			t.Fatalf("reading value from page reader returned the wrong count: want=1 got=%d", n)
-		}
-
-		if i < len(values) {
-			if !parquet.Equal(v[0], parquet.ValueOf(values[i])) {
-				t.Errorf("value at index %d mismatches: want=%v got=%v", i, values[i], v[0])
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+				t.Fatalf("reading value from %q reader: %v", test.scenario, err)
 			}
 		}
 
-		i++
-	}
-
-	if i != numValues {
-		t.Errorf("wrong number of values read from page reader: want=%d got=%d", numValues, i)
+		if i != numValues {
+			t.Errorf("wrong number of values read from %q reader: want=%d got=%d", test.scenario, numValues, i)
+		}
 	}
 }

@@ -725,6 +725,10 @@ func (page *indexedPage) Bounds() (min, max Value) {
 	return min, max
 }
 
+func (page *indexedPage) Values() ValueReader {
+	return &indexedValueReader{dict: page.dict, values: page.values}
+}
+
 func (page *indexedPage) Slice(i, j int) Page {
 	return newIndexedPage(page.dict, page.values[i:j])
 }
@@ -734,6 +738,22 @@ func (page *indexedPage) RepetitionLevels() []int8 { return nil }
 func (page *indexedPage) DefinitionLevels() []int8 { return nil }
 
 func (page *indexedPage) WriteTo(enc encoding.Encoder) error { return enc.EncodeInt32(page.values) }
+
+type indexedValueReader struct {
+	dict   Dictionary
+	values []int32
+}
+
+func (r *indexedValueReader) ReadValues(values []Value) (n int, err error) {
+	n = min(len(values), len(r.values))
+	for i := 0; i < n; i++ {
+		values[i] = r.dict.Index(int(r.values[i]))
+	}
+	if r.values = r.values[n:]; len(r.values) == 0 {
+		return n, io.EOF
+	}
+	return n, nil
+}
 
 type indexedRowGroupColumn struct{ indexedPage }
 
