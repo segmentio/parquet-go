@@ -132,8 +132,7 @@ func createParquetFile(rows rows, options ...parquet.WriterOption) (*parquet.Fil
 }
 
 func writeParquetFile(w io.Writer, rows rows, options ...parquet.WriterOption) error {
-	schema := parquet.SchemaOf(rows[0])
-	writer := parquet.NewWriter(w, append(options, schema)...)
+	writer := parquet.NewWriter(w, options...)
 
 	for _, row := range rows {
 		if err := writer.Write(row); err != nil {
@@ -141,6 +140,21 @@ func writeParquetFile(w io.Writer, rows rows, options ...parquet.WriterOption) e
 		}
 	}
 
+	return writer.Close()
+}
+
+func writeParquetFileWithRowGroup(w io.Writer, rows rows, options ...parquet.WriterOption) error {
+	rowGroup := parquet.NewRowGroup()
+	for _, row := range rows {
+		if err := rowGroup.Write(row); err != nil {
+			return err
+		}
+	}
+
+	writer := parquet.NewWriter(w, options...)
+	if err := writer.WriteRowGroup(rowGroup); err != nil {
+		return err
+	}
 	return writer.Close()
 }
 

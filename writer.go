@@ -201,18 +201,18 @@ func (w *Writer) WriteRow(row Row) error {
 // The content of the row group is flushed to the writer; after the method
 // returns successfully, the row group will be empty and in ready to be reused.
 func (w *Writer) WriteRowGroup(rowGroup *RowGroup) error {
+	if w.schema == nil {
+		w.configure(rowGroup.schema)
+	} else if w.schema != rowGroup.schema {
+		return fmt.Errorf("cannot write row group with mismatching schema:\n%s\n%s", w.schema, rowGroup.schema)
+	}
+
 	if !w.initialized {
 		w.initialized = true
 
 		if err := w.writeMagicHeader(); err != nil {
 			return err
 		}
-	}
-
-	if w.schema == nil {
-		w.schema = rowGroup.schema
-	} else if w.schema != rowGroup.schema {
-		return fmt.Errorf("cannot write row group with mismatching schema:\n%s\n%s", w.schema, rowGroup.schema)
 	}
 
 	return w.rowGroups.writeRowGroup(rowGroup)
@@ -262,7 +262,7 @@ func makeRowGroupWriter(writer io.Writer, schema *Schema, config *WriterConfig) 
 }
 
 func (rgw *rowGroupWriter) init(node Node, path []string, dataPageType format.PageType, maxRepetitionLevel, maxDefinitionLevel int8) {
-	nodeType := node.Type()
+	columnType := node.Type()
 
 	if !node.Required() {
 		maxDefinitionLevel++
@@ -285,7 +285,7 @@ func (rgw *rowGroupWriter) init(node Node, path []string, dataPageType format.Pa
 	// For backward compatibility with older readers, the parquet specification
 	// recommends to set the scale and precision on schema elements when the
 	// column is of logical type decimal.
-	logicalType := nodeType.LogicalType()
+	logicalType := columnType.LogicalType()
 	scale, precision := (*int32)(nil), (*int32)(nil)
 	if logicalType != nil && logicalType.Decimal != nil {
 		scale = &logicalType.Decimal.Scale
@@ -293,17 +293,17 @@ func (rgw *rowGroupWriter) init(node Node, path []string, dataPageType format.Pa
 	}
 
 	typeLength := (*int32)(nil)
-	if n := int32(nodeType.Length()); n > 0 {
+	if n := int32(columnType.Length()); n > 0 {
 		typeLength = &n
 	}
 
 	rgw.colSchema = append(rgw.colSchema, format.SchemaElement{
-		Type:           nodeType.PhyiscalType(),
+		Type:           columnType.PhyiscalType(),
 		TypeLength:     typeLength,
 		RepetitionType: repetitionType,
 		Name:           path[len(path)-1],
 		NumChildren:    int32(node.NumChildren()),
-		ConvertedType:  nodeType.ConvertedType(),
+		ConvertedType:  columnType.ConvertedType(),
 		Scale:          scale,
 		Precision:      precision,
 		LogicalType:    logicalType,
@@ -322,7 +322,7 @@ func (rgw *rowGroupWriter) init(node Node, path []string, dataPageType format.Pa
 		// representations of the pages, picking the one with the smallest space
 		// footprint; keep it simple for now.
 		encoding := encoding.Encoding(&Plain)
-		compressionCodec := compress.Codec(&Uncompressed)
+		compression := compress.Codec(&Uncompressed)
 		// The parquet-format documentation states that the
 		// DELTA_LENGTH_BYTE_ARRAY is always preferred to PLAIN when
 		// encoding BYTE_ARRAY values. We apply it as a default if
@@ -330,7 +330,7 @@ func (rgw *rowGroupWriter) init(node Node, path []string, dataPageType format.Pa
 		// the opportunity to override this behavior if needed.
 		//
 		// https://github.com/apache/parquet-format/blob/master/Encodings.md#delta-length-byte-array-delta_length_byte_array--6
-		if nodeType.Kind() == ByteArray {
+		if columnType.Kind() == ByteArray {
 			encoding = &DeltaLengthByteArray
 		}
 
@@ -340,7 +340,7 @@ func (rgw *rowGroupWriter) init(node Node, path []string, dataPageType format.Pa
 		}
 
 		for _, codec := range node.Compression() {
-			compressionCodec = codec
+			compression = codec
 			break
 		}
 
@@ -349,44 +349,41 @@ func (rgw *rowGroupWriter) init(node Node, path []string, dataPageType format.Pa
 
 		switch encoding.Encoding() {
 		case format.PlainDictionary, format.RLEDictionary:
-			dictionary = nodeType.NewDictionary(bufferSize)
-			nodeType = dictionary.Type()
+			dictionary = columnType.NewDictionary(bufferSize)
+			columnType = dictionary.Type()
 		}
 
-		column := nodeType.NewRowGroupColumn(bufferSize)
-		switch {
-		case maxRepetitionLevel > 0:
-			column = newRepeatedRowGroupColumn(column, maxRepetitionLevel, maxDefinitionLevel, nullsGoLast)
-		case maxDefinitionLevel > 0:
-			column = newOptionalRowGroupColumn(column, maxDefinitionLevel, nullsGoLast)
+		buffer := &bufferPoolPageWriter{
+			pool: rgw.config.ColumnPageBuffers,
 		}
 
-		buffer := &bufferPoolPageWriter{pool: rgw.config.ColumnPageBuffers}
 		rgw.columns = append(rgw.columns, rowGroupWriterColumn{
-			typ:        format.Type(nodeType.Kind()),
-			codec:      compressionCodec.CompressionCodec(),
+			typ:        format.Type(columnType.Kind()),
+			codec:      compression.CompressionCodec(),
 			path:       path[1:],
 			dictionary: dictionary,
 			buffer:     buffer,
 			chunks: newColumnChunkWriter(
 				buffer,
-				compressionCodec,
+				columnType,
+				columnType.NewColumnIndexer(rgw.config.ColumnIndexSizeLimit),
+				bufferSize,
+				compression,
 				encoding.NewEncoder(nil),
 				dataPageType,
 				maxRepetitionLevel,
 				maxDefinitionLevel,
-				column,
-				nodeType.NewColumnIndexer(rgw.config.ColumnIndexSizeLimit),
 				rgw.config.DataPageStatistics,
 				// Data pages in version 2 can omit compression when dictionary
 				// encoding is employed; only the dictionary page needs to be
 				// compressed, the data pages are encoded with the hybrid
 				// RLE/Bit-Pack encoding which doesn't benefit from an extra
 				// compression layer.
-				compressionCodec.CompressionCodec() != format.Uncompressed && (dataPageType != format.DataPageV2 || dictionary == nil),
+				compression.CompressionCodec() != format.Uncompressed && (dataPageType != format.DataPageV2 || dictionary == nil),
 			),
 		})
-		rgw.colOrders = append(rgw.colOrders, *nodeType.ColumnOrder())
+
+		rgw.colOrders = append(rgw.colOrders, *columnType.ColumnOrder())
 	}
 }
 
@@ -470,6 +467,7 @@ func (rgw *rowGroupWriter) flush(sortingColumns []format.SortingColumn) error {
 	if rgw.numRows == 0 {
 		return nil // nothing to flush
 	}
+	defer func() { rgw.numRows = 0 }()
 
 	for i := range rgw.columns {
 		if err := rgw.columns[i].chunks.flush(); err != nil {
@@ -565,6 +563,12 @@ func (rgw *rowGroupWriter) writeRow(row Row) (err error) {
 		panic("BUG: cannot write a row with no values")
 	}
 
+	defer func() {
+		for i := range rgw.columns {
+			rgw.columns[i].chunks.clear()
+		}
+	}()
+
 	for i := range row {
 		c := &rgw.columns[row[i].ColumnIndex()]
 		w := c.chunks
@@ -619,9 +623,12 @@ type columnChunkWriter struct {
 	commit func(*columnChunkWriter) error
 	values []Value
 
-	buffer      pageBuffer
-	column      RowGroupColumn
-	compression compress.Codec
+	buffer           pageBuffer
+	columnType       Type
+	columnIndexer    ColumnIndexer
+	columnBufferSize int
+	column           RowGroupColumn
+	compression      compress.Codec
 
 	dataPageType       format.PageType
 	maxRepetitionLevel int8
@@ -669,14 +676,15 @@ type columnChunkWriter struct {
 	totalCompressedSize   int64
 	encodings             []format.Encoding
 	encodingStats         []format.PageEncodingStats
-	columnIndexer         ColumnIndexer
 }
 
-func newColumnChunkWriter(buffer pageBuffer, codec compress.Codec, enc encoding.Encoder, dataPageType format.PageType, maxRepetitionLevel, maxDefinitionLevel int8, column RowGroupColumn, columnIndexer ColumnIndexer, writePageStats, isCompressed bool) *columnChunkWriter {
+func newColumnChunkWriter(buffer pageBuffer, columnType Type, columnIndexer ColumnIndexer, columnBufferSize int, compression compress.Codec, enc encoding.Encoder, dataPageType format.PageType, maxRepetitionLevel, maxDefinitionLevel int8, writePageStats, isCompressed bool) *columnChunkWriter {
 	ccw := &columnChunkWriter{
 		buffer:             buffer,
-		column:             column,
-		compression:        codec,
+		columnType:         columnType,
+		columnIndexer:      columnIndexer,
+		columnBufferSize:   columnBufferSize,
+		compression:        compression,
 		dataPageType:       dataPageType,
 		maxRepetitionLevel: maxRepetitionLevel,
 		maxDefinitionLevel: maxDefinitionLevel,
@@ -684,8 +692,6 @@ func newColumnChunkWriter(buffer pageBuffer, codec compress.Codec, enc encoding.
 		isCompressed:       isCompressed,
 		encodings:          make([]format.Encoding, 0, 3),
 		encodingStats:      make([]format.PageEncodingStats, 0, 3),
-		columnIndexer:      columnIndexer,
-		maxValues:          int32(column.Cap()),
 	}
 
 	if maxRepetitionLevel > 0 {
@@ -714,7 +720,9 @@ func newColumnChunkWriter(buffer pageBuffer, codec compress.Codec, enc encoding.
 }
 
 func (ccw *columnChunkWriter) reset() {
-	ccw.column.Reset()
+	if ccw.column != nil {
+		ccw.column.Reset()
+	}
 	ccw.nullCount = 0
 	ccw.numValues = 0
 	ccw.totalRowCount = 0
@@ -746,27 +754,47 @@ func (ccw *columnChunkWriter) statistics() format.Statistics {
 	}
 }
 
+func (ccw *columnChunkWriter) clear() {
+	for i := range ccw.values {
+		ccw.values[i] = Value{}
+	}
+	ccw.values = ccw.values[:0]
+}
+
 func (ccw *columnChunkWriter) insertRepeated(values []Value) error {
 	ccw.values = append(ccw.values, values...)
 	return nil
 }
 
 func (ccw *columnChunkWriter) commitRepeated() error {
-	defer func() {
-		for i := range ccw.values {
-			ccw.values[i] = Value{}
-		}
-		ccw.values = ccw.values[:0]
-	}()
 	return ccw.writeValues(ccw.values)
 }
 
+func (ccw *columnChunkWriter) newRowGroupColumn() RowGroupColumn {
+	column := ccw.columnType.NewRowGroupColumn(ccw.columnBufferSize)
+	switch {
+	case ccw.maxRepetitionLevel > 0:
+		column = newRepeatedRowGroupColumn(column, ccw.maxRepetitionLevel, ccw.maxDefinitionLevel, nullsGoLast)
+	case ccw.maxDefinitionLevel > 0:
+		column = newOptionalRowGroupColumn(column, ccw.maxDefinitionLevel, nullsGoLast)
+	}
+	return column
+}
+
 func (ccw *columnChunkWriter) writeValues(values []Value) error {
+	if ccw.column == nil {
+		// Lazily create the row group column so we don't need to allocate it if
+		// only WriteRowGroup is called on the writer.
+		ccw.column = ccw.newRowGroupColumn()
+		ccw.maxValues = int32(ccw.column.Cap())
+	}
+
 	if ccw.numValues > 0 && (ccw.numValues+int32(len(values))) > ccw.maxValues {
 		if err := ccw.flush(); err != nil {
 			return err
 		}
 	}
+
 	_, err := ccw.column.WriteValues(values)
 	if err != nil {
 		return err
@@ -776,6 +804,9 @@ func (ccw *columnChunkWriter) writeValues(values []Value) error {
 }
 
 func (ccw *columnChunkWriter) flush() error {
+	if ccw.numValues == 0 {
+		return nil
+	}
 	defer func() {
 		ccw.column.Reset()
 		ccw.numValues = 0
