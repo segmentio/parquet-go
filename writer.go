@@ -229,9 +229,14 @@ func (rgw *rowGroupWriter) init(node Node, path []string, dataPageType format.Pa
 		precision = &logicalType.Decimal.Precision
 	}
 
+	typeLength := (*int32)(nil)
+	if n := int32(nodeType.Length()); n > 0 {
+		typeLength = &n
+	}
+
 	rgw.colSchema = append(rgw.colSchema, format.SchemaElement{
 		Type:           nodeType.PhyiscalType(),
-		TypeLength:     typeLengthOf(nodeType),
+		TypeLength:     typeLength,
 		RepetitionType: repetitionType,
 		Name:           path[len(path)-1],
 		NumChildren:    int32(node.NumChildren()),
@@ -278,18 +283,16 @@ func (rgw *rowGroupWriter) init(node Node, path []string, dataPageType format.Pa
 
 		columnIndexer := nodeType.NewColumnIndexer(rgw.config.ColumnIndexSizeLimit)
 		dictionary := Dictionary(nil)
-		column := RowGroupColumn(nil)
 		bufferSize := rgw.config.PageBufferSize
 		encoder := encoding.NewEncoder(nil)
 
 		switch encoding.Encoding() {
 		case format.PlainDictionary, format.RLEDictionary:
 			dictionary = nodeType.NewDictionary(bufferSize)
-			column = NewIndexedRowGroupColumn(dictionary, bufferSize)
-		default:
-			column = nodeType.NewRowGroupColumn(bufferSize)
+			nodeType = dictionary.Type()
 		}
 
+		column := nodeType.NewRowGroupColumn(bufferSize)
 		switch {
 		case maxRepetitionLevel > 0:
 			column = newRepeatedRowGroupColumn(column, maxRepetitionLevel, maxDefinitionLevel, nullsGoLast)

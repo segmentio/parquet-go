@@ -45,8 +45,6 @@ type RowGroup struct {
 }
 
 type RowGroupColumn interface {
-	Type() Type
-
 	Page() Page
 
 	Reset()
@@ -242,8 +240,6 @@ func newOptionalRowGroupColumn(base RowGroupColumn, maxDefinitionLevel int8, nul
 	}
 }
 
-func (col *optionalRowGroupColumn) Type() Type { return col.base.Type() }
-
 func (col *optionalRowGroupColumn) Page() Page {
 	return rowGroupColumnPageWithLevels(col.base, 0, col.maxDefinitionLevel, nil, col.definitionLevels)
 }
@@ -308,8 +304,6 @@ func newRepeatedRowGroupColumn(base RowGroupColumn, maxRepetitionLevel, maxDefin
 	}
 }
 
-func (col *repeatedRowGroupColumn) Type() Type { return col.base.Type() }
-
 func (col *repeatedRowGroupColumn) Page() Page {
 	return rowGroupColumnPageWithLevels(col.base, col.maxRepetitionLevel, col.maxDefinitionLevel, col.repetitionLevels, col.definitionLevels)
 }
@@ -367,27 +361,15 @@ func (col *repeatedRowGroupColumn) WriteValues(values []Value) (int, error) {
 	return n, err
 }
 
-func splitRange(length, count int, do func(i, j, k int)) {
-	for i, j := 0, 0; count > 0; i++ {
-		n := (length - j) / count
-		do(i, j, j+n)
-		j += n
-		count--
-	}
-}
-
 type booleanRowGroupColumn struct{ booleanPage }
 
-func newBooleanRowGroupColumn(typ Type, bufferSize int) *booleanRowGroupColumn {
+func newBooleanRowGroupColumn(bufferSize int) *booleanRowGroupColumn {
 	return &booleanRowGroupColumn{
 		booleanPage: booleanPage{
-			typ:    typ,
 			values: make([]bool, 0, bufferSize),
 		},
 	}
 }
-
-func (col *booleanRowGroupColumn) Type() Type { return col.typ }
 
 func (col *booleanRowGroupColumn) Page() Page { return &col.booleanPage }
 
@@ -416,16 +398,13 @@ func (col *booleanRowGroupColumn) WriteValues(values []Value) (int, error) {
 
 type int32RowGroupColumn struct{ int32Page }
 
-func newInt32RowGroupColumn(typ Type, bufferSize int) *int32RowGroupColumn {
+func newInt32RowGroupColumn(bufferSize int) *int32RowGroupColumn {
 	return &int32RowGroupColumn{
 		int32Page: int32Page{
-			typ:    typ,
 			values: make([]int32, 0, bufferSize/4),
 		},
 	}
 }
-
-func (col *int32RowGroupColumn) Type() Type { return col.typ }
 
 func (col *int32RowGroupColumn) Page() Page { return &col.int32Page }
 
@@ -452,16 +431,13 @@ func (col *int32RowGroupColumn) WriteValues(values []Value) (int, error) {
 
 type int64RowGroupColumn struct{ int64Page }
 
-func newInt64RowGroupColumn(typ Type, bufferSize int) *int64RowGroupColumn {
+func newInt64RowGroupColumn(bufferSize int) *int64RowGroupColumn {
 	return &int64RowGroupColumn{
 		int64Page: int64Page{
-			typ:    typ,
 			values: make([]int64, 0, bufferSize/8),
 		},
 	}
 }
-
-func (col *int64RowGroupColumn) Type() Type { return col.typ }
 
 func (col *int64RowGroupColumn) Page() Page { return &col.int64Page }
 
@@ -488,16 +464,13 @@ func (col *int64RowGroupColumn) WriteValues(values []Value) (int, error) {
 
 type int96RowGroupColumn struct{ int96Page }
 
-func newInt96RowGroupColumn(typ Type, bufferSize int) *int96RowGroupColumn {
+func newInt96RowGroupColumn(bufferSize int) *int96RowGroupColumn {
 	return &int96RowGroupColumn{
 		int96Page: int96Page{
-			typ:    typ,
 			values: make([]deprecated.Int96, 0, bufferSize/12),
 		},
 	}
 }
-
-func (col *int96RowGroupColumn) Type() Type { return col.typ }
 
 func (col *int96RowGroupColumn) Page() Page { return &col.int96Page }
 
@@ -524,16 +497,13 @@ func (col *int96RowGroupColumn) WriteValues(values []Value) (int, error) {
 
 type floatRowGroupColumn struct{ floatPage }
 
-func newFloatRowGroupColumn(typ Type, bufferSize int) *floatRowGroupColumn {
+func newFloatRowGroupColumn(bufferSize int) *floatRowGroupColumn {
 	return &floatRowGroupColumn{
 		floatPage: floatPage{
-			typ:    typ,
 			values: make([]float32, 0, bufferSize/4),
 		},
 	}
 }
-
-func (col *floatRowGroupColumn) Type() Type { return col.typ }
 
 func (col *floatRowGroupColumn) Page() Page { return &col.floatPage }
 
@@ -560,16 +530,13 @@ func (col *floatRowGroupColumn) WriteValues(values []Value) (int, error) {
 
 type doubleRowGroupColumn struct{ doublePage }
 
-func newDoubleRowGroupColumn(typ Type, bufferSize int) *doubleRowGroupColumn {
+func newDoubleRowGroupColumn(bufferSize int) *doubleRowGroupColumn {
 	return &doubleRowGroupColumn{
 		doublePage: doublePage{
-			typ:    typ,
 			values: make([]float64, 0, bufferSize/8),
 		},
 	}
 }
-
-func (col *doubleRowGroupColumn) Type() Type { return col.typ }
 
 func (col *doubleRowGroupColumn) Page() Page { return &col.doublePage }
 
@@ -596,16 +563,13 @@ func (col *doubleRowGroupColumn) WriteValues(values []Value) (int, error) {
 
 type byteArrayRowGroupColumn struct{ byteArrayPage }
 
-func newByteArrayRowGroupColumn(typ Type, bufferSize int) *byteArrayRowGroupColumn {
+func newByteArrayRowGroupColumn(bufferSize int) *byteArrayRowGroupColumn {
 	return &byteArrayRowGroupColumn{
 		byteArrayPage: byteArrayPage{
-			typ:    typ,
 			values: encoding.MakeByteArrayList(bufferSize / 16),
 		},
 	}
 }
-
-func (col *byteArrayRowGroupColumn) Type() Type { return col.typ }
 
 func (col *byteArrayRowGroupColumn) Page() Page { return &col.byteArrayPage }
 
@@ -633,19 +597,15 @@ type fixedLenByteArrayRowGroupColumn struct {
 	tmp []byte
 }
 
-func newFixedLenByteArrayRowGroupColumn(typ Type, bufferSize int) *fixedLenByteArrayRowGroupColumn {
-	size := typ.Length()
+func newFixedLenByteArrayRowGroupColumn(size, bufferSize int) *fixedLenByteArrayRowGroupColumn {
 	return &fixedLenByteArrayRowGroupColumn{
 		fixedLenByteArrayPage: fixedLenByteArrayPage{
 			size: size,
-			typ:  typ,
 			data: make([]byte, 0, bufferSize),
 		},
 		tmp: make([]byte, size),
 	}
 }
-
-func (col *fixedLenByteArrayRowGroupColumn) Type() Type { return col.typ }
 
 func (col *fixedLenByteArrayRowGroupColumn) Page() Page { return &col.fixedLenByteArrayPage }
 
@@ -683,8 +643,8 @@ func (col *fixedLenByteArrayRowGroupColumn) WriteValues(values []Value) (int, er
 
 type uint32RowGroupColumn struct{ *int32RowGroupColumn }
 
-func newUint32RowGroupColumn(typ Type, bufferSize int) uint32RowGroupColumn {
-	return uint32RowGroupColumn{newInt32RowGroupColumn(typ, bufferSize)}
+func newUint32RowGroupColumn(bufferSize int) uint32RowGroupColumn {
+	return uint32RowGroupColumn{newInt32RowGroupColumn(bufferSize)}
 }
 
 func (col uint32RowGroupColumn) Page() Page {
@@ -697,8 +657,8 @@ func (col uint32RowGroupColumn) Less(i, j int) bool {
 
 type uint64RowGroupColumn struct{ *int64RowGroupColumn }
 
-func newUint64RowGroupColumn(typ Type, bufferSize int) uint64RowGroupColumn {
-	return uint64RowGroupColumn{newInt64RowGroupColumn(typ, bufferSize)}
+func newUint64RowGroupColumn(bufferSize int) uint64RowGroupColumn {
+	return uint64RowGroupColumn{newInt64RowGroupColumn(bufferSize)}
 }
 
 func (col uint64RowGroupColumn) Page() Page {

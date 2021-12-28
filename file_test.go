@@ -54,6 +54,7 @@ func printColumns(t *testing.T, col *parquet.Column, indent string) {
 	const bufferSize = 1024
 	chunks := col.Chunks()
 	values := make([]parquet.Value, 10)
+	pageType := col.Type()
 
 	for chunks.Next() {
 		pages := chunks.Pages()
@@ -64,34 +65,29 @@ func printColumns(t *testing.T, col *parquet.Column, indent string) {
 			case parquet.DictionaryPageHeader:
 				dictionaryPage := header.Encoding().NewDecoder(pages.PageData())
 				dictionary = col.Type().NewDictionary(bufferSize)
-
 				if err := dictionary.ReadFrom(dictionaryPage); err != nil {
 					t.Fatal(err)
 				}
+				pageType = dictionary.Type()
 
 			case parquet.DataPageHeader:
-				var pageReader parquet.PageReader
-				var pageData = header.Encoding().NewDecoder(pages.PageData())
-
-				if dictionary != nil {
-					pageReader = parquet.NewIndexedPageReader(dictionary, pageData, bufferSize)
-				} else {
-					pageReader = col.Type().NewPageReader(pageData, bufferSize)
-				}
-
-				dataPageReader := parquet.NewDataPageReader(
-					header.RepetitionLevelEncoding().NewDecoder(pages.RepetitionLevels()),
-					header.DefinitionLevelEncoding().NewDecoder(pages.DefinitionLevels()),
-					header.NumValues(),
-					pageReader,
+				pageReader := parquet.NewPageReader(
+					pageType,
 					col.MaxRepetitionLevel(),
 					col.MaxDefinitionLevel(),
 					col.Index(),
 					bufferSize,
 				)
 
+				pageReader.Reset(
+					header.NumValues(),
+					header.RepetitionLevelEncoding().NewDecoder(pages.RepetitionLevels()),
+					header.DefinitionLevelEncoding().NewDecoder(pages.DefinitionLevels()),
+					header.Encoding().NewDecoder(pages.PageData()),
+				)
+
 				for {
-					_, err := dataPageReader.ReadValues(values)
+					_, err := pageReader.ReadValues(values)
 					if err != nil {
 						if err != io.EOF {
 							t.Error(err)

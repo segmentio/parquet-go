@@ -50,44 +50,40 @@ func forEachColumnChunk(col *parquet.Column, do func(*parquet.Column, *parquet.C
 	})
 }
 
-func forEachColumnPage(col *parquet.Column, do func(*parquet.Column, *parquet.DataPageReader) error) error {
+func forEachColumnPage(col *parquet.Column, do func(*parquet.Column, *parquet.PageReader) error) error {
 	return forEachColumnChunk(col, func(leaf *parquet.Column, chunks *parquet.ColumnChunks) error {
 		const bufferSize = 1024
 		pages := chunks.Pages()
 		dictionary := (parquet.Dictionary)(nil)
+		pageType := leaf.Type()
 
 		for pages.Next() {
 			switch header := pages.PageHeader().(type) {
 			case parquet.DictionaryPageHeader:
 				decoder := header.Encoding().NewDecoder(pages.PageData())
 				dictionary = leaf.Type().NewDictionary(0)
-
 				if err := dictionary.ReadFrom(decoder); err != nil {
 					return err
 				}
+				pageType = dictionary.Type()
 
 			case parquet.DataPageHeader:
-				var pageReader parquet.PageReader
-				var pageData = header.Encoding().NewDecoder(pages.PageData())
-
-				if dictionary != nil {
-					pageReader = parquet.NewIndexedPageReader(dictionary, pageData, bufferSize)
-				} else {
-					pageReader = leaf.Type().NewPageReader(pageData, bufferSize)
-				}
-
-				dataPageReader := parquet.NewDataPageReader(
-					header.RepetitionLevelEncoding().NewDecoder(pages.RepetitionLevels()),
-					header.DefinitionLevelEncoding().NewDecoder(pages.DefinitionLevels()),
-					header.NumValues(),
-					pageReader,
+				pageReader := parquet.NewPageReader(
+					pageType,
 					leaf.MaxRepetitionLevel(),
 					leaf.MaxDefinitionLevel(),
 					leaf.Index(),
 					bufferSize,
 				)
 
-				if err := do(leaf, dataPageReader); err != nil {
+				pageReader.Reset(
+					header.NumValues(),
+					header.RepetitionLevelEncoding().NewDecoder(pages.RepetitionLevels()),
+					header.DefinitionLevelEncoding().NewDecoder(pages.DefinitionLevels()),
+					header.Encoding().NewDecoder(pages.PageData()),
+				)
+
+				if err := do(leaf, pageReader); err != nil {
 					return err
 				}
 
@@ -104,7 +100,7 @@ func forEachColumnPage(col *parquet.Column, do func(*parquet.Column, *parquet.Da
 }
 
 func forEachColumnValue(col *parquet.Column, do func(*parquet.Column, parquet.Value) error) error {
-	return forEachColumnPage(col, func(leaf *parquet.Column, page *parquet.DataPageReader) error {
+	return forEachColumnPage(col, func(leaf *parquet.Column, page *parquet.PageReader) error {
 		values := make([]parquet.Value, 10)
 		for {
 			n, err := page.ReadValues(values)

@@ -157,41 +157,38 @@ func TestPageReadWrite(t *testing.T) {
 				buf := new(bytes.Buffer)
 				dec := parquet.Plain.NewDecoder(buf)
 				enc := parquet.Plain.NewEncoder(buf)
-				pr := test.typ.NewPageReader(dec, 32)
+				pr := test.typ.NewValueDecoder(32)
 				pw := test.typ.NewRowGroupColumn(1024)
 
 				for _, values := range test.values {
 					t.Run("", func(t *testing.T) {
-						defer func() {
-							buf.Reset()
-							dec.Reset(buf)
-							enc.Reset(buf)
-							pr.Reset(dec)
-							pw.Reset()
-						}()
-						testPageReadWrite(t, pr, pw, enc, values)
+						buf.Reset()
+						dec.Reset(buf)
+						enc.Reset(buf)
+						pr.Reset(dec)
+						pw.Reset()
+						testPageReadWrite(t, test.typ, pr, pw, enc, values)
 					})
 				}
 			})
 
 			t.Run("indexed", func(t *testing.T) {
 				dict := test.typ.NewDictionary(0)
+				typ := dict.Type()
 				buf := new(bytes.Buffer)
 				dec := parquet.Plain.NewDecoder(buf)
 				enc := parquet.Plain.NewEncoder(buf)
-				pr := parquet.NewIndexedPageReader(dict, dec, 32)
-				pw := parquet.NewIndexedRowGroupColumn(dict, 1024)
+				pr := typ.NewValueDecoder(32)
+				pw := typ.NewRowGroupColumn(1024)
 
 				for _, values := range test.values {
 					t.Run("", func(t *testing.T) {
-						defer func() {
-							buf.Reset()
-							dec.Reset(buf)
-							enc.Reset(buf)
-							pr.Reset(dec)
-							pw.Reset()
-						}()
-						testPageReadWrite(t, pr, pw, enc, values)
+						buf.Reset()
+						dec.Reset(buf)
+						enc.Reset(buf)
+						pr.Reset(dec)
+						pw.Reset()
+						testPageReadWrite(t, typ, pr, pw, enc, values)
 					})
 				}
 			})
@@ -199,8 +196,7 @@ func TestPageReadWrite(t *testing.T) {
 	}
 }
 
-func testPageReadWrite(t *testing.T, r parquet.PageReader, w parquet.RowGroupColumn, e encoding.Encoder, values []interface{}) {
-	typ := r.Type()
+func testPageReadWrite(t *testing.T, typ parquet.Type, r parquet.ValueDecoder, w parquet.RowGroupColumn, e encoding.Encoder, values []interface{}) {
 	minValue := parquet.Value{}
 	maxValue := parquet.Value{}
 	batch := make([]parquet.Value, len(values))

@@ -266,21 +266,21 @@ type columnChunkReader struct {
 	column     *Column
 	chunks     *ColumnChunks
 	pages      *ColumnPages
-	reader     *DataPageReader
+	reader     *PageReader
 	dictionary Dictionary
 	numPages   int
 
 	values []Value
 	offset uint
 
-	page struct {
-		decoder encoding.Decoder
-		reader  PageReader
-	}
 	repetitions struct {
 		decoder encoding.Decoder
 	}
 	definitions struct {
+		decoder encoding.Decoder
+	}
+	page struct {
+		typ     Type
 		decoder encoding.Decoder
 	}
 
@@ -303,6 +303,7 @@ func newColumnChunkReader(column *Column, config *ReaderConfig) *columnChunkRead
 		ccr.bufferSize /= 2
 	}
 
+	ccr.page.typ = column.Type()
 	return ccr
 }
 
@@ -384,7 +385,7 @@ readNextPage:
 
 func (ccr *columnChunkReader) readDictionaryPage(header DictionaryPageHeader) error {
 	if ccr.dictionary == nil {
-		ccr.dictionary = ccr.column.Type().NewDictionary(0)
+		ccr.dictionary = ccr.page.typ.NewDictionary(ccr.bufferSize)
 	} else {
 		ccr.dictionary.Reset()
 	}
@@ -392,6 +393,7 @@ func (ccr *columnChunkReader) readDictionaryPage(header DictionaryPageHeader) er
 	if err := ccr.dictionary.ReadFrom(decoder); err != nil {
 		return err
 	}
+	ccr.page.typ = ccr.dictionary.Type()
 	ccr.numPages++
 	return nil
 }
@@ -401,25 +403,9 @@ func (ccr *columnChunkReader) readDataPage(header DataPageHeader) {
 	ccr.definitions.decoder = makeDecoder(ccr.definitions.decoder, header.DefinitionLevelEncoding(), ccr.pages.DefinitionLevels())
 	ccr.page.decoder = makeDecoder(ccr.page.decoder, header.Encoding(), ccr.pages.PageData())
 
-	if ccr.page.reader != nil {
-		ccr.page.reader.Reset(ccr.page.decoder)
-	} else {
-		if ccr.dictionary != nil {
-			ccr.page.reader = NewIndexedPageReader(ccr.dictionary, ccr.page.decoder, ccr.bufferSize)
-		} else {
-			ccr.page.reader = ccr.column.Type().NewPageReader(ccr.page.decoder, ccr.bufferSize)
-		}
-	}
-
-	numValues := header.NumValues()
-	if ccr.reader != nil {
-		ccr.reader.Reset(ccr.repetitions.decoder, ccr.definitions.decoder, numValues, ccr.page.reader)
-	} else {
-		ccr.reader = NewDataPageReader(
-			ccr.repetitions.decoder,
-			ccr.definitions.decoder,
-			numValues,
-			ccr.page.reader,
+	if ccr.reader == nil {
+		ccr.reader = NewPageReader(
+			ccr.page.typ,
 			ccr.column.MaxRepetitionLevel(),
 			ccr.column.MaxDefinitionLevel(),
 			ccr.column.Index(),
@@ -427,6 +413,7 @@ func (ccr *columnChunkReader) readDataPage(header DataPageHeader) {
 		)
 	}
 
+	ccr.reader.Reset(header.NumValues(), ccr.repetitions.decoder, ccr.definitions.decoder, ccr.page.decoder)
 	ccr.numPages++
 }
 

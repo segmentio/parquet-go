@@ -8,9 +8,6 @@ import (
 
 // Page values represent sequences of parquet values.
 type Page interface {
-	// Returns the type values written to the underlying page.
-	Type() Type
-
 	// Returns the size of the page in memory (in bytes).
 	Size() int64
 
@@ -54,8 +51,6 @@ func newPageWithLevels(base Page, maxRepetitionLevel, maxDefinitionLevel int8, r
 	}
 }
 
-func (page *pageWithLevels) Type() Type { return page.base.Type() }
-
 func (page *pageWithLevels) Size() int64 {
 	return page.base.Size() + int64(len(page.repetitionLevels)) + int64(len(page.definitionLevels))
 }
@@ -90,15 +85,12 @@ func (page *pageWithLevels) DefinitionLevels() []int8 { return page.definitionLe
 func (page *pageWithLevels) WriteTo(enc encoding.Encoder) error { return page.base.WriteTo(enc) }
 
 type booleanPage struct {
-	typ    Type
 	values []bool
 }
 
-func newBooleanPage(typ Type, values []bool) *booleanPage {
-	return &booleanPage{typ: typ, values: values}
+func newBooleanPage(values []bool) *booleanPage {
+	return &booleanPage{values: values}
 }
-
-func (page *booleanPage) Type() Type { return page.typ }
 
 func (page *booleanPage) Size() int64 { return int64(len(page.values)) }
 
@@ -133,7 +125,7 @@ func (page *booleanPage) Bounds() (min, max Value) {
 	return min, max
 }
 
-func (page *booleanPage) Slice(i, j int) Page { return newBooleanPage(page.typ, page.values[i:j]) }
+func (page *booleanPage) Slice(i, j int) Page { return newBooleanPage(page.values[i:j]) }
 
 func (page *booleanPage) RepetitionLevels() []int8 { return nil }
 
@@ -142,15 +134,12 @@ func (page *booleanPage) DefinitionLevels() []int8 { return nil }
 func (page *booleanPage) WriteTo(enc encoding.Encoder) error { return enc.EncodeBoolean(page.values) }
 
 type int32Page struct {
-	typ    Type
 	values []int32
 }
 
-func newInt32Page(typ Type, values []int32) *int32Page {
-	return &int32Page{typ: typ, values: values}
+func newInt32Page(values []int32) *int32Page {
+	return &int32Page{values: values}
 }
-
-func (page *int32Page) Type() Type { return page.typ }
 
 func (page *int32Page) Size() int64 { return 4 * int64(len(page.values)) }
 
@@ -167,7 +156,7 @@ func (page *int32Page) Bounds() (min, max Value) {
 	return min, max
 }
 
-func (page *int32Page) Slice(i, j int) Page { return newInt32Page(page.typ, page.values[i:j]) }
+func (page *int32Page) Slice(i, j int) Page { return newInt32Page(page.values[i:j]) }
 
 func (page *int32Page) RepetitionLevels() []int8 { return nil }
 
@@ -176,15 +165,12 @@ func (page *int32Page) DefinitionLevels() []int8 { return nil }
 func (page *int32Page) WriteTo(enc encoding.Encoder) error { return enc.EncodeInt32(page.values) }
 
 type int64Page struct {
-	typ    Type
 	values []int64
 }
 
-func newInt64Page(typ Type, values []int64) *int64Page {
-	return &int64Page{typ: typ, values: values}
+func newInt64Page(values []int64) *int64Page {
+	return &int64Page{values: values}
 }
-
-func (page *int64Page) Type() Type { return page.typ }
 
 func (page *int64Page) Size() int64 { return 8 * int64(len(page.values)) }
 
@@ -201,7 +187,7 @@ func (page *int64Page) Bounds() (min, max Value) {
 	return min, max
 }
 
-func (page *int64Page) Slice(i, j int) Page { return newInt64Page(page.typ, page.values[i:j]) }
+func (page *int64Page) Slice(i, j int) Page { return newInt64Page(page.values[i:j]) }
 
 func (page *int64Page) RepetitionLevels() []int8 { return nil }
 
@@ -210,15 +196,12 @@ func (page *int64Page) DefinitionLevels() []int8 { return nil }
 func (page *int64Page) WriteTo(enc encoding.Encoder) error { return enc.EncodeInt64(page.values) }
 
 type int96Page struct {
-	typ    Type
 	values []deprecated.Int96
 }
 
-func newInt96Page(typ Type, values []deprecated.Int96) *int96Page {
-	return &int96Page{typ: typ, values: values}
+func newInt96Page(values []deprecated.Int96) *int96Page {
+	return &int96Page{values: values}
 }
-
-func (page *int96Page) Type() Type { return page.typ }
 
 func (page *int96Page) Size() int64 { return 12 * int64(len(page.values)) }
 
@@ -235,7 +218,7 @@ func (page *int96Page) Bounds() (min, max Value) {
 	return min, max
 }
 
-func (page *int96Page) Slice(i, j int) Page { return newInt96Page(page.typ, page.values[i:j]) }
+func (page *int96Page) Slice(i, j int) Page { return newInt96Page(page.values[i:j]) }
 
 func (page *int96Page) RepetitionLevels() []int8 { return nil }
 
@@ -244,15 +227,12 @@ func (page *int96Page) DefinitionLevels() []int8 { return nil }
 func (page *int96Page) WriteTo(enc encoding.Encoder) error { return enc.EncodeInt96(page.values) }
 
 type floatPage struct {
-	typ    Type
 	values []float32
 }
 
-func newFloatPage(typ Type, values []float32) *floatPage {
-	return &floatPage{typ: typ, values: values}
+func newFloatPage(values []float32) *floatPage {
+	return &floatPage{values: values}
 }
-
-func (page *floatPage) Type() Type { return page.typ }
 
 func (page *floatPage) Size() int64 { return 4 * int64(len(page.values)) }
 
@@ -269,7 +249,7 @@ func (page *floatPage) Bounds() (min, max Value) {
 	return min, max
 }
 
-func (page *floatPage) Slice(i, j int) Page { return newFloatPage(page.typ, page.values[i:j]) }
+func (page *floatPage) Slice(i, j int) Page { return newFloatPage(page.values[i:j]) }
 
 func (page *floatPage) RepetitionLevels() []int8 { return nil }
 
@@ -278,15 +258,12 @@ func (page *floatPage) DefinitionLevels() []int8 { return nil }
 func (page *floatPage) WriteTo(enc encoding.Encoder) error { return enc.EncodeFloat(page.values) }
 
 type doublePage struct {
-	typ    Type
 	values []float64
 }
 
-func newDoublePage(typ Type, values []float64) *doublePage {
-	return &doublePage{typ: typ, values: values}
+func newDoublePage(values []float64) *doublePage {
+	return &doublePage{values: values}
 }
-
-func (page *doublePage) Type() Type { return page.typ }
 
 func (page *doublePage) Size() int64 { return 8 * int64(len(page.values)) }
 
@@ -303,7 +280,7 @@ func (page *doublePage) Bounds() (min, max Value) {
 	return min, max
 }
 
-func (page *doublePage) Slice(i, j int) Page { return newDoublePage(page.typ, page.values[i:j]) }
+func (page *doublePage) Slice(i, j int) Page { return newDoublePage(page.values[i:j]) }
 
 func (page *doublePage) RepetitionLevels() []int8 { return nil }
 
@@ -312,15 +289,12 @@ func (page *doublePage) DefinitionLevels() []int8 { return nil }
 func (page *doublePage) WriteTo(enc encoding.Encoder) error { return enc.EncodeDouble(page.values) }
 
 type byteArrayPage struct {
-	typ    Type
 	values encoding.ByteArrayList
 }
 
-func newByteArrayPage(typ Type, values encoding.ByteArrayList) *byteArrayPage {
-	return &byteArrayPage{typ: typ, values: values}
+func newByteArrayPage(values encoding.ByteArrayList) *byteArrayPage {
+	return &byteArrayPage{values: values}
 }
-
-func (page *byteArrayPage) Type() Type { return page.typ }
 
 func (page *byteArrayPage) Size() int64 { return page.values.Size() }
 
@@ -350,7 +324,7 @@ func (page *byteArrayPage) Bounds() (min, max Value) {
 }
 
 func (page *byteArrayPage) Slice(i, j int) Page {
-	return newByteArrayPage(page.typ, page.values.Slice(i, j))
+	return newByteArrayPage(page.values.Slice(i, j))
 }
 
 func (page *byteArrayPage) RepetitionLevels() []int8 { return nil }
@@ -362,20 +336,13 @@ func (page *byteArrayPage) WriteTo(enc encoding.Encoder) error {
 }
 
 type fixedLenByteArrayPage struct {
-	typ  Type
 	size int
 	data []byte
 }
 
-func newFixedLenByteArrayPage(typ Type, data []byte) *fixedLenByteArrayPage {
-	return &fixedLenByteArrayPage{
-		typ:  typ,
-		size: typ.Length(),
-		data: data,
-	}
+func newFixedLenByteArrayPage(size int, data []byte) *fixedLenByteArrayPage {
+	return &fixedLenByteArrayPage{size: size, data: data}
 }
-
-func (page *fixedLenByteArrayPage) Type() Type { return page.typ }
 
 func (page *fixedLenByteArrayPage) Size() int64 { return int64(len(page.data)) }
 
@@ -393,7 +360,7 @@ func (page *fixedLenByteArrayPage) Bounds() (min, max Value) {
 }
 
 func (page *fixedLenByteArrayPage) Slice(i, j int) Page {
-	return newFixedLenByteArrayPage(page.typ, page.data[i*page.size:j*page.size])
+	return newFixedLenByteArrayPage(page.size, page.data[i*page.size:j*page.size])
 }
 
 func (page *fixedLenByteArrayPage) RepetitionLevels() []int8 { return nil }
@@ -409,8 +376,8 @@ func (page *fixedLenByteArrayPage) WriteTo(enc encoding.Encoder) error {
 
 type uint32Page struct{ *int32Page }
 
-func newUint32Page(typ Type, values []int32) uint32Page {
-	return uint32Page{newInt32Page(typ, values)}
+func newUint32Page(values []int32) uint32Page {
+	return uint32Page{newInt32Page(values)}
 }
 
 func (page uint32Page) Bounds() (min, max Value) {
@@ -423,13 +390,13 @@ func (page uint32Page) Bounds() (min, max Value) {
 }
 
 func (page uint32Page) Slice(i, j int) Page {
-	return newUint32Page(page.typ, page.values[i:j])
+	return newUint32Page(page.values[i:j])
 }
 
 type uint64Page struct{ *int64Page }
 
-func newUint64Page(typ Type, values []int64) uint64Page {
-	return uint64Page{newInt64Page(typ, values)}
+func newUint64Page(values []int64) uint64Page {
+	return uint64Page{newInt64Page(values)}
 }
 
 func (page uint64Page) Bounds() (min, max Value) {
@@ -442,18 +409,5 @@ func (page uint64Page) Bounds() (min, max Value) {
 }
 
 func (page uint64Page) Slice(i, j int) Page {
-	return newUint64Page(page.typ, page.values[i:j])
+	return newUint64Page(page.values[i:j])
 }
-
-var (
-	_ Page = (*booleanPage)(nil)
-	_ Page = (*int32Page)(nil)
-	_ Page = (*int64Page)(nil)
-	_ Page = (*int96Page)(nil)
-	_ Page = (*floatPage)(nil)
-	_ Page = (*doublePage)(nil)
-	_ Page = (*byteArrayPage)(nil)
-	_ Page = (*fixedLenByteArrayPage)(nil)
-	_ Page = uint32Page{}
-	_ Page = uint64Page{}
-)
