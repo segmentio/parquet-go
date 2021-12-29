@@ -39,14 +39,12 @@ import (
 // row groups should use the RowGroup type to buffer and sort the rows prior to
 // writing them to a Writer.
 type Writer struct {
-	writer      io.Writer
-	config      *WriterConfig
-	schema      *Schema
-	rowGroups   *rowGroupWriter
-	initialized bool
-	closed      bool
-	metadata    []format.KeyValue
-	values      []Value
+	writer    io.Writer
+	config    *WriterConfig
+	schema    *Schema
+	rowGroups *rowGroupWriter
+	metadata  []format.KeyValue
+	values    []Value
 }
 
 func NewWriter(writer io.Writer, options ...WriterOption) *Writer {
@@ -81,18 +79,13 @@ func (w *Writer) configure(schema *Schema) {
 	w.rowGroups = newRowGroupWriter(w.writer, w.schema, w.config)
 }
 
-func (w *Writer) writeMagicHeader() error {
-	_, err := io.WriteString(&w.rowGroups.writer, "PAR1")
-	return err
-}
-
 // Reset clears the state of the writer without flushing any of the buffers,
 // and setting the output to the io.Writer passed as argument, allowing the
 // writer to be reused to produce another parquet file.
 //
 // Reset may be called at any time, including after a writer was closed.
 func (w *Writer) Reset(writer io.Writer) {
-	w.initialized, w.closed, w.writer = false, false, writer
+	w.writer = writer
 	if w.rowGroups != nil {
 		w.rowGroups.reset(writer)
 	}
@@ -101,19 +94,6 @@ func (w *Writer) Reset(writer io.Writer) {
 // Close must be called after all values were produced to the writer in order to
 // flush all buffers and write the parquet footer.
 func (w *Writer) Close() error {
-	if w.closed {
-		return nil
-	}
-	w.closed = true
-
-	if !w.initialized {
-		w.initialized = true
-
-		if err := w.writeMagicHeader(); err != nil {
-			return err
-		}
-	}
-
 	if err := w.rowGroups.close(); err != nil {
 		return err
 	}
@@ -160,13 +140,11 @@ func (w *Writer) Write(row interface{}) error {
 	if w.schema == nil {
 		w.configure(SchemaOf(row))
 	}
-
 	defer func() {
 		for i := range w.values {
 			w.values[i] = Value{}
 		}
 	}()
-
 	w.values = w.schema.Deconstruct(w.values[:0], row)
 	return w.WriteRow(w.values)
 }
@@ -178,17 +156,7 @@ func (w *Writer) Write(row interface{}) error {
 //
 // The row is expected to contain values for each column of the writer's schema,
 // in the order produced by the parquet.(*Schema).Deconstruct method.
-func (w *Writer) WriteRow(row Row) error {
-	if !w.initialized {
-		w.initialized = true
-
-		if err := w.writeMagicHeader(); err != nil {
-			return err
-		}
-	}
-
-	return w.rowGroups.writeRow(row)
-}
+func (w *Writer) WriteRow(row Row) error { return w.rowGroups.writeRow(row) }
 
 // WriteRowGroup writes a row group to the parquet file.
 //
@@ -206,15 +174,6 @@ func (w *Writer) WriteRowGroup(rowGroup *RowGroup) error {
 	} else if w.schema != rowGroup.schema {
 		return fmt.Errorf("cannot write row group with mismatching schema:\n%s\n%s", w.schema, rowGroup.schema)
 	}
-
-	if !w.initialized {
-		w.initialized = true
-
-		if err := w.writeMagicHeader(); err != nil {
-			return err
-		}
-	}
-
 	return w.rowGroups.writeRowGroup(rowGroup)
 }
 
@@ -390,12 +349,6 @@ func (rgw *rowGroupWriter) reset(w io.Writer) {
 }
 
 func (rgw *rowGroupWriter) close() error {
-	defer func() {
-		for i := range rgw.columns {
-			rgw.columns[i].reset()
-		}
-	}()
-
 	if err := rgw.flush(); err != nil {
 		return err
 	}
@@ -443,10 +396,23 @@ func (rgw *rowGroupWriter) close() error {
 }
 
 func (rgw *rowGroupWriter) flush() error {
+	if rgw.writer.length == 0 {
+		if _, err := rgw.writer.WriteString("PAR1"); err != nil {
+			return err
+		}
+	}
+
 	if rgw.numRows == 0 {
 		return nil // nothing to flush
 	}
-	defer func() { rgw.numRows = 0 }()
+
+	defer func() {
+		for i := range rgw.columns {
+			rgw.columns[i].reset()
+		}
+		rgw.pages.reset()
+		rgw.numRows = 0
+	}()
 
 	for i := range rgw.columns {
 		if err := rgw.columns[i].chunks.flush(); err != nil {
@@ -476,9 +442,9 @@ func (rgw *rowGroupWriter) flush() error {
 
 		if c.dictionary != nil {
 			columnChunk.dictionaryPageOffset = rgw.writer.length
+			rgw.pages.reset()
 
 			if err := c.chunks.writeDictionaryPage(&rgw.pages, c.dictionary); err != nil {
-				rgw.pages.reset()
 				return err
 			}
 
@@ -486,7 +452,6 @@ func (rgw *rowGroupWriter) flush() error {
 			columnChunk.totalCompressedSize += stats.totalCompressedSize
 			columnChunk.totalUncompressedSize += stats.totalUncompressedSize
 			columnChunk.encodingStats = append(columnChunk.encodingStats, stats.encodingStats...)
-			rgw.pages.reset()
 		}
 
 		pages := c.writer.pages()
@@ -535,7 +500,6 @@ func (rgw *rowGroupWriter) flush() error {
 		totalRowCount += stats.totalRowCount
 		totalByteSize += columnChunk.totalUncompressedSize
 		totalCompressedSize += columnChunk.totalCompressedSize
-		c.reset()
 	}
 
 	rgw.rowGroups = append(rgw.rowGroups, format.RowGroup{
@@ -1052,6 +1016,12 @@ func (w *countWriter) Reset(writer io.Writer) {
 
 func (w *countWriter) Write(b []byte) (int, error) {
 	n, err := w.writer.Write(b)
+	w.length += int64(n)
+	return n, err
+}
+
+func (w *countWriter) WriteString(s string) (int, error) {
+	n, err := io.WriteString(w.writer, s)
 	w.length += int64(n)
 	return n, err
 }
