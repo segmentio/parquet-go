@@ -395,14 +395,16 @@ func (rgw *rowGroupWriter) close(createdBy string, metadata []format.KeyValue) e
 }
 
 func (rgw *rowGroupWriter) flush() error {
+	if rgw.writer.writer == nil {
+		return io.ErrClosedPipe
+	}
+	if rgw.numRows == 0 {
+		return nil // nothing to flush
+	}
 	if rgw.writer.length == 0 {
 		if _, err := rgw.writer.WriteString("PAR1"); err != nil {
 			return err
 		}
-	}
-
-	if rgw.numRows == 0 {
-		return nil // nothing to flush
 	}
 
 	defer func() {
