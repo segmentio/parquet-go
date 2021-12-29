@@ -10,16 +10,27 @@ import (
 	"github.com/segmentio/parquet/format"
 )
 
+// SortingColumn represents a column by which a row group is sorted.
 type SortingColumn interface {
+	// Returns the path of the column in the row group schema, omitting the name
+	// of the root node.
 	Path() []string
+	// Returns true if the column will sort values in descending order.
 	Descending() bool
+	// Returns true if the column will put null values at the beginning.
 	NullsFirst() bool
 }
 
+// Ascending constructs a SortingColumn value which dictates to sort the column
+// at the path given as argument in ascending order.
 func Ascending(path ...string) SortingColumn { return ascending(path) }
 
+// Descending constructs a SortingColumn value which dictates to sort the column
+// at the path given as argument in descending order.
 func Descending(path ...string) SortingColumn { return descending(path) }
 
+// NullsFirst wraps the SortingColumn passed as argument so that it instructs
+// the row group to place null values first in the column.
 func NullsFirst(sortingColumn SortingColumn) SortingColumn { return nullsFirst{sortingColumn} }
 
 type ascending []string
