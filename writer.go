@@ -79,55 +79,24 @@ func (w *Writer) configure(schema *Schema) {
 	w.rowGroups = newRowGroupWriter(w.writer, w.schema, w.config)
 }
 
+// Close must be called after all values were produced to the writer in order to
+// flush all buffers and write the parquet footer.
+func (w *Writer) Close() error {
+	if w.rowGroups != nil {
+		return w.rowGroups.close(w.config.CreatedBy, w.metadata)
+	}
+	return nil
+}
+
 // Reset clears the state of the writer without flushing any of the buffers,
 // and setting the output to the io.Writer passed as argument, allowing the
 // writer to be reused to produce another parquet file.
 //
 // Reset may be called at any time, including after a writer was closed.
 func (w *Writer) Reset(writer io.Writer) {
-	w.writer = writer
-	if w.rowGroups != nil {
-		w.rowGroups.reset(writer)
+	if w.writer = writer; w.rowGroups != nil {
+		w.rowGroups.reset(w.writer)
 	}
-}
-
-// Close must be called after all values were produced to the writer in order to
-// flush all buffers and write the parquet footer.
-func (w *Writer) Close() error {
-	if err := w.rowGroups.close(); err != nil {
-		return err
-	}
-
-	numRows := int64(0)
-	schema := w.rowGroups.colSchema
-	columnOrders := w.rowGroups.colOrders
-	rowGroups := w.rowGroups.rowGroups
-	createdBy := w.config.CreatedBy
-
-	for rowGroupIndex := range rowGroups {
-		numRows += rowGroups[rowGroupIndex].NumRows
-	}
-
-	footer, err := thrift.Marshal(new(thrift.CompactProtocol), &format.FileMetaData{
-		Version:          1,
-		Schema:           schema,
-		NumRows:          numRows,
-		RowGroups:        rowGroups,
-		KeyValueMetadata: w.metadata,
-		CreatedBy:        createdBy,
-		ColumnOrders:     columnOrders,
-	})
-	if err != nil {
-		return err
-	}
-
-	length := len(footer)
-	footer = append(footer, 0, 0, 0, 0)
-	footer = append(footer, "PAR1"...)
-	binary.LittleEndian.PutUint32(footer[length:], uint32(length))
-
-	_, err = w.rowGroups.writer.Write(footer)
-	return err
 }
 
 // Write is called to write another row to the parquet file.
@@ -348,7 +317,13 @@ func (rgw *rowGroupWriter) reset(w io.Writer) {
 	rgw.fileOffset = 4
 }
 
-func (rgw *rowGroupWriter) close() error {
+func (rgw *rowGroupWriter) close(createdBy string, metadata []format.KeyValue) error {
+	if rgw.writer.writer == nil {
+		return nil // already closed
+	}
+	defer func() {
+		rgw.writer.writer = nil
+	}()
 	if err := rgw.flush(); err != nil {
 		return err
 	}
@@ -392,7 +367,31 @@ func (rgw *rowGroupWriter) close() error {
 		}
 	}
 
-	return nil
+	numRows := int64(0)
+	for rowGroupIndex := range rgw.rowGroups {
+		numRows += rgw.rowGroups[rowGroupIndex].NumRows
+	}
+
+	footer, err := thrift.Marshal(new(thrift.CompactProtocol), &format.FileMetaData{
+		Version:          1,
+		Schema:           rgw.colSchema,
+		NumRows:          numRows,
+		RowGroups:        rgw.rowGroups,
+		KeyValueMetadata: metadata,
+		CreatedBy:        createdBy,
+		ColumnOrders:     rgw.colOrders,
+	})
+	if err != nil {
+		return err
+	}
+
+	length := len(footer)
+	footer = append(footer, 0, 0, 0, 0)
+	footer = append(footer, "PAR1"...)
+	binary.LittleEndian.PutUint32(footer[length:], uint32(length))
+
+	_, err = rgw.writer.Write(footer)
+	return err
 }
 
 func (rgw *rowGroupWriter) flush() error {
