@@ -99,12 +99,11 @@ type utf8string string
 
 func (utf8string) Generate(rand *rand.Rand, size int) reflect.Value {
 	const characters = "abcdefghijklmnopqrstuvwxyz1234567890"
-	// TODO: investigate why tests nested repeated columns break when we uncomment this code
-	// if size > 10 {
-	// 	size = 10
-	// }
-	// n := rand.Intn(size)
-	n := size
+	const maxSize = 10
+	if size > maxSize {
+		size = maxSize
+	}
+	n := rand.Intn(size)
 	b := make([]byte, n)
 	for i := range b {
 		b[i] = characters[rand.Intn(len(characters))]

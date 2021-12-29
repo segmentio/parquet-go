@@ -93,11 +93,11 @@ func newOptionalPage(base Page, maxDefinitionLevel int8, definitionLevels []int8
 }
 
 func (page *optionalPage) NumRows() int {
-	return page.base.NumRows()
+	return len(page.definitionLevels)
 }
 
 func (page *optionalPage) NumValues() int {
-	return page.base.NumValues() + page.NumNulls()
+	return len(page.definitionLevels)
 }
 
 func (page *optionalPage) NumNulls() int {

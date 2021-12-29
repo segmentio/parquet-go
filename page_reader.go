@@ -109,8 +109,9 @@ func (r *PageReader) ReadValues(values []Value) (int, error) {
 			definitionLevels = definitionLevels[:numValues]
 		}
 		numNulls := countLevelsNotEqual(definitionLevels, r.maxDefinitionLevel)
-		n, err := r.values.ReadValues(values[:numValues-numNulls])
-		if err != nil {
+		wantRead := numValues - numNulls
+		n, err := r.values.ReadValues(values[:wantRead])
+		if n < wantRead && err != nil {
 			if err == io.EOF {
 				// EOF should not happen at this stage since we successfully
 				// decoded levels.
