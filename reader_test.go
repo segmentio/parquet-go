@@ -242,6 +242,13 @@ var readerTests = []struct {
 			RepeatedKeyValuePairs []map[utf8string]utf8string
 		}{},
 	},
+
+	{
+		scenario: "map of repeated values",
+		model: struct {
+			MapOfRepeated map[utf8string][]utf8string
+		}{},
+	},
 }
 
 func TestReader(t *testing.T) {

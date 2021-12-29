@@ -81,10 +81,17 @@ type Node interface {
 	// Returns the Go type that best represents the parquet node.
 	//
 	// For leaf nodes, this will be one of bool, int32, int64, deprecated.Int96,
-	// float32, float64, string, []byte, or [N]byte. For groups, the method
-	// returns a struct type. If the method is called on a repeated node, the
-	// method returns a slice of the underlying type. For optional nodes, the
-	// method returns a pointer of the underlying type.
+	// float32, float64, string, []byte, or [N]byte.
+	//
+	// For groups, the method returns a struct type.
+	//
+	// If the method is called on a repeated node, the method returns a slice of
+	// the underlying type.
+	//
+	// For optional nodes, the method returns a pointer of the underlying type.
+	//
+	// For nodes that were constructed from Go values (e.g. using SchemaOf), the
+	// method returns the original Go type.
 	GoType() reflect.Type
 }
 
@@ -262,12 +269,7 @@ func (n *compressedNode) Compression() []compress.Codec {
 }
 
 // Optional wraps the given node to make it optional.
-func Optional(node Node) Node {
-	if node.Optional() {
-		return node
-	}
-	return &optionalNode{wrap(node)}
-}
+func Optional(node Node) Node { return &optionalNode{wrap(node)} }
 
 type optionalNode struct{ wrappedNode }
 
@@ -277,12 +279,7 @@ func (opt *optionalNode) Required() bool       { return false }
 func (opt *optionalNode) GoType() reflect.Type { return reflect.PtrTo(unwrap(opt).GoType()) }
 
 // Repeated wraps the given node to make it repeated.
-func Repeated(node Node) Node {
-	if node.Repeated() {
-		return node
-	}
-	return &repeatedNode{wrap(node)}
-}
+func Repeated(node Node) Node { return &repeatedNode{wrap(node)} }
 
 type repeatedNode struct{ wrappedNode }
 
@@ -292,12 +289,7 @@ func (rep *repeatedNode) Required() bool       { return false }
 func (rep *repeatedNode) GoType() reflect.Type { return reflect.SliceOf(unwrap(rep).GoType()) }
 
 // Required wraps the given node to make it required.
-func Required(node Node) Node {
-	if node.Required() {
-		return node
-	}
-	return &requiredNode{wrap(node)}
-}
+func Required(node Node) Node { return &requiredNode{wrap(node)} }
 
 type requiredNode struct{ wrappedNode }
 
@@ -340,35 +332,7 @@ func (n *leafNode) ValueByName(reflect.Value, string) reflect.Value {
 	panic("cannot call ValueByName on leaf parquet node")
 }
 
-func (n *leafNode) GoType() reflect.Type {
-	return goTypeOfLeaf(n.typ)
-}
-
-func goTypeOfLeaf(t Type) reflect.Type {
-	if convertibleType, ok := t.(interface{ GoType() reflect.Type }); ok {
-		return convertibleType.GoType()
-	}
-	switch t.Kind() {
-	case Boolean:
-		return reflect.TypeOf(false)
-	case Int32:
-		return reflect.TypeOf(int32(0))
-	case Int64:
-		return reflect.TypeOf(int64(0))
-	case Int96:
-		return reflect.TypeOf(deprecated.Int96{})
-	case Float:
-		return reflect.TypeOf(float32(0))
-	case Double:
-		return reflect.TypeOf(float64(0))
-	case ByteArray:
-		return reflect.TypeOf(([]byte)(nil))
-	case FixedLenByteArray:
-		return reflect.ArrayOf(t.Length(), reflect.TypeOf(byte(0)))
-	default:
-		panic("BUG: parquet type returned an unsupported kind")
-	}
-}
+func (n *leafNode) GoType() reflect.Type { return goTypeOfLeaf(n) }
 
 var repetitionTypes = [...]format.FieldRepetitionType{
 	0: format.Required,
@@ -438,8 +402,60 @@ func (g Group) Compression() []compress.Codec {
 	return dedupeSortedCodecs(codecs)
 }
 
-func (g Group) GoType() reflect.Type {
-	return goTypeOfGroup(g)
+func (g Group) GoType() reflect.Type { return goTypeOfGroup(g) }
+
+func goTypeOf(node Node) reflect.Type {
+	switch {
+	case node.Optional():
+		return goTypeOfOptional(node)
+	case node.Repeated():
+		return goTypeOfRepeated(node)
+	default:
+		return goTypeOfRequired(node)
+	}
+}
+
+func goTypeOfOptional(node Node) reflect.Type {
+	return reflect.PtrTo(goTypeOfRequired(node))
+}
+
+func goTypeOfRepeated(node Node) reflect.Type {
+	return reflect.SliceOf(goTypeOfRequired(node))
+}
+
+func goTypeOfRequired(node Node) reflect.Type {
+	if isLeaf(node) {
+		return goTypeOfLeaf(node)
+	} else {
+		return goTypeOfGroup(node)
+	}
+}
+
+func goTypeOfLeaf(node Node) reflect.Type {
+	t := node.Type()
+	if convertibleType, ok := t.(interface{ GoType() reflect.Type }); ok {
+		return convertibleType.GoType()
+	}
+	switch t.Kind() {
+	case Boolean:
+		return reflect.TypeOf(false)
+	case Int32:
+		return reflect.TypeOf(int32(0))
+	case Int64:
+		return reflect.TypeOf(int64(0))
+	case Int96:
+		return reflect.TypeOf(deprecated.Int96{})
+	case Float:
+		return reflect.TypeOf(float32(0))
+	case Double:
+		return reflect.TypeOf(float64(0))
+	case ByteArray:
+		return reflect.TypeOf(([]byte)(nil))
+	case FixedLenByteArray:
+		return reflect.ArrayOf(t.Length(), reflect.TypeOf(byte(0)))
+	default:
+		panic("BUG: parquet type returned an unsupported kind")
+	}
 }
 
 func goTypeOfGroup(node Node) reflect.Type {

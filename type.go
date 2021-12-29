@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/segmentio/parquet/deprecated"
 	"github.com/segmentio/parquet/format"
 	"github.com/segmentio/parquet/internal/bits"
@@ -727,6 +728,10 @@ func (t *uuidType) NewValueDecoder(bufferSize int) ValueDecoder {
 	return newFixedLenByteArrayValueDecoder(16, bufferSize)
 }
 
+func (t *uuidType) GoType() reflect.Type {
+	return reflect.TypeOf(uuid.UUID{})
+}
+
 // Enum constructs a leaf node with a logical type representing enumerations.
 //
 // https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#enum
@@ -774,6 +779,10 @@ func (t *enumType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
 
 func (t *enumType) NewValueDecoder(bufferSize int) ValueDecoder {
 	return newByteArrayValueDecoder(bufferSize)
+}
+
+func (t *enumType) GoType() reflect.Type {
+	return reflect.TypeOf("")
 }
 
 // JSON constructs a leaf node of JSON logical type.

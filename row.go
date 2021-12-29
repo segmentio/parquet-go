@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"runtime/debug"
 )
 
 const (
@@ -128,7 +129,7 @@ func deconstructFuncOfMap(columnIndex int, node Node) (int, deconstructFunc) {
 	keyValueType := keyValue.GoType()
 	keyValueElem := keyValueType.Elem()
 	keyType := keyValueElem.Field(0).Type
-	valueType := keyValueElem.Field(0).Type
+	valueType := keyValueElem.Field(1).Type
 	columnIndex, deconstruct := deconstructFuncOf(columnIndex, Repeated(namedSchemaOf(keyValueElem.Name(), keyValueElem)))
 	return columnIndex, func(row Row, levels levels, mapValue reflect.Value) Row {
 		if !mapValue.IsValid() {
@@ -348,10 +349,9 @@ func reconstructFuncOfMap(columnIndex int, node Node) (int, reconstructFunc) {
 			return err
 		}
 
-		if keyValueSlice.IsNil() {
-			mapValue.Set(reflect.Zero(mapValue.Type()))
+		if mapType := mapValue.Type(); keyValueSlice.IsNil() {
+			mapValue.Set(reflect.Zero(mapType))
 		} else {
-			mapType := mapValue.Type()
 			keyType := mapType.Key()
 			valueType := mapType.Elem()
 
@@ -393,11 +393,12 @@ func reconstructFuncOfGroup(columnIndex int, node Node) (int, reconstructFunc) {
 		valueAt := valueByIndex
 
 		for i, f := range funcs {
-			n := row.indexOf(columnIndexes[i])
-			if err := f(valueAt(value, i), levels, row[:n]); err != nil {
-				return fmt.Errorf("%s → %w", names[i], err)
+			if n := row.indexOf(columnIndexes[i]); n > 0 {
+				if err := f(valueAt(value, i), levels, row[:n]); err != nil {
+					return fmt.Errorf("%s → %w", names[i], err)
+				}
+				row = row[n:]
 			}
-			row = row[n:]
 		}
 
 		return nil
@@ -408,6 +409,7 @@ func reconstructFuncOfGroup(columnIndex int, node Node) (int, reconstructFunc) {
 func reconstructFuncOfLeaf(columnIndex int, node Node) (int, reconstructFunc) {
 	return columnIndex + 1, func(value reflect.Value, _ levels, row Row) error {
 		if len(row) != 1 {
+			debug.PrintStack()
 			return fmt.Errorf("expected one value to reconstruct leaf parquet row for column %d but found %d", columnIndex, len(row))
 		}
 		if int(row[0].ColumnIndex()) != columnIndex {

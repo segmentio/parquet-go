@@ -49,14 +49,14 @@ func (c *Column) Order() *format.ColumnOrder { return c.order }
 // The returned value is unspecified if c is not a leaf column.
 func (c *Column) Type() Type { return c.typ }
 
-// Required returns true if the column is required.
-func (c *Column) Required() bool { return schemaRepetitionTypeOf(c.schema) == format.Required }
-
 // Optional returns true if the column is optional.
 func (c *Column) Optional() bool { return schemaRepetitionTypeOf(c.schema) == format.Optional }
 
 // Repeated returns true if the column may repeat.
 func (c *Column) Repeated() bool { return schemaRepetitionTypeOf(c.schema) == format.Repeated }
+
+// Required returns true if the column is required.
+func (c *Column) Required() bool { return schemaRepetitionTypeOf(c.schema) == format.Required }
 
 // NumChildren returns the number of child columns.
 //
@@ -158,42 +158,10 @@ func (c *Column) ValueByIndex(base reflect.Value, index int) reflect.Value {
 }
 
 // GoType returns the Go type that best represents the parquet column.
-func (c *Column) GoType() reflect.Type {
-	if len(c.columns) == 0 {
-		return goTypeOfLeaf(c.Type())
-	} else {
-		return goTypeOfGroup(c)
-	}
-}
+func (c *Column) GoType() reflect.Type { return goTypeOf(c) }
 
 // String returns a human-redable string representation of the oclumn.
-func (c *Column) String() string {
-	switch {
-	case c.columns != nil:
-		return fmt.Sprintf("%s{%s,R=%d,D=%d}",
-			join(c.path),
-			c.schema.RepetitionType,
-			c.maxRepetitionLevel,
-			c.maxDefinitionLevel)
-
-	case c.Type().Kind() == FixedLenByteArray:
-		return fmt.Sprintf("%s{%s(%d),%s,R=%d,D=%d}",
-			join(c.path),
-			c.schema.Type,
-			c.schema.TypeLength,
-			c.schema.RepetitionType,
-			c.maxRepetitionLevel,
-			c.maxDefinitionLevel)
-
-	default:
-		return fmt.Sprintf("%s{%s,%s,R=%d,D=%d}",
-			join(c.path),
-			c.schema.Type,
-			c.schema.RepetitionType,
-			c.maxRepetitionLevel,
-			c.maxDefinitionLevel)
-	}
-}
+func (c *Column) String() string { return sprint(c.Name(), c) }
 
 func (c *Column) forEachLeaf(do func(*Column)) {
 	if len(c.columns) == 0 {

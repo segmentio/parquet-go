@@ -86,7 +86,7 @@ func namedSchemaOf(name string, model reflect.Type) *Schema {
 	if model.Kind() != reflect.Struct {
 		panic("cannot construct parquet schema from value of type " + model.String())
 	}
-	schema = NewSchema(name, structNodeOf(model))
+	schema = NewSchema(name, nodeOf(model))
 	if actual, loaded := cachedSchemas.LoadOrStore(model, schema); loaded {
 		schema = actual.(*Schema)
 	}
@@ -539,54 +539,59 @@ func nodeOf(t reflect.Type) Node {
 		return UUID()
 	}
 
+	var n Node
 	switch t.Kind() {
 	case reflect.Bool:
-		return Leaf(BooleanType)
+		n = Leaf(BooleanType)
 
 	case reflect.Int, reflect.Int64:
-		return Int(64)
+		n = Int(64)
 
 	case reflect.Int8, reflect.Int16, reflect.Int32:
-		return Int(t.Bits())
+		n = Int(t.Bits())
 
 	case reflect.Uint, reflect.Uintptr, reflect.Uint64:
-		return Uint(64)
+		n = Uint(64)
 
 	case reflect.Uint8, reflect.Uint16, reflect.Uint32:
-		return Uint(t.Bits())
+		n = Uint(t.Bits())
 
 	case reflect.Float32:
-		return Leaf(FloatType)
+		n = Leaf(FloatType)
 
 	case reflect.Float64:
-		return Leaf(DoubleType)
+		n = Leaf(DoubleType)
 
 	case reflect.String:
-		return String()
+		n = String()
 
 	case reflect.Ptr:
-		return Optional(nodeOf(t.Elem()))
-
-	case reflect.Struct:
-		return structNodeOf(t)
+		n = Optional(nodeOf(t.Elem()))
 
 	case reflect.Slice:
 		if elem := t.Elem(); elem.Kind() == reflect.Uint8 { // []byte?
-			return Leaf(ByteArrayType)
+			n = Leaf(ByteArrayType)
 		} else {
-			return Repeated(nodeOf(elem))
+			n = Repeated(nodeOf(elem))
 		}
 
 	case reflect.Array:
 		if t.Elem().Kind() == reflect.Uint8 {
-			return Leaf(FixedLenByteArrayType(t.Len()))
+			n = Leaf(FixedLenByteArrayType(t.Len()))
 		}
 
 	case reflect.Map:
-		return Map(nodeOf(t.Key()), nodeOf(t.Elem()))
+		n = Map(nodeOf(t.Key()), nodeOf(t.Elem()))
+
+	case reflect.Struct:
+		return structNodeOf(t)
 	}
 
-	panic("cannot create parquet node from go value of type " + t.String())
+	if n == nil {
+		panic("cannot create parquet node from go value of type " + t.String())
+	}
+
+	return &goNode{wrappedNode: wrap(n), gotype: t}
 }
 
 func split(s string) (head, tail string) {
@@ -626,6 +631,13 @@ func parseDecimalArgs(args string) (scale, precision int, err error) {
 	}
 	return int(s), int(p), nil
 }
+
+type goNode struct {
+	wrappedNode
+	gotype reflect.Type
+}
+
+func (n *goNode) GoType() reflect.Type { return n.gotype }
 
 var (
 	_ RowGroupOption = (*Schema)(nil)
