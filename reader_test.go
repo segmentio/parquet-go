@@ -300,7 +300,7 @@ func BenchmarkReader(b *testing.B) {
 
 	for _, test := range readerTests {
 		b.Run(test.scenario, func(b *testing.B) {
-			const N = 10e3
+			const N = 100
 			defer buf.Reset()
 			rows := rowsOf(N, test.model)
 

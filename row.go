@@ -81,21 +81,14 @@ func deconstructFuncOfOptional(columnIndex int, node Node) (int, deconstructFunc
 func deconstructFuncOfRepeated(columnIndex int, node Node) (int, deconstructFunc) {
 	columnIndex, deconstruct := deconstructFuncOf(columnIndex, Required(node))
 	return columnIndex, func(row Row, levels levels, value reflect.Value) Row {
-		numValues := 0
-
-		if value.IsValid() {
-			numValues = value.Len()
-			levels.repetitionDepth++
-			if numValues > 0 {
-				levels.definitionLevel++
-			}
-		}
-
-		if numValues == 0 {
+		if !value.IsValid() || value.Len() == 0 {
 			return deconstruct(row, levels, reflect.Value{})
 		}
 
-		for i := 0; i < numValues; i++ {
+		levels.repetitionDepth++
+		levels.definitionLevel++
+
+		for i, n := 0, value.Len(); i < n; i++ {
 			row = deconstruct(row, levels, value.Index(i))
 			levels.repetitionLevel = levels.repetitionDepth
 		}
@@ -124,25 +117,27 @@ func deconstructFuncOfMap(columnIndex int, node Node) (int, deconstructFunc) {
 	keyValueElem := keyValueType.Elem()
 	keyType := keyValueElem.Field(0).Type
 	valueType := keyValueElem.Field(1).Type
-	columnIndex, deconstruct := deconstructFuncOf(columnIndex, Repeated(schemaOf(keyValueElem)))
+	columnIndex, deconstruct := deconstructFuncOf(columnIndex, schemaOf(keyValueElem))
 	return columnIndex, func(row Row, levels levels, mapValue reflect.Value) Row {
-		if !mapValue.IsValid() {
+		if !mapValue.IsValid() || mapValue.Len() == 0 {
 			return deconstruct(row, levels, reflect.Value{})
 		}
 
-		i := 0
-		n := mapValue.Len()
-		keyValueSlice := reflect.New(keyValueType).Elem()
-		keyValueSlice.Set(reflect.MakeSlice(keyValueType, n, n))
+		levels.repetitionDepth++
+		levels.definitionLevel++
 
-		for _, mapKey := range mapValue.MapKeys() {
-			keyValueElem := keyValueSlice.Index(i)
-			keyValueElem.Field(0).Set(mapKey.Convert(keyType))
-			keyValueElem.Field(1).Set(mapValue.MapIndex(mapKey).Convert(valueType))
-			i++
+		elem := reflect.New(keyValueElem).Elem()
+		k := elem.Field(0)
+		v := elem.Field(1)
+
+		for _, key := range mapValue.MapKeys() {
+			k.Set(key.Convert(keyType))
+			v.Set(mapValue.MapIndex(key).Convert(valueType))
+			row = deconstruct(row, levels, elem)
+			levels.repetitionLevel = levels.repetitionDepth
 		}
 
-		return deconstruct(row, levels, keyValueSlice)
+		return row
 	}
 }
 
@@ -253,58 +248,58 @@ func reconstructFuncOfOptional(columnIndex int, node Node) (int, reconstructFunc
 func reconstructFuncOfRepeated(columnIndex int, node Node) (int, reconstructFunc) {
 	nextColumnIndex, reconstruct := reconstructFuncOf(columnIndex, Required(node))
 	rowLength := nextColumnIndex - columnIndex
-	return nextColumnIndex, func(value reflect.Value, levels levels, row Row) (Row, error) {
-		if !row.startsWith(columnIndex) {
-			return row, fmt.Errorf("row is missing repeated column %d", columnIndex)
-		}
-		if len(row) < rowLength {
-			return row, fmt.Errorf("expected repeated column %d to have at least %d values but got %d", columnIndex, rowLength, len(row))
-		}
-		typ := value.Type()
-		if typ.Kind() != reflect.Slice {
-			return row, fmt.Errorf("cannot reconstruct repeated column %d into go value of type %s", columnIndex, value.Type())
-		}
-
-		levels.definitionLevel++
-		levels.repetitionDepth++
-
-		if row[0].definitionLevel < levels.definitionLevel {
-			value.Set(reflect.MakeSlice(typ, 0, 0))
-			return row[rowLength:], nil
-		}
-
-		n := 0
+	return nextColumnIndex, func(value reflect.Value, lvls levels, row Row) (Row, error) {
+		t := value.Type()
 		c := value.Cap()
+		n := 0
 		if c > 0 {
 			value.Set(value.Slice(0, c))
 		} else {
 			c = 10
-			value.Set(reflect.MakeSlice(typ, c, c))
+			value.Set(reflect.MakeSlice(t, c, c))
 		}
 
-		var err error
-		for row.startsWith(columnIndex) && row[0].repetitionLevel == levels.repetitionLevel {
+		defer func() {
+			value.Set(value.Slice(0, n))
+		}()
+
+		return reconstructRepeated(columnIndex, rowLength, lvls, row, func(levels levels, row Row) (Row, error) {
 			if n == c {
 				c *= 2
-				newValue := reflect.MakeSlice(typ, c, c)
+				newValue := reflect.MakeSlice(t, c, c)
 				reflect.Copy(newValue, value)
 				value.Set(newValue)
 			}
-
-			if row, err = reconstruct(value.Index(n), levels, row); err != nil {
-				return row, err
-			}
-
+			row, err := reconstruct(value.Index(n), levels, row)
 			n++
-			levels.repetitionLevel = levels.repetitionDepth
-		}
-
-		if n < c {
-			value.Set(value.Slice(0, n))
-		}
-
-		return row, nil
+			return row, err
+		})
 	}
+}
+
+func reconstructRepeated(columnIndex, rowLength int, levels levels, row Row, do func(levels, Row) (Row, error)) (Row, error) {
+	if !row.startsWith(columnIndex) {
+		return row, fmt.Errorf("row is missing repeated column %d", columnIndex)
+	}
+	if len(row) < rowLength {
+		return row, fmt.Errorf("expected repeated column %d to have at least %d values but got %d", columnIndex, rowLength, len(row))
+	}
+
+	levels.repetitionDepth++
+	levels.definitionLevel++
+
+	if row[0].definitionLevel < levels.definitionLevel {
+		return row[rowLength:], nil
+	}
+
+	var err error
+	for row.startsWith(columnIndex) && row[0].repetitionLevel == levels.repetitionLevel {
+		if row, err = do(levels, row); err != nil {
+			break
+		}
+		levels.repetitionLevel = levels.repetitionDepth
+	}
+	return row, err
 }
 
 func reconstructFuncOfRequired(columnIndex int, node Node) (int, reconstructFunc) {
@@ -325,32 +320,27 @@ func reconstructFuncOfMap(columnIndex int, node Node) (int, reconstructFunc) {
 	keyValue := mapKeyValueOf(node)
 	keyValueType := keyValue.GoType()
 	keyValueElem := keyValueType.Elem()
-	columnIndex, reconstruct := reconstructFuncOf(columnIndex, Repeated(schemaOf(keyValueElem)))
-	return columnIndex, func(mapValue reflect.Value, levels levels, row Row) (Row, error) {
-		keyValueSlice := reflect.New(keyValueType).Elem()
+	keyValueZero := reflect.Zero(keyValueElem)
+	nextColumnIndex, reconstruct := reconstructFuncOf(columnIndex, schemaOf(keyValueElem))
+	rowLength := nextColumnIndex - columnIndex
+	return nextColumnIndex, func(mapValue reflect.Value, lvls levels, row Row) (Row, error) {
+		t := mapValue.Type()
+		k := t.Key()
+		v := t.Elem()
 
-		row, err := reconstruct(keyValueSlice, levels, row)
-		if err != nil {
+		if mapValue.IsNil() {
+			mapValue.Set(reflect.MakeMap(t))
+		}
+
+		elem := reflect.New(keyValueElem).Elem()
+		return reconstructRepeated(columnIndex, rowLength, lvls, row, func(levels levels, row Row) (Row, error) {
+			row, err := reconstruct(elem, levels, row)
+			if err == nil {
+				mapValue.SetMapIndex(elem.Field(0).Convert(k), elem.Field(1).Convert(v))
+				elem.Set(keyValueZero)
+			}
 			return row, err
-		}
-
-		if mapType := mapValue.Type(); keyValueSlice.IsNil() {
-			mapValue.Set(reflect.Zero(mapType))
-		} else {
-			keyType := mapType.Key()
-			valueType := mapType.Elem()
-
-			if mapValue.IsNil() {
-				mapValue.Set(reflect.MakeMap(mapType))
-			}
-
-			for i, n := 0, keyValueSlice.Len(); i < n; i++ {
-				elem := keyValueSlice.Index(i)
-				mapValue.SetMapIndex(elem.Field(0).Convert(keyType), elem.Field(1).Convert(valueType))
-			}
-		}
-
-		return row, nil
+		})
 	}
 }
 
