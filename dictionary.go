@@ -788,6 +788,8 @@ func (col *indexedRowGroupColumn) Clone() RowGroupColumn {
 	}
 }
 
+func (col *indexedRowGroupColumn) Dictionary() Dictionary { return col.dict }
+
 func (col *indexedRowGroupColumn) Page() Page { return &col.indexedPage }
 
 func (col *indexedRowGroupColumn) Reset() { col.values = col.values[:0] }

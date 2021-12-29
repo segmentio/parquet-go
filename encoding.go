@@ -49,6 +49,15 @@ var (
 	}
 )
 
+func isDictionaryEncoding(encoding interface{ Encoding() format.Encoding }) bool {
+	switch encoding.Encoding() {
+	case format.PlainDictionary, format.RLEDictionary:
+		return true
+	default:
+		return false
+	}
+}
+
 func lookupEncoding(enc format.Encoding) encoding.Encoding {
 	if enc >= 0 && int(enc) < len(encodings) {
 		if e := encodings[enc]; e != nil {

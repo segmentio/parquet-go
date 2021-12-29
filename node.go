@@ -436,3 +436,35 @@ func listElementOf(node Node) Node {
 	}
 	panic("node with logical type LIST is not composed of a .list.element")
 }
+
+func encodingAndCompressionOf(node Node) (encoding.Encoding, compress.Codec) {
+	// TODO: we pick the first encoding and compression algorithm configured
+	// on the node. An amelioration we could bring to this model is to
+	// generate a matrix of encoding x codec and generate multiple
+	// representations of the pages, picking the one with the smallest space
+	// footprint; keep it simple for now.
+	encoding := encoding.Encoding(&Plain)
+	compression := compress.Codec(&Uncompressed)
+	// The parquet-format documentation states that the
+	// DELTA_LENGTH_BYTE_ARRAY is always preferred to PLAIN when
+	// encoding BYTE_ARRAY values. We apply it as a default if
+	// none were explicitly specified, which gives the application
+	// the opportunity to override this behavior if needed.
+	//
+	// https://github.com/apache/parquet-format/blob/master/Encodings.md#delta-length-byte-array-delta_length_byte_array--6
+	if node.Type().Kind() == ByteArray {
+		encoding = &DeltaLengthByteArray
+	}
+
+	for _, e := range node.Encoding() {
+		encoding = e
+		break
+	}
+
+	for _, c := range node.Compression() {
+		compression = c
+		break
+	}
+
+	return encoding, compression
+}

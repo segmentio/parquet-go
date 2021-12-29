@@ -63,7 +63,7 @@ func forEachColumnPage(col *parquet.Column, do func(*parquet.Column, *parquet.Pa
 				decoder := header.Encoding().NewDecoder(pages.PageData())
 				dictionary = leaf.Type().NewDictionary(0)
 				if err := dictionary.ReadFrom(decoder); err != nil {
-					return err
+					return fmt.Errorf("reading dictionary page: %w", err)
 				}
 				pageType = dictionary.Type()
 
@@ -84,7 +84,7 @@ func forEachColumnPage(col *parquet.Column, do func(*parquet.Column, *parquet.Pa
 				)
 
 				if err := do(leaf, pageReader); err != nil {
-					return err
+					return fmt.Errorf("reading data page: %w", err)
 				}
 
 			default:
@@ -92,7 +92,7 @@ func forEachColumnPage(col *parquet.Column, do func(*parquet.Column, *parquet.Pa
 			}
 
 			if err := pages.Err(); err != nil {
-				return err
+				return fmt.Errorf("after reading pages: %w", err)
 			}
 		}
 		return nil

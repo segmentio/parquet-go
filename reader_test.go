@@ -233,7 +233,7 @@ func TestReader(t *testing.T) {
 					defer buf.Reset()
 					rows := rowsOf(n, test.model)
 
-					if err := writeParquetFileWithRowGroup(buf, rows); err != nil {
+					if err := writeParquetFile(buf, rows); err != nil {
 						t.Fatal(err)
 					}
 
@@ -269,7 +269,7 @@ func BenchmarkReader(b *testing.B) {
 			defer buf.Reset()
 			rows := rowsOf(N, test.model)
 
-			if err := writeParquetFileWithRowGroup(buf, rows); err != nil {
+			if err := writeParquetFile(buf, rows); err != nil {
 				b.Fatal(err)
 			}
 			file.Reset(buf.Bytes())

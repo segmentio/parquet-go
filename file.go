@@ -144,23 +144,23 @@ func (f *File) readPageIndex(section *bufferedSectionReader, decoder *thrift.Dec
 	section.reset(f.reader, indexOffset, indexLength)
 
 	for i := range f.metadata.RowGroups {
-		for range f.metadata.RowGroups[i].Columns {
+		for j := range f.metadata.RowGroups[i].Columns {
 			n := len(columnIndexes)
 			columnIndexes = append(columnIndexes, ColumnIndex{})
 
 			if err := decoder.Decode(&columnIndexes[n]); err != nil {
-				return nil, nil, err
+				return nil, nil, fmt.Errorf("reading column index %d of row group %d: %w", j, i, err)
 			}
 		}
 	}
 
 	for i := range f.metadata.RowGroups {
-		for range f.metadata.RowGroups[i].Columns {
+		for j := range f.metadata.RowGroups[i].Columns {
 			n := len(offsetIndexes)
 			offsetIndexes = append(offsetIndexes, OffsetIndex{})
 
 			if err := decoder.Decode(&offsetIndexes[n]); err != nil {
-				return nil, nil, err
+				return nil, nil, fmt.Errorf("reading offset index %d of row group %d: %w", j, i, err)
 			}
 		}
 	}

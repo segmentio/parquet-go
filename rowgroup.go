@@ -49,6 +49,10 @@ type RowGroupColumn interface {
 	// the original, mutations of either column will not modify the other.
 	Clone() RowGroupColumn
 
+	// For indexed columns, returns the underlying dictionary holding the column
+	// values. If the column is not indexed, nil is returned.
+	Dictionary() Dictionary
+
 	// Converts the column to a page, allowing the application to read the
 	// values previously written to the column.
 	//
@@ -132,7 +136,18 @@ func (rg *RowGroup) init(node Node, path []string, repetitionLevel, definitionLe
 	if isLeaf(node) {
 		nullOrdering := nullsGoLast
 		columnIndex := len(rg.columns)
-		column := node.Type().NewRowGroupColumn(config.ColumnBufferSize)
+		columnType := node.Type()
+		bufferSize := config.ColumnBufferSize
+		dictionary := (Dictionary)(nil)
+		encoding, _ := encodingAndCompressionOf(node)
+
+		if isDictionaryEncoding(encoding) {
+			bufferSize /= 2
+			dictionary = columnType.NewDictionary(bufferSize)
+			columnType = dictionary.Type()
+		}
+
+		column := columnType.NewRowGroupColumn(bufferSize)
 
 		for _, sorting := range config.SortingColumns {
 			if pathEqual(sorting.Path(), path) {
@@ -330,6 +345,10 @@ func (col *optionalRowGroupColumn) Clone() RowGroupColumn {
 	}
 }
 
+func (col *optionalRowGroupColumn) Dictionary() Dictionary {
+	return col.base.Dictionary()
+}
+
 func (col *optionalRowGroupColumn) Page() Page {
 	return newOptionalPage(
 		rowGroupColumnPageWithoutNulls(col.base, col.maxDefinitionLevel, col.definitionLevels),
@@ -430,6 +449,10 @@ func (col *repeatedRowGroupColumn) Clone() RowGroupColumn {
 		definitionLevels:   append([]int8{}, col.definitionLevels...),
 		nullOrdering:       col.nullOrdering,
 	}
+}
+
+func (col *repeatedRowGroupColumn) Dictionary() Dictionary {
+	return col.base.Dictionary()
 }
 
 func (col *repeatedRowGroupColumn) Page() Page {
@@ -558,6 +581,8 @@ func (col *booleanRowGroupColumn) Clone() RowGroupColumn {
 	}
 }
 
+func (col *booleanRowGroupColumn) Dictionary() Dictionary { return nil }
+
 func (col *booleanRowGroupColumn) Page() Page { return &col.booleanPage }
 
 func (col *booleanRowGroupColumn) Reset() { col.values = col.values[:0] }
@@ -601,6 +626,8 @@ func (col *int32RowGroupColumn) Clone() RowGroupColumn {
 	}
 }
 
+func (col *int32RowGroupColumn) Dictionary() Dictionary { return nil }
+
 func (col *int32RowGroupColumn) Page() Page { return &col.int32Page }
 
 func (col *int32RowGroupColumn) Reset() { col.values = col.values[:0] }
@@ -641,6 +668,8 @@ func (col *int64RowGroupColumn) Clone() RowGroupColumn {
 		},
 	}
 }
+
+func (col *int64RowGroupColumn) Dictionary() Dictionary { return nil }
 
 func (col *int64RowGroupColumn) Page() Page { return &col.int64Page }
 
@@ -683,6 +712,8 @@ func (col *int96RowGroupColumn) Clone() RowGroupColumn {
 	}
 }
 
+func (col *int96RowGroupColumn) Dictionary() Dictionary { return nil }
+
 func (col *int96RowGroupColumn) Page() Page { return &col.int96Page }
 
 func (col *int96RowGroupColumn) Reset() { col.values = col.values[:0] }
@@ -723,6 +754,8 @@ func (col *floatRowGroupColumn) Clone() RowGroupColumn {
 		},
 	}
 }
+
+func (col *floatRowGroupColumn) Dictionary() Dictionary { return nil }
 
 func (col *floatRowGroupColumn) Page() Page { return &col.floatPage }
 
@@ -765,6 +798,8 @@ func (col *doubleRowGroupColumn) Clone() RowGroupColumn {
 	}
 }
 
+func (col *doubleRowGroupColumn) Dictionary() Dictionary { return nil }
+
 func (col *doubleRowGroupColumn) Page() Page { return &col.doublePage }
 
 func (col *doubleRowGroupColumn) Reset() { col.values = col.values[:0] }
@@ -805,6 +840,8 @@ func (col *byteArrayRowGroupColumn) Clone() RowGroupColumn {
 		},
 	}
 }
+
+func (col *byteArrayRowGroupColumn) Dictionary() Dictionary { return nil }
 
 func (col *byteArrayRowGroupColumn) Page() Page { return &col.byteArrayPage }
 
@@ -851,6 +888,8 @@ func (col *fixedLenByteArrayRowGroupColumn) Clone() RowGroupColumn {
 		tmp: make([]byte, col.size),
 	}
 }
+
+func (col *fixedLenByteArrayRowGroupColumn) Dictionary() Dictionary { return nil }
 
 func (col *fixedLenByteArrayRowGroupColumn) Page() Page { return &col.fixedLenByteArrayPage }
 
