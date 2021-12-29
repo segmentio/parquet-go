@@ -53,10 +53,12 @@ func deconstructFuncOf(columnIndex int, node Node) (int, deconstructFunc) {
 	switch {
 	case node.Optional():
 		return deconstructFuncOfOptional(columnIndex, node)
-	case isList(node):
-		return deconstructFuncOf(columnIndex, Repeated(listElementOf(node)))
 	case node.Repeated():
 		return deconstructFuncOfRepeated(columnIndex, node)
+	case isList(node):
+		return deconstructFuncOfList(columnIndex, node)
+	case isMap(node):
+		return deconstructFuncOfMap(columnIndex, node)
 	default:
 		return deconstructFuncOfRequired(columnIndex, node)
 	}
@@ -89,7 +91,7 @@ func deconstructFuncOfRepeated(columnIndex int, node Node) (int, deconstructFunc
 		if value.IsValid() {
 			numValues = value.Len()
 			levels.repetitionDepth++
-			if numValues > 0 { // !value.IsNil() {
+			if numValues > 0 {
 				levels.definitionLevel++
 			}
 		}
@@ -113,6 +115,39 @@ func deconstructFuncOfRequired(columnIndex int, node Node) (int, deconstructFunc
 		return deconstructFuncOfLeaf(columnIndex, node)
 	default:
 		return deconstructFuncOfGroup(columnIndex, node)
+	}
+}
+
+func deconstructFuncOfList(columnIndex int, node Node) (int, deconstructFunc) {
+	return deconstructFuncOf(columnIndex, Repeated(listElementOf(node)))
+}
+
+//go:noinline
+func deconstructFuncOfMap(columnIndex int, node Node) (int, deconstructFunc) {
+	keyValue := mapKeyValueOf(node)
+	keyValueType := keyValue.GoType()
+	keyValueElem := keyValueType.Elem()
+	keyType := keyValueElem.Field(0).Type
+	valueType := keyValueElem.Field(0).Type
+	columnIndex, deconstruct := deconstructFuncOf(columnIndex, Repeated(namedSchemaOf(keyValueElem.Name(), keyValueElem)))
+	return columnIndex, func(row Row, levels levels, mapValue reflect.Value) Row {
+		if !mapValue.IsValid() {
+			return deconstruct(row, levels, reflect.Value{})
+		}
+
+		i := 0
+		n := mapValue.Len()
+		keyValueSlice := reflect.New(keyValueType).Elem()
+		keyValueSlice.Set(reflect.MakeSlice(keyValueType, n, n))
+
+		for _, mapKey := range mapValue.MapKeys() {
+			keyValueElem := keyValueSlice.Index(i)
+			keyValueElem.Field(0).Set(mapKey.Convert(keyType))
+			keyValueElem.Field(1).Set(mapValue.MapIndex(mapKey).Convert(valueType))
+			i++
+		}
+
+		return deconstruct(row, levels, keyValueSlice)
 	}
 }
 
@@ -178,10 +213,12 @@ func reconstructFuncOf(columnIndex int, node Node) (int, reconstructFunc) {
 	switch {
 	case node.Optional():
 		return reconstructFuncOfOptional(columnIndex, node)
-	case isList(node):
-		return reconstructFuncOf(columnIndex, Repeated(listElementOf(node)))
 	case node.Repeated():
 		return reconstructFuncOfRepeated(columnIndex, node)
+	case isList(node):
+		return reconstructFuncOfList(columnIndex, node)
+	case isMap(node):
+		return reconstructFuncOfMap(columnIndex, node)
 	default:
 		return reconstructFuncOfRequired(columnIndex, node)
 	}
@@ -234,10 +271,9 @@ func reconstructFuncOfRepeated(columnIndex int, node Node) (int, reconstructFunc
 			return nil
 		}
 
-		t := typ.Elem()
 		elem := reflect.Value{}
-		zero := reflect.Zero(t)
-		size := t.Size()
+		offset := value.Len()
+		length := offset
 
 		for len(row) > 0 {
 			i := row.indexOf(maxColumnIndex) + 1
@@ -246,11 +282,29 @@ func reconstructFuncOfRepeated(columnIndex int, node Node) (int, reconstructFunc
 			}
 
 			if row[0].repetitionLevel <= levels.repetitionLevel {
-				elem = reflectAppend(value, zero, size)
+				if offset == length {
+					capacity := value.Cap()
+					if length < capacity {
+						value.Set(value.Slice(0, capacity))
+					} else {
+						switch {
+						case capacity == 0:
+							capacity = 10
+						default:
+							capacity *= 2
+						}
+						newValue := reflect.MakeSlice(typ, capacity, capacity)
+						reflect.Copy(newValue, value)
+						value.Set(newValue)
+					}
+					length = capacity
+				}
+				elem = value.Index(offset)
+				offset++
 			}
 
 			if !elem.IsValid() {
-				return fmt.Errorf("cannot reconstruct repeated parquet column from row missing a repetition level instructing to create the first record (first repetition level is %d)", row[0].repetitionLevel)
+				return fmt.Errorf("cannot reconstruct repeated parquet column from row missing a repetition level instructing to create the first record (first repetition level is %d>=%d)", row[0].repetitionLevel, levels.repetitionLevel)
 			}
 
 			if err := reconstruct(elem, levels, row[:i]); err != nil {
@@ -258,6 +312,10 @@ func reconstructFuncOfRepeated(columnIndex int, node Node) (int, reconstructFunc
 			}
 
 			row = row[i:]
+		}
+
+		if offset < length {
+			value.Set(value.Slice(0, offset))
 		}
 
 		return nil
@@ -270,6 +328,44 @@ func reconstructFuncOfRequired(columnIndex int, node Node) (int, reconstructFunc
 		return reconstructFuncOfLeaf(columnIndex, node)
 	default:
 		return reconstructFuncOfGroup(columnIndex, node)
+	}
+}
+
+func reconstructFuncOfList(columnIndex int, node Node) (int, reconstructFunc) {
+	return reconstructFuncOf(columnIndex, Repeated(listElementOf(node)))
+}
+
+//go:noinline
+func reconstructFuncOfMap(columnIndex int, node Node) (int, reconstructFunc) {
+	keyValue := mapKeyValueOf(node)
+	keyValueType := keyValue.GoType()
+	keyValueElem := keyValueType.Elem()
+	columnIndex, reconstruct := reconstructFuncOf(columnIndex, Repeated(namedSchemaOf(keyValueElem.Name(), keyValueElem)))
+	return columnIndex, func(mapValue reflect.Value, levels levels, row Row) error {
+		keyValueSlice := reflect.New(keyValueType).Elem()
+
+		if err := reconstruct(keyValueSlice, levels, row); err != nil {
+			return err
+		}
+
+		if keyValueSlice.IsNil() {
+			mapValue.Set(reflect.Zero(mapValue.Type()))
+		} else {
+			mapType := mapValue.Type()
+			keyType := mapType.Key()
+			valueType := mapType.Elem()
+
+			if mapValue.IsNil() {
+				mapValue.Set(reflect.MakeMap(mapType))
+			}
+
+			for i, n := 0, keyValueSlice.Len(); i < n; i++ {
+				elem := keyValueSlice.Index(i)
+				mapValue.SetMapIndex(elem.Field(0).Convert(keyType), elem.Field(1).Convert(valueType))
+			}
+		}
+
+		return nil
 	}
 }
 

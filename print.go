@@ -3,6 +3,7 @@ package parquet
 import (
 	"io"
 	"strconv"
+	"strings"
 )
 
 func Print(w io.Writer, name string, node Node) error {
@@ -168,3 +169,9 @@ func (w *printWriter) WriteString(s string) (int, error) {
 var (
 	_ io.StringWriter = (*printWriter)(nil)
 )
+
+func sprint(name string, node Node) string {
+	s := new(strings.Builder)
+	Print(s, name, node)
+	return s.String()
+}

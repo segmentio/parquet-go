@@ -140,6 +140,9 @@ func (s *Schema) ConfigureRowGroup(config *RowGroupConfig) { config.Schema = s }
 // output parquet file.
 func (s *Schema) ConfigureWriter(config *WriterConfig) { config.Schema = s }
 
+// String returns a parquet schema representation of s.
+func (s *Schema) String() string { return sprint(s.name, s.root) }
+
 // Name returns the name of s.
 func (s *Schema) Name() string { return s.name }
 
@@ -170,16 +173,12 @@ func (s *Schema) Encoding() []encoding.Encoding { return s.root.Encoding() }
 // Compression returns the list of compression codecs in the child nodes of s.
 func (s *Schema) Compression() []compress.Codec { return s.root.Compression() }
 
+// Returns the Go type that best represents the schema.
+func (s *Schema) GoType() reflect.Type { return s.root.GoType() }
+
 // ValueByName is returns the sub-value with the givne name in base.
 func (s *Schema) ValueByName(base reflect.Value, name string) reflect.Value {
 	return s.root.ValueByName(base, name)
-}
-
-// String returns a parquet schema representation of s.
-func (s *Schema) String() string {
-	b := new(strings.Builder)
-	Print(b, s.name, s.root)
-	return b.String()
 }
 
 // Deconstruct deconstructs a Go value and appends it to a row.
@@ -228,6 +227,7 @@ func (s *Schema) Reconstruct(value interface{}, row Row) error {
 
 type structNode struct {
 	node
+	gotype reflect.Type
 	fields []structField
 	names  []string
 }
@@ -238,6 +238,7 @@ func structNodeOf(t reflect.Type) *structNode {
 	fields := structFieldsOf(t)
 
 	s := &structNode{
+		gotype: t,
 		fields: make([]structField, len(fields)),
 		names:  make([]string, len(fields)),
 	}
@@ -286,6 +287,8 @@ func appendStructFields(t reflect.Type, fields []reflect.StructField, index []in
 	return fields
 }
 
+func (s *structNode) GoType() reflect.Type { return s.gotype }
+func (s *structNode) String() string       { return sprint("", s) }
 func (s *structNode) Type() Type           { return groupType{} }
 func (s *structNode) NumChildren() int     { return len(s.fields) }
 func (s *structNode) ChildNames() []string { return s.names }
@@ -443,6 +446,9 @@ func makeStructField(f reflect.StructField) structField {
 			case "zstd":
 				setCompression(&Zstd)
 
+			case "uncompressed":
+				setCompression(&Uncompressed)
+
 			case "plain":
 				setEncoding(&Plain)
 
@@ -575,6 +581,9 @@ func nodeOf(t reflect.Type) Node {
 		if t.Elem().Kind() == reflect.Uint8 {
 			return Leaf(FixedLenByteArrayType(t.Len()))
 		}
+
+	case reflect.Map:
+		return Map(nodeOf(t.Key()), nodeOf(t.Elem()))
 	}
 
 	panic("cannot create parquet node from go value of type " + t.String())

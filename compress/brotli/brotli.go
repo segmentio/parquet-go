@@ -23,6 +23,10 @@ type Codec struct {
 	LGWin int
 }
 
+func (c *Codec) String() string {
+	return "BROTLI"
+}
+
 func (c *Codec) CompressionCodec() format.CompressionCodec {
 	return format.Brotli
 }

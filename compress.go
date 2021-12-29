@@ -114,6 +114,10 @@ func (r *compressedPageReader) Reset(page io.Reader) {
 
 type unsupported struct{ codec format.CompressionCodec }
 
+func (u *unsupported) String() string {
+	return "UNSUPPORTED"
+}
+
 func (u *unsupported) CompressionCodec() format.CompressionCodec {
 	return u.codec
 }

@@ -3,6 +3,7 @@ package parquet
 import (
 	"bytes"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/segmentio/parquet/deprecated"
@@ -673,6 +674,10 @@ func (t *stringType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
 
 func (t *stringType) NewValueDecoder(bufferSize int) ValueDecoder {
 	return newByteArrayValueDecoder(bufferSize)
+}
+
+func (t *stringType) GoType() reflect.Type {
+	return reflect.TypeOf("")
 }
 
 // UUID constructs a leaf node of UUID logical type.

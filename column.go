@@ -157,6 +157,15 @@ func (c *Column) ValueByIndex(base reflect.Value, index int) reflect.Value {
 	return c.ValueByName(base, c.columns[index].Name())
 }
 
+// GoType returns the Go type that best represents the parquet column.
+func (c *Column) GoType() reflect.Type {
+	if len(c.columns) == 0 {
+		return goTypeOfLeaf(c.Type())
+	} else {
+		return goTypeOfGroup(c)
+	}
+}
+
 // String returns a human-redable string representation of the oclumn.
 func (c *Column) String() string {
 	switch {

@@ -99,7 +99,13 @@ type utf8string string
 
 func (utf8string) Generate(rand *rand.Rand, size int) reflect.Value {
 	const characters = "abcdefghijklmnopqrstuvwxyz1234567890"
-	b := make([]byte, size)
+	// TODO: investigate why tests nested repeated columns break when we uncomment this code
+	// if size > 10 {
+	// 	size = 10
+	// }
+	// n := rand.Intn(size)
+	n := size
+	b := make([]byte, n)
 	for i := range b {
 		b[i] = characters[rand.Intn(len(characters))]
 	}
@@ -213,6 +219,29 @@ var readerTests = []struct {
 		scenario: "nested lists",
 		model:    nestedListColumn{},
 	},
+
+	{
+		scenario: "key-value pairs",
+		model: struct {
+			KeyValuePairs map[utf8string]utf8string
+		}{},
+	},
+
+	{
+		scenario: "multiple key-value pairs",
+		model: struct {
+			KeyValuePairs0 map[utf8string]utf8string
+			KeyValuePairs1 map[utf8string]utf8string
+			KeyValuePairs2 map[utf8string]utf8string
+		}{},
+	},
+
+	{
+		scenario: "repeated key-value pairs",
+		model: struct {
+			RepeatedKeyValuePairs []map[utf8string]utf8string
+		}{},
+	},
 }
 
 func TestReader(t *testing.T) {
@@ -245,7 +274,7 @@ func TestReader(t *testing.T) {
 							t.Fatal(err)
 						}
 						if !reflect.DeepEqual(rowValue.Interface(), v) {
-							t.Errorf("row mismatch at index %d\nwant = %+v\ngot  = %+v", i, v, rowValue.Interface())
+							t.Errorf("row mismatch at index %d\nwant = %#v\ngot  = %#v", i, v, rowValue.Interface())
 						}
 						rowValue.Set(rowZero)
 					}
