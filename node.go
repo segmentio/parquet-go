@@ -85,15 +85,6 @@ type IndexedNode interface {
 	ValueByIndex(base reflect.Value, index int) reflect.Value
 }
 
-// NodeAt returns the node at the given path, or nil if it was not found.
-func NodeAt(node Node, path ...string) Node {
-	for node != nil && len(path) != 0 {
-		node = node.ChildByName(path[0])
-		path = path[1:]
-	}
-	return node
-}
-
 // Match returns true if the two nodes have the same structure. The comparison
 // is performed recursively on children nodes.
 //
