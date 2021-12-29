@@ -13,7 +13,7 @@ import (
 // 	}
 //
 // The use of reflect.Append requires the Go runtime to make heap allocations for
-// the slice values boxed into the returned reflect.Value of Append. It measn that
+// the slice values boxed into the returned reflect.Value of Append. It means that
 // the number of malloc increases linearly with the number of values appended to
 // a slice, which gets expensive very quickly.
 func reflectAppend(value, elem reflect.Value, elemSize uintptr) reflect.Value {
