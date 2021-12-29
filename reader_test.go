@@ -281,7 +281,7 @@ func TestReader(t *testing.T) {
 							t.Fatal(err)
 						}
 						if !reflect.DeepEqual(rowValue.Interface(), v) {
-							t.Errorf("row mismatch at index %d\nwant = %#v\ngot  = %#v", i, v, rowValue.Interface())
+							t.Errorf("row mismatch at index %d\nwant = %+v\ngot  = %+v", i, v, rowValue.Interface())
 						}
 						rowValue.Set(rowZero)
 					}

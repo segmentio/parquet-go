@@ -65,19 +65,12 @@ type Schema struct {
 //
 // The schema name is the Go type name of the value.
 func SchemaOf(model interface{}) *Schema {
-	t := dereference(reflect.TypeOf(model))
-	return namedSchemaOf(t.Name(), t)
-}
-
-// NamedSchemaOf is like SchemaOf but allows the program to customize the name
-// of the parquet schema.
-func NamedSchemaOf(name string, model interface{}) *Schema {
-	return namedSchemaOf(name, dereference(reflect.TypeOf(model)))
+	return schemaOf(dereference(reflect.TypeOf(model)))
 }
 
 var cachedSchemas sync.Map // map[reflect.Type]*Schema
 
-func namedSchemaOf(name string, model reflect.Type) *Schema {
+func schemaOf(model reflect.Type) *Schema {
 	cached, _ := cachedSchemas.Load(model)
 	schema, _ := cached.(*Schema)
 	if schema != nil {
@@ -86,7 +79,7 @@ func namedSchemaOf(name string, model reflect.Type) *Schema {
 	if model.Kind() != reflect.Struct {
 		panic("cannot construct parquet schema from value of type " + model.String())
 	}
-	schema = NewSchema(name, nodeOf(model))
+	schema = NewSchema(model.Name(), nodeOf(model))
 	if actual, loaded := cachedSchemas.LoadOrStore(model, schema); loaded {
 		schema = actual.(*Schema)
 	}
@@ -220,7 +213,10 @@ func (s *Schema) Reconstruct(value interface{}, row Row) error {
 	}
 	var err error
 	if s.reconstruct != nil {
-		err = s.reconstruct(v.Elem(), levels{}, row)
+		row, err = s.reconstruct(v.Elem(), levels{}, row)
+		if len(row) > 0 && err == nil {
+			err = fmt.Errorf("%d values remain unused after reconstructing go value of type %s from parquet row", len(row), v.Type())
+		}
 	}
 	return err
 }

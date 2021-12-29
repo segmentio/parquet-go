@@ -115,7 +115,7 @@ func (r *Reader) Reset() {
 func (r *Reader) Read(row interface{}) (err error) {
 	if rowType := dereference(reflect.TypeOf(row)); rowType.Kind() == reflect.Struct {
 		if r.seen == nil || r.seen != rowType {
-			schema := namedSchemaOf(r.schema.Name(), rowType)
+			schema := schemaOf(rowType)
 			if !Match(schema, r.schema) {
 				return fmt.Errorf("cannot read parquet row into go value of type %T: schema mismatch", row)
 			}
