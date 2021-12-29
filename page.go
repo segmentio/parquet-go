@@ -34,6 +34,30 @@ type Page interface {
 	WriteTo(encoding.Encoder) error
 }
 
+func forEachPageSlice(page Page, pageSize, wantSize int64, do func(Page) error) error {
+	numPages := int((pageSize + (wantSize - 1)) / wantSize)
+	rowIndex := 0
+	numRows := page.NumRows()
+
+	if numRows == 0 {
+		return nil
+	}
+	if numRows == 1 {
+		return do(page)
+	}
+
+	for numPages > 0 {
+		lastRowIndex := rowIndex + ((numRows - rowIndex) / numPages)
+		if err := do(page.Slice(rowIndex, lastRowIndex)); err != nil {
+			return err
+		}
+		rowIndex = lastRowIndex
+		numPages--
+	}
+
+	return nil
+}
+
 type errorPage struct{ err error }
 
 func (page *errorPage) NumRows() int                                   { return 0 }
@@ -213,8 +237,12 @@ func (page *repeatedPage) Slice(i, j int) Page {
 
 	numNulls1 := countLevelsNotEqual(page.definitionLevels[:rowIndex1], page.maxDefinitionLevel)
 	numNulls2 := countLevelsNotEqual(page.definitionLevels[rowIndex1:rowIndex2], page.maxDefinitionLevel)
+
+	i -= numNulls1
+	j = i + (rowIndex2 - (rowIndex1 + numNulls2))
+
 	return newRepeatedPage(
-		page.base.Slice(i-numNulls1, j-(numNulls1+numNulls2)),
+		page.base.Slice(i, j),
 		page.maxRepetitionLevel,
 		page.maxDefinitionLevel,
 		page.repetitionLevels[rowIndex1:rowIndex2],

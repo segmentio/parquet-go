@@ -104,16 +104,16 @@ func forEachColumnValue(col *parquet.Column, do func(*parquet.Column, parquet.Va
 		values := make([]parquet.Value, 10)
 		for {
 			n, err := page.ReadValues(values)
+			for i := 0; i < n; i++ {
+				if err := do(leaf, values[i]); err != nil {
+					return err
+				}
+			}
 			if err != nil {
 				if err != io.EOF {
 					return err
 				}
 				break
-			}
-			for i := 0; i < n; i++ {
-				if err := do(leaf, values[i]); err != nil {
-					return err
-				}
 			}
 		}
 		return nil

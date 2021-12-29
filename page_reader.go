@@ -16,6 +16,7 @@ import (
 // null values when needed.
 type PageReader struct {
 	remain             int
+	numValues          int
 	maxRepetitionLevel int8
 	maxDefinitionLevel int8
 	columnIndex        int8
@@ -59,19 +60,22 @@ func (r *PageReader) Reset(numValues int, repetitions, definitions, values encod
 		definitions.SetBitWidth(bits.Len8(r.maxDefinitionLevel))
 	}
 	r.remain = numValues
+	r.numValues = numValues
 	r.repetitions.reset(repetitions)
 	r.definitions.reset(definitions)
 	r.values.Reset(values)
 }
 
 func (r *PageReader) ReadValues(values []Value) (int, error) {
+	if r.values == nil {
+		return 0, io.EOF
+	}
 	read := 0
 
 	for r.remain > 0 && len(values) > 0 {
 		var err error
 		var repetitionLevels []int8
 		var definitionLevels []int8
-		var numNulls int
 		var numValues = r.remain
 
 		if len(values) < numValues {
@@ -104,22 +108,13 @@ func (r *PageReader) ReadValues(values []Value) (int, error) {
 		if len(definitionLevels) > 0 {
 			definitionLevels = definitionLevels[:numValues]
 		}
-		for _, d := range definitionLevels {
-			if d != r.maxDefinitionLevel {
-				numNulls++
-			}
-		}
-
-		if r.values == nil {
-			return read, io.EOF
-		}
-
+		numNulls := countLevelsNotEqual(definitionLevels, r.maxDefinitionLevel)
 		n, err := r.values.ReadValues(values[:numValues-numNulls])
 		if err != nil {
 			if err == io.EOF {
 				// EOF should not happen at this stage since we successfully
 				// decoded levels.
-				err = io.ErrUnexpectedEOF
+				err = fmt.Errorf("after reading %d/%d values: %w", r.numValues-r.remain, r.numValues, io.ErrUnexpectedEOF)
 			}
 			return read, fmt.Errorf("reading parquet values from data page: %w", err)
 		}
@@ -152,8 +147,8 @@ func (r *PageReader) ReadValues(values []Value) (int, error) {
 		read += numValues
 	}
 
-	if r.remain == 0 && read == 0 {
-		return 0, io.EOF
+	if r.remain == 0 {
+		return read, io.EOF
 	}
 
 	return read, nil
