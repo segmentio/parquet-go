@@ -107,54 +107,6 @@ type IndexedNode interface {
 	ValueByIndex(base reflect.Value, index int) reflect.Value
 }
 
-// Match returns true if the two nodes have the same structure. The comparison
-// is performed recursively on children nodes.
-//
-// On leaf nodes, the type, optional, repeated, and required properties are
-// tested for equality.
-func Match(node1, node2 Node) bool {
-	if node1 == nil || node2 == nil {
-		return node1 == nil && node2 == nil
-	}
-
-	n1 := node1.NumChildren()
-	n2 := node2.NumChildren()
-	if n1 != n2 {
-		return false
-	}
-	if n1 == 0 {
-		return node1.Type().Kind() == node2.Type().Kind() &&
-			node1.Optional() == node2.Optional() &&
-			node1.Repeated() == node2.Repeated() &&
-			node1.Required() == node2.Required()
-	}
-
-	var childAt1 func(int) Node
-	var childAt2 func(int) Node
-
-	if indexedNode, ok := unwrap(node1).(IndexedNode); ok {
-		childAt1 = indexedNode.ChildByIndex
-	} else {
-		names := node1.ChildNames()
-		childAt1 = func(i int) Node { return node1.ChildByName(names[i]) }
-	}
-
-	if indexedNode, ok := unwrap(node2).(IndexedNode); ok {
-		childAt2 = indexedNode.ChildByIndex
-	} else {
-		names := node2.ChildNames()
-		childAt2 = func(i int) Node { return node2.ChildByName(names[i]) }
-	}
-
-	for i := 0; i < n1; i++ {
-		if !Match(childAt1(i), childAt2(i)) {
-			return false
-		}
-	}
-
-	return true
-}
-
 // WrappedNode is an extension of the Node interface implemented by types which
 // wrap another underlying node.
 type WrappedNode interface {

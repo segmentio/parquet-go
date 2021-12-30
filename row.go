@@ -382,10 +382,7 @@ func reconstructFuncOfGroup(columnIndex int, node Node) (int, reconstructFunc) {
 //go:noinline
 func reconstructFuncOfLeaf(columnIndex int, node Node) (int, reconstructFunc) {
 	return columnIndex + 1, func(value reflect.Value, _ levels, row Row) (Row, error) {
-		if len(row) == 0 {
-			return row, fmt.Errorf("expected one value to reconstruct leaf parquet row for column %d but found %d", columnIndex, len(row))
-		}
-		if int(row[0].ColumnIndex()) != columnIndex {
+		if !row.startsWith(columnIndex) {
 			return row, fmt.Errorf("no values found in parquet row for column %d", columnIndex)
 		}
 		return row[1:], assignValue(value, row[0])
