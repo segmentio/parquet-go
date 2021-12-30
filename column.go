@@ -302,7 +302,7 @@ func (cl *columnLoader) open(file *File, path []string) (*Column, error) {
 		c.encoding = make([]encoding.Encoding, 0, len(c.chunks))
 		for _, chunk := range c.chunks {
 			for _, encoding := range chunk.MetaData.Encoding {
-				c.encoding = append(c.encoding, lookupEncoding(encoding))
+				c.encoding = append(c.encoding, LookupEncoding(encoding))
 			}
 		}
 		sortEncodings(c.encoding)
@@ -310,7 +310,7 @@ func (cl *columnLoader) open(file *File, path []string) (*Column, error) {
 
 		c.compression = make([]compress.Codec, len(c.chunks))
 		for i, chunk := range c.chunks {
-			c.compression[i] = lookupCompressionCodec(chunk.MetaData.Codec)
+			c.compression[i] = LookupCompressionCodec(chunk.MetaData.Codec)
 		}
 		sortCodecs(c.compression)
 		c.compression = dedupeSortedCodecs(c.compression)

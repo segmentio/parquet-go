@@ -65,7 +65,12 @@ var (
 	compressedPageReaders = [len(compressionCodecs)]sync.Pool{}
 )
 
-func lookupCompressionCodec(codec format.CompressionCodec) compress.Codec {
+// LookupCompressionCodec returns the compression codec associated with the
+// given code.
+//
+// The function nevers returns nil. If the encoding is not supported,
+// an "unsupported" codec is returned.
+func LookupCompressionCodec(codec format.CompressionCodec) compress.Codec {
 	if codec >= 0 && int(codec) < len(compressionCodecs) {
 		if c := compressionCodecs[codec]; c != nil {
 			return c
@@ -78,7 +83,7 @@ func acquireCompressedPageReader(codec format.CompressionCodec, page io.Reader) 
 	r, _ := compressedPageReaders[codec].Get().(*compressedPageReader)
 	if r == nil {
 		r = &compressedPageReader{codec: codec}
-		r.reader, r.err = lookupCompressionCodec(codec).NewReader(page)
+		r.reader, r.err = LookupCompressionCodec(codec).NewReader(page)
 		runtime.SetFinalizer(r, func(r *compressedPageReader) { r.Close() })
 	} else {
 		r.Reset(page)

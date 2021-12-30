@@ -16,7 +16,7 @@ type LengthByteArrayDecoder struct {
 }
 
 func NewLengthByteArrayDecoder(r io.Reader) *LengthByteArrayDecoder {
-	d := &LengthByteArrayDecoder{}
+	d := &LengthByteArrayDecoder{lengths: make([]int32, defaultBufferSize/4)}
 	d.Reset(r)
 	return d
 }
@@ -33,11 +33,9 @@ func (d *LengthByteArrayDecoder) Encoding() format.Encoding {
 
 func (d *LengthByteArrayDecoder) DecodeByteArray(data *encoding.ByteArrayList) (n int, err error) {
 	if d.index < 0 {
-		d.lengths, err = d.decodeLengths(d.lengths[:0])
-		if err != nil {
+		if err := d.decodeLengths(); err != nil {
 			return 0, err
 		}
-		d.index = 0
 	}
 
 	n = data.Len()
@@ -58,25 +56,16 @@ func (d *LengthByteArrayDecoder) DecodeByteArray(data *encoding.ByteArrayList) (
 	return data.Len() - n, err
 }
 
-func (d *LengthByteArrayDecoder) decodeLengths(lengths []int32) ([]int32, error) {
-	for {
-		if len(lengths) == cap(lengths) {
-			if cap(lengths) == 0 {
-				lengths = make([]int32, 0, blockSize32)
-			} else {
-				newLengths := make([]int32, len(lengths), 2*cap(lengths))
-				copy(newLengths, lengths)
-				lengths = newLengths
-			}
-		}
-
-		n, err := d.binpack.DecodeInt32(lengths[len(lengths):cap(lengths)])
-		lengths = lengths[:len(lengths)+n]
-		if err != nil {
-			if err == io.EOF {
-				err = nil
-			}
-			return lengths, err
-		}
+func (d *LengthByteArrayDecoder) decodeLengths() (err error) {
+	d.lengths, err = appendDecodeInt32(&d.binpack, d.lengths[:0])
+	if err != nil {
+		return err
 	}
+	d.index = 0
+	return nil
+}
+
+func (d *LengthByteArrayDecoder) readFull(b []byte) error {
+	_, err := io.ReadFull(d.binpack.reader, b)
+	return dontExpectEOF(err)
 }
