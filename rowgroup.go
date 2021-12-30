@@ -161,7 +161,7 @@ func (rg *RowGroup) init(node Node, path []string, repetitionLevel, definitionLe
 		column := columnType.NewRowGroupColumn(bufferSize)
 
 		for _, sorting := range config.SortingColumns {
-			if pathEqual(sorting.Path(), path) {
+			if stringsAreEqual(sorting.Path(), path) {
 				sortingColumn := format.SortingColumn{
 					ColumnIdx:  int32(columnIndex),
 					Descending: sorting.Descending(),
@@ -196,18 +196,6 @@ func (rg *RowGroup) init(node Node, path []string, repetitionLevel, definitionLe
 		path[i] = name
 		rg.init(node.ChildByName(name), path, repetitionLevel, definitionLevel, config)
 	}
-}
-
-func pathEqual(p1, p2 []string) bool {
-	if len(p1) != len(p2) {
-		return false
-	}
-	for i := range p1 {
-		if p1[i] != p2[i] {
-			return false
-		}
-	}
-	return true
 }
 
 func (rg *RowGroup) Column(i int) RowGroupColumn {
@@ -253,13 +241,9 @@ func (rg *RowGroup) Write(row interface{}) error {
 	if rg.schema == nil {
 		rg.configure(SchemaOf(row))
 	}
-
 	defer func() {
-		for i := range rg.rowbuf {
-			rg.rowbuf[i] = Value{}
-		}
+		clearValues(rg.rowbuf)
 	}()
-
 	rg.rowbuf = rg.schema.Deconstruct(rg.rowbuf[:0], row)
 	return rg.WriteRow(rg.rowbuf)
 }
@@ -267,9 +251,7 @@ func (rg *RowGroup) Write(row interface{}) error {
 func (rg *RowGroup) WriteRow(row Row) error {
 	defer func() {
 		for i, colbuf := range rg.colbuf {
-			for j := range colbuf {
-				colbuf[j] = Value{}
-			}
+			clearValues(colbuf)
 			rg.colbuf[i] = colbuf[:0]
 		}
 	}()

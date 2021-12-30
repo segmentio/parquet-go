@@ -706,3 +706,9 @@ var (
 	_ fmt.Formatter = Value{}
 	_ fmt.Stringer  = Value{}
 )
+
+func clearValues(values []Value) {
+	for i := range values {
+		values[i] = Value{}
+	}
+}
