@@ -1,126 +1,195 @@
 package parquet
 
 import (
-	"bytes"
-	"encoding/binary"
-	"io"
-	"os"
-	"path/filepath"
-	"sync"
+	"sort"
+
+	"github.com/segmentio/parquet/format"
 )
 
-const (
-	defaultBufferSize      = 4096
-	defaultLevelBufferSize = 1024
-)
-
-var (
-	defaultBufferPool bufferPool
-)
-
-type Buffer interface {
-	io.Reader
-	io.Writer
+// Buffer represents an in-memory group of parquet rows.
+//
+// The main purpose of the Buffer type is to provide a way to sort rows before
+// writting them to a parquet file. Buffer implements sort.Interface as a way
+// to support reordering the rows that have been written to it.
+type Buffer struct {
+	config  *BufferConfig
+	schema  *Schema
+	rowbuf  []Value
+	colbuf  [][]Value
+	columns []BufferColumn
+	sorted  []BufferColumn
+	sorting []format.SortingColumn
+	numRows int
 }
 
-type BufferPool interface {
-	GetBuffer() Buffer
-	PutBuffer(Buffer)
-}
-
-func NewBufferPool() BufferPool { return new(bufferPool) }
-
-type bufferPool struct{ sync.Pool }
-
-func (pool *bufferPool) GetBuffer() Buffer {
-	b, _ := pool.Get().(*buffer)
-	if b == nil {
-		b = new(buffer)
-	} else {
-		b.Reset()
+func NewBuffer(options ...BufferOption) *Buffer {
+	config := DefaultBufferConfig()
+	config.Apply(options...)
+	if err := config.Validate(); err != nil {
+		panic(err)
 	}
-	return b
+	rg := &Buffer{
+		config: config,
+	}
+	if config.Schema != nil {
+		rg.configure(config.Schema)
+	}
+	return rg
 }
 
-func (pool *bufferPool) PutBuffer(buf Buffer) {
-	if b, _ := buf.(*buffer); b != nil {
-		pool.Put(b)
+func (rg *Buffer) configure(schema *Schema) {
+	rg.schema = schema
+	rg.init(schema, make([]string, 0, 10), 0, 0, rg.config)
+	rg.rowbuf = make([]Value, 0, 10)
+	rg.colbuf = make([][]Value, len(rg.columns))
+	rg.sorted = make([]BufferColumn, len(rg.sorting))
+	for i, sort := range rg.sorting {
+		rg.sorted[i] = rg.columns[sort.ColumnIdx]
 	}
 }
 
-type buffer struct{ bytes.Buffer }
+func (rg *Buffer) init(node Node, path []string, repetitionLevel, definitionLevel int8, config *BufferConfig) {
+	switch {
+	case node.Optional():
+		definitionLevel++
+	case node.Repeated():
+		repetitionLevel++
+		definitionLevel++
+	}
 
-func (b *buffer) Close() error {
-	b.Reset()
+	if isLeaf(node) {
+		nullOrdering := nullsGoLast
+		columnIndex := len(rg.columns)
+		columnType := node.Type()
+		bufferSize := config.ColumnBufferSize
+		dictionary := (Dictionary)(nil)
+		encoding, _ := encodingAndCompressionOf(node)
+
+		if isDictionaryEncoding(encoding) {
+			bufferSize /= 2
+			dictionary = columnType.NewDictionary(bufferSize)
+			columnType = dictionary.Type()
+		}
+
+		column := columnType.NewBufferColumn(bufferSize)
+
+		for _, sorting := range config.SortingColumns {
+			if stringsAreEqual(sorting.Path(), path) {
+				sortingColumn := format.SortingColumn{
+					ColumnIdx:  int32(columnIndex),
+					Descending: sorting.Descending(),
+					NullsFirst: sorting.NullsFirst(),
+				}
+				if sortingColumn.Descending {
+					column = &reversedBufferColumn{column}
+				}
+				if sortingColumn.NullsFirst {
+					nullOrdering = nullsGoFirst
+				}
+				rg.sorting = append(rg.sorting, sortingColumn)
+				break
+			}
+		}
+
+		switch {
+		case repetitionLevel > 0:
+			column = newRepeatedBufferColumn(column, repetitionLevel, definitionLevel, nullOrdering)
+		case definitionLevel > 0:
+			column = newOptionalBufferColumn(column, definitionLevel, nullOrdering)
+		}
+
+		rg.columns = append(rg.columns, column)
+		return
+	}
+
+	i := len(path)
+	path = append(path, "")
+
+	for _, name := range node.ChildNames() {
+		path[i] = name
+		rg.init(node.ChildByName(name), path, repetitionLevel, definitionLevel, config)
+	}
+}
+
+func (rg *Buffer) Size() int64 {
+	size := int64(0)
+	for _, col := range rg.columns {
+		size += col.Size()
+	}
+	return size
+}
+
+func (rg *Buffer) SortingColumns() []format.SortingColumn { return rg.sorting }
+
+func (rg *Buffer) Schema() *Schema { return rg.schema }
+
+func (rg *Buffer) NumRows() int { return rg.numRows }
+
+func (rg *Buffer) NumColumns() int { return len(rg.columns) }
+
+func (rg *Buffer) ColumnIndex(i int) RowGroupColumn { return rg.columns[i] }
+
+func (rg *Buffer) Len() int { return rg.numRows }
+
+func (rg *Buffer) Less(i, j int) bool {
+	for _, col := range rg.sorted {
+		switch {
+		case col.Less(i, j):
+			return true
+		case col.Less(j, i): // not equal?
+			return false
+		}
+	}
+	return false
+}
+
+func (rg *Buffer) Swap(i, j int) {
+	for _, col := range rg.columns {
+		col.Swap(i, j)
+	}
+}
+
+func (rg *Buffer) Reset() {
+	for _, col := range rg.columns {
+		col.Reset()
+	}
+	rg.numRows = 0
+}
+
+func (rg *Buffer) Write(row interface{}) error {
+	if rg.schema == nil {
+		rg.configure(SchemaOf(row))
+	}
+	defer func() {
+		clearValues(rg.rowbuf)
+	}()
+	rg.rowbuf = rg.schema.Deconstruct(rg.rowbuf[:0], row)
+	return rg.WriteRow(rg.rowbuf)
+}
+
+func (rg *Buffer) WriteRow(row Row) error {
+	defer func() {
+		for i, colbuf := range rg.colbuf {
+			clearValues(colbuf)
+			rg.colbuf[i] = colbuf[:0]
+		}
+	}()
+
+	for _, value := range row {
+		columnIndex := value.ColumnIndex()
+		rg.colbuf[columnIndex] = append(rg.colbuf[columnIndex], value)
+	}
+
+	for columnIndex, values := range rg.colbuf {
+		if err := rg.columns[columnIndex].WriteRow(values); err != nil {
+			return err
+		}
+	}
+
+	rg.numRows++
 	return nil
 }
 
-type fileBufferPool struct {
-	err     error
-	tempdir string
-	pattern string
-}
-
-func NewFileBufferPool(tempdir, pattern string) BufferPool {
-	pool := &fileBufferPool{
-		tempdir: tempdir,
-		pattern: pattern,
-	}
-	pool.tempdir, pool.err = filepath.Abs(pool.tempdir)
-	return pool
-}
-
-func (pool *fileBufferPool) GetBuffer() Buffer {
-	if pool.err != nil {
-		return &errorBuffer{err: pool.err}
-	}
-	f, err := os.CreateTemp(pool.tempdir, pool.pattern)
-	if err != nil {
-		return &errorBuffer{err: err}
-	}
-	return f
-}
-
-func (pool *fileBufferPool) PutBuffer(buf Buffer) {
-	if f, _ := buf.(*os.File); f != nil {
-		defer f.Close()
-		os.Remove(f.Name())
-	}
-}
-
-type errorBuffer struct{ err error }
-
-func (errbuf *errorBuffer) Read([]byte) (int, error)          { return 0, errbuf.err }
-func (errbuf *errorBuffer) Write([]byte) (int, error)         { return 0, errbuf.err }
-func (errbuf *errorBuffer) ReadFrom(io.Reader) (int64, error) { return 0, errbuf.err }
-func (errbuf *errorBuffer) WriteTo(io.Writer) (int64, error)  { return 0, errbuf.err }
-
 var (
-	_ io.ReaderFrom = (*errorBuffer)(nil)
-	_ io.WriterTo   = (*errorBuffer)(nil)
+	_ sort.Interface = (*Buffer)(nil)
 )
-
-type lengthPrefixedWriter struct {
-	writer io.Writer
-	buffer []byte
-}
-
-func (w *lengthPrefixedWriter) Reset(ww io.Writer) {
-	w.writer = ww
-	w.buffer = append(w.buffer[:0], 0, 0, 0, 0)
-}
-
-func (w *lengthPrefixedWriter) Close() error {
-	if len(w.buffer) > 0 {
-		defer func() { w.buffer = w.buffer[:0] }()
-		binary.LittleEndian.PutUint32(w.buffer, uint32(len(w.buffer))-4)
-		_, err := w.writer.Write(w.buffer)
-		return err
-	}
-	return nil
-}
-
-func (w *lengthPrefixedWriter) Write(b []byte) (int, error) {
-	w.buffer = append(w.buffer, b...)
-	return len(b), nil
-}

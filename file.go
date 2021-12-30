@@ -246,7 +246,7 @@ type bufferedSectionReader struct {
 
 func newBufferedSectionReader(r io.ReaderAt, offset, length int64) *bufferedSectionReader {
 	b := &bufferedSectionReader{section: *io.NewSectionReader(r, offset, length)}
-	b.Reader = *bufio.NewReaderSize(&b.section, defaultBufferSize)
+	b.Reader = *bufio.NewReaderSize(&b.section, defaultReadBufferSize)
 	return b
 }
 

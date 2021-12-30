@@ -143,16 +143,16 @@ func writeParquetFile(w io.Writer, rows rows, options ...parquet.WriterOption) e
 	return writer.Close()
 }
 
-func writeParquetFileWithRowGroup(w io.Writer, rows rows, options ...parquet.WriterOption) error {
-	rowGroup := parquet.NewRowGroup()
+func writeParquetFileWithBuffer(w io.Writer, rows rows, options ...parquet.WriterOption) error {
+	buffer := parquet.NewBuffer()
 	for _, row := range rows {
-		if err := rowGroup.Write(row); err != nil {
+		if err := buffer.Write(row); err != nil {
 			return err
 		}
 	}
 
 	writer := parquet.NewWriter(w, options...)
-	if err := writer.WriteRowGroup(rowGroup); err != nil {
+	if err := writer.WriteRowGroup(buffer); err != nil {
 		return err
 	}
 	return writer.Close()

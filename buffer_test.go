@@ -11,7 +11,7 @@ import (
 	"github.com/segmentio/parquet/encoding"
 )
 
-var rowGroupTests = [...]struct {
+var bufferTests = [...]struct {
 	scenario string
 	typ      parquet.Type
 	values   [][]interface{}
@@ -151,8 +151,8 @@ var rowGroupTests = [...]struct {
 	},
 }
 
-func TestRowGroup(t *testing.T) {
-	for _, test := range rowGroupTests {
+func TestBuffer(t *testing.T) {
+	for _, test := range bufferTests {
 		t.Run(test.scenario, func(t *testing.T) {
 			for _, config := range [...]struct {
 				scenario string
@@ -185,7 +185,7 @@ func TestRowGroup(t *testing.T) {
 										"data": mod.function(parquet.Leaf(config.typ)),
 									})
 
-									options := []parquet.RowGroupOption{
+									options := []parquet.BufferOption{
 										schema,
 										parquet.ColumnBufferSize(1024),
 									}
@@ -193,24 +193,24 @@ func TestRowGroup(t *testing.T) {
 										options = append(options, parquet.SortingColumns(ordering.sorting))
 									}
 
-									buffer := new(bytes.Buffer)
-									decoder := parquet.Plain.NewDecoder(buffer)
-									encoder := parquet.Plain.NewEncoder(buffer)
+									content := new(bytes.Buffer)
+									decoder := parquet.Plain.NewDecoder(content)
+									encoder := parquet.Plain.NewEncoder(content)
 									reader := config.typ.NewValueDecoder(32)
-									rowGroup := parquet.NewRowGroup(options...)
+									buffer := parquet.NewBuffer(options...)
 
 									reset := func() {
-										buffer.Reset()
-										decoder.Reset(buffer)
-										encoder.Reset(buffer)
+										content.Reset()
+										decoder.Reset(content)
+										encoder.Reset(content)
 										reader.Reset(decoder)
-										rowGroup.Reset()
+										buffer.Reset()
 									}
 
 									for _, values := range test.values {
 										t.Run("", func(t *testing.T) {
 											reset()
-											testRowGroup(t, schema.ChildByName("data"), reader, rowGroup, encoder, values, ordering.sortFunc)
+											testBuffer(t, schema.ChildByName("data"), reader, buffer, encoder, values, ordering.sortFunc)
 										})
 									}
 								})
@@ -235,7 +235,7 @@ func descending(typ parquet.Type, values []parquet.Value) {
 	sort.Slice(values, func(i, j int) bool { return typ.Less(values[j], values[i]) })
 }
 
-func testRowGroup(t *testing.T, node parquet.Node, reader parquet.ValueReader, rowGroup *parquet.RowGroup, encoder encoding.Encoder, values []interface{}, sortFunc sortFunc) {
+func testBuffer(t *testing.T, node parquet.Node, reader parquet.ValueReader, buffer *parquet.Buffer, encoder encoding.Encoder, values []interface{}, sortFunc sortFunc) {
 	repetitionLevel := int8(0)
 	definitionLevel := int8(0)
 	if !node.Required() {
@@ -250,12 +250,15 @@ func testRowGroup(t *testing.T, node parquet.Node, reader parquet.ValueReader, r
 	}
 
 	for i := range batch {
-		if err := rowGroup.WriteRow(batch[i : i+1]); err != nil {
+		if err := buffer.WriteRow(batch[i : i+1]); err != nil {
 			t.Fatalf("writing value to row group: %v", err)
 		}
 	}
 
-	if numRows := rowGroup.Len(); numRows != len(batch) {
+	if numColumns := buffer.NumColumns(); numColumns != 1 {
+		t.Fatalf("number of columns mismatch: want=%d got=%d", 1, numColumns)
+	}
+	if numRows := buffer.NumRows(); numRows != len(batch) {
 		t.Fatalf("number of rows mismatch: want=%d got=%d", len(batch), numRows)
 	}
 
@@ -270,9 +273,9 @@ func testRowGroup(t *testing.T, node parquet.Node, reader parquet.ValueReader, r
 	}
 
 	sortFunc(typ, batch)
-	sort.Sort(rowGroup)
+	sort.Sort(buffer)
 
-	page := rowGroup.Column(0).Page()
+	page := buffer.ColumnIndex(0).Page()
 	numValues := page.NumValues()
 	if numValues != len(batch) {
 		t.Fatalf("number of values mistmatch: want=%d got=%d", len(batch), numValues)

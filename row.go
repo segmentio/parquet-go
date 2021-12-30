@@ -25,6 +25,26 @@ func (row Row) startsWith(columnIndex int) bool {
 	return len(row) > 0 && int(row[0].ColumnIndex()) == columnIndex
 }
 
+type RowReader interface {
+	ReadRow(Row) (Row, error)
+}
+
+type RowReaderAt interface {
+	ReadRowAt(Row, int) (Row, error)
+}
+
+type RowWriter interface {
+	WriteRow(Row) error
+}
+
+type RowWriterAt interface {
+	WriteRowAt(Row, int) error
+}
+
+func errRowIndexOutOfBounds(rowIndex, rowCount int) error {
+	return fmt.Errorf("row index out of bounds: %d/%d", rowIndex, rowCount)
+}
+
 // =============================================================================
 // Functions returning closures are marked with "go:noinline" below to prevent
 // losing naming information of the closure in stack traces.

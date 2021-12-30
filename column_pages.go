@@ -13,6 +13,11 @@ import (
 	"github.com/segmentio/parquet/format"
 )
 
+const (
+	defaultReadBufferSize  = 4096
+	defaultLevelBufferSize = 1024
+)
+
 var (
 	// ErrCorrupted is an error returned by the Err method of ColumnPages
 	// instances when they encountered a mismatch between the CRC checksum
@@ -60,7 +65,7 @@ type ColumnPages struct {
 func newColumnPages(column *Column, metadata *format.ColumnMetaData, columnIndex *ColumnIndex, offsetIndex *OffsetIndex) *ColumnPages {
 	c := &ColumnPages{
 		section: offsetReader{
-			reader: bufio.NewReaderSize(nil, defaultBufferSize),
+			reader: bufio.NewReaderSize(nil, defaultReadBufferSize),
 		},
 	}
 	c.reset(column, metadata, columnIndex, offsetIndex)

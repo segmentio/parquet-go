@@ -683,8 +683,8 @@ func newIndexedType(typ Type, dict Dictionary) *indexedType {
 	return &indexedType{Type: typ, dict: dict}
 }
 
-func (t *indexedType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
-	return newIndexedRowGroupColumn(t.dict, bufferSize)
+func (t *indexedType) NewBufferColumn(bufferSize int) BufferColumn {
+	return newIndexedBufferColumn(t.dict, bufferSize)
 }
 
 func (t *indexedType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -768,10 +768,10 @@ func (r *indexedValueReader) ReadValues(values []Value) (n int, err error) {
 	return n, err
 }
 
-type indexedRowGroupColumn struct{ indexedPage }
+type indexedBufferColumn struct{ indexedPage }
 
-func newIndexedRowGroupColumn(dict Dictionary, bufferSize int) *indexedRowGroupColumn {
-	return &indexedRowGroupColumn{
+func newIndexedBufferColumn(dict Dictionary, bufferSize int) *indexedBufferColumn {
+	return &indexedBufferColumn{
 		indexedPage: indexedPage{
 			dict:   dict,
 			values: make([]int32, 0, bufferSize/4),
@@ -779,8 +779,8 @@ func newIndexedRowGroupColumn(dict Dictionary, bufferSize int) *indexedRowGroupC
 	}
 }
 
-func (col *indexedRowGroupColumn) Clone() RowGroupColumn {
-	return &indexedRowGroupColumn{
+func (col *indexedBufferColumn) Clone() BufferColumn {
+	return &indexedBufferColumn{
 		indexedPage: indexedPage{
 			dict:   col.dict,
 			values: append([]int32{}, col.values...),
@@ -788,35 +788,45 @@ func (col *indexedRowGroupColumn) Clone() RowGroupColumn {
 	}
 }
 
-func (col *indexedRowGroupColumn) Dictionary() Dictionary { return col.dict }
+func (col *indexedBufferColumn) Dictionary() Dictionary { return col.dict }
 
-func (col *indexedRowGroupColumn) Page() Page { return &col.indexedPage }
+func (col *indexedBufferColumn) Page() Page { return &col.indexedPage }
 
-func (col *indexedRowGroupColumn) Reset() { col.values = col.values[:0] }
+func (col *indexedBufferColumn) Reset() { col.values = col.values[:0] }
 
-func (col *indexedRowGroupColumn) Size() int64 { return 4 * int64(len(col.values)) }
+func (col *indexedBufferColumn) Size() int64 { return 4 * int64(len(col.values)) }
 
-func (col *indexedRowGroupColumn) Cap() int { return cap(col.values) }
+func (col *indexedBufferColumn) Cap() int { return cap(col.values) }
 
-func (col *indexedRowGroupColumn) Len() int { return len(col.values) }
+func (col *indexedBufferColumn) Len() int { return len(col.values) }
 
-func (col *indexedRowGroupColumn) Less(i, j int) bool {
+func (col *indexedBufferColumn) Less(i, j int) bool {
 	u := col.dict.Index(int(col.values[i]))
 	v := col.dict.Index(int(col.values[j]))
 	t := col.dict.Type()
 	return t.Less(u, v)
 }
 
-func (col *indexedRowGroupColumn) Swap(i, j int) {
+func (col *indexedBufferColumn) Swap(i, j int) {
 	col.values[i], col.values[j] = col.values[j], col.values[i]
 }
 
-func (col *indexedRowGroupColumn) WriteValues(values []Value) (n int, err error) {
-	for _, value := range values {
+func (col *indexedBufferColumn) WriteRow(row Row) error {
+	for _, value := range row {
 		col.values = append(col.values, int32(col.dict.Insert(value)))
-		n++
 	}
-	return n, nil
+	return nil
+}
+
+func (col *indexedBufferColumn) ReadRowAt(row Row, index int) (Row, error) {
+	switch {
+	case index < 0:
+		return row, errRowIndexOutOfBounds(index, len(col.values))
+	case index >= len(col.values):
+		return row, io.EOF
+	default:
+		return append(row, col.dict.Index(index)), nil
+	}
 }
 
 type indexedValueDecoder struct {

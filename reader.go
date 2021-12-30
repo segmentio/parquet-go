@@ -446,3 +446,7 @@ func makeDecoder(decoder encoding.Decoder, encoding encoding.Encoding, input io.
 	}
 	return decoder
 }
+
+var (
+	_ RowReader = (*Reader)(nil)
+)
