@@ -222,7 +222,6 @@ func (s *Schema) Reconstruct(value interface{}, row Row) error {
 }
 
 type structNode struct {
-	node
 	gotype reflect.Type
 	fields []structField
 	names  []string
@@ -283,18 +282,29 @@ func appendStructFields(t reflect.Type, fields []reflect.StructField, index []in
 	return fields
 }
 
-func (s *structNode) GoType() reflect.Type { return s.gotype }
-func (s *structNode) String() string       { return sprint("", s) }
-func (s *structNode) Type() Type           { return groupType{} }
-func (s *structNode) NumChildren() int     { return len(s.fields) }
-func (s *structNode) ChildNames() []string { return s.names }
-func (s *structNode) ChildByName(name string) Node {
-	return s.ChildByIndex(s.indexOf(name))
-}
+func (s *structNode) Optional() bool { return false }
 
-func (s *structNode) ChildByIndex(index int) Node {
-	return &s.fields[index]
-}
+func (s *structNode) Repeated() bool { return false }
+
+func (s *structNode) Required() bool { return true }
+
+func (s *structNode) Encoding() []encoding.Encoding { return nil }
+
+func (s *structNode) Compression() []compress.Codec { return nil }
+
+func (s *structNode) GoType() reflect.Type { return s.gotype }
+
+func (s *structNode) String() string { return sprint("", s) }
+
+func (s *structNode) Type() Type { return groupType{} }
+
+func (s *structNode) NumChildren() int { return len(s.fields) }
+
+func (s *structNode) ChildNames() []string { return s.names }
+
+func (s *structNode) ChildByName(name string) Node { return s.ChildByIndex(s.indexOf(name)) }
+
+func (s *structNode) ChildByIndex(index int) Node { return &s.fields[index] }
 
 func (s *structNode) ValueByName(base reflect.Value, name string) reflect.Value {
 	return s.ValueByIndex(base, s.indexOf(name))

@@ -300,25 +300,26 @@ func (req *requiredNode) GoType() reflect.Type { return unwrap(req).GoType() }
 
 type node struct{}
 
-func (node) Optional() bool                { return false }
-func (node) Repeated() bool                { return false }
-func (node) Required() bool                { return true }
-func (node) Encoding() []encoding.Encoding { return nil }
-func (node) Compression() []compress.Codec { return nil }
-
 // Leaf returns a leaf node of the given type.
 func Leaf(typ Type) Node {
 	return &leafNode{typ: typ}
 }
 
-type leafNode struct {
-	node
-	typ Type
-}
+type leafNode struct{ typ Type }
 
 func (n *leafNode) String() string { return sprint("", n) }
 
 func (n *leafNode) Type() Type { return n.typ }
+
+func (n *leafNode) Optional() bool { return false }
+
+func (n *leafNode) Repeated() bool { return false }
+
+func (n *leafNode) Required() bool { return true }
+
+func (n *leafNode) Encoding() []encoding.Encoding { return nil }
+
+func (n *leafNode) Compression() []compress.Codec { return nil }
 
 func (n *leafNode) NumChildren() int { return 0 }
 
