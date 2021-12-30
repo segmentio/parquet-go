@@ -32,7 +32,9 @@ type Reader struct {
 	schema  *Schema
 	seen    reflect.Type
 	columns []*columnChunkReader
+	buffer  []Value
 	values  []Value
+	conv    ConvertFunc
 	read    columnReadFunc
 }
 
@@ -103,9 +105,8 @@ func (r *Reader) Reset() {
 	for _, c := range r.columns {
 		c.reset()
 	}
-	for i := range r.values {
-		r.values[i] = Value{}
-	}
+	clearValues(r.buffer)
+	clearValues(r.values)
 }
 
 // Read reads the next row from r. The type of the row must match the schema
@@ -115,9 +116,18 @@ func (r *Reader) Reset() {
 func (r *Reader) Read(row interface{}) (err error) {
 	if rowType := dereference(reflect.TypeOf(row)); rowType.Kind() == reflect.Struct {
 		if r.seen == nil || r.seen != rowType {
-			schema := namedSchemaOf(r.schema.Name(), rowType)
-			if !Match(schema, r.schema) {
-				return fmt.Errorf("cannot read parquet row into go value of type %T: schema mismatch", row)
+			schema := schemaOf(rowType)
+			if nodesAreEqual(schema, r.schema) {
+				r.conv = nil
+			} else {
+				conv, err := Convert(schema, r.schema)
+				if err != nil {
+					return fmt.Errorf("cannot read parquet row into go value of type %T: %w", row, err)
+				}
+				if r.buffer == nil {
+					r.buffer = make([]Value, 0, cap(r.values))
+				}
+				r.conv = conv
 			}
 			// Replace the schema because the one created from the go type will be
 			// optimized to decode into struct values.
@@ -125,11 +135,22 @@ func (r *Reader) Read(row interface{}) (err error) {
 			r.seen = rowType
 		}
 	}
+
 	r.values, err = r.ReadRow(r.values[:0])
 	if err != nil {
 		return err
 	}
-	return r.schema.Reconstruct(row, r.values)
+
+	values := r.values
+	if r.conv != nil {
+		r.buffer, err = r.conv(r.buffer[:0], values)
+		if err != nil {
+			return fmt.Errorf("cannot convert parquet row to go value of type %T: %w", row, err)
+		}
+		values = r.buffer
+	}
+
+	return r.schema.Reconstruct(row, values)
 }
 
 // ReadRow reads the next row from r and appends in to the given Row buffer.

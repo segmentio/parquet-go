@@ -110,9 +110,7 @@ func (w *Writer) Write(row interface{}) error {
 		w.configure(SchemaOf(row))
 	}
 	defer func() {
-		for i := range w.values {
-			w.values[i] = Value{}
-		}
+		clearValues(w.values)
 	}()
 	w.values = w.schema.Deconstruct(w.values[:0], row)
 	return w.WriteRow(w.values)
@@ -780,9 +778,7 @@ func (ccw *columnChunkWriter) statistics(nullCount int64) format.Statistics {
 }
 
 func (ccw *columnChunkWriter) clear() {
-	for i := range ccw.values {
-		ccw.values[i] = Value{}
-	}
+	clearValues(ccw.values)
 	ccw.values = ccw.values[:0]
 }
 

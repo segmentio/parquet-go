@@ -56,7 +56,7 @@ type indexedStringColumn struct {
 }
 
 type uuidColumn struct {
-	Value uuid.UUID
+	Value uuid.UUID `parquet:",delta"`
 }
 
 type decimalColumn struct {
@@ -99,7 +99,12 @@ type utf8string string
 
 func (utf8string) Generate(rand *rand.Rand, size int) reflect.Value {
 	const characters = "abcdefghijklmnopqrstuvwxyz1234567890"
-	b := make([]byte, size)
+	const maxSize = 10
+	if size > maxSize {
+		size = maxSize
+	}
+	n := rand.Intn(size)
+	b := make([]byte, n)
 	for i := range b {
 		b[i] = characters[rand.Intn(len(characters))]
 	}
@@ -213,6 +218,36 @@ var readerTests = []struct {
 		scenario: "nested lists",
 		model:    nestedListColumn{},
 	},
+
+	{
+		scenario: "key-value pairs",
+		model: struct {
+			KeyValuePairs map[utf8string]utf8string
+		}{},
+	},
+
+	{
+		scenario: "multiple key-value pairs",
+		model: struct {
+			KeyValuePairs0 map[utf8string]utf8string
+			KeyValuePairs1 map[utf8string]utf8string
+			KeyValuePairs2 map[utf8string]utf8string
+		}{},
+	},
+
+	{
+		scenario: "repeated key-value pairs",
+		model: struct {
+			RepeatedKeyValuePairs []map[utf8string]utf8string
+		}{},
+	},
+
+	{
+		scenario: "map of repeated values",
+		model: struct {
+			MapOfRepeated map[utf8string][]utf8string
+		}{},
+	},
 }
 
 func TestReader(t *testing.T) {
@@ -265,7 +300,7 @@ func BenchmarkReader(b *testing.B) {
 
 	for _, test := range readerTests {
 		b.Run(test.scenario, func(b *testing.B) {
-			const N = 10e3
+			const N = 100
 			defer buf.Reset()
 			rows := rowsOf(N, test.model)
 

@@ -89,7 +89,7 @@ var writerTests = []struct {
 		dump: `row group 0
 --------------------------------------------------------------------------------
 first_name:  BINARY ZSTD DO:4 FPO:55 SZ:90/72/0.80 VC:3 ENC:PLAIN,RLE_DICTIONARY [more]...
-last_name:   BINARY ZSTD DO:94 FPO:143 SZ:86/68/0.79 VC:3 ENC:PLAIN,RL [more]...
+last_name:   BINARY ZSTD DO:0 FPO:94 SZ:148/121/0.82 VC:3 ENC:DELTA_BYTE_ARRAY [more]...
 
     first_name TV=3 RL=0 DL=0 DS: 3 DE:PLAIN
     ----------------------------------------------------------------------------
@@ -97,7 +97,9 @@ last_name:   BINARY ZSTD DO:94 FPO:143 SZ:86/68/0.79 VC:3 ENC:PLAIN,RL [more]...
 
     last_name TV=3 RL=0 DL=0
     ----------------------------------------------------------------------------
-    page 0:                        DLE:RLE RLE:RLE VLE:DELTA_BYTE_ARRAY [more]... SZ:65
+    page 0:                        DLE:RLE RLE:RLE VLE:DELTA_BYTE_ARRAY [more]... SZ:14
+    page 1:                        DLE:RLE RLE:RLE VLE:DELTA_BYTE_ARRAY [more]... SZ:19
+    page 2:                        DLE:RLE RLE:RLE VLE:DELTA_BYTE_ARRAY [more]... SZ:19
 
 BINARY first_name
 --------------------------------------------------------------------------------
@@ -126,7 +128,7 @@ value 3: R:0 D:0 V:Skywalker
 		dump: `row group 0
 --------------------------------------------------------------------------------
 first_name:  BINARY ZSTD DO:4 FPO:55 SZ:86/77/0.90 VC:3 ENC:RLE_DICTIONARY,PLAIN [more]...
-last_name:   BINARY ZSTD DO:90 FPO:139 SZ:82/73/0.89 VC:3 ENC:RLE_DICT [more]...
+last_name:   BINARY ZSTD DO:0 FPO:90 SZ:163/136/0.83 VC:3 ENC:DELTA_BYTE_ARRAY [more]...
 
     first_name TV=3 RL=0 DL=0 DS: 3 DE:PLAIN
     ----------------------------------------------------------------------------
@@ -134,7 +136,9 @@ last_name:   BINARY ZSTD DO:90 FPO:139 SZ:82/73/0.89 VC:3 ENC:RLE_DICT [more]...
 
     last_name TV=3 RL=0 DL=0
     ----------------------------------------------------------------------------
-    page 0:                        DLE:RLE RLE:RLE VLE:DELTA_BYTE_ARRAY [more]... VC:3
+    page 0:                        DLE:RLE RLE:RLE VLE:DELTA_BYTE_ARRAY [more]... VC:1
+    page 1:                        DLE:RLE RLE:RLE VLE:DELTA_BYTE_ARRAY [more]... VC:1
+    page 2:                        DLE:RLE RLE:RLE VLE:DELTA_BYTE_ARRAY [more]... VC:1
 
 BINARY first_name
 --------------------------------------------------------------------------------

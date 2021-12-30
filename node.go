@@ -3,8 +3,11 @@ package parquet
 import (
 	"reflect"
 	"sort"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/segmentio/parquet/compress"
+	"github.com/segmentio/parquet/deprecated"
 	"github.com/segmentio/parquet/encoding"
 	"github.com/segmentio/parquet/format"
 )
@@ -18,6 +21,9 @@ import (
 // Nodes are immutable values and therefore safe to use concurrently from
 // multiple goroutines.
 type Node interface {
+	// Returns a human-readable representation of the parquet node.
+	String() string
+
 	// For leaf nodes, returns the type of values of the parquet column.
 	//
 	// Calling this method on non-leaf nodes will panic.
@@ -71,6 +77,22 @@ type Node interface {
 	// As an optimization, the returned slice may be the same across calls to
 	// this method. Applications should treat the return value as immutable.
 	Compression() []compress.Codec
+
+	// Returns the Go type that best represents the parquet node.
+	//
+	// For leaf nodes, this will be one of bool, int32, int64, deprecated.Int96,
+	// float32, float64, string, []byte, or [N]byte.
+	//
+	// For groups, the method returns a struct type.
+	//
+	// If the method is called on a repeated node, the method returns a slice of
+	// the underlying type.
+	//
+	// For optional nodes, the method returns a pointer of the underlying type.
+	//
+	// For nodes that were constructed from Go values (e.g. using SchemaOf), the
+	// method returns the original Go type.
+	GoType() reflect.Type
 }
 
 // IndexedNode is an extension of the Node interface implemented by types which
@@ -83,54 +105,6 @@ type IndexedNode interface {
 
 	// ValueByIndex returns the sub-value of base at the given index.
 	ValueByIndex(base reflect.Value, index int) reflect.Value
-}
-
-// Match returns true if the two nodes have the same structure. The comparison
-// is performed recursively on children nodes.
-//
-// On leaf nodes, the type, optional, repeated, and required properties are
-// tested for equality.
-func Match(node1, node2 Node) bool {
-	if node1 == nil || node2 == nil {
-		return node1 == nil && node2 == nil
-	}
-
-	n1 := node1.NumChildren()
-	n2 := node2.NumChildren()
-	if n1 != n2 {
-		return false
-	}
-	if n1 == 0 {
-		return node1.Type().Kind() == node2.Type().Kind() &&
-			node1.Optional() == node2.Optional() &&
-			node1.Repeated() == node2.Repeated() &&
-			node1.Required() == node2.Required()
-	}
-
-	var childAt1 func(int) Node
-	var childAt2 func(int) Node
-
-	if indexedNode, ok := unwrap(node1).(IndexedNode); ok {
-		childAt1 = indexedNode.ChildByIndex
-	} else {
-		names := node1.ChildNames()
-		childAt1 = func(i int) Node { return node1.ChildByName(names[i]) }
-	}
-
-	if indexedNode, ok := unwrap(node2).(IndexedNode); ok {
-		childAt2 = indexedNode.ChildByIndex
-	} else {
-		names := node2.ChildNames()
-		childAt2 = func(i int) Node { return node2.ChildByName(names[i]) }
-	}
-
-	for i := 0; i < n1; i++ {
-		if !Match(childAt1(i), childAt2(i)) {
-			return false
-		}
-	}
-
-	return true
 }
 
 // WrappedNode is an extension of the Node interface implemented by types which
@@ -247,66 +221,57 @@ func (n *compressedNode) Compression() []compress.Codec {
 }
 
 // Optional wraps the given node to make it optional.
-func Optional(node Node) Node {
-	if node.Optional() {
-		return node
-	}
-	return &optionalNode{wrap(node)}
-}
+func Optional(node Node) Node { return &optionalNode{wrap(node)} }
 
 type optionalNode struct{ wrappedNode }
 
-func (opt *optionalNode) Optional() bool { return true }
-func (opt *optionalNode) Repeated() bool { return false }
-func (opt *optionalNode) Required() bool { return false }
+func (opt *optionalNode) Optional() bool       { return true }
+func (opt *optionalNode) Repeated() bool       { return false }
+func (opt *optionalNode) Required() bool       { return false }
+func (opt *optionalNode) GoType() reflect.Type { return reflect.PtrTo(unwrap(opt).GoType()) }
 
 // Repeated wraps the given node to make it repeated.
-func Repeated(node Node) Node {
-	if node.Repeated() {
-		return node
-	}
-	return &repeatedNode{wrap(node)}
-}
+func Repeated(node Node) Node { return &repeatedNode{wrap(node)} }
 
 type repeatedNode struct{ wrappedNode }
 
-func (rep *repeatedNode) Optional() bool { return false }
-func (rep *repeatedNode) Repeated() bool { return true }
-func (rep *repeatedNode) Required() bool { return false }
+func (rep *repeatedNode) Optional() bool       { return false }
+func (rep *repeatedNode) Repeated() bool       { return true }
+func (rep *repeatedNode) Required() bool       { return false }
+func (rep *repeatedNode) GoType() reflect.Type { return reflect.SliceOf(unwrap(rep).GoType()) }
 
 // Required wraps the given node to make it required.
-func Required(node Node) Node {
-	if node.Required() {
-		return node
-	}
-	return &requiredNode{wrap(node)}
-}
+func Required(node Node) Node { return &requiredNode{wrap(node)} }
 
 type requiredNode struct{ wrappedNode }
 
-func (req *requiredNode) Optional() bool { return false }
-func (req *requiredNode) Repeated() bool { return false }
-func (req *requiredNode) Required() bool { return true }
+func (req *requiredNode) Optional() bool       { return false }
+func (req *requiredNode) Repeated() bool       { return false }
+func (req *requiredNode) Required() bool       { return true }
+func (req *requiredNode) GoType() reflect.Type { return unwrap(req).GoType() }
 
 type node struct{}
-
-func (node) Optional() bool                { return false }
-func (node) Repeated() bool                { return false }
-func (node) Required() bool                { return true }
-func (node) Encoding() []encoding.Encoding { return nil }
-func (node) Compression() []compress.Codec { return nil }
 
 // Leaf returns a leaf node of the given type.
 func Leaf(typ Type) Node {
 	return &leafNode{typ: typ}
 }
 
-type leafNode struct {
-	node
-	typ Type
-}
+type leafNode struct{ typ Type }
+
+func (n *leafNode) String() string { return sprint("", n) }
 
 func (n *leafNode) Type() Type { return n.typ }
+
+func (n *leafNode) Optional() bool { return false }
+
+func (n *leafNode) Repeated() bool { return false }
+
+func (n *leafNode) Required() bool { return true }
+
+func (n *leafNode) Encoding() []encoding.Encoding { return nil }
+
+func (n *leafNode) Compression() []compress.Codec { return nil }
 
 func (n *leafNode) NumChildren() int { return 0 }
 
@@ -319,6 +284,8 @@ func (n *leafNode) ChildByName(string) Node {
 func (n *leafNode) ValueByName(reflect.Value, string) reflect.Value {
 	panic("cannot call ValueByName on leaf parquet node")
 }
+
+func (n *leafNode) GoType() reflect.Type { return goTypeOfLeaf(n) }
 
 var repetitionTypes = [...]format.FieldRepetitionType{
 	0: format.Required,
@@ -340,6 +307,8 @@ func fieldRepetitionTypeOf(node Node) *format.FieldRepetitionType {
 }
 
 type Group map[string]Node
+
+func (g Group) String() string { return sprint("", g) }
 
 func (g Group) Type() Type { return groupType{} }
 
@@ -386,6 +355,80 @@ func (g Group) Compression() []compress.Codec {
 	return dedupeSortedCodecs(codecs)
 }
 
+func (g Group) GoType() reflect.Type { return goTypeOfGroup(g) }
+
+func goTypeOf(node Node) reflect.Type {
+	switch {
+	case node.Optional():
+		return goTypeOfOptional(node)
+	case node.Repeated():
+		return goTypeOfRepeated(node)
+	default:
+		return goTypeOfRequired(node)
+	}
+}
+
+func goTypeOfOptional(node Node) reflect.Type {
+	return reflect.PtrTo(goTypeOfRequired(node))
+}
+
+func goTypeOfRepeated(node Node) reflect.Type {
+	return reflect.SliceOf(goTypeOfRequired(node))
+}
+
+func goTypeOfRequired(node Node) reflect.Type {
+	if isLeaf(node) {
+		return goTypeOfLeaf(node)
+	} else {
+		return goTypeOfGroup(node)
+	}
+}
+
+func goTypeOfLeaf(node Node) reflect.Type {
+	t := node.Type()
+	if convertibleType, ok := t.(interface{ GoType() reflect.Type }); ok {
+		return convertibleType.GoType()
+	}
+	switch t.Kind() {
+	case Boolean:
+		return reflect.TypeOf(false)
+	case Int32:
+		return reflect.TypeOf(int32(0))
+	case Int64:
+		return reflect.TypeOf(int64(0))
+	case Int96:
+		return reflect.TypeOf(deprecated.Int96{})
+	case Float:
+		return reflect.TypeOf(float32(0))
+	case Double:
+		return reflect.TypeOf(float64(0))
+	case ByteArray:
+		return reflect.TypeOf(([]byte)(nil))
+	case FixedLenByteArray:
+		return reflect.ArrayOf(t.Length(), reflect.TypeOf(byte(0)))
+	default:
+		panic("BUG: parquet type returned an unsupported kind")
+	}
+}
+
+func goTypeOfGroup(node Node) reflect.Type {
+	names := node.ChildNames()
+	fields := make([]reflect.StructField, len(names))
+	for i, name := range names {
+		child := node.ChildByName(name)
+		fields[i].Name = exportedStructFieldName(name)
+		fields[i].Type = child.GoType()
+		// TODO: can we reconstruct a struct tag that would be valid if a value
+		// of this type were passed to SchemaOf?
+	}
+	return reflect.StructOf(fields)
+}
+
+func exportedStructFieldName(name string) string {
+	firstRune, size := utf8.DecodeRuneInString(name)
+	return string([]rune{unicode.ToUpper(firstRune)}) + name[size:]
+}
+
 func isLeaf(node Node) bool {
 	return node.NumChildren() == 0
 }
@@ -393,6 +436,11 @@ func isLeaf(node Node) bool {
 func isList(node Node) bool {
 	logicalType := node.Type().LogicalType()
 	return logicalType != nil && logicalType.List != nil
+}
+
+func isMap(node Node) bool {
+	logicalType := node.Type().LogicalType()
+	return logicalType != nil && logicalType.Map != nil
 }
 
 func numColumnsOf(node Node) int {
@@ -425,7 +473,20 @@ func listElementOf(node Node) Node {
 			}
 		}
 	}
-	panic("node with logical type LIST is not composed of a .list.element")
+	panic("node with logical type LIST is not composed of a repeated .list.element")
+}
+
+func mapKeyValueOf(node Node) Node {
+	if !isLeaf(node) && (node.Required() || node.Optional()) {
+		if keyValue := node.ChildByName("key_value"); keyValue != nil && !isLeaf(keyValue) && keyValue.Repeated() {
+			k := keyValue.ChildByName("key")
+			v := keyValue.ChildByName("value")
+			if k != nil && v != nil && k.Required() {
+				return keyValue
+			}
+		}
+	}
+	panic("node with logical type MAP is not composed of a repeated .key_value group with key and value fields")
 }
 
 func encodingAndCompressionOf(node Node) (encoding.Encoding, compress.Codec) {

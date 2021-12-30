@@ -632,7 +632,7 @@ func unsafeBytesToString(b []byte) string {
 }
 
 func unsafePointerOf(v reflect.Value) unsafe.Pointer {
-	return (*iface)(unsafe.Pointer(&v)).ptr
+	return (*[2]unsafe.Pointer)(unsafe.Pointer(&v))[1]
 }
 
 func unsafeByteArray(v reflect.Value, n int) []byte {
@@ -706,3 +706,9 @@ var (
 	_ fmt.Formatter = Value{}
 	_ fmt.Stringer  = Value{}
 )
+
+func clearValues(values []Value) {
+	for i := range values {
+		values[i] = Value{}
+	}
+}
