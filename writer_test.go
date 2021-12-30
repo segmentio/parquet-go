@@ -63,7 +63,7 @@ func generateParquetFile(dataPageVersion int, rows rows) ([]byte, error) {
 
 type firstAndLastName struct {
 	FirstName string `parquet:"first_name,dict,zstd"`
-	LastName  string `parquet:"last_name,dict,zstd"`
+	LastName  string `parquet:"last_name,delta,zstd"`
 }
 
 type timeseries struct {
@@ -95,9 +95,9 @@ last_name:   BINARY ZSTD DO:94 FPO:143 SZ:86/68/0.79 VC:3 ENC:PLAIN,RL [more]...
     ----------------------------------------------------------------------------
     page 0:                        DLE:RLE RLE:RLE VLE:RLE_DICTIONARY  [more]... SZ:7
 
-    last_name TV=3 RL=0 DL=0 DS:  2 DE:PLAIN
+    last_name TV=3 RL=0 DL=0
     ----------------------------------------------------------------------------
-    page 0:                        DLE:RLE RLE:RLE VLE:RLE_DICTIONARY  [more]... SZ:5
+    page 0:                        DLE:RLE RLE:RLE VLE:DELTA_BYTE_ARRAY [more]... SZ:65
 
 BINARY first_name
 --------------------------------------------------------------------------------
@@ -132,9 +132,9 @@ last_name:   BINARY ZSTD DO:90 FPO:139 SZ:82/73/0.89 VC:3 ENC:RLE_DICT [more]...
     ----------------------------------------------------------------------------
     page 0:                        DLE:RLE RLE:RLE VLE:RLE_DICTIONARY  [more]... VC:3
 
-    last_name TV=3 RL=0 DL=0 DS:  2 DE:PLAIN
+    last_name TV=3 RL=0 DL=0
     ----------------------------------------------------------------------------
-    page 0:                        DLE:RLE RLE:RLE VLE:RLE_DICTIONARY  [more]... VC:3
+    page 0:                        DLE:RLE RLE:RLE VLE:DELTA_BYTE_ARRAY [more]... VC:3
 
 BINARY first_name
 --------------------------------------------------------------------------------
