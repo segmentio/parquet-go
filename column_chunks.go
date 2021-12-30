@@ -69,11 +69,25 @@ func (c *ColumnChunks) Next() bool {
 
 // Pages returns an iterator over the data pages in the column chunk that
 // c is currently positioned at.
-func (c *ColumnChunks) Pages() *ColumnPages {
-	if c.metadata != nil {
-		return newColumnPages(c.column, c.metadata, c.columnIndex, c.offsetIndex, defaultBufferSize)
+//
+// If Next has not been called yet, or c is at the end of its sequence, nil is
+// returned.
+func (c *ColumnChunks) Pages() *ColumnPages { return c.PagesTo(nil) }
+
+// PagesTo is like Pages but allows the program to reuse a ColumnPages object
+// instead of allocating a new one to hold the returned value.
+//
+// If pages is nil, a new ColumnPages value is returned.
+func (c *ColumnChunks) PagesTo(pages *ColumnPages) *ColumnPages {
+	if c.metadata == nil {
+		return nil
 	}
-	return nil
+	if pages == nil {
+		pages = newColumnPages(c.column, c.metadata, c.columnIndex, c.offsetIndex)
+	} else {
+		pages.reset(c.column, c.metadata, c.columnIndex, c.offsetIndex)
+	}
+	return pages
 }
 
 // ReadColumnIndex reads the column index section of the column chunk.

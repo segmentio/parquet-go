@@ -15,7 +15,7 @@ import (
 type Decoder struct {
 	encoding.NotSupportedDecoder
 	reader io.Reader
-	buffer []byte
+	buffer [4]byte
 	rle    *rle.Decoder
 }
 
@@ -62,51 +62,24 @@ func (d *Decoder) DecodeDouble(data []float64) (int, error) {
 	return readFull(d.reader, 8, bits.Float64ToBytes(data))
 }
 
-func (d *Decoder) DecodeByteArray(data []byte) (int, error) {
-	if len(data) == 0 {
-		return 0, nil
-	}
+func (d *Decoder) DecodeByteArray(data *encoding.ByteArrayList) (n int, err error) {
+	n = data.Len()
 
-	if len(data) < 4 {
-		return 0, encoding.ErrBufferTooShort
-	}
-
-	n := copy(data, d.buffer)
-	d.buffer = d.buffer[:copy(d.buffer, d.buffer[n:])]
-
-	if n < len(data) {
-		r, err := io.ReadFull(d.reader, data[n:])
-		if err != nil && (n+r) == 0 {
-			return 0, err
-		}
-		data = data[:n+r]
-	}
-
-	if len(data) < 4 {
-		d.buffer = prepend(d.buffer, data)
-		return 0, io.ErrUnexpectedEOF
-	}
-
-	if size := int(binary.LittleEndian.Uint32(data)); size > (len(data) - 4) {
-		d.buffer = prepend(d.buffer, data)
-		return 0, encoding.ErrValueTooLarge
-	}
-
-	numValues := 0
-	offset := uint(4)
-	length := uint(0)
-
-	for offset <= uint(len(data)) {
-		length = uint(binary.LittleEndian.Uint32(data[offset-4:]))
-		if length > (uint(len(data)) - offset) {
+	for data.Len() < data.Cap() {
+		if _, err = io.ReadFull(d.reader, d.buffer[:4]); err != nil {
 			break
 		}
-		numValues++
-		offset += 4 + length
+		if value := data.PushSize(int(binary.LittleEndian.Uint32(d.buffer[:4]))); len(value) > 0 {
+			if _, err = io.ReadFull(d.reader, value); err != nil {
+				if err == io.EOF {
+					err = io.ErrUnexpectedEOF
+				}
+				break
+			}
+		}
 	}
 
-	d.buffer = prepend(d.buffer, data[offset-4:])
-	return numValues, nil
+	return data.Len() - n, err
 }
 
 func (d *Decoder) DecodeFixedLenByteArray(size int, data []byte) (int, error) {

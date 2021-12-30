@@ -1,7 +1,6 @@
 package delta
 
 import (
-	"encoding/binary"
 	"fmt"
 	"io"
 
@@ -32,45 +31,29 @@ func (d *LengthByteArrayDecoder) Encoding() format.Encoding {
 	return format.DeltaLengthByteArray
 }
 
-func (d *LengthByteArrayDecoder) DecodeByteArray(data []byte) (int, error) {
+func (d *LengthByteArrayDecoder) DecodeByteArray(data *encoding.ByteArrayList) (n int, err error) {
 	if d.index < 0 {
 		if err := d.decodeLengths(); err != nil {
 			return 0, err
 		}
 	}
-	if len(data) == 0 {
-		return 0, nil
-	}
-	if len(data) < 4 {
-		return 0, encoding.ErrBufferTooShort
-	}
-	if d.index == len(d.lengths) {
-		return 0, io.EOF
-	}
 
-	decoded := 0
-	for d.index < len(d.lengths) && len(data) >= 4 {
-		n := int(d.lengths[d.index])
-		binary.LittleEndian.PutUint32(data, uint32(n))
-		data = data[4:]
-
-		if len(data) < n {
-			if decoded == 0 {
-				return 0, encoding.ErrValueTooLarge
-			}
+	n = data.Len()
+	for data.Len() < data.Cap() && d.index < len(d.lengths) {
+		value := data.PushSize(int(d.lengths[d.index]))
+		_, err := io.ReadFull(d.binpack.reader, value)
+		if err != nil {
+			err = fmt.Errorf("DELTA_LENGTH_BYTE_ARRAY: decoding byte array at index %d/%d: %w", d.index, len(d.lengths), dontExpectEOF(err))
 			break
 		}
-
-		if err := d.readFull(data[:n]); err != nil {
-			return decoded, fmt.Errorf("DELTA_LENGTH_BYTE_ARRAY: decoding byte array at index %d/%d: %w", d.index, len(d.lengths), err)
-		}
-
-		data = data[n:]
-		decoded++
 		d.index++
 	}
 
-	return decoded, nil
+	if d.index == len(d.lengths) {
+		err = io.EOF
+	}
+
+	return data.Len() - n, err
 }
 
 func (d *LengthByteArrayDecoder) decodeLengths() (err error) {

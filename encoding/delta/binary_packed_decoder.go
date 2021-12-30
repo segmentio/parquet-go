@@ -240,11 +240,14 @@ func (d *BinaryPackedDecoder) decodeBlock() error {
 			}
 
 			for x := range blockValues[j:k] {
-				v, _, err := d.miniBlocks.ReadBits(uint(bitWidth))
+				v, nbits, err := d.miniBlocks.ReadBits(uint(bitWidth))
 				if err != nil {
 					err = dontExpectEOF(err)
 					err = fmt.Errorf("DELTA_BINARY_PACKED: reading mini blocks: %w", err)
 					return err
+				}
+				if nbits != uint(bitWidth) {
+					panic("BUG: wrong number of bits read from DELTA_BINARY_PACKED miniblock")
 				}
 				blockValues[j+x] = int64(v)
 			}

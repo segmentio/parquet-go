@@ -50,7 +50,7 @@ func generateParquetFile(dataPageVersion int, rows rows) ([]byte, error) {
 	defer os.Remove(path)
 	//fmt.Println(path)
 
-	if err := writeParquetFile(tmp, rows, parquet.DataPageVersion(dataPageVersion)); err != nil {
+	if err := writeParquetFile(tmp, rows, parquet.DataPageVersion(dataPageVersion), parquet.PageBufferSize(20)); err != nil {
 		return nil, err
 	}
 
@@ -88,8 +88,8 @@ var writerTests = []struct {
 		},
 		dump: `row group 0
 --------------------------------------------------------------------------------
-first_name:  BINARY ZSTD DO:4 FPO:55 SZ:90/72/0.80 VC:3 ENC:RLE,PLAIN, [more]...
-last_name:   BINARY ZSTD DO:0 FPO:94 SZ:80/89/1.11 VC:3 ENC:RLE,DELTA_BYTE_ARRAY [more]...
+first_name:  BINARY ZSTD DO:4 FPO:55 SZ:90/72/0.80 VC:3 ENC:PLAIN,RLE_DICTIONARY [more]...
+last_name:   BINARY ZSTD DO:0 FPO:94 SZ:148/121/0.82 VC:3 ENC:DELTA_BYTE_ARRAY [more]...
 
     first_name TV=3 RL=0 DL=0 DS: 3 DE:PLAIN
     ----------------------------------------------------------------------------
@@ -97,7 +97,9 @@ last_name:   BINARY ZSTD DO:0 FPO:94 SZ:80/89/1.11 VC:3 ENC:RLE,DELTA_BYTE_ARRAY
 
     last_name TV=3 RL=0 DL=0
     ----------------------------------------------------------------------------
-    page 0:                        DLE:RLE RLE:RLE VLE:DELTA_BYTE_ARRAY [more]... SZ:65
+    page 0:                        DLE:RLE RLE:RLE VLE:DELTA_BYTE_ARRAY [more]... SZ:14
+    page 1:                        DLE:RLE RLE:RLE VLE:DELTA_BYTE_ARRAY [more]... SZ:19
+    page 2:                        DLE:RLE RLE:RLE VLE:DELTA_BYTE_ARRAY [more]... SZ:19
 
 BINARY first_name
 --------------------------------------------------------------------------------
@@ -125,8 +127,8 @@ value 3: R:0 D:0 V:Skywalker
 		},
 		dump: `row group 0
 --------------------------------------------------------------------------------
-first_name:  BINARY ZSTD DO:4 FPO:55 SZ:86/77/0.90 VC:3 ENC:RLE,RLE_DI [more]...
-last_name:   BINARY ZSTD DO:0 FPO:90 SZ:85/94/1.11 VC:3 ENC:RLE,DELTA_BYTE_ARRAY [more]...
+first_name:  BINARY ZSTD DO:4 FPO:55 SZ:86/77/0.90 VC:3 ENC:RLE_DICTIONARY,PLAIN [more]...
+last_name:   BINARY ZSTD DO:0 FPO:90 SZ:163/136/0.83 VC:3 ENC:DELTA_BYTE_ARRAY [more]...
 
     first_name TV=3 RL=0 DL=0 DS: 3 DE:PLAIN
     ----------------------------------------------------------------------------
@@ -134,7 +136,9 @@ last_name:   BINARY ZSTD DO:0 FPO:90 SZ:85/94/1.11 VC:3 ENC:RLE,DELTA_BYTE_ARRAY
 
     last_name TV=3 RL=0 DL=0
     ----------------------------------------------------------------------------
-    page 0:                        DLE:RLE RLE:RLE VLE:DELTA_BYTE_ARRAY [more]... VC:3
+    page 0:                        DLE:RLE RLE:RLE VLE:DELTA_BYTE_ARRAY [more]... VC:1
+    page 1:                        DLE:RLE RLE:RLE VLE:DELTA_BYTE_ARRAY [more]... VC:1
+    page 2:                        DLE:RLE RLE:RLE VLE:DELTA_BYTE_ARRAY [more]... VC:1
 
 BINARY first_name
 --------------------------------------------------------------------------------
@@ -169,21 +173,30 @@ value 3: R:0 D:0 V:Skywalker
 		},
 		dump: `row group 0
 --------------------------------------------------------------------------------
-name:       BINARY UNCOMPRESSED DO:4 FPO:45 SZ:72/72/1.00 VC:10 ENC:RL [more]...
-timestamp:  INT64 UNCOMPRESSED DO:0 FPO:76 SZ:62/62/1.00 VC:10 ENC:DEL [more]...
-value:      DOUBLE UNCOMPRESSED DO:0 FPO:138 SZ:110/110/1.00 VC:10 ENC:PLAIN,RLE [more]...
+name:       BINARY UNCOMPRESSED DO:4 FPO:45 SZ:101/101/1.00 VC:10 ENC: [more]...
+timestamp:  INT64 UNCOMPRESSED DO:0 FPO:105 SZ:278/278/1.00 VC:10 ENC: [more]...
+value:      DOUBLE UNCOMPRESSED DO:0 FPO:383 SZ:220/220/1.00 VC:10 ENC:PLAIN [more]...
 
     name TV=10 RL=0 DL=0 DS: 1 DE:PLAIN
     ----------------------------------------------------------------------------
-    page 0:                   DLE:RLE RLE:RLE VLE:RLE_DICTIONARY ST:[n [more]... VC:10
+    page 0:                   DLE:RLE RLE:RLE VLE:RLE_DICTIONARY ST:[n [more]... VC:5
+    page 1:                   DLE:RLE RLE:RLE VLE:RLE_DICTIONARY ST:[n [more]... VC:5
 
     timestamp TV=10 RL=0 DL=0
     ----------------------------------------------------------------------------
-    page 0:                   DLE:RLE RLE:RLE VLE:DELTA_BINARY_PACKED  [more]... VC:10
+    page 0:                   DLE:RLE RLE:RLE VLE:DELTA_BINARY_PACKED  [more]... VC:2
+    page 1:                   DLE:RLE RLE:RLE VLE:DELTA_BINARY_PACKED  [more]... VC:2
+    page 2:                   DLE:RLE RLE:RLE VLE:DELTA_BINARY_PACKED  [more]... VC:2
+    page 3:                   DLE:RLE RLE:RLE VLE:DELTA_BINARY_PACKED  [more]... VC:2
+    page 4:                   DLE:RLE RLE:RLE VLE:DELTA_BINARY_PACKED  [more]... VC:2
 
     value TV=10 RL=0 DL=0
     ----------------------------------------------------------------------------
-    page 0:                   DLE:RLE RLE:RLE VLE:PLAIN ST:[no stats f [more]... VC:10
+    page 0:                   DLE:RLE RLE:RLE VLE:PLAIN ST:[no stats f [more]... VC:2
+    page 1:                   DLE:RLE RLE:RLE VLE:PLAIN ST:[no stats f [more]... VC:2
+    page 2:                   DLE:RLE RLE:RLE VLE:PLAIN ST:[no stats f [more]... VC:2
+    page 3:                   DLE:RLE RLE:RLE VLE:PLAIN ST:[no stats f [more]... VC:2
+    page 4:                   DLE:RLE RLE:RLE VLE:PLAIN ST:[no stats f [more]... VC:2
 
 BINARY name
 --------------------------------------------------------------------------------
@@ -230,7 +243,90 @@ value 10: R:0 D:0 V:10.0
 	},
 
 	{
-		scenario: "example from the twitter blog",
+		scenario: "example from the twitter blog (v1)",
+		version:  v1,
+		rows: []interface{}{
+			AddressBook{
+				Owner: "Julien Le Dem",
+				OwnerPhoneNumbers: []string{
+					"555 123 4567",
+					"555 666 1337",
+				},
+				Contacts: []Contact{
+					{
+						Name:        "Dmitriy Ryaboy",
+						PhoneNumber: "555 987 6543",
+					},
+					{
+						Name: "Chris Aniszczyk",
+					},
+				},
+			},
+			AddressBook{
+				Owner:             "A. Nonymous",
+				OwnerPhoneNumbers: nil,
+			},
+		},
+
+		dump: `row group 0
+--------------------------------------------------------------------------------
+contacts:
+.name:              BINARY UNCOMPRESSED DO:0 FPO:4 SZ:120/120/1.00 VC:3 [more]...
+.phoneNumber:       BINARY SNAPPY DO:0 FPO:124 SZ:100/96/0.96 VC:3 ENC [more]...
+owner:              BINARY ZSTD DO:0 FPO:224 SZ:98/80/0.82 VC:2 ENC:DE [more]...
+ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:322 SZ:166/116/0.70 VC:3 ENC: [more]...
+
+    contacts.name TV=3 RL=1 DL=1
+    ----------------------------------------------------------------------------
+    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:57
+    page 1:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:17
+
+    contacts.phoneNumber TV=3 RL=1 DL=2
+    ----------------------------------------------------------------------------
+    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:33
+    page 1:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:17
+
+    owner TV=2 RL=0 DL=0
+    ----------------------------------------------------------------------------
+    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:18
+    page 1:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:16
+
+    ownerPhoneNumbers TV=3 RL=1 DL=1
+    ----------------------------------------------------------------------------
+    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:52
+    page 1:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:17
+
+BINARY contacts.name
+--------------------------------------------------------------------------------
+*** row group 1 of 1, values 1 to 3 ***
+value 1: R:0 D:1 V:Dmitriy Ryaboy
+value 2: R:1 D:1 V:Chris Aniszczyk
+value 3: R:0 D:0 V:<null>
+
+BINARY contacts.phoneNumber
+--------------------------------------------------------------------------------
+*** row group 1 of 1, values 1 to 3 ***
+value 1: R:0 D:2 V:555 987 6543
+value 2: R:1 D:1 V:<null>
+value 3: R:0 D:0 V:<null>
+
+BINARY owner
+--------------------------------------------------------------------------------
+*** row group 1 of 1, values 1 to 2 ***
+value 1: R:0 D:0 V:Julien Le Dem
+value 2: R:0 D:0 V:A. Nonymous
+
+BINARY ownerPhoneNumbers
+--------------------------------------------------------------------------------
+*** row group 1 of 1, values 1 to 3 ***
+value 1: R:0 D:1 V:555 123 4567
+value 2: R:1 D:1 V:555 666 1337
+value 3: R:0 D:0 V:<null>
+`,
+	},
+
+	{
+		scenario: "example from the twitter blog (v2)",
 		version:  v2,
 		rows: []interface{}{
 			AddressBook{
@@ -258,26 +354,30 @@ value 10: R:0 D:0 V:10.0
 		dump: `row group 0
 --------------------------------------------------------------------------------
 contacts:
-.name:              BINARY UNCOMPRESSED DO:0 FPO:4 SZ:81/81/1.00 VC:3  [more]...
-.phoneNumber:       BINARY SNAPPY DO:0 FPO:85 SZ:59/57/0.97 VC:3 ENC:R [more]...
-owner:              BINARY ZSTD DO:0 FPO:144 SZ:75/66/0.88 VC:2 ENC:RL [more]...
-ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:219 SZ:102/77/0.75 VC:3 ENC:R [more]...
+.name:              BINARY UNCOMPRESSED DO:0 FPO:4 SZ:114/114/1.00 VC:3 [more]...
+.phoneNumber:       BINARY SNAPPY DO:0 FPO:118 SZ:94/90/0.96 VC:3 ENC: [more]...
+owner:              BINARY ZSTD DO:0 FPO:212 SZ:108/90/0.83 VC:2 ENC:D [more]...
+ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:320 SZ:159/109/0.69 VC:3 ENC: [more]...
 
     contacts.name TV=3 RL=1 DL=1
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:3
+    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:2
+    page 1:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:1
 
     contacts.phoneNumber TV=3 RL=1 DL=2
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:3
+    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:2
+    page 1:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:1
 
     owner TV=2 RL=0 DL=0
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:2
+    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:1
+    page 1:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:1
 
     ownerPhoneNumbers TV=3 RL=1 DL=1
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:3
+    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:2
+    page 1:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:1
 
 BINARY contacts.name
 --------------------------------------------------------------------------------

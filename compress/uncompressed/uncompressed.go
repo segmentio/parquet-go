@@ -13,6 +13,10 @@ import (
 type Codec struct {
 }
 
+func (c *Codec) String() string {
+	return "UNCOMPRESSED"
+}
+
 func (c *Codec) CompressionCodec() format.CompressionCodec {
 	return format.Uncompressed
 }

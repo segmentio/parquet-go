@@ -25,6 +25,7 @@ var (
 type ColumnPages struct {
 	column   *Column
 	header   *format.PageHeader
+	reader   io.SectionReader
 	section  offsetReader
 	crc32    crc32Reader
 	codec    format.CompressionCodec
@@ -56,22 +57,30 @@ type ColumnPages struct {
 	err error
 }
 
-func newColumnPages(column *Column, metadata *format.ColumnMetaData, columnIndex *ColumnIndex, offsetIndex *OffsetIndex, bufferSize int) *ColumnPages {
+func newColumnPages(column *Column, metadata *format.ColumnMetaData, columnIndex *ColumnIndex, offsetIndex *OffsetIndex) *ColumnPages {
 	c := &ColumnPages{
-		column:      column,
-		codec:       metadata.Codec,
-		columnIndex: columnIndex,
-		offsetIndex: offsetIndex,
+		section: offsetReader{
+			reader: bufio.NewReaderSize(nil, defaultBufferSize),
+		},
 	}
+	c.reset(column, metadata, columnIndex, offsetIndex)
+	return c
+}
+
+func (c *ColumnPages) reset(column *Column, metadata *format.ColumnMetaData, columnIndex *ColumnIndex, offsetIndex *OffsetIndex) {
+	c.close(nil)
 	pageOffset := metadata.DataPageOffset
 	if metadata.DictionaryPageOffset > 0 {
 		pageOffset = metadata.DictionaryPageOffset
 	}
-	fileSection := io.NewSectionReader(column.file, pageOffset, metadata.TotalCompressedSize)
-	c.section.reader = bufio.NewReaderSize(fileSection, bufferSize)
+	c.column = column
+	c.codec = metadata.Codec
+	c.columnIndex = columnIndex
+	c.offsetIndex = offsetIndex
+	c.reader = *io.NewSectionReader(column.file, pageOffset, metadata.TotalCompressedSize)
+	c.section.reader.Reset(&c.reader)
 	c.section.offset = pageOffset
 	c.decoder.Reset(c.protocol.NewReader(&c.section))
-	return c
 }
 
 func (c *ColumnPages) close(err error) {
@@ -82,6 +91,15 @@ func (c *ColumnPages) close(err error) {
 	c.header = nil
 	c.data.R = nil
 	c.data.N = 0
+	c.repetitionLevels = emptyReader{}
+	c.definitionLevels = emptyReader{}
+	c.compressedPageData = emptyReader{}
+	c.pageData = emptyReader{}
+	c.pageHeader = nil
+	c.v1.repetitions.reset()
+	c.v1.definitions.reset()
+	c.v2.repetitions.reset()
+	c.v2.definitions.reset()
 	c.err = err
 }
 

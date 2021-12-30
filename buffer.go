@@ -3,7 +3,6 @@ package parquet
 import (
 	"bytes"
 	"encoding/binary"
-	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -17,10 +16,6 @@ const (
 
 var (
 	defaultBufferPool bufferPool
-)
-
-var (
-	ErrBufferFull = errors.New("page buffer is full")
 )
 
 type Buffer interface {

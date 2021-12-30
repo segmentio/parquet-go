@@ -13,8 +13,10 @@ func TestPrint(t *testing.T) {
 		print string
 	}{
 		{
-			node:  parquet.Group{},
-			print: `message Test {}`,
+			node: parquet.Group{"on": parquet.Leaf(parquet.BooleanType)},
+			print: `message Test {
+	required boolean on;
+}`,
 		},
 
 		{
@@ -27,7 +29,7 @@ func TestPrint(t *testing.T) {
 		{
 			node: parquet.Group{"uuid": parquet.UUID()},
 			print: `message Test {
-	required fixed_len_byte_array uuid (UUID);
+	required fixed_len_byte_array(16) uuid (UUID);
 }`,
 		},
 

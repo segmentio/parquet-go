@@ -3,36 +3,10 @@
 package encoding
 
 import (
-	"errors"
 	"io"
 
 	"github.com/segmentio/parquet/deprecated"
 	"github.com/segmentio/parquet/format"
-)
-
-var (
-	// ErrValueTooLarge is an error returned when encountering values that are
-	// too large to be loaded in memory.
-	ErrValueTooLarge = errors.New("value is too large to be written to the buffer")
-
-	// ErrBufferTooShort is an error returned when the destination buffer is too
-	// short to receive the next value to be decoded by the application.
-	//
-	// When receiving this error, the program needs to allocate a larger buffer
-	// and retry the operation. If the buffer was large enough, the 4-bytes
-	// length of the next value to decode would have been written at the start,
-	// the application may read this value to determine how large it needs to
-	// grow the buffer to ensure that the next attempt does not result in the
-	// same error.
-	ErrBufferTooShort = errors.New("buffer is too short to contain a single value")
-
-	// ErrNotSupported is an error returned when the underlying encoding does
-	// not support the type of values being encoded or decoded.
-	//
-	// This error may be wrapped with type information, applications must use
-	// errors.Is rather than equality comparisons to test the error values
-	// returned by encoders and decoders.
-	ErrNotSupported = errors.New("encoding not supported")
 )
 
 // The Encoding interface is implemented by types representing parquet column
@@ -115,10 +89,7 @@ type Encoder interface {
 	EncodeDouble(data []float64) error
 
 	// Encodes an array of variable length byte array values using this encoder.
-	//
-	// The list of values is encoded contiguously in the `data` byte slice using
-	// the PLAIN encoding (each value is prefixed with its 4-bytes length).
-	EncodeByteArray(data []byte) error
+	EncodeByteArray(data ByteArrayList) error
 
 	// Encodes an array of fixed length byte array values using this encoder.
 	//
@@ -150,12 +121,12 @@ type Decoder interface {
 	Encoding() format.Encoding
 
 	// Decodes an array of boolean values using this decoder, returning
-	// the number of decoded values, or io.EOF if the end of the underlying
+	// the number of decoded values, and io.EOF if the end of the underlying
 	// io.Reader was reached.
 	DecodeBoolean(data []bool) (int, error)
 
 	// Decodes an array of 8 bits integer values using this decoder, returning
-	// the number of decoded values, or io.EOF if the end of the underlying
+	// the number of decoded values, and io.EOF if the end of the underlying
 	// io.Reader was reached.
 	//
 	// The parquet type system does not have a 8 bits integers, this method
@@ -165,7 +136,7 @@ type Decoder interface {
 	DecodeInt8(data []int8) (int, error)
 
 	// Decodes an array of 16 bits integer values using this decoder, returning
-	// the number of decoded values, or io.EOF if the end of the underlying
+	// the number of decoded values, and io.EOF if the end of the underlying
 	// io.Reader was reached.
 	//
 	// The parquet type system does not have a 16 bits integers, this method
@@ -175,42 +146,42 @@ type Decoder interface {
 	DecodeInt16(data []int16) (int, error)
 
 	// Decodes an array of 32 bits integer values using this decoder, returning
-	// the number of decoded values, or io.EOF if the end of the underlying
+	// the number of decoded values, and io.EOF if the end of the underlying
 	// io.Reader was reached.
 	DecodeInt32(data []int32) (int, error)
 
 	// Decodes an array of 64 bits integer values using this decoder, returning
-	// the number of decoded values, or io.EOF if the end of the underlying
+	// the number of decoded values, and io.EOF if the end of the underlying
 	// io.Reader was reached.
 	DecodeInt64(data []int64) (int, error)
 
 	// Decodes an array of 96 bits integer values using this decoder, returning
-	// the number of decoded values, or io.EOF if the end of the underlying
+	// the number of decoded values, and io.EOF if the end of the underlying
 	// io.Reader was reached.
 	DecodeInt96(data []deprecated.Int96) (int, error)
 
 	// Decodes an array of 32 bits floating point values using this decoder,
-	// returning the number of decoded values, or io.EOF if the end of the
+	// returning the number of decoded values, and io.EOF if the end of the
 	// underlying io.Reader was reached.
 	DecodeFloat(data []float32) (int, error)
 
 	// Decodes an array of 64 bits floating point values using this decoder,
-	// returning the number of decoded values, or io.EOF if the end of the
+	// returning the number of decoded values, and io.EOF if the end of the
 	// underlying io.Reader was reached.
 	DecodeDouble(data []float64) (int, error)
 
 	// Decodes an array of variable length byte array values using this decoder,
-	// returning the number of decoded values, or io.EOF if the end of the
+	// returning the number of decoded values, and io.EOF if the end of the
 	// underlying io.Reader was reached.
 	//
-	// The values are written to the `data` buffer using the PLAIN encoding, and
-	// the method returns the number of values written. The application should
-	// use functions in the encoding/plain sub-package to iterate over the
-	// decoded values.
-	DecodeByteArray(data []byte) (int, error)
+	// The values are written to the `data` buffer by calling the Push method,
+	// the method returns the number of values written. DecodeByteArray will
+	// stop pushing value to the output ByteArrayList if its total capacity is
+	// reached.
+	DecodeByteArray(data *ByteArrayList) (int, error)
 
 	// Decodes an array of fixed length byte array values using this decoder,
-	// returning the number of decoded values, or io.EOF if the end of the
+	// returning the number of decoded values, and io.EOF if the end of the
 	// underlying io.Reader was reached.
 	DecodeFixedLenByteArray(size int, data []byte) (int, error)
 
