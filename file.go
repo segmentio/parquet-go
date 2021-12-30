@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sort"
 	"sync"
 
 	"github.com/segmentio/encoding/thrift"
@@ -143,23 +144,23 @@ func (f *File) readPageIndex(section *bufferedSectionReader, decoder *thrift.Dec
 	section.reset(f.reader, indexOffset, indexLength)
 
 	for i := range f.metadata.RowGroups {
-		for range f.metadata.RowGroups[i].Columns {
+		for j := range f.metadata.RowGroups[i].Columns {
 			n := len(columnIndexes)
 			columnIndexes = append(columnIndexes, ColumnIndex{})
 
 			if err := decoder.Decode(&columnIndexes[n]); err != nil {
-				return nil, nil, err
+				return nil, nil, fmt.Errorf("reading column index %d of row group %d: %w", j, i, err)
 			}
 		}
 	}
 
 	for i := range f.metadata.RowGroups {
-		for range f.metadata.RowGroups[i].Columns {
+		for j := range f.metadata.RowGroups[i].Columns {
 			n := len(offsetIndexes)
 			offsetIndexes = append(offsetIndexes, OffsetIndex{})
 
 			if err := decoder.Decode(&offsetIndexes[n]); err != nil {
-				return nil, nil, err
+				return nil, nil, fmt.Errorf("reading offset index %d of row group %d: %w", j, i, err)
 			}
 		}
 	}
@@ -267,4 +268,27 @@ func acquireBufferedSectionReader(r io.ReaderAt, offset, length int64) *buffered
 func releaseBufferedSectionReader(b *bufferedSectionReader) {
 	b.reset(nil, 0, 0)
 	bufferedSectionReaderPool.Put(b)
+}
+
+func sortKeyValueMetadata(keyValueMetadata []format.KeyValue) {
+	sort.Slice(keyValueMetadata, func(i, j int) bool {
+		switch {
+		case keyValueMetadata[i].Key < keyValueMetadata[j].Key:
+			return true
+		case keyValueMetadata[i].Key > keyValueMetadata[j].Key:
+			return false
+		default:
+			return keyValueMetadata[i].Value < keyValueMetadata[j].Value
+		}
+	})
+}
+
+func lookupKeyValueMetadata(keyValueMetadata []format.KeyValue, key string) (value string, ok bool) {
+	i := sort.Search(len(keyValueMetadata), func(i int) bool {
+		return keyValueMetadata[i].Key >= key
+	})
+	if i == len(keyValueMetadata) || keyValueMetadata[i].Key != key {
+		return "", false
+	}
+	return keyValueMetadata[i].Value, true
 }

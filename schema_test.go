@@ -12,11 +12,6 @@ func TestSchemaOf(t *testing.T) {
 		print string
 	}{
 		{
-			value: struct{}{},
-			print: `message {}`,
-		},
-
-		{
 			value: new(struct{ Name string }),
 			print: `message {
 	required binary Name (STRING);

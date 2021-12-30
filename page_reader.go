@@ -4,47 +4,29 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/segmentio/parquet/deprecated"
 	"github.com/segmentio/parquet/encoding"
-	"github.com/segmentio/parquet/encoding/plain"
 	"github.com/segmentio/parquet/internal/bits"
 )
 
-// PageReader is an interface implemented by types that support reading values
-// from pages of parquet files.
+// PageReader reads values from a data page.
 //
-// The values read from the page do not have repetition or definition levels
-// set, use a DataPageReader to decode values with levels.
-type PageReader interface {
-	ValueReader
-	ValueBatchReader
-
-	// Returns the type of values read from the underlying page.
-	Type() Type
-
-	// Resets the decoder used to read values from the parquet page. This method
-	// is useful to allow reusing readers. Calling this method drops all values
-	// previously buffered by the reader.
-	Reset(encoding.Decoder)
-}
-
-// DataPageReader reads values from a data page.
-//
-// DataPageReader implements the ValueReader interface; when they exist,
+// PageReader implements the ValueReader interface; when they exist,
 // the reader decodes repetition and definition levels in order to assign
 // levels to values returned to the application, which includes producing
 // null values when needed.
-type DataPageReader struct {
-	page               PageReader
+type PageReader struct {
 	remain             int
+	numValues          int
 	maxRepetitionLevel int8
 	maxDefinitionLevel int8
 	columnIndex        int8
 	repetitions        levelReader
 	definitions        levelReader
+	values             ValueDecoder
 }
 
-func NewDataPageReader(repetitions, definitions encoding.Decoder, numValues int, page PageReader, maxRepetitionLevel, maxDefinitionLevel, columnIndex int8, bufferSize int) *DataPageReader {
+func NewPageReader(typ Type, maxRepetitionLevel, maxDefinitionLevel, columnIndex int8, bufferSize int) *PageReader {
+	bufferSize /= 2
 	repetitionBufferSize := 0
 	definitionBufferSize := 0
 
@@ -60,71 +42,40 @@ func NewDataPageReader(repetitions, definitions encoding.Decoder, numValues int,
 		definitionBufferSize = bufferSize
 	}
 
-	repetitions.SetBitWidth(bits.Len8(maxRepetitionLevel))
-	definitions.SetBitWidth(bits.Len8(maxDefinitionLevel))
-	return &DataPageReader{
-		page:               page,
-		remain:             numValues,
+	return &PageReader{
 		maxRepetitionLevel: maxRepetitionLevel,
 		maxDefinitionLevel: maxDefinitionLevel,
 		columnIndex:        ^columnIndex,
-		repetitions:        makeLevelReader(repetitions, repetitionBufferSize),
-		definitions:        makeLevelReader(definitions, definitionBufferSize),
+		repetitions:        makeLevelReader(repetitionBufferSize),
+		definitions:        makeLevelReader(definitionBufferSize),
+		values:             typ.NewValueDecoder(bufferSize),
 	}
 }
 
-func (r *DataPageReader) Reset(repetitions, definitions encoding.Decoder, numValues int, page PageReader) {
-	repetitions.SetBitWidth(bits.Len8(r.maxRepetitionLevel))
-	definitions.SetBitWidth(bits.Len8(r.maxDefinitionLevel))
-	r.page = page
+func (r *PageReader) Reset(numValues int, repetitions, definitions, values encoding.Decoder) {
+	if repetitions != nil {
+		repetitions.SetBitWidth(bits.Len8(r.maxRepetitionLevel))
+	}
+	if definitions != nil {
+		definitions.SetBitWidth(bits.Len8(r.maxDefinitionLevel))
+	}
 	r.remain = numValues
+	r.numValues = numValues
 	r.repetitions.reset(repetitions)
 	r.definitions.reset(definitions)
+	r.values.Reset(values)
 }
 
-func (r *DataPageReader) ReadValue() (Value, error) {
-	if r.remain == 0 {
-		return Value{}, io.EOF
+func (r *PageReader) ReadValues(values []Value) (int, error) {
+	if r.values == nil {
+		return 0, io.EOF
 	}
-
-	var val Value
-	var err error
-	var repetitionLevel int8
-	var definitionLevel int8
-
-	if r.maxRepetitionLevel > 0 {
-		repetitionLevel, err = r.repetitions.readLevel()
-		if err != nil {
-			return val, fmt.Errorf("reading parquet repetition level: %w", err)
-		}
-	}
-
-	if r.maxDefinitionLevel > 0 {
-		definitionLevel, err = r.definitions.readLevel()
-		if err != nil {
-			return val, fmt.Errorf("reading parquet definition level: %w", err)
-		}
-	}
-
-	if definitionLevel == r.maxDefinitionLevel {
-		val, err = r.page.ReadValue()
-	}
-
-	val.repetitionLevel = repetitionLevel
-	val.definitionLevel = definitionLevel
-	val.columnIndex = r.columnIndex
-	r.remain--
-	return val, err
-}
-
-func (r *DataPageReader) ReadValueBatch(values []Value) (int, error) {
 	read := 0
 
 	for r.remain > 0 && len(values) > 0 {
 		var err error
 		var repetitionLevels []int8
 		var definitionLevels []int8
-		var numNulls int
 		var numValues = r.remain
 
 		if len(values) < numValues {
@@ -157,18 +108,14 @@ func (r *DataPageReader) ReadValueBatch(values []Value) (int, error) {
 		if len(definitionLevels) > 0 {
 			definitionLevels = definitionLevels[:numValues]
 		}
-		for _, d := range definitionLevels {
-			if d != r.maxDefinitionLevel {
-				numNulls++
-			}
-		}
-
-		n, err := r.page.ReadValueBatch(values[:numValues-numNulls])
-		if err != nil {
+		numNulls := countLevelsNotEqual(definitionLevels, r.maxDefinitionLevel)
+		wantRead := numValues - numNulls
+		n, err := r.values.ReadValues(values[:wantRead])
+		if n < wantRead && err != nil {
 			if err == io.EOF {
 				// EOF should not happen at this stage since we successfully
 				// decoded levels.
-				err = io.ErrUnexpectedEOF
+				err = fmt.Errorf("after reading %d/%d values: %w", r.numValues-r.remain, r.numValues, io.ErrUnexpectedEOF)
 			}
 			return read, fmt.Errorf("reading parquet values from data page: %w", err)
 		}
@@ -201,8 +148,8 @@ func (r *DataPageReader) ReadValueBatch(values []Value) (int, error) {
 		read += numValues
 	}
 
-	if r.remain == 0 && read == 0 {
-		return 0, io.EOF
+	if r.remain == 0 {
+		return read, io.EOF
 	}
 
 	return read, nil
@@ -215,10 +162,9 @@ type levelReader struct {
 	count   uint
 }
 
-func makeLevelReader(decoder encoding.Decoder, bufferSize int) levelReader {
+func makeLevelReader(bufferSize int) levelReader {
 	return levelReader{
-		decoder: decoder,
-		levels:  make([]int8, 0, bufferSize),
+		levels: make([]int8, 0, bufferSize),
 	}
 }
 
@@ -275,443 +221,6 @@ func (r *levelReader) reset(decoder encoding.Decoder) {
 	r.count = 0
 }
 
-type booleanPageReader struct {
-	typ     Type
-	decoder encoding.Decoder
-	values  []bool
-	offset  uint
-}
-
-func newBooleanPageReader(typ Type, decoder encoding.Decoder, bufferSize int) *booleanPageReader {
-	return &booleanPageReader{
-		typ:     typ,
-		decoder: decoder,
-		values:  make([]bool, 0, atLeastOne(bufferSize)),
-	}
-}
-
-func (r *booleanPageReader) ReadValue() (Value, error) {
-	values := [1]Value{}
-	_, err := r.ReadValueBatch(values[:])
-	return values[0], err
-}
-
-func (r *booleanPageReader) ReadValueBatch(values []Value) (int, error) {
-	i := 0
-	for {
-		for r.offset < uint(len(r.values)) && i < len(values) {
-			values[i] = makeValueBoolean(r.values[r.offset])
-			r.offset++
-			i++
-		}
-
-		if i == len(values) {
-			return i, nil
-		}
-
-		n, err := r.decoder.DecodeBoolean(r.values[:cap(r.values)])
-		if n == 0 {
-			return i, err
-		}
-
-		r.values = r.values[:n]
-		r.offset = 0
-	}
-}
-
-func (r *booleanPageReader) Reset(decoder encoding.Decoder) {
-	r.decoder = decoder
-	r.values = r.values[:0]
-	r.offset = 0
-}
-
-func (r *booleanPageReader) Type() Type { return r.typ }
-
-type int32PageReader struct {
-	typ     Type
-	decoder encoding.Decoder
-	values  []int32
-	offset  uint
-}
-
-func newInt32PageReader(typ Type, decoder encoding.Decoder, bufferSize int) *int32PageReader {
-	return &int32PageReader{
-		typ:     typ,
-		decoder: decoder,
-		values:  make([]int32, 0, atLeastOne(bufferSize/4)),
-	}
-}
-
-func (r *int32PageReader) ReadValue() (Value, error) {
-	values := [1]Value{}
-	_, err := r.ReadValueBatch(values[:])
-	return values[0], err
-}
-
-func (r *int32PageReader) ReadValueBatch(values []Value) (int, error) {
-	i := 0
-	for {
-		for r.offset < uint(len(r.values)) && i < len(values) {
-			values[i] = makeValueInt32(r.values[r.offset])
-			r.offset++
-			i++
-		}
-
-		if i == len(values) {
-			return i, nil
-		}
-
-		n, err := r.decoder.DecodeInt32(r.values[:cap(r.values)])
-		if n == 0 {
-			return i, err
-		}
-
-		r.values = r.values[:n]
-		r.offset = 0
-	}
-}
-
-func (r *int32PageReader) Reset(decoder encoding.Decoder) {
-	r.decoder = decoder
-	r.values = r.values[:0]
-	r.offset = 0
-}
-
-func (r *int32PageReader) Type() Type { return r.typ }
-
-type int64PageReader struct {
-	typ     Type
-	decoder encoding.Decoder
-	values  []int64
-	offset  uint
-}
-
-func newInt64PageReader(typ Type, decoder encoding.Decoder, bufferSize int) *int64PageReader {
-	return &int64PageReader{
-		typ:     typ,
-		decoder: decoder,
-		values:  make([]int64, 0, atLeastOne(bufferSize/8)),
-	}
-}
-
-func (r *int64PageReader) ReadValue() (Value, error) {
-	values := [1]Value{}
-	_, err := r.ReadValueBatch(values[:])
-	return values[0], err
-}
-
-func (r *int64PageReader) ReadValueBatch(values []Value) (int, error) {
-	i := 0
-	for {
-		for r.offset < uint(len(r.values)) && i < len(values) {
-			values[i] = makeValueInt64(r.values[r.offset])
-			r.offset++
-			i++
-		}
-
-		if i == len(values) {
-			return i, nil
-		}
-
-		n, err := r.decoder.DecodeInt64(r.values[:cap(r.values)])
-		if n == 0 {
-			return i, err
-		}
-
-		r.values = r.values[:n]
-		r.offset = 0
-	}
-}
-
-func (r *int64PageReader) Reset(decoder encoding.Decoder) {
-	r.decoder = decoder
-	r.values = r.values[:0]
-	r.offset = 0
-}
-
-func (r *int64PageReader) Type() Type { return r.typ }
-
-type int96PageReader struct {
-	typ     Type
-	decoder encoding.Decoder
-	values  []deprecated.Int96
-	offset  uint
-}
-
-func newInt96PageReader(typ Type, decoder encoding.Decoder, bufferSize int) *int96PageReader {
-	return &int96PageReader{
-		typ:     typ,
-		decoder: decoder,
-		values:  make([]deprecated.Int96, 0, atLeastOne(bufferSize/12)),
-	}
-}
-
-func (r *int96PageReader) ReadValue() (Value, error) {
-	values := [1]Value{}
-	_, err := r.ReadValueBatch(values[:])
-	return values[0], err
-}
-
-func (r *int96PageReader) ReadValueBatch(values []Value) (int, error) {
-	i := 0
-	for {
-		for r.offset < uint(len(r.values)) && i < len(values) {
-			values[i] = makeValueInt96(r.values[r.offset])
-			r.offset++
-			i++
-		}
-
-		if i == len(values) {
-			return i, nil
-		}
-
-		n, err := r.decoder.DecodeInt96(r.values[:cap(r.values)])
-		if n == 0 {
-			return i, err
-		}
-
-		r.values = r.values[:n]
-		r.offset = 0
-	}
-}
-
-func (r *int96PageReader) Reset(decoder encoding.Decoder) {
-	r.decoder = decoder
-	r.values = r.values[:0]
-	r.offset = 0
-}
-
-func (r *int96PageReader) Type() Type { return r.typ }
-
-type floatPageReader struct {
-	typ     Type
-	decoder encoding.Decoder
-	values  []float32
-	offset  uint
-}
-
-func newFloatPageReader(typ Type, decoder encoding.Decoder, bufferSize int) *floatPageReader {
-	return &floatPageReader{
-		typ:     typ,
-		decoder: decoder,
-		values:  make([]float32, 0, atLeastOne(bufferSize/4)),
-	}
-}
-
-func (r *floatPageReader) ReadValue() (Value, error) {
-	values := [1]Value{}
-	_, err := r.ReadValueBatch(values[:])
-	return values[0], err
-}
-
-func (r *floatPageReader) ReadValueBatch(values []Value) (int, error) {
-	i := 0
-	for {
-		for r.offset < uint(len(r.values)) && i < len(values) {
-			values[i] = makeValueFloat(r.values[r.offset])
-			r.offset++
-			i++
-		}
-
-		if i == len(values) {
-			return i, nil
-		}
-
-		n, err := r.decoder.DecodeFloat(r.values[:cap(r.values)])
-		if n == 0 {
-			return i, err
-		}
-
-		r.values = r.values[:n]
-		r.offset = 0
-	}
-}
-
-func (r *floatPageReader) Reset(decoder encoding.Decoder) {
-	r.decoder = decoder
-	r.values = r.values[:0]
-	r.offset = 0
-}
-
-func (r *floatPageReader) Type() Type { return r.typ }
-
-type doublePageReader struct {
-	typ     Type
-	decoder encoding.Decoder
-	values  []float64
-	offset  uint
-}
-
-func newDoublePageReader(typ Type, decoder encoding.Decoder, bufferSize int) *doublePageReader {
-	return &doublePageReader{
-		typ:     typ,
-		decoder: decoder,
-		values:  make([]float64, 0, atLeastOne(bufferSize/8)),
-	}
-}
-
-func (r *doublePageReader) ReadValue() (Value, error) {
-	values := [1]Value{}
-	_, err := r.ReadValueBatch(values[:])
-	return values[0], err
-}
-
-func (r *doublePageReader) ReadValueBatch(values []Value) (int, error) {
-	i := 0
-	for {
-		for r.offset < uint(len(r.values)) && i < len(values) {
-			values[i] = makeValueDouble(r.values[r.offset])
-			r.offset++
-			i++
-		}
-
-		if i == len(values) {
-			return i, nil
-		}
-
-		n, err := r.decoder.DecodeDouble(r.values[:cap(r.values)])
-		if n == 0 {
-			return i, err
-		}
-
-		r.values = r.values[:n]
-		r.offset = 0
-	}
-}
-
-func (r *doublePageReader) Reset(decoder encoding.Decoder) {
-	r.decoder = decoder
-	r.values = r.values[:0]
-	r.offset = 0
-}
-
-func (r *doublePageReader) Type() Type { return r.typ }
-
-type byteArrayPageReader struct {
-	typ     Type
-	decoder encoding.Decoder
-	values  []byte
-	offset  uint
-	remain  uint
-}
-
-func newByteArrayPageReader(typ Type, decoder encoding.Decoder, bufferSize int) *byteArrayPageReader {
-	return &byteArrayPageReader{
-		typ:     typ,
-		decoder: decoder,
-		values:  make([]byte, atLeast(bufferSize, 4)),
-	}
-}
-
-func (r *byteArrayPageReader) ReadValue() (Value, error) {
-	values := [1]Value{}
-	_, err := r.ReadValueBatch(values[:])
-	return values[0], err
-}
-
-func (r *byteArrayPageReader) ReadValueBatch(values []Value) (int, error) {
-	i := 0
-	for {
-		for r.remain > 0 && i < len(values) {
-			n := plain.NextByteArrayLength(r.values[r.offset:])
-			v := r.values[4+r.offset : 4+r.offset+uint(n)]
-			r.offset += 4 + uint(n)
-			r.remain--
-			values[i] = makeValueBytes(ByteArray, copyBytes(v))
-			i++
-		}
-
-		if i == len(values) {
-			return i, nil
-		}
-
-		n, err := r.decoder.DecodeByteArray(r.values)
-		if n == 0 {
-			if err == encoding.ErrValueTooLarge {
-				size := 4 + uint32(plain.NextByteArrayLength(r.values))
-				r.values = make([]byte, bits.NearestPowerOfTwo32(size))
-				r.offset = 0
-				r.remain = 0
-				continue
-			}
-			return i, err
-		}
-
-		r.offset = 0
-		r.remain = uint(n)
-	}
-}
-
-func (r *byteArrayPageReader) Reset(decoder encoding.Decoder) {
-	r.decoder = decoder
-	r.offset = 0
-	r.remain = 0
-}
-
-func (r *byteArrayPageReader) Type() Type { return r.typ }
-
-type fixedLenByteArrayPageReader struct {
-	typ     Type
-	decoder encoding.Decoder
-	values  []byte
-	offset  uint
-	size    uint
-}
-
-func newFixedLenByteArrayPageReader(typ Type, decoder encoding.Decoder, bufferSize int) *fixedLenByteArrayPageReader {
-	size := typ.Length()
-	return &fixedLenByteArrayPageReader{
-		typ:     typ,
-		decoder: decoder,
-		size:    uint(size),
-		values:  make([]byte, 0, atLeast((bufferSize/size)*size, size)),
-	}
-}
-
-func (r *fixedLenByteArrayPageReader) ReadValue() (Value, error) {
-	values := [1]Value{}
-	_, err := r.ReadValueBatch(values[:])
-	return values[0], err
-}
-
-func (r *fixedLenByteArrayPageReader) ReadValueBatch(values []Value) (int, error) {
-	i := 0
-	for {
-		for (r.offset+r.size) <= uint(len(r.values)) && i < len(values) {
-			values[i] = makeValueBytes(FixedLenByteArray, copyBytes(r.values[r.offset:r.offset+r.size]))
-			r.offset += r.size
-			i++
-		}
-
-		if i == len(values) {
-			return i, nil
-		}
-
-		n, err := r.decoder.DecodeFixedLenByteArray(int(r.size), r.values[:cap(r.values)])
-		if n == 0 {
-			return i, err
-		}
-
-		r.values = r.values[:uint(n)*r.size]
-		r.offset = 0
-	}
-}
-
-func (r *fixedLenByteArrayPageReader) Reset(decoder encoding.Decoder) {
-	r.decoder = decoder
-	r.values = r.values[:0]
-	r.offset = 0
-}
-
-func (r *fixedLenByteArrayPageReader) Type() Type { return r.typ }
-
 var (
-	_ ValueReader = (*DataPageReader)(nil)
-	_ PageReader  = (*int32PageReader)(nil)
-	_ PageReader  = (*int64PageReader)(nil)
-	_ PageReader  = (*int96PageReader)(nil)
-	_ PageReader  = (*floatPageReader)(nil)
-	_ PageReader  = (*doublePageReader)(nil)
-	_ PageReader  = (*byteArrayPageReader)(nil)
-	_ PageReader  = (*fixedLenByteArrayPageReader)(nil)
+	_ ValueReader = (*PageReader)(nil)
 )

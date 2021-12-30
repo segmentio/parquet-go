@@ -35,36 +35,27 @@ type Value struct {
 	columnIndex     int8 // XOR so the zero-value is -1
 }
 
-// The ValueReader interface is implemented by types that read sequences of
-// parquet values.
-type ValueReader interface {
-	// Reads the next value from the sequence, or returns io.EOF when the end
-	// of the sequence was reached, or another error if no values could be read.
-	ReadValue() (Value, error)
-}
-
-// The ValueWriter interface is implemented by types that write sequences of
-// parquet values.
-type ValueWriter interface {
-	// Writes the next value to the sequence, returning a non-nil error if the
-	// write failed.
-	WriteValue(Value) error
-}
-
-// ValueBatchReader is an interface implemented by types that support reading
+// ValueReader is an interface implemented by types that support reading
 // batches of values.
-type ValueBatchReader interface {
+type ValueReader interface {
 	// Read values into the buffer passed as argument and return the number of
 	// values read. When all values have been read, the error will be io.EOF.
-	ReadValueBatch([]Value) (int, error)
+	ReadValues([]Value) (int, error)
 }
 
-// ValueBatchWriter is an interface implemented by types that support reading
+// ValueReaderAt is similar to ValueReader but instead of reading the next
+// batch of balues, the application must specify the index at which it wants to
+// read values from.
+type ValueReaderAt interface {
+	ReadValuesAt(int, []Value) (int, error)
+}
+
+// ValueWriter is an interface implemented by types that support reading
 // batches of values.
-type ValueBatchWriter interface {
+type ValueWriter interface {
 	// Write values from the buffer passed as argument and returns the number
 	// of values written.
-	WriteValueBatch([]Value) (int, error)
+	WriteValues([]Value) (int, error)
 }
 
 // ValueOf constructs a parquet value from a Go value v.
@@ -587,15 +578,11 @@ func assignValue(dst reflect.Value, src Value) error {
 		v := src.ByteArray()
 		switch dstKind {
 		case reflect.String:
-			// The parquet value is being assigned to a Go string, which is an
-			// immutable object. As an optimization we avoid allocating a new
-			// backing array and instead take a reference to the byte slice
-			// pointed at by the parquet value (which is also immutable).
-			dst.SetString(unsafeBytesToString(v))
+			dst.SetString(string(v))
 			return nil
 		case reflect.Slice:
 			if dst.Type().Elem().Kind() == reflect.Uint8 {
-				dst.SetBytes(v)
+				dst.SetBytes(copyBytes(v))
 				return nil
 			}
 		default:
@@ -618,7 +605,7 @@ func assignValue(dst reflect.Value, src Value) error {
 			}
 		case reflect.Slice:
 			if dst.Type().Elem().Kind() == reflect.Uint8 {
-				dst.SetBytes(v)
+				dst.SetBytes(copyBytes(v))
 				return nil
 			}
 		default:
@@ -645,7 +632,7 @@ func unsafeBytesToString(b []byte) string {
 }
 
 func unsafePointerOf(v reflect.Value) unsafe.Pointer {
-	return (*iface)(unsafe.Pointer(&v)).ptr
+	return (*[2]unsafe.Pointer)(unsafe.Pointer(&v))[1]
 }
 
 func unsafeByteArray(v reflect.Value, n int) []byte {
@@ -686,39 +673,42 @@ func Equal(v1, v2 Value) bool {
 	}
 }
 
-type bufferedValueReader struct {
-	reader ValueBatchReader
-	buffer []Value
-	offset uint
-}
-
-func (b *bufferedValueReader) Reset(r ValueBatchReader) {
-	b.reader = r
-	b.buffer = b.buffer[:0]
-	b.offset = 0
-}
-
-func (b *bufferedValueReader) ReadValue() (Value, error) {
-	for {
-		if b.offset < uint(len(b.buffer)) {
-			v := b.buffer[b.offset]
-			b.offset++
-			return v, nil
-		}
-		if b.reader == nil {
-			return Value{}, io.EOF
-		}
-		n, err := b.reader.ReadValueBatch(b.buffer[:cap(b.buffer)])
-		if n == 0 {
-			return Value{}, err
-		}
-		b.buffer = b.buffer[:n]
-		b.offset = 0
+// NewValueReader constructs a ValueReader exposing values between offset and
+// offset+length.
+func NewValueReader(values ValueReaderAt, offset, length int) ValueReader {
+	return &valueReader{
+		values: values,
+		offset: offset,
+		length: length,
 	}
+}
+
+type valueReader struct {
+	values ValueReaderAt
+	offset int
+	length int
+}
+
+func (r *valueReader) ReadValues(values []Value) (int, error) {
+	if len(values) > r.length {
+		values = values[:r.length]
+	}
+	n, err := r.values.ReadValuesAt(r.offset, values)
+	r.offset += n
+	r.length -= n
+	if err == nil && r.length == 0 {
+		err = io.EOF
+	}
+	return n, err
 }
 
 var (
 	_ fmt.Formatter = Value{}
 	_ fmt.Stringer  = Value{}
-	_ ValueReader   = (*bufferedValueReader)(nil)
 )
+
+func clearValues(values []Value) {
+	for i := range values {
+		values[i] = Value{}
+	}
+}

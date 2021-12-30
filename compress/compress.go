@@ -15,6 +15,9 @@ import (
 //
 // Codec instances must be safe to use concurrently from multiple goroutines.
 type Codec interface {
+	// Returns a human-readable name for the codec.
+	String() string
+
 	// Returns the code of the compression codec in the parquet format.
 	CompressionCodec() format.CompressionCodec
 

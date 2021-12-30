@@ -53,6 +53,15 @@ var (
 	}
 )
 
+func isDictionaryEncoding(encoding interface{ Encoding() format.Encoding }) bool {
+	switch encoding.Encoding() {
+	case format.PlainDictionary, format.RLEDictionary:
+		return true
+	default:
+		return false
+	}
+}
+
 // LookupEncoding returns the parquet encoding associated with the given code.
 //
 // The function never returns nil. If the encoding is not supported,

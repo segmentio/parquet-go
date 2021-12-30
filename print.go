@@ -3,6 +3,7 @@ package parquet
 import (
 	"io"
 	"strconv"
+	"strings"
 )
 
 func Print(w io.Writer, name string, node Node) error {
@@ -11,31 +12,33 @@ func Print(w io.Writer, name string, node Node) error {
 
 func PrintIndent(w io.Writer, name string, node Node, pattern, newline string) error {
 	pw := &printWriter{writer: w}
-	pw.WriteString("message ")
+	pi := &printIndent{}
 
-	if name == "" {
-		pw.WriteString("{")
+	if isLeaf(node) {
+		printWithIndent(pw, "", node, pi)
 	} else {
-		pw.WriteString(name)
-		pw.WriteString(" {")
-	}
+		pw.WriteString("message ")
 
-	if !isLeaf(node) {
-		pi := &printIndent{
-			pattern: pattern,
-			newline: newline,
-			repeat:  1,
+		if name == "" {
+			pw.WriteString("{")
+		} else {
+			pw.WriteString(name)
+			pw.WriteString(" {")
 		}
 
+		pi.pattern = pattern
+		pi.newline = newline
+		pi.repeat = 1
 		pi.writeNewLine(pw)
 
 		for _, child := range node.ChildNames() {
 			printWithIndent(pw, child, node.ChildByName(child), pi)
 			pi.writeNewLine(pw)
 		}
+
+		pw.WriteString("}")
 	}
 
-	pw.WriteString("}")
 	return pw.err
 }
 
@@ -55,28 +58,31 @@ func printWithIndent(w io.StringWriter, name string, node Node, indent *printInd
 		t := node.Type()
 		switch t.Kind() {
 		case Boolean:
-			w.WriteString("boolean ")
+			w.WriteString("boolean")
 		case Int32:
-			w.WriteString("int32 ")
+			w.WriteString("int32")
 		case Int64:
-			w.WriteString("int64 ")
+			w.WriteString("int64")
 		case Int96:
-			w.WriteString("int96 ")
+			w.WriteString("int96")
 		case Float:
-			w.WriteString("float ")
+			w.WriteString("float")
 		case Double:
-			w.WriteString("double ")
+			w.WriteString("double")
 		case ByteArray:
-			w.WriteString("binary ")
+			w.WriteString("binary")
 		case FixedLenByteArray:
 			w.WriteString("fixed_len_byte_array(")
 			w.WriteString(strconv.Itoa(t.Length()))
-			w.WriteString(") ")
+			w.WriteString(")")
 		default:
-			w.WriteString("<?> ")
+			w.WriteString("<?>")
 		}
 
-		w.WriteString(name)
+		if name != "" {
+			w.WriteString(" ")
+			w.WriteString(name)
+		}
 
 		if annotation := annotationOf(node); annotation != "" {
 			w.WriteString(" (")
@@ -168,3 +174,9 @@ func (w *printWriter) WriteString(s string) (int, error) {
 var (
 	_ io.StringWriter = (*printWriter)(nil)
 )
+
+func sprint(name string, node Node) string {
+	s := new(strings.Builder)
+	Print(s, name, node)
+	return s.String()
+}

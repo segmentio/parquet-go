@@ -40,6 +40,10 @@ type Codec struct {
 	Concurrency int
 }
 
+func (c *Codec) String() string {
+	return "ZSTD"
+}
+
 func (c *Codec) CompressionCodec() format.CompressionCodec {
 	return format.Zstd
 }

@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync/atomic"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/segmentio/parquet/compress"
@@ -65,34 +65,24 @@ type Schema struct {
 //
 // The schema name is the Go type name of the value.
 func SchemaOf(model interface{}) *Schema {
-	t := dereference(reflect.TypeOf(model))
-	return namedSchemaOf(t.Name(), t)
+	return schemaOf(dereference(reflect.TypeOf(model)))
 }
 
-// NamedSchemaOf is like SchemaOf but allows the program to customize the name
-// of the parquet schema.
-func NamedSchemaOf(name string, model interface{}) *Schema {
-	return namedSchemaOf(name, dereference(reflect.TypeOf(model)))
-}
+var cachedSchemas sync.Map // map[reflect.Type]*Schema
 
-var cachedSchemas atomic.Value // map[reflect.Type]*Schema
-
-func namedSchemaOf(name string, model reflect.Type) *Schema {
-	cache, _ := cachedSchemas.Load().(map[reflect.Type]*Schema)
-	schema, _ := cache[model]
+func schemaOf(model reflect.Type) *Schema {
+	cached, _ := cachedSchemas.Load(model)
+	schema, _ := cached.(*Schema)
 	if schema != nil {
 		return schema
 	}
 	if model.Kind() != reflect.Struct {
 		panic("cannot construct parquet schema from value of type " + model.String())
 	}
-	schema = NewSchema(name, structNodeOf(model))
-	newCache := make(map[reflect.Type]*Schema, len(cache)+1)
-	newCache[model] = schema
-	for typ, schema := range cache {
-		newCache[typ] = schema
+	schema = NewSchema(model.Name(), nodeOf(model))
+	if actual, loaded := cachedSchemas.LoadOrStore(model, schema); loaded {
+		schema = actual.(*Schema)
 	}
-	cachedSchemas.Store(newCache)
 	return schema
 }
 
@@ -114,6 +104,9 @@ func dereference(t reflect.Type) reflect.Type {
 }
 
 func makeDeconstructFunc(node Node) (deconstruct deconstructFunc) {
+	if schema, _ := node.(*Schema); schema != nil {
+		return schema.deconstruct
+	}
 	if !isLeaf(node) {
 		_, deconstruct = deconstructFuncOf(0, node)
 	}
@@ -121,11 +114,27 @@ func makeDeconstructFunc(node Node) (deconstruct deconstructFunc) {
 }
 
 func makeReconstructFunc(node Node) (reconstruct reconstructFunc) {
+	if schema, _ := node.(*Schema); schema != nil {
+		return schema.reconstruct
+	}
 	if !isLeaf(node) {
 		_, reconstruct = reconstructFuncOf(0, node)
 	}
 	return reconstruct
 }
+
+// ConfigureWriter satisfies the WriterOption interface, allowing Schema
+// instances to be passed to NewWriter to predeclare the schema of the
+// output parquet file.
+func (s *Schema) ConfigureRowGroup(config *RowGroupConfig) { config.Schema = s }
+
+// ConfigureWriter satisfies the WriterOption interface, allowing Schema
+// instances to be passed to NewWriter to predeclare the schema of the
+// output parquet file.
+func (s *Schema) ConfigureWriter(config *WriterConfig) { config.Schema = s }
+
+// String returns a parquet schema representation of s.
+func (s *Schema) String() string { return sprint(s.name, s.root) }
 
 // Name returns the name of s.
 func (s *Schema) Name() string { return s.name }
@@ -157,16 +166,12 @@ func (s *Schema) Encoding() []encoding.Encoding { return s.root.Encoding() }
 // Compression returns the list of compression codecs in the child nodes of s.
 func (s *Schema) Compression() []compress.Codec { return s.root.Compression() }
 
+// Returns the Go type that best represents the schema.
+func (s *Schema) GoType() reflect.Type { return s.root.GoType() }
+
 // ValueByName is returns the sub-value with the givne name in base.
 func (s *Schema) ValueByName(base reflect.Value, name string) reflect.Value {
 	return s.root.ValueByName(base, name)
-}
-
-// String returns a parquet schema representation of s.
-func (s *Schema) String() string {
-	b := new(strings.Builder)
-	Print(b, s.name, s.root)
-	return b.String()
 }
 
 // Deconstruct deconstructs a Go value and appends it to a row.
@@ -208,13 +213,16 @@ func (s *Schema) Reconstruct(value interface{}, row Row) error {
 	}
 	var err error
 	if s.reconstruct != nil {
-		err = s.reconstruct(v.Elem(), levels{}, row)
+		row, err = s.reconstruct(v.Elem(), levels{}, row)
+		if len(row) > 0 && err == nil {
+			err = fmt.Errorf("%d values remain unused after reconstructing go value of type %s from parquet row", len(row), v.Type())
+		}
 	}
 	return err
 }
 
 type structNode struct {
-	node
+	gotype reflect.Type
 	fields []structField
 	names  []string
 }
@@ -225,6 +233,7 @@ func structNodeOf(t reflect.Type) *structNode {
 	fields := structFieldsOf(t)
 
 	s := &structNode{
+		gotype: t,
 		fields: make([]structField, len(fields)),
 		names:  make([]string, len(fields)),
 	}
@@ -273,16 +282,29 @@ func appendStructFields(t reflect.Type, fields []reflect.StructField, index []in
 	return fields
 }
 
-func (s *structNode) Type() Type           { return groupType{} }
-func (s *structNode) NumChildren() int     { return len(s.fields) }
-func (s *structNode) ChildNames() []string { return s.names }
-func (s *structNode) ChildByName(name string) Node {
-	return s.ChildByIndex(s.indexOf(name))
-}
+func (s *structNode) Optional() bool { return false }
 
-func (s *structNode) ChildByIndex(index int) Node {
-	return &s.fields[index]
-}
+func (s *structNode) Repeated() bool { return false }
+
+func (s *structNode) Required() bool { return true }
+
+func (s *structNode) Encoding() []encoding.Encoding { return nil }
+
+func (s *structNode) Compression() []compress.Codec { return nil }
+
+func (s *structNode) GoType() reflect.Type { return s.gotype }
+
+func (s *structNode) String() string { return sprint("", s) }
+
+func (s *structNode) Type() Type { return groupType{} }
+
+func (s *structNode) NumChildren() int { return len(s.fields) }
+
+func (s *structNode) ChildNames() []string { return s.names }
+
+func (s *structNode) ChildByName(name string) Node { return s.ChildByIndex(s.indexOf(name)) }
+
+func (s *structNode) ChildByIndex(index int) Node { return &s.fields[index] }
 
 func (s *structNode) ValueByName(base reflect.Value, name string) reflect.Value {
 	return s.ValueByIndex(base, s.indexOf(name))
@@ -332,10 +354,6 @@ func fieldByIndex(v reflect.Value, index []int) reflect.Value {
 	}
 	return v
 }
-
-var (
-	_ IndexedNode = (*structNode)(nil)
-)
 
 type structField struct {
 	wrappedNode
@@ -434,6 +452,9 @@ func makeStructField(f reflect.StructField) structField {
 			case "zstd":
 				setCompression(&Zstd)
 
+			case "uncompressed":
+				setCompression(&Uncompressed)
+
 			case "plain":
 				setEncoding(&Plain)
 
@@ -448,6 +469,12 @@ func makeStructField(f reflect.StructField) structField {
 					setEncoding(&DeltaByteArray)
 				case reflect.Slice:
 					if f.Type.Elem().Kind() == reflect.Uint8 { // []byte?
+						setEncoding(&DeltaByteArray)
+					} else {
+						throwInvalidFieldTag(f, option)
+					}
+				case reflect.Array:
+					if f.Type.Elem().Kind() == reflect.Uint8 { // [N]byte?
 						setEncoding(&DeltaByteArray)
 					} else {
 						throwInvalidFieldTag(f, option)
@@ -532,51 +559,59 @@ func nodeOf(t reflect.Type) Node {
 		return UUID()
 	}
 
+	var n Node
 	switch t.Kind() {
 	case reflect.Bool:
-		return Leaf(BooleanType)
+		n = Leaf(BooleanType)
 
 	case reflect.Int, reflect.Int64:
-		return Int(64)
+		n = Int(64)
 
 	case reflect.Int8, reflect.Int16, reflect.Int32:
-		return Int(t.Bits())
+		n = Int(t.Bits())
 
 	case reflect.Uint, reflect.Uintptr, reflect.Uint64:
-		return Uint(64)
+		n = Uint(64)
 
 	case reflect.Uint8, reflect.Uint16, reflect.Uint32:
-		return Uint(t.Bits())
+		n = Uint(t.Bits())
 
 	case reflect.Float32:
-		return Leaf(FloatType)
+		n = Leaf(FloatType)
 
 	case reflect.Float64:
-		return Leaf(DoubleType)
+		n = Leaf(DoubleType)
 
 	case reflect.String:
-		return String()
+		n = String()
 
 	case reflect.Ptr:
-		return Optional(nodeOf(t.Elem()))
-
-	case reflect.Struct:
-		return structNodeOf(t)
+		n = Optional(nodeOf(t.Elem()))
 
 	case reflect.Slice:
 		if elem := t.Elem(); elem.Kind() == reflect.Uint8 { // []byte?
-			return Leaf(ByteArrayType)
+			n = Leaf(ByteArrayType)
 		} else {
-			return Repeated(nodeOf(elem))
+			n = Repeated(nodeOf(elem))
 		}
 
 	case reflect.Array:
 		if t.Elem().Kind() == reflect.Uint8 {
-			return Leaf(FixedLenByteArrayType(t.Len()))
+			n = Leaf(FixedLenByteArrayType(t.Len()))
 		}
+
+	case reflect.Map:
+		n = Map(nodeOf(t.Key()), nodeOf(t.Elem()))
+
+	case reflect.Struct:
+		return structNodeOf(t)
 	}
 
-	panic("cannot create parquet node from go value of type " + t.String())
+	if n == nil {
+		panic("cannot create parquet node from go value of type " + t.String())
+	}
+
+	return &goNode{wrappedNode: wrap(n), gotype: t}
 }
 
 func split(s string) (head, tail string) {
@@ -616,3 +651,16 @@ func parseDecimalArgs(args string) (scale, precision int, err error) {
 	}
 	return int(s), int(p), nil
 }
+
+type goNode struct {
+	wrappedNode
+	gotype reflect.Type
+}
+
+func (n *goNode) GoType() reflect.Type { return n.gotype }
+
+var (
+	_ RowGroupOption = (*Schema)(nil)
+	_ WriterOption   = (*Schema)(nil)
+	_ IndexedNode    = (*structNode)(nil)
+)

@@ -32,7 +32,9 @@ type Reader struct {
 	schema  *Schema
 	seen    reflect.Type
 	columns []*columnChunkReader
+	buffer  []Value
 	values  []Value
+	conv    ConvertFunc
 	read    columnReadFunc
 }
 
@@ -103,9 +105,8 @@ func (r *Reader) Reset() {
 	for _, c := range r.columns {
 		c.reset()
 	}
-	for i := range r.values {
-		r.values[i] = Value{}
-	}
+	clearValues(r.buffer)
+	clearValues(r.values)
 }
 
 // Read reads the next row from r. The type of the row must match the schema
@@ -115,9 +116,18 @@ func (r *Reader) Reset() {
 func (r *Reader) Read(row interface{}) (err error) {
 	if rowType := dereference(reflect.TypeOf(row)); rowType.Kind() == reflect.Struct {
 		if r.seen == nil || r.seen != rowType {
-			schema := namedSchemaOf(r.schema.Name(), rowType)
-			if !Match(schema, r.schema) {
-				return fmt.Errorf("cannot read parquet row into go value of type %T: schema mismatch", row)
+			schema := schemaOf(rowType)
+			if nodesAreEqual(schema, r.schema) {
+				r.conv = nil
+			} else {
+				conv, err := Convert(schema, r.schema)
+				if err != nil {
+					return fmt.Errorf("cannot read parquet row into go value of type %T: %w", row, err)
+				}
+				if r.buffer == nil {
+					r.buffer = make([]Value, 0, cap(r.values))
+				}
+				r.conv = conv
 			}
 			// Replace the schema because the one created from the go type will be
 			// optimized to decode into struct values.
@@ -125,11 +135,22 @@ func (r *Reader) Read(row interface{}) (err error) {
 			r.seen = rowType
 		}
 	}
+
 	r.values, err = r.ReadRow(r.values[:0])
 	if err != nil {
 		return err
 	}
-	return r.schema.Reconstruct(row, r.values)
+
+	values := r.values
+	if r.conv != nil {
+		r.buffer, err = r.conv(r.buffer[:0], values)
+		if err != nil {
+			return fmt.Errorf("cannot convert parquet row to go value of type %T: %w", row, err)
+		}
+		values = r.buffer
+	}
+
+	return r.schema.Reconstruct(row, values)
 }
 
 // ReadRow reads the next row from r and appends in to the given Row buffer.
@@ -217,9 +238,9 @@ func columnReadFuncOfLeaf(column *Column, readers []*columnChunkReader) columnRe
 		return func(row Row, _ int8) (Row, error) {
 			// Manually inline the buffered value read because the cast is too high
 			// for the compiler in ReadValue. This gives a ~20% increase in throughput.
-			if leaf.values.offset < uint(len(leaf.values.buffer)) {
-				row = append(row, leaf.values.buffer[leaf.values.offset])
-				leaf.values.offset++
+			if leaf.offset < uint(len(leaf.values)) {
+				row = append(row, leaf.values[leaf.offset])
+				leaf.offset++
 				return row, nil
 			}
 			v, err := leaf.readValue()
@@ -237,9 +258,9 @@ func columnReadFuncOfLeaf(column *Column, readers []*columnChunkReader) columnRe
 		if leaf.peeked {
 			v = leaf.cursor
 		} else {
-			if leaf.values.offset < uint(len(leaf.values.buffer)) {
-				v = leaf.values.buffer[leaf.values.offset]
-				leaf.values.offset++
+			if leaf.offset < uint(len(leaf.values)) {
+				v = leaf.values[leaf.offset]
+				leaf.offset++
 			} else if v, err = leaf.readValue(); err != nil {
 				if level > 0 && err == io.EOF {
 					err = nil
@@ -266,19 +287,21 @@ type columnChunkReader struct {
 	column     *Column
 	chunks     *ColumnChunks
 	pages      *ColumnPages
-	reader     *DataPageReader
-	values     bufferedValueReader
+	reader     *PageReader
 	dictionary Dictionary
 	numPages   int
 
-	page struct {
-		decoder encoding.Decoder
-		reader  PageReader
-	}
+	values []Value
+	offset uint
+
 	repetitions struct {
 		decoder encoding.Decoder
 	}
 	definitions struct {
+		decoder encoding.Decoder
+	}
+	page struct {
+		typ     Type
 		decoder encoding.Decoder
 	}
 
@@ -291,9 +314,7 @@ func newColumnChunkReader(column *Column, config *ReaderConfig) *columnChunkRead
 		bufferSize: config.PageBufferSize,
 		column:     column,
 		chunks:     column.Chunks(),
-		values: bufferedValueReader{
-			buffer: make([]Value, 0, 170),
-		},
+		values:     make([]Value, 0, 170),
 	}
 
 	maxRepetitionLevel := column.MaxRepetitionLevel()
@@ -303,6 +324,7 @@ func newColumnChunkReader(column *Column, config *ReaderConfig) *columnChunkRead
 		ccr.bufferSize /= 2
 	}
 
+	ccr.page.typ = column.Type()
 	return ccr
 }
 
@@ -312,7 +334,8 @@ func (ccr *columnChunkReader) reset() {
 	}
 
 	ccr.chunks.Seek(0)
-	ccr.values.Reset(nil)
+	ccr.values = ccr.values[:0]
+	ccr.offset = 0
 	ccr.numPages = 0
 
 	ccr.peeked = false
@@ -321,14 +344,25 @@ func (ccr *columnChunkReader) reset() {
 
 func (ccr *columnChunkReader) readValue() (Value, error) {
 readNextValue:
-	v, err := ccr.values.ReadValue()
-	if err != nil {
-		if err == io.EOF {
-			goto readNextPage
+	for {
+		if ccr.offset < uint(len(ccr.values)) {
+			v := ccr.values[ccr.offset]
+			ccr.offset++
+			return v, nil
 		}
-		err = fmt.Errorf("%s: %w", join(ccr.column.Path()), err)
+		if ccr.reader == nil {
+			break
+		}
+		n, err := ccr.reader.ReadValues(ccr.values[:cap(ccr.values)])
+		if n == 0 {
+			if err == io.EOF {
+				break
+			}
+			return Value{}, fmt.Errorf("%s: %w", join(ccr.column.Path()), err)
+		}
+		ccr.values = ccr.values[:n]
+		ccr.offset = 0
 	}
-	return v, err
 
 readNextPage:
 	if ccr.pages != nil {
@@ -372,7 +406,7 @@ readNextPage:
 
 func (ccr *columnChunkReader) readDictionaryPage(header DictionaryPageHeader) error {
 	if ccr.dictionary == nil {
-		ccr.dictionary = ccr.column.Type().NewDictionary(0)
+		ccr.dictionary = ccr.page.typ.NewDictionary(ccr.bufferSize)
 	} else {
 		ccr.dictionary.Reset()
 	}
@@ -380,6 +414,7 @@ func (ccr *columnChunkReader) readDictionaryPage(header DictionaryPageHeader) er
 	if err := ccr.dictionary.ReadFrom(decoder); err != nil {
 		return err
 	}
+	ccr.page.typ = ccr.dictionary.Type()
 	ccr.numPages++
 	return nil
 }
@@ -389,25 +424,9 @@ func (ccr *columnChunkReader) readDataPage(header DataPageHeader) {
 	ccr.definitions.decoder = makeDecoder(ccr.definitions.decoder, header.DefinitionLevelEncoding(), ccr.pages.DefinitionLevels())
 	ccr.page.decoder = makeDecoder(ccr.page.decoder, header.Encoding(), ccr.pages.PageData())
 
-	if ccr.page.reader != nil {
-		ccr.page.reader.Reset(ccr.page.decoder)
-	} else {
-		if ccr.dictionary != nil {
-			ccr.page.reader = NewIndexedPageReader(ccr.page.decoder, ccr.bufferSize, ccr.dictionary)
-		} else {
-			ccr.page.reader = ccr.column.Type().NewPageReader(ccr.page.decoder, ccr.bufferSize)
-		}
-	}
-
-	numValues := header.NumValues()
-	if ccr.reader != nil {
-		ccr.reader.Reset(ccr.repetitions.decoder, ccr.definitions.decoder, numValues, ccr.page.reader)
-	} else {
-		ccr.reader = NewDataPageReader(
-			ccr.repetitions.decoder,
-			ccr.definitions.decoder,
-			numValues,
-			ccr.page.reader,
+	if ccr.reader == nil {
+		ccr.reader = NewPageReader(
+			ccr.page.typ,
 			ccr.column.MaxRepetitionLevel(),
 			ccr.column.MaxDefinitionLevel(),
 			ccr.column.Index(),
@@ -415,7 +434,7 @@ func (ccr *columnChunkReader) readDataPage(header DataPageHeader) {
 		)
 	}
 
-	ccr.values.Reset(ccr.reader)
+	ccr.reader.Reset(header.NumValues(), ccr.repetitions.decoder, ccr.definitions.decoder, ccr.page.decoder)
 	ccr.numPages++
 }
 

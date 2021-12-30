@@ -8,6 +8,7 @@ import (
 const (
 	DefaultCreatedBy            = "github.com/segmentio/parquet"
 	DefaultColumnIndexSizeLimit = 16
+	DefaultColumnBufferSize     = 1 * 1024 * 1024
 	DefaultPageBufferSize       = 1 * 1024 * 1024
 	DefaultDataPageVersion      = 2
 	DefaultRowGroupTargetSize   = 128 * 1024 * 1024
@@ -44,7 +45,7 @@ func (c *FileConfig) Apply(options ...FileOption) {
 }
 
 // Configure applies configuration options from c to config.
-func (c *FileConfig) Configure(config *FileConfig) {
+func (c *FileConfig) ConfigureFile(config *FileConfig) {
 	*config = FileConfig{
 		SkipPageIndex: config.SkipPageIndex,
 	}
@@ -84,7 +85,7 @@ func (c *ReaderConfig) Apply(options ...ReaderOption) {
 }
 
 // Configure applies configuration options from c to config.
-func (c *ReaderConfig) Configure(config *ReaderConfig) {
+func (c *ReaderConfig) ConfigureReader(config *ReaderConfig) {
 	*config = ReaderConfig{
 		PageBufferSize: coalesceInt(c.PageBufferSize, config.PageBufferSize),
 	}
@@ -116,6 +117,7 @@ type WriterConfig struct {
 	DataPageStatistics   bool
 	RowGroupTargetSize   int64
 	KeyValueMetadata     map[string]string
+	Schema               *Schema
 }
 
 // DefaultWriterConfig returns a new WriterConfig value initialized with the
@@ -140,7 +142,7 @@ func (c *WriterConfig) Apply(options ...WriterOption) {
 }
 
 // Configure applies configuration options from c to config.
-func (c *WriterConfig) Configure(config *WriterConfig) {
+func (c *WriterConfig) ConfigureWriter(config *WriterConfig) {
 	keyValueMetadata := config.KeyValueMetadata
 	if len(c.KeyValueMetadata) > 0 {
 		if keyValueMetadata == nil {
@@ -159,6 +161,7 @@ func (c *WriterConfig) Configure(config *WriterConfig) {
 		DataPageStatistics:   config.DataPageStatistics,
 		RowGroupTargetSize:   coalesceInt64(c.RowGroupTargetSize, config.RowGroupTargetSize),
 		KeyValueMetadata:     keyValueMetadata,
+		Schema:               coalesceSchema(c.Schema, config.Schema),
 	}
 }
 
@@ -172,6 +175,51 @@ func (c *WriterConfig) Validate() error {
 		validatePositiveInt64(baseName+"RowGroupTargetSize", c.RowGroupTargetSize),
 		validateOneOfInt(baseName+"DataPageVersion", c.DataPageVersion, 1, 2),
 	)
+}
+
+// The RowGroupConfig type carries configuration options for parquet row groups.
+//
+// RowGroupConfig implements the RowGroupOption interface so it can be used
+// directly as argument to the NewRowGroup function when needed, for example:
+//
+//	rowGroup := parquet.NewRowGroup(&parquet.RowGroupConfig{
+//		ColumnBufferSize: 8 * 1024 * 1024,
+//	})
+//
+type RowGroupConfig struct {
+	ColumnBufferSize int
+	SortingColumns   []SortingColumn
+	Schema           *Schema
+}
+
+// DefaultRowGroupConfig returns a new RowGroupConfig value initialized with the
+// default row group configuration.
+func DefaultRowGroupConfig() *RowGroupConfig {
+	return &RowGroupConfig{
+		ColumnBufferSize: DefaultColumnBufferSize,
+	}
+}
+
+// Validate returns a non-nil error if the configuration of c is invalid.
+func (c *RowGroupConfig) Validate() error {
+	const baseName = "parquet.(*RowGroupConfig)."
+	return errorInvalidConfiguration(
+		validatePositiveInt(baseName+"ColumnBufferSize", c.ColumnBufferSize),
+	)
+}
+
+func (c *RowGroupConfig) Apply(options ...RowGroupOption) {
+	for _, opt := range options {
+		opt.ConfigureRowGroup(c)
+	}
+}
+
+func (c *RowGroupConfig) ConfigureRowGroup(config *RowGroupConfig) {
+	*config = RowGroupConfig{
+		ColumnBufferSize: coalesceInt(c.ColumnBufferSize, config.ColumnBufferSize),
+		SortingColumns:   coalesceSortingColumns(c.SortingColumns, config.SortingColumns),
+		Schema:           coalesceSchema(c.Schema, config.Schema),
+	}
 }
 
 // FileOption is an interface implemented by types that carry configuration
@@ -190,6 +238,12 @@ type ReaderOption interface {
 // options for parquet writers.
 type WriterOption interface {
 	ConfigureWriter(*WriterConfig)
+}
+
+// RowGroupOption is an interface implemented by types that carryconfiguration
+// options for parquet row groups.
+type RowGroupOption interface {
+	ConfigureRowGroup(*RowGroupConfig)
 }
 
 // SkipPageIndex is a file configuration option which when set to true, prevents
@@ -292,6 +346,24 @@ func KeyValueMetadata(key, value string) WriterOption {
 	})
 }
 
+// ColumnBufferSize creates a configuration option which defines the size of
+// row group column buffers.
+//
+// Defaults to 1 MiB.
+func ColumnBufferSize(size int) RowGroupOption {
+	return rowGroupOption(func(config *RowGroupConfig) { config.ColumnBufferSize = size })
+}
+
+// SortingColumns creates a configuration option which defines the sorting order
+// of columns in a row group.
+//
+// The order of sorting columns passed as argument defines the ordering
+// hierarchy; when elements are equal in the first column, the second column is
+// used to order rows, etc...
+func SortingColumns(sortingColumns ...SortingColumn) RowGroupOption {
+	return rowGroupOption(func(config *RowGroupConfig) { config.SortingColumns = sortingColumns })
+}
+
 type fileOption func(*FileConfig)
 
 func (opt fileOption) ConfigureFile(config *FileConfig) { opt(config) }
@@ -303,6 +375,10 @@ func (opt readerOption) ConfigureReader(config *ReaderConfig) { opt(config) }
 type writerOption func(*WriterConfig)
 
 func (opt writerOption) ConfigureWriter(config *WriterConfig) { opt(config) }
+
+type rowGroupOption func(*RowGroupConfig)
+
+func (opt rowGroupOption) ConfigureRowGroup(config *RowGroupConfig) { opt(config) }
 
 func coalesceInt(i1, i2 int) int {
 	if i1 != 0 {
@@ -337,6 +413,20 @@ func coalesceBufferPool(p1, p2 BufferPool) BufferPool {
 		return p1
 	}
 	return p2
+}
+
+func coalesceSchema(s1, s2 *Schema) *Schema {
+	if s1 != nil {
+		return s1
+	}
+	return s2
+}
+
+func coalesceSortingColumns(s1, s2 []SortingColumn) []SortingColumn {
+	if s1 != nil {
+		return s1
+	}
+	return s2
 }
 
 func validatePositiveInt(optionName string, optionValue int) error {
@@ -408,3 +498,12 @@ func (err *invalidConfiguration) Error() string {
 	}
 	return errorString
 }
+
+var (
+	_ FileOption     = (*FileConfig)(nil)
+	_ ReaderOption   = (*ReaderConfig)(nil)
+	_ WriterOption   = (*WriterConfig)(nil)
+	_ RowGroupOption = (*RowGroupConfig)(nil)
+	_ ReaderOption   = PageBufferSize(0)
+	_ WriterOption   = PageBufferSize(0)
+)

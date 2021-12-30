@@ -723,14 +723,18 @@ func testByteArrayEncoding(t *testing.T, e encoding.Encoding) {
 	buf := new(bytes.Buffer)
 	enc := e.NewEncoder(buf)
 	dec := e.NewDecoder(buf)
-	tmp := make([]byte, 0, 4096)
+	tmp := encoding.MakeByteArrayList(1)
 
 	for _, test := range byteArrayTests {
 		t.Run("", func(t *testing.T) {
 			defer dec.Reset(buf)
 			defer enc.Reset(buf)
 			defer buf.Reset()
-			tmp = plain.AppendByteArrayList(tmp[:0], test...)
+			defer tmp.Reset()
+
+			for _, v := range test {
+				tmp.Push(v)
+			}
 
 			if err := enc.EncodeByteArray(tmp); err != nil {
 				if errors.Is(err, encoding.ErrNotSupported) {
@@ -739,34 +743,26 @@ func testByteArrayEncoding(t *testing.T, e encoding.Encoding) {
 				t.Fatal("encode:", err)
 			}
 
-			maxLen := 0
-			for _, value := range test {
-				if len(value) > maxLen {
-					maxLen = len(value)
-				}
-			}
-
 			for i := 0; i < len(test); {
-				for i := range tmp {
-					tmp[i] = 0
-				}
-				n, err := dec.DecodeByteArray(tmp[:4+maxLen])
+				tmp.Reset()
+				n, err := dec.DecodeByteArray(&tmp)
 				if err != nil && (err != io.EOF || n != len(test)) {
-					t.Fatal("decode:", err)
+					t.Fatal("decode:", n, err)
 				}
 				if n == 0 {
 					t.Fatalf("decoder decoded the wrong number of items: %d", n)
 				}
-				plain.ScanByteArrayList(tmp, n, func(value []byte) error {
+				tmp.Range(func(value []byte) bool {
 					if !bytes.Equal(value, test[i]) {
 						t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, test[i], value)
 					}
 					i++
-					return nil
+					return true
 				})
 			}
 
-			if n, err := dec.DecodeByteArray(tmp[:4+maxLen]); err != io.EOF {
+			tmp.Reset()
+			if n, err := dec.DecodeByteArray(&tmp); err != io.EOF {
 				t.Fatal("non-EOF error returned after decoding all the values:", err)
 			} else if n != 0 {
 				t.Fatal("non-zero number of values decoded at EOF:", n)
