@@ -1,0 +1,89 @@
+package delta
+
+import (
+	"bufio"
+	"fmt"
+	"io"
+
+	"github.com/segmentio/parquet/encoding"
+	"github.com/segmentio/parquet/format"
+)
+
+type ByteArrayDecoder struct {
+	encoding.NotSupportedDecoder
+	deltas   BinaryPackedDecoder
+	arrays   LengthByteArrayDecoder
+	previous []byte
+	prefixes []int32
+}
+
+func NewByteArrayDecoder(r io.Reader) *ByteArrayDecoder {
+	d := &ByteArrayDecoder{prefixes: make([]int32, defaultBufferSize/4)}
+	d.Reset(r)
+	return d
+}
+
+func (d *ByteArrayDecoder) Reset(r io.Reader) {
+	if r != nil {
+		br, _ := r.(*bufio.Reader)
+		if br == nil {
+			r = bufio.NewReaderSize(r, defaultBufferSize)
+		}
+	}
+	d.deltas.Reset(r)
+	d.arrays.Reset(r)
+	d.previous = d.previous[:0]
+	d.prefixes = d.prefixes[:0]
+}
+
+func (d *ByteArrayDecoder) Encoding() format.Encoding {
+	return format.DeltaByteArray
+}
+
+func (d *ByteArrayDecoder) DecodeByteArray(data *encoding.ByteArrayList) (int, error) {
+	if d.arrays.index < 0 {
+		if err := d.decodePrefixes(); err != nil {
+			return 0, err
+		}
+		if err := d.arrays.decodeLengths(); err != nil {
+			return 0, err
+		}
+	}
+
+	if d.arrays.index == len(d.arrays.lengths) {
+		return 0, io.EOF
+	}
+
+	decoded := 0
+	for d.arrays.index < len(d.arrays.lengths) && data.Len() < data.Cap() {
+		prefixLength := len(d.previous)
+		suffixLength := int(d.arrays.lengths[d.arrays.index])
+		length := prefixLength + suffixLength
+
+		value := data.PushSize(length)
+		copy(value, d.previous[:prefixLength])
+
+		if err := d.arrays.readFull(value[prefixLength:]); err != nil {
+			return decoded, fmt.Errorf("DELTA_BYTE_ARRAY: decoding byte array at index %d/%d: %w", d.arrays.index, len(d.arrays.lengths), err)
+		}
+
+		if i := d.arrays.index + 1; i < len(d.prefixes) {
+			j := int(d.prefixes[i])
+			k := len(value)
+			if j > k {
+				return decoded, fmt.Errorf("DELTA_BYTE_ARRAY: next prefix is longer than the last decoded byte array (%d>%d)", j, k)
+			}
+			d.previous = append(d.previous[:0], value[:j]...)
+		}
+
+		decoded++
+		d.arrays.index++
+	}
+
+	return decoded, nil
+}
+
+func (d *ByteArrayDecoder) decodePrefixes() (err error) {
+	d.prefixes, err = appendDecodeInt32(&d.deltas, d.prefixes[:0])
+	return err
+}

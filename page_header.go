@@ -64,7 +64,7 @@ func (dict DictionaryPageHeader) NumValues() int {
 }
 
 func (dict DictionaryPageHeader) Encoding() encoding.Encoding {
-	return lookupEncoding(dict.header.Encoding)
+	return LookupEncoding(dict.header.Encoding)
 }
 
 func (dict DictionaryPageHeader) IsSorted() bool {
@@ -89,15 +89,15 @@ func (v1 DataPageHeaderV1) NumValues() int {
 }
 
 func (v1 DataPageHeaderV1) RepetitionLevelEncoding() encoding.Encoding {
-	return lookupEncoding(v1.header.RepetitionLevelEncoding)
+	return LookupEncoding(v1.header.RepetitionLevelEncoding)
 }
 
 func (v1 DataPageHeaderV1) DefinitionLevelEncoding() encoding.Encoding {
-	return lookupEncoding(v1.header.DefinitionLevelEncoding)
+	return LookupEncoding(v1.header.DefinitionLevelEncoding)
 }
 
 func (v1 DataPageHeaderV1) Encoding() encoding.Encoding {
-	return lookupEncoding(v1.header.Encoding)
+	return LookupEncoding(v1.header.Encoding)
 }
 
 func (v1 DataPageHeaderV1) NullCount() int {
@@ -145,7 +145,7 @@ func (v2 DataPageHeaderV2) DefinitionLevelEncoding() encoding.Encoding {
 }
 
 func (v2 DataPageHeaderV2) Encoding() encoding.Encoding {
-	return lookupEncoding(v2.header.Encoding)
+	return LookupEncoding(v2.header.Encoding)
 }
 
 func (v2 DataPageHeaderV2) NullCount() int {
