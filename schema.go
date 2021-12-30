@@ -473,6 +473,12 @@ func makeStructField(f reflect.StructField) structField {
 					} else {
 						throwInvalidFieldTag(f, option)
 					}
+				case reflect.Array:
+					if f.Type.Elem().Kind() == reflect.Uint8 { // [N]byte?
+						setEncoding(&DeltaByteArray)
+					} else {
+						throwInvalidFieldTag(f, option)
+					}
 				default:
 					throwInvalidFieldTag(f, option)
 				}

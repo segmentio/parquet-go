@@ -41,6 +41,22 @@ func (d *ByteArrayDecoder) Encoding() format.Encoding {
 }
 
 func (d *ByteArrayDecoder) DecodeByteArray(data *encoding.ByteArrayList) (int, error) {
+	return d.decode(data.Cap()-data.Len(), func(n int) ([]byte, error) { return data.PushSize(n), nil })
+}
+
+func (d *ByteArrayDecoder) DecodeFixedLenByteArray(size int, data []byte) (int, error) {
+	i := 0
+	return d.decode(len(data)/size, func(n int) ([]byte, error) {
+		if n != size {
+			return nil, fmt.Errorf("decoding fixed length byte array of size %d but a value of length %d was found", size, n)
+		}
+		v := data[i : i+n]
+		i += n
+		return v, nil
+	})
+}
+
+func (d *ByteArrayDecoder) decode(limit int, push func(int) ([]byte, error)) (int, error) {
 	if d.arrays.index < 0 {
 		if err := d.decodePrefixes(); err != nil {
 			return 0, err
@@ -55,14 +71,17 @@ func (d *ByteArrayDecoder) DecodeByteArray(data *encoding.ByteArrayList) (int, e
 	}
 
 	decoded := 0
-	for d.arrays.index < len(d.arrays.lengths) && data.Len() < data.Cap() {
+	for d.arrays.index < len(d.arrays.lengths) && decoded < limit {
 		prefixLength := len(d.previous)
 		suffixLength := int(d.arrays.lengths[d.arrays.index])
 		length := prefixLength + suffixLength
 
-		value := data.PushSize(length)
-		copy(value, d.previous[:prefixLength])
+		value, err := push(length)
+		if err != nil {
+			return decoded, fmt.Errorf("DELTA_BYTE_ARRAY: %w", err)
+		}
 
+		copy(value, d.previous[:prefixLength])
 		if err := d.arrays.readFull(value[prefixLength:]); err != nil {
 			return decoded, fmt.Errorf("DELTA_BYTE_ARRAY: decoding byte array at index %d/%d: %w", d.arrays.index, len(d.arrays.lengths), err)
 		}

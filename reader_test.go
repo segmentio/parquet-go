@@ -56,7 +56,7 @@ type indexedStringColumn struct {
 }
 
 type uuidColumn struct {
-	Value uuid.UUID
+	Value uuid.UUID `parquet:",delta"`
 }
 
 type decimalColumn struct {
