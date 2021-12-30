@@ -444,6 +444,14 @@ func makeStructField(f reflect.StructField) structField {
 				switch f.Type.Kind() {
 				case reflect.Int, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint32, reflect.Uint64:
 					setEncoding(&DeltaBinaryPacked)
+				case reflect.String:
+					setEncoding(&DeltaByteArray)
+				case reflect.Slice:
+					if f.Type.Elem().Kind() == reflect.Uint8 { // []byte?
+						setEncoding(&DeltaByteArray)
+					} else {
+						throwInvalidFieldTag(f, option)
+					}
 				default:
 					throwInvalidFieldTag(f, option)
 				}

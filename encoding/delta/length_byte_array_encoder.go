@@ -17,7 +17,7 @@ type LengthByteArrayEncoder struct {
 }
 
 func NewLengthByteArrayEncoder(w io.Writer) *LengthByteArrayEncoder {
-	e := &LengthByteArrayEncoder{lengths: make([]int32, 512)}
+	e := &LengthByteArrayEncoder{lengths: make([]int32, defaultBufferSize/4)}
 	e.Reset(w)
 	return e
 }

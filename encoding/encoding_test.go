@@ -230,6 +230,11 @@ func TestEncoding(t *testing.T) {
 		},
 
 		{
+			scenario: "DELTA_BYTE_ARRAY",
+			encoding: new(delta.ByteArrayEncoding),
+		},
+
+		{
 			scenario: "BYTE_STREAM_SPLIT",
 			encoding: new(bytestreamsplit.Encoding),
 		},

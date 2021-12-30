@@ -34,6 +34,9 @@ var (
 	// DeltaLengthByteArray is the delta length byte array parquet encoding.
 	DeltaLengthByteArray delta.LengthByteArrayEncoding
 
+	// DeltaByteArray is the delta byte array parquet encoding.
+	DeltaByteArray delta.ByteArrayEncoding
+
 	// ByteStreamSplit is an encoding for floating-point data.
 	ByteStreamSplit bytestreamsplit.Encoding
 
@@ -45,11 +48,16 @@ var (
 		format.RLEDictionary:        &RLEDictionary,
 		format.DeltaBinaryPacked:    &DeltaBinaryPacked,
 		format.DeltaLengthByteArray: &DeltaLengthByteArray,
+		format.DeltaByteArray:       &DeltaByteArray,
 		format.ByteStreamSplit:      &ByteStreamSplit,
 	}
 )
 
-func lookupEncoding(enc format.Encoding) encoding.Encoding {
+// LookupEncoding returns the parquet encoding associated with the given code.
+//
+// The function never returns nil. If the encoding is not supported,
+// encoding.NotSupported is returned.
+func LookupEncoding(enc format.Encoding) encoding.Encoding {
 	if enc >= 0 && int(enc) < len(encodings) {
 		if e := encodings[enc]; e != nil {
 			return e
