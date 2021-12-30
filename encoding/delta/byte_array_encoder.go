@@ -35,25 +35,30 @@ func (e *ByteArrayEncoder) Encoding() format.Encoding {
 	return format.DeltaByteArray
 }
 
-func (e *ByteArrayEncoder) EncodeByteArray(data encoding.ByteArrayList) (err error) {
+func (e *ByteArrayEncoder) EncodeByteArray(data encoding.ByteArrayList) error {
+	return e.encode(data.Len(), data.Index)
+}
+
+func (e *ByteArrayEncoder) EncodeFixedLenByteArray(size int, data []byte) error {
+	return e.encode(len(data)/size, func(i int) []byte { return data[i*size : (i+1)*size] })
+}
+
+func (e *ByteArrayEncoder) encode(count int, valueAt func(int) []byte) error {
 	lastValue := ([]byte)(nil)
 	e.prefixes = e.prefixes[:0]
 	e.suffixes.Reset()
 
-	data.Range(func(value []byte) bool {
+	for i := 0; i < count; i++ {
+		value := valueAt(i)
 		if len(value) > math.MaxInt32 {
-			err = fmt.Errorf("DELTA_BYTE_ARRAY: byte array of length %d is too large to be encoded", len(value))
-			return false
+			return fmt.Errorf("DELTA_BYTE_ARRAY: byte array of length %d is too large to be encoded", len(value))
 		}
 		n := prefixLength(lastValue, value)
 		e.prefixes = append(e.prefixes, int32(n))
 		e.suffixes.Push(value[n:])
 		lastValue = value
-		return true
-	})
-	if err != nil {
-		return err
 	}
+
 	if err := e.deltas.EncodeInt32(e.prefixes); err != nil {
 		return err
 	}
