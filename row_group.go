@@ -8,6 +8,60 @@ import (
 	"sort"
 )
 
+// RowGroup is an interface representing a parquet row group.
+type RowGroup interface {
+	// Returns the list of column that that row group has values for.
+	Columns() []RowGroupColumn
+
+	// Returns the number of rows in the group.
+	NumRows() int
+
+	// Returns the schema of rows in the group.
+	Schema() *Schema
+
+	// Returns the list of sorting columns describing how rows are sorted in the
+	// group.
+	//
+	// The method will return an empty slice if the rows are not sorted.
+	SortingColumns() []SortingColumn
+
+	// Rows returns a reader exposing the rows of the row group.
+	Rows() RowReader
+}
+
+// The RowGroupColumn interface represents individual columns of a row group.
+type RowGroupColumn interface {
+	// For indexed columns, returns the underlying dictionary holding the column
+	// values. If the column is not indexed, nil is returned.
+	Dictionary() Dictionary
+
+	// Returns the index of this column in its parent row group.
+	Index() int
+
+	// Returns the list of pages in the colunn.
+	Pages() []Page
+}
+
+// RowGroupReader is an interface implemented by types that expose sequences of
+// row groups to the application.
+type RowGroupReader interface {
+	ReadRowGroup() (RowGroup, error)
+}
+
+type RowGroupColumnReader interface {
+	ReadRowGroupColumn() (RowGroupColumn, error)
+}
+
+// RowGroupWriter is an interface implemented by tyeps that allow the program
+// to write row groups.
+type RowGroupWriter interface {
+	WriteRowGroup(RowGroup) (int64, error)
+}
+
+type RowGroupColumnWriter interface {
+	WriteRowGroupColumn(RowGroupColumn) (int64, error)
+}
+
 // SortingColumn represents a column by which a row group is sorted.
 type SortingColumn interface {
 	// Returns the path of the column in the row group schema, omitting the name
@@ -120,49 +174,6 @@ func sortingColumnsAreEqual(sortingColumns1, sortingColumns2 []SortingColumn) bo
 	}
 
 	return true
-}
-
-// RowGroup is an interface representing a parquet row group.
-type RowGroup interface {
-	// Returns the list of column that that row group has values for.
-	Columns() []RowGroupColumn
-
-	// Returns the number of rows in the group.
-	NumRows() int
-
-	// Returns the schema of rows in the group.
-	Schema() *Schema
-
-	// Returns the list of sorting columns describing how rows are sorted in the
-	// group.
-	//
-	// The method will return an empty slice if the rows are not sorted.
-	SortingColumns() []SortingColumn
-
-	// Rows returns a reader exposing the rows of the row group.
-	Rows() RowReader
-}
-
-// The RowGroupColumn interface represents individual columns of a row group.
-type RowGroupColumn interface {
-	// For indexed columns, returns the underlying dictionary holding the column
-	// values. If the column is not indexed, nil is returned.
-	Dictionary() Dictionary
-
-	// Returns the list of pages in the colunn.
-	Pages() []Page
-}
-
-// RowGroupReader is an interface implemented by types that expose sequences of
-// row groups to the application.
-type RowGroupReader interface {
-	ReadRowGroup() (RowGroup, error)
-}
-
-// RowGroupWriter is an interface implemented by tyeps that allow the program
-// to write row groups.
-type RowGroupWriter interface {
-	WriteRowGroup(RowGroup) (int64, error)
 }
 
 var (

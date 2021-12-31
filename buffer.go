@@ -52,7 +52,7 @@ func (buf *Buffer) configure(schema *Schema) {
 			columnType = dictionary.Type()
 		}
 
-		column := columnType.NewBufferColumn(bufferSize)
+		column := columnType.NewBufferColumn(leaf.columnIndex, bufferSize)
 		switch {
 		case leaf.maxRepetitionLevel > 0:
 			column = newRepeatedBufferColumn(column, leaf.maxRepetitionLevel, leaf.maxDefinitionLevel, nullOrdering)

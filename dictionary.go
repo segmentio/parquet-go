@@ -683,8 +683,8 @@ func newIndexedType(typ Type, dict Dictionary) *indexedType {
 	return &indexedType{Type: typ, dict: dict}
 }
 
-func (t *indexedType) NewBufferColumn(bufferSize int) BufferColumn {
-	return newIndexedBufferColumn(t.dict, bufferSize)
+func (t *indexedType) NewBufferColumn(columnIndex, bufferSize int) BufferColumn {
+	return newIndexedBufferColumn(t.dict, columnIndex, bufferSize)
 }
 
 func (t *indexedType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -757,14 +757,18 @@ func (r *indexedValueReader) ReadValues(values []Value) (n int, err error) {
 	return n, err
 }
 
-type indexedBufferColumn struct{ indexedPage }
+type indexedBufferColumn struct {
+	indexedPage
+	columnIndex int8
+}
 
-func newIndexedBufferColumn(dict Dictionary, bufferSize int) *indexedBufferColumn {
+func newIndexedBufferColumn(dict Dictionary, columnIndex, bufferSize int) *indexedBufferColumn {
 	return &indexedBufferColumn{
 		indexedPage: indexedPage{
 			dict:   dict,
 			values: make([]int32, 0, bufferSize/4),
 		},
+		columnIndex: ^int8(columnIndex),
 	}
 }
 
@@ -774,10 +778,13 @@ func (col *indexedBufferColumn) Clone() BufferColumn {
 			dict:   col.dict,
 			values: append([]int32{}, col.values...),
 		},
+		columnIndex: col.columnIndex,
 	}
 }
 
 func (col *indexedBufferColumn) Dictionary() Dictionary { return col.dict }
+
+func (col *indexedBufferColumn) Index() int { return int(^col.columnIndex) }
 
 func (col *indexedBufferColumn) Pages() []Page { return []Page{&col.indexedPage} }
 
@@ -816,7 +823,9 @@ func (col *indexedBufferColumn) ReadRowAt(row Row, index int) (Row, error) {
 	case index >= len(col.values):
 		return row, io.EOF
 	default:
-		return append(row, col.dict.Index(int(col.values[index]))), nil
+		v := col.dict.Index(int(col.values[index]))
+		v.columnIndex = col.columnIndex
+		return append(row, v), nil
 	}
 }
 

@@ -384,9 +384,10 @@ func (r *repeatedPageReader) ReadValues(values []Value) (n int, err error) {
 	return n, err
 }
 
-type booleanPage struct{ values []bool }
-
-func newBooleanPage(values []bool) *booleanPage { return &booleanPage{values: values} }
+type booleanPage struct {
+	values      []bool
+	columnIndex int8
+}
 
 func (page *booleanPage) NumRows() int { return len(page.values) }
 
@@ -421,7 +422,12 @@ func (page *booleanPage) Bounds() (min, max Value) {
 	return min, max
 }
 
-func (page *booleanPage) Slice(i, j int) Page { return newBooleanPage(page.values[i:j]) }
+func (page *booleanPage) Slice(i, j int) Page {
+	return &booleanPage{
+		values:      page.values[i:j],
+		columnIndex: page.columnIndex,
+	}
+}
 
 func (page *booleanPage) Size() int64 { return sizeOfBool(page.values) }
 
@@ -433,12 +439,16 @@ func (page *booleanPage) WriteTo(e encoding.Encoder) error { return e.EncodeBool
 
 func (page *booleanPage) Values() ValueReader { return &booleanPageReader{values: page.values} }
 
-type booleanPageReader struct{ values []bool }
+type booleanPageReader struct {
+	values      []bool
+	columnIndex int8
+}
 
 func (r *booleanPageReader) ReadValues(values []Value) (n int, err error) {
 	n = min(len(values), len(r.values))
 	for i := 0; i < n; i++ {
 		values[i] = makeValueBoolean(r.values[i])
+		values[i].columnIndex = r.columnIndex
 	}
 	if r.values = r.values[n:]; len(r.values) == 0 {
 		err = io.EOF
@@ -446,9 +456,10 @@ func (r *booleanPageReader) ReadValues(values []Value) (n int, err error) {
 	return n, err
 }
 
-type int32Page struct{ values []int32 }
-
-func newInt32Page(values []int32) *int32Page { return &int32Page{values: values} }
+type int32Page struct {
+	values      []int32
+	columnIndex int8
+}
 
 func (page *int32Page) NumRows() int { return len(page.values) }
 
@@ -465,7 +476,12 @@ func (page *int32Page) Bounds() (min, max Value) {
 	return min, max
 }
 
-func (page *int32Page) Slice(i, j int) Page { return newInt32Page(page.values[i:j]) }
+func (page *int32Page) Slice(i, j int) Page {
+	return &int32Page{
+		values:      page.values[i:j],
+		columnIndex: page.columnIndex,
+	}
+}
 
 func (page *int32Page) Size() int64 { return sizeOfInt32(page.values) }
 
@@ -477,12 +493,16 @@ func (page *int32Page) WriteTo(e encoding.Encoder) error { return e.EncodeInt32(
 
 func (page *int32Page) Values() ValueReader { return &int32PageReader{values: page.values} }
 
-type int32PageReader struct{ values []int32 }
+type int32PageReader struct {
+	values      []int32
+	columnIndex int8
+}
 
 func (r *int32PageReader) ReadValues(values []Value) (n int, err error) {
 	n = min(len(values), len(r.values))
 	for i := 0; i < n; i++ {
 		values[i] = makeValueInt32(r.values[i])
+		values[i].columnIndex = r.columnIndex
 	}
 	if r.values = r.values[n:]; len(r.values) == 0 {
 		err = io.EOF
@@ -490,9 +510,10 @@ func (r *int32PageReader) ReadValues(values []Value) (n int, err error) {
 	return n, err
 }
 
-type int64Page struct{ values []int64 }
-
-func newInt64Page(values []int64) *int64Page { return &int64Page{values: values} }
+type int64Page struct {
+	values      []int64
+	columnIndex int8
+}
 
 func (page *int64Page) NumRows() int { return len(page.values) }
 
@@ -509,7 +530,12 @@ func (page *int64Page) Bounds() (min, max Value) {
 	return min, max
 }
 
-func (page *int64Page) Slice(i, j int) Page { return newInt64Page(page.values[i:j]) }
+func (page *int64Page) Slice(i, j int) Page {
+	return &int64Page{
+		values:      page.values[i:j],
+		columnIndex: page.columnIndex,
+	}
+}
 
 func (page *int64Page) Size() int64 { return sizeOfInt64(page.values) }
 
@@ -521,12 +547,16 @@ func (page *int64Page) WriteTo(e encoding.Encoder) error { return e.EncodeInt64(
 
 func (page *int64Page) Values() ValueReader { return &int64PageReader{values: page.values} }
 
-type int64PageReader struct{ values []int64 }
+type int64PageReader struct {
+	values      []int64
+	columnIndex int8
+}
 
 func (r *int64PageReader) ReadValues(values []Value) (n int, err error) {
 	n = min(len(values), len(r.values))
 	for i := 0; i < n; i++ {
 		values[i] = makeValueInt64(r.values[i])
+		values[i].columnIndex = r.columnIndex
 	}
 	if r.values = r.values[n:]; len(r.values) == 0 {
 		err = io.EOF
@@ -534,9 +564,10 @@ func (r *int64PageReader) ReadValues(values []Value) (n int, err error) {
 	return n, err
 }
 
-type int96Page struct{ values []deprecated.Int96 }
-
-func newInt96Page(values []deprecated.Int96) *int96Page { return &int96Page{values: values} }
+type int96Page struct {
+	values      []deprecated.Int96
+	columnIndex int8
+}
 
 func (page *int96Page) NumRows() int { return len(page.values) }
 
@@ -553,7 +584,12 @@ func (page *int96Page) Bounds() (min, max Value) {
 	return min, max
 }
 
-func (page *int96Page) Slice(i, j int) Page { return newInt96Page(page.values[i:j]) }
+func (page *int96Page) Slice(i, j int) Page {
+	return &int96Page{
+		values:      page.values[i:j],
+		columnIndex: page.columnIndex,
+	}
+}
 
 func (page *int96Page) Size() int64 { return sizeOfInt96(page.values) }
 
@@ -565,12 +601,16 @@ func (page *int96Page) WriteTo(e encoding.Encoder) error { return e.EncodeInt96(
 
 func (page *int96Page) Values() ValueReader { return &int96PageReader{values: page.values} }
 
-type int96PageReader struct{ values []deprecated.Int96 }
+type int96PageReader struct {
+	values      []deprecated.Int96
+	columnIndex int8
+}
 
 func (r *int96PageReader) ReadValues(values []Value) (n int, err error) {
 	n = min(len(values), len(r.values))
 	for i := 0; i < n; i++ {
 		values[i] = makeValueInt96(r.values[i])
+		values[i].columnIndex = r.columnIndex
 	}
 	if r.values = r.values[n:]; len(r.values) == 0 {
 		err = io.EOF
@@ -578,9 +618,10 @@ func (r *int96PageReader) ReadValues(values []Value) (n int, err error) {
 	return n, err
 }
 
-type floatPage struct{ values []float32 }
-
-func newFloatPage(values []float32) *floatPage { return &floatPage{values: values} }
+type floatPage struct {
+	values      []float32
+	columnIndex int8
+}
 
 func (page *floatPage) NumRows() int { return len(page.values) }
 
@@ -597,7 +638,12 @@ func (page *floatPage) Bounds() (min, max Value) {
 	return min, max
 }
 
-func (page *floatPage) Slice(i, j int) Page { return newFloatPage(page.values[i:j]) }
+func (page *floatPage) Slice(i, j int) Page {
+	return &floatPage{
+		values:      page.values[i:j],
+		columnIndex: page.columnIndex,
+	}
+}
 
 func (page *floatPage) Size() int64 { return sizeOfFloat32(page.values) }
 
@@ -611,12 +657,16 @@ func (page *floatPage) Values() ValueReader {
 	return &floatPageReader{values: page.values}
 }
 
-type floatPageReader struct{ values []float32 }
+type floatPageReader struct {
+	values      []float32
+	columnIndex int8
+}
 
 func (r *floatPageReader) ReadValues(values []Value) (n int, err error) {
 	n = min(len(values), len(r.values))
 	for i := 0; i < n; i++ {
 		values[i] = makeValueFloat(r.values[i])
+		values[i].columnIndex = r.columnIndex
 	}
 	if r.values = r.values[n:]; len(r.values) == 0 {
 		err = io.EOF
@@ -624,9 +674,10 @@ func (r *floatPageReader) ReadValues(values []Value) (n int, err error) {
 	return n, err
 }
 
-type doublePage struct{ values []float64 }
-
-func newDoublePage(values []float64) *doublePage { return &doublePage{values: values} }
+type doublePage struct {
+	values      []float64
+	columnIndex int8
+}
 
 func (page *doublePage) NumRows() int { return len(page.values) }
 
@@ -643,7 +694,12 @@ func (page *doublePage) Bounds() (min, max Value) {
 	return min, max
 }
 
-func (page *doublePage) Slice(i, j int) Page { return newDoublePage(page.values[i:j]) }
+func (page *doublePage) Slice(i, j int) Page {
+	return &doublePage{
+		values:      page.values[i:j],
+		columnIndex: page.columnIndex,
+	}
+}
 
 func (page *doublePage) Size() int64 { return sizeOfFloat64(page.values) }
 
@@ -658,14 +714,15 @@ func (page *doublePage) Values() ValueReader {
 }
 
 type doublePageReader struct {
-	values []float64
-	offset uint
+	values      []float64
+	columnIndex int8
 }
 
 func (r *doublePageReader) ReadValues(values []Value) (n int, err error) {
 	n = min(len(values), len(r.values))
 	for i := 0; i < n; i++ {
 		values[i] = makeValueDouble(r.values[i])
+		values[i].columnIndex = r.columnIndex
 	}
 	if r.values = r.values[n:]; len(r.values) == 0 {
 		err = io.EOF
@@ -673,10 +730,9 @@ func (r *doublePageReader) ReadValues(values []Value) (n int, err error) {
 	return n, err
 }
 
-type byteArrayPage struct{ values encoding.ByteArrayList }
-
-func newByteArrayPage(values encoding.ByteArrayList) *byteArrayPage {
-	return &byteArrayPage{values: values}
+type byteArrayPage struct {
+	values      encoding.ByteArrayList
+	columnIndex int8
 }
 
 func (page *byteArrayPage) NumRows() int { return page.values.Len() }
@@ -706,7 +762,12 @@ func (page *byteArrayPage) Bounds() (min, max Value) {
 	return min, max
 }
 
-func (page *byteArrayPage) Slice(i, j int) Page { return newByteArrayPage(page.values.Slice(i, j)) }
+func (page *byteArrayPage) Slice(i, j int) Page {
+	return &byteArrayPage{
+		values:      page.values.Slice(i, j),
+		columnIndex: page.columnIndex,
+	}
+}
 
 func (page *byteArrayPage) Size() int64 { return page.values.Size() }
 
@@ -718,12 +779,16 @@ func (page *byteArrayPage) WriteTo(e encoding.Encoder) error { return e.EncodeBy
 
 func (page *byteArrayPage) Values() ValueReader { return &byteArrayPageReader{values: page.values} }
 
-type byteArrayPageReader struct{ values encoding.ByteArrayList }
+type byteArrayPageReader struct {
+	values      encoding.ByteArrayList
+	columnIndex int8
+}
 
 func (r *byteArrayPageReader) ReadValues(values []Value) (n int, err error) {
 	n = min(len(values), r.values.Len())
 	for i := 0; i < n; i++ {
 		values[i] = makeValueBytes(ByteArray, r.values.Index(i))
+		values[i].columnIndex = r.columnIndex
 	}
 	if r.values = r.values.Slice(n, r.values.Len()); r.values.Len() == 0 {
 		err = io.EOF
@@ -732,12 +797,9 @@ func (r *byteArrayPageReader) ReadValues(values []Value) (n int, err error) {
 }
 
 type fixedLenByteArrayPage struct {
-	size int
-	data []byte
-}
-
-func newFixedLenByteArrayPage(size int, data []byte) *fixedLenByteArrayPage {
-	return &fixedLenByteArrayPage{size: size, data: data}
+	size        int
+	data        []byte
+	columnIndex int8
 }
 
 func (page *fixedLenByteArrayPage) NumRows() int { return len(page.data) / page.size }
@@ -756,7 +818,11 @@ func (page *fixedLenByteArrayPage) Bounds() (min, max Value) {
 }
 
 func (page *fixedLenByteArrayPage) Slice(i, j int) Page {
-	return newFixedLenByteArrayPage(page.size, page.data[i*page.size:j*page.size])
+	return &fixedLenByteArrayPage{
+		size:        page.size,
+		data:        page.data[i*page.size : j*page.size],
+		columnIndex: page.columnIndex,
+	}
 }
 
 func (page *fixedLenByteArrayPage) Size() int64 { return sizeOfBytes(page.data) }
@@ -774,13 +840,15 @@ func (page *fixedLenByteArrayPage) Values() ValueReader {
 }
 
 type fixedLenByteArrayPageReader struct {
-	size int
-	data []byte
+	size        int
+	data        []byte
+	columnIndex int8
 }
 
 func (r *fixedLenByteArrayPageReader) ReadValues(values []Value) (n int, err error) {
 	for n < len(values) && r.size > 0 && len(r.data) >= r.size {
 		values[n] = makeValueBytes(FixedLenByteArray, r.data[:r.size:r.size])
+		values[n].columnIndex = r.columnIndex
 		r.data = r.data[r.size:]
 		n++
 	}
@@ -795,10 +863,6 @@ func (r *fixedLenByteArrayPageReader) ReadValues(values []Value) (n int, err err
 
 type uint32Page struct{ *int32Page }
 
-func newUint32Page(values []int32) uint32Page {
-	return uint32Page{newInt32Page(values)}
-}
-
 func (page uint32Page) Bounds() (min, max Value) {
 	if len(page.values) > 0 {
 		minUint32, maxUint32 := bits.MinMaxUint32(bits.Int32ToUint32(page.values))
@@ -809,14 +873,10 @@ func (page uint32Page) Bounds() (min, max Value) {
 }
 
 func (page uint32Page) Slice(i, j int) Page {
-	return newUint32Page(page.values[i:j])
+	return uint32Page{page.int32Page.Slice(i, j).(*int32Page)}
 }
 
 type uint64Page struct{ *int64Page }
-
-func newUint64Page(values []int64) uint64Page {
-	return uint64Page{newInt64Page(values)}
-}
 
 func (page uint64Page) Bounds() (min, max Value) {
 	if len(page.values) > 0 {
@@ -828,7 +888,7 @@ func (page uint64Page) Bounds() (min, max Value) {
 }
 
 func (page uint64Page) Slice(i, j int) Page {
-	return newUint64Page(page.values[i:j])
+	return uint64Page{page.int64Page.Slice(i, j).(*int64Page)}
 }
 
 func min(a, b int) int {

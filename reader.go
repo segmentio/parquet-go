@@ -183,11 +183,10 @@ func (r *Reader) Schema() *Schema { return r.fileSchema }
 type columnValueReader struct {
 	buffer []Value
 	offset uint
-	column int8
 	reader ValueReader
 }
 
-func makeColumnValueReaders(numColumns int, columnIndex func(int) ValueReader) []columnValueReader {
+func makeColumnValueReaders(numColumns int, columnAt func(int) ValueReader) []columnValueReader {
 	// 170 x sizeof(Value) = 1KB
 	const columnBufferSize = 170
 	buffer := make([]Value, columnBufferSize*numColumns)
@@ -195,8 +194,7 @@ func makeColumnValueReaders(numColumns int, columnIndex func(int) ValueReader) [
 
 	for i := 0; i < numColumns; i++ {
 		readers[i].buffer = buffer[:0:columnBufferSize]
-		readers[i].column = ^int8(i)
-		readers[i].reader = columnIndex(i)
+		readers[i].reader = columnAt(i)
 		buffer = buffer[columnBufferSize:]
 	}
 
@@ -216,9 +214,6 @@ func (r *columnValueReader) readMoreValues() error {
 	}
 	r.buffer = r.buffer[:n]
 	r.offset = 0
-	for i := range r.buffer {
-		r.buffer[i].columnIndex = r.column
-	}
 	return nil
 }
 

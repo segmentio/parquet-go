@@ -97,6 +97,10 @@ func (col *optionalBufferColumn) Dictionary() Dictionary {
 	return col.base.Dictionary()
 }
 
+func (col *optionalBufferColumn) Index() int {
+	return col.base.Index()
+}
+
 func (col *optionalBufferColumn) Pages() []Page {
 	col.reorder()
 	return pagesWithDefinitionLevels(
@@ -276,6 +280,10 @@ func (col *repeatedBufferColumn) Clone() BufferColumn {
 
 func (col *repeatedBufferColumn) Dictionary() Dictionary {
 	return col.base.Dictionary()
+}
+
+func (col *repeatedBufferColumn) Index() int {
+	return col.base.Index()
 }
 
 func (col *repeatedBufferColumn) Pages() []Page {
@@ -493,10 +501,11 @@ func maxRowLengthOf(rows []region) (maxLength uint32) {
 
 type booleanBufferColumn struct{ booleanPage }
 
-func newBooleanBufferColumn(bufferSize int) *booleanBufferColumn {
+func newBooleanBufferColumn(columnIndex, bufferSize int) *booleanBufferColumn {
 	return &booleanBufferColumn{
 		booleanPage: booleanPage{
-			values: make([]bool, 0, bufferSize),
+			values:      make([]bool, 0, bufferSize),
+			columnIndex: ^int8(columnIndex),
 		},
 	}
 }
@@ -504,12 +513,15 @@ func newBooleanBufferColumn(bufferSize int) *booleanBufferColumn {
 func (col *booleanBufferColumn) Clone() BufferColumn {
 	return &booleanBufferColumn{
 		booleanPage: booleanPage{
-			values: append([]bool{}, col.values...),
+			values:      append([]bool{}, col.values...),
+			columnIndex: col.columnIndex,
 		},
 	}
 }
 
 func (col *booleanBufferColumn) Dictionary() Dictionary { return nil }
+
+func (col *booleanBufferColumn) Index() int { return int(^col.columnIndex) }
 
 func (col *booleanBufferColumn) Pages() []Page { return []Page{&col.booleanPage} }
 
@@ -545,16 +557,19 @@ func (col *booleanBufferColumn) ReadRowAt(row Row, index int) (Row, error) {
 	case index >= len(col.values):
 		return row, io.EOF
 	default:
-		return append(row, makeValueBoolean(col.values[index])), nil
+		v := makeValueBoolean(col.values[index])
+		v.columnIndex = col.columnIndex
+		return append(row, v), nil
 	}
 }
 
 type int32BufferColumn struct{ int32Page }
 
-func newInt32BufferColumn(bufferSize int) *int32BufferColumn {
+func newInt32BufferColumn(columnIndex, bufferSize int) *int32BufferColumn {
 	return &int32BufferColumn{
 		int32Page: int32Page{
-			values: make([]int32, 0, bufferSize/4),
+			values:      make([]int32, 0, bufferSize/4),
+			columnIndex: ^int8(columnIndex),
 		},
 	}
 }
@@ -562,7 +577,8 @@ func newInt32BufferColumn(bufferSize int) *int32BufferColumn {
 func (col *int32BufferColumn) Clone() BufferColumn {
 	return &int32BufferColumn{
 		int32Page: int32Page{
-			values: append([]int32{}, col.values...),
+			values:      append([]int32{}, col.values...),
+			columnIndex: col.columnIndex,
 		},
 	}
 }
@@ -570,6 +586,8 @@ func (col *int32BufferColumn) Clone() BufferColumn {
 func (col *int32BufferColumn) Dictionary() Dictionary { return nil }
 
 func (col *int32BufferColumn) Pages() []Page { return []Page{&col.int32Page} }
+
+func (col *int32BufferColumn) Index() int { return int(^col.columnIndex) }
 
 func (col *int32BufferColumn) Reset() { col.values = col.values[:0] }
 
@@ -601,16 +619,19 @@ func (col *int32BufferColumn) ReadRowAt(row Row, index int) (Row, error) {
 	case index >= len(col.values):
 		return row, io.EOF
 	default:
-		return append(row, makeValueInt32(col.values[index])), nil
+		v := makeValueInt32(col.values[index])
+		v.columnIndex = col.columnIndex
+		return append(row, v), nil
 	}
 }
 
 type int64BufferColumn struct{ int64Page }
 
-func newInt64BufferColumn(bufferSize int) *int64BufferColumn {
+func newInt64BufferColumn(columnIndex, bufferSize int) *int64BufferColumn {
 	return &int64BufferColumn{
 		int64Page: int64Page{
-			values: make([]int64, 0, bufferSize/8),
+			values:      make([]int64, 0, bufferSize/8),
+			columnIndex: ^int8(columnIndex),
 		},
 	}
 }
@@ -618,12 +639,15 @@ func newInt64BufferColumn(bufferSize int) *int64BufferColumn {
 func (col *int64BufferColumn) Clone() BufferColumn {
 	return &int64BufferColumn{
 		int64Page: int64Page{
-			values: append([]int64{}, col.values...),
+			values:      append([]int64{}, col.values...),
+			columnIndex: col.columnIndex,
 		},
 	}
 }
 
 func (col *int64BufferColumn) Dictionary() Dictionary { return nil }
+
+func (col *int64BufferColumn) Index() int { return int(^col.columnIndex) }
 
 func (col *int64BufferColumn) Pages() []Page { return []Page{&col.int64Page} }
 
@@ -657,16 +681,19 @@ func (col *int64BufferColumn) ReadRowAt(row Row, index int) (Row, error) {
 	case index >= len(col.values):
 		return row, io.EOF
 	default:
-		return append(row, makeValueInt64(col.values[index])), nil
+		v := makeValueInt64(col.values[index])
+		v.columnIndex = col.columnIndex
+		return append(row, v), nil
 	}
 }
 
 type int96BufferColumn struct{ int96Page }
 
-func newInt96BufferColumn(bufferSize int) *int96BufferColumn {
+func newInt96BufferColumn(columnIndex, bufferSize int) *int96BufferColumn {
 	return &int96BufferColumn{
 		int96Page: int96Page{
-			values: make([]deprecated.Int96, 0, bufferSize/12),
+			values:      make([]deprecated.Int96, 0, bufferSize/12),
+			columnIndex: ^int8(columnIndex),
 		},
 	}
 }
@@ -674,12 +701,15 @@ func newInt96BufferColumn(bufferSize int) *int96BufferColumn {
 func (col *int96BufferColumn) Clone() BufferColumn {
 	return &int96BufferColumn{
 		int96Page: int96Page{
-			values: append([]deprecated.Int96{}, col.values...),
+			values:      append([]deprecated.Int96{}, col.values...),
+			columnIndex: col.columnIndex,
 		},
 	}
 }
 
 func (col *int96BufferColumn) Dictionary() Dictionary { return nil }
+
+func (col *int96BufferColumn) Index() int { return int(^col.columnIndex) }
 
 func (col *int96BufferColumn) Pages() []Page { return []Page{&col.int96Page} }
 
@@ -713,16 +743,19 @@ func (col *int96BufferColumn) ReadRowAt(row Row, index int) (Row, error) {
 	case index >= len(col.values):
 		return row, io.EOF
 	default:
-		return append(row, makeValueInt96(col.values[index])), nil
+		v := makeValueInt96(col.values[index])
+		v.columnIndex = col.columnIndex
+		return append(row, v), nil
 	}
 }
 
 type floatBufferColumn struct{ floatPage }
 
-func newFloatBufferColumn(bufferSize int) *floatBufferColumn {
+func newFloatBufferColumn(columnIndex, bufferSize int) *floatBufferColumn {
 	return &floatBufferColumn{
 		floatPage: floatPage{
-			values: make([]float32, 0, bufferSize/4),
+			values:      make([]float32, 0, bufferSize/4),
+			columnIndex: ^int8(columnIndex),
 		},
 	}
 }
@@ -730,12 +763,15 @@ func newFloatBufferColumn(bufferSize int) *floatBufferColumn {
 func (col *floatBufferColumn) Clone() BufferColumn {
 	return &floatBufferColumn{
 		floatPage: floatPage{
-			values: append([]float32{}, col.values...),
+			values:      append([]float32{}, col.values...),
+			columnIndex: col.columnIndex,
 		},
 	}
 }
 
 func (col *floatBufferColumn) Dictionary() Dictionary { return nil }
+
+func (col *floatBufferColumn) Index() int { return int(^col.columnIndex) }
 
 func (col *floatBufferColumn) Pages() []Page { return []Page{&col.floatPage} }
 
@@ -769,16 +805,19 @@ func (col *floatBufferColumn) ReadRowAt(row Row, index int) (Row, error) {
 	case index >= len(col.values):
 		return row, io.EOF
 	default:
-		return append(row, makeValueFloat(col.values[index])), nil
+		v := makeValueFloat(col.values[index])
+		v.columnIndex = col.columnIndex
+		return append(row, v), nil
 	}
 }
 
 type doubleBufferColumn struct{ doublePage }
 
-func newDoubleBufferColumn(bufferSize int) *doubleBufferColumn {
+func newDoubleBufferColumn(columnIndex, bufferSize int) *doubleBufferColumn {
 	return &doubleBufferColumn{
 		doublePage: doublePage{
-			values: make([]float64, 0, bufferSize/8),
+			values:      make([]float64, 0, bufferSize/8),
+			columnIndex: ^int8(columnIndex),
 		},
 	}
 }
@@ -786,12 +825,15 @@ func newDoubleBufferColumn(bufferSize int) *doubleBufferColumn {
 func (col *doubleBufferColumn) Clone() BufferColumn {
 	return &doubleBufferColumn{
 		doublePage: doublePage{
-			values: append([]float64{}, col.values...),
+			values:      append([]float64{}, col.values...),
+			columnIndex: col.columnIndex,
 		},
 	}
 }
 
 func (col *doubleBufferColumn) Dictionary() Dictionary { return nil }
+
+func (col *doubleBufferColumn) Index() int { return int(^col.columnIndex) }
 
 func (col *doubleBufferColumn) Pages() []Page { return []Page{&col.doublePage} }
 
@@ -825,16 +867,19 @@ func (col *doubleBufferColumn) ReadRowAt(row Row, index int) (Row, error) {
 	case index >= len(col.values):
 		return row, io.EOF
 	default:
-		return append(row, makeValueDouble(col.values[index])), nil
+		v := makeValueDouble(col.values[index])
+		v.columnIndex = col.columnIndex
+		return append(row, v), nil
 	}
 }
 
 type byteArrayBufferColumn struct{ byteArrayPage }
 
-func newByteArrayBufferColumn(bufferSize int) *byteArrayBufferColumn {
+func newByteArrayBufferColumn(columnIndex, bufferSize int) *byteArrayBufferColumn {
 	return &byteArrayBufferColumn{
 		byteArrayPage: byteArrayPage{
-			values: encoding.MakeByteArrayList(bufferSize / 16),
+			values:      encoding.MakeByteArrayList(bufferSize / 16),
+			columnIndex: ^int8(columnIndex),
 		},
 	}
 }
@@ -842,12 +887,15 @@ func newByteArrayBufferColumn(bufferSize int) *byteArrayBufferColumn {
 func (col *byteArrayBufferColumn) Clone() BufferColumn {
 	return &byteArrayBufferColumn{
 		byteArrayPage: byteArrayPage{
-			values: col.values.Clone(),
+			values:      col.values.Clone(),
+			columnIndex: col.columnIndex,
 		},
 	}
 }
 
 func (col *byteArrayBufferColumn) Dictionary() Dictionary { return nil }
+
+func (col *byteArrayBufferColumn) Index() int { return int(^col.columnIndex) }
 
 func (col *byteArrayBufferColumn) Pages() []Page { return []Page{&col.byteArrayPage} }
 
@@ -879,7 +927,9 @@ func (col *byteArrayBufferColumn) ReadRowAt(row Row, index int) (Row, error) {
 	case index >= col.values.Len():
 		return row, io.EOF
 	default:
-		return append(row, makeValueBytes(ByteArray, col.values.Index(index))), nil
+		v := makeValueBytes(ByteArray, col.values.Index(index))
+		v.columnIndex = col.columnIndex
+		return append(row, v), nil
 	}
 }
 
@@ -888,11 +938,12 @@ type fixedLenByteArrayBufferColumn struct {
 	tmp []byte
 }
 
-func newFixedLenByteArrayBufferColumn(size, bufferSize int) *fixedLenByteArrayBufferColumn {
+func newFixedLenByteArrayBufferColumn(size, columnIndex, bufferSize int) *fixedLenByteArrayBufferColumn {
 	return &fixedLenByteArrayBufferColumn{
 		fixedLenByteArrayPage: fixedLenByteArrayPage{
-			size: size,
-			data: make([]byte, 0, bufferSize),
+			size:        size,
+			data:        make([]byte, 0, bufferSize),
+			columnIndex: ^int8(columnIndex),
 		},
 		tmp: make([]byte, size),
 	}
@@ -901,14 +952,17 @@ func newFixedLenByteArrayBufferColumn(size, bufferSize int) *fixedLenByteArrayBu
 func (col *fixedLenByteArrayBufferColumn) Clone() BufferColumn {
 	return &fixedLenByteArrayBufferColumn{
 		fixedLenByteArrayPage: fixedLenByteArrayPage{
-			size: col.size,
-			data: append([]byte{}, col.data...),
+			size:        col.size,
+			data:        append([]byte{}, col.data...),
+			columnIndex: col.columnIndex,
 		},
 		tmp: make([]byte, col.size),
 	}
 }
 
 func (col *fixedLenByteArrayBufferColumn) Dictionary() Dictionary { return nil }
+
+func (col *fixedLenByteArrayBufferColumn) Index() int { return int(^col.columnIndex) }
 
 func (col *fixedLenByteArrayBufferColumn) Pages() []Page { return []Page{&col.fixedLenByteArrayPage} }
 
@@ -955,14 +1009,16 @@ func (col *fixedLenByteArrayBufferColumn) ReadRowAt(row Row, index int) (Row, er
 	case j > len(col.data):
 		return row, io.EOF
 	default:
-		return append(row, makeValueBytes(FixedLenByteArray, col.data[i:j])), nil
+		v := makeValueBytes(FixedLenByteArray, col.data[i:j])
+		v.columnIndex = col.columnIndex
+		return append(row, v), nil
 	}
 }
 
 type uint32BufferColumn struct{ *int32BufferColumn }
 
-func newUint32BufferColumn(bufferSize int) uint32BufferColumn {
-	return uint32BufferColumn{newInt32BufferColumn(bufferSize)}
+func newUint32BufferColumn(columnIndex, bufferSize int) uint32BufferColumn {
+	return uint32BufferColumn{newInt32BufferColumn(columnIndex, bufferSize)}
 }
 
 func (col uint32BufferColumn) Pages() []Page {
@@ -979,8 +1035,8 @@ func (col uint32BufferColumn) Less(i, j int) bool {
 
 type uint64BufferColumn struct{ *int64BufferColumn }
 
-func newUint64BufferColumn(bufferSize int) uint64BufferColumn {
-	return uint64BufferColumn{newInt64BufferColumn(bufferSize)}
+func newUint64BufferColumn(columnIndex, bufferSize int) uint64BufferColumn {
+	return uint64BufferColumn{newInt64BufferColumn(columnIndex, bufferSize)}
 }
 
 func (col uint64BufferColumn) Clone() BufferColumn {

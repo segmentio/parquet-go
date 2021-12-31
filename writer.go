@@ -246,10 +246,8 @@ func (rgw *rowGroupWriter) init(node Node, path []string, dataPageType format.Pa
 	})
 
 	if names := node.ChildNames(); len(names) > 0 {
-		base := path[:len(path):len(path)]
-
 		for _, name := range names {
-			rgw.init(node.ChildByName(name), append(base, name), dataPageType, maxRepetitionLevel, maxDefinitionLevel, config)
+			rgw.init(node.ChildByName(name), appendPath(path, name), dataPageType, maxRepetitionLevel, maxDefinitionLevel, config)
 		}
 	} else {
 		encoding, compression := encodingAndCompressionOf(node)
@@ -279,6 +277,7 @@ func (rgw *rowGroupWriter) init(node Node, path []string, dataPageType format.Pa
 				dataPageType,
 				maxRepetitionLevel,
 				maxDefinitionLevel,
+				len(rgw.columns),
 				config.PageBufferSize,
 				config.DataPageStatistics,
 				// Data pages in version 2 can omit compression when dictionary
@@ -727,13 +726,14 @@ type columnChunkWriter struct {
 
 	maxValues      int32
 	numValues      int32
+	columnIndex    int
 	bufferSize     int
 	writePageStats bool
 	isCompressed   bool
 	encodings      []format.Encoding
 }
 
-func newColumnChunkWriter(writer pageWriter, columnType Type, columnIndexer ColumnIndexer, compression compress.Codec, encoder encoding.Encoder, dataPageType format.PageType, maxRepetitionLevel, maxDefinitionLevel int8, bufferSize int, writePageStats, isCompressed bool) *columnChunkWriter {
+func newColumnChunkWriter(writer pageWriter, columnType Type, columnIndexer ColumnIndexer, compression compress.Codec, encoder encoding.Encoder, dataPageType format.PageType, maxRepetitionLevel, maxDefinitionLevel int8, columnIndex, bufferSize int, writePageStats, isCompressed bool) *columnChunkWriter {
 	ccw := &columnChunkWriter{
 		writer:             writer,
 		columnType:         columnType,
@@ -742,6 +742,7 @@ func newColumnChunkWriter(writer pageWriter, columnType Type, columnIndexer Colu
 		dataPageType:       dataPageType,
 		maxRepetitionLevel: maxRepetitionLevel,
 		maxDefinitionLevel: maxDefinitionLevel,
+		columnIndex:        columnIndex,
 		bufferSize:         bufferSize,
 		writePageStats:     writePageStats,
 		isCompressed:       isCompressed,
@@ -808,7 +809,7 @@ func (ccw *columnChunkWriter) commitRepeated() error {
 }
 
 func (ccw *columnChunkWriter) newBufferColumn() BufferColumn {
-	column := ccw.columnType.NewBufferColumn(ccw.bufferSize)
+	column := ccw.columnType.NewBufferColumn(ccw.columnIndex, ccw.bufferSize)
 	switch {
 	case ccw.maxRepetitionLevel > 0:
 		column = newRepeatedBufferColumn(column, ccw.maxRepetitionLevel, ccw.maxDefinitionLevel, nullsGoLast)
