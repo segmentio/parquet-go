@@ -38,12 +38,6 @@ type Column struct {
 	index              int8
 }
 
-// Schema returns the underlying schema element of c.
-func (c *Column) Schema() *format.SchemaElement { return c.schema }
-
-// Order returns the underlying column order of c.
-func (c *Column) Order() *format.ColumnOrder { return c.order }
-
 // Type returns the type of the column.
 //
 // The returned value is unspecified if c is not a leaf column.

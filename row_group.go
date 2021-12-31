@@ -41,19 +41,25 @@ type nullsFirst struct{ SortingColumn }
 
 func (nullsFirst) NullsFirst() bool { return true }
 
+// RowGroup is an interface representing a parquet row group.
 type RowGroup interface {
+	// Returns the list of column that that row group has values for.
 	Columns() []RowGroupColumn
 
+	// Returns the number of rows in the group.
 	NumRows() int
 
-	Schema() *Schema
-
+	// Returns the list of sorting columns describing how rows are sorted in the
+	// group.
+	//
+	// The method will return an empty slice if the rows are not sorted.
 	SortingColumns() []format.SortingColumn
 
 	// Rows returns a reader exposing the rows of the row group.
 	Rows() RowReader
 }
 
+// The RowGroupColumn interface represents individual columns of a row group.
 type RowGroupColumn interface {
 	// For indexed columns, returns the underlying dictionary holding the column
 	// values. If the column is not indexed, nil is returned.
@@ -63,10 +69,14 @@ type RowGroupColumn interface {
 	Pages() []Page
 }
 
+// RowGroupReader is an interface implemented by types that expose sequences of
+// row groups to the application.
 type RowGroupReader interface {
 	ReadRowGroup() (RowGroup, error)
 }
 
+// RowGroupWriter is an interface implemented by tyeps that allow the program
+// to write row groups.
 type RowGroupWriter interface {
 	WriteRowGroup(RowGroup) (int64, error)
 }

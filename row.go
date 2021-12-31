@@ -26,46 +26,70 @@ func (row Row) startsWith(columnIndex int) bool {
 	return len(row) > 0 && int(row[0].ColumnIndex()) == columnIndex
 }
 
+// RowReader reads a sequence of parquet rows.
 type RowReader interface {
 	ReadRow(Row) (Row, error)
 }
 
+// RowReaderAt reads parquet rows at specific indexes.
 type RowReaderAt interface {
 	ReadRowAt(Row, int) (Row, error)
 }
 
-type RowWriter interface {
-	WriteRow(Row) error
-}
-
-type RowWriterWithSchema interface {
-	RowWriter
-	Schema() *Schema
-}
-
-type RowWriterAt interface {
-	WriteRowAt(Row, int) error
-}
-
+// RowReaderFrom reads parquet rows from reader.
 type RowReaderFrom interface {
 	ReadRowsFrom(RowReader) (int64, error)
 }
 
-type RowWriterTo interface {
-	WriteRowsTo(RowWriter) (int64, error)
-}
-
+// RowReaderWtihSchema is an extension of the RowReader interface which
+// advertizes the schema of rows returned by ReadRow calls.
 type RowReaderWithSchema interface {
 	RowReader
 	Schema() *Schema
 }
 
+// RowWriter writes parquet rows to an underlying medium.
+type RowWriter interface {
+	WriteRow(Row) error
+}
+
+// RowWriterAt writes parquet rows at specific indexes.
+type RowWriterAt interface {
+	WriteRowAt(Row, int) error
+}
+
+// RowWriterTo writes parquet rows to a writer.
+type RowWriterTo interface {
+	WriteRowsTo(RowWriter) (int64, error)
+}
+
+// RowWriterWithSchema is an extension of the RowWriter interface which
+// advertizes the schema of rows expected to be passed to WriteRow calls.
+type RowWriterWithSchema interface {
+	RowWriter
+	Schema() *Schema
+}
+
+// CopyRows copies rows from src to dst.
+//
+// The underlying types of src and dst are tested to determine if they expose
+// information about the schema of rows that are read and expected to be
+// written. If the schema information are available but do not match, the
+// function will attempt to automatically convert the rows from the source
+// schema to the destination.
+//
+// As an optimization, the src argument may implemnt RowWriterTo to bypass
+// the default row copy logic and provide its own. The dst argument may also
+// implement RowReaderFrom for the same purpose.
+//
+// The function returns the number of rows written, or any error encountered
+// other than io.EOF.
 func CopyRows(dst RowWriter, src RowReader) (int64, error) {
-	n, _, err := copyRowsBuffer(dst, src, nil)
+	n, _, err := copyRows(dst, src, nil)
 	return n, err
 }
 
-func copyRowsBuffer(dst RowWriter, src RowReader, buf []Value) (written int64, ret []Value, err error) {
+func copyRows(dst RowWriter, src RowReader, buf []Value) (written int64, ret []Value, err error) {
 	targetSchema := targetSchemaOf(dst)
 	sourceSchema := sourceSchemaOf(src)
 

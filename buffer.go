@@ -24,6 +24,8 @@ type Buffer struct {
 	numRows int
 }
 
+// NewBuffer constructs a new buffer, using the given list of buffer options
+// to configure the buffer returned by the function.
 func NewBuffer(options ...BufferOption) *Buffer {
 	config := DefaultBufferConfig()
 	config.Apply(options...)
@@ -114,6 +116,7 @@ func (buf *Buffer) init(node Node, path []string, repetitionLevel, definitionLev
 	}
 }
 
+// Size returns the estimated size of the buffer in memory.
 func (buf *Buffer) Size() int64 {
 	size := int64(0)
 	for _, col := range buf.columns {
@@ -122,6 +125,9 @@ func (buf *Buffer) Size() int64 {
 	return size
 }
 
+// Columns returns the list of columns in the buffer.
+//
+// The list will be empty until a schema is configured on the buffer.
 func (buf *Buffer) Columns() []RowGroupColumn {
 	columns := make([]RowGroupColumn, len(buf.columns))
 	for i, c := range buf.columns {
@@ -130,14 +136,26 @@ func (buf *Buffer) Columns() []RowGroupColumn {
 	return columns
 }
 
+// NumRows returns the number of rows written to the buffer.
 func (buf *Buffer) NumRows() int { return buf.numRows }
 
+// Schema returns the schema of the buffer.
+//
+// The schema is either configured by passing a Schema in the option list when
+// constructing the buffer, or lazily discovered when the first row is written.
 func (buf *Buffer) Schema() *Schema { return buf.schema }
 
+// SortingColumns returns the list of columns by which the buffer will be
+// sorted.
+//
+// The sorting order is configured by passing a SortingColumns option when
+// constructing the buffer.
 func (buf *Buffer) SortingColumns() []format.SortingColumn { return buf.sorting }
 
+// Len returns the number of rows written to the buffer.
 func (buf *Buffer) Len() int { return buf.numRows }
 
+// Less returns true if the row[i] < row[j] in the buffer.
 func (buf *Buffer) Less(i, j int) bool {
 	for _, col := range buf.sorted {
 		switch {
@@ -150,12 +168,14 @@ func (buf *Buffer) Less(i, j int) bool {
 	return false
 }
 
+// Swap exchanges the rows at indexes i and j.
 func (buf *Buffer) Swap(i, j int) {
 	for _, col := range buf.columns {
 		col.Swap(i, j)
 	}
 }
 
+// Reset clears the content of the buffer, allowing it to be reused.
 func (buf *Buffer) Reset() {
 	for _, col := range buf.columns {
 		col.Reset()
@@ -163,6 +183,7 @@ func (buf *Buffer) Reset() {
 	buf.numRows = 0
 }
 
+// Write writes a row held in a Go value to the buffer.
 func (buf *Buffer) Write(row interface{}) error {
 	if buf.schema == nil {
 		buf.configure(SchemaOf(row))
@@ -174,6 +195,7 @@ func (buf *Buffer) Write(row interface{}) error {
 	return buf.WriteRow(buf.rowbuf)
 }
 
+// WriteRow writes a parquet row to the buffer.
 func (buf *Buffer) WriteRow(row Row) error {
 	defer func() {
 		for i, colbuf := range buf.colbuf {
@@ -197,9 +219,11 @@ func (buf *Buffer) WriteRow(row Row) error {
 	return nil
 }
 
-func (buf *Buffer) Rows() RowReader {
-	return &bufferRowReader{buffer: buf}
-}
+// Rows returns a reader exposing the current content of the buffer.
+//
+// The buffer and the returned reader share memory, mutating the buffer
+// concurrently to reading rows may result in non-deterministic behavior.
+func (buf *Buffer) Rows() RowReader { return &bufferRowReader{buffer: buf} }
 
 type bufferRowReader struct {
 	buffer  *Buffer
@@ -238,12 +262,11 @@ func (r *bufferRowReader) WriteRowsTo(w RowWriter) (int64, error) {
 	return CopyRows(w, struct{ RowReader }{r})
 }
 
-func (r *bufferRowReader) Schema() *Schema {
-	return r.buffer.schema
-}
+func (r *bufferRowReader) Schema() *Schema { return r.buffer.schema }
 
 var (
 	_ RowReaderWithSchema = (*bufferRowReader)(nil)
 	_ RowWriterTo         = (*bufferRowReader)(nil)
+	_ RowGroup            = (*Buffer)(nil)
 	_ sort.Interface      = (*Buffer)(nil)
 )

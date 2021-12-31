@@ -136,7 +136,7 @@ func (w *Writer) ReadRowsFrom(rows RowReader) (written int64, err error) {
 			w.configure(r.Schema())
 		}
 	}
-	written, w.values, err = copyRowsBuffer(w.rowGroups, rows, w.values[:0])
+	written, w.values, err = copyRows(w.rowGroups, rows, w.values[:0])
 	return written, err
 }
 
