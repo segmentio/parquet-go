@@ -642,11 +642,24 @@ func (rgw *rowGroupWriter) WriteRowGroup(rowGroup RowGroup) (int64, error) {
 		totalCompressedSize += stats.totalCompressedSize
 	}
 
+	rowGroupSortingColumns := rowGroup.SortingColumns()
+	rowGroupSchema := rowGroup.Schema()
+	sortingColumns := make([]format.SortingColumn, 0, len(rowGroupSortingColumns))
+	forEachLeafColumnOf(rowGroupSchema, func(leaf leafColumn) {
+		if sorting := sortingColumnOf(rowGroupSortingColumns, leaf.path); sorting != nil {
+			sortingColumns = append(sortingColumns, format.SortingColumn{
+				ColumnIdx:  int32(leaf.columnIndex),
+				Descending: sorting.Descending(),
+				NullsFirst: sorting.NullsFirst(),
+			})
+		}
+	})
+
 	rgw.rowGroups = append(rgw.rowGroups, format.RowGroup{
 		Columns:             columns,
 		TotalByteSize:       totalByteSize,
 		NumRows:             totalRowCount,
-		SortingColumns:      rowGroup.SortingColumns(),
+		SortingColumns:      sortingColumns,
 		FileOffset:          rgw.fileOffset,
 		TotalCompressedSize: totalCompressedSize,
 		Ordinal:             int16(len(rgw.rowGroups)),

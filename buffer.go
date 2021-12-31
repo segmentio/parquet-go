@@ -3,8 +3,6 @@ package parquet
 import (
 	"io"
 	"sort"
-
-	"github.com/segmentio/parquet/format"
 )
 
 // Buffer represents an in-memory group of parquet rows.
@@ -19,7 +17,6 @@ type Buffer struct {
 	colbuf  [][]Value
 	columns []BufferColumn
 	sorted  []BufferColumn
-	sorting []format.SortingColumn
 	readRow columnReadRowFunc
 	numRows int
 }
@@ -56,43 +53,28 @@ func (buf *Buffer) configure(schema *Schema) {
 		}
 
 		column := columnType.NewBufferColumn(bufferSize)
-
-		for _, sorting := range buf.config.SortingColumns {
-			if stringsAreEqual(sorting.Path(), leaf.path) {
-				sortingColumn := format.SortingColumn{
-					ColumnIdx:  int32(leaf.columnIndex),
-					Descending: sorting.Descending(),
-					NullsFirst: sorting.NullsFirst(),
-				}
-				if sortingColumn.Descending {
-					column = &reversedBufferColumn{column}
-				}
-				if sortingColumn.NullsFirst {
-					nullOrdering = nullsGoFirst
-				}
-				buf.sorting = append(buf.sorting, sortingColumn)
-				break
-			}
-		}
-
 		switch {
 		case leaf.maxRepetitionLevel > 0:
 			column = newRepeatedBufferColumn(column, leaf.maxRepetitionLevel, leaf.maxDefinitionLevel, nullOrdering)
 		case leaf.maxDefinitionLevel > 0:
 			column = newOptionalBufferColumn(column, leaf.maxDefinitionLevel, nullOrdering)
 		}
-
 		buf.columns = append(buf.columns, column)
+
+		if sorting := sortingColumnOf(buf.config.SortingColumns, leaf.path); sorting != nil {
+			if sorting.Descending() {
+				column = &reversedBufferColumn{column}
+			}
+			if sorting.NullsFirst() {
+				nullOrdering = nullsGoFirst
+			}
+			buf.sorted = append(buf.sorted, column)
+		}
 	})
 
 	buf.schema = schema
 	buf.rowbuf = make([]Value, 0, 10)
 	buf.colbuf = make([][]Value, len(buf.columns))
-	buf.sorted = make([]BufferColumn, len(buf.sorting))
-	for i, sort := range buf.sorting {
-		buf.sorted[i] = buf.columns[sort.ColumnIdx]
-	}
-
 	_, buf.readRow = columnReadRowFuncOf(schema, 0, 0)
 }
 
@@ -130,7 +112,7 @@ func (buf *Buffer) Schema() *Schema { return buf.schema }
 //
 // The sorting order is configured by passing a SortingColumns option when
 // constructing the buffer.
-func (buf *Buffer) SortingColumns() []format.SortingColumn { return buf.sorting }
+func (buf *Buffer) SortingColumns() []SortingColumn { return buf.config.SortingColumns }
 
 // Len returns the number of rows written to the buffer.
 func (buf *Buffer) Len() int { return buf.numRows }
@@ -141,7 +123,7 @@ func (buf *Buffer) Less(i, j int) bool {
 		switch {
 		case col.Less(i, j):
 			return true
-		case col.Less(j, i): // not equal?
+		case col.Less(j, i):
 			return false
 		}
 	}

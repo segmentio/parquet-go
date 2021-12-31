@@ -3,8 +3,6 @@ package parquet
 import (
 	"container/heap"
 	"io"
-
-	"github.com/segmentio/parquet/format"
 )
 
 // SortingColumn represents a column by which a row group is sorted.
@@ -46,6 +44,15 @@ type nullsFirst struct{ SortingColumn }
 
 func (nullsFirst) NullsFirst() bool { return true }
 
+func sortingColumnOf(sortingColumns []SortingColumn, path []string) SortingColumn {
+	for _, sorting := range sortingColumns {
+		if stringsAreEqual(sorting.Path(), path) {
+			return sorting
+		}
+	}
+	return nil
+}
+
 // RowGroup is an interface representing a parquet row group.
 type RowGroup interface {
 	// Returns the list of column that that row group has values for.
@@ -54,11 +61,14 @@ type RowGroup interface {
 	// Returns the number of rows in the group.
 	NumRows() int
 
+	// Returns the schema of rows in the group.
+	Schema() *Schema
+
 	// Returns the list of sorting columns describing how rows are sorted in the
 	// group.
 	//
 	// The method will return an empty slice if the rows are not sorted.
-	SortingColumns() []format.SortingColumn
+	SortingColumns() []SortingColumn
 
 	// Rows returns a reader exposing the rows of the row group.
 	Rows() RowReader
@@ -92,11 +102,23 @@ func MergeRowGroups(schema Node, rowGroups ...RowGroup) (RowGroup, error) {
 	}
 	copy(m.rowGroups, rowGroups)
 
+	if m.schema, _ = schema.(*Schema); m.schema == nil {
+		m.schema = NewSchema("", schema)
+	}
+
 	forEachLeafColumnOf(schema, func(leaf leafColumn) {
-		m.sortFuncs = append(m.sortFuncs, columnSortFunc{
-			columnIndex: leaf.columnIndex,
-			compare:     sortFuncOf(leaf.node.Type(), leaf.maxRepetitionLevel, leaf.maxDefinitionLevel, false, false),
-		})
+		if sorting := sortingColumnOf(m.sorting, leaf.path); sorting != nil {
+			m.sortFuncs = append(m.sortFuncs, columnSortFunc{
+				columnIndex: leaf.columnIndex,
+				compare: sortFuncOf(
+					leaf.node.Type(),
+					leaf.maxRepetitionLevel,
+					leaf.maxDefinitionLevel,
+					sorting.Descending(),
+					sorting.NullsFirst(),
+				),
+			})
+		}
 	})
 
 	return m, nil
@@ -105,7 +127,7 @@ func MergeRowGroups(schema Node, rowGroups ...RowGroup) (RowGroup, error) {
 type mergedRowGroup struct {
 	schema    *Schema
 	rowGroups []RowGroup
-	sorting   []format.SortingColumn
+	sorting   []SortingColumn
 	sortFuncs []columnSortFunc
 }
 
@@ -120,9 +142,9 @@ func (m *mergedRowGroup) NumRows() (numRows int) {
 	return numRows
 }
 
-func (m *mergedRowGroup) SortingColumns() []format.SortingColumn {
-	return m.sorting
-}
+func (m *mergedRowGroup) Schema() *Schema { return m.schema }
+
+func (m *mergedRowGroup) SortingColumns() []SortingColumn { return m.sorting }
 
 func (m *mergedRowGroup) Rows() RowReader {
 	r := &mergedRowGroupReader{
