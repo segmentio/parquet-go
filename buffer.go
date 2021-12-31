@@ -42,33 +42,12 @@ func NewBuffer(options ...BufferOption) *Buffer {
 }
 
 func (buf *Buffer) configure(schema *Schema) {
-	buf.schema = schema
-	buf.init(schema, make([]string, 0, 10), 0, 0, buf.config)
-	buf.rowbuf = make([]Value, 0, 10)
-	buf.colbuf = make([][]Value, len(buf.columns))
-	buf.sorted = make([]BufferColumn, len(buf.sorting))
-	for i, sort := range buf.sorting {
-		buf.sorted[i] = buf.columns[sort.ColumnIdx]
-	}
-	_, buf.readRow = columnReadRowFuncOf(schema, 0, 0)
-}
-
-func (buf *Buffer) init(node Node, path []string, repetitionLevel, definitionLevel int8, config *BufferConfig) {
-	switch {
-	case node.Optional():
-		definitionLevel++
-	case node.Repeated():
-		repetitionLevel++
-		definitionLevel++
-	}
-
-	if isLeaf(node) {
+	forEachLeafColumnOf(schema, func(leaf leafColumn) {
 		nullOrdering := nullsGoLast
-		columnIndex := len(buf.columns)
-		columnType := node.Type()
-		bufferSize := config.ColumnBufferSize
+		columnType := leaf.node.Type()
+		bufferSize := buf.config.ColumnBufferSize
 		dictionary := (Dictionary)(nil)
-		encoding, _ := encodingAndCompressionOf(node)
+		encoding, _ := encodingAndCompressionOf(leaf.node)
 
 		if isDictionaryEncoding(encoding) {
 			bufferSize /= 2
@@ -78,10 +57,10 @@ func (buf *Buffer) init(node Node, path []string, repetitionLevel, definitionLev
 
 		column := columnType.NewBufferColumn(bufferSize)
 
-		for _, sorting := range config.SortingColumns {
-			if stringsAreEqual(sorting.Path(), path) {
+		for _, sorting := range buf.config.SortingColumns {
+			if stringsAreEqual(sorting.Path(), leaf.path) {
 				sortingColumn := format.SortingColumn{
-					ColumnIdx:  int32(columnIndex),
+					ColumnIdx:  int32(leaf.columnIndex),
 					Descending: sorting.Descending(),
 					NullsFirst: sorting.NullsFirst(),
 				}
@@ -97,23 +76,24 @@ func (buf *Buffer) init(node Node, path []string, repetitionLevel, definitionLev
 		}
 
 		switch {
-		case repetitionLevel > 0:
-			column = newRepeatedBufferColumn(column, repetitionLevel, definitionLevel, nullOrdering)
-		case definitionLevel > 0:
-			column = newOptionalBufferColumn(column, definitionLevel, nullOrdering)
+		case leaf.maxRepetitionLevel > 0:
+			column = newRepeatedBufferColumn(column, leaf.maxRepetitionLevel, leaf.maxDefinitionLevel, nullOrdering)
+		case leaf.maxDefinitionLevel > 0:
+			column = newOptionalBufferColumn(column, leaf.maxDefinitionLevel, nullOrdering)
 		}
 
 		buf.columns = append(buf.columns, column)
-		return
+	})
+
+	buf.schema = schema
+	buf.rowbuf = make([]Value, 0, 10)
+	buf.colbuf = make([][]Value, len(buf.columns))
+	buf.sorted = make([]BufferColumn, len(buf.sorting))
+	for i, sort := range buf.sorting {
+		buf.sorted[i] = buf.columns[sort.ColumnIdx]
 	}
 
-	i := len(path)
-	path = append(path, "")
-
-	for _, name := range node.ChildNames() {
-		path[i] = name
-		buf.init(node.ChildByName(name), path, repetitionLevel, definitionLevel, config)
-	}
+	_, buf.readRow = columnReadRowFuncOf(schema, 0, 0)
 }
 
 // Size returns the estimated size of the buffer in memory.

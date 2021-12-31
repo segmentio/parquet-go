@@ -1,6 +1,11 @@
 package parquet
 
-import "github.com/segmentio/parquet/format"
+import (
+	"container/heap"
+	"io"
+
+	"github.com/segmentio/parquet/format"
+)
 
 // SortingColumn represents a column by which a row group is sorted.
 type SortingColumn interface {
@@ -65,7 +70,7 @@ type RowGroupColumn interface {
 	// values. If the column is not indexed, nil is returned.
 	Dictionary() Dictionary
 
-	// Returns a reader exposing the list of pages in the column.
+	// Returns the list of pages in the colunn.
 	Pages() []Page
 }
 
@@ -81,6 +86,292 @@ type RowGroupWriter interface {
 	WriteRowGroup(RowGroup) (int64, error)
 }
 
-func MergeRowGroups(rowGroups ...RowGroup) (RowGroup, error) {
-	return nil, nil
+func MergeRowGroups(schema Node, rowGroups ...RowGroup) (RowGroup, error) {
+	m := &mergedRowGroup{
+		rowGroups: make([]RowGroup, len(rowGroups)),
+	}
+	copy(m.rowGroups, rowGroups)
+
+	forEachLeafColumnOf(schema, func(leaf leafColumn) {
+		m.sortFuncs = append(m.sortFuncs, columnSortFunc{
+			columnIndex: leaf.columnIndex,
+			compare:     sortFuncOf(leaf.node.Type(), leaf.maxRepetitionLevel, leaf.maxDefinitionLevel, false, false),
+		})
+	})
+
+	return m, nil
 }
+
+type mergedRowGroup struct {
+	schema    *Schema
+	rowGroups []RowGroup
+	sorting   []format.SortingColumn
+	sortFuncs []columnSortFunc
+}
+
+func (m *mergedRowGroup) Columns() []RowGroupColumn {
+	panic("NOT IMPLEMENTED")
+}
+
+func (m *mergedRowGroup) NumRows() (numRows int) {
+	for _, rowGroup := range m.rowGroups {
+		numRows += rowGroup.NumRows()
+	}
+	return numRows
+}
+
+func (m *mergedRowGroup) SortingColumns() []format.SortingColumn {
+	return m.sorting
+}
+
+func (m *mergedRowGroup) Rows() RowReader {
+	r := &mergedRowGroupReader{
+		schema:  m.schema,
+		sorting: m.sortFuncs,
+		cursors: make([]*cursor, len(m.rowGroups)),
+	}
+
+	cursors := make([]cursor, len(m.rowGroups))
+	for i, rowGroup := range m.rowGroups {
+		cursors[i].reader = rowGroup.Rows()
+	}
+	for i := range cursors {
+		r.cursors[i] = &cursors[i]
+	}
+
+	return r
+}
+
+type columnSortFunc struct {
+	columnIndex int
+	compare     sortFunc
+}
+
+type mergedRowGroupReader struct {
+	schema  *Schema
+	sorting []columnSortFunc
+	cursors []*cursor
+	init    bool
+	err     error
+}
+
+func (r *mergedRowGroupReader) initReadRow() {
+	for _, cur := range r.cursors {
+		cur.next()
+	}
+
+	i := 0
+	for _, cur := range r.cursors {
+		if cur.done() {
+			if cur.err != io.EOF {
+				r.err = cur.err
+			}
+		} else {
+			r.cursors[i] = cur
+			i++
+		}
+	}
+
+	r.cursors = r.cursors[:i]
+	heap.Init(r)
+}
+
+func (r *mergedRowGroupReader) ReadRow(row Row) (Row, error) {
+	if !r.init {
+		r.init = true
+		r.initReadRow()
+	}
+
+	if r.err != nil {
+		return row, r.err
+	}
+
+	if len(r.cursors) == 0 {
+		return row, io.EOF
+	}
+
+	min := r.cursors[0]
+	row = append(row, min.row...)
+
+	if min.next() {
+		heap.Fix(r, 0)
+	} else {
+		if err := min.err; err != io.EOF {
+			r.err = err
+			return row, err
+		}
+		heap.Pop(r)
+	}
+
+	return row, nil
+}
+
+func (r *mergedRowGroupReader) Schema() *Schema { return r.schema }
+
+func (r *mergedRowGroupReader) Len() int { return len(r.cursors) }
+
+func (r *mergedRowGroupReader) Less(i, j int) bool {
+	for _, sorting := range r.sorting {
+		col1 := r.cursors[i].columns[sorting.columnIndex]
+		col2 := r.cursors[j].columns[sorting.columnIndex]
+		comp := sorting.compare(col1, col2)
+		switch {
+		case comp < 0:
+			return true
+		case comp > 0:
+			return false
+		}
+	}
+	return false
+}
+
+func (r *mergedRowGroupReader) Swap(i, j int) {
+	r.cursors[i], r.cursors[j] = r.cursors[j], r.cursors[i]
+}
+
+func (r *mergedRowGroupReader) Push(interface{}) {
+	panic("NOT IMPLEMENTED")
+}
+
+func (r *mergedRowGroupReader) Pop() interface{} {
+	n := len(r.cursors) - 1
+	c := r.cursors[n]
+	r.cursors = r.cursors[:n]
+	return c
+}
+
+type cursor struct {
+	reader  RowReader
+	row     Row
+	err     error
+	columns [][]Value
+}
+
+func (cur *cursor) done() bool {
+	return cur.err != nil
+}
+
+func (cur *cursor) next() bool {
+	if cur.done() {
+		return false
+	}
+
+	clearValues(cur.row)
+	cur.row, cur.err = cur.reader.ReadRow(cur.row[:0])
+	if cur.done() {
+		return false
+	}
+
+	for i, c := range cur.columns {
+		cur.columns[i] = c[:0]
+	}
+
+	for _, v := range cur.row {
+		columnIndex := v.ColumnIndex()
+		cur.columns[columnIndex] = append(cur.columns[columnIndex], v)
+	}
+
+	return true
+}
+
+type sortFunc func(a, b []Value) int
+
+func sortFuncOf(t Type, maxDefinitionLevel, maxRepetitionLevel int8, descending, nullsFirst bool) (sort sortFunc) {
+	switch {
+	case maxRepetitionLevel > 0:
+		sort = sortFuncOfRepeated(t, nullsFirst)
+	case maxDefinitionLevel > 0:
+		sort = sortFuncOfOptional(t, nullsFirst)
+	default:
+		sort = sortFuncOfRequired(t)
+	}
+	if descending {
+		sort = sortFuncOfDescending(sort)
+	}
+	return sort
+}
+
+//go:noinline
+func sortFuncOfDescending(sort sortFunc) sortFunc {
+	return func(a, b []Value) int { return ^sort(a, b) }
+}
+
+func sortFuncOfOptional(t Type, nullsFirst bool) sortFunc {
+	if nullsFirst {
+		return sortFuncOfOptionalNullsFirst(t)
+	} else {
+		return sortFuncOfOptionalNullsLast(t)
+	}
+}
+
+//go:noinline
+func sortFuncOfOptionalNullsFirst(t Type) sortFunc {
+	compare := sortFuncOfRequired(t)
+	return func(a, b []Value) int {
+		switch {
+		case a[0].IsNull():
+			if b[0].IsNull() {
+				return 0
+			}
+			return -1
+		case b[0].IsNull():
+			return +1
+		default:
+			return compare(a, b)
+		}
+	}
+}
+
+//go:noinline
+func sortFuncOfOptionalNullsLast(t Type) sortFunc {
+	compare := sortFuncOfRequired(t)
+	return func(a, b []Value) int {
+		switch {
+		case a[0].IsNull():
+			if b[0].IsNull() {
+				return 0
+			}
+			return +1
+		case b[0].IsNull():
+			return -1
+		default:
+			return compare(a, b)
+		}
+	}
+}
+
+//go:noinline
+func sortFuncOfRepeated(t Type, nullsFirst bool) sortFunc {
+	compare := sortFuncOfOptional(t, nullsFirst)
+	return func(a, b []Value) int {
+		n := min(len(a), len(b))
+
+		for i := 0; i < n; i++ {
+			k := compare(a[i:i+1], b[i:i+1])
+			if k != 0 {
+				return k
+			}
+		}
+
+		return len(a) - len(b)
+	}
+}
+
+//go:noinline
+func sortFuncOfRequired(t Type) sortFunc {
+	less := t.Less
+	return func(a, b []Value) int {
+		switch {
+		case less(a[0], b[0]):
+			return -1
+		case less(b[0], a[0]):
+			return +1
+		default:
+			return 0
+		}
+	}
+}
+
+var (
+	_ RowReaderWithSchema = (*mergedRowGroupReader)(nil)
+)
