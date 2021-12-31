@@ -18,11 +18,13 @@ type BufferColumn interface {
 	RowGroupColumn
 	RowReaderAt
 	RowWriter
-	//ValueReaderAt
 
 	// Returns a copy of the column. The returned copy shares no memory with
 	// the original, mutations of either column will not modify the other.
 	Clone() BufferColumn
+
+	// Returns a reader exposing the values currently held in the column.
+	Values() ValueReader
 
 	// Clears all rows written to the column.
 	Reset()

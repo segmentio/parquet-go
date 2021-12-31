@@ -38,25 +38,91 @@ type RowWriter interface {
 	WriteRow(Row) error
 }
 
+type RowWriterWithSchema interface {
+	RowWriter
+	Schema() *Schema
+}
+
 type RowWriterAt interface {
 	WriteRowAt(Row, int) error
 }
 
-func CopyRows(w RowWriter, r RowReader) (int64, error) {
-	var numRows int64
-	var row = make([]Value, 42)
-	var err error
+type RowReaderFrom interface {
+	ReadRowsFrom(RowReader) (int64, error)
+}
+
+type RowWriterTo interface {
+	WriteRowsTo(RowWriter) (int64, error)
+}
+
+type RowReaderWithSchema interface {
+	RowReader
+	Schema() *Schema
+}
+
+func CopyRows(dst RowWriter, src RowReader) (int64, error) {
+	n, _, err := copyRowsBuffer(dst, src, nil)
+	return n, err
+}
+
+func copyRowsBuffer(dst RowWriter, src RowReader, buf []Value) (written int64, ret []Value, err error) {
+	targetSchema := targetSchemaOf(dst)
+	sourceSchema := sourceSchemaOf(src)
+
+	if targetSchema != nil && sourceSchema != nil {
+		if !nodesAreEqual(targetSchema, sourceSchema) {
+			conv, err := Convert(targetSchema, sourceSchema)
+			if err != nil {
+				return 0, buf, err
+			}
+			src = ConvertRowReader(src, conv)
+		}
+	}
+
+	if wt, ok := src.(RowWriterTo); ok {
+		written, err = wt.WriteRowsTo(dst)
+		return written, buf, err
+	}
+
+	if rf, ok := dst.(RowReaderFrom); ok {
+		written, err = rf.ReadRowsFrom(src)
+		return written, buf, err
+	}
+
+	if len(buf) == 0 {
+		buf = make([]Value, 42)
+	}
+
+	defer func() {
+		clearValues(buf)
+	}()
+
 	for {
-		if row, err = r.ReadRow(row[:0]); err != nil {
+		if buf, err = src.ReadRow(buf[:0]); err != nil {
 			if err == io.EOF {
 				err = nil
 			}
-			return numRows, err
+			return written, buf, err
 		}
-		if err = w.WriteRow(row); err != nil {
-			return numRows, err
+		if err = dst.WriteRow(buf); err != nil {
+			return written, buf, err
 		}
+		written++
 	}
+}
+
+func sourceSchemaOf(r RowReader) *Schema {
+	if rrs, ok := r.(RowReaderWithSchema); ok {
+		return rrs.Schema()
+	}
+	return nil
+}
+
+func targetSchemaOf(w RowWriter) *Schema {
+	if rws, ok := w.(RowWriterWithSchema); ok {
+		return rws.Schema()
+	}
+	return nil
 }
 
 func errRowIndexOutOfBounds(rowIndex, rowCount int) error {

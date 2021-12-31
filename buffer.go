@@ -198,46 +198,72 @@ func (buf *Buffer) WriteRow(row Row) error {
 }
 
 func (buf *Buffer) Rows() RowReader {
-	const columnBufferSize = 170
-	values := make([]Value, columnBufferSize*len(buf.columns))
-	reader := &bufferRowReader{
-		columns: make([]columnValueReader, len(buf.columns)),
-		readRow: buf.readRow,
-	}
-	for i, c := range buf.columns {
-		reader.columns[i].values = values[:0:columnBufferSize]
-		reader.columns[i].reader = c.Values()
-		values = values[columnBufferSize:]
-	}
-	return reader
+	return &bufferRowReader{buffer: buf}
 }
 
 type bufferRowReader struct {
-	columns []columnValueReader
+	buffer  *Buffer
 	readRow columnReadRowFunc
+	readers []columnValueReader
+}
+
+func (r *bufferRowReader) initReadRow() {
+	const columnBufferSize = 170
+	buffer := make([]Value, columnBufferSize*len(r.buffer.columns))
+	r.readers = make([]columnValueReader, len(r.buffer.columns))
+	for i, c := range r.buffer.columns {
+		r.readers[i].buffer = buffer[:0:columnBufferSize]
+		r.readers[i].reader = c.Values()
+		buffer = buffer[columnBufferSize:]
+	}
 }
 
 func (r *bufferRowReader) ReadRow(row Row) (Row, error) {
+	if len(r.readers) == 0 {
+		r.initReadRow()
+	}
+	if r.readRow == nil {
+		return row, io.EOF
+	}
 	n := len(row)
-	row, err := r.readRow(row, 0, r.columns)
+	row, err := r.readRow(row, 0, r.readers)
 	if err == nil && len(row) == n {
 		err = io.EOF
 	}
 	return row, err
 }
 
+func (r *bufferRowReader) WriteRowsTo(w RowWriter) (int64, error) {
+	if rgw, ok := w.(RowGroupWriter); ok {
+		return rgw.WriteRowGroup(r.buffer)
+	}
+	if rt, ok := w.(RowReaderFrom); ok {
+		return rt.ReadRowsFrom(r)
+	}
+	return CopyRows(w, struct{ RowReader }{r})
+}
+
+func (r *bufferRowReader) Schema() *Schema {
+	return r.buffer.schema
+}
+
+var (
+	_ RowReaderWithSchema = (*bufferRowReader)(nil)
+	_ RowWriterTo         = (*bufferRowReader)(nil)
+)
+
 type columnValueReader struct {
-	values []Value
+	buffer []Value
 	offset uint
 	reader ValueReader
 }
 
 func (r *columnValueReader) readMoreValues() error {
-	n, err := r.reader.ReadValues(r.values[:cap(r.values)])
+	n, err := r.reader.ReadValues(r.buffer[:cap(r.buffer)])
 	if n == 0 {
 		return err
 	}
-	r.values = r.values[:n]
+	r.buffer = r.buffer[:n]
 	r.offset = 0
 	return nil
 }
@@ -319,8 +345,8 @@ func columnReadRowFuncOfLeaf(node Node, columnIndex int, repetitionDepth int8) (
 			col := &columns[columnIndex]
 
 			for {
-				if col.offset < uint(len(col.values)) {
-					v := col.values[col.offset]
+				if col.offset < uint(len(col.buffer)) {
+					v := col.buffer[col.offset]
 					v.columnIndex = valueColumnIndex
 					row = append(row, v)
 					col.offset++
@@ -336,8 +362,8 @@ func columnReadRowFuncOfLeaf(node Node, columnIndex int, repetitionDepth int8) (
 			col := &columns[columnIndex]
 
 			for {
-				if col.offset < uint(len(col.values)) {
-					if v := col.values[col.offset]; v.repetitionLevel == repetitionLevel {
+				if col.offset < uint(len(col.buffer)) {
+					if v := col.buffer[col.offset]; v.repetitionLevel == repetitionLevel {
 						v.columnIndex = valueColumnIndex
 						col.offset++
 						row = append(row, v)

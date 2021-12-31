@@ -152,7 +152,7 @@ func writeParquetFileWithBuffer(w io.Writer, rows rows, options ...parquet.Write
 	}
 
 	writer := parquet.NewWriter(w, options...)
-	if err := writer.WriteRowGroup(buffer); err != nil {
+	if _, err := parquet.CopyRows(writer, buffer.Rows()); err != nil {
 		return err
 	}
 	return writer.Close()

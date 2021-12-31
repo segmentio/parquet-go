@@ -339,3 +339,25 @@ func merge(s1, s2, s3 []string) []string {
 	sort.Strings(merged)
 	return merged
 }
+
+func ConvertRowReader(rows RowReader, conv ConvertFunc) RowReader {
+	return &convertRowReader{rows: rows, conv: conv}
+}
+
+type convertRowReader struct {
+	conv ConvertFunc
+	rows RowReader
+	buf  Row
+}
+
+func (crr *convertRowReader) ReadRow(row Row) (Row, error) {
+	defer func() {
+		clearValues(crr.buf)
+	}()
+	var err error
+	crr.buf, err = crr.rows.ReadRow(crr.buf[:0])
+	if err != nil {
+		return row, err
+	}
+	return crr.conv(row, crr.buf)
+}

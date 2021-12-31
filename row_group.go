@@ -61,9 +61,6 @@ type RowGroupColumn interface {
 
 	// Returns a reader exposing the list of pages in the column.
 	Pages() []Page
-
-	// Returns a reader exposing the values currently held in the buffer.
-	Values() ValueReader
 }
 
 type RowGroupReader interface {
@@ -71,7 +68,7 @@ type RowGroupReader interface {
 }
 
 type RowGroupWriter interface {
-	WriteRowGroup(RowGroup) error
+	WriteRowGroup(RowGroup) (int64, error)
 }
 
 func MergeRowGroups(rowGroups ...RowGroup) (RowGroup, error) {

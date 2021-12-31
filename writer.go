@@ -125,22 +125,19 @@ func (w *Writer) Write(row interface{}) error {
 // in the order produced by the parquet.(*Schema).Deconstruct method.
 func (w *Writer) WriteRow(row Row) error { return w.rowGroups.WriteRow(row) }
 
-// WriteRowGroup writes a row group to the parquet file.
+// ReadRowsFrom reads rows from the reader passed as arguments and writes them
+// to w.
 //
-// The writer must have had no schema configured, or its schema must be the same
-// as the schema of the row group or an error will be returned.
-//
-// The content of the row group is flushed to the writer; after the method
-// returns successfully, the row group will be empty and in ready to be reused.
-func (w *Writer) WriteRowGroup(rowGroup RowGroup) error {
-	rowGroupSchema := rowGroup.Schema()
+// This is similar to calling WriteRow repeatedly, but will be more efficient
+// if optimizations are supported by the reader.
+func (w *Writer) ReadRowsFrom(rows RowReader) (written int64, err error) {
 	if w.schema == nil {
-		w.configure(rowGroupSchema)
-	} else if w.schema != rowGroupSchema {
-		return fmt.Errorf("cannot write row group with mismatching schema:\n%s\n%s", w.schema, rowGroupSchema)
+		if r, ok := rows.(RowReaderWithSchema); ok {
+			w.configure(r.Schema())
+		}
 	}
-	_, err := CopyRows(w.rowGroups, rowGroup.Rows())
-	return err
+	written, w.values, err = copyRowsBuffer(w.rowGroups, rows, w.values[:0])
+	return written, err
 }
 
 type rowGroupWriter struct {
@@ -553,15 +550,15 @@ func (rgw *rowGroupWriter) WriteRow(row Row) (err error) {
 	return nil
 }
 
-func (rgw *rowGroupWriter) WriteRowGroup(rowGroup RowGroup) error {
+func (rgw *rowGroupWriter) WriteRowGroup(rowGroup RowGroup) (int64, error) {
 	if rowGroup.NumRows() == 0 {
-		return nil
+		return 0, nil
 	}
 	if err := rgw.flush(); err != nil {
-		return err
+		return 0, err
 	}
 	if err := rgw.writeMagicHeader(); err != nil {
-		return err
+		return 0, err
 	}
 
 	// Note: a lot of this code is shared with (*rowGroupWriter).flush,
@@ -587,7 +584,7 @@ func (rgw *rowGroupWriter) WriteRowGroup(rowGroup RowGroup) error {
 			dictionaryPageOffset = rgw.writer.offset
 
 			if err := rgw.columns[i].chunks.writeDictionaryPage(&rgw.pages, dictionary); err != nil {
-				return fmt.Errorf("writing dictionary page of row group colum %d: %w", i, err)
+				return totalRowCount, fmt.Errorf("writing dictionary page of row group colum %d: %w", i, err)
 			}
 		}
 
@@ -599,7 +596,7 @@ func (rgw *rowGroupWriter) WriteRowGroup(rowGroup RowGroup) error {
 				return rgw.columns[i].chunks.writePage(&rgw.pages, page)
 			})
 			if err != nil {
-				return fmt.Errorf("writing data pages of row group column %d: %w", i, err)
+				return totalRowCount, fmt.Errorf("writing data pages of row group column %d: %w", i, err)
 			}
 		}
 
@@ -653,7 +650,7 @@ func (rgw *rowGroupWriter) WriteRowGroup(rowGroup RowGroup) error {
 	rgw.columnIndexes = append(rgw.columnIndexes, columnIndex)
 	rgw.offsetIndexes = append(rgw.offsetIndexes, offsetIndex)
 	rgw.fileOffset += totalCompressedSize
-	return nil
+	return totalRowCount, nil
 }
 
 func (rgw *rowGroupWriter) writeMagicHeader() error {
@@ -806,7 +803,7 @@ func (ccw *columnChunkWriter) newBufferColumn() BufferColumn {
 func (ccw *columnChunkWriter) writeRow(row []Value) error {
 	if ccw.column == nil {
 		// Lazily create the row group column so we don't need to allocate it if
-		// only WriteRowGroup is called on the writer.
+		// only WriteRowGroup is called on the parent row group writer.
 		ccw.column = ccw.newBufferColumn()
 		ccw.maxValues = int32(ccw.column.Cap())
 	}
@@ -1265,7 +1262,9 @@ func (w *unbufferedPageWriter) writePage(header, data []byte, stats pageStats) e
 
 var (
 	_ RowWriter        = (*Writer)(nil)
-	_ RowGroupWriter   = (*Writer)(nil)
+	_ RowReaderFrom    = (*Writer)(nil)
+	_ RowWriter        = (*rowGroupWriter)(nil)
+	_ RowGroupWriter   = (*rowGroupWriter)(nil)
 	_ columnPageWriter = (*bufferedPageWriter)(nil)
 	_ columnPageWriter = (*unbufferedPageWriter)(nil)
 )
