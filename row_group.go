@@ -186,10 +186,6 @@ func MergeRowGroups(rowGroups []RowGroup, options ...RowGroupOption) (RowGroup, 
 		return m, nil
 	}
 
-	for _, rowGroup := range rowGroups {
-		m.numRows += rowGroup.NumRows()
-	}
-
 	if m.schema == nil {
 		m.schema = rowGroups[0].Schema()
 
@@ -244,7 +240,6 @@ func MergeRowGroups(rowGroups []RowGroup, options ...RowGroupOption) (RowGroup, 
 }
 
 type mergedRowGroup struct {
-	numRows   int
 	schema    *Schema
 	sorting   []SortingColumn
 	sortFuncs []columnSortFunc
