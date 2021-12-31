@@ -208,14 +208,9 @@ type bufferRowReader struct {
 }
 
 func (r *bufferRowReader) initReadRow() {
-	const columnBufferSize = 170
-	buffer := make([]Value, columnBufferSize*len(r.buffer.columns))
-	r.readers = make([]columnValueReader, len(r.buffer.columns))
-	for i, c := range r.buffer.columns {
-		r.readers[i].buffer = buffer[:0:columnBufferSize]
-		r.readers[i].reader = c.Values()
-		buffer = buffer[columnBufferSize:]
-	}
+	r.readers = makeColumnValueReaders(len(r.buffer.columns), func(i int) ValueReader {
+		return r.buffer.columns[i].Values()
+	})
 }
 
 func (r *bufferRowReader) ReadRow(row Row) (Row, error) {
@@ -250,139 +245,5 @@ func (r *bufferRowReader) Schema() *Schema {
 var (
 	_ RowReaderWithSchema = (*bufferRowReader)(nil)
 	_ RowWriterTo         = (*bufferRowReader)(nil)
-)
-
-type columnValueReader struct {
-	buffer []Value
-	offset uint
-	reader ValueReader
-}
-
-func (r *columnValueReader) readMoreValues() error {
-	n, err := r.reader.ReadValues(r.buffer[:cap(r.buffer)])
-	if n == 0 {
-		return err
-	}
-	r.buffer = r.buffer[:n]
-	r.offset = 0
-	return nil
-}
-
-type columnReadRowFunc func(Row, int8, []columnValueReader) (Row, error)
-
-func columnReadRowFuncOf(node Node, columnIndex int, repetitionDepth int8) (int, columnReadRowFunc) {
-	var read columnReadRowFunc
-
-	if node.Repeated() {
-		repetitionDepth++
-	}
-
-	if isLeaf(node) {
-		columnIndex, read = columnReadRowFuncOfLeaf(node, columnIndex, repetitionDepth)
-	} else {
-		columnIndex, read = columnReadRowFuncOfGroup(node, columnIndex, repetitionDepth)
-	}
-
-	if node.Repeated() {
-		read = columnReadRowFuncOfRepeated(node, repetitionDepth, read)
-	}
-
-	return columnIndex, read
-}
-
-//go:noinline
-func columnReadRowFuncOfRepeated(node Node, repetitionDepth int8, read columnReadRowFunc) columnReadRowFunc {
-	return func(row Row, repetitionLevel int8, columns []columnValueReader) (Row, error) {
-		var err error
-
-		for {
-			n := len(row)
-
-			if row, err = read(row, repetitionLevel, columns); err != nil {
-				return row, err
-			}
-			if n == len(row) {
-				return row, nil
-			}
-
-			repetitionLevel = repetitionDepth
-		}
-	}
-}
-
-//go:noinline
-func columnReadRowFuncOfGroup(node Node, columnIndex int, repetitionDepth int8) (int, columnReadRowFunc) {
-	names := node.ChildNames()
-	if len(names) == 1 {
-		return columnReadRowFuncOf(node.ChildByName(names[0]), columnIndex, repetitionDepth)
-	}
-
-	group := make([]columnReadRowFunc, len(names))
-	for i, name := range names {
-		columnIndex, group[i] = columnReadRowFuncOf(node.ChildByName(name), columnIndex, repetitionDepth)
-	}
-
-	return columnIndex, func(row Row, repetitionLevel int8, columns []columnValueReader) (Row, error) {
-		var err error
-
-		for _, read := range group {
-			if row, err = read(row, repetitionLevel, columns); err != nil {
-				break
-			}
-		}
-
-		return row, err
-	}
-}
-
-//go:noinline
-func columnReadRowFuncOfLeaf(node Node, columnIndex int, repetitionDepth int8) (int, columnReadRowFunc) {
-	var read columnReadRowFunc
-	var valueColumnIndex = ^int8(columnIndex)
-
-	if repetitionDepth == 0 {
-		read = func(row Row, _ int8, columns []columnValueReader) (Row, error) {
-			col := &columns[columnIndex]
-
-			for {
-				if col.offset < uint(len(col.buffer)) {
-					v := col.buffer[col.offset]
-					v.columnIndex = valueColumnIndex
-					row = append(row, v)
-					col.offset++
-					return row, nil
-				}
-				if err := col.readMoreValues(); err != nil {
-					return row, err
-				}
-			}
-		}
-	} else {
-		read = func(row Row, repetitionLevel int8, columns []columnValueReader) (Row, error) {
-			col := &columns[columnIndex]
-
-			for {
-				if col.offset < uint(len(col.buffer)) {
-					if v := col.buffer[col.offset]; v.repetitionLevel == repetitionLevel {
-						v.columnIndex = valueColumnIndex
-						col.offset++
-						row = append(row, v)
-					}
-					return row, nil
-				}
-				if err := col.readMoreValues(); err != nil {
-					if repetitionLevel > 0 && err == io.EOF {
-						err = nil
-					}
-					return row, err
-				}
-			}
-		}
-	}
-
-	return columnIndex + 1, read
-}
-
-var (
-	_ sort.Interface = (*Buffer)(nil)
+	_ sort.Interface      = (*Buffer)(nil)
 )
