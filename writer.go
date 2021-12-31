@@ -140,6 +140,11 @@ func (w *Writer) ReadRowsFrom(rows RowReader) (written int64, err error) {
 	return written, err
 }
 
+// Schema returns the schema of rows written by w.
+//
+// The returned value will be nil if no schema has yet been configured on w.
+func (w *Writer) Schema() *Schema { return w.schema }
+
 type rowGroupWriter struct {
 	writer offsetTrackingWriter
 	pages  unbufferedPageWriter
@@ -1261,10 +1266,10 @@ func (w *unbufferedPageWriter) writePage(header, data []byte, stats pageStats) e
 }
 
 var (
-	_ RowWriter        = (*Writer)(nil)
-	_ RowReaderFrom    = (*Writer)(nil)
-	_ RowWriter        = (*rowGroupWriter)(nil)
-	_ RowGroupWriter   = (*rowGroupWriter)(nil)
-	_ columnPageWriter = (*bufferedPageWriter)(nil)
-	_ columnPageWriter = (*unbufferedPageWriter)(nil)
+	_ RowWriterWithSchema = (*Writer)(nil)
+	_ RowReaderFrom       = (*Writer)(nil)
+	_ RowWriter           = (*rowGroupWriter)(nil)
+	_ RowGroupWriter      = (*rowGroupWriter)(nil)
+	_ columnPageWriter    = (*bufferedPageWriter)(nil)
+	_ columnPageWriter    = (*unbufferedPageWriter)(nil)
 )

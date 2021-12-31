@@ -34,7 +34,7 @@ type Reader struct {
 	columns []*columnChunkReader
 	buffer  []Value
 	values  []Value
-	conv    ConvertFunc
+	conv    Conversion
 	read    columnReadFunc
 }
 
@@ -143,7 +143,7 @@ func (r *Reader) Read(row interface{}) (err error) {
 
 	values := r.values
 	if r.conv != nil {
-		r.buffer, err = r.conv(r.buffer[:0], values)
+		r.buffer, err = r.conv.Convert(r.buffer[:0], values)
 		if err != nil {
 			return fmt.Errorf("cannot convert parquet row to go value of type %T: %w", row, err)
 		}
@@ -167,6 +167,11 @@ func (r *Reader) ReadRow(buf Row) (Row, error) {
 	}
 	return buf, err
 }
+
+// Schema returns the schema of rows read by r.
+//
+// The returned value will be nil if no schema has yet been configured on r.
+func (r *Reader) Schema() *Schema { return r.schema }
 
 type columnReadFunc func(Row, int8) (Row, error)
 
@@ -444,5 +449,5 @@ func makeDecoder(decoder encoding.Decoder, encoding encoding.Encoding, input io.
 }
 
 var (
-	_ RowReader = (*Reader)(nil)
+	_ RowReaderWithSchema = (*Reader)(nil)
 )

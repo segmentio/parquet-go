@@ -105,13 +105,13 @@ func TestConvert(t *testing.T) {
 			to := parquet.SchemaOf(test.to)
 			from := parquet.SchemaOf(test.from)
 
-			convert, err := parquet.Convert(to, from)
+			conv, err := parquet.Convert(to, from)
 			if err != nil {
 				t.Fatal(err)
 			}
 
 			row := from.Deconstruct(nil, test.from)
-			row, err = convert(nil, row)
+			row, err = conv.Convert(nil, row)
 			if err != nil {
 				t.Fatal(err)
 			}
