@@ -45,6 +45,14 @@ func errRowIndexOutOfBounds(rowIndex, rowCount int) error {
 	return fmt.Errorf("row index out of bounds: %d/%d", rowIndex, rowCount)
 }
 
+func errRowHasTooFewValues(numValues int) error {
+	return fmt.Errorf("row has too few values to be written to the column: %d", numValues)
+}
+
+func errRowHasTooManyValues(numValues int) error {
+	return fmt.Errorf("row has too many values to be written to the column: %d", numValues)
+}
+
 // =============================================================================
 // Functions returning closures are marked with "go:noinline" below to prevent
 // losing naming information of the closure in stack traces.

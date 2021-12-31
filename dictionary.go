@@ -812,9 +812,13 @@ func (col *indexedBufferColumn) Swap(i, j int) {
 }
 
 func (col *indexedBufferColumn) WriteRow(row Row) error {
-	for _, value := range row {
-		col.values = append(col.values, int32(col.dict.Insert(value)))
+	if len(row) == 0 {
+		return errRowHasTooFewValues(len(row))
 	}
+	if len(row) > 1 {
+		return errRowHasTooManyValues(len(row))
+	}
+	col.values = append(col.values, int32(col.dict.Insert(row[0])))
 	return nil
 }
 
@@ -825,7 +829,7 @@ func (col *indexedBufferColumn) ReadRowAt(row Row, index int) (Row, error) {
 	case index >= len(col.values):
 		return row, io.EOF
 	default:
-		return append(row, col.dict.Index(index)), nil
+		return append(row, col.dict.Index(int(col.values[index]))), nil
 	}
 }
 

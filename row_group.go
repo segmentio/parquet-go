@@ -58,14 +58,9 @@ type RowGroupColumn interface {
 	// values. If the column is not indexed, nil is returned.
 	Dictionary() Dictionary
 
-	// Converts the column to a page, allowing the application to read the
-	// values previously written to the column.
-	//
-	// The returned page shares the column memory, it remains valid until the
-	// next call to Reset.
-	//
-	// After calling this method, the state of the column is undefined; the only
-	// valid operation is calling Reset, which invalidates the page.
+	// Returns a reader exposing the list of pages in the column.
+	//Pages() PageReader
+
 	Page() Page
 
 	// Returns the size of the column in bytes.
