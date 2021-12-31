@@ -35,17 +35,37 @@ type Page interface {
 	WriteRepetitionLevelsTo(encoding.Encoder) error
 	WriteDefinitionLevelsTo(encoding.Encoder) error
 	WriteTo(encoding.Encoder) error
+
+	// Returns the size of the page in bytes.
+	Size() int64
 }
 
-func forEachPageSlice(page Page, pageSize, wantSize int64, do func(Page) error) error {
-	numPages := int((pageSize + (wantSize - 1)) / wantSize)
-	rowIndex := 0
-	numRows := page.NumRows()
+func sizeOfBytes(data []byte) int64 { return 1 * int64(len(data)) }
 
+func sizeOfBool(data []bool) int64 { return 1 * int64(len(data)) }
+
+func sizeOfInt8(data []int8) int64 { return 1 * int64(len(data)) }
+
+func sizeOfInt32(data []int32) int64 { return 4 * int64(len(data)) }
+
+func sizeOfInt64(data []int64) int64 { return 8 * int64(len(data)) }
+
+func sizeOfInt96(data []deprecated.Int96) int64 { return 12 * int64(len(data)) }
+
+func sizeOfFloat32(data []float32) int64 { return 4 * int64(len(data)) }
+
+func sizeOfFloat64(data []float64) int64 { return 8 * int64(len(data)) }
+
+func forEachPageSlice(page Page, wantSize int64, do func(Page) error) error {
+	numRows := page.NumRows()
 	if numRows == 0 {
 		return nil
 	}
-	if numRows == 1 {
+
+	pageSize := page.Size()
+	numPages := int((pageSize + (wantSize - 1)) / wantSize)
+	rowIndex := 0
+	if numPages < 2 {
 		return do(page)
 	}
 
@@ -96,6 +116,11 @@ func (page *errorPage) WriteRepetitionLevelsTo(encoding.Encoder) error { return 
 func (page *errorPage) WriteDefinitionLevelsTo(encoding.Encoder) error { return page.err }
 func (page *errorPage) WriteTo(encoding.Encoder) error                 { return page.err }
 func (page *errorPage) ReadValuesAt(int, []Value) (int, error)         { return 0, page.err }
+func (page *errorPage) Size() int64                                    { return 0 }
+
+func errPageBoundsOutOfRange(i, j, n int) error {
+	return fmt.Errorf("page bounds out of range [%d:%d]: with length %d", i, j, n)
+}
 
 func countLevelsEqual(levels []int8, value int8) int {
 	return bytes.Count(bits.Int8ToBytes(levels), []byte{byte(value)})
@@ -143,6 +168,10 @@ func (page *optionalPage) Slice(i, j int) Page {
 		page.maxDefinitionLevel,
 		page.definitionLevels[i:j],
 	)
+}
+
+func (page *optionalPage) Size() int64 {
+	return page.base.Size() + sizeOfInt8(page.definitionLevels)
 }
 
 func (page *optionalPage) WriteRepetitionLevelsTo(e encoding.Encoder) error {
@@ -230,10 +259,6 @@ func (page *repeatedPage) Bounds() (min, max Value) {
 	return page.base.Bounds()
 }
 
-func errPageBoundsOutOfRange(i, j, n int) error {
-	return fmt.Errorf("page bounds out of range [%d:%d]: with length %d", i, j, n)
-}
-
 func (page *repeatedPage) Slice(i, j int) Page {
 	numRows := page.NumRows()
 	if i < 0 || i > numRows {
@@ -275,6 +300,10 @@ func (page *repeatedPage) Slice(i, j int) Page {
 		page.repetitionLevels[rowIndex1:rowIndex2],
 		page.definitionLevels[rowIndex1:rowIndex2],
 	)
+}
+
+func (page *repeatedPage) Size() int64 {
+	return sizeOfInt8(page.repetitionLevels) + sizeOfInt8(page.definitionLevels) + page.base.Size()
 }
 
 func (page *repeatedPage) WriteRepetitionLevelsTo(e encoding.Encoder) error {
@@ -371,6 +400,8 @@ func (page *booleanPage) Bounds() (min, max Value) {
 
 func (page *booleanPage) Slice(i, j int) Page { return newBooleanPage(page.values[i:j]) }
 
+func (page *booleanPage) Size() int64 { return sizeOfBool(page.values) }
+
 func (page *booleanPage) WriteRepetitionLevelsTo(encoding.Encoder) error { return nil }
 
 func (page *booleanPage) WriteDefinitionLevelsTo(encoding.Encoder) error { return nil }
@@ -410,6 +441,8 @@ func (page *int32Page) Bounds() (min, max Value) {
 }
 
 func (page *int32Page) Slice(i, j int) Page { return newInt32Page(page.values[i:j]) }
+
+func (page *int32Page) Size() int64 { return sizeOfInt32(page.values) }
 
 func (page *int32Page) WriteRepetitionLevelsTo(encoding.Encoder) error { return nil }
 
@@ -451,6 +484,8 @@ func (page *int64Page) Bounds() (min, max Value) {
 
 func (page *int64Page) Slice(i, j int) Page { return newInt64Page(page.values[i:j]) }
 
+func (page *int64Page) Size() int64 { return sizeOfInt64(page.values) }
+
 func (page *int64Page) WriteRepetitionLevelsTo(encoding.Encoder) error { return nil }
 
 func (page *int64Page) WriteDefinitionLevelsTo(encoding.Encoder) error { return nil }
@@ -490,6 +525,8 @@ func (page *int96Page) Bounds() (min, max Value) {
 }
 
 func (page *int96Page) Slice(i, j int) Page { return newInt96Page(page.values[i:j]) }
+
+func (page *int96Page) Size() int64 { return sizeOfInt96(page.values) }
 
 func (page *int96Page) WriteRepetitionLevelsTo(encoding.Encoder) error { return nil }
 
@@ -531,6 +568,8 @@ func (page *floatPage) Bounds() (min, max Value) {
 
 func (page *floatPage) Slice(i, j int) Page { return newFloatPage(page.values[i:j]) }
 
+func (page *floatPage) Size() int64 { return sizeOfFloat32(page.values) }
+
 func (page *floatPage) WriteRepetitionLevelsTo(encoding.Encoder) error { return nil }
 
 func (page *floatPage) WriteDefinitionLevelsTo(encoding.Encoder) error { return nil }
@@ -570,6 +609,8 @@ func (page *doublePage) Bounds() (min, max Value) {
 }
 
 func (page *doublePage) Slice(i, j int) Page { return newDoublePage(page.values[i:j]) }
+
+func (page *doublePage) Size() int64 { return sizeOfFloat64(page.values) }
 
 func (page *doublePage) WriteRepetitionLevelsTo(encoding.Encoder) error { return nil }
 
@@ -627,6 +668,8 @@ func (page *byteArrayPage) Slice(i, j int) Page {
 	return newByteArrayPage(page.values.Slice(i, j))
 }
 
+func (page *byteArrayPage) Size() int64 { return page.values.Size() }
+
 func (page *byteArrayPage) WriteRepetitionLevelsTo(encoding.Encoder) error { return nil }
 
 func (page *byteArrayPage) WriteDefinitionLevelsTo(encoding.Encoder) error { return nil }
@@ -675,6 +718,8 @@ func (page *fixedLenByteArrayPage) Bounds() (min, max Value) {
 func (page *fixedLenByteArrayPage) Slice(i, j int) Page {
 	return newFixedLenByteArrayPage(page.size, page.data[i*page.size:j*page.size])
 }
+
+func (page *fixedLenByteArrayPage) Size() int64 { return sizeOfBytes(page.data) }
 
 func (page *fixedLenByteArrayPage) WriteRepetitionLevelsTo(encoding.Encoder) error { return nil }
 

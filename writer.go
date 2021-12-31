@@ -592,8 +592,13 @@ func (rgw *rowGroupWriter) writeRowGroup(rowGroup RowGroup) error {
 		}
 
 		dataPageOffset := rgw.writer.offset
+		targetPageSize := int64(rgw.columns[i].chunks.bufferSize)
+
 		for _, page := range rowGroupColumn.Pages() {
-			if err := rgw.columns[i].chunks.writePage(&rgw.pages, page); err != nil {
+			err := forEachPageSlice(page, targetPageSize, func(page Page) error {
+				return rgw.columns[i].chunks.writePage(&rgw.pages, page)
+			})
+			if err != nil {
 				return fmt.Errorf("writing data pages of row group column %d: %w", i, err)
 			}
 		}

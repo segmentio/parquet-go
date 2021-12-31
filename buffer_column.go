@@ -137,7 +137,7 @@ func (col *optionalBufferColumn) Reset() {
 }
 
 func (col *optionalBufferColumn) Size() int64 {
-	return col.base.Size() + int64(len(col.rows)) + int64(len(col.index)) + int64(len(col.definitionLevels))
+	return sizeOfInt32(col.rows) + sizeOfInt32(col.index) + sizeOfInt8(col.definitionLevels) + col.base.Size()
 }
 
 func (col *optionalBufferColumn) Cap() int { return cap(col.rows) }
@@ -223,6 +223,8 @@ type region struct {
 	offset uint32
 	length uint32
 }
+
+func sizeOfRegion(regions []region) int64 { return 8 * int64(len(regions)) }
 
 func newRepeatedBufferColumn(base BufferColumn, maxRepetitionLevel, maxDefinitionLevel int8, nullOrdering nullOrdering) *repeatedBufferColumn {
 	n := base.Cap()
@@ -345,7 +347,7 @@ func (col *repeatedBufferColumn) Reset() {
 }
 
 func (col *repeatedBufferColumn) Size() int64 {
-	return 8*int64(len(col.rows)) + int64(len(col.repetitionLevels)) + int64(len(col.definitionLevels)) + col.base.Size()
+	return sizeOfRegion(col.rows) + sizeOfInt8(col.repetitionLevels) + sizeOfInt8(col.definitionLevels) + col.base.Size()
 }
 
 func (col *repeatedBufferColumn) Cap() int { return cap(col.rows) }
@@ -470,8 +472,6 @@ func (col *booleanBufferColumn) Pages() []Page { return []Page{&col.booleanPage}
 
 func (col *booleanBufferColumn) Reset() { col.values = col.values[:0] }
 
-func (col *booleanBufferColumn) Size() int64 { return int64(len(col.values)) }
-
 func (col *booleanBufferColumn) Cap() int { return cap(col.values) }
 
 func (col *booleanBufferColumn) Len() int { return len(col.values) }
@@ -530,8 +530,6 @@ func (col *int32BufferColumn) Pages() []Page { return []Page{&col.int32Page} }
 
 func (col *int32BufferColumn) Reset() { col.values = col.values[:0] }
 
-func (col *int32BufferColumn) Size() int64 { return 4 * int64(len(col.values)) }
-
 func (col *int32BufferColumn) Cap() int { return cap(col.values) }
 
 func (col *int32BufferColumn) Len() int { return len(col.values) }
@@ -587,8 +585,6 @@ func (col *int64BufferColumn) Dictionary() Dictionary { return nil }
 func (col *int64BufferColumn) Pages() []Page { return []Page{&col.int64Page} }
 
 func (col *int64BufferColumn) Reset() { col.values = col.values[:0] }
-
-func (col *int64BufferColumn) Size() int64 { return 8 * int64(len(col.values)) }
 
 func (col *int64BufferColumn) Cap() int { return cap(col.values) }
 
@@ -646,8 +642,6 @@ func (col *int96BufferColumn) Pages() []Page { return []Page{&col.int96Page} }
 
 func (col *int96BufferColumn) Reset() { col.values = col.values[:0] }
 
-func (col *int96BufferColumn) Size() int64 { return 12 * int64(len(col.values)) }
-
 func (col *int96BufferColumn) Cap() int { return cap(col.values) }
 
 func (col *int96BufferColumn) Len() int { return len(col.values) }
@@ -703,8 +697,6 @@ func (col *floatBufferColumn) Dictionary() Dictionary { return nil }
 func (col *floatBufferColumn) Pages() []Page { return []Page{&col.floatPage} }
 
 func (col *floatBufferColumn) Reset() { col.values = col.values[:0] }
-
-func (col *floatBufferColumn) Size() int64 { return 4 * int64(len(col.values)) }
 
 func (col *floatBufferColumn) Cap() int { return cap(col.values) }
 
@@ -762,8 +754,6 @@ func (col *doubleBufferColumn) Pages() []Page { return []Page{&col.doublePage} }
 
 func (col *doubleBufferColumn) Reset() { col.values = col.values[:0] }
 
-func (col *doubleBufferColumn) Size() int64 { return 8 * int64(len(col.values)) }
-
 func (col *doubleBufferColumn) Cap() int { return cap(col.values) }
 
 func (col *doubleBufferColumn) Len() int { return len(col.values) }
@@ -819,8 +809,6 @@ func (col *byteArrayBufferColumn) Dictionary() Dictionary { return nil }
 func (col *byteArrayBufferColumn) Pages() []Page { return []Page{&col.byteArrayPage} }
 
 func (col *byteArrayBufferColumn) Reset() { col.values.Reset() }
-
-func (col *byteArrayBufferColumn) Size() int64 { return col.values.Size() }
 
 func (col *byteArrayBufferColumn) Cap() int { return col.values.Cap() }
 
@@ -882,8 +870,6 @@ func (col *fixedLenByteArrayBufferColumn) Dictionary() Dictionary { return nil }
 func (col *fixedLenByteArrayBufferColumn) Pages() []Page { return []Page{&col.fixedLenByteArrayPage} }
 
 func (col *fixedLenByteArrayBufferColumn) Reset() { col.data = col.data[:0] }
-
-func (col *fixedLenByteArrayBufferColumn) Size() int64 { return int64(len(col.data)) }
 
 func (col *fixedLenByteArrayBufferColumn) Cap() int { return cap(col.data) / col.size }
 

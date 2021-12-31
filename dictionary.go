@@ -733,6 +733,8 @@ func (page *indexedPage) Slice(i, j int) Page {
 	return newIndexedPage(page.dict, page.values[i:j])
 }
 
+func (page *indexedPage) Size() int64 { return sizeOfInt32(page.values) }
+
 func (page *indexedPage) WriteRepetitionLevelsTo(encoding.Encoder) error { return nil }
 
 func (page *indexedPage) WriteDefinitionLevelsTo(encoding.Encoder) error { return nil }
@@ -793,8 +795,6 @@ func (col *indexedBufferColumn) Dictionary() Dictionary { return col.dict }
 func (col *indexedBufferColumn) Pages() []Page { return []Page{&col.indexedPage} }
 
 func (col *indexedBufferColumn) Reset() { col.values = col.values[:0] }
-
-func (col *indexedBufferColumn) Size() int64 { return 4 * int64(len(col.values)) }
 
 func (col *indexedBufferColumn) Cap() int { return cap(col.values) }
 
