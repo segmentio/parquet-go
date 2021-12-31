@@ -119,15 +119,19 @@ func (rg *Buffer) Size() int64 {
 	return size
 }
 
-func (rg *Buffer) SortingColumns() []format.SortingColumn { return rg.sorting }
-
-func (rg *Buffer) Schema() *Schema { return rg.schema }
+func (rg *Buffer) Columns() []RowGroupColumn {
+	columns := make([]RowGroupColumn, len(rg.columns))
+	for i, c := range rg.columns {
+		columns[i] = c
+	}
+	return columns
+}
 
 func (rg *Buffer) NumRows() int { return rg.numRows }
 
-func (rg *Buffer) NumColumns() int { return len(rg.columns) }
+func (rg *Buffer) Schema() *Schema { return rg.schema }
 
-func (rg *Buffer) ColumnIndex(i int) RowGroupColumn { return rg.columns[i] }
+func (rg *Buffer) SortingColumns() []format.SortingColumn { return rg.sorting }
 
 func (rg *Buffer) Len() int { return rg.numRows }
 
@@ -189,6 +193,42 @@ func (rg *Buffer) WriteRow(row Row) error {
 	rg.numRows++
 	return nil
 }
+
+/*
+type bufferRowReader struct {
+	columns []bufferColumnRowReader
+}
+
+func (r *bufferColumnRowReader) ReadRow(row Row) (Row, error) {
+	var reset = len(row)
+	var err error
+
+	for i := range r.columns {
+		c := &r.columns[i]
+		n := len(row)
+
+		if row, err = c.ReadRow(row); err != nil {
+			return row[:reset], err
+		}
+		for columnIndex := ^int8(i); n < len(row); n++ {
+			row[n].columnIndex = columnIndex
+		}
+	}
+
+	return row, nil
+}
+
+type bufferColumnRowReader struct {
+	column BufferColumn
+	offset int
+}
+
+func (r *bufferColumnRowReader) ReadRow(row Row) (Row, error) {
+	row, err := r.column.ReadRowAt(row, r.offset)
+	r.offset++
+	return row, err
+}
+*/
 
 var (
 	_ sort.Interface = (*Buffer)(nil)

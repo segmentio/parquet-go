@@ -18,6 +18,7 @@ type BufferColumn interface {
 	RowGroupColumn
 	RowReaderAt
 	RowWriter
+	ValueReaderAt
 
 	// Returns a copy of the column. The returned copy shares no memory with
 	// the original, mutations of either column will not modify the other.
@@ -181,30 +182,11 @@ func (col *optionalBufferColumn) WriteRow(row Row) error {
 }
 
 func (col *optionalBufferColumn) ReadRowAt(row Row, index int) (Row, error) {
-	if index < 0 {
-		return row, errRowIndexOutOfBounds(index, len(col.definitionLevels))
-	}
-	if index >= len(col.definitionLevels) {
-		return row, io.EOF
-	}
+	return readOptionalRowAt(col.base, col.maxDefinitionLevel, col.rows, col.definitionLevels, row, index)
+}
 
-	if definitionLevel := col.definitionLevels[index]; definitionLevel != col.maxDefinitionLevel {
-		row = append(row, Value{definitionLevel: definitionLevel})
-	} else {
-		var err error
-		var n = len(row)
-
-		if row, err = col.base.ReadRowAt(row, int(col.rows[index])); err != nil {
-			return row, err
-		}
-
-		for n < len(row) {
-			row[n].definitionLevel = definitionLevel
-			n++
-		}
-	}
-
-	return row, nil
+func (col *optionalBufferColumn) ReadValuesAt(values []Value, index int) (int, error) {
+	return readOptionalValuesAt(col.base, col.maxDefinitionLevel, col.definitionLevels, values, index)
 }
 
 type repeatedBufferColumn struct {
@@ -408,44 +390,26 @@ func (col *repeatedBufferColumn) WriteRow(row Row) error {
 }
 
 func (col *repeatedBufferColumn) ReadRowAt(row Row, index int) (Row, error) {
-	if index < 0 {
-		return row, errRowIndexOutOfBounds(index, len(col.rows))
-	}
-	if index >= len(col.rows) {
-		return row, io.EOF
-	}
+	return readRepeatedRowAt(
+		col.base,
+		col.maxRepetitionLevel,
+		col.maxDefinitionLevel,
+		col.rows,
+		col.repetitionLevels,
+		col.definitionLevels,
+		row, index,
+	)
+}
 
-	reset := len(row)
-	region := col.rows[index]
-	maxDefinitionLevel := col.maxDefinitionLevel
-	repetitionLevels := col.repetitionLevels[region.offset : region.offset+region.length]
-	definitionLevels := col.definitionLevels[region.offset : region.offset+region.length]
-	baseIndex := 0
-
-	for i := range definitionLevels {
-		if definitionLevels[i] != maxDefinitionLevel {
-			row = append(row, Value{
-				repetitionLevel: repetitionLevels[i],
-				definitionLevel: definitionLevels[i],
-			})
-		} else {
-			var err error
-			var n = len(row)
-
-			if row, err = col.base.ReadRowAt(row, int(region.offset)+baseIndex); err != nil {
-				return row[:reset], err
-			}
-
-			baseIndex += n
-			for n < len(row) {
-				row[n].repetitionLevel = repetitionLevels[i]
-				row[n].definitionLevel = definitionLevels[i]
-				n++
-			}
-		}
-	}
-
-	return row, nil
+func (col *repeatedBufferColumn) ReadValuesAt(values []Value, index int) (int, error) {
+	return readRepeatedValuesAt(
+		col.base,
+		col.maxRepetitionLevel,
+		col.maxDefinitionLevel,
+		col.repetitionLevels,
+		col.definitionLevels,
+		values, index,
+	)
 }
 
 type booleanBufferColumn struct{ booleanPage }

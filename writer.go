@@ -577,9 +577,8 @@ func (rgw *rowGroupWriter) writeRowGroup(rowGroup RowGroup) error {
 	columnIndex := make([]format.ColumnIndex, len(rgw.columns))
 	offsetIndex := make([]format.OffsetIndex, len(rgw.columns))
 
-	for i, n := 0, rowGroup.NumColumns(); i < n; i++ {
+	for i, rowGroupColumn := range rowGroup.Columns() {
 		rgw.pages.reset()
-		rowGroupColumn := rowGroup.ColumnIndex(i)
 		rowGroupOffset := rgw.writer.offset
 		dictionaryPageOffset := int64(0)
 

@@ -47,7 +47,7 @@ type ValueReader interface {
 // batch of balues, the application must specify the index at which it wants to
 // read values from.
 type ValueReaderAt interface {
-	ReadValuesAt(int, []Value) (int, error)
+	ReadValuesAt([]Value, int) (int, error)
 }
 
 // ValueWriter is an interface implemented by types that support reading
@@ -693,7 +693,7 @@ func (r *valueReader) ReadValues(values []Value) (int, error) {
 	if len(values) > r.length {
 		values = values[:r.length]
 	}
-	n, err := r.values.ReadValuesAt(r.offset, values)
+	n, err := r.values.ReadValuesAt(values, r.offset)
 	r.offset += n
 	r.length -= n
 	if err == nil && r.length == 0 {

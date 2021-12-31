@@ -255,9 +255,6 @@ func testBuffer(t *testing.T, node parquet.Node, reader parquet.ValueReader, buf
 		}
 	}
 
-	if numColumns := buffer.NumColumns(); numColumns != 1 {
-		t.Fatalf("number of columns mismatch: want=%d got=%d", 1, numColumns)
-	}
 	if numRows := buffer.NumRows(); numRows != len(batch) {
 		t.Fatalf("number of rows mismatch: want=%d got=%d", len(batch), numRows)
 	}
@@ -275,7 +272,7 @@ func testBuffer(t *testing.T, node parquet.Node, reader parquet.ValueReader, buf
 	sortFunc(typ, batch)
 	sort.Sort(buffer)
 
-	page := buffer.ColumnIndex(0).Pages()[0]
+	page := buffer.Columns()[0].Pages()[0]
 	numValues := page.NumValues()
 	if numValues != len(batch) {
 		t.Fatalf("number of values mistmatch: want=%d got=%d", len(batch), numValues)

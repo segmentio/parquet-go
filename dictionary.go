@@ -741,7 +741,7 @@ func (page *indexedPage) WriteDefinitionLevelsTo(encoding.Encoder) error { retur
 
 func (page *indexedPage) WriteTo(e encoding.Encoder) error { return e.EncodeInt32(page.values) }
 
-func (page *indexedPage) ReadValuesAt(offset int, values []Value) (n int, err error) {
+func (page *indexedPage) ReadValuesAt(values []Value, offset int) (n int, err error) {
 	if offset < len(page.values) {
 		n = min(len(values), len(page.values)-offset)
 		for i := 0; i < n; i++ {

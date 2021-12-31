@@ -42,11 +42,9 @@ type nullsFirst struct{ SortingColumn }
 func (nullsFirst) NullsFirst() bool { return true }
 
 type RowGroup interface {
-	NumColumns() int
+	Columns() []RowGroupColumn
 
 	NumRows() int
-
-	ColumnIndex(int) RowGroupColumn
 
 	Schema() *Schema
 
@@ -70,6 +68,6 @@ type RowGroupWriter interface {
 	WriteRowGroup(RowGroup) error
 }
 
-func Merge(rowGroups ...RowGroup) RowGroup {
-	return nil
+func MergeRowGroups(rowGroups ...RowGroup) (RowGroup, error) {
+	return nil, nil
 }
