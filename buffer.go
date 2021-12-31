@@ -11,7 +11,7 @@ import (
 // writting them to a parquet file. Buffer implements sort.Interface as a way
 // to support reordering the rows that have been written to it.
 type Buffer struct {
-	config  *BufferConfig
+	config  *RowGroupConfig
 	schema  *Schema
 	rowbuf  []Value
 	colbuf  [][]Value
@@ -23,8 +23,8 @@ type Buffer struct {
 
 // NewBuffer constructs a new buffer, using the given list of buffer options
 // to configure the buffer returned by the function.
-func NewBuffer(options ...BufferOption) *Buffer {
-	config := DefaultBufferConfig()
+func NewBuffer(options ...RowGroupOption) *Buffer {
+	config := DefaultRowGroupConfig()
 	config.Apply(options...)
 	if err := config.Validate(); err != nil {
 		panic(err)

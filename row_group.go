@@ -2,7 +2,10 @@ package parquet
 
 import (
 	"container/heap"
+	"errors"
+	"fmt"
 	"io"
+	"sort"
 )
 
 // SortingColumn represents a column by which a row group is sorted.
@@ -53,6 +56,72 @@ func sortingColumnOf(sortingColumns []SortingColumn, path []string) SortingColum
 	return nil
 }
 
+type sortingColumnsOrder []SortingColumn
+
+func (sorting sortingColumnsOrder) Len() int {
+	return len(sorting)
+}
+
+func (sorting sortingColumnsOrder) Less(i, j int) bool {
+	path1 := sorting[i].Path()
+	path2 := sorting[j].Path()
+	switch {
+	case stringsAreOrdered(path1, path2):
+		return true
+	case stringsAreOrdered(path2, path2):
+		return false
+	}
+	desc1 := sorting[i].Descending()
+	desc2 := sorting[j].Descending()
+	if desc1 != desc2 {
+		return !desc1
+	}
+	null1 := sorting[i].NullsFirst()
+	null2 := sorting[j].NullsFirst()
+	return null1 != null2 && !null1
+}
+
+func (sorting sortingColumnsOrder) Swap(i, j int) {
+	sorting[i], sorting[j] = sorting[i], sorting[i]
+}
+
+func sortedSortingColumns(sortingColumns []SortingColumn) []SortingColumn {
+	if !sortingColumnsAreSorted(sortingColumns) {
+		sortedSortingColumns := make([]SortingColumn, len(sortingColumns))
+		copy(sortedSortingColumns, sortingColumns)
+		sort.Sort(sortingColumnsOrder(sortedSortingColumns))
+		sortingColumns = sortedSortingColumns
+	}
+	return sortingColumns
+}
+
+func sortingColumnsAreSorted(sortingColumns []SortingColumn) bool {
+	return sort.IsSorted(sortingColumnsOrder(sortingColumns))
+}
+
+func sortingColumnsAreEqual(sortingColumns1, sortingColumns2 []SortingColumn) bool {
+	if len(sortingColumns1) != len(sortingColumns2) {
+		return false
+	}
+
+	sortingColumns1 = sortedSortingColumns(sortingColumns1)
+	sortingColumns2 = sortedSortingColumns(sortingColumns2)
+
+	for i := range sortingColumns1 {
+		if !stringsAreEqual(sortingColumns1[i].Path(), sortingColumns2[i].Path()) {
+			return false
+		}
+		if sortingColumns1[i].Descending() != sortingColumns2[i].Descending() {
+			return false
+		}
+		if sortingColumns1[i].NullsFirst() != sortingColumns2[i].NullsFirst() {
+			return false
+		}
+	}
+
+	return true
+}
+
 // RowGroup is an interface representing a parquet row group.
 type RowGroup interface {
 	// Returns the list of column that that row group has values for.
@@ -96,39 +165,90 @@ type RowGroupWriter interface {
 	WriteRowGroup(RowGroup) (int64, error)
 }
 
-func MergeRowGroups(schema Node, rowGroups ...RowGroup) (RowGroup, error) {
-	m := &mergedRowGroup{
-		rowGroups: make([]RowGroup, len(rowGroups)),
+var (
+	errRowGroupSchemaMismatch         = errors.New("cannot merge row groups with mismatching schemas")
+	errRowGroupSortingColumnsMismatch = errors.New("cannot merge row groups with mismatching sorting columns")
+)
+
+func MergeRowGroups(rowGroups []RowGroup, options ...RowGroupOption) (RowGroup, error) {
+	config := DefaultRowGroupConfig()
+	config.Apply(options...)
+	if err := config.Validate(); err != nil {
+		return nil, err
 	}
+
+	m := &mergedRowGroup{
+		schema:  config.Schema,
+		sorting: config.SortingColumns,
+	}
+
+	if len(rowGroups) == 0 {
+		return m, nil
+	}
+
+	for _, rowGroup := range rowGroups {
+		m.numRows += rowGroup.NumRows()
+	}
+
+	if m.schema == nil {
+		m.schema = rowGroups[0].Schema()
+
+		for _, rowGroup := range rowGroups[1:] {
+			if !nodesAreEqual(m.schema, rowGroup.Schema()) {
+				return nil, errRowGroupSchemaMismatch
+			}
+		}
+	}
+
+	if m.sorting == nil {
+		m.sorting = rowGroups[0].SortingColumns()
+
+		for _, rowGroup := range rowGroups[1:] {
+			if !sortingColumnsAreEqual(m.sorting, rowGroup.SortingColumns()) {
+				return nil, errRowGroupSortingColumnsMismatch
+			}
+		}
+	}
+
+	if len(m.sorting) > 0 {
+		forEachLeafColumnOf(m.schema, func(leaf leafColumn) {
+			if sorting := sortingColumnOf(m.sorting, leaf.path); sorting != nil {
+				m.sortFuncs = append(m.sortFuncs, columnSortFunc{
+					columnIndex: leaf.columnIndex,
+					compare: sortFuncOf(
+						leaf.node.Type(),
+						leaf.maxRepetitionLevel,
+						leaf.maxDefinitionLevel,
+						sorting.Descending(),
+						sorting.NullsFirst(),
+					),
+				})
+			}
+		})
+	}
+
+	m.rowGroups = make([]RowGroup, len(rowGroups))
 	copy(m.rowGroups, rowGroups)
 
-	if m.schema, _ = schema.(*Schema); m.schema == nil {
-		m.schema = NewSchema("", schema)
-	}
-
-	forEachLeafColumnOf(schema, func(leaf leafColumn) {
-		if sorting := sortingColumnOf(m.sorting, leaf.path); sorting != nil {
-			m.sortFuncs = append(m.sortFuncs, columnSortFunc{
-				columnIndex: leaf.columnIndex,
-				compare: sortFuncOf(
-					leaf.node.Type(),
-					leaf.maxRepetitionLevel,
-					leaf.maxDefinitionLevel,
-					sorting.Descending(),
-					sorting.NullsFirst(),
-				),
-			})
+	for i, rowGroup := range m.rowGroups {
+		if schema := rowGroup.Schema(); !nodesAreEqual(m.schema, schema) {
+			conv, err := Convert(m.schema, schema)
+			if err != nil {
+				return nil, fmt.Errorf("cannot merge row groups: %w", err)
+			}
+			m.rowGroups[i] = ConvertRowGroup(rowGroup, conv)
 		}
-	})
+	}
 
 	return m, nil
 }
 
 type mergedRowGroup struct {
+	numRows   int
 	schema    *Schema
-	rowGroups []RowGroup
 	sorting   []SortingColumn
 	sortFuncs []columnSortFunc
+	rowGroups []RowGroup
 }
 
 func (m *mergedRowGroup) Columns() []RowGroupColumn {

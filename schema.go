@@ -123,10 +123,10 @@ func makeReconstructFunc(node Node) (reconstruct reconstructFunc) {
 	return reconstruct
 }
 
-// ConfigureBuffer satisfies the BufferOption interface, allowing Schema
-// instances to be passed to NewBuffer to predeclare the schema of the
+// ConfigureRowGroup satisfies the RowGroupOption interface, allowing Schema
+// instances to be passed to NewRowGroup to predeclare the schema of the
 // output parquet file.
-func (s *Schema) ConfigureBuffer(config *BufferConfig) { config.Schema = s }
+func (s *Schema) ConfigureRowGroup(config *RowGroupConfig) { config.Schema = s }
 
 // ConfigureWriter satisfies the WriterOption interface, allowing Schema
 // instances to be passed to NewWriter to predeclare the schema of the
@@ -660,7 +660,7 @@ type goNode struct {
 func (n *goNode) GoType() reflect.Type { return n.gotype }
 
 var (
-	_ BufferOption = (*Schema)(nil)
-	_ WriterOption = (*Schema)(nil)
-	_ IndexedNode  = (*structNode)(nil)
+	_ RowGroupOption = (*Schema)(nil)
+	_ WriterOption   = (*Schema)(nil)
+	_ IndexedNode    = (*structNode)(nil)
 )

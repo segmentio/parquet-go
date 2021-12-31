@@ -178,45 +178,45 @@ func (c *WriterConfig) Validate() error {
 	)
 }
 
-// The BufferConfig type carries configuration options for parquet row groups.
+// The RowGroupConfig type carries configuration options for parquet row groups.
 //
-// BufferConfig implements the BufferOption interface so it can be used
+// RowGroupConfig implements the RowGroupOption interface so it can be used
 // directly as argument to the NewBuffer function when needed, for example:
 //
-//	buffer := parquet.NewBuffer(&parquet.BufferConfig{
+//	buffer := parquet.NewBuffer(&parquet.RowGroupConfig{
 //		ColumnBufferSize: 8 * 1024 * 1024,
 //	})
 //
-type BufferConfig struct {
+type RowGroupConfig struct {
 	ColumnBufferSize int
 	SortingColumns   []SortingColumn
 	Schema           *Schema
 }
 
-// DefaultBufferConfig returns a new BufferConfig value initialized with the
+// DefaultRowGroupConfig returns a new RowGroupConfig value initialized with the
 // default row group configuration.
-func DefaultBufferConfig() *BufferConfig {
-	return &BufferConfig{
+func DefaultRowGroupConfig() *RowGroupConfig {
+	return &RowGroupConfig{
 		ColumnBufferSize: DefaultColumnBufferSize,
 	}
 }
 
 // Validate returns a non-nil error if the configuration of c is invalid.
-func (c *BufferConfig) Validate() error {
-	const baseName = "parquet.(*BufferConfig)."
+func (c *RowGroupConfig) Validate() error {
+	const baseName = "parquet.(*RowGroupConfig)."
 	return errorInvalidConfiguration(
 		validatePositiveInt(baseName+"ColumnBufferSize", c.ColumnBufferSize),
 	)
 }
 
-func (c *BufferConfig) Apply(options ...BufferOption) {
+func (c *RowGroupConfig) Apply(options ...RowGroupOption) {
 	for _, opt := range options {
-		opt.ConfigureBuffer(c)
+		opt.ConfigureRowGroup(c)
 	}
 }
 
-func (c *BufferConfig) ConfigureBuffer(config *BufferConfig) {
-	*config = BufferConfig{
+func (c *RowGroupConfig) ConfigureRowGroup(config *RowGroupConfig) {
+	*config = RowGroupConfig{
 		ColumnBufferSize: coalesceInt(c.ColumnBufferSize, config.ColumnBufferSize),
 		SortingColumns:   coalesceSortingColumns(c.SortingColumns, config.SortingColumns),
 		Schema:           coalesceSchema(c.Schema, config.Schema),
@@ -241,10 +241,10 @@ type WriterOption interface {
 	ConfigureWriter(*WriterConfig)
 }
 
-// BufferOption is an interface implemented by types that carryconfiguration
+// RowGroupOption is an interface implemented by types that carryconfiguration
 // options for parquet row groups.
-type BufferOption interface {
-	ConfigureBuffer(*BufferConfig)
+type RowGroupOption interface {
+	ConfigureRowGroup(*RowGroupConfig)
 }
 
 // SkipPageIndex is a file configuration option which when set to true, prevents
@@ -351,8 +351,8 @@ func KeyValueMetadata(key, value string) WriterOption {
 // row group column buffers.
 //
 // Defaults to 1 MiB.
-func ColumnBufferSize(size int) BufferOption {
-	return bufferOption(func(config *BufferConfig) { config.ColumnBufferSize = size })
+func ColumnBufferSize(size int) RowGroupOption {
+	return rowGroupOption(func(config *RowGroupConfig) { config.ColumnBufferSize = size })
 }
 
 // SortinColumns creates a configuration option which defines the sorting order
@@ -361,8 +361,9 @@ func ColumnBufferSize(size int) BufferOption {
 // The order of sorting columns passed as argument defines the ordering
 // hierarchy; when elements are equal in the first column, the second column is
 // used to order rows, etc...
-func SortingColumns(sortingColumns ...SortingColumn) BufferOption {
-	return bufferOption(func(config *BufferConfig) { config.SortingColumns = sortingColumns })
+func SortingColumns(sortingColumns ...SortingColumn) RowGroupOption {
+	sortingColumns = sortedSortingColumns(sortingColumns)
+	return rowGroupOption(func(config *RowGroupConfig) { config.SortingColumns = sortingColumns })
 }
 
 type fileOption func(*FileConfig)
@@ -377,9 +378,9 @@ type writerOption func(*WriterConfig)
 
 func (opt writerOption) ConfigureWriter(config *WriterConfig) { opt(config) }
 
-type bufferOption func(*BufferConfig)
+type rowGroupOption func(*RowGroupConfig)
 
-func (opt bufferOption) ConfigureBuffer(config *BufferConfig) { opt(config) }
+func (opt rowGroupOption) ConfigureRowGroup(config *RowGroupConfig) { opt(config) }
 
 func coalesceInt(i1, i2 int) int {
 	if i1 != 0 {
@@ -501,10 +502,10 @@ func (err *invalidConfiguration) Error() string {
 }
 
 var (
-	_ FileOption   = (*FileConfig)(nil)
-	_ ReaderOption = (*ReaderConfig)(nil)
-	_ WriterOption = (*WriterConfig)(nil)
-	_ BufferOption = (*BufferConfig)(nil)
-	_ ReaderOption = PageBufferSize(0)
-	_ WriterOption = PageBufferSize(0)
+	_ FileOption     = (*FileConfig)(nil)
+	_ ReaderOption   = (*ReaderConfig)(nil)
+	_ WriterOption   = (*WriterConfig)(nil)
+	_ RowGroupOption = (*RowGroupConfig)(nil)
+	_ ReaderOption   = PageBufferSize(0)
+	_ WriterOption   = PageBufferSize(0)
 )

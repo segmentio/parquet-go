@@ -49,6 +49,11 @@ func (c *conversion) Schema() *Schema { return c.schema }
 
 // Convert constructs a conversion function from one parquet schema to another.
 //
+// The function supports converting between schemas where the source or target
+// have extra columns; if there are more columns in the source, they will be
+// stripped out of the rows. Extra columns in the target schema will be set to
+// null or zero values.
+//
 // The returned function is intended to be used to append the converted soruce
 // row to the destinatination buffer.
 func Convert(to, from Node) (conv Conversion, err error) {
@@ -321,6 +326,18 @@ func stringsAreEqual(strings1, strings2 []string) bool {
 	return true
 }
 
+func stringsAreOrdered(strings1, strings2 []string) bool {
+	n := min(len(strings1), len(strings2))
+
+	for i := 0; i < n; i++ {
+		if strings1[i] >= strings2[i] {
+			return false
+		}
+	}
+
+	return len(strings1) <= len(strings2)
+}
+
 func comm(sortedStrings1, sortedStrings2 []string) (only1, only2, both []string) {
 	i1 := 0
 	i2 := 0
@@ -361,26 +378,49 @@ func merge(s1, s2, s3 []string) []string {
 	return merged
 }
 
+// ConvertRowGroup constructs a wrapper of the given row group which appies
+// the given schema conversion on its rows.
+func ConvertRowGroup(rowGroup RowGroup, conv Conversion) RowGroup {
+	return &convertedRowGroup{RowGroup: rowGroup, conv: conv}
+}
+
+type convertedRowGroup struct {
+	RowGroup
+	conv Conversion
+}
+
+func (c *convertedRowGroup) Schema() *Schema {
+	return c.conv.Schema()
+}
+
+func (c *convertedRowGroup) Rows() RowReader {
+	return ConvertRowReader(c.RowGroup.Rows(), c.conv)
+}
+
 // ConvertRowReader constructs a wrapper of the given row reader which applies
 // the given schema conversion to the rows.
 func ConvertRowReader(rows RowReader, conv Conversion) RowReaderWithSchema {
-	return &convertRowReader{rows: rows, Conversion: conv}
+	return &convertedRowReader{rows: rows, conv: conv}
 }
 
-type convertRowReader struct {
+type convertedRowReader struct {
 	rows RowReader
 	buf  Row
-	Conversion
+	conv Conversion
 }
 
-func (crr *convertRowReader) ReadRow(row Row) (Row, error) {
+func (c *convertedRowReader) ReadRow(row Row) (Row, error) {
 	defer func() {
-		clearValues(crr.buf)
+		clearValues(c.buf)
 	}()
 	var err error
-	crr.buf, err = crr.rows.ReadRow(crr.buf[:0])
+	c.buf, err = c.rows.ReadRow(c.buf[:0])
 	if err != nil {
 		return row, err
 	}
-	return crr.Convert(row, crr.buf)
+	return c.conv.Convert(row, c.buf)
+}
+
+func (c *convertedRowReader) Schema() *Schema {
+	return c.conv.Schema()
 }

@@ -185,7 +185,7 @@ func TestBuffer(t *testing.T) {
 										"data": mod.function(parquet.Leaf(config.typ)),
 									})
 
-									options := []parquet.BufferOption{
+									options := []parquet.RowGroupOption{
 										schema,
 										parquet.ColumnBufferSize(1024),
 									}
