@@ -49,6 +49,9 @@ type RowGroup interface {
 	Schema() *Schema
 
 	SortingColumns() []format.SortingColumn
+
+	// Rows returns a reader exposing the rows of the row group.
+	Rows() RowReader
 }
 
 type RowGroupColumn interface {
@@ -58,6 +61,9 @@ type RowGroupColumn interface {
 
 	// Returns a reader exposing the list of pages in the column.
 	Pages() []Page
+
+	// Returns a reader exposing the values currently held in the buffer.
+	Values() ValueReader
 }
 
 type RowGroupReader interface {

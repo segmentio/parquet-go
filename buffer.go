@@ -1,6 +1,7 @@
 package parquet
 
 import (
+	"io"
 	"sort"
 
 	"github.com/segmentio/parquet/format"
@@ -19,6 +20,7 @@ type Buffer struct {
 	columns []BufferColumn
 	sorted  []BufferColumn
 	sorting []format.SortingColumn
+	readRow columnReadRowFunc
 	numRows int
 }
 
@@ -28,27 +30,28 @@ func NewBuffer(options ...BufferOption) *Buffer {
 	if err := config.Validate(); err != nil {
 		panic(err)
 	}
-	rg := &Buffer{
+	buf := &Buffer{
 		config: config,
 	}
 	if config.Schema != nil {
-		rg.configure(config.Schema)
+		buf.configure(config.Schema)
 	}
-	return rg
+	return buf
 }
 
-func (rg *Buffer) configure(schema *Schema) {
-	rg.schema = schema
-	rg.init(schema, make([]string, 0, 10), 0, 0, rg.config)
-	rg.rowbuf = make([]Value, 0, 10)
-	rg.colbuf = make([][]Value, len(rg.columns))
-	rg.sorted = make([]BufferColumn, len(rg.sorting))
-	for i, sort := range rg.sorting {
-		rg.sorted[i] = rg.columns[sort.ColumnIdx]
+func (buf *Buffer) configure(schema *Schema) {
+	buf.schema = schema
+	buf.init(schema, make([]string, 0, 10), 0, 0, buf.config)
+	buf.rowbuf = make([]Value, 0, 10)
+	buf.colbuf = make([][]Value, len(buf.columns))
+	buf.sorted = make([]BufferColumn, len(buf.sorting))
+	for i, sort := range buf.sorting {
+		buf.sorted[i] = buf.columns[sort.ColumnIdx]
 	}
+	_, buf.readRow = columnReadRowFuncOf(schema, 0, 0)
 }
 
-func (rg *Buffer) init(node Node, path []string, repetitionLevel, definitionLevel int8, config *BufferConfig) {
+func (buf *Buffer) init(node Node, path []string, repetitionLevel, definitionLevel int8, config *BufferConfig) {
 	switch {
 	case node.Optional():
 		definitionLevel++
@@ -59,7 +62,7 @@ func (rg *Buffer) init(node Node, path []string, repetitionLevel, definitionLeve
 
 	if isLeaf(node) {
 		nullOrdering := nullsGoLast
-		columnIndex := len(rg.columns)
+		columnIndex := len(buf.columns)
 		columnType := node.Type()
 		bufferSize := config.ColumnBufferSize
 		dictionary := (Dictionary)(nil)
@@ -86,7 +89,7 @@ func (rg *Buffer) init(node Node, path []string, repetitionLevel, definitionLeve
 				if sortingColumn.NullsFirst {
 					nullOrdering = nullsGoFirst
 				}
-				rg.sorting = append(rg.sorting, sortingColumn)
+				buf.sorting = append(buf.sorting, sortingColumn)
 				break
 			}
 		}
@@ -98,7 +101,7 @@ func (rg *Buffer) init(node Node, path []string, repetitionLevel, definitionLeve
 			column = newOptionalBufferColumn(column, definitionLevel, nullOrdering)
 		}
 
-		rg.columns = append(rg.columns, column)
+		buf.columns = append(buf.columns, column)
 		return
 	}
 
@@ -107,36 +110,36 @@ func (rg *Buffer) init(node Node, path []string, repetitionLevel, definitionLeve
 
 	for _, name := range node.ChildNames() {
 		path[i] = name
-		rg.init(node.ChildByName(name), path, repetitionLevel, definitionLevel, config)
+		buf.init(node.ChildByName(name), path, repetitionLevel, definitionLevel, config)
 	}
 }
 
-func (rg *Buffer) Size() int64 {
+func (buf *Buffer) Size() int64 {
 	size := int64(0)
-	for _, col := range rg.columns {
+	for _, col := range buf.columns {
 		size += col.Size()
 	}
 	return size
 }
 
-func (rg *Buffer) Columns() []RowGroupColumn {
-	columns := make([]RowGroupColumn, len(rg.columns))
-	for i, c := range rg.columns {
+func (buf *Buffer) Columns() []RowGroupColumn {
+	columns := make([]RowGroupColumn, len(buf.columns))
+	for i, c := range buf.columns {
 		columns[i] = c
 	}
 	return columns
 }
 
-func (rg *Buffer) NumRows() int { return rg.numRows }
+func (buf *Buffer) NumRows() int { return buf.numRows }
 
-func (rg *Buffer) Schema() *Schema { return rg.schema }
+func (buf *Buffer) Schema() *Schema { return buf.schema }
 
-func (rg *Buffer) SortingColumns() []format.SortingColumn { return rg.sorting }
+func (buf *Buffer) SortingColumns() []format.SortingColumn { return buf.sorting }
 
-func (rg *Buffer) Len() int { return rg.numRows }
+func (buf *Buffer) Len() int { return buf.numRows }
 
-func (rg *Buffer) Less(i, j int) bool {
-	for _, col := range rg.sorted {
+func (buf *Buffer) Less(i, j int) bool {
+	for _, col := range buf.sorted {
 		switch {
 		case col.Less(i, j):
 			return true
@@ -147,88 +150,212 @@ func (rg *Buffer) Less(i, j int) bool {
 	return false
 }
 
-func (rg *Buffer) Swap(i, j int) {
-	for _, col := range rg.columns {
+func (buf *Buffer) Swap(i, j int) {
+	for _, col := range buf.columns {
 		col.Swap(i, j)
 	}
 }
 
-func (rg *Buffer) Reset() {
-	for _, col := range rg.columns {
+func (buf *Buffer) Reset() {
+	for _, col := range buf.columns {
 		col.Reset()
 	}
-	rg.numRows = 0
+	buf.numRows = 0
 }
 
-func (rg *Buffer) Write(row interface{}) error {
-	if rg.schema == nil {
-		rg.configure(SchemaOf(row))
+func (buf *Buffer) Write(row interface{}) error {
+	if buf.schema == nil {
+		buf.configure(SchemaOf(row))
 	}
 	defer func() {
-		clearValues(rg.rowbuf)
+		clearValues(buf.rowbuf)
 	}()
-	rg.rowbuf = rg.schema.Deconstruct(rg.rowbuf[:0], row)
-	return rg.WriteRow(rg.rowbuf)
+	buf.rowbuf = buf.schema.Deconstruct(buf.rowbuf[:0], row)
+	return buf.WriteRow(buf.rowbuf)
 }
 
-func (rg *Buffer) WriteRow(row Row) error {
+func (buf *Buffer) WriteRow(row Row) error {
 	defer func() {
-		for i, colbuf := range rg.colbuf {
+		for i, colbuf := range buf.colbuf {
 			clearValues(colbuf)
-			rg.colbuf[i] = colbuf[:0]
+			buf.colbuf[i] = colbuf[:0]
 		}
 	}()
 
 	for _, value := range row {
 		columnIndex := value.ColumnIndex()
-		rg.colbuf[columnIndex] = append(rg.colbuf[columnIndex], value)
+		buf.colbuf[columnIndex] = append(buf.colbuf[columnIndex], value)
 	}
 
-	for columnIndex, values := range rg.colbuf {
-		if err := rg.columns[columnIndex].WriteRow(values); err != nil {
+	for columnIndex, values := range buf.colbuf {
+		if err := buf.columns[columnIndex].WriteRow(values); err != nil {
 			return err
 		}
 	}
 
-	rg.numRows++
+	buf.numRows++
 	return nil
 }
 
-/*
-type bufferRowReader struct {
-	columns []bufferColumnRowReader
+func (buf *Buffer) Rows() RowReader {
+	const columnBufferSize = 170
+	values := make([]Value, columnBufferSize*len(buf.columns))
+	reader := &bufferRowReader{
+		columns: make([]columnValueReader, len(buf.columns)),
+		readRow: buf.readRow,
+	}
+	for i, c := range buf.columns {
+		reader.columns[i].values = values[:columnBufferSize:columnBufferSize]
+		reader.columns[i].reader = c.Values()
+		values = values[columnBufferSize:]
+	}
+	return reader
 }
 
-func (r *bufferColumnRowReader) ReadRow(row Row) (Row, error) {
-	var reset = len(row)
-	var err error
+type bufferRowReader struct {
+	columns []columnValueReader
+	readRow columnReadRowFunc
+}
 
-	for i := range r.columns {
-		c := &r.columns[i]
-		n := len(row)
+func (r *bufferRowReader) ReadRow(row Row) (Row, error) {
+	n := len(row)
+	row, err := r.readRow(row, 0, r.columns)
+	if err == nil && len(row) == n {
+		err = io.EOF
+	}
+	return row, err
+}
 
-		if row, err = c.ReadRow(row); err != nil {
-			return row[:reset], err
+type columnValueReader struct {
+	values []Value
+	offset uint
+	reader ValueReader
+}
+
+func (r *columnValueReader) readMoreValues() error {
+	n, err := r.reader.ReadValues(r.values[:cap(r.values)])
+	if n == 0 {
+		return err
+	}
+	r.values = r.values[:n]
+	r.offset = 0
+	return nil
+}
+
+type columnReadRowFunc func(Row, int8, []columnValueReader) (Row, error)
+
+func columnReadRowFuncOf(node Node, columnIndex int, repetitionDepth int8) (int, columnReadRowFunc) {
+	var read columnReadRowFunc
+
+	if node.Repeated() {
+		repetitionDepth++
+	}
+
+	if isLeaf(node) {
+		columnIndex, read = columnReadRowFuncOfLeaf(node, columnIndex, repetitionDepth)
+	} else {
+		columnIndex, read = columnReadRowFuncOfGroup(node, columnIndex, repetitionDepth)
+	}
+
+	if node.Repeated() {
+		read = columnReadRowFuncOfRepeated(node, repetitionDepth, read)
+	}
+
+	return columnIndex, read
+}
+
+//go:noinline
+func columnReadRowFuncOfRepeated(node Node, repetitionDepth int8, read columnReadRowFunc) columnReadRowFunc {
+	return func(row Row, repetitionLevel int8, columns []columnValueReader) (Row, error) {
+		var err error
+
+		for {
+			n := len(row)
+
+			if row, err = read(row, repetitionLevel, columns); err != nil {
+				return row, err
+			}
+			if n == len(row) {
+				return row, nil
+			}
+
+			repetitionLevel = repetitionDepth
 		}
-		for columnIndex := ^int8(i); n < len(row); n++ {
-			row[n].columnIndex = columnIndex
+	}
+}
+
+//go:noinline
+func columnReadRowFuncOfGroup(node Node, columnIndex int, repetitionDepth int8) (int, columnReadRowFunc) {
+	names := node.ChildNames()
+	if len(names) == 1 {
+		return columnReadRowFuncOf(node.ChildByName(names[0]), columnIndex, repetitionDepth)
+	}
+
+	group := make([]columnReadRowFunc, len(names))
+	for i, name := range names {
+		columnIndex, group[i] = columnReadRowFuncOf(node.ChildByName(name), columnIndex, repetitionDepth)
+	}
+
+	return columnIndex, func(row Row, repetitionLevel int8, columns []columnValueReader) (Row, error) {
+		var err error
+
+		for _, read := range group {
+			if row, err = read(row, repetitionLevel, columns); err != nil {
+				break
+			}
+		}
+
+		return row, err
+	}
+}
+
+//go:noinline
+func columnReadRowFuncOfLeaf(node Node, columnIndex int, repetitionDepth int8) (int, columnReadRowFunc) {
+	var read columnReadRowFunc
+	var valueColumnIndex = ^int8(columnIndex)
+
+	if repetitionDepth == 0 {
+		read = func(row Row, _ int8, columns []columnValueReader) (Row, error) {
+			col := &columns[columnIndex]
+
+			for {
+				if col.offset < uint(len(col.values)) {
+					v := col.values[col.offset]
+					v.columnIndex = valueColumnIndex
+					row = append(row, v)
+					col.offset++
+					return row, nil
+				}
+				if err := col.readMoreValues(); err != nil {
+					return row, err
+				}
+			}
+		}
+	} else {
+		read = func(row Row, repetitionLevel int8, columns []columnValueReader) (Row, error) {
+			col := &columns[columnIndex]
+
+			for {
+				if col.offset < uint(len(col.values)) {
+					if v := col.values[col.offset]; v.repetitionLevel == repetitionLevel {
+						v.columnIndex = valueColumnIndex
+						col.offset++
+						row = append(row, v)
+					}
+					return row, nil
+				}
+				if err := col.readMoreValues(); err != nil {
+					if repetitionLevel > 0 && err == io.EOF {
+						err = nil
+					}
+					return row, err
+				}
+			}
 		}
 	}
 
-	return row, nil
+	return columnIndex + 1, read
 }
-
-type bufferColumnRowReader struct {
-	column BufferColumn
-	offset int
-}
-
-func (r *bufferColumnRowReader) ReadRow(row Row) (Row, error) {
-	row, err := r.column.ReadRowAt(row, r.offset)
-	r.offset++
-	return row, err
-}
-*/
 
 var (
 	_ sort.Interface = (*Buffer)(nil)

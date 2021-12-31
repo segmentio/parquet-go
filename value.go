@@ -43,13 +43,6 @@ type ValueReader interface {
 	ReadValues([]Value) (int, error)
 }
 
-// ValueReaderAt is similar to ValueReader but instead of reading the next
-// batch of balues, the application must specify the index at which it wants to
-// read values from.
-type ValueReaderAt interface {
-	ReadValuesAt([]Value, int) (int, error)
-}
-
 // ValueWriter is an interface implemented by types that support reading
 // batches of values.
 type ValueWriter interface {
@@ -673,35 +666,6 @@ func Equal(v1, v2 Value) bool {
 	}
 }
 
-// NewValueReader constructs a ValueReader exposing values between offset and
-// offset+length.
-func NewValueReader(values ValueReaderAt, offset, length int) ValueReader {
-	return &valueReader{
-		values: values,
-		offset: offset,
-		length: length,
-	}
-}
-
-type valueReader struct {
-	values ValueReaderAt
-	offset int
-	length int
-}
-
-func (r *valueReader) ReadValues(values []Value) (int, error) {
-	if len(values) > r.length {
-		values = values[:r.length]
-	}
-	n, err := r.values.ReadValuesAt(values, r.offset)
-	r.offset += n
-	r.length -= n
-	if err == nil && r.length == 0 {
-		err = io.EOF
-	}
-	return n, err
-}
-
 var (
 	_ fmt.Formatter = Value{}
 	_ fmt.Stringer  = Value{}
@@ -712,3 +676,7 @@ func clearValues(values []Value) {
 		values[i] = Value{}
 	}
 }
+
+type errorValueReader struct{ err error }
+
+func (r *errorValueReader) ReadValues([]Value) (int, error) { return 0, r.err }

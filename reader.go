@@ -168,10 +168,6 @@ func (r *Reader) ReadRow(buf Row) (Row, error) {
 	return buf, err
 }
 
-type columnTreeReader interface {
-	read(Row, int8) (Row, error)
-}
-
 type columnReadFunc func(Row, int8) (Row, error)
 
 func columnReadFuncOf(column *Column, readers []*columnChunkReader) columnReadFunc {

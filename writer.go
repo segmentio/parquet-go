@@ -123,7 +123,7 @@ func (w *Writer) Write(row interface{}) error {
 //
 // The row is expected to contain values for each column of the writer's schema,
 // in the order produced by the parquet.(*Schema).Deconstruct method.
-func (w *Writer) WriteRow(row Row) error { return w.rowGroups.writeRow(row) }
+func (w *Writer) WriteRow(row Row) error { return w.rowGroups.WriteRow(row) }
 
 // WriteRowGroup writes a row group to the parquet file.
 //
@@ -139,7 +139,9 @@ func (w *Writer) WriteRowGroup(rowGroup RowGroup) error {
 	} else if w.schema != rowGroupSchema {
 		return fmt.Errorf("cannot write row group with mismatching schema:\n%s\n%s", w.schema, rowGroupSchema)
 	}
-	return w.rowGroups.writeRowGroup(rowGroup)
+	//_, err := CopyRows(w.rowGroups, rowGroup.Rows())
+	//return err
+	return w.rowGroups.WriteRowGroup(rowGroup)
 }
 
 type rowGroupWriter struct {
@@ -513,7 +515,7 @@ func (rgw *rowGroupWriter) flush() error {
 	return nil
 }
 
-func (rgw *rowGroupWriter) writeRow(row Row) (err error) {
+func (rgw *rowGroupWriter) WriteRow(row Row) (err error) {
 	if len(row) == 0 {
 		panic("BUG: cannot write a row with no values")
 	}
@@ -552,7 +554,7 @@ func (rgw *rowGroupWriter) writeRow(row Row) (err error) {
 	return nil
 }
 
-func (rgw *rowGroupWriter) writeRowGroup(rowGroup RowGroup) error {
+func (rgw *rowGroupWriter) WriteRowGroup(rowGroup RowGroup) error {
 	if rowGroup.NumRows() == 0 {
 		return nil
 	}

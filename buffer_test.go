@@ -306,9 +306,9 @@ func testBuffer(t *testing.T, node parquet.Node, reader parquet.ValueReader, buf
 		reader   parquet.ValueReader
 	}{
 		{"test", batch, reader},
-		{"page", batch, parquet.NewValueReader(page, 0, numValues)},
-		{"head", batch[:halfValues], parquet.NewValueReader(page.Slice(0, halfValues), 0, halfValues)},
-		{"tail", batch[halfValues:], parquet.NewValueReader(page.Slice(halfValues, numValues), 0, numValues-halfValues)},
+		{"page", batch, page.Values()},
+		{"head", batch[:halfValues], page.Slice(0, halfValues).Values()},
+		{"tail", batch[halfValues:], page.Slice(halfValues, numValues).Values()},
 	} {
 		v := [1]parquet.Value{}
 		i := 0

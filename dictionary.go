@@ -725,10 +725,6 @@ func (page *indexedPage) Bounds() (min, max Value) {
 	return min, max
 }
 
-func (page *indexedPage) Values() ValueReader {
-	return &indexedValueReader{dict: page.dict, values: page.values}
-}
-
 func (page *indexedPage) Slice(i, j int) Page {
 	return newIndexedPage(page.dict, page.values[i:j])
 }
@@ -741,17 +737,8 @@ func (page *indexedPage) WriteDefinitionLevelsTo(encoding.Encoder) error { retur
 
 func (page *indexedPage) WriteTo(e encoding.Encoder) error { return e.EncodeInt32(page.values) }
 
-func (page *indexedPage) ReadValuesAt(values []Value, offset int) (n int, err error) {
-	if offset < len(page.values) {
-		n = min(len(values), len(page.values)-offset)
-		for i := 0; i < n; i++ {
-			values[i] = page.dict.Index(int(page.values[offset+i]))
-		}
-	}
-	if offset+n >= len(page.values) {
-		err = io.EOF
-	}
-	return n, err
+func (page *indexedPage) Values() ValueReader {
+	return &indexedValueReader{dict: page.dict, values: page.values}
 }
 
 type indexedValueReader struct {

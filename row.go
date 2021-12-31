@@ -2,6 +2,7 @@ package parquet
 
 import (
 	"fmt"
+	"io"
 	"math"
 	"reflect"
 )
@@ -39,6 +40,23 @@ type RowWriter interface {
 
 type RowWriterAt interface {
 	WriteRowAt(Row, int) error
+}
+
+func CopyRows(w RowWriter, r RowReader) (int64, error) {
+	var numRows int64
+	var row = make([]Value, 42)
+	var err error
+	for {
+		if row, err = r.ReadRow(row[:0]); err != nil {
+			if err == io.EOF {
+				err = nil
+			}
+			return numRows, err
+		}
+		if err = w.WriteRow(row); err != nil {
+			return numRows, err
+		}
+	}
 }
 
 func errRowIndexOutOfBounds(rowIndex, rowCount int) error {
