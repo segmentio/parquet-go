@@ -102,6 +102,10 @@ type nullsFirst struct{ SortingColumn }
 func (nullsFirst) NullsFirst() bool { return true }
 
 func sortingColumnOf(sortingColumns []SortingColumn, path []string) SortingColumn {
+	// There are usually a few sorting columns in a row group, so the linear
+	// scan is the fastest option and works whether the sorting column list
+	// os sorted or not. Please revisit this decision if this code path ends
+	// up being more costly than necessary.
 	for _, sorting := range sortingColumns {
 		if stringsAreEqual(sorting.Path(), path) {
 			return sorting

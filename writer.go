@@ -641,7 +641,7 @@ func (rgw *rowGroupWriter) WriteRowGroup(rowGroup RowGroup) (int64, error) {
 		totalCompressedSize += stats.totalCompressedSize
 	}
 
-	rowGroupSortingColumns := rowGroup.SortingColumns()
+	rowGroupSortingColumns := sortedSortingColumns(rowGroup.SortingColumns())
 	rowGroupSchema := rowGroup.Schema()
 	sortingColumns := make([]format.SortingColumn, 0, len(rowGroupSortingColumns))
 	forEachLeafColumnOf(rowGroupSchema, func(leaf leafColumn) {
