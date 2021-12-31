@@ -99,6 +99,14 @@ func copyRows(dst RowWriter, src RowReader, buf []Value) (written int64, ret []V
 			if err != nil {
 				return 0, buf, err
 			}
+			// The conversion effectively disables a potential optimization
+			// if the source reader implemented RowWriterTo. It is a trade off
+			// we are making to optimize for safety rather than performance.
+			//
+			// Entering this code path should not be the common case tho, it is
+			// most often used when parquet schemas are evolving, but we expect
+			// that the majority of files of an application to be sharing a
+			// common schema.
 			src = ConvertRowReader(src, conv)
 		}
 	}
