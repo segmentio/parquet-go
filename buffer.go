@@ -205,7 +205,7 @@ func (buf *Buffer) Rows() RowReader {
 		readRow: buf.readRow,
 	}
 	for i, c := range buf.columns {
-		reader.columns[i].values = values[:columnBufferSize:columnBufferSize]
+		reader.columns[i].values = values[:0:columnBufferSize]
 		reader.columns[i].reader = c.Values()
 		values = values[columnBufferSize:]
 	}

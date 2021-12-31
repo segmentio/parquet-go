@@ -210,27 +210,22 @@ func (r *optionalPageReader) ReadValues(values []Value) (n int, err error) {
 			n++
 		}
 
-		if n == len(values) {
-			break
-		}
-
 		i := n
 		j := r.offset
-		for n < len(values) && j < len(r.definitionLevels) && r.definitionLevels[j] == r.maxDefinitionLevel {
-			n++
+		for i < len(values) && j < len(r.definitionLevels) && r.definitionLevels[j] == r.maxDefinitionLevel {
+			i++
 			j++
 		}
 
-		n, err = r.values.ReadValues(values[i:n])
-		r.offset += n
-
-		for n += i; i < n; i++ {
-			values[i].definitionLevel = r.maxDefinitionLevel
-			i++
-		}
-
-		if err != nil {
-			break
+		if n < i {
+			for j, err = r.values.ReadValues(values[n:i]); j > 0; j-- {
+				values[n].definitionLevel = r.maxDefinitionLevel
+				r.offset++
+				n++
+			}
+			if err != nil {
+				return n, err
+			}
 		}
 	}
 
@@ -363,28 +358,23 @@ func (r *repeatedPageReader) ReadValues(values []Value) (n int, err error) {
 			n++
 		}
 
-		if n == len(values) {
-			break
-		}
-
 		i := n
 		j := r.offset
-		for n < len(values) && j < len(r.definitionLevels) && r.definitionLevels[j] == r.maxDefinitionLevel {
-			n++
+		for i < len(values) && j < len(r.definitionLevels) && r.definitionLevels[j] == r.maxDefinitionLevel {
+			i++
 			j++
 		}
 
-		n, err = r.values.ReadValues(values[i:n])
-
-		for n += i; i < n; i++ {
-			values[i].repetitionLevel = r.repetitionLevels[r.offset]
-			values[i].definitionLevel = r.maxDefinitionLevel
-			r.offset++
-			i++
-		}
-
-		if err != nil {
-			break
+		if n < i {
+			for j, err = r.values.ReadValues(values[n:i]); j > 0; j-- {
+				values[n].repetitionLevel = r.repetitionLevels[r.offset]
+				values[n].definitionLevel = r.maxDefinitionLevel
+				r.offset++
+				n++
+			}
+			if err != nil {
+				return n, err
+			}
 		}
 	}
 

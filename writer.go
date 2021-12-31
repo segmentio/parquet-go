@@ -139,9 +139,8 @@ func (w *Writer) WriteRowGroup(rowGroup RowGroup) error {
 	} else if w.schema != rowGroupSchema {
 		return fmt.Errorf("cannot write row group with mismatching schema:\n%s\n%s", w.schema, rowGroupSchema)
 	}
-	//_, err := CopyRows(w.rowGroups, rowGroup.Rows())
-	//return err
-	return w.rowGroups.WriteRowGroup(rowGroup)
+	_, err := CopyRows(w.rowGroups, rowGroup.Rows())
+	return err
 }
 
 type rowGroupWriter struct {
