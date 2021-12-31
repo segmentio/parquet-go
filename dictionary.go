@@ -715,9 +715,9 @@ func (page *indexedPage) Bounds() (min, max Value) {
 		for _, i := range page.values[1:] {
 			value := page.dict.Index(int(i))
 			switch {
-			case typ.Less(value, min):
+			case typ.Compare(value, min) < 0:
 				min = value
-			case typ.Less(max, value):
+			case typ.Compare(value, max) > 0:
 				max = value
 			}
 		}
@@ -798,7 +798,7 @@ func (col *indexedBufferColumn) Less(i, j int) bool {
 	u := col.dict.Index(int(col.values[i]))
 	v := col.dict.Index(int(col.values[j]))
 	t := col.dict.Type()
-	return t.Less(u, v)
+	return t.Compare(u, v) < 0
 }
 
 func (col *indexedBufferColumn) Swap(i, j int) {

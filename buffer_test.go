@@ -228,11 +228,11 @@ type sortFunc func(parquet.Type, []parquet.Value)
 func unordered(typ parquet.Type, values []parquet.Value) {}
 
 func ascending(typ parquet.Type, values []parquet.Value) {
-	sort.Slice(values, func(i, j int) bool { return typ.Less(values[i], values[j]) })
+	sort.Slice(values, func(i, j int) bool { return typ.Compare(values[i], values[j]) < 0 })
 }
 
 func descending(typ parquet.Type, values []parquet.Value) {
-	sort.Slice(values, func(i, j int) bool { return typ.Less(values[j], values[i]) })
+	sort.Slice(values, func(i, j int) bool { return typ.Compare(values[i], values[j]) > 0 })
 }
 
 func testBuffer(t *testing.T, node parquet.Node, reader parquet.ValueReader, buffer *parquet.Buffer, encoder encoding.Encoder, values []interface{}, sortFunc sortFunc) {
@@ -261,10 +261,10 @@ func testBuffer(t *testing.T, node parquet.Node, reader parquet.ValueReader, buf
 
 	typ := node.Type()
 	for _, value := range batch {
-		if minValue.IsNull() || typ.Less(value, minValue) {
+		if minValue.IsNull() || typ.Compare(value, minValue) < 0 {
 			minValue = value
 		}
-		if maxValue.IsNull() || typ.Less(maxValue, value) {
+		if maxValue.IsNull() || typ.Compare(value, maxValue) > 0 {
 			maxValue = value
 		}
 	}

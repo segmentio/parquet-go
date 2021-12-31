@@ -511,17 +511,7 @@ func sortFuncOfRepeated(t Type, nullsFirst bool) sortFunc {
 
 //go:noinline
 func sortFuncOfRequired(t Type) sortFunc {
-	less := t.Less
-	return func(a, b []Value) int {
-		switch {
-		case less(a[0], b[0]):
-			return -1
-		case less(b[0], a[0]):
-			return +1
-		default:
-			return 0
-		}
-	}
+	return func(a, b []Value) int { return t.Compare(a[0], b[0]) }
 }
 
 var (

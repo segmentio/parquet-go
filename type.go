@@ -51,13 +51,13 @@ type Type interface {
 	// For other types, the value is zero.
 	Length() int
 
-	// Compares two values and returns whether the first one is less than the
-	// other.
+	// Compares two values and returns a negative value if a < b, positive if
+	// a > b, or zero if a == b.
 	//
 	// The values Kind must match the type, otherwise the result is undefined.
 	//
 	// The method panics if it is called on a group type.
-	Less(Value, Value) bool
+	Compare(a, b Value) int
 
 	// ColumnOrder returns the type's column order. For group types, this method
 	// returns nil.
@@ -178,8 +178,8 @@ func (t booleanType) Kind() Kind { return Boolean }
 
 func (t booleanType) Length() int { return 1 }
 
-func (t booleanType) Less(v1, v2 Value) bool {
-	return !v1.Boolean() && v2.Boolean()
+func (t booleanType) Compare(a, b Value) int {
+	return compareBool(a.Boolean(), b.Boolean())
 }
 
 func (t booleanType) PhyiscalType() *format.Type {
@@ -210,8 +210,8 @@ func (t int32Type) Kind() Kind { return Int32 }
 
 func (t int32Type) Length() int { return 32 }
 
-func (t int32Type) Less(v1, v2 Value) bool {
-	return v1.Int32() < v2.Int32()
+func (t int32Type) Compare(a, b Value) int {
+	return compareInt32(a.Int32(), b.Int32())
 }
 
 func (t int32Type) PhyiscalType() *format.Type {
@@ -242,8 +242,8 @@ func (t int64Type) Kind() Kind { return Int64 }
 
 func (t int64Type) Length() int { return 64 }
 
-func (t int64Type) Less(v1, v2 Value) bool {
-	return v1.Int64() < v2.Int64()
+func (t int64Type) Compare(a, b Value) int {
+	return compareInt64(a.Int64(), b.Int64())
 }
 
 func (t int64Type) PhyiscalType() *format.Type {
@@ -274,8 +274,8 @@ func (t int96Type) Kind() Kind { return Int96 }
 
 func (t int96Type) Length() int { return 96 }
 
-func (t int96Type) Less(v1, v2 Value) bool {
-	return v1.Int96().Less(v2.Int96())
+func (t int96Type) Compare(a, b Value) int {
+	return compareInt96(a.Int96(), b.Int96())
 }
 
 func (t int96Type) PhyiscalType() *format.Type {
@@ -306,8 +306,8 @@ func (t floatType) Kind() Kind { return Float }
 
 func (t floatType) Length() int { return 32 }
 
-func (t floatType) Less(v1, v2 Value) bool {
-	return v1.Float() < v2.Float()
+func (t floatType) Compare(a, b Value) int {
+	return compareFloat32(a.Float(), b.Float())
 }
 
 func (t floatType) PhyiscalType() *format.Type {
@@ -338,7 +338,9 @@ func (t doubleType) Kind() Kind { return Double }
 
 func (t doubleType) Length() int { return 64 }
 
-func (t doubleType) Less(v1, v2 Value) bool { return v1.Double() < v2.Double() }
+func (t doubleType) Compare(a, b Value) int {
+	return compareFloat64(a.Double(), b.Double())
+}
 
 func (t doubleType) PhyiscalType() *format.Type { return &physicalTypes[Double] }
 
@@ -366,11 +368,13 @@ func (t byteArrayType) Kind() Kind { return ByteArray }
 
 func (t byteArrayType) Length() int { return 0 }
 
-func (t byteArrayType) Less(v1, v2 Value) bool {
-	return bytes.Compare(v1.ByteArray(), v2.ByteArray()) < 0
+func (t byteArrayType) Compare(a, b Value) int {
+	return bytes.Compare(a.ByteArray(), b.ByteArray())
 }
 
-func (t byteArrayType) PhyiscalType() *format.Type { return &physicalTypes[ByteArray] }
+func (t byteArrayType) PhyiscalType() *format.Type {
+	return &physicalTypes[ByteArray]
+}
 
 func (t byteArrayType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	return newByteArrayColumnIndexer(sizeLimit)
@@ -401,8 +405,8 @@ func (t *fixedLenByteArrayType) Kind() Kind { return FixedLenByteArray }
 
 func (t *fixedLenByteArrayType) Length() int { return t.length }
 
-func (t *fixedLenByteArrayType) Less(v1, v2 Value) bool {
-	return bytes.Compare(v1.ByteArray(), v2.ByteArray()) < 0
+func (t *fixedLenByteArrayType) Compare(a, b Value) int {
+	return bytes.Compare(a.ByteArray(), b.ByteArray())
 }
 
 func (t *fixedLenByteArrayType) PhyiscalType() *format.Type {
@@ -500,22 +504,22 @@ func (t *intType) Kind() Kind {
 
 func (t *intType) Length() int { return int(t.BitWidth) }
 
-func (t *intType) Less(v1, v2 Value) bool {
+func (t *intType) Compare(a, b Value) int {
 	if t.BitWidth == 64 {
-		i1 := v1.Int64()
-		i2 := v2.Int64()
+		i1 := a.Int64()
+		i2 := b.Int64()
 		if t.IsSigned {
-			return i1 < i2
+			return compareInt64(i1, i2)
 		} else {
-			return uint64(i1) < uint64(i2)
+			return compareUint64(uint64(i1), uint64(i2))
 		}
 	} else {
-		i1 := v1.Int32()
-		i2 := v2.Int32()
+		i1 := a.Int32()
+		i2 := b.Int32()
 		if t.IsSigned {
-			return i1 < i2
+			return compareInt32(i1, i2)
 		} else {
-			return uint32(i1) < uint32(i2)
+			return compareUint32(uint32(i1), uint32(i2))
 		}
 	}
 }
@@ -641,8 +645,8 @@ func (t *stringType) Kind() Kind { return ByteArray }
 
 func (t *stringType) Length() int { return 0 }
 
-func (t *stringType) Less(v1, v2 Value) bool {
-	return bytes.Compare(v1.ByteArray(), v2.ByteArray()) < 0
+func (t *stringType) Compare(a, b Value) int {
+	return bytes.Compare(a.ByteArray(), b.ByteArray())
 }
 
 func (t *stringType) ColumnOrder() *format.ColumnOrder {
@@ -694,8 +698,8 @@ func (t *uuidType) Kind() Kind { return FixedLenByteArray }
 
 func (t *uuidType) Length() int { return 16 }
 
-func (t *uuidType) Less(v1, v2 Value) bool {
-	return bytes.Compare(v1.ByteArray(), v2.ByteArray()) < 0
+func (t *uuidType) Compare(a, b Value) int {
+	return bytes.Compare(a.ByteArray(), b.ByteArray())
 }
 
 func (t *uuidType) ColumnOrder() *format.ColumnOrder {
@@ -745,8 +749,8 @@ func (t *enumType) Kind() Kind { return ByteArray }
 
 func (t *enumType) Length() int { return 0 }
 
-func (t *enumType) Less(v1, v2 Value) bool {
-	return bytes.Compare(v1.ByteArray(), v2.ByteArray()) < 0
+func (t *enumType) Compare(a, b Value) int {
+	return bytes.Compare(a.ByteArray(), b.ByteArray())
 }
 
 func (t *enumType) ColumnOrder() *format.ColumnOrder {
@@ -798,8 +802,8 @@ func (t *jsonType) Kind() Kind { return ByteArray }
 
 func (t *jsonType) Length() int { return 0 }
 
-func (t *jsonType) Less(v1, v2 Value) bool {
-	return bytes.Compare(v1.ByteArray(), v2.ByteArray()) < 0
+func (t *jsonType) Compare(a, b Value) int {
+	return bytes.Compare(a.ByteArray(), b.ByteArray())
 }
 
 func (t *jsonType) ColumnOrder() *format.ColumnOrder {
@@ -847,8 +851,8 @@ func (t *bsonType) Kind() Kind { return ByteArray }
 
 func (t *bsonType) Length() int { return 0 }
 
-func (t *bsonType) Less(v1, v2 Value) bool {
-	return bytes.Compare(v1.ByteArray(), v2.ByteArray()) < 0
+func (t *bsonType) Compare(a, b Value) int {
+	return bytes.Compare(a.ByteArray(), b.ByteArray())
 }
 
 func (t *bsonType) ColumnOrder() *format.ColumnOrder {
@@ -896,7 +900,7 @@ func (t *dateType) Kind() Kind { return Int32 }
 
 func (t *dateType) Length() int { return 32 }
 
-func (t *dateType) Less(v1, v2 Value) bool { return v1.Int32() < v2.Int32() }
+func (t *dateType) Compare(a, b Value) int { return compareInt32(a.Int32(), b.Int32()) }
 
 func (t *dateType) ColumnOrder() *format.ColumnOrder {
 	return &typeDefinedColumnOrder
@@ -993,11 +997,11 @@ func (t *timeType) Length() int {
 	}
 }
 
-func (t *timeType) Less(v1, v2 Value) bool {
+func (t *timeType) Compare(a, b Value) int {
 	if t.Unit.Millis != nil {
-		return v1.Int32() < v2.Int32()
+		return compareInt32(a.Int32(), b.Int32())
 	} else {
-		return v1.Int64() < v2.Int64()
+		return compareInt64(a.Int64(), b.Int64())
 	}
 }
 
@@ -1075,7 +1079,7 @@ func (t *timestampType) Kind() Kind { return Int64 }
 
 func (t *timestampType) Length() int { return 64 }
 
-func (t *timestampType) Less(v1, v2 Value) bool { return v1.Int64() < v2.Int64() }
+func (t *timestampType) Compare(a, b Value) int { return compareInt64(a.Int64(), b.Int64()) }
 
 func (t *timestampType) ColumnOrder() *format.ColumnOrder { return &typeDefinedColumnOrder }
 
@@ -1131,7 +1135,7 @@ func (t *listType) Kind() Kind { panic("cannot call Kind on parquet LIST type") 
 
 func (t *listType) Length() int { return 0 }
 
-func (t *listType) Less(Value, Value) bool { panic("cannot compare values on parquet LIST type") }
+func (t *listType) Compare(Value, Value) int { panic("cannot compare values on parquet LIST type") }
 
 func (t *listType) ColumnOrder() *format.ColumnOrder { return nil }
 
@@ -1185,7 +1189,7 @@ func (t *mapType) Kind() Kind { panic("cannot call Kind on parquet MAP type") }
 
 func (t *mapType) Length() int { return 0 }
 
-func (t *mapType) Less(Value, Value) bool { panic("cannot compare values on parquet MAP type") }
+func (t *mapType) Compare(Value, Value) int { panic("cannot compare values on parquet MAP type") }
 
 func (t *mapType) ColumnOrder() *format.ColumnOrder { return nil }
 
@@ -1223,7 +1227,7 @@ func (t *nullType) Kind() Kind { panic("cannot call Kind on parquet NULL type") 
 
 func (t *nullType) Length() int { return 0 }
 
-func (t *nullType) Less(Value, Value) bool { panic("cannot compare values on parquet NULL type") }
+func (t *nullType) Compare(Value, Value) int { panic("cannot compare values on parquet NULL type") }
 
 func (t *nullType) ColumnOrder() *format.ColumnOrder { return nil }
 
@@ -1259,7 +1263,7 @@ func (groupType) Kind() Kind {
 	panic("cannot call Kind on parquet group")
 }
 
-func (groupType) Less(Value, Value) bool {
+func (groupType) Compare(Value, Value) int {
 	panic("cannot compare values on parquet group")
 }
 
@@ -1288,3 +1292,91 @@ func (groupType) PhyiscalType() *format.Type { return nil }
 func (groupType) LogicalType() *format.LogicalType { return nil }
 
 func (groupType) ConvertedType() *deprecated.ConvertedType { return nil }
+
+func compareBool(v1, v2 bool) int {
+	if v1 != v2 {
+		if v2 {
+			return -1
+		} else {
+			return +1
+		}
+	}
+	return 0
+}
+
+func compareInt32(v1, v2 int32) int {
+	switch {
+	case v1 < v2:
+		return -1
+	case v1 > v2:
+		return +1
+	default:
+		return 0
+	}
+}
+
+func compareInt64(v1, v2 int64) int {
+	switch {
+	case v1 < v2:
+		return -1
+	case v1 > v2:
+		return +1
+	default:
+		return 0
+	}
+}
+
+func compareInt96(v1, v2 deprecated.Int96) int {
+	switch {
+	case v1.Less(v2):
+		return -1
+	case v2.Less(v1):
+		return +1
+	default:
+		return 0
+	}
+}
+
+func compareFloat32(v1, v2 float32) int {
+	switch {
+	case v1 < v2:
+		return -1
+	case v1 > v2:
+		return +1
+	default:
+		return 0
+	}
+}
+
+func compareFloat64(v1, v2 float64) int {
+	switch {
+	case v1 < v2:
+		return -1
+	case v1 > v2:
+		return +1
+	default:
+		return 0
+	}
+}
+
+func compareUint32(v1, v2 uint32) int {
+	switch {
+	case v1 < v2:
+		return -1
+	case v1 > v2:
+		return +1
+	default:
+		return 0
+	}
+}
+
+func compareUint64(v1, v2 uint64) int {
+	switch {
+	case v1 < v2:
+		return -1
+	case v1 > v2:
+		return +1
+	default:
+		return 0
+	}
+}
