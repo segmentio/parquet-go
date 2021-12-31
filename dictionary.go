@@ -790,7 +790,7 @@ func (col *indexedBufferColumn) Clone() BufferColumn {
 
 func (col *indexedBufferColumn) Dictionary() Dictionary { return col.dict }
 
-func (col *indexedBufferColumn) Page() Page { return &col.indexedPage }
+func (col *indexedBufferColumn) Pages() []Page { return []Page{&col.indexedPage} }
 
 func (col *indexedBufferColumn) Reset() { col.values = col.values[:0] }
 

@@ -275,7 +275,7 @@ func testBuffer(t *testing.T, node parquet.Node, reader parquet.ValueReader, buf
 	sortFunc(typ, batch)
 	sort.Sort(buffer)
 
-	page := buffer.ColumnIndex(0).Page()
+	page := buffer.ColumnIndex(0).Pages()[0]
 	numValues := page.NumValues()
 	if numValues != len(batch) {
 		t.Fatalf("number of values mistmatch: want=%d got=%d", len(batch), numValues)

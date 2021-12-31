@@ -37,6 +37,9 @@ type BufferColumn interface {
 
 	// Swaps rows at index i and j.
 	Swap(i, j int)
+
+	// Returns the size of the column buffer in bytes.
+	Size() int64
 }
 
 type nullOrdering func(column BufferColumn, i, j int, maxDefinitionLevel, definitionLevel1, definitionLevel2 int8) bool
@@ -51,10 +54,6 @@ func nullsGoFirst(column BufferColumn, i, j int, maxDefinitionLevel, definitionL
 
 func nullsGoLast(column BufferColumn, i, j int, maxDefinitionLevel, definitionLevel1, definitionLevel2 int8) bool {
 	return definitionLevel1 == maxDefinitionLevel && (definitionLevel2 != maxDefinitionLevel || column.Less(i, j))
-}
-
-func isNull(i int, maxDefinitionLevel int8, definitionLevels []int8) bool {
-	return definitionLevels[i] != maxDefinitionLevel
 }
 
 type reversedBufferColumn struct{ BufferColumn }
@@ -95,7 +94,7 @@ func (col *optionalBufferColumn) Dictionary() Dictionary {
 	return col.base.Dictionary()
 }
 
-func (col *optionalBufferColumn) Page() Page {
+func (col *optionalBufferColumn) Pages() []Page {
 	numNulls := countLevelsNotEqual(col.definitionLevels, col.maxDefinitionLevel)
 	numValues := len(col.rows) - numNulls
 
@@ -121,7 +120,14 @@ func (col *optionalBufferColumn) Page() Page {
 		}
 	}
 
-	return newOptionalPage(col.base.Page(), col.maxDefinitionLevel, col.definitionLevels)
+	return pagesWithDefinitionLevels(
+		col.base.Pages(),
+		col.maxDefinitionLevel,
+		col.definitionLevels,
+		func(page Page, i, j int) Page {
+			return newOptionalPage(page, col.maxDefinitionLevel, col.definitionLevels[i:j])
+		},
+	)
 }
 
 func (col *optionalBufferColumn) Reset() {
@@ -267,7 +273,7 @@ func maxRowLengthOf(rows []region) (maxLength uint32) {
 	return maxLength
 }
 
-func (col *repeatedBufferColumn) Page() Page {
+func (col *repeatedBufferColumn) Pages() []Page {
 	if rowsHaveBeenReordered(col.rows) {
 		if col.reordering == nil {
 			col.reordering = col.Clone().(*repeatedBufferColumn)
@@ -289,10 +295,10 @@ func (col *repeatedBufferColumn) Page() Page {
 			for i := 0; i < numValues; i++ {
 				var err error
 				if buffer, err = col.base.ReadRowAt(buffer[:0], int(row.offset)+i); err != nil {
-					return &errorPage{err: fmt.Errorf("reordering rows of repeated column: %w", err)}
+					return []Page{&errorPage{err: fmt.Errorf("reordering rows of repeated column: %w", err)}}
 				}
 				if err = column.base.WriteRow(buffer); err != nil {
-					return &errorPage{err: fmt.Errorf("reordering rows of repeated column: %w", err)}
+					return []Page{&errorPage{err: fmt.Errorf("reordering rows of repeated column: %w", err)}}
 				}
 			}
 		}
@@ -309,12 +315,18 @@ func (col *repeatedBufferColumn) Page() Page {
 		col.swapReorderingBuffer(column)
 	}
 
-	return newRepeatedPage(
-		col.base.Page(),
-		col.maxRepetitionLevel,
+	return pagesWithDefinitionLevels(
+		col.base.Pages(),
 		col.maxDefinitionLevel,
-		col.repetitionLevels,
 		col.definitionLevels,
+		func(page Page, i, j int) Page {
+			return newRepeatedPage(page,
+				col.maxRepetitionLevel,
+				col.maxDefinitionLevel,
+				col.repetitionLevels[i:j],
+				col.definitionLevels[i:j],
+			)
+		},
 	)
 }
 
@@ -454,7 +466,7 @@ func (col *booleanBufferColumn) Clone() BufferColumn {
 
 func (col *booleanBufferColumn) Dictionary() Dictionary { return nil }
 
-func (col *booleanBufferColumn) Page() Page { return &col.booleanPage }
+func (col *booleanBufferColumn) Pages() []Page { return []Page{&col.booleanPage} }
 
 func (col *booleanBufferColumn) Reset() { col.values = col.values[:0] }
 
@@ -514,7 +526,7 @@ func (col *int32BufferColumn) Clone() BufferColumn {
 
 func (col *int32BufferColumn) Dictionary() Dictionary { return nil }
 
-func (col *int32BufferColumn) Page() Page { return &col.int32Page }
+func (col *int32BufferColumn) Pages() []Page { return []Page{&col.int32Page} }
 
 func (col *int32BufferColumn) Reset() { col.values = col.values[:0] }
 
@@ -572,7 +584,7 @@ func (col *int64BufferColumn) Clone() BufferColumn {
 
 func (col *int64BufferColumn) Dictionary() Dictionary { return nil }
 
-func (col *int64BufferColumn) Page() Page { return &col.int64Page }
+func (col *int64BufferColumn) Pages() []Page { return []Page{&col.int64Page} }
 
 func (col *int64BufferColumn) Reset() { col.values = col.values[:0] }
 
@@ -630,7 +642,7 @@ func (col *int96BufferColumn) Clone() BufferColumn {
 
 func (col *int96BufferColumn) Dictionary() Dictionary { return nil }
 
-func (col *int96BufferColumn) Page() Page { return &col.int96Page }
+func (col *int96BufferColumn) Pages() []Page { return []Page{&col.int96Page} }
 
 func (col *int96BufferColumn) Reset() { col.values = col.values[:0] }
 
@@ -688,7 +700,7 @@ func (col *floatBufferColumn) Clone() BufferColumn {
 
 func (col *floatBufferColumn) Dictionary() Dictionary { return nil }
 
-func (col *floatBufferColumn) Page() Page { return &col.floatPage }
+func (col *floatBufferColumn) Pages() []Page { return []Page{&col.floatPage} }
 
 func (col *floatBufferColumn) Reset() { col.values = col.values[:0] }
 
@@ -746,7 +758,7 @@ func (col *doubleBufferColumn) Clone() BufferColumn {
 
 func (col *doubleBufferColumn) Dictionary() Dictionary { return nil }
 
-func (col *doubleBufferColumn) Page() Page { return &col.doublePage }
+func (col *doubleBufferColumn) Pages() []Page { return []Page{&col.doublePage} }
 
 func (col *doubleBufferColumn) Reset() { col.values = col.values[:0] }
 
@@ -804,7 +816,7 @@ func (col *byteArrayBufferColumn) Clone() BufferColumn {
 
 func (col *byteArrayBufferColumn) Dictionary() Dictionary { return nil }
 
-func (col *byteArrayBufferColumn) Page() Page { return &col.byteArrayPage }
+func (col *byteArrayBufferColumn) Pages() []Page { return []Page{&col.byteArrayPage} }
 
 func (col *byteArrayBufferColumn) Reset() { col.values.Reset() }
 
@@ -867,7 +879,7 @@ func (col *fixedLenByteArrayBufferColumn) Clone() BufferColumn {
 
 func (col *fixedLenByteArrayBufferColumn) Dictionary() Dictionary { return nil }
 
-func (col *fixedLenByteArrayBufferColumn) Page() Page { return &col.fixedLenByteArrayPage }
+func (col *fixedLenByteArrayBufferColumn) Pages() []Page { return []Page{&col.fixedLenByteArrayPage} }
 
 func (col *fixedLenByteArrayBufferColumn) Reset() { col.data = col.data[:0] }
 
@@ -924,8 +936,8 @@ func newUint32BufferColumn(bufferSize int) uint32BufferColumn {
 	return uint32BufferColumn{newInt32BufferColumn(bufferSize)}
 }
 
-func (col uint32BufferColumn) Page() Page {
-	return uint32Page{&col.int32Page}
+func (col uint32BufferColumn) Pages() []Page {
+	return []Page{uint32Page{&col.int32Page}}
 }
 
 func (col uint32BufferColumn) Clone() BufferColumn {
@@ -946,8 +958,8 @@ func (col uint64BufferColumn) Clone() BufferColumn {
 	return uint64BufferColumn{col.int64BufferColumn.Clone().(*int64BufferColumn)}
 }
 
-func (col uint64BufferColumn) Page() Page {
-	return uint64Page{&col.int64Page}
+func (col uint64BufferColumn) Pages() []Page {
+	return []Page{uint64Page{&col.int64Page}}
 }
 
 func (col uint64BufferColumn) Less(i, j int) bool {

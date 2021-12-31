@@ -59,12 +59,7 @@ type RowGroupColumn interface {
 	Dictionary() Dictionary
 
 	// Returns a reader exposing the list of pages in the column.
-	//Pages() PageReader
-
-	Page() Page
-
-	// Returns the size of the column in bytes.
-	Size() int64
+	Pages() []Page
 }
 
 type RowGroupReader interface {

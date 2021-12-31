@@ -592,12 +592,10 @@ func (rgw *rowGroupWriter) writeRowGroup(rowGroup RowGroup) error {
 		}
 
 		dataPageOffset := rgw.writer.offset
-		targetPageSize := int64(rgw.columns[i].chunks.bufferSize)
-		err := forEachPageSlice(rowGroupColumn.Page(), rowGroupColumn.Size(), targetPageSize, func(page Page) error {
-			return rgw.columns[i].chunks.writePage(&rgw.pages, page)
-		})
-		if err != nil {
-			return fmt.Errorf("writing data pages of row group column %d: %w", i, err)
+		for _, page := range rowGroupColumn.Pages() {
+			if err := rgw.columns[i].chunks.writePage(&rgw.pages, page); err != nil {
+				return fmt.Errorf("writing data pages of row group column %d: %w", i, err)
+			}
 		}
 
 		pages := rgw.pages.pages()
@@ -825,11 +823,19 @@ func (ccw *columnChunkWriter) flush() error {
 	if ccw.numValues == 0 {
 		return nil
 	}
+
 	defer func() {
 		ccw.column.Reset()
 		ccw.numValues = 0
 	}()
-	return ccw.writePage(ccw.writer, ccw.column.Page())
+
+	for _, page := range ccw.column.Pages() {
+		if err := ccw.writePage(ccw.writer, page); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (ccw *columnChunkWriter) writePage(writer pageWriter, page Page) error {

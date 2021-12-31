@@ -61,6 +61,30 @@ func forEachPageSlice(page Page, pageSize, wantSize int64, do func(Page) error) 
 	return nil
 }
 
+func pagesWithDefinitionLevels(pages []Page, maxDefinitionLevel int8, definitionLevels []int8, newPage func(Page, int, int) Page) []Page {
+	rowIndex := 0
+
+	for i, page := range pages {
+		numRows := page.NumRows()
+
+		lastRowIndex := rowIndex
+		for lastRowIndex < len(definitionLevels) && numRows > 0 {
+			if definitionLevels[lastRowIndex] == maxDefinitionLevel {
+				numRows--
+			}
+			lastRowIndex++
+		}
+		for lastRowIndex < len(definitionLevels) && definitionLevels[lastRowIndex] != maxDefinitionLevel {
+			lastRowIndex++
+		}
+
+		pages[i] = newPage(page, rowIndex, lastRowIndex)
+		rowIndex = lastRowIndex
+	}
+
+	return pages
+}
+
 type errorPage struct{ err error }
 
 func (page *errorPage) NumRows() int                                   { return 0 }
@@ -140,7 +164,7 @@ func (page *optionalPage) ReadValuesAt(index int, values []Value) (n int, err er
 	offset := countLevelsEqual(page.definitionLevels[:index], page.maxDefinitionLevel)
 
 	for n < len(values) && index < len(page.definitionLevels) {
-		for n < len(values) && index < len(page.definitionLevels) && isNull(index, page.maxDefinitionLevel, page.definitionLevels) {
+		for n < len(values) && index < len(page.definitionLevels) && page.definitionLevels[index] != page.maxDefinitionLevel {
 			values[n] = Value{definitionLevel: page.definitionLevels[index]}
 			index++
 			n++
@@ -148,7 +172,7 @@ func (page *optionalPage) ReadValuesAt(index int, values []Value) (n int, err er
 
 		i := index
 		j := n
-		for j < len(values) && i < len(page.definitionLevels) && !isNull(i, page.maxDefinitionLevel, page.definitionLevels) {
+		for j < len(values) && i < len(page.definitionLevels) && page.definitionLevels[i] == page.maxDefinitionLevel {
 			i++
 			j++
 		}
@@ -272,7 +296,7 @@ func (page *repeatedPage) ReadValuesAt(index int, values []Value) (n int, err er
 	offset := countLevelsEqual(page.definitionLevels[:index], page.maxDefinitionLevel)
 
 	for n < len(values) && index < len(page.definitionLevels) {
-		for n < len(values) && index < len(page.definitionLevels) && isNull(index, page.maxDefinitionLevel, page.definitionLevels) {
+		for n < len(values) && index < len(page.definitionLevels) && page.definitionLevels[index] != page.maxDefinitionLevel {
 			values[n] = Value{
 				repetitionLevel: page.repetitionLevels[index],
 				definitionLevel: page.definitionLevels[index],
@@ -283,7 +307,7 @@ func (page *repeatedPage) ReadValuesAt(index int, values []Value) (n int, err er
 
 		i := index
 		j := n
-		for j < len(values) && i < len(page.definitionLevels) && !isNull(i, page.maxDefinitionLevel, page.definitionLevels) {
+		for j < len(values) && i < len(page.definitionLevels) && page.definitionLevels[i] == page.maxDefinitionLevel {
 			i++
 			j++
 		}
