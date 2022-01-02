@@ -177,14 +177,6 @@ func forEachPageSlice(page BufferedPage, wantSize int64, do func(BufferedPage) b
 	}
 }
 
-func writePageValuesTo(w ValueWriter, r ValueReader, p Page) (int64, error) {
-	if pw, ok := w.(PageWriter); ok {
-		return pw.WritePage(p)
-	} else {
-		return CopyValues(w, struct{ ValueReader }{r})
-	}
-}
-
 type errorPage struct {
 	err         error
 	columnIndex int
@@ -354,10 +346,6 @@ func (r *optionalPageReader) ReadValues(values []Value) (n int, err error) {
 	return n, err
 }
 
-func (r *optionalPageReader) WriteValuesTo(w ValueWriter) (int64, error) {
-	return writePageValuesTo(w, r, r.page)
-}
-
 type repeatedPage struct {
 	base               BufferedPage
 	maxRepetitionLevel int8
@@ -511,10 +499,6 @@ func (r *repeatedPageReader) ReadValues(values []Value) (n int, err error) {
 	return n, err
 }
 
-func (r *repeatedPageReader) WriteValuesTo(w ValueWriter) (int64, error) {
-	return writePageValuesTo(w, r, r.page)
-}
-
 type booleanPage struct {
 	values      []bool
 	columnIndex int8
@@ -592,10 +576,6 @@ func (r *booleanPageReader) ReadValues(values []Value) (n int, err error) {
 	return n, err
 }
 
-func (r *booleanPageReader) WriteValuesTo(w ValueWriter) (int64, error) {
-	return writePageValuesTo(w, r, r.page)
-}
-
 type int32Page struct {
 	values      []int32
 	columnIndex int8
@@ -653,10 +633,6 @@ func (r *int32PageReader) ReadValues(values []Value) (n int, err error) {
 		err = io.EOF
 	}
 	return n, err
-}
-
-func (r *int32PageReader) WriteValuesTo(w ValueWriter) (int64, error) {
-	return writePageValuesTo(w, r, r.page)
 }
 
 type int64Page struct {
@@ -718,10 +694,6 @@ func (r *int64PageReader) ReadValues(values []Value) (n int, err error) {
 	return n, err
 }
 
-func (r *int64PageReader) WriteValuesTo(w ValueWriter) (int64, error) {
-	return writePageValuesTo(w, r, r.page)
-}
-
 type int96Page struct {
 	values      []deprecated.Int96
 	columnIndex int8
@@ -779,10 +751,6 @@ func (r *int96PageReader) ReadValues(values []Value) (n int, err error) {
 		err = io.EOF
 	}
 	return n, err
-}
-
-func (r *int96PageReader) WriteValuesTo(w ValueWriter) (int64, error) {
-	return writePageValuesTo(w, r, r.page)
 }
 
 type floatPage struct {
@@ -844,10 +812,6 @@ func (r *floatPageReader) ReadValues(values []Value) (n int, err error) {
 	return n, err
 }
 
-func (r *floatPageReader) WriteValuesTo(w ValueWriter) (int64, error) {
-	return writePageValuesTo(w, r, r.page)
-}
-
 type doublePage struct {
 	values      []float64
 	columnIndex int8
@@ -905,10 +869,6 @@ func (r *doublePageReader) ReadValues(values []Value) (n int, err error) {
 		err = io.EOF
 	}
 	return n, err
-}
-
-func (r *doublePageReader) WriteValuesTo(w ValueWriter) (int64, error) {
-	return writePageValuesTo(w, r, r.page)
 }
 
 type byteArrayPage struct {
@@ -982,10 +942,6 @@ func (r *byteArrayPageReader) ReadValues(values []Value) (n int, err error) {
 	return n, err
 }
 
-func (r *byteArrayPageReader) WriteValuesTo(w ValueWriter) (int64, error) {
-	return writePageValuesTo(w, r, r.page)
-}
-
 type fixedLenByteArrayPage struct {
 	size        int
 	data        []byte
@@ -1049,10 +1005,6 @@ func (r *fixedLenByteArrayPageReader) ReadValues(values []Value) (n int, err err
 		err = io.EOF
 	}
 	return n, err
-}
-
-func (r *fixedLenByteArrayPageReader) WriteValuesTo(w ValueWriter) (int64, error) {
-	return writePageValuesTo(w, r, r.page)
 }
 
 // The following two specializations for unsigned integer types are needed to
@@ -1158,15 +1110,4 @@ var (
 
 	_ io.ReaderFrom = (*errorBuffer)(nil)
 	_ io.WriterTo   = (*errorBuffer)(nil)
-
-	_ ValueWriterTo = (*optionalPageReader)(nil)
-	_ ValueWriterTo = (*repeatedPageReader)(nil)
-	_ ValueWriterTo = (*booleanPageReader)(nil)
-	_ ValueWriterTo = (*int32PageReader)(nil)
-	_ ValueWriterTo = (*int64PageReader)(nil)
-	_ ValueWriterTo = (*int96PageReader)(nil)
-	_ ValueWriterTo = (*floatPageReader)(nil)
-	_ ValueWriterTo = (*doublePageReader)(nil)
-	_ ValueWriterTo = (*byteArrayPageReader)(nil)
-	_ ValueWriterTo = (*fixedLenByteArrayPageReader)(nil)
 )

@@ -27,7 +27,7 @@ type ColumnBuffer interface {
 	RowWriter
 
 	// The column implements ValueWriter as a mechanism to optimize the copy
-	// of vlaues into the buffer in contexts where the row information is
+	// of values into the buffer in contexts where the row information is
 	// provided by the values because the repetition and definition levels
 	// are set.
 	ValueWriter

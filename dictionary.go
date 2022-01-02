@@ -763,10 +763,6 @@ func (r *indexedPageReader) ReadValues(values []Value) (n int, err error) {
 	return n, err
 }
 
-func (r *indexedPageReader) WriteValuesTo(w ValueWriter) (int64, error) {
-	return writePageValuesTo(w, r, r.page)
-}
-
 type indexedColumnBuffer struct{ indexedPage }
 
 func newIndexedColumnBuffer(dict Dictionary, columnIndex, bufferSize int) *indexedColumnBuffer {

@@ -22,6 +22,28 @@ const (
 // position in the row.
 type Row []Value
 
+// Equal returns true if row and other contain the same sequence of values.
+func (row Row) Equal(other Row) bool {
+	if len(row) != len(other) {
+		return false
+	}
+	for i := range row {
+		if !Equal(row[i], other[i]) {
+			return false
+		}
+		if row[i].repetitionLevel != other[i].repetitionLevel {
+			return false
+		}
+		if row[i].definitionLevel != other[i].definitionLevel {
+			return false
+		}
+		if row[i].columnIndex != other[i].columnIndex {
+			return false
+		}
+	}
+	return true
+}
+
 func (row Row) startsWith(columnIndex int) bool {
 	return len(row) > 0 && int(row[0].ColumnIndex()) == columnIndex
 }

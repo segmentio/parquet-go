@@ -19,7 +19,6 @@ type Buffer struct {
 	buffers []ColumnBuffer
 	sorted  []ColumnBuffer
 	readRow columnReadRowFunc
-	numRows int
 }
 
 // NewBuffer constructs a new buffer, using the given list of buffer options
@@ -99,7 +98,14 @@ func (buf *Buffer) Size() int64 {
 func (buf *Buffer) Columns() []RowGroupColumn { return buf.columns }
 
 // NumRows returns the number of rows written to the buffer.
-func (buf *Buffer) NumRows() int { return buf.numRows }
+func (buf *Buffer) NumRows() int {
+	if len(buf.buffers) == 0 {
+		return 0
+	} else {
+		// All columns have the same number of rows.
+		return buf.buffers[0].Len()
+	}
+}
 
 // Schema returns the schema of the buffer.
 //
@@ -115,7 +121,7 @@ func (buf *Buffer) Schema() *Schema { return buf.schema }
 func (buf *Buffer) SortingColumns() []SortingColumn { return buf.config.SortingColumns }
 
 // Len returns the number of rows written to the buffer.
-func (buf *Buffer) Len() int { return buf.numRows }
+func (buf *Buffer) Len() int { return buf.NumRows() }
 
 // Less returns true if the row[i] < row[j] in the buffer.
 func (buf *Buffer) Less(i, j int) bool {
@@ -142,7 +148,6 @@ func (buf *Buffer) Reset() {
 	for _, col := range buf.buffers {
 		col.Reset()
 	}
-	buf.numRows = 0
 }
 
 // Write writes a row held in a Go value to the buffer.
@@ -177,8 +182,22 @@ func (buf *Buffer) WriteRow(row Row) error {
 		}
 	}
 
-	buf.numRows++
 	return nil
+}
+
+// WriteRowGroup satisfies the RowGroupWriter interface.
+func (buf *Buffer) WriteRowGroup(rowGroup RowGroup) (int64, error) {
+	if buf.schema == nil {
+		buf.configure(rowGroup.Schema())
+	}
+	n := buf.NumRows()
+	_, err := CopyPages(buf, rowGroup.Pages())
+	return int64(buf.NumRows() - n), err
+}
+
+// WritePage satisfies the PageWriter interface.
+func (buf *Buffer) WritePage(page Page) (int64, error) {
+	return CopyValues(buf.buffers[page.ColumnIndex()], page.Values())
 }
 
 // Rows returns a reader exposing the current content of the buffer.
@@ -207,15 +226,17 @@ type bufferRowReader struct {
 	readers []columnValueReader
 }
 
-func (r *bufferRowReader) initReadRow() {
-	r.readers = makeColumnValueReaders(len(r.buffer.buffers), func(i int) ValueReader {
-		return r.buffer.buffers[i].Page().Values()
+func (r *bufferRowReader) initReadRow(b *Buffer) {
+	r.readRow = b.readRow
+	r.readers = makeColumnValueReaders(len(b.buffers), func(i int) ValueReader {
+		return b.buffers[i].Page().Values()
 	})
 }
 
 func (r *bufferRowReader) ReadRow(row Row) (Row, error) {
-	if len(r.readers) == 0 {
-		r.initReadRow()
+	if r.buffer != nil {
+		r.initReadRow(r.buffer)
+		r.buffer = nil
 	}
 	if r.readRow == nil {
 		return row, io.EOF
@@ -241,5 +262,7 @@ var (
 	_ RowReaderWithSchema = (*bufferRowReader)(nil)
 	_ RowWriterTo         = (*bufferRowReader)(nil)
 	_ RowGroup            = (*Buffer)(nil)
+	_ RowGroupWriter      = (*Buffer)(nil)
+	_ PageWriter          = (*Buffer)(nil)
 	_ sort.Interface      = (*Buffer)(nil)
 )

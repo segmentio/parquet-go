@@ -256,7 +256,6 @@ type mergedRowGroup struct {
 	sorting   []SortingColumn
 	sortFuncs []columnSortFunc
 	rowGroups []RowGroup
-	columns   []RowGroupColumn
 }
 
 func (m *mergedRowGroup) NumRows() (numRows int) {
@@ -266,28 +265,14 @@ func (m *mergedRowGroup) NumRows() (numRows int) {
 	return numRows
 }
 
-func (m *mergedRowGroup) Columns() []RowGroupColumn { return m.columns }
+func (m *mergedRowGroup) Columns() []RowGroupColumn { return nil } // TODO
 
 func (m *mergedRowGroup) Schema() *Schema { return m.schema }
 
 func (m *mergedRowGroup) SortingColumns() []SortingColumn { return m.sorting }
 
 func (m *mergedRowGroup) Rows() RowReader {
-	r := &mergedRowGroupReader{
-		schema:  m.schema,
-		sorting: m.sortFuncs,
-		cursors: make([]*cursor, len(m.rowGroups)),
-	}
-
-	cursors := make([]cursor, len(m.rowGroups))
-	for i, rowGroup := range m.rowGroups {
-		cursors[i].reader = rowGroup.Rows()
-	}
-	for i := range cursors {
-		r.cursors[i] = &cursors[i]
-	}
-
-	return r
+	return &mergedRowGroupReader{mergedRowGroup: m}
 }
 
 func (m *mergedRowGroup) Pages() PageReader {
@@ -300,38 +285,53 @@ type columnSortFunc struct {
 }
 
 type mergedRowGroupReader struct {
-	schema  *Schema
+	*mergedRowGroup
 	sorting []columnSortFunc
 	cursors []*cursor
-	init    bool
 	err     error
 }
 
-func (r *mergedRowGroupReader) initReadRow() {
-	for _, cur := range r.cursors {
-		cur.next()
-	}
+func (r *mergedRowGroupReader) initReadRow(m *mergedRowGroup) {
+	if m.schema != nil {
+		numColumns := numColumnsOf(m.schema)
 
-	i := 0
-	for _, cur := range r.cursors {
-		if cur.done() {
-			if cur.err != io.EOF {
-				r.err = cur.err
-			}
-		} else {
-			r.cursors[i] = cur
-			i++
+		cursors := make([]cursor, len(m.rowGroups))
+		for i, rowGroup := range m.rowGroups {
+			cursors[i].reader = rowGroup.Rows()
+			cursors[i].columns = make([][]Value, numColumns)
 		}
-	}
 
-	r.cursors = r.cursors[:i]
-	heap.Init(r)
+		r.cursors = make([]*cursor, len(cursors))
+		for i := range cursors {
+			r.cursors[i] = &cursors[i]
+		}
+
+		for _, cur := range r.cursors {
+			cur.next()
+		}
+
+		i := 0
+		for _, cur := range r.cursors {
+			if cur.done() {
+				if cur.err != io.EOF {
+					r.err = cur.err
+				}
+			} else {
+				r.cursors[i] = cur
+				i++
+			}
+		}
+
+		r.cursors = r.cursors[:i]
+		r.sorting = m.sortFuncs
+		heap.Init(r)
+	}
 }
 
 func (r *mergedRowGroupReader) ReadRow(row Row) (Row, error) {
-	if !r.init {
-		r.init = true
-		r.initReadRow()
+	if r.mergedRowGroup != nil {
+		r.initReadRow(r.mergedRowGroup)
+		r.mergedRowGroup = nil
 	}
 
 	if r.err != nil {
@@ -394,22 +394,6 @@ func (r *mergedRowGroupReader) Pop() interface{} {
 	c := r.cursors[n]
 	r.cursors = r.cursors[:n]
 	return c
-}
-
-type mergedRowGroupColumn struct {
-	columns []RowGroupColumn
-}
-
-func (m *mergedRowGroupColumn) ColumnIndex() int {
-	return m.columns[0].ColumnIndex()
-}
-
-func (m *mergedRowGroupColumn) Dictionary() Dictionary {
-	return nil
-}
-
-func (m *mergedRowGroupColumn) Pages() PageReader {
-	return nil
 }
 
 type cursor struct {
