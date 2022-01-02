@@ -63,7 +63,7 @@ func printColumns(t *testing.T, col *parquet.Column, indent string) {
 		for pages.Next() {
 			switch header := pages.PageHeader().(type) {
 			case parquet.DictionaryPageHeader:
-				dictionaryPage := header.Encoding().NewDecoder(pages.PageData())
+				dictionaryPage := parquet.LookupEncoding(header.Encoding()).NewDecoder(pages.PageData())
 				dictionary = col.Type().NewDictionary(bufferSize)
 				if err := dictionary.ReadFrom(dictionaryPage); err != nil {
 					t.Fatal(err)
@@ -81,9 +81,9 @@ func printColumns(t *testing.T, col *parquet.Column, indent string) {
 
 				pageReader.Reset(
 					header.NumValues(),
-					header.RepetitionLevelEncoding().NewDecoder(pages.RepetitionLevels()),
-					header.DefinitionLevelEncoding().NewDecoder(pages.DefinitionLevels()),
-					header.Encoding().NewDecoder(pages.PageData()),
+					parquet.LookupEncoding(header.RepetitionLevelEncoding()).NewDecoder(pages.RepetitionLevels()),
+					parquet.LookupEncoding(header.DefinitionLevelEncoding()).NewDecoder(pages.DefinitionLevels()),
+					parquet.LookupEncoding(header.Encoding()).NewDecoder(pages.PageData()),
 				)
 
 				for {

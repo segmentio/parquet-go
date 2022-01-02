@@ -728,7 +728,7 @@ func (page *indexedPage) Bounds() (min, max Value) {
 	return min, max
 }
 
-func (page *indexedPage) Slice(i, j int) Page {
+func (page *indexedPage) Slice(i, j int) BufferedPage {
 	return &indexedPage{
 		dict:        page.dict,
 		values:      page.values[i:j],
@@ -738,9 +738,9 @@ func (page *indexedPage) Slice(i, j int) Page {
 
 func (page *indexedPage) Size() int64 { return sizeOfInt32(page.values) }
 
-func (page *indexedPage) WriteRepetitionLevelsTo(encoding.Encoder) error { return nil }
+func (page *indexedPage) RepetitionLevels() []int8 { return nil }
 
-func (page *indexedPage) WriteDefinitionLevelsTo(encoding.Encoder) error { return nil }
+func (page *indexedPage) DefinitionLevels() []int8 { return nil }
 
 func (page *indexedPage) WriteTo(e encoding.Encoder) error { return e.EncodeInt32(page.values) }
 
@@ -793,7 +793,7 @@ func (col *indexedColumnBuffer) Dictionary() Dictionary { return col.dict }
 
 func (col *indexedColumnBuffer) Pages() PageReader { return onePage(col.Page()) }
 
-func (col *indexedColumnBuffer) Page() Page { return &col.indexedPage }
+func (col *indexedColumnBuffer) Page() BufferedPage { return &col.indexedPage }
 
 func (col *indexedColumnBuffer) Reset() { col.values = col.values[:0] }
 

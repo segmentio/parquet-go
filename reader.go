@@ -6,6 +6,7 @@ import (
 	"reflect"
 
 	"github.com/segmentio/parquet/encoding"
+	"github.com/segmentio/parquet/format"
 )
 
 // A Reader reads Go values from parquet files.
@@ -449,7 +450,7 @@ func (ccr *columnChunkReader) readDictionaryPage(header DictionaryPageHeader) er
 	} else {
 		ccr.dictionary.Reset()
 	}
-	decoder := header.Encoding().NewDecoder(ccr.pages.PageData())
+	decoder := LookupEncoding(header.Encoding()).NewDecoder(ccr.pages.PageData())
 	if err := ccr.dictionary.ReadFrom(decoder); err != nil {
 		return err
 	}
@@ -477,9 +478,9 @@ func (ccr *columnChunkReader) readDataPage(header DataPageHeader) {
 	ccr.numPages++
 }
 
-func makeDecoder(decoder encoding.Decoder, encoding encoding.Encoding, input io.Reader) encoding.Decoder {
-	if decoder == nil || encoding.Encoding() != decoder.Encoding() {
-		decoder = encoding.NewDecoder(input)
+func makeDecoder(decoder encoding.Decoder, encoding format.Encoding, input io.Reader) encoding.Decoder {
+	if decoder == nil || encoding != decoder.Encoding() {
+		decoder = LookupEncoding(encoding).NewDecoder(input)
 	} else {
 		decoder.Reset(input)
 	}

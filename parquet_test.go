@@ -60,7 +60,7 @@ func forEachColumnPage(col *parquet.Column, do func(*parquet.Column, *parquet.Da
 		for pages.Next() {
 			switch header := pages.PageHeader().(type) {
 			case parquet.DictionaryPageHeader:
-				decoder := header.Encoding().NewDecoder(pages.PageData())
+				decoder := parquet.LookupEncoding(header.Encoding()).NewDecoder(pages.PageData())
 				dictionary = leaf.Type().NewDictionary(0)
 				if err := dictionary.ReadFrom(decoder); err != nil {
 					return fmt.Errorf("reading dictionary page: %w", err)
@@ -78,9 +78,9 @@ func forEachColumnPage(col *parquet.Column, do func(*parquet.Column, *parquet.Da
 
 				pageReader.Reset(
 					header.NumValues(),
-					header.RepetitionLevelEncoding().NewDecoder(pages.RepetitionLevels()),
-					header.DefinitionLevelEncoding().NewDecoder(pages.DefinitionLevels()),
-					header.Encoding().NewDecoder(pages.PageData()),
+					parquet.LookupEncoding(header.RepetitionLevelEncoding()).NewDecoder(pages.RepetitionLevels()),
+					parquet.LookupEncoding(header.DefinitionLevelEncoding()).NewDecoder(pages.DefinitionLevels()),
+					parquet.LookupEncoding(header.Encoding()).NewDecoder(pages.PageData()),
 				)
 
 				if err := do(leaf, pageReader); err != nil {

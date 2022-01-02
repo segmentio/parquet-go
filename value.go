@@ -48,6 +48,8 @@ type ValueReader interface {
 	ReadValues([]Value) (int, error)
 }
 
+// ValueReaderFrom is an interface implemented by value writers to read values
+// from a reader.
 type ValueReaderFrom interface {
 	ReadValuesFrom(ValueReader) (int64, error)
 }
@@ -60,10 +62,21 @@ type ValueWriter interface {
 	WriteValues([]Value) (int, error)
 }
 
+// ValueWriterTo is an interface implemented by value readers to write values to
+// a writer.
 type ValueWriterTo interface {
 	WriteValuesTo(ValueWriter) (int64, error)
 }
 
+// CopyValues copies values from src to dst, returning the number of values
+// that were written.
+//
+// As an optimization, the reader and writer may choose to implement
+// ValueReaderFrom and ValueWriterTo to provide their own copy logic.
+//
+// The function returns any error it encounters reading or writing pages, except
+// for io.EOF from the reader which indicates that there were no more values to
+// read.
 func CopyValues(dst ValueWriter, src ValueReader) (int64, error) {
 	return copyValues(dst, src, nil)
 }
