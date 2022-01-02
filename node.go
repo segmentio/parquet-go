@@ -429,52 +429,6 @@ func exportedStructFieldName(name string) string {
 	return string([]rune{unicode.ToUpper(firstRune)}) + name[size:]
 }
 
-type leafColumn struct {
-	node               Node
-	path               []string
-	columnIndex        int
-	maxRepetitionLevel int8
-	maxDefinitionLevel int8
-}
-
-func forEachLeafColumnOf(node Node, do func(leafColumn)) {
-	forEachLeafColumn(node, nil, 0, 0, 0, do)
-}
-
-func forEachLeafColumn(node Node, path []string, columnIndex int, maxRepetitionLevel, maxDefinitionLevel int8, do func(leafColumn)) int {
-	switch {
-	case node.Optional():
-		maxDefinitionLevel++
-	case node.Repeated():
-		maxRepetitionLevel++
-		maxDefinitionLevel++
-	}
-
-	if isLeaf(node) {
-		do(leafColumn{
-			node:               node,
-			path:               path,
-			columnIndex:        columnIndex,
-			maxRepetitionLevel: maxRepetitionLevel,
-			maxDefinitionLevel: maxDefinitionLevel,
-		})
-		return columnIndex + 1
-	}
-
-	for _, name := range node.ChildNames() {
-		columnIndex = forEachLeafColumn(
-			node.ChildByName(name),
-			appendPath(path, name),
-			columnIndex,
-			maxRepetitionLevel,
-			maxDefinitionLevel,
-			do,
-		)
-	}
-
-	return columnIndex
-}
-
 func isLeaf(node Node) bool {
 	return node.NumChildren() == 0
 }

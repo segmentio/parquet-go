@@ -98,13 +98,13 @@ type nullsFirst struct{ SortingColumn }
 
 func (nullsFirst) NullsFirst() bool { return true }
 
-func sortingColumnOf(sortingColumns []SortingColumn, path []string) SortingColumn {
+func sortingColumnOf(sortingColumns []SortingColumn, path columnPath) SortingColumn {
 	// There are usually a few sorting columns in a row group, so the linear
 	// scan is the fastest option and works whether the sorting column list
 	// os sorted or not. Please revisit this decision if this code path ends
 	// up being more costly than necessary.
 	for _, sorting := range sortingColumns {
-		if stringsAreEqual(sorting.Path(), path) {
+		if path.equal(sorting.Path()) {
 			return sorting
 		}
 	}
@@ -118,12 +118,12 @@ func (sorting sortingColumnsOrder) Len() int {
 }
 
 func (sorting sortingColumnsOrder) Less(i, j int) bool {
-	path1 := sorting[i].Path()
-	path2 := sorting[j].Path()
+	path1 := columnPath(sorting[i].Path())
+	path2 := columnPath(sorting[j].Path())
 	switch {
-	case stringsAreOrdered(path1, path2):
+	case path1.less(path2):
 		return true
-	case stringsAreOrdered(path2, path2):
+	case path2.less(path2):
 		return false
 	}
 	desc1 := sorting[i].Descending()
@@ -163,7 +163,7 @@ func sortingColumnsAreEqual(sortingColumns1, sortingColumns2 []SortingColumn) bo
 	sortingColumns2 = sortedSortingColumns(sortingColumns2)
 
 	for i := range sortingColumns1 {
-		if !stringsAreEqual(sortingColumns1[i].Path(), sortingColumns2[i].Path()) {
+		if !columnPath(sortingColumns1[i].Path()).equal(sortingColumns2[i].Path()) {
 			return false
 		}
 		if sortingColumns1[i].Descending() != sortingColumns2[i].Descending() {

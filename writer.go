@@ -686,7 +686,7 @@ type columnChunkWriter struct {
 	values []Value
 
 	pages         bufferedPageWriter
-	columnPath    []string
+	columnPath    columnPath
 	columnType    Type
 	columnIndexer ColumnIndexer
 	column        ColumnBuffer

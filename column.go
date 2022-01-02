@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
-	"strings"
 
 	"github.com/segmentio/parquet/compress"
 	"github.com/segmentio/parquet/deprecated"
@@ -23,7 +22,7 @@ type Column struct {
 	file        *File
 	schema      *format.SchemaElement
 	order       *format.ColumnOrder
-	path        []string
+	path        columnPath
 	names       []string
 	columns     []*Column
 	chunks      []*format.ColumnChunk
@@ -167,10 +166,6 @@ func (c *Column) forEachLeaf(do func(*Column)) {
 	}
 }
 
-func join(path []string) string {
-	return strings.Join(path, ".")
-}
-
 func openColumns(file *File) (*Column, error) {
 	cl := columnLoader{}
 
@@ -195,16 +190,16 @@ func openColumns(file *File) (*Column, error) {
 
 func (c *Column) setLevels(depth, repetition, definition, index int8) (int8, error) {
 	if depth < 0 {
-		return -1, fmt.Errorf("cannot represent parquet columns with more than 127 nested levels: %s", join(c.path))
+		return -1, fmt.Errorf("cannot represent parquet columns with more than 127 nested levels: %s", c.path)
 	}
 	if index < 0 {
-		return -1, fmt.Errorf("cannot represent parquet rows with more than 127 columns: %s", join(c.path))
+		return -1, fmt.Errorf("cannot represent parquet rows with more than 127 columns: %s", c.path)
 	}
 	if repetition < 0 {
-		return -1, fmt.Errorf("cannot represent parquet columns with more than 127 repetition levels: %s", join(c.path))
+		return -1, fmt.Errorf("cannot represent parquet columns with more than 127 repetition levels: %s", c.path)
 	}
 	if definition < 0 {
-		return -1, fmt.Errorf("cannot represent parquet columns with more than 127 definition levels: %s", join(c.path))
+		return -1, fmt.Errorf("cannot represent parquet columns with more than 127 definition levels: %s", c.path)
 	}
 
 	switch schemaRepetitionTypeOf(c.schema) {
@@ -247,7 +242,7 @@ func (cl *columnLoader) open(file *File, path []string) (*Column, error) {
 		file:   file,
 		schema: &file.metadata.Schema[cl.schemaIndex],
 	}
-	c.path = append(path[:len(path):len(path)], c.schema.Name)
+	c.path = c.path.append(c.schema.Name)
 
 	cl.schemaIndex++
 	numChildren := int(c.schema.NumChildren)

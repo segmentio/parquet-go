@@ -17,7 +17,7 @@ type ConvertError struct {
 
 // Error satisfies the error interface.
 func (e *ConvertError) Error() string {
-	return fmt.Sprintf("parquet conversion error: %s %q", e.Reason, join(e.Path))
+	return fmt.Sprintf("parquet conversion error: %s %q", e.Reason, columnPath(e.Path))
 }
 
 // Conversion is an interface implemented by types that provide conversion of
@@ -83,17 +83,13 @@ type convertFunc func(Row, Row, levels) (Row, Row, error)
 type convertNode struct {
 	columnIndex int
 	node        Node
-	path        []string
+	path        columnPath
 }
 
 func (c convertNode) child(name string) convertNode {
 	c.node = c.node.ChildByName(name)
-	c.path = appendPath(c.path, name)
+	c.path = c.path.append(name)
 	return c
-}
-
-func appendPath(path []string, name string) []string {
-	return append(path[:len(path):len(path)], name)
 }
 
 func convert(to, from convertNode) (int, int, convertFunc) {
@@ -310,35 +306,6 @@ func groupNodesAreEqual(node1, node2 Node) bool {
 	}
 
 	return true
-}
-
-func stringsAreEqual(strings1, strings2 []string) bool {
-	if len(strings1) != len(strings2) {
-		return false
-	}
-
-	for i := range strings1 {
-		if strings1[i] != strings2[i] {
-			return false
-		}
-	}
-
-	return true
-}
-
-func stringsAreOrdered(strings1, strings2 []string) bool {
-	n := len(strings1)
-	if n > len(strings2) {
-		n = len(strings2)
-	}
-
-	for i := 0; i < n; i++ {
-		if strings1[i] >= strings2[i] {
-			return false
-		}
-	}
-
-	return len(strings1) <= len(strings2)
 }
 
 func comm(sortedStrings1, sortedStrings2 []string) (only1, only2, both []string) {
