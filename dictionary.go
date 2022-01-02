@@ -699,6 +699,8 @@ type indexedPage struct {
 
 func (page *indexedPage) ColumnIndex() int { return int(^page.columnIndex) }
 
+func (page *indexedPage) Dictionary() Dictionary { return page.dict }
+
 func (page *indexedPage) NumRows() int { return len(page.values) }
 
 func (page *indexedPage) NumValues() int { return len(page.values) }
@@ -788,6 +790,8 @@ func (col *indexedColumnBuffer) Clone() ColumnBuffer {
 }
 
 func (col *indexedColumnBuffer) Dictionary() Dictionary { return col.dict }
+
+func (col *indexedColumnBuffer) Pages() PageReader { return onePage(col.Page()) }
 
 func (col *indexedColumnBuffer) Page() Page { return &col.indexedPage }
 

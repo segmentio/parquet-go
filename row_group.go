@@ -27,6 +27,9 @@ type RowGroup interface {
 
 	// Returns a reader exposing the rows of the row group.
 	Rows() RowReader
+
+	// Returns a reader exposing the pages of the row group.
+	Pages() PageReader
 }
 
 // The RowGroupColumn interface represents individual columns of a row group.
@@ -38,8 +41,8 @@ type RowGroupColumn interface {
 	// values. If the column is not indexed, nil is returned.
 	Dictionary() Dictionary
 
-	// Returns a reader exposing the values of the column.
-	Values() ValueReader
+	// Returns a reader exposing the pages of the column.
+	Pages() PageReader
 }
 
 // RowGroupReader is an interface implemented by types that expose sequences of
@@ -48,22 +51,10 @@ type RowGroupReader interface {
 	ReadRowGroup() (RowGroup, error)
 }
 
-// RowGroupColumnReader is implemented by types that support reading row group
-// columns.
-type RowGroupColumnReader interface {
-	ReadRowGroupColumn() (RowGroupColumn, error)
-}
-
 // RowGroupWriter is an interface implemented by tyeps that allow the program
 // to write row groups.
 type RowGroupWriter interface {
 	WriteRowGroup(RowGroup) (int64, error)
-}
-
-// RowGroupColumnWriter is implemented by types that support writing row group
-// columns.
-type RowGroupColumnWriter interface {
-	WriteRowGroupColumn(RowGroupColumn) (int64, error)
 }
 
 // SortingColumn represents a column by which a row group is sorted.
@@ -71,8 +62,10 @@ type SortingColumn interface {
 	// Returns the path of the column in the row group schema, omitting the name
 	// of the root node.
 	Path() []string
+
 	// Returns true if the column will sort values in descending order.
 	Descending() bool
+
 	// Returns true if the column will put null values at the beginning.
 	NullsFirst() bool
 }
@@ -263,10 +256,7 @@ type mergedRowGroup struct {
 	sorting   []SortingColumn
 	sortFuncs []columnSortFunc
 	rowGroups []RowGroup
-}
-
-func (m *mergedRowGroup) Columns() []RowGroupColumn {
-	panic("NOT IMPLEMENTED")
+	columns   []RowGroupColumn
 }
 
 func (m *mergedRowGroup) NumRows() (numRows int) {
@@ -275,6 +265,8 @@ func (m *mergedRowGroup) NumRows() (numRows int) {
 	}
 	return numRows
 }
+
+func (m *mergedRowGroup) Columns() []RowGroupColumn { return m.columns }
 
 func (m *mergedRowGroup) Schema() *Schema { return m.schema }
 
@@ -296,6 +288,10 @@ func (m *mergedRowGroup) Rows() RowReader {
 	}
 
 	return r
+}
+
+func (m *mergedRowGroup) Pages() PageReader {
+	panic("NOT IMPLEMENTED") // TODO
 }
 
 type columnSortFunc struct {
@@ -400,6 +396,22 @@ func (r *mergedRowGroupReader) Pop() interface{} {
 	return c
 }
 
+type mergedRowGroupColumn struct {
+	columns []RowGroupColumn
+}
+
+func (m *mergedRowGroupColumn) ColumnIndex() int {
+	return m.columns[0].ColumnIndex()
+}
+
+func (m *mergedRowGroupColumn) Dictionary() Dictionary {
+	return nil
+}
+
+func (m *mergedRowGroupColumn) Pages() PageReader {
+	return nil
+}
+
 type cursor struct {
 	reader  RowReader
 	row     Row
@@ -453,7 +465,7 @@ func sortFuncOf(t Type, maxDefinitionLevel, maxRepetitionLevel int8, descending,
 
 //go:noinline
 func sortFuncOfDescending(sort sortFunc) sortFunc {
-	return func(a, b []Value) int { return ^sort(a, b) }
+	return func(a, b []Value) int { return -sort(a, b) }
 }
 
 func sortFuncOfOptional(t Type, nullsFirst bool) sortFunc {
