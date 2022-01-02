@@ -295,7 +295,7 @@ func (page *repeatedPage) NumRows() int {
 }
 
 func (page *repeatedPage) NumValues() int {
-	return page.base.NumValues() + page.NumNulls()
+	return len(page.definitionLevels)
 }
 
 func (page *repeatedPage) NumNulls() int {
