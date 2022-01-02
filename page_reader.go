@@ -85,7 +85,7 @@ func (r *PageReader) ReadValues(values []Value) (int, error) {
 		if r.maxRepetitionLevel > 0 {
 			repetitionLevels, err = r.repetitions.peekLevels()
 			if err != nil {
-				return read, fmt.Errorf("reading parquet repetition level from data page: %w", err)
+				return read, fmt.Errorf("decoding repetition level from data page of column %d: %w", ^r.columnIndex, err)
 			}
 			if len(repetitionLevels) < numValues {
 				numValues = len(repetitionLevels)
@@ -95,7 +95,7 @@ func (r *PageReader) ReadValues(values []Value) (int, error) {
 		if r.maxDefinitionLevel > 0 {
 			definitionLevels, err = r.definitions.peekLevels()
 			if err != nil {
-				return read, fmt.Errorf("reading parquet definition level from data page: %w", err)
+				return read, fmt.Errorf("decoding definition level from data page of column %d: %w", ^r.columnIndex, err)
 			}
 			if len(definitionLevels) < numValues {
 				numValues = len(definitionLevels)
@@ -117,7 +117,7 @@ func (r *PageReader) ReadValues(values []Value) (int, error) {
 				// decoded levels.
 				err = fmt.Errorf("after reading %d/%d values: %w", r.numValues-r.remain, r.numValues, io.ErrUnexpectedEOF)
 			}
-			return read, fmt.Errorf("reading parquet values from data page: %w", err)
+			return read, fmt.Errorf("decoding %s values from data page of column %d: %w", r.values.Decoder().Encoding(), ^r.columnIndex, err)
 		}
 
 		for i, j := n-1, len(definitionLevels)-1; j >= 0; j-- {

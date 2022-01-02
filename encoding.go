@@ -53,7 +53,7 @@ var (
 	}
 )
 
-func isDictionaryEncoding(encoding interface{ Encoding() format.Encoding }) bool {
+func isDictionaryEncoding(encoding encoding.Encoding) bool {
 	switch encoding.Encoding() {
 	case format.PlainDictionary, format.RLEDictionary:
 		return true

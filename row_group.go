@@ -363,9 +363,12 @@ func (r *mergedRowGroupReader) Schema() *Schema { return r.schema }
 func (r *mergedRowGroupReader) Len() int { return len(r.cursors) }
 
 func (r *mergedRowGroupReader) Less(i, j int) bool {
+	columns1 := r.cursors[i].columns
+	columns2 := r.cursors[j].columns
+
 	for _, sorting := range r.sorting {
-		col1 := r.cursors[i].columns[sorting.columnIndex]
-		col2 := r.cursors[j].columns[sorting.columnIndex]
+		col1 := columns1[sorting.columnIndex]
+		col2 := columns2[sorting.columnIndex]
 		comp := sorting.compare(col1, col2)
 		switch {
 		case comp < 0:
@@ -374,6 +377,7 @@ func (r *mergedRowGroupReader) Less(i, j int) bool {
 			return false
 		}
 	}
+
 	return false
 }
 

@@ -221,6 +221,20 @@ func (s *Schema) Reconstruct(value interface{}, row Row) error {
 	return err
 }
 
+func (s *Schema) forEachNode(do func(name string, node Node)) {
+	forEachNodeOf(s.Name(), s, do)
+}
+
+func forEachNodeOf(name string, node Node, do func(string, Node)) {
+	do(name, node)
+
+	if !isLeaf(node) {
+		for _, name := range node.ChildNames() {
+			forEachNodeOf(name, node.ChildByName(name), do)
+		}
+	}
+}
+
 type structNode struct {
 	gotype reflect.Type
 	fields []structField

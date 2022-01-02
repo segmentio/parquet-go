@@ -843,12 +843,6 @@ func newIndexedValueDecoder(dict Dictionary, bufferSize int) *indexedValueDecode
 	}
 }
 
-func (r *indexedValueDecoder) Reset(decoder encoding.Decoder) {
-	r.decoder = decoder
-	r.values = r.values[:0]
-	r.offset = 0
-}
-
 func (r *indexedValueDecoder) ReadValues(values []Value) (int, error) {
 	i := 0
 	for {
@@ -885,4 +879,14 @@ func (r *indexedValueDecoder) ReadValues(values []Value) (int, error) {
 		r.values = r.values[:n]
 		r.offset = 0
 	}
+}
+
+func (r *indexedValueDecoder) Reset(decoder encoding.Decoder) {
+	r.decoder = decoder
+	r.values = r.values[:0]
+	r.offset = 0
+}
+
+func (r *indexedValueDecoder) Decoder() encoding.Decoder {
+	return r.decoder
 }
