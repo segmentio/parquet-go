@@ -295,7 +295,7 @@ func testBuffer(t *testing.T, node parquet.Node, reader parquet.ValueReader, buf
 		t.Fatalf("flushing page writer: %v", err)
 	}
 
-	// We writes a single value per row, so num values = num rows for all pages
+	// We write a single value per row, so num values = num rows for all pages
 	// including repeated ones, which makes it OK to slice the pages using the
 	// number of values as a proxy for the row indexes.
 	halfValues := numValues / 2

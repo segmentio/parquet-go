@@ -8,7 +8,7 @@ import (
 // Buffer represents an in-memory group of parquet rows.
 //
 // The main purpose of the Buffer type is to provide a way to sort rows before
-// writting them to a parquet file. Buffer implements sort.Interface as a way
+// writing them to a parquet file. Buffer implements sort.Interface as a way
 // to support reordering the rows that have been written to it.
 type Buffer struct {
 	config  *RowGroupConfig
