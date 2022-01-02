@@ -25,21 +25,21 @@ type RowGroup interface {
 	// The method will return an empty slice if the rows are not sorted.
 	SortingColumns() []SortingColumn
 
-	// Rows returns a reader exposing the rows of the row group.
+	// Returns a reader exposing the rows of the row group.
 	Rows() RowReader
 }
 
 // The RowGroupColumn interface represents individual columns of a row group.
 type RowGroupColumn interface {
+	// Returns the index of this column in its parent row group.
+	ColumnIndex() int
+
 	// For indexed columns, returns the underlying dictionary holding the column
 	// values. If the column is not indexed, nil is returned.
 	Dictionary() Dictionary
 
-	// Returns the index of this column in its parent row group.
-	Index() int
-
-	// Returns the list of pages in the colunn.
-	Pages() []Page
+	// Returns a reader exposing the values of the column.
+	Values() ValueReader
 }
 
 // RowGroupReader is an interface implemented by types that expose sequences of
@@ -48,6 +48,8 @@ type RowGroupReader interface {
 	ReadRowGroup() (RowGroup, error)
 }
 
+// RowGroupColumnReader is implemented by types that support reading row group
+// columns.
 type RowGroupColumnReader interface {
 	ReadRowGroupColumn() (RowGroupColumn, error)
 }
@@ -58,6 +60,8 @@ type RowGroupWriter interface {
 	WriteRowGroup(RowGroup) (int64, error)
 }
 
+// RowGroupColumnWriter is implemented by types that support writing row group
+// columns.
 type RowGroupColumnWriter interface {
 	WriteRowGroupColumn(RowGroupColumn) (int64, error)
 }
@@ -500,7 +504,10 @@ func sortFuncOfOptionalNullsLast(t Type) sortFunc {
 func sortFuncOfRepeated(t Type, nullsFirst bool) sortFunc {
 	compare := sortFuncOfOptional(t, nullsFirst)
 	return func(a, b []Value) int {
-		n := min(len(a), len(b))
+		n := len(a)
+		if n < len(b) {
+			n = len(b)
+		}
 
 		for i := 0; i < n; i++ {
 			k := compare(a[i:i+1], b[i:i+1])

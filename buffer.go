@@ -218,8 +218,8 @@ func (r *bufferRowReader) WriteRowsTo(w RowWriter) (int64, error) {
 	if rgw, ok := w.(RowGroupWriter); ok {
 		return rgw.WriteRowGroup(r.buffer)
 	}
-	if rt, ok := w.(RowReaderFrom); ok {
-		return rt.ReadRowsFrom(r)
+	if rrf, ok := w.(RowReaderFrom); ok {
+		return rrf.ReadRowsFrom(r)
 	}
 	return CopyRows(w, struct{ RowReader }{r})
 }

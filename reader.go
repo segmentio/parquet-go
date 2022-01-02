@@ -187,8 +187,7 @@ type columnValueReader struct {
 }
 
 func makeColumnValueReaders(numColumns int, columnAt func(int) ValueReader) []columnValueReader {
-	// 170 x sizeof(Value) = 1KB
-	const columnBufferSize = 170
+	const columnBufferSize = defaultValueBufferSize
 	buffer := make([]Value, columnBufferSize*numColumns)
 	readers := make([]columnValueReader, numColumns)
 
@@ -337,7 +336,7 @@ type columnChunkReader struct {
 	column     *Column
 	chunks     *ColumnChunks
 	pages      *ColumnPages
-	reader     *PageReader
+	reader     *DataPageReader
 	dictionary Dictionary
 	numPages   int
 
@@ -364,7 +363,7 @@ func newColumnChunkReader(column *Column, config *ReaderConfig) *columnChunkRead
 		bufferSize: config.PageBufferSize,
 		column:     column,
 		chunks:     column.Chunks(),
-		values:     make([]Value, 0, 170),
+		values:     make([]Value, 0, defaultValueBufferSize),
 	}
 
 	maxRepetitionLevel := column.MaxRepetitionLevel()
@@ -465,7 +464,7 @@ func (ccr *columnChunkReader) readDataPage(header DataPageHeader) {
 	ccr.page.decoder = makeDecoder(ccr.page.decoder, header.Encoding(), ccr.pages.PageData())
 
 	if ccr.reader == nil {
-		ccr.reader = NewPageReader(
+		ccr.reader = NewDataPageReader(
 			ccr.page.typ,
 			ccr.column.MaxRepetitionLevel(),
 			ccr.column.MaxDefinitionLevel(),

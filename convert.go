@@ -327,7 +327,10 @@ func stringsAreEqual(strings1, strings2 []string) bool {
 }
 
 func stringsAreOrdered(strings1, strings2 []string) bool {
-	n := min(len(strings1), len(strings2))
+	n := len(strings1)
+	if n > len(strings2) {
+		n = len(strings2)
+	}
 
 	for i := 0; i < n; i++ {
 		if strings1[i] >= strings2[i] {

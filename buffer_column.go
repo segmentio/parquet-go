@@ -2,7 +2,6 @@ package parquet
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"sort"
 
@@ -15,16 +14,30 @@ import (
 // BufferColumn implements sort.Interface as a way to support reordering the
 // rows that have been written to it.
 type BufferColumn interface {
+	// Exposes a read-only view of the column buffer.
 	RowGroupColumn
+
+	// Allows reading rows back from the column by calling ReadRowAt.
 	RowReaderAt
+
+	// Provides the main mechanism for writing values to the column via the
+	// WriteRow method. WriteRow must be called with a row containing only
+	// the value for this column; unless this is a repeated column, the row
+	// must contain a single value.
 	RowWriter
+
+	// The column implements ValueWriter as a mechanism to optimize the copy
+	// of vlaues into the buffer in contexts where the row information is
+	// provided by the values because the repetition and definition levels
+	// are set.
+	ValueWriter
 
 	// Returns a copy of the column. The returned copy shares no memory with
 	// the original, mutations of either column will not modify the other.
 	Clone() BufferColumn
 
-	// Returns a reader exposing the values currently held in the column.
-	Values() ValueReader
+	// Returns the column as a Page.
+	Page() Page
 
 	// Clears all rows written to the column.
 	Reset()
@@ -97,20 +110,45 @@ func (col *optionalBufferColumn) Dictionary() Dictionary {
 	return col.base.Dictionary()
 }
 
-func (col *optionalBufferColumn) Index() int {
-	return col.base.Index()
+func (col *optionalBufferColumn) ColumnIndex() int {
+	return col.base.ColumnIndex()
 }
 
-func (col *optionalBufferColumn) Pages() []Page {
-	col.reorder()
-	return pagesWithDefinitionLevels(
-		col.base.Pages(),
-		col.maxDefinitionLevel,
-		col.definitionLevels,
-		func(page Page, i, j int) Page {
-			return newOptionalPage(page, col.maxDefinitionLevel, col.definitionLevels[i:j])
-		},
-	)
+func (col *optionalBufferColumn) Page() Page {
+	numNulls := countLevelsNotEqual(col.definitionLevels, col.maxDefinitionLevel)
+	numValues := len(col.rows) - numNulls
+
+	if numValues > 0 {
+		if cap(col.index) < numValues {
+			col.index = make([]int32, numValues)
+		}
+		index := col.index[:numValues]
+		i := 0
+		for _, j := range col.rows {
+			if j >= 0 {
+				index[j] = int32(i)
+				i++
+			}
+		}
+
+		// Cyclic sort: O(N)
+		for i := range index {
+			for j := int(index[i]); i != j; j = int(index[i]) {
+				col.base.Swap(i, j)
+				index[i], index[j] = index[j], index[i]
+			}
+		}
+	}
+
+	i := 0
+	for _, r := range col.rows {
+		if r >= 0 {
+			col.rows[i] = int32(i)
+			i++
+		}
+	}
+
+	return newOptionalPage(col.base.Page(), col.maxDefinitionLevel, col.definitionLevels)
 }
 
 func (col *optionalBufferColumn) Reset() {
@@ -141,6 +179,46 @@ func (col *optionalBufferColumn) Less(i, j int) bool {
 func (col *optionalBufferColumn) Swap(i, j int) {
 	col.rows[i], col.rows[j] = col.rows[j], col.rows[i]
 	col.definitionLevels[i], col.definitionLevels[j] = col.definitionLevels[j], col.definitionLevels[i]
+}
+
+func (col *optionalBufferColumn) WriteValues(values []Value) (n int, err error) {
+	rowIndex := int32(col.base.Len())
+
+	for n < len(values) {
+		i := n
+		for n < len(values) && values[n].definitionLevel != col.maxDefinitionLevel {
+			n++
+		}
+
+		for _, v := range values[i:n] {
+			col.rows = append(col.rows, rowIndex)
+			col.definitionLevels = append(col.definitionLevels, v.definitionLevel)
+			rowIndex++
+		}
+
+		i = n
+		for n < len(values) && values[n].definitionLevel == col.maxDefinitionLevel {
+			n++
+		}
+
+		if i < n {
+			count, err := col.base.WriteValues(values[i:n])
+			col.definitionLevels = appendLevel(col.definitionLevels, col.maxDefinitionLevel, count)
+			n += count
+
+			for count > 0 {
+				col.rows = append(col.rows, rowIndex)
+				rowIndex++
+				count--
+			}
+
+			if err != nil {
+				return n, err
+			}
+		}
+	}
+
+	return n, nil
 }
 
 func (col *optionalBufferColumn) WriteRow(row Row) error {
@@ -191,47 +269,7 @@ func (col *optionalBufferColumn) ReadRowAt(row Row, index int) (Row, error) {
 }
 
 func (col *optionalBufferColumn) Values() ValueReader {
-	col.reorder()
-	return &optionalPageReader{
-		values:             col.base.Values(),
-		maxDefinitionLevel: col.maxDefinitionLevel,
-		definitionLevels:   col.definitionLevels,
-	}
-}
-
-func (col *optionalBufferColumn) reorder() {
-	numNulls := countLevelsNotEqual(col.definitionLevels, col.maxDefinitionLevel)
-	numValues := len(col.rows) - numNulls
-
-	if numValues > 0 {
-		if cap(col.index) < numValues {
-			col.index = make([]int32, numValues)
-		}
-		index := col.index[:numValues]
-		i := 0
-		for _, j := range col.rows {
-			if j >= 0 {
-				index[j] = int32(i)
-				i++
-			}
-		}
-
-		// Cyclic sort: O(N)
-		for i := range index {
-			for j := int(index[i]); i != j; j = int(index[i]) {
-				col.base.Swap(i, j)
-				index[i], index[j] = index[j], index[i]
-			}
-		}
-	}
-
-	i := 0
-	for _, r := range col.rows {
-		if r >= 0 {
-			col.rows[i] = int32(i)
-			i++
-		}
-	}
+	return &optionalPageReader{page: col.Page().(*optionalPage)}
 }
 
 type repeatedBufferColumn struct {
@@ -282,26 +320,58 @@ func (col *repeatedBufferColumn) Dictionary() Dictionary {
 	return col.base.Dictionary()
 }
 
-func (col *repeatedBufferColumn) Index() int {
-	return col.base.Index()
+func (col *repeatedBufferColumn) ColumnIndex() int {
+	return col.base.ColumnIndex()
 }
 
-func (col *repeatedBufferColumn) Pages() []Page {
-	if err := col.reorder(); err != nil {
-		return []Page{&errorPage{err: err}}
+func (col *repeatedBufferColumn) Page() Page {
+	if rowsHaveBeenReordered(col.rows) {
+		if col.reordering == nil {
+			col.reordering = col.Clone().(*repeatedBufferColumn)
+		}
+
+		maxLen := maxRowLengthOf(col.rows)
+		if maxLen > uint32(cap(col.buffer)) {
+			col.buffer = make([]Value, maxLen)
+		}
+
+		buffer := col.buffer[:maxLen]
+		column := col.reordering
+		column.Reset()
+
+		for _, row := range col.rows {
+			numNulls := countLevelsNotEqual(col.definitionLevels[row.offset:row.offset+row.length], col.maxDefinitionLevel)
+			numValues := int(row.length) - numNulls
+
+			for i := 0; i < numValues; i++ {
+				var err error
+				if buffer, err = col.base.ReadRowAt(buffer[:0], int(row.offset)+i); err != nil {
+					return newErrorPage(col.ColumnIndex(), "reordering rows of repeated column: %w", err)
+				}
+				if err = column.base.WriteRow(buffer); err != nil {
+					return newErrorPage(col.ColumnIndex(), "reordering rows of repeated column: %w", err)
+				}
+			}
+		}
+
+		for _, row := range col.rows {
+			column.rows = append(column.rows, region{
+				offset: uint32(len(column.repetitionLevels)),
+				length: row.length,
+			})
+			column.repetitionLevels = append(column.repetitionLevels, col.repetitionLevels[row.offset:row.offset+row.length]...)
+			column.definitionLevels = append(column.definitionLevels, col.definitionLevels[row.offset:row.offset+row.length]...)
+		}
+
+		col.swapReorderingBuffer(column)
 	}
-	return pagesWithDefinitionLevels(
-		col.base.Pages(),
+
+	return newRepeatedPage(
+		col.base.Page(),
+		col.maxRepetitionLevel,
 		col.maxDefinitionLevel,
+		col.repetitionLevels,
 		col.definitionLevels,
-		func(page Page, i, j int) Page {
-			return newRepeatedPage(page,
-				col.maxRepetitionLevel,
-				col.maxDefinitionLevel,
-				col.repetitionLevels[i:j],
-				col.definitionLevels[i:j],
-			)
-		},
 	)
 }
 
@@ -350,6 +420,44 @@ func (col *repeatedBufferColumn) Less(i, j int) bool {
 
 func (col *repeatedBufferColumn) Swap(i, j int) {
 	col.rows[i], col.rows[j] = col.rows[j], col.rows[i]
+}
+
+func (col *repeatedBufferColumn) WriteValues(values []Value) (n int, err error) {
+	// The values may belong to the last row that was written if they do not
+	// start with a repetition level less than the column's maximum.
+	i := 0
+
+	for i < len(values) && values[i].repetitionLevel == col.maxRepetitionLevel {
+		i++
+	}
+
+	if i > 0 {
+		row := values[:i]
+		values = values[i:]
+		lastRow := &col.rows[len(col.rows)-1]
+
+		for i, v := range row {
+			if v.definitionLevel == col.maxDefinitionLevel {
+				if _, err := col.base.WriteValues(row[i : i+1]); err != nil {
+					return n, err
+				}
+				n++
+			}
+			lastRow.length++
+			col.repetitionLevels = append(col.repetitionLevels, v.repetitionLevel)
+			col.definitionLevels = append(col.definitionLevels, v.definitionLevel)
+		}
+	}
+
+	forEachRowOf(values, col.maxRepetitionLevel, func(row Row) bool {
+		if err = col.WriteRow(row); err != nil {
+			return false
+		}
+		n += len(row)
+		return true
+	})
+
+	return n, err
 }
 
 func (col *repeatedBufferColumn) WriteRow(row Row) error {
@@ -422,59 +530,10 @@ func (col *repeatedBufferColumn) ReadRowAt(row Row, index int) (Row, error) {
 }
 
 func (col *repeatedBufferColumn) Values() ValueReader {
-	if err := col.reorder(); err != nil {
-		return &errorValueReader{err: err}
-	}
-	return &repeatedPageReader{
-		values:             col.base.Values(),
-		maxRepetitionLevel: col.maxRepetitionLevel,
-		maxDefinitionLevel: col.maxDefinitionLevel,
-		definitionLevels:   col.definitionLevels,
-		repetitionLevels:   col.repetitionLevels,
-	}
+	return &repeatedPageReader{page: col.Page().(*repeatedPage)}
 }
 
 func (col *repeatedBufferColumn) reorder() error {
-	if rowsHaveBeenReordered(col.rows) {
-		if col.reordering == nil {
-			col.reordering = col.Clone().(*repeatedBufferColumn)
-		}
-
-		maxLen := maxRowLengthOf(col.rows)
-		if maxLen > uint32(cap(col.buffer)) {
-			col.buffer = make([]Value, maxLen)
-		}
-
-		buffer := col.buffer[:maxLen]
-		column := col.reordering
-		column.Reset()
-
-		for _, row := range col.rows {
-			numNulls := countLevelsNotEqual(col.definitionLevels[row.offset:row.offset+row.length], col.maxDefinitionLevel)
-			numValues := int(row.length) - numNulls
-
-			for i := 0; i < numValues; i++ {
-				var err error
-				if buffer, err = col.base.ReadRowAt(buffer[:0], int(row.offset)+i); err != nil {
-					return fmt.Errorf("reordering rows of repeated column: %w", err)
-				}
-				if err = column.base.WriteRow(buffer); err != nil {
-					return fmt.Errorf("reordering rows of repeated column: %w", err)
-				}
-			}
-		}
-
-		for _, row := range col.rows {
-			column.rows = append(column.rows, region{
-				offset: uint32(len(column.repetitionLevels)),
-				length: row.length,
-			})
-			column.repetitionLevels = append(column.repetitionLevels, col.repetitionLevels[row.offset:row.offset+row.length]...)
-			column.definitionLevels = append(column.definitionLevels, col.definitionLevels[row.offset:row.offset+row.length]...)
-		}
-
-		col.swapReorderingBuffer(column)
-	}
 
 	return nil
 }
@@ -521,9 +580,7 @@ func (col *booleanBufferColumn) Clone() BufferColumn {
 
 func (col *booleanBufferColumn) Dictionary() Dictionary { return nil }
 
-func (col *booleanBufferColumn) Index() int { return int(^col.columnIndex) }
-
-func (col *booleanBufferColumn) Pages() []Page { return []Page{&col.booleanPage} }
+func (col *booleanBufferColumn) Page() Page { return &col.booleanPage }
 
 func (col *booleanBufferColumn) Reset() { col.values = col.values[:0] }
 
@@ -537,6 +594,13 @@ func (col *booleanBufferColumn) Less(i, j int) bool {
 
 func (col *booleanBufferColumn) Swap(i, j int) {
 	col.values[i], col.values[j] = col.values[j], col.values[i]
+}
+
+func (col *booleanBufferColumn) WriteValues(values []Value) (int, error) {
+	for _, v := range values {
+		col.values = append(col.values, v.Boolean())
+	}
+	return len(values), nil
 }
 
 func (col *booleanBufferColumn) WriteRow(row Row) error {
@@ -585,9 +649,7 @@ func (col *int32BufferColumn) Clone() BufferColumn {
 
 func (col *int32BufferColumn) Dictionary() Dictionary { return nil }
 
-func (col *int32BufferColumn) Pages() []Page { return []Page{&col.int32Page} }
-
-func (col *int32BufferColumn) Index() int { return int(^col.columnIndex) }
+func (col *int32BufferColumn) Page() Page { return &col.int32Page }
 
 func (col *int32BufferColumn) Reset() { col.values = col.values[:0] }
 
@@ -599,6 +661,13 @@ func (col *int32BufferColumn) Less(i, j int) bool { return col.values[i] < col.v
 
 func (col *int32BufferColumn) Swap(i, j int) {
 	col.values[i], col.values[j] = col.values[j], col.values[i]
+}
+
+func (col *int32BufferColumn) WriteValues(values []Value) (int, error) {
+	for _, v := range values {
+		col.values = append(col.values, v.Int32())
+	}
+	return len(values), nil
 }
 
 func (col *int32BufferColumn) WriteRow(row Row) error {
@@ -647,9 +716,7 @@ func (col *int64BufferColumn) Clone() BufferColumn {
 
 func (col *int64BufferColumn) Dictionary() Dictionary { return nil }
 
-func (col *int64BufferColumn) Index() int { return int(^col.columnIndex) }
-
-func (col *int64BufferColumn) Pages() []Page { return []Page{&col.int64Page} }
+func (col *int64BufferColumn) Page() Page { return &col.int64Page }
 
 func (col *int64BufferColumn) Reset() { col.values = col.values[:0] }
 
@@ -661,6 +728,13 @@ func (col *int64BufferColumn) Less(i, j int) bool { return col.values[i] < col.v
 
 func (col *int64BufferColumn) Swap(i, j int) {
 	col.values[i], col.values[j] = col.values[j], col.values[i]
+}
+
+func (col *int64BufferColumn) WriteValues(values []Value) (int, error) {
+	for _, v := range values {
+		col.values = append(col.values, v.Int64())
+	}
+	return len(values), nil
 }
 
 func (col *int64BufferColumn) WriteRow(row Row) error {
@@ -709,9 +783,7 @@ func (col *int96BufferColumn) Clone() BufferColumn {
 
 func (col *int96BufferColumn) Dictionary() Dictionary { return nil }
 
-func (col *int96BufferColumn) Index() int { return int(^col.columnIndex) }
-
-func (col *int96BufferColumn) Pages() []Page { return []Page{&col.int96Page} }
+func (col *int96BufferColumn) Page() Page { return &col.int96Page }
 
 func (col *int96BufferColumn) Reset() { col.values = col.values[:0] }
 
@@ -723,6 +795,13 @@ func (col *int96BufferColumn) Less(i, j int) bool { return col.values[i].Less(co
 
 func (col *int96BufferColumn) Swap(i, j int) {
 	col.values[i], col.values[j] = col.values[j], col.values[i]
+}
+
+func (col *int96BufferColumn) WriteValues(values []Value) (int, error) {
+	for _, v := range values {
+		col.values = append(col.values, v.Int96())
+	}
+	return len(values), nil
 }
 
 func (col *int96BufferColumn) WriteRow(row Row) error {
@@ -771,9 +850,7 @@ func (col *floatBufferColumn) Clone() BufferColumn {
 
 func (col *floatBufferColumn) Dictionary() Dictionary { return nil }
 
-func (col *floatBufferColumn) Index() int { return int(^col.columnIndex) }
-
-func (col *floatBufferColumn) Pages() []Page { return []Page{&col.floatPage} }
+func (col *floatBufferColumn) Page() Page { return &col.floatPage }
 
 func (col *floatBufferColumn) Reset() { col.values = col.values[:0] }
 
@@ -785,6 +862,13 @@ func (col *floatBufferColumn) Less(i, j int) bool { return col.values[i] < col.v
 
 func (col *floatBufferColumn) Swap(i, j int) {
 	col.values[i], col.values[j] = col.values[j], col.values[i]
+}
+
+func (col *floatBufferColumn) WriteValues(values []Value) (int, error) {
+	for _, v := range values {
+		col.values = append(col.values, v.Float())
+	}
+	return len(values), nil
 }
 
 func (col *floatBufferColumn) WriteRow(row Row) error {
@@ -833,9 +917,7 @@ func (col *doubleBufferColumn) Clone() BufferColumn {
 
 func (col *doubleBufferColumn) Dictionary() Dictionary { return nil }
 
-func (col *doubleBufferColumn) Index() int { return int(^col.columnIndex) }
-
-func (col *doubleBufferColumn) Pages() []Page { return []Page{&col.doublePage} }
+func (col *doubleBufferColumn) Page() Page { return &col.doublePage }
 
 func (col *doubleBufferColumn) Reset() { col.values = col.values[:0] }
 
@@ -847,6 +929,13 @@ func (col *doubleBufferColumn) Less(i, j int) bool { return col.values[i] < col.
 
 func (col *doubleBufferColumn) Swap(i, j int) {
 	col.values[i], col.values[j] = col.values[j], col.values[i]
+}
+
+func (col *doubleBufferColumn) WriteValues(values []Value) (int, error) {
+	for _, v := range values {
+		col.values = append(col.values, v.Double())
+	}
+	return len(values), nil
 }
 
 func (col *doubleBufferColumn) WriteRow(row Row) error {
@@ -895,9 +984,7 @@ func (col *byteArrayBufferColumn) Clone() BufferColumn {
 
 func (col *byteArrayBufferColumn) Dictionary() Dictionary { return nil }
 
-func (col *byteArrayBufferColumn) Index() int { return int(^col.columnIndex) }
-
-func (col *byteArrayBufferColumn) Pages() []Page { return []Page{&col.byteArrayPage} }
+func (col *byteArrayBufferColumn) Page() Page { return &col.byteArrayPage }
 
 func (col *byteArrayBufferColumn) Reset() { col.values.Reset() }
 
@@ -908,6 +995,13 @@ func (col *byteArrayBufferColumn) Len() int { return col.values.Len() }
 func (col *byteArrayBufferColumn) Less(i, j int) bool { return col.values.Less(i, j) }
 
 func (col *byteArrayBufferColumn) Swap(i, j int) { col.values.Swap(i, j) }
+
+func (col *byteArrayBufferColumn) WriteValues(values []Value) (int, error) {
+	for _, v := range values {
+		col.values.Push(v.ByteArray())
+	}
+	return len(values), nil
+}
 
 func (col *byteArrayBufferColumn) WriteRow(row Row) error {
 	if len(row) == 0 {
@@ -962,9 +1056,7 @@ func (col *fixedLenByteArrayBufferColumn) Clone() BufferColumn {
 
 func (col *fixedLenByteArrayBufferColumn) Dictionary() Dictionary { return nil }
 
-func (col *fixedLenByteArrayBufferColumn) Index() int { return int(^col.columnIndex) }
-
-func (col *fixedLenByteArrayBufferColumn) Pages() []Page { return []Page{&col.fixedLenByteArrayPage} }
+func (col *fixedLenByteArrayBufferColumn) Page() Page { return &col.fixedLenByteArrayPage }
 
 func (col *fixedLenByteArrayBufferColumn) Reset() { col.data = col.data[:0] }
 
@@ -987,6 +1079,13 @@ func (col *fixedLenByteArrayBufferColumn) index(i int) []byte {
 	j := (i + 0) * col.size
 	k := (i + 1) * col.size
 	return col.data[j:k:k]
+}
+
+func (col *fixedLenByteArrayBufferColumn) WriteValues(values []Value) (int, error) {
+	for _, v := range values {
+		col.data = append(col.data, v.ByteArray()...)
+	}
+	return len(values), nil
 }
 
 func (col *fixedLenByteArrayBufferColumn) WriteRow(row Row) error {
@@ -1021,8 +1120,8 @@ func newUint32BufferColumn(columnIndex, bufferSize int) uint32BufferColumn {
 	return uint32BufferColumn{newInt32BufferColumn(columnIndex, bufferSize)}
 }
 
-func (col uint32BufferColumn) Pages() []Page {
-	return []Page{uint32Page{&col.int32Page}}
+func (col uint32BufferColumn) Page() Page {
+	return uint32Page{&col.int32Page}
 }
 
 func (col uint32BufferColumn) Clone() BufferColumn {
@@ -1043,8 +1142,8 @@ func (col uint64BufferColumn) Clone() BufferColumn {
 	return uint64BufferColumn{col.int64BufferColumn.Clone().(*int64BufferColumn)}
 }
 
-func (col uint64BufferColumn) Pages() []Page {
-	return []Page{uint64Page{&col.int64Page}}
+func (col uint64BufferColumn) Page() Page {
+	return uint64Page{&col.int64Page}
 }
 
 func (col uint64BufferColumn) Less(i, j int) bool {

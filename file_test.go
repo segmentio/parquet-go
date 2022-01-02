@@ -71,7 +71,7 @@ func printColumns(t *testing.T, col *parquet.Column, indent string) {
 				pageType = dictionary.Type()
 
 			case parquet.DataPageHeader:
-				pageReader := parquet.NewPageReader(
+				pageReader := parquet.NewDataPageReader(
 					pageType,
 					col.MaxRepetitionLevel(),
 					col.MaxDefinitionLevel(),

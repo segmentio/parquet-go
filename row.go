@@ -157,6 +157,22 @@ func targetSchemaOf(w RowWriter) *Schema {
 	return nil
 }
 
+func forEachRowOf(values []Value, maxReptitionLevel int8, do func(Row) bool) {
+	for len(values) > 0 {
+		i := 1
+
+		for i < len(values) && values[i].repetitionLevel == maxReptitionLevel {
+			i++
+		}
+
+		if !do(values[:i]) {
+			break
+		}
+
+		values = values[i:]
+	}
+}
+
 func errRowIndexOutOfBounds(rowIndex, rowCount int) error {
 	return fmt.Errorf("row index out of bounds: %d/%d", rowIndex, rowCount)
 }

@@ -14,6 +14,11 @@ import (
 	"github.com/segmentio/parquet/deprecated"
 )
 
+const (
+	// 170 x sizeof(Value) = 4KB
+	defaultValueBufferSize = 170
+)
+
 // The Value type is similar to the reflect.Value abstraction of Go values, but
 // for parquet values. Value instances wrap underlying Go values mapped to one
 // of the parquet physical types.
@@ -43,12 +48,59 @@ type ValueReader interface {
 	ReadValues([]Value) (int, error)
 }
 
+type ValueReaderFrom interface {
+	ReadValuesFrom(ValueReader) (int64, error)
+}
+
 // ValueWriter is an interface implemented by types that support reading
 // batches of values.
 type ValueWriter interface {
 	// Write values from the buffer passed as argument and returns the number
 	// of values written.
 	WriteValues([]Value) (int, error)
+}
+
+type ValueWriterTo interface {
+	WriteValuesTo(ValueWriter) (int64, error)
+}
+
+func CopyValues(dst ValueWriter, src ValueReader) (int64, error) {
+	return copyValues(dst, src, nil)
+}
+
+func copyValues(dst ValueWriter, src ValueReader, buf []Value) (written int64, err error) {
+	if wt, ok := src.(ValueWriterTo); ok {
+		return wt.WriteValuesTo(dst)
+	}
+
+	if rf, ok := dst.(ValueReaderFrom); ok {
+		return rf.ReadValuesFrom(src)
+	}
+
+	if len(buf) == 0 {
+		buf = make([]Value, defaultValueBufferSize)
+	}
+
+	defer clearValues(buf)
+
+	for {
+		n, err := src.ReadValues(buf)
+
+		if n > 0 {
+			wn, werr := dst.WriteValues(buf[:n])
+			written += int64(wn)
+			if werr != nil {
+				return written, werr
+			}
+		}
+
+		if err != nil {
+			if err == io.EOF {
+				err = nil
+			}
+			return written, err
+		}
+	}
 }
 
 // ValueOf constructs a parquet value from a Go value v.

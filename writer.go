@@ -154,39 +154,6 @@ func (w *Writer) ReadRowsFrom(rows RowReader) (written int64, err error) {
 // The returned value will be nil if no schema has yet been configured on w.
 func (w *Writer) Schema() *Schema { return w.schema }
 
-type rowGroupWriter struct {
-	writer offsetTrackingWriter
-	pages  unbufferedPageWriter
-
-	columns       []rowGroupWriterColumn
-	colOrders     []format.ColumnOrder
-	colSchema     []format.SchemaElement
-	rowGroups     []format.RowGroup
-	columnIndexes [][]format.ColumnIndex
-	offsetIndexes [][]format.OffsetIndex
-
-	numRows    int64
-	fileOffset int64
-	targetSize int64
-}
-
-type rowGroupWriterColumn struct {
-	typ        format.Type
-	codec      format.CompressionCodec
-	path       []string
-	dictionary Dictionary
-	writer     *bufferedPageWriter
-	chunks     *columnChunkWriter
-}
-
-func (col *rowGroupWriterColumn) reset() {
-	if col.dictionary != nil {
-		col.dictionary.Reset()
-	}
-	col.writer.reset()
-	col.chunks.reset()
-}
-
 type rowGroup struct{ *writer }
 
 func (g rowGroup) Columns() (columns []RowGroupColumn) {
@@ -207,11 +174,11 @@ func (g rowGroup) Rows() RowReader { return nil }
 
 type rowGroupColumn struct{ *columnChunkWriter }
 
+func (c rowGroupColumn) ColumnIndex() int { return c.columnIndex }
+
 func (c rowGroupColumn) Dictionary() Dictionary { return c.dictionary }
 
-func (c rowGroupColumn) Index() int { return c.columnIndex }
-
-func (c rowGroupColumn) Pages() []Page { return nil }
+func (c rowGroupColumn) Values() ValueReader { return nil }
 
 type writer struct {
 	writer offsetTrackingWriter
@@ -231,6 +198,7 @@ type writer struct {
 	buffers struct {
 		header bytes.Buffer
 		page   bytes.Buffer
+		values []Value
 	}
 
 	columns     []*columnChunkWriter
@@ -248,14 +216,13 @@ type writer struct {
 func newWriter(output io.Writer, config *WriterConfig) *writer {
 	w := new(writer)
 	w.writer.Reset(output)
-
+	w.pages.writer = &w.writer
 	w.createdBy = config.CreatedBy
 	w.metadata = make([]format.KeyValue, 0, len(config.KeyValueMetadata))
 	for k, v := range config.KeyValueMetadata {
 		w.metadata = append(w.metadata, format.KeyValue{Key: k, Value: v})
 	}
 	sortKeyValueMetadata(w.metadata)
-
 	w.rowGroup.schema = config.Schema
 	w.rowGroup.targetByteSize = config.RowGroupTargetSize
 
@@ -332,6 +299,8 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 			isCompressed: compression.CompressionCodec() != format.Uncompressed && (dataPageType != format.DataPageV2 || dictionary == nil),
 		}
 
+		c.writer = &c.pages
+
 		// Those buffers are scratch space used to generate the page header and
 		// content, they are shared by all column chunks because they are only
 		// used during calls to writeDictionaryPage or writeDataPage, which are
@@ -343,7 +312,7 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 			c.commit = (*columnChunkWriter).commitRepeated
 			c.values = make([]Value, 0, 10)
 		} else {
-			c.insert = (*columnChunkWriter).writeRow
+			c.insert = (*columnChunkWriter).WriteRow
 			c.commit = func(*columnChunkWriter) error { return nil }
 		}
 
@@ -364,7 +333,6 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 		w.columnOrders = append(w.columnOrders, *columnType.ColumnOrder())
 	})
 
-	w.pages.writer = &w.writer
 	w.columnChunk = make([]format.ColumnChunk, len(w.columns))
 	w.columnIndex = make([]format.ColumnIndex, len(w.columns))
 	w.offsetIndex = make([]format.OffsetIndex, len(w.columns))
@@ -375,10 +343,6 @@ func (w *writer) clear() {
 	w.rowGroup.numRows = 0
 	w.rowGroup.totalCompressedSize = 0
 	w.rowGroup.totalByteSize = 0
-
-	for _, c := range w.columns {
-		c.reset()
-	}
 
 	for i := range w.columnChunk {
 		w.columnChunk[i] = format.ColumnChunk{}
@@ -445,8 +409,9 @@ func (w *writer) Flush() error {
 
 func (w *writer) WriteRow(row Row) error {
 	defer func() {
-		for i := range w.columns {
-			w.columns[i].clear()
+		for _, c := range w.columns {
+			clearValues(c.values)
+			c.values = c.values[:0]
 		}
 	}()
 
@@ -537,9 +502,12 @@ func (w *writer) writeRowGroup(rowGroup RowGroup) (int64, error) {
 }
 
 func (w *writer) WriteRowGroupColumn(rowGroupColumn RowGroupColumn) (int64, error) {
-	defer w.pages.reset()
+	columnIndex := rowGroupColumn.ColumnIndex()
+	defer func() {
+		w.pages.reset()
+		w.columns[columnIndex].reset()
+	}()
 
-	columnIndex := rowGroupColumn.Index()
 	dictionaryPageOffset := int64(0)
 	totalUncompressedSize := int64(0)
 	totalCompressedSize := int64(0)
@@ -602,33 +570,38 @@ func (w *writer) WriteRowGroupColumn(rowGroupColumn RowGroupColumn) (int64, erro
 	return stats.totalRowCount, nil
 }
 
+func (w *writer) WritePage(page Page) (int64, error) {
+	return w.columns[page.ColumnIndex()].WritePage(page)
+}
+
 func (w *writer) writeDataPages(column RowGroupColumn) (pages []format.PageLocation, stats *pageWriterStats, err error) {
 	if c, ok := column.(rowGroupColumn); ok {
 		pages = c.pages.pages()
 		stats = c.pages.stats()
 
 		for _, bufferedPage := range c.pages.buffers {
-			if _, err := io.Copy(w.pages.writer, bufferedPage); err != nil {
-				return pages, stats, err
+			if _, err = io.Copy(w.pages.writer, bufferedPage); err != nil {
+				break
 			}
 		}
 	} else {
 		pages = w.pages.pages()
 		stats = w.pages.stats()
 
-		columnIndex := column.Index()
-		targetPageSize := int64(w.columns[columnIndex].bufferSize)
+		if w.buffers.values == nil {
+			w.buffers.values = make([]Value, defaultValueBufferSize)
+		}
 
-		for _, page := range column.Pages() {
-			err := forEachPageSlice(page, targetPageSize, func(page Page) error {
-				return w.columns[columnIndex].writeDataPage(&w.pages, page)
-			})
-			if err != nil {
-				return pages, stats, err
-			}
+		c := w.columns[column.ColumnIndex()]
+		c.writer = &w.pages
+		defer func() { c.writer = &c.pages }()
+
+		_, err = copyValues(c, column.Values(), w.buffers.values)
+		if err == nil {
+			err = c.flush()
 		}
 	}
-	return pages, stats, nil
+	return pages, stats, err
 }
 
 func (w *writer) writeFileHeader() error {
@@ -710,11 +683,12 @@ func (w *writer) writeFileFooter() error {
 }
 
 type columnChunkWriter struct {
-	insert func(*columnChunkWriter, []Value) error
+	insert func(*columnChunkWriter, Row) error
 	commit func(*columnChunkWriter) error
 	values []Value
 
 	pages         bufferedPageWriter
+	writer        pageWriter
 	columnPath    []string
 	columnType    Type
 	columnIndexer ColumnIndexer
@@ -787,18 +761,27 @@ func (ccw *columnChunkWriter) statistics(nullCount int64) format.Statistics {
 	}
 }
 
-func (ccw *columnChunkWriter) clear() {
-	clearValues(ccw.values)
-	ccw.values = ccw.values[:0]
+func (ccw *columnChunkWriter) flush() error {
+	if ccw.numValues == 0 {
+		return nil
+	}
+
+	defer func() {
+		ccw.column.Reset()
+		ccw.numValues = 0
+	}()
+
+	_, err := ccw.writeDataPage(ccw.writer, ccw.column.Page())
+	return err
 }
 
-func (ccw *columnChunkWriter) insertRepeated(values []Value) error {
-	ccw.values = append(ccw.values, values...)
+func (ccw *columnChunkWriter) insertRepeated(row Row) error {
+	ccw.values = append(ccw.values, row...)
 	return nil
 }
 
 func (ccw *columnChunkWriter) commitRepeated() error {
-	return ccw.writeRow(ccw.values)
+	return ccw.WriteRow(ccw.values)
 }
 
 func (ccw *columnChunkWriter) newBufferColumn() BufferColumn {
@@ -812,7 +795,19 @@ func (ccw *columnChunkWriter) newBufferColumn() BufferColumn {
 	return column
 }
 
-func (ccw *columnChunkWriter) writeRow(row []Value) error {
+func (ccw *columnChunkWriter) WriteValues(values []Value) (int, error) {
+	if ccw.column == nil {
+		// Lazily create the row group column so we don't need to allocate it if
+		// only WriteRowGroup is called on the parent row group writer.
+		ccw.column = ccw.newBufferColumn()
+		ccw.maxValues = int32(ccw.column.Cap())
+	}
+	n, err := ccw.column.WriteValues(values)
+	ccw.numValues += int32(n)
+	return n, err
+}
+
+func (ccw *columnChunkWriter) WriteRow(row Row) error {
 	if ccw.column == nil {
 		// Lazily create the row group column so we don't need to allocate it if
 		// only WriteRowGroup is called on the parent row group writer.
@@ -833,29 +828,25 @@ func (ccw *columnChunkWriter) writeRow(row []Value) error {
 	return nil
 }
 
-func (ccw *columnChunkWriter) flush() error {
-	if ccw.numValues == 0 {
-		return nil
+func (ccw *columnChunkWriter) WritePage(page Page) (numValues int64, err error) {
+	if err := ccw.flush(); err != nil {
+		return 0, err
 	}
 
-	defer func() {
-		ccw.column.Reset()
-		ccw.numValues = 0
-	}()
+	forEachPageSlice(page, int64(ccw.bufferSize), func(page Page) bool {
+		var n int64
+		n, err = ccw.writeDataPage(ccw.writer, page)
+		numValues += n
+		return err == nil
+	})
 
-	for _, page := range ccw.column.Pages() {
-		if err := ccw.writeDataPage(&ccw.pages, page); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return numValues, err
 }
 
-func (ccw *columnChunkWriter) writeDataPage(writer pageWriter, page Page) error {
+func (ccw *columnChunkWriter) writeDataPage(writer pageWriter, page Page) (int64, error) {
 	numValues := page.NumValues()
 	if numValues == 0 {
-		return nil
+		return 0, nil
 	}
 
 	ccw.page.buffer.Reset()
@@ -870,7 +861,7 @@ func (ccw *columnChunkWriter) writeDataPage(writer pageWriter, page Page) error 
 			ccw.levels.encoder.Reset(&ccw.page.uncompressed)
 			ccw.levels.encoder.SetBitWidth(bits.Len8(ccw.maxRepetitionLevel))
 			if err := page.WriteRepetitionLevelsTo(ccw.levels.encoder); err != nil {
-				return err
+				return 0, err
 			}
 			repetitionLevelsByteLength = int32(ccw.page.uncompressed.offset)
 		}
@@ -879,7 +870,7 @@ func (ccw *columnChunkWriter) writeDataPage(writer pageWriter, page Page) error 
 			ccw.levels.encoder.Reset(&ccw.page.uncompressed)
 			ccw.levels.encoder.SetBitWidth(bits.Len8(ccw.maxDefinitionLevel))
 			if err := page.WriteDefinitionLevelsTo(ccw.levels.encoder); err != nil {
-				return err
+				return 0, err
 			}
 			definitionLevelsByteLength = int32(ccw.page.uncompressed.offset)
 		}
@@ -890,7 +881,7 @@ func (ccw *columnChunkWriter) writeDataPage(writer pageWriter, page Page) error 
 	} else {
 		p, err := ccw.compressedPage(&ccw.page.checksum)
 		if err != nil {
-			return err
+			return 0, err
 		}
 		ccw.page.uncompressed.Reset(p)
 	}
@@ -901,10 +892,10 @@ func (ccw *columnChunkWriter) writeDataPage(writer pageWriter, page Page) error 
 			ccw.levels.encoder.Reset(&ccw.levels.v1)
 			ccw.levels.encoder.SetBitWidth(bits.Len8(ccw.maxRepetitionLevel))
 			if err := page.WriteRepetitionLevelsTo(ccw.levels.encoder); err != nil {
-				return err
+				return 0, err
 			}
 			if err := ccw.levels.v1.Close(); err != nil {
-				return err
+				return 0, err
 			}
 		}
 		if ccw.maxDefinitionLevel > 0 {
@@ -912,10 +903,10 @@ func (ccw *columnChunkWriter) writeDataPage(writer pageWriter, page Page) error 
 			ccw.levels.encoder.Reset(&ccw.levels.v1)
 			ccw.levels.encoder.SetBitWidth(bits.Len8(ccw.maxDefinitionLevel))
 			if err := page.WriteDefinitionLevelsTo(ccw.levels.encoder); err != nil {
-				return err
+				return 0, err
 			}
 			if err := ccw.levels.v1.Close(); err != nil {
-				return err
+				return 0, err
 			}
 		}
 	}
@@ -927,11 +918,11 @@ func (ccw *columnChunkWriter) writeDataPage(writer pageWriter, page Page) error 
 
 	ccw.page.encoder.Reset(&ccw.page.uncompressed)
 	if err := page.WriteTo(ccw.page.encoder); err != nil {
-		return err
+		return 0, err
 	}
 	if ccw.page.compressed != nil {
 		if err := ccw.page.compressed.Close(); err != nil {
-			return err
+			return 0, err
 		}
 	}
 
@@ -973,11 +964,11 @@ func (ccw *columnChunkWriter) writeDataPage(writer pageWriter, page Page) error 
 	}
 
 	if err := ccw.header.encoder.Encode(pageHeader); err != nil {
-		return err
+		return 0, err
 	}
 
 	headerSize := ccw.header.buffer.Len()
-	return writer.writePage(ccw.header.buffer.Bytes(), ccw.page.buffer.Bytes(), pageStats{
+	return int64(numValues), writer.writePage(ccw.header.buffer.Bytes(), ccw.page.buffer.Bytes(), pageStats{
 		pageType:         ccw.dataPageType,
 		encoding:         encoding,
 		numNulls:         int32(numNulls),
@@ -1284,6 +1275,11 @@ var (
 	_ RowWriter            = (*writer)(nil)
 	_ RowGroupWriter       = (*writer)(nil)
 	_ RowGroupColumnWriter = (*writer)(nil)
+	_ PageWriter           = (*writer)(nil)
+
+	_ ValueWriter = (*columnChunkWriter)(nil)
+	_ RowWriter   = (*columnChunkWriter)(nil)
+	_ PageWriter  = (*columnChunkWriter)(nil)
 
 	_ columnPageWriter = (*bufferedPageWriter)(nil)
 	_ columnPageWriter = (*unbufferedPageWriter)(nil)
