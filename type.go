@@ -112,7 +112,7 @@ type Type interface {
 	// Creates a row group buffer column for values of this type.
 	//
 	// The method panics if it is called on a group type.
-	NewBufferColumn(columnIndex, bufferSize int) BufferColumn
+	NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer
 
 	// Creates a decoder for values of this type.
 	//
@@ -194,8 +194,8 @@ func (t booleanType) NewDictionary(bufferSize int) Dictionary {
 	return newBooleanDictionary(t)
 }
 
-func (t booleanType) NewBufferColumn(columnIndex, bufferSize int) BufferColumn {
-	return newBooleanBufferColumn(columnIndex, bufferSize)
+func (t booleanType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newBooleanColumnBuffer(columnIndex, bufferSize)
 }
 
 func (t booleanType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -226,8 +226,8 @@ func (t int32Type) NewDictionary(bufferSize int) Dictionary {
 	return newInt32Dictionary(t, bufferSize)
 }
 
-func (t int32Type) NewBufferColumn(columnIndex, bufferSize int) BufferColumn {
-	return newInt32BufferColumn(columnIndex, bufferSize)
+func (t int32Type) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newInt32ColumnBuffer(columnIndex, bufferSize)
 }
 
 func (t int32Type) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -258,8 +258,8 @@ func (t int64Type) NewDictionary(bufferSize int) Dictionary {
 	return newInt64Dictionary(t, bufferSize)
 }
 
-func (t int64Type) NewBufferColumn(columnIndex, bufferSize int) BufferColumn {
-	return newInt64BufferColumn(columnIndex, bufferSize)
+func (t int64Type) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newInt64ColumnBuffer(columnIndex, bufferSize)
 }
 
 func (t int64Type) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -290,8 +290,8 @@ func (t int96Type) NewDictionary(bufferSize int) Dictionary {
 	return newInt96Dictionary(t, bufferSize)
 }
 
-func (t int96Type) NewBufferColumn(columnIndex, bufferSize int) BufferColumn {
-	return newInt96BufferColumn(columnIndex, bufferSize)
+func (t int96Type) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newInt96ColumnBuffer(columnIndex, bufferSize)
 }
 
 func (t int96Type) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -322,8 +322,8 @@ func (t floatType) NewDictionary(bufferSize int) Dictionary {
 	return newFloatDictionary(t, bufferSize)
 }
 
-func (t floatType) NewBufferColumn(columnIndex, bufferSize int) BufferColumn {
-	return newFloatBufferColumn(columnIndex, bufferSize)
+func (t floatType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newFloatColumnBuffer(columnIndex, bufferSize)
 }
 
 func (t floatType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -352,8 +352,8 @@ func (t doubleType) NewDictionary(bufferSize int) Dictionary {
 	return newDoubleDictionary(t, bufferSize)
 }
 
-func (t doubleType) NewBufferColumn(columnIndex, bufferSize int) BufferColumn {
-	return newDoubleBufferColumn(columnIndex, bufferSize)
+func (t doubleType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newDoubleColumnBuffer(columnIndex, bufferSize)
 }
 
 func (t doubleType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -384,8 +384,8 @@ func (t byteArrayType) NewDictionary(bufferSize int) Dictionary {
 	return newByteArrayDictionary(t, bufferSize)
 }
 
-func (t byteArrayType) NewBufferColumn(columnIndex, bufferSize int) BufferColumn {
-	return newByteArrayBufferColumn(columnIndex, bufferSize)
+func (t byteArrayType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newByteArrayColumnBuffer(columnIndex, bufferSize)
 }
 
 func (t byteArrayType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -421,8 +421,8 @@ func (t *fixedLenByteArrayType) NewDictionary(bufferSize int) Dictionary {
 	return newFixedLenByteArrayDictionary(t, bufferSize)
 }
 
-func (t *fixedLenByteArrayType) NewBufferColumn(columnIndex, bufferSize int) BufferColumn {
-	return newFixedLenByteArrayBufferColumn(t.length, columnIndex, bufferSize)
+func (t *fixedLenByteArrayType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newFixedLenByteArrayColumnBuffer(t.length, columnIndex, bufferSize)
 }
 
 func (t *fixedLenByteArrayType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -574,18 +574,18 @@ func (t *intType) NewDictionary(bufferSize int) Dictionary {
 	}
 }
 
-func (t *intType) NewBufferColumn(columnIndex, bufferSize int) BufferColumn {
+func (t *intType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 	if t.IsSigned {
 		if t.BitWidth == 64 {
-			return newInt64BufferColumn(columnIndex, bufferSize)
+			return newInt64ColumnBuffer(columnIndex, bufferSize)
 		} else {
-			return newInt32BufferColumn(columnIndex, bufferSize)
+			return newInt32ColumnBuffer(columnIndex, bufferSize)
 		}
 	} else {
 		if t.BitWidth == 64 {
-			return newUint64BufferColumn(columnIndex, bufferSize)
+			return newUint64ColumnBuffer(columnIndex, bufferSize)
 		} else {
-			return newUint32BufferColumn(columnIndex, bufferSize)
+			return newUint32ColumnBuffer(columnIndex, bufferSize)
 		}
 	}
 }
@@ -673,8 +673,8 @@ func (t *stringType) NewDictionary(bufferSize int) Dictionary {
 	return newByteArrayDictionary(t, bufferSize)
 }
 
-func (t *stringType) NewBufferColumn(columnIndex, bufferSize int) BufferColumn {
-	return newByteArrayBufferColumn(columnIndex, bufferSize)
+func (t *stringType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newByteArrayColumnBuffer(columnIndex, bufferSize)
 }
 
 func (t *stringType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -724,8 +724,8 @@ func (t *uuidType) NewDictionary(bufferSize int) Dictionary {
 	return newFixedLenByteArrayDictionary(t, bufferSize)
 }
 
-func (t *uuidType) NewBufferColumn(columnIndex, bufferSize int) BufferColumn {
-	return newFixedLenByteArrayBufferColumn(16, columnIndex, bufferSize)
+func (t *uuidType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newFixedLenByteArrayColumnBuffer(16, columnIndex, bufferSize)
 }
 
 func (t *uuidType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -777,8 +777,8 @@ func (t *enumType) NewDictionary(bufferSize int) Dictionary {
 	return newByteArrayDictionary(t, bufferSize)
 }
 
-func (t *enumType) NewBufferColumn(columnIndex, bufferSize int) BufferColumn {
-	return newByteArrayBufferColumn(columnIndex, bufferSize)
+func (t *enumType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newByteArrayColumnBuffer(columnIndex, bufferSize)
 }
 
 func (t *enumType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -830,8 +830,8 @@ func (t *jsonType) NewDictionary(bufferSize int) Dictionary {
 	return newByteArrayDictionary(t, bufferSize)
 }
 
-func (t *jsonType) NewBufferColumn(columnIndex, bufferSize int) BufferColumn {
-	return newByteArrayBufferColumn(columnIndex, bufferSize)
+func (t *jsonType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newByteArrayColumnBuffer(columnIndex, bufferSize)
 }
 
 func (t *jsonType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -879,8 +879,8 @@ func (t *bsonType) NewDictionary(bufferSize int) Dictionary {
 	return newByteArrayDictionary(t, bufferSize)
 }
 
-func (t *bsonType) NewBufferColumn(columnIndex, bufferSize int) BufferColumn {
-	return newByteArrayBufferColumn(columnIndex, bufferSize)
+func (t *bsonType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newByteArrayColumnBuffer(columnIndex, bufferSize)
 }
 
 func (t *bsonType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -924,8 +924,8 @@ func (t *dateType) NewDictionary(bufferSize int) Dictionary {
 	return newInt32Dictionary(t, bufferSize)
 }
 
-func (t *dateType) NewBufferColumn(columnIndex, bufferSize int) BufferColumn {
-	return newInt32BufferColumn(columnIndex, bufferSize)
+func (t *dateType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newInt32ColumnBuffer(columnIndex, bufferSize)
 }
 
 func (t *dateType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -1048,11 +1048,11 @@ func (t *timeType) NewDictionary(bufferSize int) Dictionary {
 	}
 }
 
-func (t *timeType) NewBufferColumn(columnIndex, bufferSize int) BufferColumn {
+func (t *timeType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 	if t.Unit.Millis != nil {
-		return newInt32BufferColumn(columnIndex, bufferSize)
+		return newInt32ColumnBuffer(columnIndex, bufferSize)
 	} else {
-		return newInt64BufferColumn(columnIndex, bufferSize)
+		return newInt64ColumnBuffer(columnIndex, bufferSize)
 	}
 }
 
@@ -1108,8 +1108,8 @@ func (t *timestampType) NewDictionary(bufferSize int) Dictionary {
 	return newInt64Dictionary(t, bufferSize)
 }
 
-func (t *timestampType) NewBufferColumn(columnIndex, bufferSize int) BufferColumn {
-	return newInt64BufferColumn(columnIndex, bufferSize)
+func (t *timestampType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newInt64ColumnBuffer(columnIndex, bufferSize)
 }
 
 func (t *timestampType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -1157,7 +1157,7 @@ func (t *listType) NewDictionary(bufferSize int) Dictionary {
 	panic("cannot create dictionary from parquet LIST type")
 }
 
-func (t *listType) NewBufferColumn(columnIndex, bufferSize int) BufferColumn {
+func (t *listType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 	panic("cannot create row group column from parquet LIST type")
 }
 
@@ -1211,7 +1211,7 @@ func (t *mapType) NewDictionary(bufferSize int) Dictionary {
 	panic("cannot create dictionary from parquet MAP type")
 }
 
-func (t *mapType) NewBufferColumn(columnIndex, bufferSize int) BufferColumn {
+func (t *mapType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 	panic("cannot create row group column from parquet MAP type")
 }
 
@@ -1247,7 +1247,7 @@ func (t *nullType) NewDictionary(int) Dictionary {
 	panic("cannot create dictionary from parquet NULL type")
 }
 
-func (t *nullType) NewBufferColumn(int, int) BufferColumn {
+func (t *nullType) NewColumnBuffer(int, int) ColumnBuffer {
 	panic("cannot create row group column from parquet NULL type")
 }
 
@@ -1275,7 +1275,7 @@ func (groupType) NewDictionary(int) Dictionary {
 	panic("cannot create dictionary from parquet group")
 }
 
-func (t groupType) NewBufferColumn(int, int) BufferColumn {
+func (t groupType) NewColumnBuffer(int, int) ColumnBuffer {
 	panic("cannot create row group column from parquet group")
 }
 

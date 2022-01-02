@@ -692,7 +692,7 @@ type columnChunkWriter struct {
 	columnPath    []string
 	columnType    Type
 	columnIndexer ColumnIndexer
-	column        BufferColumn
+	column        ColumnBuffer
 	compression   compress.Codec
 	dictionary    Dictionary
 
@@ -784,13 +784,13 @@ func (ccw *columnChunkWriter) commitRepeated() error {
 	return ccw.WriteRow(ccw.values)
 }
 
-func (ccw *columnChunkWriter) newBufferColumn() BufferColumn {
-	column := ccw.columnType.NewBufferColumn(ccw.columnIndex, ccw.bufferSize)
+func (ccw *columnChunkWriter) newColumnBuffer() ColumnBuffer {
+	column := ccw.columnType.NewColumnBuffer(ccw.columnIndex, ccw.bufferSize)
 	switch {
 	case ccw.maxRepetitionLevel > 0:
-		column = newRepeatedBufferColumn(column, ccw.maxRepetitionLevel, ccw.maxDefinitionLevel, nullsGoLast)
+		column = newRepeatedColumnBuffer(column, ccw.maxRepetitionLevel, ccw.maxDefinitionLevel, nullsGoLast)
 	case ccw.maxDefinitionLevel > 0:
-		column = newOptionalBufferColumn(column, ccw.maxDefinitionLevel, nullsGoLast)
+		column = newOptionalColumnBuffer(column, ccw.maxDefinitionLevel, nullsGoLast)
 	}
 	return column
 }
@@ -799,7 +799,7 @@ func (ccw *columnChunkWriter) WriteValues(values []Value) (int, error) {
 	if ccw.column == nil {
 		// Lazily create the row group column so we don't need to allocate it if
 		// only WriteRowGroup is called on the parent row group writer.
-		ccw.column = ccw.newBufferColumn()
+		ccw.column = ccw.newColumnBuffer()
 		ccw.maxValues = int32(ccw.column.Cap())
 	}
 	n, err := ccw.column.WriteValues(values)
@@ -811,7 +811,7 @@ func (ccw *columnChunkWriter) WriteRow(row Row) error {
 	if ccw.column == nil {
 		// Lazily create the row group column so we don't need to allocate it if
 		// only WriteRowGroup is called on the parent row group writer.
-		ccw.column = ccw.newBufferColumn()
+		ccw.column = ccw.newColumnBuffer()
 		ccw.maxValues = int32(ccw.column.Cap())
 	}
 

@@ -683,8 +683,8 @@ func newIndexedType(typ Type, dict Dictionary) *indexedType {
 	return &indexedType{Type: typ, dict: dict}
 }
 
-func (t *indexedType) NewBufferColumn(columnIndex, bufferSize int) BufferColumn {
-	return newIndexedBufferColumn(t.dict, columnIndex, bufferSize)
+func (t *indexedType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newIndexedColumnBuffer(t.dict, columnIndex, bufferSize)
 }
 
 func (t *indexedType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -765,10 +765,10 @@ func (r *indexedPageReader) WriteValuesTo(w ValueWriter) (int64, error) {
 	return writePageValuesTo(w, r, r.page)
 }
 
-type indexedBufferColumn struct{ indexedPage }
+type indexedColumnBuffer struct{ indexedPage }
 
-func newIndexedBufferColumn(dict Dictionary, columnIndex, bufferSize int) *indexedBufferColumn {
-	return &indexedBufferColumn{
+func newIndexedColumnBuffer(dict Dictionary, columnIndex, bufferSize int) *indexedColumnBuffer {
+	return &indexedColumnBuffer{
 		indexedPage: indexedPage{
 			dict:        dict,
 			values:      make([]int32, 0, bufferSize/4),
@@ -777,8 +777,8 @@ func newIndexedBufferColumn(dict Dictionary, columnIndex, bufferSize int) *index
 	}
 }
 
-func (col *indexedBufferColumn) Clone() BufferColumn {
-	return &indexedBufferColumn{
+func (col *indexedColumnBuffer) Clone() ColumnBuffer {
+	return &indexedColumnBuffer{
 		indexedPage: indexedPage{
 			dict:        col.dict,
 			values:      append([]int32{}, col.values...),
@@ -787,35 +787,35 @@ func (col *indexedBufferColumn) Clone() BufferColumn {
 	}
 }
 
-func (col *indexedBufferColumn) Dictionary() Dictionary { return col.dict }
+func (col *indexedColumnBuffer) Dictionary() Dictionary { return col.dict }
 
-func (col *indexedBufferColumn) Page() Page { return &col.indexedPage }
+func (col *indexedColumnBuffer) Page() Page { return &col.indexedPage }
 
-func (col *indexedBufferColumn) Reset() { col.values = col.values[:0] }
+func (col *indexedColumnBuffer) Reset() { col.values = col.values[:0] }
 
-func (col *indexedBufferColumn) Cap() int { return cap(col.values) }
+func (col *indexedColumnBuffer) Cap() int { return cap(col.values) }
 
-func (col *indexedBufferColumn) Len() int { return len(col.values) }
+func (col *indexedColumnBuffer) Len() int { return len(col.values) }
 
-func (col *indexedBufferColumn) Less(i, j int) bool {
+func (col *indexedColumnBuffer) Less(i, j int) bool {
 	u := col.dict.Index(int(col.values[i]))
 	v := col.dict.Index(int(col.values[j]))
 	t := col.dict.Type()
 	return t.Compare(u, v) < 0
 }
 
-func (col *indexedBufferColumn) Swap(i, j int) {
+func (col *indexedColumnBuffer) Swap(i, j int) {
 	col.values[i], col.values[j] = col.values[j], col.values[i]
 }
 
-func (col *indexedBufferColumn) WriteValues(values []Value) (int, error) {
+func (col *indexedColumnBuffer) WriteValues(values []Value) (int, error) {
 	for _, v := range values {
 		col.values = append(col.values, int32(col.dict.Insert(v)))
 	}
 	return len(values), nil
 }
 
-func (col *indexedBufferColumn) WriteRow(row Row) error {
+func (col *indexedColumnBuffer) WriteRow(row Row) error {
 	if len(row) == 0 {
 		return errRowHasTooFewValues(len(row))
 	}
@@ -826,7 +826,7 @@ func (col *indexedBufferColumn) WriteRow(row Row) error {
 	return nil
 }
 
-func (col *indexedBufferColumn) ReadRowAt(row Row, index int) (Row, error) {
+func (col *indexedColumnBuffer) ReadRowAt(row Row, index int) (Row, error) {
 	switch {
 	case index < 0:
 		return row, errRowIndexOutOfBounds(index, len(col.values))

@@ -15,8 +15,8 @@ type Buffer struct {
 	schema  *Schema
 	rowbuf  []Value
 	colbuf  [][]Value
-	columns []BufferColumn
-	sorted  []BufferColumn
+	columns []ColumnBuffer
+	sorted  []ColumnBuffer
 	readRow columnReadRowFunc
 	numRows int
 }
@@ -52,18 +52,18 @@ func (buf *Buffer) configure(schema *Schema) {
 			columnType = dictionary.Type()
 		}
 
-		column := columnType.NewBufferColumn(leaf.columnIndex, bufferSize)
+		column := columnType.NewColumnBuffer(leaf.columnIndex, bufferSize)
 		switch {
 		case leaf.maxRepetitionLevel > 0:
-			column = newRepeatedBufferColumn(column, leaf.maxRepetitionLevel, leaf.maxDefinitionLevel, nullOrdering)
+			column = newRepeatedColumnBuffer(column, leaf.maxRepetitionLevel, leaf.maxDefinitionLevel, nullOrdering)
 		case leaf.maxDefinitionLevel > 0:
-			column = newOptionalBufferColumn(column, leaf.maxDefinitionLevel, nullOrdering)
+			column = newOptionalColumnBuffer(column, leaf.maxDefinitionLevel, nullOrdering)
 		}
 		buf.columns = append(buf.columns, column)
 
 		if sorting := sortingColumnOf(buf.config.SortingColumns, leaf.path); sorting != nil {
 			if sorting.Descending() {
-				column = &reversedBufferColumn{column}
+				column = &reversedColumnBuffer{column}
 			}
 			if sorting.NullsFirst() {
 				nullOrdering = nullsGoFirst
