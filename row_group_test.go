@@ -35,7 +35,14 @@ func TestMergeRowGroups(t *testing.T) {
 	}{
 		{
 			scenario: "no row groups",
-			output:   newRowGroup(nil),
+			options: []parquet.RowGroupOption{
+				parquet.SchemaOf(dataType{}),
+			},
+			output: newRowGroup(
+				[]parquet.RowGroupOption{
+					parquet.SchemaOf(dataType{}),
+				},
+			),
 		},
 
 		{

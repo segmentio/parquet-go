@@ -130,8 +130,14 @@ func (w *Writer) WriteRow(row Row) error { return w.writer.WriteRow(row) }
 // The content of the row group is flushed to the writer; after the method
 // returns successfully, the row group will be empty and in ready to be reused.
 func (w *Writer) WriteRowGroup(rowGroup RowGroup) (int64, error) {
-	if w.schema == nil {
-		w.configure(rowGroup.Schema())
+	rowGroupSchema := rowGroup.Schema()
+	switch {
+	case rowGroupSchema == nil:
+		return 0, errRowGroupSchemaMissing
+	case w.schema == nil:
+		w.configure(rowGroupSchema)
+	case !nodesAreEqual(w.schema, rowGroupSchema):
+		return 0, errRowGroupSchemaMismatch
 	}
 	return w.writer.WriteRowGroup(rowGroup)
 }

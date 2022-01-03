@@ -197,8 +197,17 @@ func (buf *Buffer) WriteRow(row Row) error {
 
 // WriteRowGroup satisfies the RowGroupWriter interface.
 func (buf *Buffer) WriteRowGroup(rowGroup RowGroup) (int64, error) {
-	if buf.schema == nil {
-		buf.configure(rowGroup.Schema())
+	rowGroupSchema := rowGroup.Schema()
+	switch {
+	case rowGroupSchema == nil:
+		return 0, errRowGroupSchemaMissing
+	case buf.schema == nil:
+		buf.configure(rowGroupSchema)
+	case !nodesAreEqual(buf.schema, rowGroupSchema):
+		return 0, errRowGroupSchemaMismatch
+	}
+	if !sortingColumnsAreEqual(buf.SortingColumns(), rowGroup.SortingColumns()) {
+		return 0, errRowGroupSortingColumnsMismatch
 	}
 	n := buf.NumRows()
 	_, err := CopyPages(buf, rowGroup.Pages())

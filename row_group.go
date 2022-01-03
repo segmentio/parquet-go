@@ -182,8 +182,8 @@ func sortingColumnsAreEqual(sortingColumns1, sortingColumns2 []SortingColumn) bo
 
 var (
 	errRowGroupSchemaMissing          = errors.New("cannot write rows to a row group which has no schema")
-	errRowGroupSchemaMismatch         = errors.New("cannot merge row groups with mismatching schemas")
-	errRowGroupSortingColumnsMismatch = errors.New("cannot merge row groups with mismatching sorting columns")
+	errRowGroupSchemaMismatch         = errors.New("cannot write row groups with mismatching schemas")
+	errRowGroupSortingColumnsMismatch = errors.New("cannot write row groups with mismatching sorting columns")
 )
 
 func MergeRowGroups(rowGroups []RowGroup, options ...RowGroupOption) (RowGroup, error) {
