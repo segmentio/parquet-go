@@ -272,7 +272,7 @@ func (r *bufferRowReader) WriteRowsTo(w RowWriter) (int64, error) {
 			return rgw.WriteRowGroup(r.buffer)
 		}
 	}
-	return CopyRows(w, struct{ RowReaderWithSchema }{r})
+	return CopyRows(w, struct{ RowReader }{r})
 }
 
 func (r *bufferRowReader) Schema() *Schema { return r.schema }
