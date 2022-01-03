@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"sort"
 )
 
 // RowGroup is an interface representing a parquet row group.
@@ -114,78 +113,49 @@ func searchSortingColumn(sortingColumns []SortingColumn, path columnPath) int {
 	return len(sortingColumns)
 }
 
-type sortingColumnsOrder []SortingColumn
-
-func (sorting sortingColumnsOrder) Len() int {
-	return len(sorting)
-}
-
-func (sorting sortingColumnsOrder) Less(i, j int) bool {
-	path1 := columnPath(sorting[i].Path())
-	path2 := columnPath(sorting[j].Path())
-	switch {
-	case path1.less(path2):
-		return true
-	case path2.less(path2):
+func sortingColumnsHavePrefix(sortingColumns, prefix []SortingColumn) bool {
+	if len(sortingColumns) < len(prefix) {
 		return false
 	}
-	desc1 := sorting[i].Descending()
-	desc2 := sorting[j].Descending()
-	if desc1 != desc2 {
-		return !desc1
-	}
-	null1 := sorting[i].NullsFirst()
-	null2 := sorting[j].NullsFirst()
-	return null1 != null2 && !null1
-}
-
-func (sorting sortingColumnsOrder) Swap(i, j int) {
-	sorting[i], sorting[j] = sorting[i], sorting[i]
-}
-
-func sortedSortingColumns(sortingColumns []SortingColumn) []SortingColumn {
-	if !sortingColumnsAreSorted(sortingColumns) {
-		sortedSortingColumns := make([]SortingColumn, len(sortingColumns))
-		copy(sortedSortingColumns, sortingColumns)
-		sort.Sort(sortingColumnsOrder(sortedSortingColumns))
-		sortingColumns = sortedSortingColumns
-	}
-	return sortingColumns
-}
-
-func sortingColumnsAreSorted(sortingColumns []SortingColumn) bool {
-	return sort.IsSorted(sortingColumnsOrder(sortingColumns))
-}
-
-func sortingColumnsAreEqual(sortingColumns1, sortingColumns2 []SortingColumn) bool {
-	if len(sortingColumns1) != len(sortingColumns2) {
-		return false
-	}
-
-	sortingColumns1 = sortedSortingColumns(sortingColumns1)
-	sortingColumns2 = sortedSortingColumns(sortingColumns2)
-
-	for i := range sortingColumns1 {
-		if !columnPath(sortingColumns1[i].Path()).equal(sortingColumns2[i].Path()) {
-			return false
-		}
-		if sortingColumns1[i].Descending() != sortingColumns2[i].Descending() {
-			return false
-		}
-		if sortingColumns1[i].NullsFirst() != sortingColumns2[i].NullsFirst() {
+	for i, sortingColumn := range prefix {
+		if !sortingColumnsAreEqual(sortingColumns[i], sortingColumn) {
 			return false
 		}
 	}
-
 	return true
 }
 
+func sortingColumnsAreEqual(s1, s2 SortingColumn) bool {
+	path1 := columnPath(s1.Path())
+	path2 := columnPath(s2.Path())
+	return path1.equal(path2) && s1.Descending() == s2.Descending() && s1.NullsFirst() == s2.NullsFirst()
+}
+
 var (
-	errRowGroupSchemaMissing          = errors.New("cannot write rows to a row group which has no schema")
-	errRowGroupSchemaMismatch         = errors.New("cannot write row groups with mismatching schemas")
-	errRowGroupSortingColumnsMismatch = errors.New("cannot write row groups with mismatching sorting columns")
+	// ErrRowGroupSchemaMissing is an error returned when attempting to write a
+	// row group but the source has no schema.
+	ErrRowGroupSchemaMissing = errors.New("cannot write rows to a row group which has no schema")
+
+	// ErrRowGroupSchemaMismatch is an error returned when attempting to write a
+	// row group but the source and destination schemas differ.
+	ErrRowGroupSchemaMismatch = errors.New("cannot write row groups with mismatching schemas")
+
+	// ErrRowGroupSortingColumnsMismatch is an error returned when attempting to
+	// write a row group but the sorting columns differ in the source and
+	// destination.
+	ErrRowGroupSortingColumnsMismatch = errors.New("cannot write row groups with mismatching sorting columns")
 )
 
+// MergeRowGRoups constructs a row group which is a merged view of the row
+// groups in the slice passed as first argument.
+//
+// The function performs validation to ensure that the merge operation is
+// possible, ensuring that the schemas match or can be converted to an
+// optionally configured target schema passed as argument to the option list.
+//
+// The sorting columns of each row group are also consulted to determine whether
+// the output can be represented. If sorting columns are configured on the merge
+// they must be a prefix of sorting columns of all row groups being merged.
 func MergeRowGroups(rowGroups []RowGroup, options ...RowGroupOption) (RowGroup, error) {
 	config := DefaultRowGroupConfig()
 	config.Apply(options...)
@@ -207,22 +177,18 @@ func MergeRowGroups(rowGroups []RowGroup, options ...RowGroupOption) (RowGroup, 
 
 		for _, rowGroup := range rowGroups[1:] {
 			if !nodesAreEqual(m.schema, rowGroup.Schema()) {
-				return nil, errRowGroupSchemaMismatch
-			}
-		}
-	}
-
-	if m.sorting == nil {
-		m.sorting = rowGroups[0].SortingColumns()
-
-		for _, rowGroup := range rowGroups[1:] {
-			if !sortingColumnsAreEqual(m.sorting, rowGroup.SortingColumns()) {
-				return nil, errRowGroupSortingColumnsMismatch
+				return nil, ErrRowGroupSchemaMismatch
 			}
 		}
 	}
 
 	if len(m.sorting) > 0 {
+		for _, rowGroup := range rowGroups {
+			if !sortingColumnsHavePrefix(rowGroup.SortingColumns(), m.sorting) {
+				return nil, ErrRowGroupSortingColumnsMismatch
+			}
+		}
+
 		m.sortFuncs = make([]columnSortFunc, len(m.sorting))
 		forEachLeafColumnOf(m.schema, func(leaf leafColumn) {
 			if sortingIndex := searchSortingColumn(m.sorting, leaf.path); sortingIndex < len(m.sorting) {

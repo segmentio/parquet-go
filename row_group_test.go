@@ -89,6 +89,11 @@ func TestMergeRowGroups(t *testing.T) {
 
 		{
 			scenario: "row groups sorted by ascending last name",
+			options: []parquet.RowGroupOption{
+				parquet.SortingColumns(
+					parquet.Ascending("LastName"),
+				),
+			},
 			input: []parquet.RowGroup{
 				newRowGroup(
 					[]parquet.RowGroupOption{
@@ -117,6 +122,11 @@ func TestMergeRowGroups(t *testing.T) {
 
 		{
 			scenario: "row groups sorted by descending last name",
+			options: []parquet.RowGroupOption{
+				parquet.SortingColumns(
+					parquet.Descending("LastName"),
+				),
+			},
 			input: []parquet.RowGroup{
 				newRowGroup(
 					[]parquet.RowGroupOption{
@@ -145,6 +155,12 @@ func TestMergeRowGroups(t *testing.T) {
 
 		{
 			scenario: "row groups sorted by ascending last and first name",
+			options: []parquet.RowGroupOption{
+				parquet.SortingColumns(
+					parquet.Ascending("LastName"),
+					parquet.Ascending("FirstName"),
+				),
+			},
 			input: []parquet.RowGroup{
 				newRowGroup(
 					[]parquet.RowGroupOption{
@@ -179,6 +195,9 @@ func TestMergeRowGroups(t *testing.T) {
 			scenario: "row groups with conversion to a different schema",
 			options: []parquet.RowGroupOption{
 				parquet.SchemaOf(subDataType{}),
+				parquet.SortingColumns(
+					parquet.Ascending("LastName"),
+				),
 			},
 			input: []parquet.RowGroup{
 				newRowGroup(

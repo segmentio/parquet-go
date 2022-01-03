@@ -178,7 +178,7 @@ func (buf *Buffer) WriteRow(row Row) error {
 	}()
 
 	if buf.schema == nil {
-		return errRowGroupSchemaMissing
+		return ErrRowGroupSchemaMissing
 	}
 
 	for _, value := range row {
@@ -200,14 +200,14 @@ func (buf *Buffer) WriteRowGroup(rowGroup RowGroup) (int64, error) {
 	rowGroupSchema := rowGroup.Schema()
 	switch {
 	case rowGroupSchema == nil:
-		return 0, errRowGroupSchemaMissing
+		return 0, ErrRowGroupSchemaMissing
 	case buf.schema == nil:
 		buf.configure(rowGroupSchema)
 	case !nodesAreEqual(buf.schema, rowGroupSchema):
-		return 0, errRowGroupSchemaMismatch
+		return 0, ErrRowGroupSchemaMismatch
 	}
-	if !sortingColumnsAreEqual(buf.SortingColumns(), rowGroup.SortingColumns()) {
-		return 0, errRowGroupSortingColumnsMismatch
+	if !sortingColumnsHavePrefix(rowGroup.SortingColumns(), buf.SortingColumns()) {
+		return 0, ErrRowGroupSortingColumnsMismatch
 	}
 	n := buf.NumRows()
 	_, err := CopyPages(buf, rowGroup.Pages())

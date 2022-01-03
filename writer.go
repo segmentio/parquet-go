@@ -133,11 +133,11 @@ func (w *Writer) WriteRowGroup(rowGroup RowGroup) (int64, error) {
 	rowGroupSchema := rowGroup.Schema()
 	switch {
 	case rowGroupSchema == nil:
-		return 0, errRowGroupSchemaMissing
+		return 0, ErrRowGroupSchemaMissing
 	case w.schema == nil:
 		w.configure(rowGroupSchema)
 	case !nodesAreEqual(w.schema, rowGroupSchema):
-		return 0, errRowGroupSchemaMismatch
+		return 0, ErrRowGroupSchemaMismatch
 	}
 	return w.writer.WriteRowGroup(rowGroup)
 }
