@@ -3,7 +3,6 @@ package parquet
 import (
 	"bufio"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -11,10 +10,6 @@ import (
 
 	"github.com/segmentio/encoding/thrift"
 	"github.com/segmentio/parquet/format"
-)
-
-var (
-	ErrMissingRootColumn = errors.New("parquet file is missing a root column")
 )
 
 // File represents a parquet file.

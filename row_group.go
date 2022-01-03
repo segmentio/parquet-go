@@ -2,7 +2,6 @@ package parquet
 
 import (
 	"container/heap"
-	"errors"
 	"fmt"
 	"io"
 )
@@ -130,21 +129,6 @@ func sortingColumnsAreEqual(s1, s2 SortingColumn) bool {
 	path2 := columnPath(s2.Path())
 	return path1.equal(path2) && s1.Descending() == s2.Descending() && s1.NullsFirst() == s2.NullsFirst()
 }
-
-var (
-	// ErrRowGroupSchemaMissing is an error returned when attempting to write a
-	// row group but the source has no schema.
-	ErrRowGroupSchemaMissing = errors.New("cannot write rows to a row group which has no schema")
-
-	// ErrRowGroupSchemaMismatch is an error returned when attempting to write a
-	// row group but the source and destination schemas differ.
-	ErrRowGroupSchemaMismatch = errors.New("cannot write row groups with mismatching schemas")
-
-	// ErrRowGroupSortingColumnsMismatch is an error returned when attempting to
-	// write a row group but the sorting columns differ in the source and
-	// destination.
-	ErrRowGroupSortingColumnsMismatch = errors.New("cannot write row groups with mismatching sorting columns")
-)
 
 // MergeRowGRoups constructs a row group which is a merged view of the row
 // groups in the slice passed as first argument.

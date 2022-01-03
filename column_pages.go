@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -16,14 +15,6 @@ import (
 const (
 	defaultReadBufferSize  = 4096
 	defaultLevelBufferSize = 1024
-)
-
-var (
-	// ErrCorrupted is an error returned by the Err method of ColumnPages
-	// instances when they encountered a mismatch between the CRC checksum
-	// recorded in a page header and the one computed while reading the page
-	// data.
-	ErrCorrupted = errors.New("corrupted")
 )
 
 // ColumnPages is an iterator type used to scan pages of a column chunk.
