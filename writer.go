@@ -67,9 +67,11 @@ func NewWriter(output io.Writer, options ...WriterOption) *Writer {
 }
 
 func (w *Writer) configure(schema *Schema) {
-	w.config.Schema = schema
-	w.schema = schema
-	w.writer = newWriter(w.output, w.config)
+	if schema != nil {
+		w.config.Schema = schema
+		w.schema = schema
+		w.writer = newWriter(w.output, w.config)
+	}
 }
 
 // Close must be called after all values were produced to the writer in order to
@@ -499,16 +501,16 @@ func (w *writer) writeRowGroup(rows RowGroup) (int64, error) {
 		totalCompressedSize += int64(c.TotalCompressedSize)
 	}
 
-	rowGroupSortingColumns := sortedSortingColumns(rows.SortingColumns())
+	rowGroupSortingColumns := rows.SortingColumns()
 	rowGroupSchema := rows.Schema()
 	sortingColumns := make([]format.SortingColumn, 0, len(rowGroupSortingColumns))
 	forEachLeafColumnOf(rowGroupSchema, func(leaf leafColumn) {
-		if sorting := sortingColumnOf(rowGroupSortingColumns, leaf.path); sorting != nil {
-			sortingColumns = append(sortingColumns, format.SortingColumn{
+		if sortingIndex := searchSortingColumn(rowGroupSortingColumns, leaf.path); sortingIndex < len(sortingColumns) {
+			sortingColumns[sortingIndex] = format.SortingColumn{
 				ColumnIdx:  int32(leaf.columnIndex),
-				Descending: sorting.Descending(),
-				NullsFirst: sorting.NullsFirst(),
-			})
+				Descending: rowGroupSortingColumns[sortingIndex].Descending(),
+				NullsFirst: rowGroupSortingColumns[sortingIndex].NullsFirst(),
+			}
 		}
 	})
 

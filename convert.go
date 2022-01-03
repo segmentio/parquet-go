@@ -359,12 +359,12 @@ type convertedRowGroup struct {
 	conv Conversion
 }
 
-func (c *convertedRowGroup) Schema() *Schema {
-	return c.conv.Schema()
-}
-
 func (c *convertedRowGroup) Rows() RowReader {
 	return ConvertRowReader(c.RowGroup.Rows(), c.conv)
+}
+
+func (c *convertedRowGroup) Schema() *Schema {
+	return c.conv.Schema()
 }
 
 // ConvertRowReader constructs a wrapper of the given row reader which applies

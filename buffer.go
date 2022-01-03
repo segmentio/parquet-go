@@ -39,6 +39,12 @@ func NewBuffer(options ...RowGroupOption) *Buffer {
 }
 
 func (buf *Buffer) configure(schema *Schema) {
+	if schema == nil {
+		return
+	}
+	sortingColumns := buf.config.SortingColumns
+	buf.sorted = make([]ColumnBuffer, len(sortingColumns))
+
 	forEachLeafColumnOf(schema, func(leaf leafColumn) {
 		nullOrdering := nullsGoLast
 		columnType := leaf.node.Type()
@@ -61,14 +67,14 @@ func (buf *Buffer) configure(schema *Schema) {
 		}
 		buf.buffers = append(buf.buffers, column)
 
-		if sorting := sortingColumnOf(buf.config.SortingColumns, leaf.path); sorting != nil {
-			if sorting.Descending() {
+		if sortingIndex := searchSortingColumn(sortingColumns, leaf.path); sortingIndex < len(sortingColumns) {
+			if sortingColumns[sortingIndex].Descending() {
 				column = &reversedColumnBuffer{column}
 			}
-			if sorting.NullsFirst() {
+			if sortingColumns[sortingIndex].NullsFirst() {
 				nullOrdering = nullsGoFirst
 			}
-			buf.sorted = append(buf.sorted, column)
+			buf.sorted[sortingIndex] = column
 		}
 	})
 
@@ -171,6 +177,10 @@ func (buf *Buffer) WriteRow(row Row) error {
 		}
 	}()
 
+	if buf.schema == nil {
+		return errRowGroupSchemaMissing
+	}
+
 	for _, value := range row {
 		columnIndex := value.ColumnIndex()
 		buf.colbuf[columnIndex] = append(buf.colbuf[columnIndex], value)
@@ -250,8 +260,11 @@ func (r *bufferRowReader) ReadRow(row Row) (Row, error) {
 }
 
 func (r *bufferRowReader) WriteRowsTo(w RowWriter) (int64, error) {
-	if rgw, ok := w.(RowGroupWriter); ok {
-		return rgw.WriteRowGroup(r.buffer)
+	if r.buffer != nil {
+		if rgw, ok := w.(RowGroupWriter); ok {
+			defer func() { r.buffer = nil }()
+			return rgw.WriteRowGroup(r.buffer)
+		}
 	}
 	return CopyRows(w, struct{ RowReaderWithSchema }{r})
 }

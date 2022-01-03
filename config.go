@@ -362,7 +362,6 @@ func ColumnBufferSize(size int) RowGroupOption {
 // hierarchy; when elements are equal in the first column, the second column is
 // used to order rows, etc...
 func SortingColumns(sortingColumns ...SortingColumn) RowGroupOption {
-	sortingColumns = sortedSortingColumns(sortingColumns)
 	return rowGroupOption(func(config *RowGroupConfig) { config.SortingColumns = sortingColumns })
 }
 
