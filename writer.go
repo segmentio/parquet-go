@@ -1235,7 +1235,6 @@ func (page *compressedPage) PageData() io.Reader    { return page.buffer }
 
 type compressedPageHeader struct{ *compressedPage }
 
-func (header compressedPageHeader) String() string            { return "" }
 func (header compressedPageHeader) NumValues() int            { return int(header.stats.numValues) }
 func (header compressedPageHeader) Encoding() format.Encoding { return header.stats.encoding }
 func (header compressedPageHeader) PageType() format.PageType { return header.stats.pageType }

@@ -8,8 +8,6 @@ import (
 
 // PageHeader is an interface implemented by parquet page headers.
 type PageHeader interface {
-	fmt.Stringer
-
 	// Returns the number of values in the page (including nulls).
 	NumValues() int
 
