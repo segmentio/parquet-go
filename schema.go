@@ -23,6 +23,7 @@ type Schema struct {
 	root        Node
 	deconstruct deconstructFunc
 	reconstruct reconstructFunc
+	readRow     columnReadRowFunc
 }
 
 // SchemaOf constructs a parquet schema from a Go value.
@@ -93,6 +94,7 @@ func NewSchema(name string, root Node) *Schema {
 		root:        root,
 		deconstruct: makeDeconstructFunc(root),
 		reconstruct: makeReconstructFunc(root),
+		readRow:     makeColumnReadRowFunc(root),
 	}
 }
 
@@ -121,6 +123,11 @@ func makeReconstructFunc(node Node) (reconstruct reconstructFunc) {
 		_, reconstruct = reconstructFuncOf(0, node)
 	}
 	return reconstruct
+}
+
+func makeColumnReadRowFunc(node Node) columnReadRowFunc {
+	_, readRow := columnReadRowFuncOf(node, 0, 0)
+	return readRow
 }
 
 // ConfigureRowGroup satisfies the RowGroupOption interface, allowing Schema

@@ -38,7 +38,7 @@ type Reader struct {
 	buffer     []Value
 	values     []Value
 	conv       Conversion
-	read       columnReadRowFunc
+	readRow    columnReadRowFunc
 }
 
 // NewReader constructs a parquet reader reading rows from the given
@@ -76,7 +76,6 @@ func NewReader(r io.ReaderAt, options ...ReaderOption) *Reader {
 	readers := makeColumnValueReaders(len(columns), func(i int) ValueReader {
 		return columns[i]
 	})
-	_, read := columnReadRowFuncOf(root, 0, 0)
 	schema := NewSchema(root.Name(), root)
 	return &Reader{
 		file:       f,
@@ -85,7 +84,7 @@ func NewReader(r io.ReaderAt, options ...ReaderOption) *Reader {
 		columns:    columns,
 		readers:    readers,
 		values:     make([]Value, 0, len(columns)),
-		read:       read,
+		readRow:    schema.readRow,
 	}
 }
 
@@ -171,7 +170,7 @@ func (r *Reader) Read(row interface{}) (err error) {
 // The method returns io.EOF when no more rows can be read from r.
 func (r *Reader) ReadRow(buf Row) (Row, error) {
 	n := len(buf)
-	buf, err := r.read(buf, 0, r.readers)
+	buf, err := r.readRow(buf, 0, r.readers)
 	if err == nil && len(buf) == n {
 		err = io.EOF
 	}
@@ -180,6 +179,33 @@ func (r *Reader) ReadRow(buf Row) (Row, error) {
 
 // Schema returns the schema of rows read by r.
 func (r *Reader) Schema() *Schema { return r.fileSchema }
+
+type columnPageValueReader struct {
+	values ValueReader
+	pages  PageReader
+}
+
+func (r *columnPageValueReader) ReadValues(values []Value) (int, error) {
+	numValues := 0
+	for {
+		if r.values != nil {
+			n, err := r.values.ReadValues(values)
+			numValues += n
+			if err == nil || err != io.EOF {
+				return numValues, err
+			}
+			r.values = nil
+		}
+		if r.pages == nil {
+			return numValues, io.EOF
+		}
+		p, err := r.pages.ReadPage()
+		if err != nil {
+			return numValues, err
+		}
+		r.values = p.Values()
+	}
+}
 
 type columnValueReader struct {
 	buffer []Value

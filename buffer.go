@@ -1,7 +1,6 @@
 package parquet
 
 import (
-	"io"
 	"sort"
 )
 
@@ -18,7 +17,6 @@ type Buffer struct {
 	columns []RowGroupColumn
 	buffers []ColumnBuffer
 	sorted  []ColumnBuffer
-	readRow columnReadRowFunc
 }
 
 // NewBuffer constructs a new buffer, using the given list of buffer options
@@ -86,7 +84,6 @@ func (buf *Buffer) configure(schema *Schema) {
 	buf.schema = schema
 	buf.rowbuf = make([]Value, 0, 10)
 	buf.colbuf = make([][]Value, len(buf.buffers))
-	_, buf.readRow = columnReadRowFuncOf(schema, 0, 0)
 }
 
 // Size returns the estimated size of the buffer in memory.
@@ -224,10 +221,7 @@ func (buf *Buffer) WritePage(page Page) (int64, error) {
 // The buffer and the returned reader share memory, mutating the buffer
 // concurrently to reading rows may result in non-deterministic behavior.
 func (buf *Buffer) Rows() RowReader {
-	return &bufferRowReader{
-		buffer: buf,
-		schema: buf.schema,
-	}
+	return &rowGroupRowReader{rowGroup: buf}
 }
 
 // Pages returns a reader exposing the current pages of the buffer.
@@ -235,62 +229,12 @@ func (buf *Buffer) Rows() RowReader {
 // The buffer and the returned reader share memory, mutating the buffer
 // concurrently to reading rows may result in non-deterministic behavior.
 func (buf *Buffer) Pages() PageReader {
-	r := &multiPageReader{
-		readers: make([]PageReader, len(buf.buffers)),
-	}
-	for i, b := range buf.buffers {
-		r.readers[i] = b.Pages()
-	}
-	return r
+	return &multiRowGroupColumnPageReader{rowGroupColumns: buf.columns}
 }
-
-type bufferRowReader struct {
-	buffer  *Buffer
-	schema  *Schema
-	readRow columnReadRowFunc
-	readers []columnValueReader
-}
-
-func (r *bufferRowReader) initReadRow(b *Buffer) {
-	r.readRow = b.readRow
-	r.readers = makeColumnValueReaders(len(b.buffers), func(i int) ValueReader {
-		return b.buffers[i].Page().Values()
-	})
-}
-
-func (r *bufferRowReader) ReadRow(row Row) (Row, error) {
-	if r.buffer != nil {
-		r.initReadRow(r.buffer)
-		r.buffer = nil
-	}
-	if r.readRow == nil {
-		return row, io.EOF
-	}
-	n := len(row)
-	row, err := r.readRow(row, 0, r.readers)
-	if err == nil && len(row) == n {
-		err = io.EOF
-	}
-	return row, err
-}
-
-func (r *bufferRowReader) WriteRowsTo(w RowWriter) (int64, error) {
-	if r.buffer != nil {
-		if rgw, ok := w.(RowGroupWriter); ok {
-			defer func() { r.buffer = nil }()
-			return rgw.WriteRowGroup(r.buffer)
-		}
-	}
-	return CopyRows(w, struct{ RowReader }{r})
-}
-
-func (r *bufferRowReader) Schema() *Schema { return r.schema }
 
 var (
-	_ RowReaderWithSchema = (*bufferRowReader)(nil)
-	_ RowWriterTo         = (*bufferRowReader)(nil)
-	_ RowGroup            = (*Buffer)(nil)
-	_ RowGroupWriter      = (*Buffer)(nil)
-	_ PageWriter          = (*Buffer)(nil)
-	_ sort.Interface      = (*Buffer)(nil)
+	_ RowGroup       = (*Buffer)(nil)
+	_ RowGroupWriter = (*Buffer)(nil)
+	_ PageWriter     = (*Buffer)(nil)
+	_ sort.Interface = (*Buffer)(nil)
 )

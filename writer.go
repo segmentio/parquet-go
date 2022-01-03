@@ -164,7 +164,13 @@ func (w *Writer) Schema() *Schema { return w.schema }
 
 type rowGroup struct{ *writer }
 
-func (g rowGroup) Columns() []RowGroupColumn { return nil }
+func (g rowGroup) Columns() []RowGroupColumn {
+	columns := make([]RowGroupColumn, len(g.columns))
+	for i, c := range g.columns {
+		columns[i] = c
+	}
+	return columns
+}
 
 func (g rowGroup) NumRows() int { return int(g.rowGroup.numRows) }
 
@@ -172,16 +178,12 @@ func (g rowGroup) Schema() *Schema { return g.rowGroup.schema }
 
 func (g rowGroup) SortingColumns() []SortingColumn { return nil }
 
-func (g rowGroup) Rows() RowReader { return nil }
+func (g rowGroup) Rows() RowReader {
+	return &rowGroupRowReader{rowGroup: g}
+}
 
 func (g rowGroup) Pages() PageReader {
-	r := &multiPageReader{
-		readers: make([]PageReader, len(g.columns)),
-	}
-	for i, c := range g.columns {
-		r.readers[i] = c.Pages()
-	}
-	return r
+	return &multiRowGroupColumnPageReader{rowGroupColumns: g.Columns()}
 }
 
 type writer struct {

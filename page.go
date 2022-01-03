@@ -97,23 +97,6 @@ func (r *singlePageReader) ReadPage() (Page, error) {
 
 func onePage(page Page) PageReader { return &singlePageReader{page: page} }
 
-type multiPageReader struct{ readers []PageReader }
-
-func (r *multiPageReader) ReadPage() (Page, error) {
-readNextPage:
-	if len(r.readers) == 0 {
-		return nil, io.EOF
-	}
-	p, err := r.readers[0].ReadPage()
-	if err != nil {
-		if err == io.EOF {
-			r.readers = r.readers[1:]
-			goto readNextPage
-		}
-	}
-	return p, err
-}
-
 // CopyPages copies pages from src to dst, returning the number of values that
 // were copied.
 //
