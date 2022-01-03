@@ -1162,7 +1162,10 @@ type bufferedPageWriter struct {
 }
 
 func (w *bufferedPageWriter) read(column RowGroupColumn) *bufferedPageReader {
-	return &bufferedPageReader{column: column, pages: w.pages}
+	for i := range w.pages {
+		w.pages[i].column = column
+	}
+	return &bufferedPageReader{pages: w.pages}
 }
 
 func (w *bufferedPageWriter) reset() {
@@ -1199,8 +1202,7 @@ func (w *bufferedPageWriter) writePage(header, data io.Reader, stats pageStats) 
 }
 
 type bufferedPageReader struct {
-	column RowGroupColumn
-	pages  []compressedPage
+	pages []compressedPage
 }
 
 func (r *bufferedPageReader) ReadPage() (Page, error) {
@@ -1208,7 +1210,6 @@ func (r *bufferedPageReader) ReadPage() (Page, error) {
 		return nil, io.EOF
 	}
 	page := &r.pages[0]
-	page.column = r.column
 	r.pages = r.pages[1:]
 	return page, nil
 }
@@ -1219,18 +1220,15 @@ type compressedPage struct {
 	stats  pageStats
 }
 
-func (page *compressedPage) ColumnIndex() int                               { return page.column.ColumnIndex() }
-func (page *compressedPage) Dictionary() Dictionary                         { return page.column.Dictionary() }
-func (page *compressedPage) NumRows() int                                   { return int(page.stats.numRows) }
-func (page *compressedPage) NumValues() int                                 { return int(page.stats.numValues) }
-func (page *compressedPage) NumNulls() int                                  { return int(page.stats.numNulls) }
-func (page *compressedPage) Bounds() (min, max Value)                       { return }
-func (page *compressedPage) Slice(i, j int) Page                            { return nil }
-func (page *compressedPage) Size() int64                                    { return int64(page.stats.uncompressedSize) }
-func (page *compressedPage) WriteRepetitionLevelsTo(encoding.Encoder) error { return nil }
-func (page *compressedPage) WriteDefinitionLevelsTo(encoding.Encoder) error { return nil }
-func (page *compressedPage) WriteTo(encoding.Encoder) error                 { return nil }
-func (page *compressedPage) Values() ValueReader                            { return nil }
+func (page *compressedPage) ColumnIndex() int         { return page.column.ColumnIndex() }
+func (page *compressedPage) Dictionary() Dictionary   { return page.column.Dictionary() }
+func (page *compressedPage) NumRows() int             { return int(page.stats.numRows) }
+func (page *compressedPage) NumValues() int           { return int(page.stats.numValues) }
+func (page *compressedPage) NumNulls() int            { return int(page.stats.numNulls) }
+func (page *compressedPage) Bounds() (min, max Value) { return }
+func (page *compressedPage) Slice(i, j int) Page      { return nil }
+func (page *compressedPage) Size() int64              { return int64(page.stats.uncompressedSize) }
+func (page *compressedPage) Values() ValueReader      { return nil }
 
 func (page *compressedPage) PageHeader() PageHeader { return compressedPageHeader{page} }
 func (page *compressedPage) PageData() io.Reader    { return page.buffer }
