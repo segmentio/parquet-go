@@ -214,7 +214,12 @@ func (buf *Buffer) WritePage(page Page) (int64, error) {
 //
 // The buffer and the returned reader share memory, mutating the buffer
 // concurrently to reading rows may result in non-deterministic behavior.
-func (buf *Buffer) Rows() RowReader { return &bufferRowReader{buffer: buf} }
+func (buf *Buffer) Rows() RowReader {
+	return &bufferRowReader{
+		buffer: buf,
+		schema: buf.schema,
+	}
+}
 
 // Pages returns a reader exposing the current pages of the buffer.
 //
@@ -232,6 +237,7 @@ func (buf *Buffer) Pages() PageReader {
 
 type bufferRowReader struct {
 	buffer  *Buffer
+	schema  *Schema
 	readRow columnReadRowFunc
 	readers []columnValueReader
 }
@@ -269,7 +275,7 @@ func (r *bufferRowReader) WriteRowsTo(w RowWriter) (int64, error) {
 	return CopyRows(w, struct{ RowReaderWithSchema }{r})
 }
 
-func (r *bufferRowReader) Schema() *Schema { return r.buffer.schema }
+func (r *bufferRowReader) Schema() *Schema { return r.schema }
 
 var (
 	_ RowReaderWithSchema = (*bufferRowReader)(nil)
