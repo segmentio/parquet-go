@@ -437,7 +437,7 @@ func (r *filePageReader) Reset() {
 
 func (r *filePageReader) ReadPage() (Page, error) {
 	for {
-		r.page.header = format.PageHeader{}
+		resetPageHeader(&r.page.header)
 		if err := r.decoder.Decode(&r.page.header); err != nil {
 			if err != io.EOF {
 				err = fmt.Errorf("decoding page header: %w", err)
