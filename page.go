@@ -16,7 +16,7 @@ import (
 // Page values represent sequences of parquet values.
 type Page interface {
 	// Returns the column index that this page belongs to.
-	ColumnIndex() int
+	Column() int
 
 	// If the page contains indexed values, calling this method returns the
 	// dictionary in which the values are looked up. Otherwise, the method
@@ -83,6 +83,10 @@ type PageReader interface {
 type PageWriter interface {
 	WritePage(Page) (int64, error)
 }
+
+type emptyPageReader struct{}
+
+func (emptyPageReader) ReadPage() (Page, error) { return nil, io.EOF }
 
 type singlePageReader struct{ page Page }
 
@@ -172,7 +176,7 @@ func newErrorPage(columnIndex int, msg string, args ...interface{}) *errorPage {
 	}
 }
 
-func (page *errorPage) ColumnIndex() int               { return page.columnIndex }
+func (page *errorPage) Column() int                    { return page.columnIndex }
 func (page *errorPage) Dictionary() Dictionary         { return nil }
 func (page *errorPage) NumRows() int                   { return 0 }
 func (page *errorPage) NumValues() int                 { return 0 }
@@ -231,8 +235,8 @@ func newOptionalPage(base BufferedPage, maxDefinitionLevel int8, definitionLevel
 	}
 }
 
-func (page *optionalPage) ColumnIndex() int {
-	return page.base.ColumnIndex()
+func (page *optionalPage) Column() int {
+	return page.base.Column()
 }
 
 func (page *optionalPage) Dictionary() Dictionary {
@@ -347,8 +351,8 @@ func newRepeatedPage(base BufferedPage, maxRepetitionLevel, maxDefinitionLevel i
 	}
 }
 
-func (page *repeatedPage) ColumnIndex() int {
-	return page.base.ColumnIndex()
+func (page *repeatedPage) Column() int {
+	return page.base.Column()
 }
 
 func (page *repeatedPage) Dictionary() Dictionary {
@@ -487,7 +491,7 @@ type booleanPage struct {
 	columnIndex int8
 }
 
-func (page *booleanPage) ColumnIndex() int { return int(^page.columnIndex) }
+func (page *booleanPage) Column() int { return int(^page.columnIndex) }
 
 func (page *booleanPage) Dictionary() Dictionary { return nil }
 
@@ -564,7 +568,7 @@ type int32Page struct {
 	columnIndex int8
 }
 
-func (page *int32Page) ColumnIndex() int { return int(^page.columnIndex) }
+func (page *int32Page) Column() int { return int(^page.columnIndex) }
 
 func (page *int32Page) Dictionary() Dictionary { return nil }
 
@@ -623,7 +627,7 @@ type int64Page struct {
 	columnIndex int8
 }
 
-func (page *int64Page) ColumnIndex() int { return int(^page.columnIndex) }
+func (page *int64Page) Column() int { return int(^page.columnIndex) }
 
 func (page *int64Page) Dictionary() Dictionary { return nil }
 
@@ -682,7 +686,7 @@ type int96Page struct {
 	columnIndex int8
 }
 
-func (page *int96Page) ColumnIndex() int { return int(^page.columnIndex) }
+func (page *int96Page) Column() int { return int(^page.columnIndex) }
 
 func (page *int96Page) Dictionary() Dictionary { return nil }
 
@@ -741,7 +745,7 @@ type floatPage struct {
 	columnIndex int8
 }
 
-func (page *floatPage) ColumnIndex() int { return int(^page.columnIndex) }
+func (page *floatPage) Column() int { return int(^page.columnIndex) }
 
 func (page *floatPage) Dictionary() Dictionary { return nil }
 
@@ -800,7 +804,7 @@ type doublePage struct {
 	columnIndex int8
 }
 
-func (page *doublePage) ColumnIndex() int { return int(^page.columnIndex) }
+func (page *doublePage) Column() int { return int(^page.columnIndex) }
 
 func (page *doublePage) Dictionary() Dictionary { return nil }
 
@@ -859,7 +863,7 @@ type byteArrayPage struct {
 	columnIndex int8
 }
 
-func (page *byteArrayPage) ColumnIndex() int { return int(^page.columnIndex) }
+func (page *byteArrayPage) Column() int { return int(^page.columnIndex) }
 
 func (page *byteArrayPage) Dictionary() Dictionary { return nil }
 
@@ -931,7 +935,7 @@ type fixedLenByteArrayPage struct {
 	columnIndex int8
 }
 
-func (page *fixedLenByteArrayPage) ColumnIndex() int { return int(^page.columnIndex) }
+func (page *fixedLenByteArrayPage) Column() int { return int(^page.columnIndex) }
 
 func (page *fixedLenByteArrayPage) Dictionary() Dictionary { return nil }
 

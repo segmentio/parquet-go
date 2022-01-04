@@ -246,7 +246,7 @@ func testBuffer(t *testing.T, node parquet.Node, reader parquet.ValueReader, buf
 	maxValue := parquet.Value{}
 	batch := make([]parquet.Value, len(values))
 	for i := range values {
-		batch[i] = parquet.ValueOf(values[i]).Level(repetitionLevel, definitionLevel).Column(0)
+		batch[i] = parquet.ValueOf(values[i]).Level(repetitionLevel, definitionLevel, 0)
 	}
 
 	for i := range batch {
@@ -272,7 +272,7 @@ func testBuffer(t *testing.T, node parquet.Node, reader parquet.ValueReader, buf
 	sortFunc(typ, batch)
 	sort.Sort(buffer)
 
-	page := buffer.Columns()[0].(parquet.ColumnBuffer).Page()
+	page := buffer.Column(0).(parquet.ColumnBuffer).Page()
 	numValues := page.NumValues()
 	if numValues != len(batch) {
 		t.Fatalf("number of values mistmatch: want=%d got=%d", len(batch), numValues)

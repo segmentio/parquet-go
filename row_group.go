@@ -8,11 +8,14 @@ import (
 
 // RowGroup is an interface representing a parquet row group.
 type RowGroup interface {
-	// Returns the list of column that that row group has values for.
-	Columns() []RowGroupColumn
-
 	// Returns the number of rows in the group.
 	NumRows() int
+
+	// Returns the number of columns in the group.
+	NumColumns() int
+
+	// Returns the column at the given index in the group.
+	Column(int) RowGroupColumn
 
 	// Returns the schema of rows in the group.
 	Schema() *Schema
@@ -33,11 +36,7 @@ type RowGroup interface {
 // The RowGroupColumn interface represents individual columns of a row group.
 type RowGroupColumn interface {
 	// Returns the index of this column in its parent row group.
-	ColumnIndex() int
-
-	// For indexed columns, returns the underlying dictionary holding the column
-	// values. If the column is not indexed, nil is returned.
-	Dictionary() Dictionary
+	Column() int
 
 	// Returns a reader exposing the pages of the column.
 	Pages() PageReader
@@ -53,27 +52,6 @@ type RowGroupReader interface {
 // to write row groups.
 type RowGroupWriter interface {
 	WriteRowGroup(RowGroup) (int64, error)
-}
-
-type rowGroup struct {
-	schema  *Schema
-	numRows int
-	columns []RowGroupColumn
-	sorting []SortingColumn
-}
-
-func (g *rowGroup) Schema() *Schema { return g.schema }
-
-func (g *rowGroup) NumRows() int { return g.numRows }
-
-func (g *rowGroup) Columns() []RowGroupColumn { return g.columns }
-
-func (g *rowGroup) SortingColumns() []SortingColumn { return g.sorting }
-
-func (g *rowGroup) Rows() RowReader { return &rowGroupRowReader{rowGroup: g} }
-
-func (g *rowGroup) Pages() PageReader {
-	return &multiRowGroupColumnPageReader{rowGroupColumns: g.columns}
 }
 
 // SortingColumn represents a column by which a row group is sorted.
@@ -241,7 +219,9 @@ func (m *mergedRowGroup) NumRows() (numRows int) {
 	return numRows
 }
 
-func (m *mergedRowGroup) Columns() []RowGroupColumn { return nil } // TODO
+func (m *mergedRowGroup) NumColumns() int { return 0 } // TODO
+
+func (m *mergedRowGroup) Column(int) RowGroupColumn { return nil } // TODO
 
 func (m *mergedRowGroup) Schema() *Schema { return m.schema }
 
@@ -391,13 +371,10 @@ func (r *rowGroupRowReader) Schema() *Schema {
 
 func (r *rowGroupRowReader) ReadRow(row Row) (Row, error) {
 	if r.rowGroup != nil {
-		columns := r.rowGroup.Columns()
-		readers := make([]columnPageValueReader, len(columns))
-		for i := range columns {
-			readers[i].pages = columns[i].Pages()
-		}
 		r.schema = r.rowGroup.Schema()
-		r.readers = makeColumnValueReaders(len(readers), func(i int) ValueReader { return &readers[i] })
+		r.readers = makeColumnValueReaders(r.rowGroup.NumColumns(), func(i int) PageReader {
+			return r.rowGroup.Column(i).Pages()
+		})
 		r.rowGroup = nil
 	}
 	if r.schema == nil {
@@ -421,6 +398,29 @@ func (r *rowGroupRowReader) WriteRowsTo(w RowWriter) (int64, error) {
 	return CopyRows(w, struct{ RowReaderWithSchema }{r})
 }
 
+type rowGroupPageReader struct {
+	pageReader  PageReader
+	rowGroup    RowGroup
+	columnIndex int
+}
+
+func (r *rowGroupPageReader) ReadPage() (Page, error) {
+	for {
+		if r.pageReader != nil {
+			p, err := r.pageReader.ReadPage()
+			if err == nil || err != io.EOF {
+				return p, err
+			}
+			r.pageReader = nil
+		}
+		if r.rowGroup == nil || r.columnIndex == r.rowGroup.NumColumns() {
+			return nil, io.EOF
+		}
+		r.pageReader = r.rowGroup.Column(r.columnIndex).Pages()
+		r.columnIndex++
+	}
+}
+
 type multiRowGroupPageReader struct {
 	pageReader PageReader
 	rowGroups  []RowGroup
@@ -435,11 +435,9 @@ func (r *multiRowGroupPageReader) ReadPage() (Page, error) {
 			}
 			r.pageReader = nil
 		}
-
 		if len(r.rowGroups) == 0 {
 			return nil, io.EOF
 		}
-
 		r.pageReader = r.rowGroups[0].Pages()
 		r.rowGroups = r.rowGroups[1:]
 	}
@@ -459,11 +457,9 @@ func (r *multiRowGroupColumnPageReader) ReadPage() (Page, error) {
 			}
 			r.pageReader = nil
 		}
-
 		if len(r.rowGroupColumns) == 0 {
 			return nil, io.EOF
 		}
-
 		r.pageReader = r.rowGroupColumns[0].Pages()
 		r.rowGroupColumns = r.rowGroupColumns[1:]
 	}
@@ -491,11 +487,9 @@ func (r *concatenatedRowGroupRowReader) ReadRow(row Row) (Row, error) {
 			}
 			r.rowReader = nil
 		}
-
 		if len(r.rowGroups) == 0 {
 			return row, io.EOF
 		}
-
 		r.rowReader = r.rowGroups[0].Rows()
 		r.rowGroups = r.rowGroups[1:]
 	}
@@ -535,7 +529,7 @@ func (cur *columnRowCursor) next() bool {
 	}
 
 	for _, v := range cur.row {
-		columnIndex := v.ColumnIndex()
+		columnIndex := v.Column()
 		cur.columns[columnIndex] = append(cur.columns[columnIndex], v)
 	}
 

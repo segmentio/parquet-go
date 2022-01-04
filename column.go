@@ -118,8 +118,20 @@ func (c *Column) Column(name string) *Column {
 	return nil
 }
 
-// Chunks returns an iterator over the column chunks that compose this column.
-func (c *Column) Chunks() *ColumnChunks { return &ColumnChunks{column: c, index: -1} }
+// Pages returns a reader exposing all pages in this column, across row groups.
+func (c *Column) Pages() PageReader {
+	if len(c.columns) != 0 {
+		return emptyPageReader{}
+	}
+	r := &multiRowGroupColumnPageReader{
+		rowGroupColumns: make([]RowGroupColumn, len(c.file.rowGroups)),
+	}
+	columnIndex := int(c.Index())
+	for i := range r.rowGroupColumns {
+		r.rowGroupColumns[i] = c.file.rowGroups[i].Column(columnIndex)
+	}
+	return r
+}
 
 // Depth returns the position of the column relative to the root.
 func (c *Column) Depth() int8 { return c.depth }
@@ -154,7 +166,7 @@ func (c *Column) ValueByIndex(base reflect.Value, index int) reflect.Value {
 func (c *Column) GoType() reflect.Type { return goTypeOf(c) }
 
 // String returns a human-redable string representation of the oclumn.
-func (c *Column) String() string { return sprint(c.Name(), c) }
+func (c *Column) String() string { return c.path.String() + ": " + sprint(c.Name(), c) }
 
 func (c *Column) forEachLeaf(do func(*Column)) {
 	if len(c.columns) == 0 {

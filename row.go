@@ -45,7 +45,7 @@ func (row Row) Equal(other Row) bool {
 }
 
 func (row Row) startsWith(columnIndex int) bool {
-	return len(row) > 0 && int(row[0].ColumnIndex()) == columnIndex
+	return len(row) > 0 && int(row[0].Column()) == columnIndex
 }
 
 // RowReader reads a sequence of parquet rows.

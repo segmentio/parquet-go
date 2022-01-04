@@ -2,7 +2,6 @@ package parquet_test
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"reflect"
 
@@ -36,87 +35,42 @@ func forEachLeafColumn(col *parquet.Column, do func(*parquet.Column) error) erro
 	return nil
 }
 
-func forEachColumnChunk(col *parquet.Column, do func(*parquet.Column, *parquet.ColumnChunks) error) error {
+func forEachColumnPage(col *parquet.Column, do func(*parquet.Column, parquet.Page) error) error {
 	return forEachLeafColumn(col, func(leaf *parquet.Column) error {
-		chunks := leaf.Chunks()
-
-		for chunks.Next() {
-			if err := do(leaf, chunks); err != nil {
+		pages := leaf.Pages()
+		for {
+			p, err := pages.ReadPage()
+			if err != nil {
+				if err == io.EOF {
+					err = nil
+				}
+				return err
+			}
+			if err := do(leaf, p); err != nil {
 				return err
 			}
 		}
-
-		return nil
-	})
-}
-
-func forEachColumnPage(col *parquet.Column, do func(*parquet.Column, *parquet.DataPageReader) error) error {
-	return forEachColumnChunk(col, func(leaf *parquet.Column, chunks *parquet.ColumnChunks) error {
-		const bufferSize = 1024
-		pages := chunks.Pages()
-		dictionary := (parquet.Dictionary)(nil)
-		pageType := leaf.Type()
-
-		for pages.Next() {
-			switch header := pages.PageHeader().(type) {
-			case parquet.DictionaryPageHeader:
-				decoder := parquet.LookupEncoding(header.Encoding()).NewDecoder(pages.PageData())
-				dictionary = leaf.Type().NewDictionary(0)
-				if err := dictionary.ReadFrom(decoder); err != nil {
-					return fmt.Errorf("reading dictionary page: %w", err)
-				}
-				pageType = dictionary.Type()
-
-			case parquet.DataPageHeader:
-				pageReader := parquet.NewDataPageReader(
-					pageType,
-					leaf.MaxRepetitionLevel(),
-					leaf.MaxDefinitionLevel(),
-					leaf.Index(),
-					bufferSize,
-				)
-
-				pageReader.Reset(
-					header.NumValues(),
-					parquet.LookupEncoding(header.RepetitionLevelEncoding()).NewDecoder(pages.RepetitionLevels()),
-					parquet.LookupEncoding(header.DefinitionLevelEncoding()).NewDecoder(pages.DefinitionLevels()),
-					parquet.LookupEncoding(header.Encoding()).NewDecoder(pages.PageData()),
-				)
-
-				if err := do(leaf, pageReader); err != nil {
-					return fmt.Errorf("reading data page: %w", err)
-				}
-
-			default:
-				return fmt.Errorf("unsupported page header type: %#v", header)
-			}
-
-			if err := pages.Err(); err != nil {
-				return fmt.Errorf("after reading pages: %w", err)
-			}
-		}
-		return nil
 	})
 }
 
 func forEachColumnValue(col *parquet.Column, do func(*parquet.Column, parquet.Value) error) error {
-	return forEachColumnPage(col, func(leaf *parquet.Column, page *parquet.DataPageReader) error {
-		values := make([]parquet.Value, 10)
+	return forEachColumnPage(col, func(leaf *parquet.Column, page parquet.Page) error {
+		buffer := [1]parquet.Value{}
+		values := page.Values()
 		for {
-			n, err := page.ReadValues(values)
-			for i := 0; i < n; i++ {
-				if err := do(leaf, values[i]); err != nil {
+			n, err := values.ReadValues(buffer[:])
+			if n > 0 {
+				if err := do(leaf, buffer[0]); err != nil {
 					return err
 				}
 			}
 			if err != nil {
-				if err != io.EOF {
-					return err
+				if err == io.EOF {
+					err = nil
 				}
-				break
+				return err
 			}
 		}
-		return nil
 	})
 }
 

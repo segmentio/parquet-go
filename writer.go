@@ -165,21 +165,13 @@ func (w *Writer) Schema() *Schema { return w.schema }
 
 type writerRowGroup struct{ *writer }
 
-func (g writerRowGroup) Columns() []RowGroupColumn { return g.rowGroup.columns }
-
-func (g writerRowGroup) NumRows() int { return int(g.rowGroup.numRows) }
-
-func (g writerRowGroup) Schema() *Schema { return g.rowGroup.schema }
-
+func (g writerRowGroup) NumRows() int                    { return int(g.rowGroup.numRows) }
+func (g writerRowGroup) NumColumns() int                 { return len(g.columns) }
+func (g writerRowGroup) Column(i int) RowGroupColumn     { return g.columns[i] }
+func (g writerRowGroup) Schema() *Schema                 { return g.rowGroup.schema }
 func (g writerRowGroup) SortingColumns() []SortingColumn { return nil }
-
-func (g writerRowGroup) Rows() RowReader {
-	return &rowGroupRowReader{rowGroup: g}
-}
-
-func (g writerRowGroup) Pages() PageReader {
-	return &multiRowGroupColumnPageReader{rowGroupColumns: g.Columns()}
-}
+func (g writerRowGroup) Rows() RowReader                 { return &rowGroupRowReader{rowGroup: g} }
+func (g writerRowGroup) Pages() PageReader               { return &rowGroupPageReader{rowGroup: g} }
 
 type writer struct {
 	writer offsetTrackingWriter
@@ -193,7 +185,6 @@ type writer struct {
 		numRows        int64
 		totalRowCount  int64
 		targetByteSize int64
-		columns        []RowGroupColumn
 	}
 
 	buffers struct {
@@ -335,7 +326,6 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 	w.columnIndex = make([]format.ColumnIndex, len(w.columns))
 	w.offsetIndex = make([]format.OffsetIndex, len(w.columns))
 	w.columnOrders = make([]format.ColumnOrder, len(w.columns))
-	w.rowGroup.columns = make([]RowGroupColumn, len(w.columns))
 
 	for i, c := range w.columns {
 		w.columnChunk[i] = format.ColumnChunk{
@@ -351,10 +341,6 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 
 	for i, c := range w.columns {
 		w.columnOrders[i] = *c.columnType.ColumnOrder()
-	}
-
-	for i, c := range w.columns {
-		w.rowGroup.columns[i] = c
 	}
 
 	return w
@@ -423,7 +409,7 @@ func (w *writer) WriteRow(row Row) error {
 	}()
 
 	for i := range row {
-		c := w.columns[row[i].ColumnIndex()]
+		c := w.columns[row[i].Column()]
 		if err := c.insert(c, row[i:i+1]); err != nil {
 			return err
 		}
@@ -549,7 +535,7 @@ func (w *writer) writeRowGroup(rows RowGroup) (int64, error) {
 }
 
 func (w *writer) WritePage(page Page) (numValues int64, err error) {
-	columnIndex := page.ColumnIndex()
+	columnIndex := page.Column()
 	columnChunk := &w.columnChunk[columnIndex].MetaData
 	column := w.columns[columnIndex]
 
@@ -1050,12 +1036,8 @@ func (ccw *columnChunkWriter) makePageStatistics(numNulls int64, minValue, maxVa
 	return stats
 }
 
-func (ccw *columnChunkWriter) ColumnIndex() int {
+func (ccw *columnChunkWriter) Column() int {
 	return ccw.columnIndex
-}
-
-func (ccw *columnChunkWriter) Dictionary() Dictionary {
-	return ccw.dictionary
 }
 
 func (ccw *columnChunkWriter) Pages() PageReader {
@@ -1169,7 +1151,7 @@ type bufferedPageWriter struct {
 	pages []compressedPage
 }
 
-func (w *bufferedPageWriter) read(column RowGroupColumn) *bufferedPageReader {
+func (w *bufferedPageWriter) read(column *columnChunkWriter) *bufferedPageReader {
 	for i := range w.pages {
 		w.pages[i].column = column
 	}
@@ -1223,13 +1205,13 @@ func (r *bufferedPageReader) ReadPage() (Page, error) {
 }
 
 type compressedPage struct {
-	column RowGroupColumn
+	column *columnChunkWriter
 	buffer io.ReadWriter
 	stats  pageStats
 }
 
-func (page *compressedPage) ColumnIndex() int         { return page.column.ColumnIndex() }
-func (page *compressedPage) Dictionary() Dictionary   { return page.column.Dictionary() }
+func (page *compressedPage) Column() int              { return page.column.columnIndex }
+func (page *compressedPage) Dictionary() Dictionary   { return page.column.dictionary }
 func (page *compressedPage) NumRows() int             { return int(page.stats.numRows) }
 func (page *compressedPage) NumValues() int           { return int(page.stats.numValues) }
 func (page *compressedPage) NumNulls() int            { return int(page.stats.numNulls) }

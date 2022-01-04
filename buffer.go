@@ -14,8 +14,7 @@ type Buffer struct {
 	schema  *Schema
 	rowbuf  []Value
 	colbuf  [][]Value
-	columns []RowGroupColumn
-	buffers []ColumnBuffer
+	columns []ColumnBuffer
 	sorted  []ColumnBuffer
 }
 
@@ -63,7 +62,7 @@ func (buf *Buffer) configure(schema *Schema) {
 		case leaf.maxDefinitionLevel > 0:
 			column = newOptionalColumnBuffer(column, leaf.maxDefinitionLevel, nullOrdering)
 		}
-		buf.buffers = append(buf.buffers, column)
+		buf.columns = append(buf.columns, column)
 
 		if sortingIndex := searchSortingColumn(sortingColumns, leaf.path); sortingIndex < len(sortingColumns) {
 			if sortingColumns[sortingIndex].Descending() {
@@ -76,39 +75,39 @@ func (buf *Buffer) configure(schema *Schema) {
 		}
 	})
 
-	buf.columns = make([]RowGroupColumn, len(buf.buffers))
-	for i, column := range buf.buffers {
-		buf.columns[i] = column
-	}
-
 	buf.schema = schema
 	buf.rowbuf = make([]Value, 0, 10)
-	buf.colbuf = make([][]Value, len(buf.buffers))
+	buf.colbuf = make([][]Value, len(buf.columns))
 }
 
 // Size returns the estimated size of the buffer in memory.
 func (buf *Buffer) Size() int64 {
 	size := int64(0)
-	for _, col := range buf.buffers {
+	for _, col := range buf.columns {
 		size += col.Size()
 	}
 	return size
 }
 
-// Columns returns the list of columns in the buffer.
-//
-// The list will be empty until a schema is configured on the buffer.
-func (buf *Buffer) Columns() []RowGroupColumn { return buf.columns }
-
 // NumRows returns the number of rows written to the buffer.
 func (buf *Buffer) NumRows() int {
-	if len(buf.buffers) == 0 {
+	if len(buf.columns) == 0 {
 		return 0
 	} else {
 		// All columns have the same number of rows.
-		return buf.buffers[0].Len()
+		return buf.columns[0].Len()
 	}
 }
+
+// NumColumns returns the number of columns in the buffer.
+//
+// The count will be zero until a schema is configured on buf.
+func (buf *Buffer) NumColumns() int { return len(buf.columns) }
+
+// Column returns the buffer column at index i.
+//
+// The method panics if i is negative or beyond the last column index in buf.
+func (buf *Buffer) Column(i int) RowGroupColumn { return buf.columns[i] }
 
 // Schema returns the schema of the buffer.
 //
@@ -141,14 +140,14 @@ func (buf *Buffer) Less(i, j int) bool {
 
 // Swap exchanges the rows at indexes i and j.
 func (buf *Buffer) Swap(i, j int) {
-	for _, col := range buf.buffers {
+	for _, col := range buf.columns {
 		col.Swap(i, j)
 	}
 }
 
 // Reset clears the content of the buffer, allowing it to be reused.
 func (buf *Buffer) Reset() {
-	for _, col := range buf.buffers {
+	for _, col := range buf.columns {
 		col.Reset()
 	}
 }
@@ -179,12 +178,12 @@ func (buf *Buffer) WriteRow(row Row) error {
 	}
 
 	for _, value := range row {
-		columnIndex := value.ColumnIndex()
+		columnIndex := value.Column()
 		buf.colbuf[columnIndex] = append(buf.colbuf[columnIndex], value)
 	}
 
 	for columnIndex, values := range buf.colbuf {
-		if err := buf.buffers[columnIndex].WriteRow(values); err != nil {
+		if err := buf.columns[columnIndex].WriteRow(values); err != nil {
 			return err
 		}
 	}
@@ -213,24 +212,20 @@ func (buf *Buffer) WriteRowGroup(rowGroup RowGroup) (int64, error) {
 
 // WritePage satisfies the PageWriter interface.
 func (buf *Buffer) WritePage(page Page) (int64, error) {
-	return CopyValues(buf.buffers[page.ColumnIndex()], page.Values())
+	return CopyValues(buf.columns[page.Column()], page.Values())
 }
 
 // Rows returns a reader exposing the current content of the buffer.
 //
 // The buffer and the returned reader share memory, mutating the buffer
 // concurrently to reading rows may result in non-deterministic behavior.
-func (buf *Buffer) Rows() RowReader {
-	return &rowGroupRowReader{rowGroup: buf}
-}
+func (buf *Buffer) Rows() RowReader { return &rowGroupRowReader{rowGroup: buf} }
 
 // Pages returns a reader exposing the current pages of the buffer.
 //
 // The buffer and the returned reader share memory, mutating the buffer
 // concurrently to reading rows may result in non-deterministic behavior.
-func (buf *Buffer) Pages() PageReader {
-	return &multiRowGroupColumnPageReader{rowGroupColumns: buf.columns}
-}
+func (buf *Buffer) Pages() PageReader { return &rowGroupPageReader{rowGroup: buf} }
 
 var (
 	_ RowGroup       = (*Buffer)(nil)

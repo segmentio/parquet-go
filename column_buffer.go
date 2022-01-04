@@ -32,6 +32,10 @@ type ColumnBuffer interface {
 	// are set.
 	ValueWriter
 
+	// For indexed columns, returns the underlying dictionary holding the column
+	// values. If the column is not indexed, nil is returned.
+	Dictionary() Dictionary
+
 	// Returns a copy of the column. The returned copy shares no memory with
 	// the original, mutations of either column will not modify the other.
 	Clone() ColumnBuffer
@@ -110,8 +114,8 @@ func (col *optionalColumnBuffer) Dictionary() Dictionary {
 	return col.base.Dictionary()
 }
 
-func (col *optionalColumnBuffer) ColumnIndex() int {
-	return col.base.ColumnIndex()
+func (col *optionalColumnBuffer) Column() int {
+	return col.base.Column()
 }
 
 func (col *optionalColumnBuffer) Pages() PageReader {
@@ -324,8 +328,8 @@ func (col *repeatedColumnBuffer) Dictionary() Dictionary {
 	return col.base.Dictionary()
 }
 
-func (col *repeatedColumnBuffer) ColumnIndex() int {
-	return col.base.ColumnIndex()
+func (col *repeatedColumnBuffer) Column() int {
+	return col.base.Column()
 }
 
 func (col *repeatedColumnBuffer) Pages() PageReader {
@@ -354,10 +358,10 @@ func (col *repeatedColumnBuffer) Page() BufferedPage {
 			for i := 0; i < numValues; i++ {
 				var err error
 				if buffer, err = col.base.ReadRowAt(buffer[:0], int(row.offset)+i); err != nil {
-					return newErrorPage(col.ColumnIndex(), "reordering rows of repeated column: %w", err)
+					return newErrorPage(col.Column(), "reordering rows of repeated column: %w", err)
 				}
 				if err = column.base.WriteRow(buffer); err != nil {
-					return newErrorPage(col.ColumnIndex(), "reordering rows of repeated column: %w", err)
+					return newErrorPage(col.Column(), "reordering rows of repeated column: %w", err)
 				}
 			}
 		}

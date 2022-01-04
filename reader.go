@@ -4,9 +4,6 @@ import (
 	"fmt"
 	"io"
 	"reflect"
-
-	"github.com/segmentio/parquet/encoding"
-	"github.com/segmentio/parquet/format"
 )
 
 // A Reader reads Go values from parquet files.
@@ -33,8 +30,7 @@ type Reader struct {
 	fileSchema *Schema
 	readSchema *Schema
 	seen       reflect.Type
-	columns    []*columnChunkReader
-	readers    []columnValueReader
+	columns    []columnValueReader
 	buffer     []Value
 	values     []Value
 	conv       Conversion
@@ -69,20 +65,13 @@ func NewReader(r io.ReaderAt, options ...ReaderOption) *Reader {
 	}
 
 	root := f.Root()
-	columns := make([]*columnChunkReader, 0, numColumnsOf(root))
-	root.forEachLeaf(func(column *Column) {
-		columns = append(columns, newColumnChunkReader(column, config))
-	})
-	readers := makeColumnValueReaders(len(columns), func(i int) ValueReader {
-		return columns[i]
-	})
 	schema := NewSchema(root.Name(), root)
+	columns := makeFileColumnValueReader(f)
 	return &Reader{
 		file:       f,
 		fileSchema: schema,
 		readSchema: schema,
 		columns:    columns,
-		readers:    readers,
 		values:     make([]Value, 0, len(columns)),
 		readRow:    schema.readRow,
 	}
@@ -108,12 +97,15 @@ func sizeOf(r io.ReaderAt) (int64, error) {
 	}
 }
 
+func makeFileColumnValueReader(f *File) []columnValueReader {
+	columnPages := make([]PageReader, 0, numColumnsOf(f.Root()))
+	f.Root().forEachLeaf(func(col *Column) { columnPages = append(columnPages, col.Pages()) })
+	return makeColumnValueReaders(len(columnPages), func(i int) PageReader { return columnPages[i] })
+}
+
 // Reset repositions the reader at the beginning of the underlying parquet file.
 func (r *Reader) Reset() {
-	for i, c := range r.columns {
-		c.Reset()
-		r.readers[i].reset(c)
-	}
+	r.columns = makeFileColumnValueReader(r.file)
 	clearValues(r.buffer)
 	clearValues(r.values)
 }
@@ -170,7 +162,7 @@ func (r *Reader) Read(row interface{}) (err error) {
 // The method returns io.EOF when no more rows can be read from r.
 func (r *Reader) ReadRow(buf Row) (Row, error) {
 	n := len(buf)
-	buf, err := r.readRow(buf, 0, r.readers)
+	buf, err := r.readRow(buf, 0, r.columns)
 	if err == nil && len(buf) == n {
 		err = io.EOF
 	}
@@ -180,67 +172,50 @@ func (r *Reader) ReadRow(buf Row) (Row, error) {
 // Schema returns the schema of rows read by r.
 func (r *Reader) Schema() *Schema { return r.fileSchema }
 
-type columnPageValueReader struct {
+type columnValueReader struct {
+	buffer []Value
+	offset uint
 	values ValueReader
 	pages  PageReader
 }
 
-func (r *columnPageValueReader) ReadValues(values []Value) (int, error) {
-	numValues := 0
-	for {
-		if r.values != nil {
-			n, err := r.values.ReadValues(values)
-			numValues += n
-			if err == nil || err != io.EOF {
-				return numValues, err
-			}
-			r.values = nil
-		}
-		if r.pages == nil {
-			return numValues, io.EOF
-		}
-		p, err := r.pages.ReadPage()
-		if err != nil {
-			return numValues, err
-		}
-		r.values = p.Values()
-	}
-}
-
-type columnValueReader struct {
-	buffer []Value
-	offset uint
-	reader ValueReader
-}
-
-func makeColumnValueReaders(numColumns int, columnAt func(int) ValueReader) []columnValueReader {
+func makeColumnValueReaders(numColumns int, columnPagesOf func(int) PageReader) []columnValueReader {
 	const columnBufferSize = defaultValueBufferSize
 	buffer := make([]Value, columnBufferSize*numColumns)
 	readers := make([]columnValueReader, numColumns)
 
 	for i := 0; i < numColumns; i++ {
 		readers[i].buffer = buffer[:0:columnBufferSize]
-		readers[i].reader = columnAt(i)
+		readers[i].pages = columnPagesOf(i)
 		buffer = buffer[columnBufferSize:]
 	}
 
 	return readers
 }
 
-func (r *columnValueReader) reset(reader ValueReader) {
-	r.buffer = r.buffer[:0]
-	r.offset = 0
-	r.reader = reader
-}
-
 func (r *columnValueReader) readMoreValues() error {
-	n, err := r.reader.ReadValues(r.buffer[:cap(r.buffer)])
-	if n == 0 {
-		return err
+	for {
+		if r.values != nil {
+			n, err := r.values.ReadValues(r.buffer[:cap(r.buffer)])
+			if n > 0 {
+				r.buffer = r.buffer[:n]
+				r.offset = 0
+				return nil
+			}
+			if err != io.EOF {
+				return err
+			}
+			r.values = nil
+		}
+		if r.pages == nil {
+			return io.EOF
+		}
+		p, err := r.pages.ReadPage()
+		if err != nil {
+			return err
+		}
+		r.values = p.Values()
 	}
-	r.buffer = r.buffer[:n]
-	r.offset = 0
-	return nil
 }
 
 type columnReadRowFunc func(Row, int8, []columnValueReader) (Row, error)
@@ -356,161 +331,6 @@ func columnReadRowFuncOfLeaf(node Node, columnIndex int, repetitionDepth int8) (
 	}
 
 	return columnIndex + 1, read
-}
-
-type columnChunkReader struct {
-	bufferSize int
-	column     *Column
-	chunks     *ColumnChunks
-	pages      *ColumnPages
-	reader     *DataPageReader
-	dictionary Dictionary
-	numPages   int
-
-	values []Value
-	offset uint
-
-	repetitions struct {
-		decoder encoding.Decoder
-	}
-	definitions struct {
-		decoder encoding.Decoder
-	}
-	page struct {
-		typ     Type
-		decoder encoding.Decoder
-	}
-
-	peeked bool
-	cursor Value
-}
-
-func newColumnChunkReader(column *Column, config *ReaderConfig) *columnChunkReader {
-	ccr := &columnChunkReader{
-		bufferSize: config.PageBufferSize,
-		column:     column,
-		chunks:     column.Chunks(),
-		values:     make([]Value, 0, defaultValueBufferSize),
-	}
-
-	maxRepetitionLevel := column.MaxRepetitionLevel()
-	maxDefinitionLevel := column.MaxDefinitionLevel()
-
-	if maxRepetitionLevel > 0 || maxDefinitionLevel > 0 {
-		ccr.bufferSize /= 2
-	}
-
-	ccr.page.typ = column.Type()
-	return ccr
-}
-
-func (ccr *columnChunkReader) Reset() {
-	if ccr.pages != nil {
-		ccr.pages.close(io.EOF)
-	}
-
-	ccr.chunks.Seek(0)
-	ccr.values = ccr.values[:0]
-	ccr.offset = 0
-	ccr.numPages = 0
-
-	ccr.peeked = false
-	ccr.cursor = Value{}
-}
-
-func (ccr *columnChunkReader) ReadValues(values []Value) (int, error) {
-readNextValues:
-	if ccr.reader != nil {
-		n, err := ccr.reader.ReadValues(values)
-		if n > 0 {
-			return n, nil
-		}
-		if err != io.EOF {
-			return 0, err
-		}
-	}
-
-readNextPage:
-	if ccr.pages != nil {
-		if !ccr.pages.Next() {
-			// Here the page count needs to be reset because we are changing the
-			// column chunk and we may have to read another dictionary page.
-			ccr.numPages = 0
-			if ccr.dictionary != nil {
-				ccr.dictionary.Reset()
-			}
-		} else {
-			var err error
-
-			switch header := ccr.pages.PageHeader().(type) {
-			case DictionaryPageHeader:
-				if ccr.numPages != 0 {
-					err = fmt.Errorf("the dictionary must be in the first page but one was found after reading %d pages", ccr.numPages)
-				} else {
-					err = ccr.readDictionaryPage(header)
-				}
-				if err != nil {
-					return 0, err
-				}
-				goto readNextPage
-			case DataPageHeader:
-				ccr.readDataPage(header)
-				goto readNextValues
-			default:
-				return 0, fmt.Errorf("unsupported page header type: %#v", header)
-			}
-		}
-	}
-
-	if !ccr.chunks.Next() {
-		return 0, io.EOF
-	}
-
-	ccr.pages = ccr.chunks.PagesTo(ccr.pages)
-	goto readNextPage
-}
-
-func (ccr *columnChunkReader) readDictionaryPage(header DictionaryPageHeader) error {
-	if ccr.dictionary == nil {
-		ccr.dictionary = ccr.page.typ.NewDictionary(ccr.bufferSize)
-	} else {
-		ccr.dictionary.Reset()
-	}
-	decoder := LookupEncoding(header.Encoding()).NewDecoder(ccr.pages.PageData())
-	if err := ccr.dictionary.ReadFrom(decoder); err != nil {
-		return err
-	}
-	ccr.page.typ = ccr.dictionary.Type()
-	ccr.numPages++
-	return nil
-}
-
-func (ccr *columnChunkReader) readDataPage(header DataPageHeader) {
-	ccr.repetitions.decoder = makeDecoder(ccr.repetitions.decoder, header.RepetitionLevelEncoding(), ccr.pages.RepetitionLevels())
-	ccr.definitions.decoder = makeDecoder(ccr.definitions.decoder, header.DefinitionLevelEncoding(), ccr.pages.DefinitionLevels())
-	ccr.page.decoder = makeDecoder(ccr.page.decoder, header.Encoding(), ccr.pages.PageData())
-
-	if ccr.reader == nil {
-		ccr.reader = NewDataPageReader(
-			ccr.page.typ,
-			ccr.column.MaxRepetitionLevel(),
-			ccr.column.MaxDefinitionLevel(),
-			ccr.column.Index(),
-			ccr.bufferSize,
-		)
-	}
-
-	ccr.reader.Reset(header.NumValues(), ccr.repetitions.decoder, ccr.definitions.decoder, ccr.page.decoder)
-	ccr.numPages++
-}
-
-func makeDecoder(decoder encoding.Decoder, encoding format.Encoding, input io.Reader) encoding.Decoder {
-	if decoder == nil || encoding != decoder.Encoding() {
-		decoder = LookupEncoding(encoding).NewDecoder(input)
-	} else {
-		decoder.Reset(input)
-	}
-	return decoder
 }
 
 var (

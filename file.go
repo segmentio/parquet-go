@@ -16,6 +16,11 @@ import (
 	"github.com/segmentio/parquet/format"
 )
 
+const (
+	defaultReadBufferSize  = 4096
+	defaultLevelBufferSize = 1024
+)
+
 // File represents a parquet file.
 type File struct {
 	metadata      format.FileMetaData
@@ -305,24 +310,39 @@ func lookupKeyValueMetadata(keyValueMetadata []format.KeyValue, key string) (val
 	return keyValueMetadata[i].Value, true
 }
 
-func newFileRowGroup(file *File, schema *Schema, columns []*Column, group *format.RowGroup) RowGroup {
-	g := &rowGroup{
-		schema:  schema,
-		numRows: int(group.NumRows),
-		columns: make([]RowGroupColumn, len(group.Columns)),
-		sorting: make([]SortingColumn, len(group.SortingColumns)),
+type fileRowGroup struct {
+	schema   *Schema
+	rowGroup *format.RowGroup
+	columns  []fileRowGroupColumn
+	sorting  []SortingColumn
+}
+
+func (g *fileRowGroup) Schema() *Schema                 { return g.schema }
+func (g *fileRowGroup) NumRows() int                    { return int(g.rowGroup.NumRows) }
+func (g *fileRowGroup) NumColumns() int                 { return len(g.columns) }
+func (g *fileRowGroup) Column(i int) RowGroupColumn     { return &g.columns[i] }
+func (g *fileRowGroup) SortingColumns() []SortingColumn { return g.sorting }
+func (g *fileRowGroup) Rows() RowReader                 { return &rowGroupRowReader{rowGroup: g} }
+func (g *fileRowGroup) Pages() PageReader               { return &rowGroupPageReader{rowGroup: g} }
+
+func newFileRowGroup(file *File, schema *Schema, columns []*Column, rowGroup *format.RowGroup) *fileRowGroup {
+	g := &fileRowGroup{
+		schema:   schema,
+		rowGroup: rowGroup,
+		columns:  make([]fileRowGroupColumn, len(rowGroup.Columns)),
+		sorting:  make([]SortingColumn, len(rowGroup.SortingColumns)),
 	}
 
 	hasIndexes := file.columnIndexes != nil && file.offsetIndexes != nil
 	for i := range g.columns {
-		c := &fileRowGroupColumn{
+		c := fileRowGroupColumn{
 			file:   file,
 			column: columns[i],
-			chunk:  &group.Columns[i],
+			chunk:  &rowGroup.Columns[i],
 		}
 
 		if hasIndexes {
-			j := (int(group.Ordinal) * len(columns)) + i
+			j := (int(rowGroup.Ordinal) * len(columns)) + i
 			c.columnIndex = &file.columnIndexes[j]
 			c.offsetIndex = &file.offsetIndexes[j]
 		}
@@ -332,9 +352,9 @@ func newFileRowGroup(file *File, schema *Schema, columns []*Column, group *forma
 
 	for i := range g.sorting {
 		g.sorting[i] = &fileSortingColumn{
-			column:     columns[group.SortingColumns[i].ColumnIdx],
-			descending: group.SortingColumns[i].Descending,
-			nullsFirst: group.SortingColumns[i].NullsFirst,
+			column:     columns[rowGroup.SortingColumns[i].ColumnIdx],
+			descending: rowGroup.SortingColumns[i].Descending,
+			nullsFirst: rowGroup.SortingColumns[i].NullsFirst,
 		}
 	}
 
@@ -359,16 +379,8 @@ type fileRowGroupColumn struct {
 	chunk       *format.ColumnChunk
 }
 
-func (c *fileRowGroupColumn) ColumnIndex() int {
+func (c *fileRowGroupColumn) Column() int {
 	return int(c.column.Index())
-}
-
-func (c *fileRowGroupColumn) Dictionary() Dictionary {
-	if c.chunk.MetaData.DictionaryPageOffset == 0 {
-		return nil
-	}
-	// TODO
-	return nil
 }
 
 func (c *fileRowGroupColumn) Pages() PageReader {
@@ -381,11 +393,13 @@ type filePageReader struct {
 	protocol    thrift.CompactProtocol
 	decoder     thrift.Decoder
 
-	section bufferedSectionReader
+	section *io.SectionReader
+	rbuf    *bufio.Reader
+
 	// This buffer is used to hold compressed page in memory when they are read;
 	// we need to read whole pages because we have to compute the checksum prior
 	// to returning the page to the application.
-	buffer []byte
+	compressedPageData []byte
 
 	page filePage
 }
@@ -409,8 +423,9 @@ func newFilePageReader(file *File, column *Column, columnIndex *ColumnIndex, off
 		r.page.columnType = r.page.dictionary.Type()
 	}
 
-	r.section.Reset(file, pageOffset, chunk.MetaData.TotalCompressedSize)
-	r.decoder.Reset(r.protocol.NewReader(&r.section))
+	r.section = io.NewSectionReader(file, pageOffset, chunk.MetaData.TotalCompressedSize)
+	r.rbuf = bufio.NewReaderSize(r.section, defaultReadBufferSize)
+	r.decoder.Reset(r.protocol.NewReader(r.rbuf))
 	return r
 }
 
@@ -429,20 +444,20 @@ func (r *filePageReader) ReadPage() (Page, error) {
 		}
 
 		compressedPageSize := int(r.page.header.CompressedPageSize)
-		if cap(r.buffer) < compressedPageSize {
-			r.buffer = make([]byte, compressedPageSize)
+		if cap(r.compressedPageData) < compressedPageSize {
+			r.compressedPageData = make([]byte, compressedPageSize)
 		} else {
-			r.buffer = r.buffer[:compressedPageSize]
+			r.compressedPageData = r.compressedPageData[:compressedPageSize]
 		}
 
-		_, err := io.ReadFull(&r.section, r.buffer)
+		_, err := io.ReadFull(r.rbuf, r.compressedPageData)
 		if err != nil {
 			return nil, fmt.Errorf("reading page %d of column %q", r.page.index, r.page.columnPath())
 		}
 
 		if r.page.header.CRC != 0 {
 			headerChecksum := uint32(r.page.header.CRC)
-			bufferChecksum := crc32.ChecksumIEEE(r.buffer)
+			bufferChecksum := crc32.ChecksumIEEE(r.compressedPageData)
 
 			if headerChecksum != bufferChecksum {
 				return nil, fmt.Errorf("crc32 checksum mismatch in page %d of column %q: 0x%08X != 0x%08X: %w",
@@ -455,7 +470,7 @@ func (r *filePageReader) ReadPage() (Page, error) {
 			}
 		}
 
-		r.page.data.Reset(r.buffer)
+		r.page.data.Reset(r.compressedPageData)
 
 		if r.page.header.Type != format.DictionaryPage {
 			if r.columnIndex != nil {
@@ -475,13 +490,17 @@ func (r *filePageReader) ReadPage() (Page, error) {
 		}
 
 		dict := r.page.dictionary
-		dict.Reset()
+		page := acquireCompressedPageReader(r.page.codec, &r.page.data)
 
 		enc := r.page.header.DictionaryPageHeader.Encoding
-		dec := LookupEncoding(enc).NewDecoder(&r.page.data)
+		dec := LookupEncoding(enc).NewDecoder(page)
 
-		if err := dict.ReadFrom(dec); err != nil {
-			return nil, fmt.Errorf("reading dictionary of column %q", r.page.columnPath())
+		dict.Reset()
+		err = dict.ReadFrom(dec)
+		releaseCompressedPageReader(page)
+
+		if err != nil {
+			return nil, fmt.Errorf("reading dictionary of column %q: %w", r.page.columnPath(), err)
 		}
 	}
 }
@@ -616,7 +635,7 @@ func (p *filePage) columnPath() columnPath {
 	return columnPath(p.column.Path())
 }
 
-func (p *filePage) ColumnIndex() int {
+func (p *filePage) Column() int {
 	return int(p.column.Index())
 }
 
@@ -739,7 +758,7 @@ func (s *filePageValueReaderState) reset(columnType Type, column *Column, codec 
 			return fmt.Errorf("initializing v2 reader for page of column %q: %w", columnPath(column.Path()), err)
 		}
 		if h.IsCompressed(codec) {
-			s.page.compressed = initCompressedPage(s.page.compressed, codec, data)
+			s.page.compressed = makeCompressedPage(s.page.compressed, codec, data)
 			pageData = s.page.compressed
 		} else {
 			pageData = data
@@ -748,12 +767,12 @@ func (s *filePageValueReaderState) reset(columnType Type, column *Column, codec 
 
 	case DataPageHeaderV1:
 		if h.IsCompressed(codec) {
-			s.page.compressed = initCompressedPage(s.page.compressed, codec, data)
+			s.page.compressed = makeCompressedPage(s.page.compressed, codec, data)
 			pageData = s.page.compressed
 		} else {
 			pageData = data
 		}
-		repetitionLevels, definitionLevels, err = s.initDataPageV1(column, data)
+		repetitionLevels, definitionLevels, err = s.initDataPageV1(column, pageData)
 		if err != nil {
 			return fmt.Errorf("initializing v1 reader for page of column %q: %w", columnPath(column.Path()), err)
 		}
@@ -781,7 +800,7 @@ func (s *filePageValueReaderState) reset(columnType Type, column *Column, codec 
 	return nil
 }
 
-func (s *filePageValueReaderState) initDataPageV1(column *Column, data *bytes.Reader) (repetitionLevels, definitionLevels io.Reader, err error) {
+func (s *filePageValueReaderState) initDataPageV1(column *Column, data io.Reader) (repetitionLevels, definitionLevels io.Reader, err error) {
 	s.v1.repetitions.reset()
 	s.v1.definitions.reset()
 
@@ -825,6 +844,89 @@ func (s *filePageValueReaderState) initDataPageV2(header DataPageHeaderV2, data 
 	repetitionLevels = &s.v2.repetitions.section
 	definitionLevels = &s.v2.definitions.section
 	return repetitionLevels, definitionLevels, nil
+}
+
+type dataPageLevelV1 struct {
+	section bytes.Reader
+	data    []byte
+}
+
+func (lvl *dataPageLevelV1) reset() {
+	lvl.section.Reset(nil)
+}
+
+// This method breaks abstraction layers a bit, but it is helpful to avoid
+// decoding repetition and definition levels if there is no need to.
+//
+// In the data header format v1, the repetition and definition levels were
+// part of the compressed page payload. In order to access the data, the
+// levels must be fully read. Because of it, the levels have to be buffered
+// to allow the content to be decoded lazily later on.
+//
+// In the data header format v2, the repetition and definition levels are not
+// part of the compressed page data, they can be accessed by slicing a section
+// of the file according to the level lengths stored in the column metadata
+// header, therefore there is no need to buffer the levels.
+func (lvl *dataPageLevelV1) readDataPageV1Level(r io.Reader, typ string) error {
+	const defaultLevelBufferSize = 256
+
+	if cap(lvl.data) < 4 {
+		lvl.data = make([]byte, 4, defaultLevelBufferSize)
+	} else {
+		lvl.data = lvl.data[:4]
+	}
+	if _, err := io.ReadFull(r, lvl.data); err != nil {
+		return fmt.Errorf("reading RLE encoded length of %s levels: %w", typ, err)
+	}
+
+	n := int(binary.LittleEndian.Uint32(lvl.data))
+	if cap(lvl.data) < n {
+		lvl.data = make([]byte, n)
+	} else {
+		lvl.data = lvl.data[:n]
+	}
+
+	if rn, err := io.ReadFull(r, lvl.data); err != nil {
+		return fmt.Errorf("reading %d/%d bytes of %s levels: %w", rn, n, typ, err)
+	}
+
+	lvl.section.Reset(lvl.data)
+	return nil
+}
+
+type dataPageLevelV2 struct {
+	section io.SectionReader
+}
+
+func (lvl *dataPageLevelV2) reset() {
+	lvl.section = *io.NewSectionReader(nil, 0, 0)
+}
+
+func (lvl *dataPageLevelV2) setDataPageV2Section(file io.ReaderAt, dataPageOffset, dataPageLength int64) {
+	lvl.section = *io.NewSectionReader(file, dataPageOffset, dataPageLength)
+}
+
+func makeCompressedPage(page *compressedPageReader, codec format.CompressionCodec, compressed io.Reader) *compressedPageReader {
+	if page == nil {
+		page = acquireCompressedPageReader(codec, compressed)
+	} else {
+		if page.codec != codec {
+			releaseCompressedPageReader(page)
+			page = acquireCompressedPageReader(codec, compressed)
+		} else {
+			page.Reset(compressed)
+		}
+	}
+	return page
+}
+
+func makeDecoder(decoder encoding.Decoder, encoding format.Encoding, input io.Reader) encoding.Decoder {
+	if decoder == nil || encoding != decoder.Encoding() {
+		decoder = LookupEncoding(encoding).NewDecoder(input)
+	} else {
+		decoder.Reset(input)
+	}
+	return decoder
 }
 
 var (

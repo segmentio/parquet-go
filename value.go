@@ -365,10 +365,10 @@ func (v Value) RepetitionLevel() int8 { return v.repetitionLevel }
 // DefinitionLevel returns the definition level of v.
 func (v Value) DefinitionLevel() int8 { return v.definitionLevel }
 
-// ColumnIndex returns the column index within the row that v was created from.
+// Column returns the column index within the row that v was created from.
 //
 // Returns -1 if the value does not carry a column index.
-func (v Value) ColumnIndex() int8 { return ^v.columnIndex }
+func (v Value) Column() int8 { return ^v.columnIndex }
 
 // Bytes returns the binary representation of v.
 //
@@ -427,7 +427,7 @@ func (v Value) Format(w fmt.State, r rune) {
 		if w.Flag('+') {
 			io.WriteString(w, "C:")
 		}
-		fmt.Fprint(w, v.ColumnIndex())
+		fmt.Fprint(w, v.Column())
 
 	case 'd':
 		if w.Flag('+') {
@@ -519,11 +519,11 @@ func (v Value) GoString() string {
 	return fmt.Sprintf("%#v", v)
 }
 
-// Level returns v with the repetition and definition levels set to the values
-// passed as arguments.
+// Level returns v with the repetition leve, definition level, and column index
+// set to the values passed as arguments.
 //
 // The method panics if either argument is negative.
-func (v Value) Level(repetitionLevel, definitionLevel int8) Value {
+func (v Value) Level(repetitionLevel, definitionLevel, columnIndex int8) Value {
 	if repetitionLevel < 0 {
 		panic("cannot create a value with a negative repetition level")
 	}
@@ -532,14 +532,6 @@ func (v Value) Level(repetitionLevel, definitionLevel int8) Value {
 	}
 	v.repetitionLevel = repetitionLevel
 	v.definitionLevel = definitionLevel
-	return v
-}
-
-// Column returns v with the column index set to the given value.
-func (v Value) Column(columnIndex int8) Value {
-	if columnIndex < 0 {
-		panic("cannot create a value with a negative repetition level")
-	}
 	v.columnIndex = ^columnIndex
 	return v
 }

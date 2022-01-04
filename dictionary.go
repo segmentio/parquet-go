@@ -697,7 +697,7 @@ type indexedPage struct {
 	columnIndex int8
 }
 
-func (page *indexedPage) ColumnIndex() int { return int(^page.columnIndex) }
+func (page *indexedPage) Column() int { return int(^page.columnIndex) }
 
 func (page *indexedPage) Dictionary() Dictionary { return page.dict }
 
