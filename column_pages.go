@@ -386,7 +386,7 @@ func (lvl *dataPageLevelV2) reset() {
 	lvl.section = *io.NewSectionReader(nil, 0, 0)
 }
 
-func (lvl *dataPageLevelV2) setDataPageV2Section(file *File, dataPageOffset, dataPageLength int64) {
+func (lvl *dataPageLevelV2) setDataPageV2Section(file io.ReaderAt, dataPageOffset, dataPageLength int64) {
 	lvl.section = *io.NewSectionReader(file, dataPageOffset, dataPageLength)
 }
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"hash/crc32"
 	"io"
 	"sort"
 
@@ -162,27 +163,21 @@ func (w *Writer) ReadRowsFrom(rows RowReader) (written int64, err error) {
 // The returned value will be nil if no schema has yet been configured on w.
 func (w *Writer) Schema() *Schema { return w.schema }
 
-type rowGroup struct{ *writer }
+type writerRowGroup struct{ *writer }
 
-func (g rowGroup) Columns() []RowGroupColumn {
-	columns := make([]RowGroupColumn, len(g.columns))
-	for i, c := range g.columns {
-		columns[i] = c
-	}
-	return columns
-}
+func (g writerRowGroup) Columns() []RowGroupColumn { return g.rowGroup.columns }
 
-func (g rowGroup) NumRows() int { return int(g.rowGroup.numRows) }
+func (g writerRowGroup) NumRows() int { return int(g.rowGroup.numRows) }
 
-func (g rowGroup) Schema() *Schema { return g.rowGroup.schema }
+func (g writerRowGroup) Schema() *Schema { return g.rowGroup.schema }
 
-func (g rowGroup) SortingColumns() []SortingColumn { return nil }
+func (g writerRowGroup) SortingColumns() []SortingColumn { return nil }
 
-func (g rowGroup) Rows() RowReader {
+func (g writerRowGroup) Rows() RowReader {
 	return &rowGroupRowReader{rowGroup: g}
 }
 
-func (g rowGroup) Pages() PageReader {
+func (g writerRowGroup) Pages() PageReader {
 	return &multiRowGroupColumnPageReader{rowGroupColumns: g.Columns()}
 }
 
@@ -198,6 +193,7 @@ type writer struct {
 		numRows        int64
 		totalRowCount  int64
 		targetByteSize int64
+		columns        []RowGroupColumn
 	}
 
 	buffers struct {
@@ -339,6 +335,7 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 	w.columnIndex = make([]format.ColumnIndex, len(w.columns))
 	w.offsetIndex = make([]format.OffsetIndex, len(w.columns))
 	w.columnOrders = make([]format.ColumnOrder, len(w.columns))
+	w.rowGroup.columns = make([]RowGroupColumn, len(w.columns))
 
 	for i, c := range w.columns {
 		w.columnChunk[i] = format.ColumnChunk{
@@ -354,6 +351,10 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 
 	for i, c := range w.columns {
 		w.columnOrders[i] = *c.columnType.ColumnOrder()
+	}
+
+	for i, c := range w.columns {
+		w.rowGroup.columns[i] = c
 	}
 
 	return w
@@ -409,7 +410,7 @@ func (w *writer) Flush() error {
 		}
 	}
 
-	_, err := w.writeRowGroup(rowGroup{w})
+	_, err := w.writeRowGroup(writerRowGroup{w})
 	return err
 }
 
@@ -616,11 +617,14 @@ func (w *writer) recordPageStats(columnIndex int, pageOffset int64, stats pageSt
 		Count:    1,
 	})
 
-	offsetIndex.PageLocations = append(offsetIndex.PageLocations, format.PageLocation{
-		Offset:             pageOffset,
-		CompressedPageSize: stats.compressedSize,
-		FirstRowIndex:      w.rowGroup.totalRowCount,
-	})
+	switch stats.pageType {
+	case format.DataPage, format.DataPageV2:
+		offsetIndex.PageLocations = append(offsetIndex.PageLocations, format.PageLocation{
+			Offset:             pageOffset,
+			CompressedPageSize: stats.compressedSize,
+			FirstRowIndex:      w.rowGroup.totalRowCount,
+		})
+	}
 
 	w.rowGroup.totalRowCount += int64(stats.numRows)
 }
@@ -741,7 +745,6 @@ type columnChunkWriter struct {
 
 	page struct {
 		buffer       *bytes.Buffer
-		checksum     crc32Writer
 		compressed   compress.Writer
 		uncompressed offsetTrackingWriter
 		encoder      encoding.Encoder
@@ -858,21 +861,19 @@ func (ccw *columnChunkWriter) writeDataPage(writer pageWriter, page BufferedPage
 	}
 
 	ccw.page.buffer.Reset()
-	ccw.page.checksum.Reset(ccw.page.buffer)
-
 	repetitionLevelsByteLength := int32(0)
 	definitionLevelsByteLength := int32(0)
 
 	if ccw.dataPageType == format.DataPageV2 {
 		if ccw.maxRepetitionLevel > 0 {
-			ccw.page.uncompressed.Reset(&ccw.page.checksum)
+			ccw.page.uncompressed.Reset(ccw.page.buffer)
 			ccw.levels.encoder.Reset(&ccw.page.uncompressed)
 			ccw.levels.encoder.SetBitWidth(bits.Len8(ccw.maxRepetitionLevel))
 			ccw.levels.encoder.EncodeInt8(page.RepetitionLevels())
 			repetitionLevelsByteLength = int32(ccw.page.uncompressed.offset)
 		}
 		if ccw.maxDefinitionLevel > 0 {
-			ccw.page.uncompressed.Reset(&ccw.page.checksum)
+			ccw.page.uncompressed.Reset(ccw.page.buffer)
 			ccw.levels.encoder.Reset(&ccw.page.uncompressed)
 			ccw.levels.encoder.SetBitWidth(bits.Len8(ccw.maxDefinitionLevel))
 			ccw.levels.encoder.EncodeInt8(page.DefinitionLevels())
@@ -881,9 +882,9 @@ func (ccw *columnChunkWriter) writeDataPage(writer pageWriter, page BufferedPage
 	}
 
 	if !ccw.isCompressed {
-		ccw.page.uncompressed.Reset(&ccw.page.checksum)
+		ccw.page.uncompressed.Reset(ccw.page.buffer)
 	} else {
-		p, err := ccw.compressedPage(&ccw.page.checksum)
+		p, err := ccw.compressedPage(ccw.page.buffer)
 		if err != nil {
 			return 0, err
 		}
@@ -933,7 +934,7 @@ func (ccw *columnChunkWriter) writeDataPage(writer pageWriter, page BufferedPage
 		Type:                 ccw.dataPageType,
 		UncompressedPageSize: int32(uncompressedPageSize),
 		CompressedPageSize:   int32(compressedPageSize),
-		CRC:                  int32(ccw.page.checksum.Sum32()),
+		CRC:                  int32(crc32.ChecksumIEEE(ccw.page.buffer.Bytes())),
 	}
 
 	numRows := page.NumRows()
@@ -992,9 +993,8 @@ func (ccw *columnChunkWriter) compressedPage(w io.Writer) (compress.Writer, erro
 
 func (ccw *columnChunkWriter) writeDictionaryPage(writer pageWriter, dict Dictionary) error {
 	ccw.page.buffer.Reset()
-	ccw.page.checksum.Reset(ccw.page.buffer)
 
-	p, err := ccw.compressedPage(&ccw.page.checksum)
+	p, err := ccw.compressedPage(ccw.page.buffer)
 	if err != nil {
 		return err
 	}
@@ -1016,7 +1016,7 @@ func (ccw *columnChunkWriter) writeDictionaryPage(writer pageWriter, dict Dictio
 		Type:                 format.DictionaryPage,
 		UncompressedPageSize: int32(ccw.page.uncompressed.offset),
 		CompressedPageSize:   int32(ccw.page.buffer.Len()),
-		CRC:                  int32(ccw.page.checksum.Sum32()),
+		CRC:                  int32(crc32.ChecksumIEEE(ccw.page.buffer.Bytes())),
 		DictionaryPageHeader: &format.DictionaryPageHeader{
 			NumValues: int32(dict.Len()),
 			Encoding:  format.Plain,

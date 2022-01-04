@@ -679,6 +679,43 @@ func assignValue(dst reflect.Value, src Value) error {
 	return fmt.Errorf("cannot assign parquet value of type %s to go value of type %s", srcKind.String(), dst.Type())
 }
 
+func parseValue(kind Kind, data []byte) (val Value, err error) {
+	switch kind {
+	case Boolean:
+		if len(data) == 1 {
+			val = makeValueBoolean(data[0] != 0)
+		}
+	case Int32:
+		if len(data) == 4 {
+			val = makeValueInt32(int32(binary.LittleEndian.Uint32(data)))
+		}
+	case Int64:
+		if len(data) == 8 {
+			val = makeValueInt64(int64(binary.LittleEndian.Uint64(data)))
+		}
+	case Int96:
+		if len(data) == 12 {
+			lo := binary.LittleEndian.Uint64(data[:8])
+			hi := binary.LittleEndian.Uint32(data[8:])
+			val = makeValueInt96(makeInt96(lo, hi))
+		}
+	case Float:
+		if len(data) == 4 {
+			val = makeValueFloat(float32(math.Float32frombits(binary.LittleEndian.Uint32(data))))
+		}
+	case Double:
+		if len(data) == 8 {
+			val = makeValueDouble(float64(math.Float64frombits(binary.LittleEndian.Uint64(data))))
+		}
+	case ByteArray, FixedLenByteArray:
+		val = makeValueBytes(kind, data)
+	}
+	if val.IsNull() {
+		err = fmt.Errorf("cannot decode %s value from input of length %d", kind, len(data))
+	}
+	return val, err
+}
+
 func copyBytes(b []byte) []byte {
 	c := make([]byte, len(b))
 	copy(c, b)

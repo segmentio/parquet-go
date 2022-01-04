@@ -55,6 +55,27 @@ type RowGroupWriter interface {
 	WriteRowGroup(RowGroup) (int64, error)
 }
 
+type rowGroup struct {
+	schema  *Schema
+	numRows int
+	columns []RowGroupColumn
+	sorting []SortingColumn
+}
+
+func (g *rowGroup) Schema() *Schema { return g.schema }
+
+func (g *rowGroup) NumRows() int { return g.numRows }
+
+func (g *rowGroup) Columns() []RowGroupColumn { return g.columns }
+
+func (g *rowGroup) SortingColumns() []SortingColumn { return g.sorting }
+
+func (g *rowGroup) Rows() RowReader { return &rowGroupRowReader{rowGroup: g} }
+
+func (g *rowGroup) Pages() PageReader {
+	return &multiRowGroupColumnPageReader{rowGroupColumns: g.columns}
+}
+
 // SortingColumn represents a column by which a row group is sorted.
 type SortingColumn interface {
 	// Returns the path of the column in the row group schema, omitting the name
