@@ -113,6 +113,10 @@ func copyValues(dst ValueWriter, src ValueReader, buf []Value) (written int64, e
 			}
 			return written, err
 		}
+
+		if n == 0 {
+			return written, io.ErrNoProgress
+		}
 	}
 }
 
@@ -687,8 +691,8 @@ func parseValue(kind Kind, data []byte) (val Value, err error) {
 		}
 	case Int96:
 		if len(data) == 12 {
-			lo := binary.LittleEndian.Uint64(data[:8])
-			hi := binary.LittleEndian.Uint32(data[8:])
+			lo := binary.LittleEndian.Uint64(data[0:8])
+			hi := binary.LittleEndian.Uint32(data[8:12])
 			val = makeValueInt96(makeInt96(lo, hi))
 		}
 	case Float:
