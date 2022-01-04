@@ -8,13 +8,13 @@ import (
 	"github.com/segmentio/parquet/internal/bits"
 )
 
-// DataPageReader reads values from a data page.
+// dataPageReader reads values from a data page.
 //
-// DataPageReader implements the ValueReader interface; when they exist,
+// dataPageReader implements the ValueReader interface; when they exist,
 // the reader decodes repetition and definition levels in order to assign
 // levels to values returned to the application, which includes producing
 // null values when needed.
-type DataPageReader struct {
+type dataPageReader struct {
 	remain             int
 	numValues          int
 	maxRepetitionLevel int8
@@ -25,7 +25,7 @@ type DataPageReader struct {
 	values             ValueDecoder
 }
 
-func NewDataPageReader(typ Type, maxRepetitionLevel, maxDefinitionLevel, columnIndex int8, bufferSize int) *DataPageReader {
+func newDataPageReader(typ Type, maxRepetitionLevel, maxDefinitionLevel, columnIndex int8, bufferSize int) *dataPageReader {
 	bufferSize /= 2
 	repetitionBufferSize := 0
 	definitionBufferSize := 0
@@ -42,7 +42,7 @@ func NewDataPageReader(typ Type, maxRepetitionLevel, maxDefinitionLevel, columnI
 		definitionBufferSize = bufferSize
 	}
 
-	return &DataPageReader{
+	return &dataPageReader{
 		maxRepetitionLevel: maxRepetitionLevel,
 		maxDefinitionLevel: maxDefinitionLevel,
 		columnIndex:        ^columnIndex,
@@ -52,7 +52,7 @@ func NewDataPageReader(typ Type, maxRepetitionLevel, maxDefinitionLevel, columnI
 	}
 }
 
-func (r *DataPageReader) Reset(numValues int, repetitions, definitions, values encoding.Decoder) {
+func (r *dataPageReader) Reset(numValues int, repetitions, definitions, values encoding.Decoder) {
 	if repetitions != nil {
 		repetitions.SetBitWidth(bits.Len8(r.maxRepetitionLevel))
 	}
@@ -66,7 +66,7 @@ func (r *DataPageReader) Reset(numValues int, repetitions, definitions, values e
 	r.values.Reset(values)
 }
 
-func (r *DataPageReader) ReadValues(values []Value) (int, error) {
+func (r *dataPageReader) ReadValues(values []Value) (int, error) {
 	if r.values == nil {
 		return 0, io.EOF
 	}
@@ -220,7 +220,3 @@ func (r *levelReader) reset(decoder encoding.Decoder) {
 	r.offset = 0
 	r.count = 0
 }
-
-var (
-	_ ValueReader = (*DataPageReader)(nil)
-)

@@ -65,8 +65,18 @@ func NewReader(r io.ReaderAt, options ...ReaderOption) *Reader {
 	}
 
 	root := f.Root()
+
+	columnPages := make([]multiReusablePageReader, numColumnsOf(root))
+	columnIndex := 0
+	root.forEachLeaf(func(col *Column) {
+		col.pagesTo(&columnPages[columnIndex])
+		columnIndex++
+	})
+	columns := makeColumnValueReaders(len(columnPages), func(i int) reusablePageReader {
+		return &columnPages[i]
+	})
+
 	schema := NewSchema(root.Name(), root)
-	columns := makeFileColumnValueReader(f)
 	return &Reader{
 		file:       f,
 		fileSchema: schema,
@@ -97,15 +107,11 @@ func sizeOf(r io.ReaderAt) (int64, error) {
 	}
 }
 
-func makeFileColumnValueReader(f *File) []columnValueReader {
-	columnPages := make([]PageReader, 0, numColumnsOf(f.Root()))
-	f.Root().forEachLeaf(func(col *Column) { columnPages = append(columnPages, col.Pages()) })
-	return makeColumnValueReaders(len(columnPages), func(i int) PageReader { return columnPages[i] })
-}
-
 // Reset repositions the reader at the beginning of the underlying parquet file.
 func (r *Reader) Reset() {
-	r.columns = makeFileColumnValueReader(r.file)
+	for i := range r.columns {
+		r.columns[i].reset()
+	}
 	clearValues(r.buffer)
 	clearValues(r.values)
 }
@@ -176,10 +182,10 @@ type columnValueReader struct {
 	buffer []Value
 	offset uint
 	values ValueReader
-	pages  PageReader
+	pages  reusablePageReader
 }
 
-func makeColumnValueReaders(numColumns int, columnPagesOf func(int) PageReader) []columnValueReader {
+func makeColumnValueReaders(numColumns int, columnPagesOf func(int) reusablePageReader) []columnValueReader {
 	const columnBufferSize = defaultValueBufferSize
 	buffer := make([]Value, columnBufferSize*numColumns)
 	readers := make([]columnValueReader, numColumns)
@@ -191,6 +197,16 @@ func makeColumnValueReaders(numColumns int, columnPagesOf func(int) PageReader) 
 	}
 
 	return readers
+}
+
+func (r *columnValueReader) reset() {
+	clearValues(r.buffer)
+	r.buffer = r.buffer[:0]
+	r.offset = 0
+	r.values = nil
+	if r.pages != nil {
+		r.pages.Reset()
+	}
 }
 
 func (r *columnValueReader) readMoreValues() error {

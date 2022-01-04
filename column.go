@@ -120,17 +120,24 @@ func (c *Column) Column(name string) *Column {
 
 // Pages returns a reader exposing all pages in this column, across row groups.
 func (c *Column) Pages() PageReader {
-	if len(c.columns) != 0 {
+	if c.index < 0 {
 		return emptyPageReader{}
 	}
-	r := &multiColumnChunkPageReader{
-		rowGroupColumns: make([]ColumnChunk, len(c.file.rowGroups)),
-	}
-	columnIndex := int(c.Index())
-	for i := range r.rowGroupColumns {
-		r.rowGroupColumns[i] = c.file.rowGroups[i].Column(columnIndex)
-	}
+	r := new(multiReusablePageReader)
+	c.pagesTo(r)
 	return r
+}
+
+func (c *Column) pagesTo(r *multiReusablePageReader) {
+	pages := make([]filePageReader, len(c.file.rowGroups))
+	columnIndex := int(c.index)
+	for i := range pages {
+		c.file.rowGroups[i].columns[columnIndex].pagesTo(&pages[i])
+	}
+	r.pages = make([]reusablePageReader, len(pages))
+	for i := range pages {
+		r.pages[i] = &pages[i]
+	}
 }
 
 // Depth returns the position of the column relative to the root.

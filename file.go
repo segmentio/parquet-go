@@ -30,7 +30,7 @@ type File struct {
 	root          *Column
 	columnIndexes []ColumnIndex
 	offsetIndexes []OffsetIndex
-	rowGroups     []RowGroup
+	rowGroups     []fileRowGroup
 }
 
 // OpenFile opens a parquet file from the content between offset 0 and the given
@@ -90,9 +90,9 @@ func OpenFile(r io.ReaderAt, size int64, options ...FileOption) (*File, error) {
 	columns := make([]*Column, 0, MaxColumnIndex+1)
 	f.root.forEachLeaf(func(c *Column) { columns = append(columns, c) })
 
-	f.rowGroups = make([]RowGroup, len(f.metadata.RowGroups))
+	f.rowGroups = make([]fileRowGroup, len(f.metadata.RowGroups))
 	for i := range f.rowGroups {
-		f.rowGroups[i] = newFileRowGroup(f, schema, columns, &f.metadata.RowGroups[i])
+		f.rowGroups[i].init(f, schema, columns, &f.metadata.RowGroups[i])
 	}
 
 	sortKeyValueMetadata(f.metadata.KeyValueMetadata)
@@ -182,8 +182,11 @@ func (f *File) readPageIndex(section *bufferedSectionReader, decoder *thrift.Dec
 	return columnIndexes, offsetIndexes, nil
 }
 
-// ReadRowGroups returns a list containing the row groups in f.
-func (f *File) RowGroups() []RowGroup { return f.rowGroups }
+// NumRowGroups returns the number of row groups in f.
+func (f *File) NumRowGroups() int { return len(f.rowGroups) }
+
+// RowGroup returns the row group at the given index in f.
+func (f *File) RowGroup(i int) RowGroup { return &f.rowGroups[i] }
 
 // Root returns the root column of f.
 func (f *File) Root() *Column { return f.root }
@@ -317,21 +320,11 @@ type fileRowGroup struct {
 	sorting  []SortingColumn
 }
 
-func (g *fileRowGroup) Schema() *Schema                 { return g.schema }
-func (g *fileRowGroup) NumRows() int                    { return int(g.rowGroup.NumRows) }
-func (g *fileRowGroup) NumColumns() int                 { return len(g.columns) }
-func (g *fileRowGroup) Column(i int) ColumnChunk        { return &g.columns[i] }
-func (g *fileRowGroup) SortingColumns() []SortingColumn { return g.sorting }
-func (g *fileRowGroup) Rows() RowReader                 { return &rowGroupRowReader{rowGroup: g} }
-func (g *fileRowGroup) Pages() PageReader               { return &rowGroupPageReader{rowGroup: g} }
-
-func newFileRowGroup(file *File, schema *Schema, columns []*Column, rowGroup *format.RowGroup) *fileRowGroup {
-	g := &fileRowGroup{
-		schema:   schema,
-		rowGroup: rowGroup,
-		columns:  make([]fileColumnChunk, len(rowGroup.Columns)),
-		sorting:  make([]SortingColumn, len(rowGroup.SortingColumns)),
-	}
+func (g *fileRowGroup) init(file *File, schema *Schema, columns []*Column, rowGroup *format.RowGroup) {
+	g.schema = schema
+	g.rowGroup = rowGroup
+	g.columns = make([]fileColumnChunk, len(rowGroup.Columns))
+	g.sorting = make([]SortingColumn, len(rowGroup.SortingColumns))
 
 	hasIndexes := file.columnIndexes != nil && file.offsetIndexes != nil
 	for i := range g.columns {
@@ -357,9 +350,15 @@ func newFileRowGroup(file *File, schema *Schema, columns []*Column, rowGroup *fo
 			nullsFirst: rowGroup.SortingColumns[i].NullsFirst,
 		}
 	}
-
-	return g
 }
+
+func (g *fileRowGroup) Schema() *Schema                 { return g.schema }
+func (g *fileRowGroup) NumRows() int                    { return int(g.rowGroup.NumRows) }
+func (g *fileRowGroup) NumColumns() int                 { return len(g.columns) }
+func (g *fileRowGroup) Column(i int) ColumnChunk        { return &g.columns[i] }
+func (g *fileRowGroup) SortingColumns() []SortingColumn { return g.sorting }
+func (g *fileRowGroup) Rows() RowReader                 { return &rowGroupRowReader{rowGroup: g} }
+func (g *fileRowGroup) Pages() PageReader               { return &rowGroupPageReader{rowGroup: g} }
 
 type fileSortingColumn struct {
 	column     *Column
@@ -384,12 +383,38 @@ func (c *fileColumnChunk) Column() int {
 }
 
 func (c *fileColumnChunk) Pages() PageReader {
-	return newFilePageReader(c.file, c.column, c.columnIndex, c.offsetIndex, c.chunk)
+	r := new(filePageReader)
+	c.pagesTo(r)
+	return r
+}
+
+func (c *fileColumnChunk) pagesTo(r *filePageReader) {
+	r.columnIndex = c.columnIndex
+	r.offsetIndex = c.offsetIndex
+	r.chunk = c.chunk
+	r.page = filePage{
+		column:     c.column,
+		columnType: c.column.Type(),
+		codec:      c.chunk.MetaData.Codec,
+	}
+
+	pageOffset := c.chunk.MetaData.DictionaryPageOffset
+	if pageOffset == 0 {
+		pageOffset = c.chunk.MetaData.DataPageOffset
+	} else {
+		r.page.dictionary = r.page.columnType.NewDictionary(0) // TODO: configure buffer size
+		r.page.columnType = r.page.dictionary.Type()
+	}
+
+	r.section = io.NewSectionReader(c.file, pageOffset, c.chunk.MetaData.TotalCompressedSize)
+	r.rbuf = bufio.NewReaderSize(r.section, defaultReadBufferSize)
+	r.decoder.Reset(r.protocol.NewReader(r.rbuf))
 }
 
 type filePageReader struct {
 	columnIndex *ColumnIndex
 	offsetIndex *OffsetIndex
+	chunk       *format.ColumnChunk
 	protocol    thrift.CompactProtocol
 	decoder     thrift.Decoder
 
@@ -404,29 +429,10 @@ type filePageReader struct {
 	page filePage
 }
 
-func newFilePageReader(file *File, column *Column, columnIndex *ColumnIndex, offsetIndex *OffsetIndex, chunk *format.ColumnChunk) *filePageReader {
-	r := &filePageReader{
-		columnIndex: columnIndex,
-		offsetIndex: offsetIndex,
-		page: filePage{
-			column:     column,
-			columnType: column.Type(),
-			codec:      chunk.MetaData.Codec,
-		},
-	}
-
-	pageOffset := chunk.MetaData.DictionaryPageOffset
-	if pageOffset == 0 {
-		pageOffset = chunk.MetaData.DataPageOffset
-	} else {
-		r.page.dictionary = r.page.columnType.NewDictionary(0) // TODO: configure buffer size
-		r.page.columnType = r.page.dictionary.Type()
-	}
-
-	r.section = io.NewSectionReader(file, pageOffset, chunk.MetaData.TotalCompressedSize)
-	r.rbuf = bufio.NewReaderSize(r.section, defaultReadBufferSize)
-	r.decoder.Reset(r.protocol.NewReader(r.rbuf))
-	return r
+func (r *filePageReader) Reset() {
+	r.section.Seek(0, io.SeekStart)
+	r.rbuf.Reset(r.section)
+	r.page.index = 0
 }
 
 func (r *filePageReader) ReadPage() (Page, error) {
@@ -688,7 +694,7 @@ func (p *filePage) Values() ValueReader {
 	if p.values == nil {
 		p.values = new(filePageValueReaderState)
 	}
-	if err := p.values.reset(p.columnType, p.column, p.codec, p.PageHeader(), &p.data); err != nil {
+	if err := p.values.init(p.columnType, p.column, p.codec, p.PageHeader(), &p.data); err != nil {
 		return &errorValueReader{err: err}
 	}
 	return p.values.reader
@@ -712,7 +718,7 @@ func (p *filePage) PageData() io.Reader {
 }
 
 type filePageValueReaderState struct {
-	reader *DataPageReader
+	reader *dataPageReader
 
 	v1 struct {
 		repetitions dataPageLevelV1
@@ -745,7 +751,7 @@ func (s *filePageValueReaderState) release() {
 	}
 }
 
-func (s *filePageValueReaderState) reset(columnType Type, column *Column, codec format.CompressionCodec, header PageHeader, data *bytes.Reader) (err error) {
+func (s *filePageValueReaderState) init(columnType Type, column *Column, codec format.CompressionCodec, header PageHeader, data *bytes.Reader) (err error) {
 	var repetitionLevels io.Reader
 	var definitionLevels io.Reader
 	var pageHeader DataPageHeader
@@ -787,7 +793,7 @@ func (s *filePageValueReaderState) reset(columnType Type, column *Column, codec 
 	s.page.decoder = makeDecoder(s.page.decoder, pageHeader.Encoding(), pageData)
 
 	if s.reader == nil {
-		s.reader = NewDataPageReader(
+		s.reader = newDataPageReader(
 			columnType,
 			column.MaxRepetitionLevel(),
 			column.MaxDefinitionLevel(),

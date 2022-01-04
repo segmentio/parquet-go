@@ -86,20 +86,60 @@ type PageWriter interface {
 
 type emptyPageReader struct{}
 
+func (emptyPageReader) Reset() {}
+
 func (emptyPageReader) ReadPage() (Page, error) { return nil, io.EOF }
 
-type singlePageReader struct{ page Page }
+type singlePageReader struct {
+	page Page
+	used bool
+}
+
+func (r *singlePageReader) Reset() { r.used = false }
 
 func (r *singlePageReader) ReadPage() (Page, error) {
-	if r.page == nil {
-		return nil, io.EOF
+	if !r.used {
+		r.used = true
+		return r.page, nil
 	}
-	p := r.page
-	r.page = nil
-	return p, nil
+	return nil, io.EOF
 }
 
 func onePage(page Page) PageReader { return &singlePageReader{page: page} }
+
+type multiReusablePageReader struct {
+	pages []reusablePageReader
+	index int
+}
+
+func (r *multiReusablePageReader) Reset() {
+	for _, p := range r.pages {
+		p.Reset()
+	}
+	r.index = 0
+}
+
+func (r *multiReusablePageReader) ReadPage() (Page, error) {
+	for r.index < len(r.pages) {
+		p, err := r.pages[r.index].ReadPage()
+		if err == nil || err != io.EOF {
+			return p, err
+		}
+		r.index++
+	}
+	return nil, io.EOF
+}
+
+type reusablePageReader interface {
+	PageReader
+	Reset()
+}
+
+var (
+	_ reusablePageReader = emptyPageReader{}
+	_ reusablePageReader = (*singlePageReader)(nil)
+	_ reusablePageReader = (*multiReusablePageReader)(nil)
+)
 
 // CopyPages copies pages from src to dst, returning the number of values that
 // were copied.

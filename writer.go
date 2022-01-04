@@ -1219,9 +1219,8 @@ func (page *compressedPage) Bounds() (min, max Value) { return }
 func (page *compressedPage) Slice(i, j int) Page      { return nil }
 func (page *compressedPage) Size() int64              { return int64(page.stats.uncompressedSize) }
 func (page *compressedPage) Values() ValueReader      { return nil }
-
-func (page *compressedPage) PageHeader() PageHeader { return compressedPageHeader{page} }
-func (page *compressedPage) PageData() io.Reader    { return page.buffer }
+func (page *compressedPage) PageHeader() PageHeader   { return compressedPageHeader{page} }
+func (page *compressedPage) PageData() io.Reader      { return page.buffer }
 
 type compressedPageHeader struct{ *compressedPage }
 

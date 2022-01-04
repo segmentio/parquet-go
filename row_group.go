@@ -363,8 +363,8 @@ func (r *rowGroupRowReader) Schema() *Schema {
 func (r *rowGroupRowReader) ReadRow(row Row) (Row, error) {
 	if r.rowGroup != nil {
 		r.schema = r.rowGroup.Schema()
-		r.readers = makeColumnValueReaders(r.rowGroup.NumColumns(), func(i int) PageReader {
-			return r.rowGroup.Column(i).Pages()
+		r.readers = makeColumnValueReaders(r.rowGroup.NumColumns(), func(i int) reusablePageReader {
+			return r.rowGroup.Column(i).Pages().(reusablePageReader)
 		})
 		r.rowGroup = nil
 	}
