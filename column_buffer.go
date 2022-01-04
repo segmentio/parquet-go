@@ -15,7 +15,7 @@ import (
 // rows that have been written to it.
 type ColumnBuffer interface {
 	// Exposes a read-only view of the column buffer.
-	RowGroupColumn
+	ColumnChunk
 
 	// Allows reading rows back from the column by calling ReadRowAt.
 	RowReaderAt

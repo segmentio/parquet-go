@@ -123,8 +123,8 @@ func (c *Column) Pages() PageReader {
 	if len(c.columns) != 0 {
 		return emptyPageReader{}
 	}
-	r := &multiRowGroupColumnPageReader{
-		rowGroupColumns: make([]RowGroupColumn, len(c.file.rowGroups)),
+	r := &multiColumnChunkPageReader{
+		rowGroupColumns: make([]ColumnChunk, len(c.file.rowGroups)),
 	}
 	columnIndex := int(c.Index())
 	for i := range r.rowGroupColumns {

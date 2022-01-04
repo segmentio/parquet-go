@@ -167,7 +167,7 @@ type writerRowGroup struct{ *writer }
 
 func (g writerRowGroup) NumRows() int                    { return int(g.rowGroup.numRows) }
 func (g writerRowGroup) NumColumns() int                 { return len(g.columns) }
-func (g writerRowGroup) Column(i int) RowGroupColumn     { return g.columns[i] }
+func (g writerRowGroup) Column(i int) ColumnChunk        { return g.columns[i] }
 func (g writerRowGroup) Schema() *Schema                 { return g.rowGroup.schema }
 func (g writerRowGroup) SortingColumns() []SortingColumn { return nil }
 func (g writerRowGroup) Rows() RowReader                 { return &rowGroupRowReader{rowGroup: g} }
@@ -1258,8 +1258,8 @@ var (
 	_ RowGroupWriter = (*writer)(nil)
 	_ PageWriter     = (*writer)(nil)
 
-	_ RowGroupColumn = (*columnChunkWriter)(nil)
-	_ RowWriter      = (*columnChunkWriter)(nil)
+	_ ColumnChunk = (*columnChunkWriter)(nil)
+	_ RowWriter   = (*columnChunkWriter)(nil)
 
 	_ CompressedPage = (*compressedPage)(nil)
 )

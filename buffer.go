@@ -107,7 +107,7 @@ func (buf *Buffer) NumColumns() int { return len(buf.columns) }
 // Column returns the buffer column at index i.
 //
 // The method panics if i is negative or beyond the last column index in buf.
-func (buf *Buffer) Column(i int) RowGroupColumn { return buf.columns[i] }
+func (buf *Buffer) Column(i int) ColumnChunk { return buf.columns[i] }
 
 // Schema returns the schema of the buffer.
 //

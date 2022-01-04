@@ -313,14 +313,14 @@ func lookupKeyValueMetadata(keyValueMetadata []format.KeyValue, key string) (val
 type fileRowGroup struct {
 	schema   *Schema
 	rowGroup *format.RowGroup
-	columns  []fileRowGroupColumn
+	columns  []fileColumnChunk
 	sorting  []SortingColumn
 }
 
 func (g *fileRowGroup) Schema() *Schema                 { return g.schema }
 func (g *fileRowGroup) NumRows() int                    { return int(g.rowGroup.NumRows) }
 func (g *fileRowGroup) NumColumns() int                 { return len(g.columns) }
-func (g *fileRowGroup) Column(i int) RowGroupColumn     { return &g.columns[i] }
+func (g *fileRowGroup) Column(i int) ColumnChunk        { return &g.columns[i] }
 func (g *fileRowGroup) SortingColumns() []SortingColumn { return g.sorting }
 func (g *fileRowGroup) Rows() RowReader                 { return &rowGroupRowReader{rowGroup: g} }
 func (g *fileRowGroup) Pages() PageReader               { return &rowGroupPageReader{rowGroup: g} }
@@ -329,13 +329,13 @@ func newFileRowGroup(file *File, schema *Schema, columns []*Column, rowGroup *fo
 	g := &fileRowGroup{
 		schema:   schema,
 		rowGroup: rowGroup,
-		columns:  make([]fileRowGroupColumn, len(rowGroup.Columns)),
+		columns:  make([]fileColumnChunk, len(rowGroup.Columns)),
 		sorting:  make([]SortingColumn, len(rowGroup.SortingColumns)),
 	}
 
 	hasIndexes := file.columnIndexes != nil && file.offsetIndexes != nil
 	for i := range g.columns {
-		c := fileRowGroupColumn{
+		c := fileColumnChunk{
 			file:   file,
 			column: columns[i],
 			chunk:  &rowGroup.Columns[i],
@@ -371,7 +371,7 @@ func (s *fileSortingColumn) Path() []string   { return s.column.Path() }
 func (s *fileSortingColumn) Descending() bool { return s.descending }
 func (s *fileSortingColumn) NullsFirst() bool { return s.nullsFirst }
 
-type fileRowGroupColumn struct {
+type fileColumnChunk struct {
 	file        *File
 	column      *Column
 	columnIndex *ColumnIndex
@@ -379,11 +379,11 @@ type fileRowGroupColumn struct {
 	chunk       *format.ColumnChunk
 }
 
-func (c *fileRowGroupColumn) Column() int {
+func (c *fileColumnChunk) Column() int {
 	return int(c.column.Index())
 }
 
-func (c *fileRowGroupColumn) Pages() PageReader {
+func (c *fileColumnChunk) Pages() PageReader {
 	return newFilePageReader(c.file, c.column, c.columnIndex, c.offsetIndex, c.chunk)
 }
 

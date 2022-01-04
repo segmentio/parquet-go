@@ -15,7 +15,7 @@ type RowGroup interface {
 	NumColumns() int
 
 	// Returns the column at the given index in the group.
-	Column(int) RowGroupColumn
+	Column(int) ColumnChunk
 
 	// Returns the schema of rows in the group.
 	Schema() *Schema
@@ -30,15 +30,6 @@ type RowGroup interface {
 	Rows() RowReader
 
 	// Returns a reader exposing the pages of the row group.
-	Pages() PageReader
-}
-
-// The RowGroupColumn interface represents individual columns of a row group.
-type RowGroupColumn interface {
-	// Returns the index of this column in its parent row group.
-	Column() int
-
-	// Returns a reader exposing the pages of the column.
 	Pages() PageReader
 }
 
@@ -221,7 +212,7 @@ func (m *mergedRowGroup) NumRows() (numRows int) {
 
 func (m *mergedRowGroup) NumColumns() int { return 0 } // TODO
 
-func (m *mergedRowGroup) Column(int) RowGroupColumn { return nil } // TODO
+func (m *mergedRowGroup) Column(int) ColumnChunk { return nil } // TODO
 
 func (m *mergedRowGroup) Schema() *Schema { return m.schema }
 
@@ -440,28 +431,6 @@ func (r *multiRowGroupPageReader) ReadPage() (Page, error) {
 		}
 		r.pageReader = r.rowGroups[0].Pages()
 		r.rowGroups = r.rowGroups[1:]
-	}
-}
-
-type multiRowGroupColumnPageReader struct {
-	pageReader      PageReader
-	rowGroupColumns []RowGroupColumn
-}
-
-func (r *multiRowGroupColumnPageReader) ReadPage() (Page, error) {
-	for {
-		if r.pageReader != nil {
-			p, err := r.pageReader.ReadPage()
-			if err == nil || err != io.EOF {
-				return p, err
-			}
-			r.pageReader = nil
-		}
-		if len(r.rowGroupColumns) == 0 {
-			return nil, io.EOF
-		}
-		r.pageReader = r.rowGroupColumns[0].Pages()
-		r.rowGroupColumns = r.rowGroupColumns[1:]
 	}
 }
 
