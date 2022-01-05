@@ -253,6 +253,10 @@ func (f *File) readOffsetIndex(chunk *format.ColumnChunk) (*OffsetIndex, error) 
 	return (*OffsetIndex)(offsetIndex), err
 }
 
+func (f *File) hasIndexes() bool {
+	return f.columnIndexes != nil && f.offsetIndexes != nil
+}
+
 var (
 	_ io.ReaderAt = (*File)(nil)
 
@@ -326,7 +330,6 @@ func (g *fileRowGroup) init(file *File, schema *Schema, columns []*Column, rowGr
 	g.columns = make([]fileColumnChunk, len(rowGroup.Columns))
 	g.sorting = make([]SortingColumn, len(rowGroup.SortingColumns))
 
-	hasIndexes := file.columnIndexes != nil && file.offsetIndexes != nil
 	for i := range g.columns {
 		c := fileColumnChunk{
 			file:   file,
@@ -334,7 +337,7 @@ func (g *fileRowGroup) init(file *File, schema *Schema, columns []*Column, rowGr
 			chunk:  &rowGroup.Columns[i],
 		}
 
-		if hasIndexes {
+		if file.hasIndexes() {
 			j := (int(rowGroup.Ordinal) * len(columns)) + i
 			c.columnIndex = &file.columnIndexes[j]
 			c.offsetIndex = &file.offsetIndexes[j]
@@ -384,11 +387,11 @@ func (c *fileColumnChunk) Column() int {
 
 func (c *fileColumnChunk) Pages() PageReader {
 	r := new(filePageReader)
-	c.pagesTo(r)
+	c.setPagesOn(r)
 	return r
 }
 
-func (c *fileColumnChunk) pagesTo(r *filePageReader) {
+func (c *fileColumnChunk) setPagesOn(r *filePageReader) {
 	r.columnIndex = c.columnIndex
 	r.offsetIndex = c.offsetIndex
 	r.chunk = c.chunk
@@ -421,9 +424,9 @@ type filePageReader struct {
 	section *io.SectionReader
 	rbuf    *bufio.Reader
 
-	// This buffer is used to hold compressed page in memory when they are read;
-	// we need to read whole pages because we have to compute the checksum prior
-	// to returning the page to the application.
+	// This buffer holds compressed pages in memory when they are read; we need
+	// to read whole pages because we have to compute the checksum prior to
+	// exposing the page to the application.
 	compressedPageData []byte
 
 	page filePage
@@ -802,6 +805,7 @@ func (s *filePageValueReaderState) init(columnType Type, column *Column, codec f
 		)
 	}
 
+	// TODO: revisit the data page reader APIs
 	s.reader.Reset(header.NumValues(), s.repetitions.decoder, s.definitions.decoder, s.page.decoder)
 	return nil
 }

@@ -5,7 +5,7 @@ import (
 	"sort"
 )
 
-// ConvertErorr is an error type returned by calls to Convert when the conversion
+// ConvertError is an error type returned by calls to Convert when the conversion
 // of parquet schemas is impossible or the input row for the conversion is
 // malformed.
 type ConvertError struct {

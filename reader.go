@@ -69,7 +69,7 @@ func NewReader(r io.ReaderAt, options ...ReaderOption) *Reader {
 	columnPages := make([]multiReusablePageReader, numColumnsOf(root))
 	columnIndex := 0
 	root.forEachLeaf(func(col *Column) {
-		col.pagesTo(&columnPages[columnIndex])
+		col.setPagesOn(&columnPages[columnIndex])
 		columnIndex++
 	})
 	columns := makeColumnValueReaders(len(columnPages), func(i int) reusablePageReader {

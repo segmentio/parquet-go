@@ -80,7 +80,7 @@ func (buf *Buffer) configure(schema *Schema) {
 	buf.colbuf = make([][]Value, len(buf.columns))
 }
 
-// Size returns the estimated size of the buffer in memory.
+// Size returns the estimated size of the buffer in memory (in bytes).
 func (buf *Buffer) Size() int64 {
 	size := int64(0)
 	for _, col := range buf.columns {

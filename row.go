@@ -3,14 +3,7 @@ package parquet
 import (
 	"fmt"
 	"io"
-	"math"
 	"reflect"
-)
-
-const (
-	MaxRepetitionLevel = math.MaxInt8
-	MaxDefinitionLevel = math.MaxInt8
-	MaxColumnIndex     = math.MaxInt8
 )
 
 // Row represents a parquet row as a slice of values.

@@ -52,7 +52,7 @@ type ColumnBuffer interface {
 	// Returns the number of rows currently written to the column.
 	Len() int
 
-	// Compares rows at index i and j and returns whether i < j.
+	// Compares rows at index i and j and reports whether i < j.
 	Less(i, j int) bool
 
 	// Swaps rows at index i and j.
@@ -543,11 +543,6 @@ func (col *repeatedColumnBuffer) ReadRowAt(row Row, index int) (Row, error) {
 
 func (col *repeatedColumnBuffer) Values() ValueReader {
 	return &repeatedPageReader{page: col.Page().(*repeatedPage)}
-}
-
-func (col *repeatedColumnBuffer) reorder() error {
-
-	return nil
 }
 
 func rowsHaveBeenReordered(rows []region) bool {

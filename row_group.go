@@ -92,7 +92,7 @@ func (nf nullsFirst) NullsFirst() bool { return true }
 func searchSortingColumn(sortingColumns []SortingColumn, path columnPath) int {
 	// There are usually a few sorting columns in a row group, so the linear
 	// scan is the fastest option and works whether the sorting column list
-	// os sorted or not. Please revisit this decision if this code path ends
+	// is sorted or not. Please revisit this decision if this code path ends
 	// up being more costly than necessary.
 	for i, sorting := range sortingColumns {
 		if path.equal(sorting.Path()) {
@@ -220,7 +220,7 @@ func (m *mergedRowGroup) SortingColumns() []SortingColumn { return m.sorting }
 
 func (m *mergedRowGroup) Rows() RowReader {
 	if len(m.sortFuncs) == 0 {
-		// When the row group has no ordering, use a simpler verison of the
+		// When the row group has no ordering, use a simpler version of the
 		// merger which simply concatenates rows from each of the row groups.
 		// This is preferrable because it makes the output deterministic, the
 		// heap merge may otherwise reorder rows across groups.
@@ -231,7 +231,7 @@ func (m *mergedRowGroup) Rows() RowReader {
 		}
 	} else {
 		// The row group needs to respect a sorting order; the merged row reader
-		// uses a heap to merge rows fomr the row groups.
+		// uses a heap to merge rows form the row groups.
 		return &mergedRowGroupRowReader{
 			rowGroup: m,
 			schema:   m.schema,

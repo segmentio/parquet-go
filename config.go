@@ -355,7 +355,7 @@ func ColumnBufferSize(size int) RowGroupOption {
 	return rowGroupOption(func(config *RowGroupConfig) { config.ColumnBufferSize = size })
 }
 
-// SortinColumns creates a configuration option which defines the sorting order
+// SortingColumns creates a configuration option which defines the sorting order
 // of columns in a row group.
 //
 // The order of sorting columns passed as argument defines the ordering

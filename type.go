@@ -51,10 +51,10 @@ type Type interface {
 	// For other types, the value is zero.
 	Length() int
 
-	// Compares two values and returns a negative value if a < b, positive if
+	// Compares two values and returns a negative integer if a < b, positive if
 	// a > b, or zero if a == b.
 	//
-	// The values Kind must match the type, otherwise the result is undefined.
+	// The values' Kind must match the type, otherwise the result is undefined.
 	//
 	// The method panics if it is called on a group type.
 	Compare(a, b Value) int
@@ -1294,14 +1294,14 @@ func (groupType) LogicalType() *format.LogicalType { return nil }
 func (groupType) ConvertedType() *deprecated.ConvertedType { return nil }
 
 func compareBool(v1, v2 bool) int {
-	if v1 != v2 {
-		if v2 {
-			return -1
-		} else {
-			return +1
-		}
+	switch {
+	case !v1 && v2:
+		return -1
+	case v1 && !v2:
+		return +1
+	default:
+		return 0
 	}
-	return 0
 }
 
 func compareInt32(v1, v2 int32) int {
