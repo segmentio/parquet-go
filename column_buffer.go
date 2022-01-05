@@ -7,6 +7,7 @@ import (
 
 	"github.com/segmentio/parquet/deprecated"
 	"github.com/segmentio/parquet/encoding"
+	"github.com/segmentio/parquet/format"
 )
 
 // ColumnBuffer is an interface representing columns of a row group.
@@ -60,6 +61,33 @@ type ColumnBuffer interface {
 
 	// Returns the size of the column buffer in bytes.
 	Size() int64
+}
+
+var (
+	// This variable is used as placeholder when returning the offset index of
+	// column buffers declared in this file. All column buffers are made of a
+	// single page starting at the first offset and first row of their parent
+	// row group; only the compressed page size information isn't available,
+	// so it is also set to zero.
+	zeroOffsetIndex = OffsetIndex{PageLocations: []format.PageLocation{{}}}
+)
+
+func columnIndexOf(col ColumnBuffer) *ColumnIndex {
+	min, max := col.Page().Bounds()
+	return &ColumnIndex{
+		NullPages:  []bool{false},
+		MinValues:  [][]byte{min.Bytes()},
+		MaxValues:  [][]byte{max.Bytes()},
+		NullCounts: []int64{0},
+	}
+}
+
+func columnIndexOfNullable(col ColumnBuffer, maxDefinitionLevel int8, definitionLevels []int8) *ColumnIndex {
+	nullCount := countLevelsNotEqual(definitionLevels, maxDefinitionLevel)
+	columnIndex := columnIndexOf(col)
+	columnIndex.NullPages[0] = nullCount == len(definitionLevels)
+	columnIndex.NullCounts[0] = int64(nullCount)
+	return columnIndex
 }
 
 type nullOrdering func(column ColumnBuffer, i, j int, maxDefinitionLevel, definitionLevel1, definitionLevel2 int8) bool
@@ -124,6 +152,14 @@ func (col *optionalColumnBuffer) Clone() ColumnBuffer {
 		definitionLevels:   append([]int8{}, col.definitionLevels...),
 		nullOrdering:       col.nullOrdering,
 	}
+}
+
+func (col *optionalColumnBuffer) ColumnIndex() *ColumnIndex {
+	return columnIndexOfNullable(col.base, col.maxDefinitionLevel, col.definitionLevels)
+}
+
+func (col *optionalColumnBuffer) OffsetIndex() *OffsetIndex {
+	return &zeroOffsetIndex
 }
 
 func (col *optionalColumnBuffer) Dictionary() Dictionary {
@@ -354,6 +390,14 @@ func (col *repeatedColumnBuffer) Clone() ColumnBuffer {
 		definitionLevels:   append([]int8{}, col.definitionLevels...),
 		nullOrdering:       col.nullOrdering,
 	}
+}
+
+func (col *repeatedColumnBuffer) ColumnIndex() *ColumnIndex {
+	return columnIndexOfNullable(col.base, col.maxDefinitionLevel, col.definitionLevels)
+}
+
+func (col *repeatedColumnBuffer) OffsetIndex() *OffsetIndex {
+	return &zeroOffsetIndex
 }
 
 func (col *repeatedColumnBuffer) Dictionary() Dictionary {
@@ -635,6 +679,10 @@ func (col *booleanColumnBuffer) Clone() ColumnBuffer {
 	}
 }
 
+func (col *booleanColumnBuffer) ColumnIndex() *ColumnIndex { return columnIndexOf(col) }
+
+func (col *booleanColumnBuffer) OffsetIndex() *OffsetIndex { return &zeroOffsetIndex }
+
 func (col *booleanColumnBuffer) Dictionary() Dictionary { return nil }
 
 func (col *booleanColumnBuffer) Pages() PageReader { return onePage(col.Page()) }
@@ -706,6 +754,10 @@ func (col *int32ColumnBuffer) Clone() ColumnBuffer {
 	}
 }
 
+func (col *int32ColumnBuffer) ColumnIndex() *ColumnIndex { return columnIndexOf(col) }
+
+func (col *int32ColumnBuffer) OffsetIndex() *OffsetIndex { return &zeroOffsetIndex }
+
 func (col *int32ColumnBuffer) Dictionary() Dictionary { return nil }
 
 func (col *int32ColumnBuffer) Pages() PageReader { return onePage(col.Page()) }
@@ -774,6 +826,10 @@ func (col *int64ColumnBuffer) Clone() ColumnBuffer {
 		},
 	}
 }
+
+func (col *int64ColumnBuffer) ColumnIndex() *ColumnIndex { return columnIndexOf(col) }
+
+func (col *int64ColumnBuffer) OffsetIndex() *OffsetIndex { return &zeroOffsetIndex }
 
 func (col *int64ColumnBuffer) Dictionary() Dictionary { return nil }
 
@@ -844,6 +900,10 @@ func (col *int96ColumnBuffer) Clone() ColumnBuffer {
 	}
 }
 
+func (col *int96ColumnBuffer) ColumnIndex() *ColumnIndex { return columnIndexOf(col) }
+
+func (col *int96ColumnBuffer) OffsetIndex() *OffsetIndex { return &zeroOffsetIndex }
+
 func (col *int96ColumnBuffer) Dictionary() Dictionary { return nil }
 
 func (col *int96ColumnBuffer) Pages() PageReader { return onePage(col.Page()) }
@@ -912,6 +972,10 @@ func (col *floatColumnBuffer) Clone() ColumnBuffer {
 		},
 	}
 }
+
+func (col *floatColumnBuffer) ColumnIndex() *ColumnIndex { return columnIndexOf(col) }
+
+func (col *floatColumnBuffer) OffsetIndex() *OffsetIndex { return &zeroOffsetIndex }
 
 func (col *floatColumnBuffer) Dictionary() Dictionary { return nil }
 
@@ -982,6 +1046,10 @@ func (col *doubleColumnBuffer) Clone() ColumnBuffer {
 	}
 }
 
+func (col *doubleColumnBuffer) ColumnIndex() *ColumnIndex { return columnIndexOf(col) }
+
+func (col *doubleColumnBuffer) OffsetIndex() *OffsetIndex { return &zeroOffsetIndex }
+
 func (col *doubleColumnBuffer) Dictionary() Dictionary { return nil }
 
 func (col *doubleColumnBuffer) Pages() PageReader { return onePage(col.Page()) }
@@ -1050,6 +1118,10 @@ func (col *byteArrayColumnBuffer) Clone() ColumnBuffer {
 		},
 	}
 }
+
+func (col *byteArrayColumnBuffer) ColumnIndex() *ColumnIndex { return columnIndexOf(col) }
+
+func (col *byteArrayColumnBuffer) OffsetIndex() *OffsetIndex { return &zeroOffsetIndex }
 
 func (col *byteArrayColumnBuffer) Dictionary() Dictionary { return nil }
 
@@ -1124,6 +1196,10 @@ func (col *fixedLenByteArrayColumnBuffer) Clone() ColumnBuffer {
 		tmp: make([]byte, col.size),
 	}
 }
+
+func (col *fixedLenByteArrayColumnBuffer) ColumnIndex() *ColumnIndex { return columnIndexOf(col) }
+
+func (col *fixedLenByteArrayColumnBuffer) OffsetIndex() *OffsetIndex { return &zeroOffsetIndex }
 
 func (col *fixedLenByteArrayColumnBuffer) Dictionary() Dictionary { return nil }
 

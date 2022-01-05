@@ -377,6 +377,14 @@ type fileColumnChunk struct {
 	chunk       *format.ColumnChunk
 }
 
+func (c *fileColumnChunk) ColumnIndex() *ColumnIndex {
+	return c.columnIndex
+}
+
+func (c *fileColumnChunk) OffsetIndex() *OffsetIndex {
+	return c.offsetIndex
+}
+
 func (c *fileColumnChunk) Column() int {
 	return int(c.column.Index())
 }

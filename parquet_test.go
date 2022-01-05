@@ -74,6 +74,17 @@ func forEachColumnValue(col *parquet.Column, do func(*parquet.Column, parquet.Va
 	})
 }
 
+func forEachColumnChunk(file *parquet.File, do func(*parquet.Column, parquet.ColumnChunk) error) error {
+	return forEachLeafColumn(file.Root(), func(leaf *parquet.Column) error {
+		for i, n := 0, file.NumRowGroups(); i < n; i++ {
+			if err := do(leaf, file.RowGroup(i).Column(int(leaf.Index()))); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 func createParquetFile(rows rows, options ...parquet.WriterOption) (*parquet.File, error) {
 	buffer := new(bytes.Buffer)
 
