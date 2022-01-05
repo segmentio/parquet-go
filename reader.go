@@ -196,9 +196,11 @@ func (r *Reader) Schema() *Schema { return r.fileSchema }
 
 type columnValueReader struct {
 	buffer []Value
-	offset uint
+	offset int
 	values ValueReader
-	pages  reusablePageReader
+
+	pages reusablePageReader
+	index int
 }
 
 func makeColumnValueReaders(numColumns int, columnPagesOf func(int) reusablePageReader) []columnValueReader {
@@ -223,6 +225,7 @@ func (r *columnValueReader) reset() {
 	if r.pages != nil {
 		r.pages.Reset()
 	}
+	r.index = 0
 }
 
 func (r *columnValueReader) readMoreValues() error {
@@ -246,6 +249,7 @@ func (r *columnValueReader) readMoreValues() error {
 		if err != nil {
 			return err
 		}
+		r.index++
 		r.values = p.Values()
 	}
 }
@@ -330,7 +334,7 @@ func columnReadRowFuncOfLeaf(node Node, columnIndex int, repetitionDepth int8) (
 			col := &columns[columnIndex]
 
 			for {
-				if col.offset < uint(len(col.buffer)) {
+				if col.offset < len(col.buffer) {
 					row = append(row, col.buffer[col.offset])
 					col.offset++
 					return row, nil
@@ -345,7 +349,7 @@ func columnReadRowFuncOfLeaf(node Node, columnIndex int, repetitionDepth int8) (
 			col := &columns[columnIndex]
 
 			for {
-				if col.offset < uint(len(col.buffer)) {
+				if col.offset < len(col.buffer) {
 					if col.buffer[col.offset].repetitionLevel == repetitionLevel {
 						row = append(row, col.buffer[col.offset])
 						col.offset++

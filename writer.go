@@ -211,6 +211,7 @@ type writer struct {
 		page   bytes.Buffer
 	}
 
+	indexes       []ColumnIndexer
 	columns       []*writerColumnChunk
 	columnChunk   []format.ColumnChunk
 	columnIndex   []format.ColumnIndex
@@ -292,7 +293,6 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 			pages:              bufferedPageWriter{pool: config.ColumnPageBuffers},
 			columnPath:         leaf.path,
 			columnType:         columnType,
-			columnIndexer:      columnType.NewColumnIndexer(config.ColumnIndexSizeLimit),
 			compression:        compression,
 			dictionary:         dictionary,
 			dataPageType:       dataPageType,
@@ -341,10 +341,15 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 		w.columns = append(w.columns, c)
 	})
 
+	w.indexes = make([]ColumnIndexer, len(w.columns))
 	w.columnChunk = make([]format.ColumnChunk, len(w.columns))
 	w.columnIndex = make([]format.ColumnIndex, len(w.columns))
 	w.offsetIndex = make([]format.OffsetIndex, len(w.columns))
 	w.columnOrders = make([]format.ColumnOrder, len(w.columns))
+
+	for i, c := range w.columns {
+		w.indexes[i] = c.columnType.NewColumnIndexer(config.ColumnIndexSizeLimit)
+	}
 
 	for i, c := range w.columns {
 		w.columnChunk[i] = format.ColumnChunk{
@@ -367,6 +372,10 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 
 func (w *writer) Reset(writer io.Writer) {
 	w.writer.Reset(writer)
+
+	for _, i := range w.indexes {
+		i.Reset()
+	}
 
 	for _, c := range w.columns {
 		c.reset()
@@ -499,8 +508,8 @@ func (w *writer) writeRowGroup(rows RowGroup) (int64, error) {
 		return 0, err
 	}
 
-	for i, c := range w.columns {
-		w.columnIndex[i] = format.ColumnIndex(c.columnIndexer.ColumnIndex())
+	for i, index := range w.indexes {
+		w.columnIndex[i] = format.ColumnIndex(index.ColumnIndex())
 	}
 
 	totalByteSize := int64(0)
@@ -525,14 +534,6 @@ func (w *writer) writeRowGroup(rows RowGroup) (int64, error) {
 			}
 		}
 	})
-
-	for _, sorting := range sortingColumns {
-		if sorting.Descending {
-			w.columnIndex[sorting.ColumnIdx].BoundaryOrder = format.Descending
-		} else {
-			w.columnIndex[sorting.ColumnIdx].BoundaryOrder = format.Ascending
-		}
-	}
 
 	columns := make([]format.ColumnChunk, len(w.columnChunk))
 	copy(columns, w.columnChunk)
@@ -593,13 +594,18 @@ func (w *writer) WritePage(page Page) (numValues int64, err error) {
 		compressedSize := int64(0)
 		compressedSize, err = io.Copy(&w.writer, p.PageData())
 
-		h := p.PageHeader()
+		header := p.PageHeader()
+		minValue, maxValue := p.Bounds()
 		w.recordPageStats(columnIndex, pageOffset, pageStats{
-			pageType:         h.PageType(),
-			encoding:         h.Encoding(),
+			pageType:         header.PageType(),
+			encoding:         header.Encoding(),
 			uncompressedSize: int32(p.Size()),
 			compressedSize:   int32(compressedSize),
 			numRows:          int32(p.NumRows()),
+			numNulls:         int32(p.NumNulls()),
+			numValues:        int32(numValues),
+			minValue:         minValue,
+			maxValue:         maxValue,
 		})
 
 	case BufferedPage:
@@ -617,13 +623,13 @@ func (w *writer) WritePage(page Page) (numValues int64, err error) {
 func (w *writer) recordBufferedPageStats(columnIndex int, pageOffset int64) {
 	defer w.pages.reset()
 
-	for _, stats := range w.pages.stats {
-		w.recordPageStats(columnIndex, pageOffset, stats)
+	for i := range w.pages.stats {
+		w.recordPageStats(columnIndex, pageOffset, &w.pages[i].stats)
 		pageOffset += int64(stats.compressedSize)
 	}
 }
 
-func (w *writer) recordPageStats(columnIndex int, pageOffset int64, stats pageStats) {
+func (w *writer) recordPageStats(columnIndex int, pageOffset int64, stats *pageStats) {
 	columnChunk := &w.columnChunk[columnIndex].MetaData
 	offsetIndex := &w.offsetIndex[columnIndex]
 
@@ -645,6 +651,7 @@ func (w *writer) recordPageStats(columnIndex int, pageOffset int64, stats pageSt
 		})
 	}
 
+	w.indexes[columnIndex].IndexPage(int(stats.numValues), int(stats.numNulls), stats.minValue, stats.maxValue)
 	w.rowGroup.totalRowCount += int64(stats.numRows)
 }
 
@@ -731,13 +738,12 @@ type writerColumnChunk struct {
 	commit func(*writerColumnChunk) error
 	values []Value
 
-	pages         bufferedPageWriter
-	columnPath    columnPath
-	columnType    Type
-	columnIndexer ColumnIndexer
-	column        ColumnBuffer
-	compression   compress.Codec
-	dictionary    Dictionary
+	pages       bufferedPageWriter
+	columnPath  columnPath
+	columnType  Type
+	column      ColumnBuffer
+	compression compress.Codec
+	dictionary  Dictionary
 
 	dataPageType       format.PageType
 	maxRepetitionLevel int8
@@ -786,21 +792,7 @@ func (ccw *writerColumnChunk) reset() {
 	if ccw.column != nil {
 		ccw.column.Reset()
 	}
-	ccw.columnIndexer.Reset()
 	ccw.numValues = 0
-}
-
-func (ccw *writerColumnChunk) statistics(nullCount int64) format.Statistics {
-	min, max := ccw.columnIndexer.Bounds()
-	minValue := min.Bytes()
-	maxValue := max.Bytes()
-	return format.Statistics{
-		Min:       minValue, // deprecated
-		Max:       maxValue, // deprecated
-		NullCount: nullCount,
-		MinValue:  minValue,
-		MaxValue:  maxValue,
-	}
 }
 
 func (ccw *writerColumnChunk) flush() error {
@@ -927,10 +919,12 @@ func (ccw *writerColumnChunk) writeDataPage(writer pageWriter, page BufferedPage
 		}
 	}
 
-	numNulls := page.NumNulls()
-	minValue, maxValue := page.Bounds()
-	statistics := ccw.makePageStatistics(int64(numNulls), minValue, maxValue)
-	ccw.columnIndexer.IndexPage(numValues, numNulls, minValue, maxValue)
+	var statistics format.Statistics
+	var minValue, maxValue = page.Bounds()
+	if ccw.writePageStats {
+		numNulls := int64(page.NumNulls())
+		statistics = ccw.makePageStatistics(numNulls, minValue, maxValue)
+	}
 
 	ccw.page.encoder.Reset(&ccw.page.uncompressed)
 	if err := page.WriteTo(ccw.page.encoder); err != nil {
@@ -956,6 +950,7 @@ func (ccw *writerColumnChunk) writeDataPage(writer pageWriter, page BufferedPage
 		CRC:                  int32(crc32.ChecksumIEEE(ccw.page.buffer.Bytes())),
 	}
 
+	numNulls := page.NumNulls()
 	numRows := page.NumRows()
 	switch ccw.dataPageType {
 	case format.DataPage:
@@ -992,6 +987,8 @@ func (ccw *writerColumnChunk) writeDataPage(writer pageWriter, page BufferedPage
 		numRows:          int32(numRows),
 		uncompressedSize: int32(headerSize) + int32(uncompressedPageSize),
 		compressedSize:   int32(headerSize) + int32(compressedPageSize),
+		minValue:         minValue,
+		maxValue:         maxValue,
 	})
 }
 
@@ -1054,19 +1051,16 @@ func (ccw *writerColumnChunk) writeDictionaryPage(writer pageWriter, dict Dictio
 	})
 }
 
-func (ccw *writerColumnChunk) makePageStatistics(numNulls int64, minValue, maxValue Value) (stats format.Statistics) {
-	if ccw.writePageStats {
-		minValueBytes := minValue.Bytes()
-		maxValueBytes := maxValue.Bytes()
-		stats = format.Statistics{
-			Min:       minValueBytes, // deprecated
-			Max:       maxValueBytes, // deprecated
-			NullCount: numNulls,
-			MinValue:  minValueBytes,
-			MaxValue:  maxValueBytes,
-		}
+func (ccw *writerColumnChunk) makePageStatistics(numNulls int64, minValue, maxValue Value) format.Statistics {
+	minValueBytes := minValue.Bytes()
+	maxValueBytes := maxValue.Bytes()
+	return format.Statistics{
+		Min:       minValueBytes, // deprecated
+		Max:       maxValueBytes, // deprecated
+		NullCount: numNulls,
+		MinValue:  minValueBytes,
+		MaxValue:  maxValueBytes,
 	}
-	return stats
 }
 
 func (c *writerColumnChunk) ColumnIndex() *ColumnIndex { return nil }
@@ -1169,6 +1163,12 @@ type pageStats struct {
 	numRows          int32
 	uncompressedSize int32
 	compressedSize   int32
+	minValue         Value
+	maxValue         Value
+}
+
+func (stats *pageStats) bounds() (min, max Value) {
+	return stats.minValue, stats.maxValue
 }
 
 type pageWriter interface {
@@ -1245,7 +1245,7 @@ func (page *compressedPage) Dictionary() Dictionary   { return page.column.dicti
 func (page *compressedPage) NumRows() int             { return int(page.stats.numRows) }
 func (page *compressedPage) NumValues() int           { return int(page.stats.numValues) }
 func (page *compressedPage) NumNulls() int            { return int(page.stats.numNulls) }
-func (page *compressedPage) Bounds() (min, max Value) { return }
+func (page *compressedPage) Bounds() (min, max Value) { return page.stats.bounds() }
 func (page *compressedPage) Slice(i, j int) Page      { return nil }
 func (page *compressedPage) Size() int64              { return int64(page.stats.uncompressedSize) }
 func (page *compressedPage) Values() ValueReader      { return nil }
