@@ -596,7 +596,7 @@ func (w *writer) WritePage(page Page) (numValues int64, err error) {
 
 		header := p.PageHeader()
 		minValue, maxValue := p.Bounds()
-		w.recordPageStats(columnIndex, pageOffset, pageStats{
+		w.recordPageStats(columnIndex, pageOffset, &pageStats{
 			pageType:         header.PageType(),
 			encoding:         header.Encoding(),
 			uncompressedSize: int32(p.Size()),
@@ -624,8 +624,8 @@ func (w *writer) recordBufferedPageStats(columnIndex int, pageOffset int64) {
 	defer w.pages.reset()
 
 	for i := range w.pages.stats {
-		w.recordPageStats(columnIndex, pageOffset, &w.pages[i].stats)
-		pageOffset += int64(stats.compressedSize)
+		w.recordPageStats(columnIndex, pageOffset, &w.pages.stats[i])
+		pageOffset += int64(w.pages.stats[i].compressedSize)
 	}
 }
 
