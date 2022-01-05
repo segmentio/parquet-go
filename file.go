@@ -568,12 +568,12 @@ var (
 	errPageHasNoColumnIndexNorStatistics     = errors.New("column has no index and page has no statistics")
 )
 
-func pageHeaderStatisticsOf(header *format.PageHeader) *format.Statistics {
-	switch header.Type {
+func (p *filePage) statistics() *format.Statistics {
+	switch p.header.Type {
 	case format.DataPageV2:
-		return &header.DataPageHeaderV2.Statistics
+		return &p.header.DataPageHeaderV2.Statistics
 	case format.DataPage:
-		return &header.DataPageHeader.Statistics
+		return &p.header.DataPageHeader.Statistics
 	default:
 		return nil
 	}
@@ -595,7 +595,7 @@ func (p *filePage) parseColumnIndex(columnIndex *ColumnIndex) (err error) {
 
 	minValue, maxValue, nullPage := columnIndex.PageBounds(p.index)
 
-	if stats := pageHeaderStatisticsOf(&p.header); stats != nil {
+	if stats := p.statistics(); stats != nil {
 		if stats.MinValue == nil {
 			stats.MinValue = minValue
 		}
@@ -627,7 +627,7 @@ func (p *filePage) parseColumnIndex(columnIndex *ColumnIndex) (err error) {
 
 func (p *filePage) parseStatistics() (err error) {
 	kind := p.columnType.Kind()
-	stats := pageHeaderStatisticsOf(&p.header)
+	stats := p.statistics()
 
 	if stats == nil {
 		return p.errStatistics(errPageHasNoColumnIndexNorStatistics)
