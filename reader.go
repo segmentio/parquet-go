@@ -44,14 +44,30 @@ type Reader struct {
 // parquet.File. If r is already a parquet.File it is used directly; otherwise,
 // the io.ReaderAt value is expected to either have a `Size() int64` method or
 // implement io.Seeker in order to determine its size.
-func NewReader(r io.ReaderAt, options ...ReaderOption) *Reader {
-	f, _ := r.(*File)
+//
+// The function panics if the reader configuration is invalid. Programs that
+// cannot guarantee the validity of the options passed to NewReader should
+// construct the reader configuration independently prior to calling this
+// function:
+//
+//	config, err := parquet.NewReaderConfig(options...)
+//	if err != nil {
+//		// handle the configuration error
+//		...
+//	} else {
+//		// this call to create a reader is guaranteed not to panic
+//		reader := parquet.NewReader(input, config)
+//		...
+//	}
+//
+func NewReader(input io.ReaderAt, options ...ReaderOption) *Reader {
+	f, _ := input.(*File)
 	if f == nil {
-		n, err := sizeOf(r)
+		n, err := sizeOf(input)
 		if err != nil {
 			panic(err)
 		}
-		if f, err = OpenFile(r, n); err != nil {
+		if f, err = OpenFile(input, n); err != nil {
 			panic(err)
 		}
 	}

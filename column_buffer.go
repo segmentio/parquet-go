@@ -76,15 +76,31 @@ func nullsGoLast(column ColumnBuffer, i, j int, maxDefinitionLevel, definitionLe
 	return definitionLevel1 == maxDefinitionLevel && (definitionLevel2 != maxDefinitionLevel || column.Less(i, j))
 }
 
+// reversedColumnBuffer is an adapter of ColumnBuffer which inverses the order
+// in which rows are ordered when the column gets sorted.
+//
+// This type is used when buffers are constructed with sorting columns ordering
+// values in descending order.
 type reversedColumnBuffer struct{ ColumnBuffer }
 
 func (col *reversedColumnBuffer) Less(i, j int) bool { return col.ColumnBuffer.Less(j, i) }
 
+// optionalColumnBuffer is an implementation of the ColumnBuffer interface used
+// as a wrapper to an underlying ColumnBuffer to manage the creation of
+// definition levels.
+//
+// Null values are not written to the underlying column; instead, the buffer
+// tracks offsets of row values in the column, null row values are represented
+// by the value -1 and a definition level less than the max.
+//
+// This column buffer type is used for all leaf columns that have a non-zero
+// max definition level and a zero repetition level, which may be because the
+// column or one of its parent(s) are marked optional.
 type optionalColumnBuffer struct {
 	base               ColumnBuffer
 	maxDefinitionLevel int8
 	rows               []int32
-	index              []int32
+	sortIndex          []int32
 	definitionLevels   []int8
 	nullOrdering       nullOrdering
 }
@@ -127,23 +143,23 @@ func (col *optionalColumnBuffer) Page() BufferedPage {
 	numValues := len(col.rows) - numNulls
 
 	if numValues > 0 {
-		if cap(col.index) < numValues {
-			col.index = make([]int32, numValues)
+		if cap(col.sortIndex) < numValues {
+			col.sortIndex = make([]int32, numValues)
 		}
-		index := col.index[:numValues]
+		sortIndex := col.sortIndex[:numValues]
 		i := 0
 		for _, j := range col.rows {
 			if j >= 0 {
-				index[j] = int32(i)
+				sortIndex[j] = int32(i)
 				i++
 			}
 		}
 
 		// Cyclic sort: O(N)
-		for i := range index {
-			for j := int(index[i]); i != j; j = int(index[i]) {
+		for i := range sortIndex {
+			for j := int(sortIndex[i]); i != j; j = int(sortIndex[i]) {
 				col.base.Swap(i, j)
-				index[i], index[j] = index[j], index[i]
+				sortIndex[i], sortIndex[j] = sortIndex[j], sortIndex[i]
 			}
 		}
 	}
@@ -166,7 +182,7 @@ func (col *optionalColumnBuffer) Reset() {
 }
 
 func (col *optionalColumnBuffer) Size() int64 {
-	return sizeOfInt32(col.rows) + sizeOfInt32(col.index) + sizeOfInt8(col.definitionLevels) + col.base.Size()
+	return sizeOfInt32(col.rows) + sizeOfInt32(col.sortIndex) + sizeOfInt8(col.definitionLevels) + col.base.Size()
 }
 
 func (col *optionalColumnBuffer) Cap() int { return cap(col.rows) }
@@ -185,6 +201,10 @@ func (col *optionalColumnBuffer) Less(i, j int) bool {
 }
 
 func (col *optionalColumnBuffer) Swap(i, j int) {
+	// Because the underlying column does not contain null values, we cannot
+	// swap its values at indexes i and j. We swap the row indexes only, then
+	// reorder the underlying buffer using a cyclic sort when the buffer is
+	// materialized into a page view.
 	col.rows[i], col.rows[j] = col.rows[j], col.rows[i]
 	col.definitionLevels[i], col.definitionLevels[j] = col.definitionLevels[j], col.definitionLevels[i]
 }
@@ -280,6 +300,18 @@ func (col *optionalColumnBuffer) Values() ValueReader {
 	return &optionalPageReader{page: col.Page().(*optionalPage)}
 }
 
+// repeatedColumnBuffer is an implementation of the ColumnBuffer interface used
+// as a wrapper to an underlying ColumnBuffer to manage the creation of
+// repetition levels, definition levels, and map rows to the region of the
+// underlying buffer that contains their sequence of values.
+//
+// Null values are not written to the underlying column; instead, the buffer
+// tracks offsets of row values in the column, null row values are represented
+// by the value -1 and a definition level less than the max.
+//
+// This column buffer type is used for all leaf columns that have a non-zero
+// max repetition level, which may be because the column or one of its parent(s)
+// are marked repeated.
 type repeatedColumnBuffer struct {
 	base               ColumnBuffer
 	maxRepetitionLevel int8
@@ -431,6 +463,12 @@ func (col *repeatedColumnBuffer) Less(i, j int) bool {
 }
 
 func (col *repeatedColumnBuffer) Swap(i, j int) {
+	// Because the underlying column does not contain null values, and may hold
+	// an arbitrary number of values per row, we cannot swap its values at
+	// indexes i and j. We swap the row indexes only, then reorder the base
+	// column buffer when its view is materialized into a page by creating a
+	// copy and writing rows back to it following the order of rows in the
+	// repeated column buffer.
 	col.rows[i], col.rows[j] = col.rows[j], col.rows[i]
 }
 
@@ -564,6 +602,18 @@ func maxRowLengthOf(rows []region) (maxLength uint32) {
 	}
 	return maxLength
 }
+
+// =============================================================================
+// The types below are in-memory implementations of the ColumnBuffer interface
+// for each of parquet type.
+//
+// These column buffers are created by calling NewColumnBuffer on parquet.Type
+// instances; each parquet type manages to construct column buffers of the
+// appropriate type, which ensures that we are packing as many values as we
+// can in memory.
+//
+// See Type.NewColumnBuffer for details about how these types get created.
+// =============================================================================
 
 type booleanColumnBuffer struct{ booleanPage }
 

@@ -226,23 +226,3 @@ var (
 	_ DataPageHeader = DataPageHeaderV2{}
 	_ PageHeader     = unknownPageHeader{}
 )
-
-func resetPageHeader(header *format.PageHeader) {
-	header.Type = 0
-	header.UncompressedPageSize = 0
-	header.CompressedPageSize = 0
-	header.CRC = 0
-
-	if header.DataPageHeader != nil {
-		*header.DataPageHeader = format.DataPageHeader{}
-	}
-	if header.IndexPageHeader != nil {
-		header.IndexPageHeader = nil
-	}
-	if header.DictionaryPageHeader != nil {
-		*header.DictionaryPageHeader = format.DictionaryPageHeader{}
-	}
-	if header.DataPageHeaderV2 != nil {
-		*header.DataPageHeaderV2 = format.DataPageHeaderV2{}
-	}
-}

@@ -42,10 +42,8 @@ type File struct {
 func OpenFile(r io.ReaderAt, size int64, options ...FileOption) (*File, error) {
 	b := make([]byte, 8)
 	f := &File{reader: r, size: size}
-	c := DefaultFileConfig()
-	c.Apply(options...)
-
-	if err := c.Validate(); err != nil {
+	c, err := NewFileConfig(options...)
+	if err != nil {
 		return nil, err
 	}
 
@@ -68,8 +66,7 @@ func OpenFile(r io.ReaderAt, size int64, options ...FileOption) (*File, error) {
 	decoder := thrift.NewDecoder(f.protocol.NewReader(section))
 	defer releaseBufferedSectionReader(section)
 
-	err := decoder.Decode(&f.metadata)
-	if err != nil {
+	if err := decoder.Decode(&f.metadata); err != nil {
 		return nil, fmt.Errorf("reading parquet file metadata: %w", err)
 	}
 	if len(f.metadata.Schema) == 0 {
@@ -437,9 +434,31 @@ func (r *filePageReader) Reset() {
 	r.page.index = 0
 }
 
+func (r *filePageReader) clearPageHeader() {
+	h := &r.page.header
+	h.Type = 0
+	h.UncompressedPageSize = 0
+	h.CompressedPageSize = 0
+	h.CRC = 0
+
+	if h.DataPageHeader != nil {
+		*h.DataPageHeader = format.DataPageHeader{}
+	}
+	if h.IndexPageHeader != nil {
+		h.IndexPageHeader = nil
+	}
+	if h.DictionaryPageHeader != nil {
+		*h.DictionaryPageHeader = format.DictionaryPageHeader{}
+	}
+	if h.DataPageHeaderV2 != nil {
+		*h.DataPageHeaderV2 = format.DataPageHeaderV2{}
+	}
+}
+
 func (r *filePageReader) ReadPage() (Page, error) {
 	for {
-		resetPageHeader(&r.page.header)
+		r.clearPageHeader()
+
 		if err := r.decoder.Decode(&r.page.header); err != nil {
 			if err != io.EOF {
 				err = fmt.Errorf("decoding page header: %w", err)
@@ -468,6 +487,14 @@ func (r *filePageReader) ReadPage() (Page, error) {
 			bufferChecksum := crc32.ChecksumIEEE(r.compressedPageData)
 
 			if headerChecksum != bufferChecksum {
+				// The parquet specs indicate that corruption errors could be
+				// handled gracefully by skipping pages, tho this may not always
+				// be practical. Depending on how the pages are consumed,
+				// missing rows may cause unpredictable behaviors in algorithms.
+				//
+				// For now, we assume these errors to be fatal, but we may
+				// revisit later and improve error handling to be more resilient
+				// to data corruption.
 				return nil, fmt.Errorf("crc32 checksum mismatch in page %d of column %q: 0x%08X != 0x%08X: %w",
 					r.page.index,
 					r.page.columnPath(),
@@ -541,6 +568,17 @@ var (
 	errPageHasNoColumnIndexNorStatistics     = errors.New("column has no index and page has no statistics")
 )
 
+func pageHeaderStatisticsOf(header *format.PageHeader) *format.Statistics {
+	switch header.Type {
+	case format.DataPageV2:
+		return &header.DataPageHeaderV2.Statistics
+	case format.DataPage:
+		return &header.DataPageHeader.Statistics
+	default:
+		return nil
+	}
+}
+
 func (p *filePage) parseColumnIndex(columnIndex *ColumnIndex) (err error) {
 	if p.index >= len(columnIndex.NullPages) {
 		return p.errColumnIndex(errPageIndexExceedsColumnIndexNullPages)
@@ -555,17 +593,9 @@ func (p *filePage) parseColumnIndex(columnIndex *ColumnIndex) (err error) {
 		return p.errColumnIndex(errPageIndexExceedsColumnIndexNullCounts)
 	}
 
-	var stats *format.Statistics
-	switch p.header.Type {
-	case format.DataPageV2:
-		stats = &p.header.DataPageHeaderV2.Statistics
-	case format.DataPage:
-		stats = &p.header.DataPageHeader.Statistics
-	}
-
 	minValue, maxValue, nullPage := columnIndex.PageBounds(p.index)
 
-	if stats != nil {
+	if stats := pageHeaderStatisticsOf(&p.header); stats != nil {
 		if stats.MinValue == nil {
 			stats.MinValue = minValue
 		}
@@ -596,15 +626,8 @@ func (p *filePage) parseColumnIndex(columnIndex *ColumnIndex) (err error) {
 }
 
 func (p *filePage) parseStatistics() (err error) {
-	var kind = p.columnType.Kind()
-	var stats *format.Statistics
-
-	switch p.header.Type {
-	case format.DataPageV2:
-		stats = &p.header.DataPageHeaderV2.Statistics
-	case format.DataPage:
-		stats = &p.header.DataPageHeader.Statistics
-	}
+	kind := p.columnType.Kind()
+	stats := pageHeaderStatisticsOf(&p.header)
 
 	if stats == nil {
 		return p.errStatistics(errPageHasNoColumnIndexNorStatistics)

@@ -37,6 +37,17 @@ func DefaultFileConfig() *FileConfig {
 	}
 }
 
+// NewFileConfig constructs a new file configuration applying the options passed
+// as arguments.
+//
+// The function returns an non-nil error if some of the options carried invalid
+// configuration values.
+func NewFileConfig(options ...FileOption) (*FileConfig, error) {
+	config := DefaultFileConfig()
+	config.Apply(options...)
+	return config, config.Validate()
+}
+
 // Apply applies the given list of options to c.
 func (c *FileConfig) Apply(options ...FileOption) {
 	for _, opt := range options {
@@ -75,6 +86,17 @@ func DefaultReaderConfig() *ReaderConfig {
 	return &ReaderConfig{
 		PageBufferSize: DefaultPageBufferSize,
 	}
+}
+
+// NewReaderConfig constructs a new reader configuration applying the options
+// passed as arguments.
+//
+// The function returns an non-nil error if some of the options carried invalid
+// configuration values.
+func NewReaderConfig(options ...ReaderOption) (*ReaderConfig, error) {
+	config := DefaultReaderConfig()
+	config.Apply(options...)
+	return config, config.Validate()
 }
 
 // Apply applies the given list of options to c.
@@ -133,6 +155,17 @@ func DefaultWriterConfig() *WriterConfig {
 		DataPageStatistics:   DefaultDataPageStatistics,
 		RowGroupTargetSize:   DefaultRowGroupTargetSize,
 	}
+}
+
+// NewWriterConfig constructs a new writer configuration applying the options
+// passed as arguments.
+//
+// The function returns an non-nil error if some of the options carried invalid
+// configuration values.
+func NewWriterConfig(options ...WriterOption) (*WriterConfig, error) {
+	config := DefaultWriterConfig()
+	config.Apply(options...)
+	return config, config.Validate()
 }
 
 // Apply applies the given list of options to c.
@@ -199,6 +232,17 @@ func DefaultRowGroupConfig() *RowGroupConfig {
 	return &RowGroupConfig{
 		ColumnBufferSize: DefaultColumnBufferSize,
 	}
+}
+
+// NewRowGroupConfig constructs a new row group configuration applying the
+// options passed as arguments.
+//
+// The function returns an non-nil error if some of the options carried invalid
+// configuration values.
+func NewRowGroupConfig(options ...RowGroupOption) (*RowGroupConfig, error) {
+	config := DefaultRowGroupConfig()
+	config.Apply(options...)
+	return config, config.Validate()
 }
 
 // Validate returns a non-nil error if the configuration of c is invalid.

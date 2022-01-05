@@ -20,10 +20,25 @@ type Buffer struct {
 
 // NewBuffer constructs a new buffer, using the given list of buffer options
 // to configure the buffer returned by the function.
+//
+// The function panics if the buffer configuration is invalid. Programs that
+// cannot guarantee the validity of the options passed to NewBuffer should
+// construct the buffer configuration independently prior to calling this
+// function:
+//
+//	config, err := parquet.NewRowGroupConfig(options...)
+//	if err != nil {
+//		// handle the configuration error
+//		...
+//	} else {
+//		// this call to create a buffer is guaranteed not to panic
+//		buffer := parquet.NewBuffer(config)
+//		...
+//	}
+//
 func NewBuffer(options ...RowGroupOption) *Buffer {
-	config := DefaultRowGroupConfig()
-	config.Apply(options...)
-	if err := config.Validate(); err != nil {
+	config, err := NewRowGroupConfig(options...)
+	if err != nil {
 		panic(err)
 	}
 	buf := &Buffer{

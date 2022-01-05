@@ -47,6 +47,23 @@ type Writer struct {
 	values []Value
 }
 
+// NewWriter constructs a parquet writer writing a file to the given io.Writer.
+//
+// The function panics if the writer configuration is invalid. Programs that
+// cannot guarantee the validity of the options passed to NewWriter should
+// construct the writer configuration independently prior to calling this
+// function:
+//
+//	config, err := parquet.NewWriterConfig(options...)
+//	if err != nil {
+//		// handle the configuration error
+//		...
+//	} else {
+//		// this call to create a writer is guaranteed not to panic
+//		writer := parquet.NewWriter(output, config)
+//		...
+//	}
+//
 func NewWriter(output io.Writer, options ...WriterOption) *Writer {
 	config := DefaultWriterConfig()
 	config.Apply(options...)

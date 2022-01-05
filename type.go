@@ -111,6 +111,20 @@ type Type interface {
 
 	// Creates a row group buffer column for values of this type.
 	//
+	// Column buffers are created using the index of the column they are
+	// accumulating values in memory for (relative to the parent schema),
+	// and the size of their memory buffer.
+	//
+	// The buffer size is given in bytes, because we want to control memory
+	// consumption of the application, which is simpler to achieve with buffer
+	// size expressed in bytes rather than number of elements.
+	//
+	// Note that the buffer size is not a hard limit, it defines the initial
+	// capacity of the column buffer, but may grow as needed. Programs can use
+	// the Size method of the column buffer (or the parent row group, when
+	// relevant) to determine how many bytes are being used, and perofrm a flush
+	// of the buffers to a storage layer.
+	//
 	// The method panics if it is called on a group type.
 	NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer
 
