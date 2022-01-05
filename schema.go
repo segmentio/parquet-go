@@ -173,7 +173,7 @@ func (s *Schema) Encoding() []encoding.Encoding { return s.root.Encoding() }
 // Compression returns the list of compression codecs in the child nodes of s.
 func (s *Schema) Compression() []compress.Codec { return s.root.Compression() }
 
-// Returns the Go type that best represents the schema.
+// GoType returns the Go type that best represents the schema.
 func (s *Schema) GoType() reflect.Type { return s.root.GoType() }
 
 // ValueByName is returns the sub-value with the givne name in base.

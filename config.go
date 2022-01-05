@@ -44,7 +44,7 @@ func (c *FileConfig) Apply(options ...FileOption) {
 	}
 }
 
-// Configure applies configuration options from c to config.
+// ConfigureFile applies configuration options from c to config.
 func (c *FileConfig) ConfigureFile(config *FileConfig) {
 	*config = FileConfig{
 		SkipPageIndex: config.SkipPageIndex,
@@ -84,7 +84,7 @@ func (c *ReaderConfig) Apply(options ...ReaderOption) {
 	}
 }
 
-// Configure applies configuration options from c to config.
+// ConfigureReader applies configuration options from c to config.
 func (c *ReaderConfig) ConfigureReader(config *ReaderConfig) {
 	*config = ReaderConfig{
 		PageBufferSize: coalesceInt(c.PageBufferSize, config.PageBufferSize),
@@ -142,7 +142,7 @@ func (c *WriterConfig) Apply(options ...WriterOption) {
 	}
 }
 
-// Configure applies configuration options from c to config.
+// ConfigureWriter applies configuration options from c to config.
 func (c *WriterConfig) ConfigureWriter(config *WriterConfig) {
 	keyValueMetadata := config.KeyValueMetadata
 	if len(c.KeyValueMetadata) > 0 {

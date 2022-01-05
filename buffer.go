@@ -206,13 +206,8 @@ func (buf *Buffer) WriteRowGroup(rowGroup RowGroup) (int64, error) {
 		return 0, ErrRowGroupSortingColumnsMismatch
 	}
 	n := buf.NumRows()
-	_, err := CopyPages(buf, rowGroup.Pages())
+	_, err := CopyRows(bufferWriter{buf}, rowGroup.Rows())
 	return int64(buf.NumRows() - n), err
-}
-
-// WritePage satisfies the PageWriter interface.
-func (buf *Buffer) WritePage(page Page) (int64, error) {
-	return CopyValues(buf.columns[page.Column()], page.Values())
 }
 
 // Rows returns a reader exposing the current content of the buffer.
@@ -221,15 +216,23 @@ func (buf *Buffer) WritePage(page Page) (int64, error) {
 // concurrently to reading rows may result in non-deterministic behavior.
 func (buf *Buffer) Rows() RowReader { return &rowGroupRowReader{rowGroup: buf} }
 
-// Pages returns a reader exposing the current pages of the buffer.
-//
-// The buffer and the returned reader share memory, mutating the buffer
-// concurrently to reading rows may result in non-deterministic behavior.
-func (buf *Buffer) Pages() PageReader { return &rowGroupPageReader{rowGroup: buf} }
+// bufferWriter is an adapter for Buffer which implements both RowWriter and
+// PageWriter to enable optimizations in CopyRows for types that support writing
+// rows by copying whole pages instead of calling WriteRow repeatedly.
+type bufferWriter struct{ buf *Buffer }
+
+func (r bufferWriter) WriteRow(row Row) error {
+	return r.buf.WriteRow(row)
+}
+
+func (r bufferWriter) WritePage(page Page) (int64, error) {
+	return CopyValues(r.buf.columns[page.Column()], page.Values())
+}
 
 var (
 	_ RowGroup       = (*Buffer)(nil)
 	_ RowGroupWriter = (*Buffer)(nil)
-	_ PageWriter     = (*Buffer)(nil)
 	_ sort.Interface = (*Buffer)(nil)
+
+	_ PageWriter = (*bufferWriter)(nil)
 )

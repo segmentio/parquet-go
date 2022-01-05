@@ -28,9 +28,6 @@ type RowGroup interface {
 
 	// Returns a reader exposing the rows of the row group.
 	Rows() RowReader
-
-	// Returns a reader exposing the pages of the row group.
-	Pages() PageReader
 }
 
 // RowGroupReader is an interface implemented by types that expose sequences of
@@ -120,7 +117,7 @@ func sortingColumnsAreEqual(s1, s2 SortingColumn) bool {
 	return path1.equal(path2) && s1.Descending() == s2.Descending() && s1.NullsFirst() == s2.NullsFirst()
 }
 
-// MergeRowGRoups constructs a row group which is a merged view of the row
+// MergeRowGroups constructs a row group which is a merged view of the row
 // groups in the slice passed as first argument.
 //
 // The function performs validation to ensure that the merge operation is
@@ -236,18 +233,6 @@ func (m *mergedRowGroup) Rows() RowReader {
 			rowGroup: m,
 			schema:   m.schema,
 		}
-	}
-}
-
-func (m *mergedRowGroup) Pages() PageReader {
-	if len(m.sortFuncs) == 0 {
-		// When the row group has no ordering, simply expose the concatenation
-		// of pages from each of the sub groups.
-		return &multiRowGroupPageReader{rowGroups: m.rowGroups}
-	} else {
-		// When an ordering is applied, we used an optimized version of the
-		//
-		panic("TODO")
 	}
 }
 
@@ -380,58 +365,28 @@ func (r *rowGroupRowReader) ReadRow(row Row) (Row, error) {
 }
 
 func (r *rowGroupRowReader) WriteRowsTo(w RowWriter) (int64, error) {
-	if r.rowGroup != nil {
-		if rgw, ok := w.(RowGroupWriter); ok {
-			defer func() { r.rowGroup = nil }()
-			return rgw.WriteRowGroup(r.rowGroup)
-		}
+	if r.rowGroup == nil {
+		return 0, nil
 	}
+	defer func() {
+		r.rowGroup = nil
+	}()
+
+	switch dst := w.(type) {
+	case RowGroupWriter:
+		return dst.WriteRowGroup(r.rowGroup)
+
+	case PageWriter:
+		for i, n := 0, r.rowGroup.NumColumns(); i < n; i++ {
+			_, err := CopyPages(dst, r.rowGroup.Column(i).Pages())
+			if err != nil {
+				return 0, err
+			}
+		}
+		return int64(r.rowGroup.NumRows()), nil
+	}
+
 	return CopyRows(w, struct{ RowReaderWithSchema }{r})
-}
-
-type rowGroupPageReader struct {
-	pageReader  PageReader
-	rowGroup    RowGroup
-	columnIndex int
-}
-
-func (r *rowGroupPageReader) ReadPage() (Page, error) {
-	for {
-		if r.pageReader != nil {
-			p, err := r.pageReader.ReadPage()
-			if err == nil || err != io.EOF {
-				return p, err
-			}
-			r.pageReader = nil
-		}
-		if r.rowGroup == nil || r.columnIndex == r.rowGroup.NumColumns() {
-			return nil, io.EOF
-		}
-		r.pageReader = r.rowGroup.Column(r.columnIndex).Pages()
-		r.columnIndex++
-	}
-}
-
-type multiRowGroupPageReader struct {
-	pageReader PageReader
-	rowGroups  []RowGroup
-}
-
-func (r *multiRowGroupPageReader) ReadPage() (Page, error) {
-	for {
-		if r.pageReader != nil {
-			p, err := r.pageReader.ReadPage()
-			if err == nil || err != io.EOF {
-				return p, err
-			}
-			r.pageReader = nil
-		}
-		if len(r.rowGroups) == 0 {
-			return nil, io.EOF
-		}
-		r.pageReader = r.rowGroups[0].Pages()
-		r.rowGroups = r.rowGroups[1:]
-	}
 }
 
 type concatenatedRowGroupRowReader struct {

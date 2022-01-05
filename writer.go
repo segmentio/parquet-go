@@ -140,7 +140,10 @@ func (w *Writer) WriteRowGroup(rowGroup RowGroup) (int64, error) {
 	case !nodesAreEqual(w.schema, rowGroupSchema):
 		return 0, ErrRowGroupSchemaMismatch
 	}
-	return w.writer.WriteRowGroup(rowGroup)
+	if err := w.writer.Flush(); err != nil {
+		return 0, err
+	}
+	return w.writer.writeRowGroup(rowGroup)
 }
 
 // ReadRowsFrom reads rows from the reader passed as arguments and writes them
@@ -171,7 +174,6 @@ func (g writerRowGroup) Column(i int) ColumnChunk        { return g.columns[i] }
 func (g writerRowGroup) Schema() *Schema                 { return g.rowGroup.schema }
 func (g writerRowGroup) SortingColumns() []SortingColumn { return nil }
 func (g writerRowGroup) Rows() RowReader                 { return &rowGroupRowReader{rowGroup: g} }
-func (g writerRowGroup) Pages() PageReader               { return &rowGroupPageReader{rowGroup: g} }
 
 type writer struct {
 	writer offsetTrackingWriter
@@ -434,13 +436,11 @@ func (w *writer) WriteRow(row Row) error {
 	return nil
 }
 
-func (w *writer) WriteRowGroup(rows RowGroup) (int64, error) {
-	if err := w.Flush(); err != nil {
-		return 0, err
-	}
-	return w.writeRowGroup(rows)
-}
-
+// writeRowGroup writes a row group to w. Note that this method isn't called
+// WriteRowGroup (exported) on purpose so that unlike the calling *Writer type,
+// the *writer type does not end up satisfying RowGroupWriter which would
+// otherwise cause an infinite recursive call when CopyRows is used to write
+// rows from the group to the writer.
 func (w *writer) writeRowGroup(rows RowGroup) (int64, error) {
 	if err := w.writeFileHeader(); err != nil {
 		return 0, err
@@ -477,8 +477,8 @@ func (w *writer) writeRowGroup(rows RowGroup) (int64, error) {
 	}()
 
 	fileOffset := w.writer.offset
-
-	if _, err := CopyPages(w, rows.Pages()); err != nil {
+	numRows, err := CopyRows(w, rows.Rows())
+	if err != nil {
 		return 0, err
 	}
 
@@ -518,7 +518,6 @@ func (w *writer) writeRowGroup(rows RowGroup) (int64, error) {
 	offsetIndex := make([]format.OffsetIndex, len(w.offsetIndex))
 	copy(offsetIndex, w.offsetIndex)
 
-	numRows := int64(rows.NumRows())
 	w.rowGroups = append(w.rowGroups, format.RowGroup{
 		Columns:             columns,
 		TotalByteSize:       totalByteSize,
@@ -534,6 +533,15 @@ func (w *writer) writeRowGroup(rows RowGroup) (int64, error) {
 	return numRows, nil
 }
 
+// This WritePage method satisfies the PageWriter interface as a mechanism to
+// allow writing whole pages of values instead of individual rows. It is called
+// indirectly by readers that implement WriteRowsTo and are able to leverage
+// the method to optimize the writes.
+//
+// This is the mechnism used by the writerRowGroup type when flushing the
+// writer's column buffers. When reading rows from the writerRowGroup, the
+// row reader implement RowWriterTo and detects that the target (the *writer
+// itself) implements PageWriter, then copies the column buffer pages directly.
 func (w *writer) WritePage(page Page) (numValues int64, err error) {
 	columnIndex := page.Column()
 	columnChunk := &w.columnChunk[columnIndex].MetaData
@@ -1253,9 +1261,8 @@ var (
 	_ RowReaderFrom       = (*Writer)(nil)
 	_ RowGroupWriter      = (*Writer)(nil)
 
-	_ RowWriter      = (*writer)(nil)
-	_ RowGroupWriter = (*writer)(nil)
-	_ PageWriter     = (*writer)(nil)
+	_ RowWriter  = (*writer)(nil)
+	_ PageWriter = (*writer)(nil)
 
 	_ ColumnChunk = (*columnChunkWriter)(nil)
 	_ RowWriter   = (*columnChunkWriter)(nil)

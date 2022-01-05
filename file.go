@@ -361,7 +361,6 @@ func (g *fileRowGroup) NumColumns() int                 { return len(g.columns) 
 func (g *fileRowGroup) Column(i int) ColumnChunk        { return &g.columns[i] }
 func (g *fileRowGroup) SortingColumns() []SortingColumn { return g.sorting }
 func (g *fileRowGroup) Rows() RowReader                 { return &rowGroupRowReader{rowGroup: g} }
-func (g *fileRowGroup) Pages() PageReader               { return &rowGroupPageReader{rowGroup: g} }
 
 type fileSortingColumn struct {
 	column     *Column
