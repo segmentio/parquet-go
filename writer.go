@@ -526,6 +526,14 @@ func (w *writer) writeRowGroup(rows RowGroup) (int64, error) {
 		}
 	})
 
+	for _, sorting := range sortingColumns {
+		if sorting.Descending {
+			w.columnIndex[sorting.ColumnIdx].BoundaryOrder = format.Descending
+		} else {
+			w.columnIndex[sorting.ColumnIdx].BoundaryOrder = format.Ascending
+		}
+	}
+
 	columns := make([]format.ColumnChunk, len(w.columnChunk))
 	copy(columns, w.columnChunk)
 
