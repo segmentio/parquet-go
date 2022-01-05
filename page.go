@@ -13,7 +13,14 @@ import (
 	"github.com/segmentio/parquet/internal/bits"
 )
 
-// Page values represent sequences of parquet values.
+// Page values represent sequences of parquet values. From the Parquet
+// documentation: "Column chunks are a chunk of the data for a particular
+// column. They live in a particular row group and are guaranteed to be
+// contiguous in the file. Column chunks are divided up into pages. A page is
+// conceptually an indivisible unit (in terms of compression and encoding).
+// There can be multiple page types which are interleaved in a column chunk."
+//
+// https://github.com/apache/parquet-format#glossary
 type Page interface {
 	// Returns the column index that this page belongs to.
 	Column() int

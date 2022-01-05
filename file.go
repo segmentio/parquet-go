@@ -21,7 +21,8 @@ const (
 	defaultLevelBufferSize = 1024
 )
 
-// File represents a parquet file.
+// File represents a parquet file. The layout of a Parquet file can be found
+// here: https://github.com/apache/parquet-format#file-format
 type File struct {
 	metadata      format.FileMetaData
 	protocol      thrift.CompactProtocol
