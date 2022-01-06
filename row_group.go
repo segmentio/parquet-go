@@ -26,7 +26,12 @@ type ColumnChunk interface {
 	OffsetIndex() *OffsetIndex
 }
 
-// RowGroup is an interface representing a parquet row group.
+// RowGroup is an interface representing a parquet row group. From the Parquet
+// docs, a RowGroup is "a logical horizontal partitioning of the data into rows.
+// There is no physical structure that is guaranteed for a row group. A row
+// group consists of a column chunk for each column in the dataset."
+//
+// https://github.com/apache/parquet-format#glossary
 type RowGroup interface {
 	// Returns the number of rows in the group.
 	NumRows() int
@@ -56,7 +61,7 @@ type RowGroupReader interface {
 	ReadRowGroup() (RowGroup, error)
 }
 
-// RowGroupWriter is an interface implemented by tyeps that allow the program
+// RowGroupWriter is an interface implemented by types that allow the program
 // to write row groups.
 type RowGroupWriter interface {
 	WriteRowGroup(RowGroup) (int64, error)
@@ -137,12 +142,13 @@ func sortingColumnsAreEqual(s1, s2 SortingColumn) bool {
 	return path1.equal(path2) && s1.Descending() == s2.Descending() && s1.NullsFirst() == s2.NullsFirst()
 }
 
-// MergeRowGroups constructs a row group which is a merged view of the row
-// groups in the slice passed as first argument.
+// MergeRowGroups constructs a row group which is a merged view of rowGroups. If
+// rowGroups are sorted and the passed options include sorting, the merged row
+// group will also be sorted.
 //
-// The function performs validation to ensure that the merge operation is
+// The function validates the input to ensure that the merge operation is
 // possible, ensuring that the schemas match or can be converted to an
-// optionally configured target schema passed as argument to the option list.
+// optionally configured target schema passed as argument in the option list.
 //
 // The sorting columns of each row group are also consulted to determine whether
 // the output can be represented. If sorting columns are configured on the merge
