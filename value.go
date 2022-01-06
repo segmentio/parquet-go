@@ -523,7 +523,7 @@ func (v Value) GoString() string {
 	return fmt.Sprintf("%#v", v)
 }
 
-// Level returns v with the repetition leve, definition level, and column index
+// Level returns v with the repetition level, definition level, and column index
 // set to the values passed as arguments.
 //
 // The method panics if either argument is negative.
