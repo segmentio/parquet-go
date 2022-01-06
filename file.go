@@ -34,7 +34,7 @@ type File struct {
 	rowGroups     []fileRowGroup
 }
 
-// OpenFile opens a parquet file from the content between offset 0 and the given
+// OpenFile opens a parquet file and reads the content between offset 0 and the given
 // size in r.
 //
 // Only the parquet magic bytes and footer are read, column chunks and other
