@@ -57,7 +57,7 @@ type RowReaderFrom interface {
 }
 
 // RowReaderWithSchema is an extension of the RowReader interface which
-// advertizes the schema of rows returned by ReadRow calls.
+// advertises the schema of rows returned by ReadRow calls.
 type RowReaderWithSchema interface {
 	RowReader
 	Schema() *Schema
