@@ -383,15 +383,12 @@ func (w *writer) reset(writer io.Writer) {
 
 func (w *writer) close() error {
 	defer w.writer.Reset(nil)
-
 	if err := w.writeFileHeader(); err != nil {
 		return err
 	}
-
 	if err := w.flush(); err != nil {
 		return err
 	}
-
 	return w.writeFileFooter()
 }
 
