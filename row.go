@@ -79,7 +79,7 @@ type RowWriterTo interface {
 }
 
 // RowWriterWithSchema is an extension of the RowWriter interface which
-// advertizes the schema of rows expected to be passed to WriteRow calls.
+// advertises the schema of rows expected to be passed to WriteRow calls.
 type RowWriterWithSchema interface {
 	RowWriter
 	Schema() *Schema
