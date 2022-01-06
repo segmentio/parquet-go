@@ -42,9 +42,14 @@ func (list *ByteArrayList) Clone() ByteArrayList {
 }
 
 func (list *ByteArrayList) Split() [][]byte {
-	split := make([][]byte, list.Len())
+	clone := ByteArrayList{
+		slices: list.slices,
+		values: make([]byte, len(list.values)),
+	}
+	copy(clone.values, list.values)
+	split := make([][]byte, clone.Len())
 	for i := range split {
-		split[i] = list.Index(i)
+		split[i] = clone.Index(i)
 	}
 	return split
 }

@@ -70,6 +70,12 @@ type CompressedPage interface {
 
 	// Returns a reader exposing the content of the compressed page.
 	PageData() io.Reader
+
+	// Returns the size of the page data.
+	PageSize() int64
+
+	// CRC returns the IEEE CRC32 checksum of the page.
+	CRC() uint32
 }
 
 // PageReader is an interface implemented by types that support producing a
@@ -180,28 +186,29 @@ func sizeOfFloat32(data []float32) int64 { return 4 * int64(len(data)) }
 
 func sizeOfFloat64(data []float64) int64 { return 8 * int64(len(data)) }
 
-func forEachPageSlice(page BufferedPage, wantSize int64, do func(BufferedPage) bool) {
+func forEachPageSlice(page BufferedPage, wantSize int64, do func(BufferedPage) error) error {
 	numRows := page.NumRows()
 	if numRows == 0 {
-		return
+		return nil
 	}
 
 	pageSize := page.Size()
 	numPages := int((pageSize + (wantSize - 1)) / wantSize)
 	rowIndex := 0
 	if numPages < 2 {
-		do(page)
-		return
+		return do(page)
 	}
 
 	for numPages > 0 {
 		lastRowIndex := rowIndex + ((numRows - rowIndex) / numPages)
-		if !do(page.Slice(rowIndex, lastRowIndex)) {
-			break
+		if err := do(page.Slice(rowIndex, lastRowIndex)); err != nil {
+			return err
 		}
 		rowIndex = lastRowIndex
 		numPages--
 	}
+
+	return nil
 }
 
 type errorPage struct {

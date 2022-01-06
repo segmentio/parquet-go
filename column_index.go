@@ -528,6 +528,7 @@ func (index uint64ColumnIndexer) ColumnIndex() ColumnIndex {
 }
 
 func splitFixedLenByteArrayList(size int, data []byte) [][]byte {
+	data = copyBytes(data)
 	values := make([][]byte, len(data)/size)
 	for i := range values {
 		j := (i + 0) * size

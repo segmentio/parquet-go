@@ -746,9 +746,11 @@ func (p *filePage) PageHeader() PageHeader {
 	}
 }
 
-func (p *filePage) PageData() io.Reader {
-	return &p.data
-}
+func (p *filePage) PageData() io.Reader { return &p.data }
+
+func (p *filePage) PageSize() int64 { return int64(p.header.CompressedPageSize) }
+
+func (p *filePage) CRC() uint32 { return uint32(p.header.CRC) }
 
 type filePageValueReaderState struct {
 	reader *dataPageReader

@@ -198,9 +198,8 @@ type columnValueReader struct {
 	buffer []Value
 	offset int
 	values ValueReader
-
-	pages reusablePageReader
-	index int
+	pages  reusablePageReader
+	index  int
 }
 
 func makeColumnValueReaders(numColumns int, columnPagesOf func(int) reusablePageReader) []columnValueReader {
@@ -228,6 +227,10 @@ func (r *columnValueReader) reset() {
 	r.index = 0
 }
 
+func (r *columnValueReader) hasBufferedValues() bool {
+	return r.offset < len(r.buffer)
+}
+
 func (r *columnValueReader) readMoreValues() error {
 	for {
 		if r.values != nil {
@@ -249,8 +252,8 @@ func (r *columnValueReader) readMoreValues() error {
 		if err != nil {
 			return err
 		}
-		r.index++
 		r.values = p.Values()
+		r.index++
 	}
 }
 
@@ -264,20 +267,20 @@ func columnReadRowFuncOf(node Node, columnIndex int, repetitionDepth int8) (int,
 	}
 
 	if isLeaf(node) {
-		columnIndex, read = columnReadRowFuncOfLeaf(node, columnIndex, repetitionDepth)
+		columnIndex, read = columnReadRowFuncOfLeaf(columnIndex, repetitionDepth)
 	} else {
 		columnIndex, read = columnReadRowFuncOfGroup(node, columnIndex, repetitionDepth)
 	}
 
 	if node.Repeated() {
-		read = columnReadRowFuncOfRepeated(node, repetitionDepth, read)
+		read = columnReadRowFuncOfRepeated(read, repetitionDepth)
 	}
 
 	return columnIndex, read
 }
 
 //go:noinline
-func columnReadRowFuncOfRepeated(node Node, repetitionDepth int8, read columnReadRowFunc) columnReadRowFunc {
+func columnReadRowFuncOfRepeated(read columnReadRowFunc, repetitionDepth int8) columnReadRowFunc {
 	return func(row Row, repetitionLevel int8, columns []columnValueReader) (Row, error) {
 		var err error
 
@@ -326,7 +329,7 @@ func columnReadRowFuncOfGroup(node Node, columnIndex int, repetitionDepth int8) 
 }
 
 //go:noinline
-func columnReadRowFuncOfLeaf(node Node, columnIndex int, repetitionDepth int8) (int, columnReadRowFunc) {
+func columnReadRowFuncOfLeaf(columnIndex int, repetitionDepth int8) (int, columnReadRowFunc) {
 	var read columnReadRowFunc
 
 	if repetitionDepth == 0 {

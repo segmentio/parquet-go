@@ -11,7 +11,6 @@ const (
 	DefaultColumnBufferSize     = 1 * 1024 * 1024
 	DefaultPageBufferSize       = 1 * 1024 * 1024
 	DefaultDataPageVersion      = 2
-	DefaultRowGroupTargetSize   = 128 * 1024 * 1024
 	DefaultDataPageStatistics   = false
 	DefaultSkipPageIndex        = false
 )
@@ -138,7 +137,6 @@ type WriterConfig struct {
 	PageBufferSize       int
 	DataPageVersion      int
 	DataPageStatistics   bool
-	RowGroupTargetSize   int64
 	KeyValueMetadata     map[string]string
 	Schema               *Schema
 }
@@ -153,7 +151,6 @@ func DefaultWriterConfig() *WriterConfig {
 		PageBufferSize:       DefaultPageBufferSize,
 		DataPageVersion:      DefaultDataPageVersion,
 		DataPageStatistics:   DefaultDataPageStatistics,
-		RowGroupTargetSize:   DefaultRowGroupTargetSize,
 	}
 }
 
@@ -193,7 +190,6 @@ func (c *WriterConfig) ConfigureWriter(config *WriterConfig) {
 		PageBufferSize:       coalesceInt(c.PageBufferSize, config.PageBufferSize),
 		DataPageVersion:      coalesceInt(c.DataPageVersion, config.DataPageVersion),
 		DataPageStatistics:   config.DataPageStatistics,
-		RowGroupTargetSize:   coalesceInt64(c.RowGroupTargetSize, config.RowGroupTargetSize),
 		KeyValueMetadata:     keyValueMetadata,
 		Schema:               coalesceSchema(c.Schema, config.Schema),
 	}
@@ -206,7 +202,6 @@ func (c *WriterConfig) Validate() error {
 		validateNotNil(baseName+"ColumnPageBuffers", c.ColumnPageBuffers),
 		validatePositiveInt(baseName+"ColumnIndexSizeLimit", c.ColumnIndexSizeLimit),
 		validatePositiveInt(baseName+"PageBufferSize", c.PageBufferSize),
-		validatePositiveInt64(baseName+"RowGroupTargetSize", c.RowGroupTargetSize),
 		validateOneOfInt(baseName+"DataPageVersion", c.DataPageVersion, 1, 2),
 	)
 }
@@ -358,14 +353,6 @@ func DataPageVersion(version int) WriterOption {
 // Defaults to false.
 func DataPageStatistics(enabled bool) WriterOption {
 	return writerOption(func(config *WriterConfig) { config.DataPageStatistics = enabled })
-}
-
-// RowGroupTargetSize creates a configuration option to define the target size of
-// row groups when creating parquet files.
-//
-// Defaults to 128 MiB.
-func RowGroupTargetSize(size int64) WriterOption {
-	return writerOption(func(config *WriterConfig) { config.RowGroupTargetSize = size })
 }
 
 // KeyValueMetadata creates a configuration option which adds key/value metadata
