@@ -649,7 +649,7 @@ func maxRowLengthOf(rows []region) (maxLength uint32) {
 
 // =============================================================================
 // The types below are in-memory implementations of the ColumnBuffer interface
-// for each of parquet type.
+// for each parquet type.
 //
 // These column buffers are created by calling NewColumnBuffer on parquet.Type
 // instances; each parquet type manages to construct column buffers of the
