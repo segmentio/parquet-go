@@ -891,6 +891,7 @@ func (s *filePageValueReaderState) initDataPageV2(header DataPageHeaderV2, data 
 
 type dataPageLevelV1 struct {
 	section bytes.Reader
+	buffer  [4]byte
 	data    []byte
 }
 
@@ -911,18 +912,11 @@ func (lvl *dataPageLevelV1) reset() {
 // of the file according to the level lengths stored in the column metadata
 // header, therefore there is no need to buffer the levels.
 func (lvl *dataPageLevelV1) readDataPageV1Level(r io.Reader, typ string) error {
-	const defaultLevelBufferSize = 256
-
-	if cap(lvl.data) < 4 {
-		lvl.data = make([]byte, 4, defaultLevelBufferSize)
-	} else {
-		lvl.data = lvl.data[:4]
-	}
-	if _, err := io.ReadFull(r, lvl.data); err != nil {
+	if _, err := io.ReadFull(r, lvl.buffer[:4]); err != nil {
 		return fmt.Errorf("reading RLE encoded length of %s levels: %w", typ, err)
 	}
 
-	n := int(binary.LittleEndian.Uint32(lvl.data))
+	n := int(binary.LittleEndian.Uint32(lvl.buffer[:4]))
 	if cap(lvl.data) < n {
 		lvl.data = make([]byte, n)
 	} else {
