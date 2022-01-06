@@ -39,7 +39,7 @@ type File struct {
 //
 // Only the parquet magic bytes and footer are read, column chunks and other
 // parts of the file are left untouched; this means that successfully opening
-// a file does not validate that the pages are not corrupted.
+// a file does not validate that the pages have valid checksums.
 func OpenFile(r io.ReaderAt, size int64, options ...FileOption) (*File, error) {
 	b := make([]byte, 8)
 	f := &File{reader: r, size: size}
@@ -59,7 +59,7 @@ func OpenFile(r io.ReaderAt, size int64, options ...FileOption) (*File, error) {
 		return nil, fmt.Errorf("reading magic footer of parquet file: %w", err)
 	}
 	if string(b[4:8]) != "PAR1" {
-		return nil, fmt.Errorf("invalid magic footer of parquet file: %q", b[:4])
+		return nil, fmt.Errorf("invalid magic footer of parquet file: %q", b[4:8])
 	}
 
 	footerSize := int64(binary.LittleEndian.Uint32(b[:4]))

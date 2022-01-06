@@ -286,7 +286,7 @@ func TestMergeRowGroups(t *testing.T) {
 					// We test two views of the resulting row group: the one originally
 					// returned by MergeRowGroups, and one where the merged row group
 					// has been copied into a new buffer. The intent is to exercise both
-					// the row-by-row read as well as optimized code thams when CopyRows
+					// the row-by-row read as well as optimized code paths when CopyRows
 					// bypasses the ReadRow/WriteRow calls and the row group is written
 					// directly to the buffer by calling WriteRowsTo/WriteRowGroup.
 					mergedCopy := parquet.NewBuffer(options...)

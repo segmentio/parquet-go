@@ -149,8 +149,6 @@ func (w *Writer) WriteRow(row Row) error { return w.writer.WriteRow(row) }
 //
 // Buffered rows will be flushed prior to writing rows from the group, unless
 // the row group was empty in which case nothing is written to the file.
-// ReadRowsFrom reads rows from the reader passed as arguments and writes them
-// to w.
 //
 // The content of the row group is flushed to the writer; after the method
 // returns successfully, the row group will be empty and in ready to be reused.
