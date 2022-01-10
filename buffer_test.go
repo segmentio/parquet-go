@@ -11,7 +11,7 @@ import (
 	"github.com/segmentio/parquet/encoding"
 )
 
-var rowGroupTests = [...]struct {
+var bufferTests = [...]struct {
 	scenario string
 	typ      parquet.Type
 	values   [][]interface{}
@@ -151,8 +151,8 @@ var rowGroupTests = [...]struct {
 	},
 }
 
-func TestRowGroup(t *testing.T) {
-	for _, test := range rowGroupTests {
+func TestBuffer(t *testing.T) {
+	for _, test := range bufferTests {
 		t.Run(test.scenario, func(t *testing.T) {
 			for _, config := range [...]struct {
 				scenario string
@@ -193,24 +193,24 @@ func TestRowGroup(t *testing.T) {
 										options = append(options, parquet.SortingColumns(ordering.sorting))
 									}
 
-									buffer := new(bytes.Buffer)
-									decoder := parquet.Plain.NewDecoder(buffer)
-									encoder := parquet.Plain.NewEncoder(buffer)
+									content := new(bytes.Buffer)
+									decoder := parquet.Plain.NewDecoder(content)
+									encoder := parquet.Plain.NewEncoder(content)
 									reader := config.typ.NewValueDecoder(32)
-									rowGroup := parquet.NewRowGroup(options...)
+									buffer := parquet.NewBuffer(options...)
 
 									reset := func() {
-										buffer.Reset()
-										decoder.Reset(buffer)
-										encoder.Reset(buffer)
+										content.Reset()
+										decoder.Reset(content)
+										encoder.Reset(content)
 										reader.Reset(decoder)
-										rowGroup.Reset()
+										buffer.Reset()
 									}
 
 									for _, values := range test.values {
 										t.Run("", func(t *testing.T) {
 											reset()
-											testRowGroup(t, schema.ChildByName("data"), reader, rowGroup, encoder, values, ordering.sortFunc)
+											testBuffer(t, schema.ChildByName("data"), reader, buffer, encoder, values, ordering.sortFunc)
 										})
 									}
 								})
@@ -228,14 +228,14 @@ type sortFunc func(parquet.Type, []parquet.Value)
 func unordered(typ parquet.Type, values []parquet.Value) {}
 
 func ascending(typ parquet.Type, values []parquet.Value) {
-	sort.Slice(values, func(i, j int) bool { return typ.Less(values[i], values[j]) })
+	sort.Slice(values, func(i, j int) bool { return typ.Compare(values[i], values[j]) < 0 })
 }
 
 func descending(typ parquet.Type, values []parquet.Value) {
-	sort.Slice(values, func(i, j int) bool { return typ.Less(values[j], values[i]) })
+	sort.Slice(values, func(i, j int) bool { return typ.Compare(values[i], values[j]) > 0 })
 }
 
-func testRowGroup(t *testing.T, node parquet.Node, reader parquet.ValueReader, rowGroup *parquet.RowGroup, encoder encoding.Encoder, values []interface{}, sortFunc sortFunc) {
+func testBuffer(t *testing.T, node parquet.Node, reader parquet.ValueReader, buffer *parquet.Buffer, encoder encoding.Encoder, values []interface{}, sortFunc sortFunc) {
 	repetitionLevel := int8(0)
 	definitionLevel := int8(0)
 	if !node.Required() {
@@ -246,33 +246,33 @@ func testRowGroup(t *testing.T, node parquet.Node, reader parquet.ValueReader, r
 	maxValue := parquet.Value{}
 	batch := make([]parquet.Value, len(values))
 	for i := range values {
-		batch[i] = parquet.ValueOf(values[i]).Level(repetitionLevel, definitionLevel).Column(0)
+		batch[i] = parquet.ValueOf(values[i]).Level(repetitionLevel, definitionLevel, 0)
 	}
 
 	for i := range batch {
-		if err := rowGroup.WriteRow(batch[i : i+1]); err != nil {
+		if err := buffer.WriteRow(batch[i : i+1]); err != nil {
 			t.Fatalf("writing value to row group: %v", err)
 		}
 	}
 
-	if numRows := rowGroup.Len(); numRows != len(batch) {
+	if numRows := buffer.NumRows(); numRows != len(batch) {
 		t.Fatalf("number of rows mismatch: want=%d got=%d", len(batch), numRows)
 	}
 
 	typ := node.Type()
 	for _, value := range batch {
-		if minValue.IsNull() || typ.Less(value, minValue) {
+		if minValue.IsNull() || typ.Compare(value, minValue) < 0 {
 			minValue = value
 		}
-		if maxValue.IsNull() || typ.Less(maxValue, value) {
+		if maxValue.IsNull() || typ.Compare(value, maxValue) > 0 {
 			maxValue = value
 		}
 	}
 
 	sortFunc(typ, batch)
-	sort.Sort(rowGroup)
+	sort.Sort(buffer)
 
-	page := rowGroup.Column(0).Page()
+	page := buffer.Column(0).(parquet.ColumnBuffer).Page()
 	numValues := page.NumValues()
 	if numValues != len(batch) {
 		t.Fatalf("number of values mistmatch: want=%d got=%d", len(batch), numValues)
@@ -295,7 +295,7 @@ func testRowGroup(t *testing.T, node parquet.Node, reader parquet.ValueReader, r
 		t.Fatalf("flushing page writer: %v", err)
 	}
 
-	// We writes a single value per row, so num values = num rows for all pages
+	// We write a single value per row, so num values = num rows for all pages
 	// including repeated ones, which makes it OK to slice the pages using the
 	// number of values as a proxy for the row indexes.
 	halfValues := numValues / 2
@@ -306,9 +306,9 @@ func testRowGroup(t *testing.T, node parquet.Node, reader parquet.ValueReader, r
 		reader   parquet.ValueReader
 	}{
 		{"test", batch, reader},
-		{"page", batch, parquet.NewValueReader(page, 0, numValues)},
-		{"head", batch[:halfValues], parquet.NewValueReader(page.Slice(0, halfValues), 0, halfValues)},
-		{"tail", batch[halfValues:], parquet.NewValueReader(page.Slice(halfValues, numValues), 0, numValues-halfValues)},
+		{"page", batch, page.Values()},
+		{"head", batch[:halfValues], page.Slice(0, halfValues).Values()},
+		{"tail", batch[halfValues:], page.Slice(halfValues, numValues).Values()},
 	} {
 		v := [1]parquet.Value{}
 		i := 0

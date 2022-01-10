@@ -8,13 +8,13 @@ import (
 	"github.com/segmentio/parquet/internal/bits"
 )
 
-// PageReader reads values from a data page.
+// dataPageReader reads values from a data page.
 //
-// PageReader implements the ValueReader interface; when they exist,
+// dataPageReader implements the ValueReader interface; when they exist,
 // the reader decodes repetition and definition levels in order to assign
 // levels to values returned to the application, which includes producing
 // null values when needed.
-type PageReader struct {
+type dataPageReader struct {
 	remain             int
 	numValues          int
 	maxRepetitionLevel int8
@@ -25,7 +25,7 @@ type PageReader struct {
 	values             ValueDecoder
 }
 
-func NewPageReader(typ Type, maxRepetitionLevel, maxDefinitionLevel, columnIndex int8, bufferSize int) *PageReader {
+func newDataPageReader(typ Type, maxRepetitionLevel, maxDefinitionLevel, columnIndex int8, bufferSize int) *dataPageReader {
 	bufferSize /= 2
 	repetitionBufferSize := 0
 	definitionBufferSize := 0
@@ -42,7 +42,7 @@ func NewPageReader(typ Type, maxRepetitionLevel, maxDefinitionLevel, columnIndex
 		definitionBufferSize = bufferSize
 	}
 
-	return &PageReader{
+	return &dataPageReader{
 		maxRepetitionLevel: maxRepetitionLevel,
 		maxDefinitionLevel: maxDefinitionLevel,
 		columnIndex:        ^columnIndex,
@@ -52,7 +52,7 @@ func NewPageReader(typ Type, maxRepetitionLevel, maxDefinitionLevel, columnIndex
 	}
 }
 
-func (r *PageReader) Reset(numValues int, repetitions, definitions, values encoding.Decoder) {
+func (r *dataPageReader) Reset(numValues int, repetitions, definitions, values encoding.Decoder) {
 	if repetitions != nil {
 		repetitions.SetBitWidth(bits.Len8(r.maxRepetitionLevel))
 	}
@@ -66,7 +66,7 @@ func (r *PageReader) Reset(numValues int, repetitions, definitions, values encod
 	r.values.Reset(values)
 }
 
-func (r *PageReader) ReadValues(values []Value) (int, error) {
+func (r *dataPageReader) ReadValues(values []Value) (int, error) {
 	if r.values == nil {
 		return 0, io.EOF
 	}
@@ -85,7 +85,7 @@ func (r *PageReader) ReadValues(values []Value) (int, error) {
 		if r.maxRepetitionLevel > 0 {
 			repetitionLevels, err = r.repetitions.peekLevels()
 			if err != nil {
-				return read, fmt.Errorf("reading parquet repetition level from data page: %w", err)
+				return read, fmt.Errorf("decoding repetition level from data page of column %d: %w", ^r.columnIndex, err)
 			}
 			if len(repetitionLevels) < numValues {
 				numValues = len(repetitionLevels)
@@ -95,7 +95,7 @@ func (r *PageReader) ReadValues(values []Value) (int, error) {
 		if r.maxDefinitionLevel > 0 {
 			definitionLevels, err = r.definitions.peekLevels()
 			if err != nil {
-				return read, fmt.Errorf("reading parquet definition level from data page: %w", err)
+				return read, fmt.Errorf("decoding definition level from data page of column %d: %w", ^r.columnIndex, err)
 			}
 			if len(definitionLevels) < numValues {
 				numValues = len(definitionLevels)
@@ -117,7 +117,7 @@ func (r *PageReader) ReadValues(values []Value) (int, error) {
 				// decoded levels.
 				err = fmt.Errorf("after reading %d/%d values: %w", r.numValues-r.remain, r.numValues, io.ErrUnexpectedEOF)
 			}
-			return read, fmt.Errorf("reading parquet values from data page: %w", err)
+			return read, fmt.Errorf("decoding %s values from data page of column %d: %w", r.values.Decoder().Encoding(), ^r.columnIndex, err)
 		}
 
 		for i, j := n-1, len(definitionLevels)-1; j >= 0; j-- {
@@ -220,7 +220,3 @@ func (r *levelReader) reset(decoder encoding.Decoder) {
 	r.offset = 0
 	r.count = 0
 }
-
-var (
-	_ ValueReader = (*PageReader)(nil)
-)

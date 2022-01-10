@@ -2,14 +2,8 @@ package parquet
 
 import (
 	"fmt"
-	"math"
+	"io"
 	"reflect"
-)
-
-const (
-	MaxRepetitionLevel = math.MaxInt8
-	MaxDefinitionLevel = math.MaxInt8
-	MaxColumnIndex     = math.MaxInt8
 )
 
 // Row represents a parquet row as a slice of values.
@@ -21,8 +15,239 @@ const (
 // position in the row.
 type Row []Value
 
+// Equal returns true if row and other contain the same sequence of values.
+func (row Row) Equal(other Row) bool {
+	if len(row) != len(other) {
+		return false
+	}
+	for i := range row {
+		if !Equal(row[i], other[i]) {
+			return false
+		}
+		if row[i].repetitionLevel != other[i].repetitionLevel {
+			return false
+		}
+		if row[i].definitionLevel != other[i].definitionLevel {
+			return false
+		}
+		if row[i].columnIndex != other[i].columnIndex {
+			return false
+		}
+	}
+	return true
+}
+
 func (row Row) startsWith(columnIndex int) bool {
-	return len(row) > 0 && int(row[0].ColumnIndex()) == columnIndex
+	return len(row) > 0 && int(row[0].Column()) == columnIndex
+}
+
+// RowReader reads a sequence of parquet rows.
+type RowReader interface {
+	ReadRow(Row) (Row, error)
+}
+
+// RowReaderAt reads parquet rows at specific indexes.
+type RowReaderAt interface {
+	ReadRowAt(Row, int) (Row, error)
+}
+
+// RowReaderFrom reads parquet rows from reader.
+type RowReaderFrom interface {
+	ReadRowsFrom(RowReader) (int64, error)
+}
+
+// RowReaderWithSchema is an extension of the RowReader interface which
+// advertises the schema of rows returned by ReadRow calls.
+type RowReaderWithSchema interface {
+	RowReader
+	Schema() *Schema
+}
+
+// RowWriter writes parquet rows to an underlying medium.
+type RowWriter interface {
+	WriteRow(Row) error
+}
+
+// RowWriterAt writes parquet rows at specific indexes.
+type RowWriterAt interface {
+	WriteRowAt(Row, int) error
+}
+
+// RowWriterTo writes parquet rows to a writer.
+type RowWriterTo interface {
+	WriteRowsTo(RowWriter) (int64, error)
+}
+
+// RowWriterWithSchema is an extension of the RowWriter interface which
+// advertises the schema of rows expected to be passed to WriteRow calls.
+type RowWriterWithSchema interface {
+	RowWriter
+	Schema() *Schema
+}
+
+// CopyRows copies rows from src to dst.
+//
+// The underlying types of src and dst are tested to determine if they expose
+// information about the schema of rows that are read and expected to be
+// written. If the schema information are available but do not match, the
+// function will attempt to automatically convert the rows from the source
+// schema to the destination.
+//
+// As an optimization, the src argument may implemnt RowWriterTo to bypass
+// the default row copy logic and provide its own. The dst argument may also
+// implement RowReaderFrom for the same purpose.
+//
+// The function returns the number of rows written, or any error encountered
+// other than io.EOF.
+func CopyRows(dst RowWriter, src RowReader) (int64, error) {
+	n, _, err := copyRows(dst, src, nil)
+	return n, err
+}
+
+func copyRows(dst RowWriter, src RowReader, buf []Value) (written int64, ret []Value, err error) {
+	targetSchema := targetSchemaOf(dst)
+	sourceSchema := sourceSchemaOf(src)
+
+	if targetSchema != nil && sourceSchema != nil {
+		if !nodesAreEqual(targetSchema, sourceSchema) {
+			conv, err := Convert(targetSchema, sourceSchema)
+			if err != nil {
+				return 0, buf, err
+			}
+			// The conversion effectively disables a potential optimization
+			// if the source reader implemented RowWriterTo. It is a trade off
+			// we are making to optimize for safety rather than performance.
+			//
+			// Entering this code path should not be the common case tho, it is
+			// most often used when parquet schemas are evolving, but we expect
+			// that the majority of files of an application to be sharing a
+			// common schema.
+			src = ConvertRowReader(src, conv)
+		}
+	}
+
+	if wt, ok := src.(RowWriterTo); ok {
+		written, err = wt.WriteRowsTo(dst)
+		return written, buf, err
+	}
+
+	if rf, ok := dst.(RowReaderFrom); ok {
+		written, err = rf.ReadRowsFrom(src)
+		return written, buf, err
+	}
+
+	if len(buf) == 0 {
+		buf = make([]Value, 42)
+	}
+
+	defer func() {
+		clearValues(buf)
+	}()
+
+	for {
+		if buf, err = src.ReadRow(buf[:0]); err != nil {
+			if err == io.EOF {
+				err = nil
+			}
+			return written, buf, err
+		}
+		if err = dst.WriteRow(buf); err != nil {
+			return written, buf, err
+		}
+		written++
+	}
+}
+
+func sourceSchemaOf(r RowReader) *Schema {
+	if rrs, ok := r.(RowReaderWithSchema); ok {
+		return rrs.Schema()
+	}
+	return nil
+}
+
+func targetSchemaOf(w RowWriter) *Schema {
+	if rws, ok := w.(RowWriterWithSchema); ok {
+		return rws.Schema()
+	}
+	return nil
+}
+
+func errRowIndexOutOfBounds(rowIndex, rowCount int) error {
+	return fmt.Errorf("row index out of bounds: %d/%d", rowIndex, rowCount)
+}
+
+func errRowHasTooFewValues(numValues int) error {
+	return fmt.Errorf("row has too few values to be written to the column: %d", numValues)
+}
+
+func errRowHasTooManyValues(numValues int) error {
+	return fmt.Errorf("row has too many values to be written to the column: %d", numValues)
+}
+
+func hasRepeatedRowValues(values []Value) bool {
+	for _, v := range values {
+		if v.repetitionLevel != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func countRowsOf(values []Value) (numRows int) {
+	if !hasRepeatedRowValues(values) {
+		return len(values) // Faster path when there are no repeated values.
+	}
+	if len(values) > 0 {
+		// The values may have not been at the start of a repeated row,
+		// it could be the continuation of a repeated row. Skip until we
+		// find the beginning of a row before starting to count how many
+		// rows there are.
+		if values[0].repetitionLevel != 0 {
+			_, values = splitRowValues(values)
+		}
+		for len(values) > 0 {
+			numRows++
+			_, values = splitRowValues(values)
+		}
+	}
+	return numRows
+}
+
+func limitRowValues(values []Value, rowCount int) []Value {
+	if !hasRepeatedRowValues(values) {
+		if len(values) > rowCount {
+			values = values[:rowCount]
+		}
+	} else {
+		var row Row
+		var limit int
+		for len(values) > 0 {
+			row, values = splitRowValues(values)
+			limit += len(row)
+		}
+		values = values[:limit]
+	}
+	return values
+}
+
+func splitRowValues(values []Value) (head, tail []Value) {
+	for i, v := range values {
+		if v.repetitionLevel == 0 {
+			return values[:i+1], values[i+1:]
+		}
+	}
+	return values, nil
+}
+
+func forEachRepeatedRowOf(values []Value, do func(Row) error) error {
+	var row Row
+	for len(values) > 0 {
+		row, values = splitRowValues(values)
+		if err := do(row); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // =============================================================================

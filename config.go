@@ -11,7 +11,6 @@ const (
 	DefaultColumnBufferSize     = 1 * 1024 * 1024
 	DefaultPageBufferSize       = 1 * 1024 * 1024
 	DefaultDataPageVersion      = 2
-	DefaultRowGroupTargetSize   = 128 * 1024 * 1024
 	DefaultDataPageStatistics   = false
 	DefaultSkipPageIndex        = false
 )
@@ -37,6 +36,17 @@ func DefaultFileConfig() *FileConfig {
 	}
 }
 
+// NewFileConfig constructs a new file configuration applying the options passed
+// as arguments.
+//
+// The function returns an non-nil error if some of the options carried invalid
+// configuration values.
+func NewFileConfig(options ...FileOption) (*FileConfig, error) {
+	config := DefaultFileConfig()
+	config.Apply(options...)
+	return config, config.Validate()
+}
+
 // Apply applies the given list of options to c.
 func (c *FileConfig) Apply(options ...FileOption) {
 	for _, opt := range options {
@@ -44,7 +54,7 @@ func (c *FileConfig) Apply(options ...FileOption) {
 	}
 }
 
-// Configure applies configuration options from c to config.
+// ConfigureFile applies configuration options from c to config.
 func (c *FileConfig) ConfigureFile(config *FileConfig) {
 	*config = FileConfig{
 		SkipPageIndex: config.SkipPageIndex,
@@ -77,6 +87,17 @@ func DefaultReaderConfig() *ReaderConfig {
 	}
 }
 
+// NewReaderConfig constructs a new reader configuration applying the options
+// passed as arguments.
+//
+// The function returns an non-nil error if some of the options carried invalid
+// configuration values.
+func NewReaderConfig(options ...ReaderOption) (*ReaderConfig, error) {
+	config := DefaultReaderConfig()
+	config.Apply(options...)
+	return config, config.Validate()
+}
+
 // Apply applies the given list of options to c.
 func (c *ReaderConfig) Apply(options ...ReaderOption) {
 	for _, opt := range options {
@@ -84,7 +105,7 @@ func (c *ReaderConfig) Apply(options ...ReaderOption) {
 	}
 }
 
-// Configure applies configuration options from c to config.
+// ConfigureReader applies configuration options from c to config.
 func (c *ReaderConfig) ConfigureReader(config *ReaderConfig) {
 	*config = ReaderConfig{
 		PageBufferSize: coalesceInt(c.PageBufferSize, config.PageBufferSize),
@@ -110,12 +131,12 @@ func (c *ReaderConfig) Validate() error {
 //
 type WriterConfig struct {
 	CreatedBy            string
-	ColumnPageBuffers    BufferPool
+	ColumnPageBuffers    PageBufferPool
 	ColumnIndexSizeLimit int
+	PageBufferPool       PageBufferPool
 	PageBufferSize       int
 	DataPageVersion      int
 	DataPageStatistics   bool
-	RowGroupTargetSize   int64
 	KeyValueMetadata     map[string]string
 	Schema               *Schema
 }
@@ -125,13 +146,23 @@ type WriterConfig struct {
 func DefaultWriterConfig() *WriterConfig {
 	return &WriterConfig{
 		CreatedBy:            DefaultCreatedBy,
-		ColumnPageBuffers:    &defaultBufferPool,
+		ColumnPageBuffers:    &defaultPageBufferPool,
 		ColumnIndexSizeLimit: DefaultColumnIndexSizeLimit,
 		PageBufferSize:       DefaultPageBufferSize,
 		DataPageVersion:      DefaultDataPageVersion,
 		DataPageStatistics:   DefaultDataPageStatistics,
-		RowGroupTargetSize:   DefaultRowGroupTargetSize,
 	}
+}
+
+// NewWriterConfig constructs a new writer configuration applying the options
+// passed as arguments.
+//
+// The function returns an non-nil error if some of the options carried invalid
+// configuration values.
+func NewWriterConfig(options ...WriterOption) (*WriterConfig, error) {
+	config := DefaultWriterConfig()
+	config.Apply(options...)
+	return config, config.Validate()
 }
 
 // Apply applies the given list of options to c.
@@ -141,7 +172,7 @@ func (c *WriterConfig) Apply(options ...WriterOption) {
 	}
 }
 
-// Configure applies configuration options from c to config.
+// ConfigureWriter applies configuration options from c to config.
 func (c *WriterConfig) ConfigureWriter(config *WriterConfig) {
 	keyValueMetadata := config.KeyValueMetadata
 	if len(c.KeyValueMetadata) > 0 {
@@ -154,12 +185,11 @@ func (c *WriterConfig) ConfigureWriter(config *WriterConfig) {
 	}
 	*config = WriterConfig{
 		CreatedBy:            coalesceString(c.CreatedBy, config.CreatedBy),
-		ColumnPageBuffers:    coalesceBufferPool(c.ColumnPageBuffers, config.ColumnPageBuffers),
+		ColumnPageBuffers:    coalescePageBufferPool(c.ColumnPageBuffers, config.ColumnPageBuffers),
 		ColumnIndexSizeLimit: coalesceInt(c.ColumnIndexSizeLimit, config.ColumnIndexSizeLimit),
 		PageBufferSize:       coalesceInt(c.PageBufferSize, config.PageBufferSize),
 		DataPageVersion:      coalesceInt(c.DataPageVersion, config.DataPageVersion),
 		DataPageStatistics:   config.DataPageStatistics,
-		RowGroupTargetSize:   coalesceInt64(c.RowGroupTargetSize, config.RowGroupTargetSize),
 		KeyValueMetadata:     keyValueMetadata,
 		Schema:               coalesceSchema(c.Schema, config.Schema),
 	}
@@ -172,7 +202,6 @@ func (c *WriterConfig) Validate() error {
 		validateNotNil(baseName+"ColumnPageBuffers", c.ColumnPageBuffers),
 		validatePositiveInt(baseName+"ColumnIndexSizeLimit", c.ColumnIndexSizeLimit),
 		validatePositiveInt(baseName+"PageBufferSize", c.PageBufferSize),
-		validatePositiveInt64(baseName+"RowGroupTargetSize", c.RowGroupTargetSize),
 		validateOneOfInt(baseName+"DataPageVersion", c.DataPageVersion, 1, 2),
 	)
 }
@@ -180,9 +209,9 @@ func (c *WriterConfig) Validate() error {
 // The RowGroupConfig type carries configuration options for parquet row groups.
 //
 // RowGroupConfig implements the RowGroupOption interface so it can be used
-// directly as argument to the NewRowGroup function when needed, for example:
+// directly as argument to the NewBuffer function when needed, for example:
 //
-//	rowGroup := parquet.NewRowGroup(&parquet.RowGroupConfig{
+//	buffer := parquet.NewBuffer(&parquet.RowGroupConfig{
 //		ColumnBufferSize: 8 * 1024 * 1024,
 //	})
 //
@@ -198,6 +227,17 @@ func DefaultRowGroupConfig() *RowGroupConfig {
 	return &RowGroupConfig{
 		ColumnBufferSize: DefaultColumnBufferSize,
 	}
+}
+
+// NewRowGroupConfig constructs a new row group configuration applying the
+// options passed as arguments.
+//
+// The function returns an non-nil error if some of the options carried invalid
+// configuration values.
+func NewRowGroupConfig(options ...RowGroupOption) (*RowGroupConfig, error) {
+	config := DefaultRowGroupConfig()
+	config.Apply(options...)
+	return config, config.Validate()
 }
 
 // Validate returns a non-nil error if the configuration of c is invalid.
@@ -285,7 +325,7 @@ func CreatedBy(createdBy string) WriterOption {
 // on the amount of memory available.
 //
 // Defaults to using in-memory buffers.
-func ColumnPageBuffers(buffers BufferPool) WriterOption {
+func ColumnPageBuffers(buffers PageBufferPool) WriterOption {
 	return writerOption(func(config *WriterConfig) { config.ColumnPageBuffers = buffers })
 }
 
@@ -313,14 +353,6 @@ func DataPageVersion(version int) WriterOption {
 // Defaults to false.
 func DataPageStatistics(enabled bool) WriterOption {
 	return writerOption(func(config *WriterConfig) { config.DataPageStatistics = enabled })
-}
-
-// RowGroupTargetSize creates a configuration option to define the target size of
-// row groups when creating parquet files.
-//
-// Defaults to 128 MiB.
-func RowGroupTargetSize(size int64) WriterOption {
-	return writerOption(func(config *WriterConfig) { config.RowGroupTargetSize = size })
 }
 
 // KeyValueMetadata creates a configuration option which adds key/value metadata
@@ -361,6 +393,11 @@ func ColumnBufferSize(size int) RowGroupOption {
 // hierarchy; when elements are equal in the first column, the second column is
 // used to order rows, etc...
 func SortingColumns(sortingColumns ...SortingColumn) RowGroupOption {
+	// Make a copy so that we do not retain the input slice generated implicitly
+	// for the variable argument list, and also avoid having a nil slice when
+	// the option is passed with no sorting columns, so we can differentiate it
+	// from it not being passed.
+	sortingColumns = append([]SortingColumn{}, sortingColumns...)
 	return rowGroupOption(func(config *RowGroupConfig) { config.SortingColumns = sortingColumns })
 }
 
@@ -408,7 +445,7 @@ func coalesceBytes(b1, b2 []byte) []byte {
 	return b2
 }
 
-func coalesceBufferPool(p1, p2 BufferPool) BufferPool {
+func coalescePageBufferPool(p1, p2 PageBufferPool) PageBufferPool {
 	if p1 != nil {
 		return p1
 	}

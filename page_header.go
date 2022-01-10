@@ -3,19 +3,19 @@ package parquet
 import (
 	"fmt"
 
-	"github.com/segmentio/parquet/encoding"
 	"github.com/segmentio/parquet/format"
 )
 
 // PageHeader is an interface implemented by parquet page headers.
 type PageHeader interface {
-	fmt.Stringer
-
 	// Returns the number of values in the page (including nulls).
 	NumValues() int
 
 	// Returns the page encoding.
-	Encoding() encoding.Encoding
+	Encoding() format.Encoding
+
+	// Returns the parquet format page type.
+	PageType() format.PageType
 }
 
 // DataPageHeader is a specialization of the PageHeader interface implemented by
@@ -23,11 +23,15 @@ type PageHeader interface {
 type DataPageHeader interface {
 	PageHeader
 
+	// Returns whether the page is compressed, according to the codec given as
+	// argument and details stored in the page header.
+	IsCompressed(format.CompressionCodec) bool
+
 	// Returns the encoding of the repetition level section.
-	RepetitionLevelEncoding() encoding.Encoding
+	RepetitionLevelEncoding() format.Encoding
 
 	// Returns the encoding of the definition level section.
-	DefinitionLevelEncoding() encoding.Encoding
+	DefinitionLevelEncoding() format.Encoding
 
 	// Returns the number of null values in the page.
 	NullCount() int
@@ -63,8 +67,12 @@ func (dict DictionaryPageHeader) NumValues() int {
 	return int(dict.header.NumValues)
 }
 
-func (dict DictionaryPageHeader) Encoding() encoding.Encoding {
-	return LookupEncoding(dict.header.Encoding)
+func (dict DictionaryPageHeader) Encoding() format.Encoding {
+	return dict.header.Encoding
+}
+
+func (dict DictionaryPageHeader) PageType() format.PageType {
+	return format.DictionaryPage
 }
 
 func (dict DictionaryPageHeader) IsSorted() bool {
@@ -88,16 +96,24 @@ func (v1 DataPageHeaderV1) NumValues() int {
 	return int(v1.header.NumValues)
 }
 
-func (v1 DataPageHeaderV1) RepetitionLevelEncoding() encoding.Encoding {
-	return LookupEncoding(v1.header.RepetitionLevelEncoding)
+func (v1 DataPageHeaderV1) IsCompressed(codec format.CompressionCodec) bool {
+	return codec != format.Uncompressed
 }
 
-func (v1 DataPageHeaderV1) DefinitionLevelEncoding() encoding.Encoding {
-	return LookupEncoding(v1.header.DefinitionLevelEncoding)
+func (v1 DataPageHeaderV1) RepetitionLevelEncoding() format.Encoding {
+	return v1.header.RepetitionLevelEncoding
 }
 
-func (v1 DataPageHeaderV1) Encoding() encoding.Encoding {
-	return LookupEncoding(v1.header.Encoding)
+func (v1 DataPageHeaderV1) DefinitionLevelEncoding() format.Encoding {
+	return v1.header.DefinitionLevelEncoding
+}
+
+func (v1 DataPageHeaderV1) Encoding() format.Encoding {
+	return v1.header.Encoding
+}
+
+func (v1 DataPageHeaderV1) PageType() format.PageType {
+	return format.DataPage
 }
 
 func (v1 DataPageHeaderV1) NullCount() int {
@@ -136,16 +152,32 @@ func (v2 DataPageHeaderV2) NumRows() int {
 	return int(v2.header.NumRows)
 }
 
-func (v2 DataPageHeaderV2) RepetitionLevelEncoding() encoding.Encoding {
-	return &RLE
+func (v2 DataPageHeaderV2) IsCompressed(codec format.CompressionCodec) bool {
+	return codec != format.Uncompressed && (v2.header.IsCompressed == nil || *v2.header.IsCompressed)
 }
 
-func (v2 DataPageHeaderV2) DefinitionLevelEncoding() encoding.Encoding {
-	return &RLE
+func (v2 DataPageHeaderV2) RepetitionLevelsByteLength() int64 {
+	return int64(v2.header.RepetitionLevelsByteLength)
 }
 
-func (v2 DataPageHeaderV2) Encoding() encoding.Encoding {
-	return LookupEncoding(v2.header.Encoding)
+func (v2 DataPageHeaderV2) DefinitionLevelsByteLength() int64 {
+	return int64(v2.header.DefinitionLevelsByteLength)
+}
+
+func (v2 DataPageHeaderV2) RepetitionLevelEncoding() format.Encoding {
+	return format.RLE
+}
+
+func (v2 DataPageHeaderV2) DefinitionLevelEncoding() format.Encoding {
+	return format.RLE
+}
+
+func (v2 DataPageHeaderV2) Encoding() format.Encoding {
+	return v2.header.Encoding
+}
+
+func (v2 DataPageHeaderV2) PageType() format.PageType {
+	return format.DataPageV2
 }
 
 func (v2 DataPageHeaderV2) NullCount() int {
@@ -176,8 +208,12 @@ func (u unknownPageHeader) NumValues() int {
 	return 0
 }
 
-func (u unknownPageHeader) Encoding() encoding.Encoding {
-	return encoding.NotSupported{}
+func (u unknownPageHeader) Encoding() format.Encoding {
+	return -1
+}
+
+func (u unknownPageHeader) PageType() format.PageType {
+	return u.header.Type
 }
 
 func (u unknownPageHeader) String() string {

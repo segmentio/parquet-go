@@ -12,6 +12,7 @@ import (
 type ValueDecoder interface {
 	ValueReader
 	Reset(encoding.Decoder)
+	Decoder() encoding.Decoder
 }
 
 type booleanValueDecoder struct {
@@ -58,6 +59,10 @@ func (r *booleanValueDecoder) Reset(decoder encoding.Decoder) {
 	r.offset = 0
 }
 
+func (r *booleanValueDecoder) Decoder() encoding.Decoder {
+	return r.decoder
+}
+
 type int32ValueDecoder struct {
 	decoder encoding.Decoder
 	values  []int32
@@ -100,6 +105,10 @@ func (r *int32ValueDecoder) Reset(decoder encoding.Decoder) {
 	r.decoder = decoder
 	r.values = r.values[:0]
 	r.offset = 0
+}
+
+func (r *int32ValueDecoder) Decoder() encoding.Decoder {
+	return r.decoder
 }
 
 type int64ValueDecoder struct {
@@ -146,6 +155,10 @@ func (r *int64ValueDecoder) Reset(decoder encoding.Decoder) {
 	r.offset = 0
 }
 
+func (r *int64ValueDecoder) Decoder() encoding.Decoder {
+	return r.decoder
+}
+
 type int96ValueDecoder struct {
 	decoder encoding.Decoder
 	values  []deprecated.Int96
@@ -188,6 +201,10 @@ func (r *int96ValueDecoder) Reset(decoder encoding.Decoder) {
 	r.decoder = decoder
 	r.values = r.values[:0]
 	r.offset = 0
+}
+
+func (r *int96ValueDecoder) Decoder() encoding.Decoder {
+	return r.decoder
 }
 
 type floatValueDecoder struct {
@@ -234,6 +251,10 @@ func (r *floatValueDecoder) Reset(decoder encoding.Decoder) {
 	r.offset = 0
 }
 
+func (r *floatValueDecoder) Decoder() encoding.Decoder {
+	return r.decoder
+}
+
 type doubleValueDecoder struct {
 	decoder encoding.Decoder
 	values  []float64
@@ -276,6 +297,10 @@ func (r *doubleValueDecoder) Reset(decoder encoding.Decoder) {
 	r.decoder = decoder
 	r.values = r.values[:0]
 	r.offset = 0
+}
+
+func (r *doubleValueDecoder) Decoder() encoding.Decoder {
+	return r.decoder
 }
 
 type byteArrayValueDecoder struct {
@@ -322,6 +347,10 @@ func (r *byteArrayValueDecoder) Reset(decoder encoding.Decoder) {
 	r.index = 0
 }
 
+func (r *byteArrayValueDecoder) Decoder() encoding.Decoder {
+	return r.decoder
+}
+
 type fixedLenByteArrayValueDecoder struct {
 	decoder encoding.Decoder
 	values  []byte
@@ -366,6 +395,10 @@ func (r *fixedLenByteArrayValueDecoder) Reset(decoder encoding.Decoder) {
 	r.decoder = decoder
 	r.values = r.values[:0]
 	r.offset = 0
+}
+
+func (r *fixedLenByteArrayValueDecoder) Decoder() encoding.Decoder {
+	return r.decoder
 }
 
 func atLeastOne(size int) int {

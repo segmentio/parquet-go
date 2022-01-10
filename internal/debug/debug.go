@@ -5,6 +5,24 @@ import (
 	"io"
 )
 
+func ReaderAt(reader io.ReaderAt, prefix string) io.ReaderAt {
+	return &ioReaderAt{
+		reader: reader,
+		prefix: prefix,
+	}
+}
+
+type ioReaderAt struct {
+	reader io.ReaderAt
+	prefix string
+}
+
+func (d *ioReaderAt) ReadAt(b []byte, off int64) (int, error) {
+	n, err := d.reader.ReadAt(b, off)
+	fmt.Printf("%s: Read(%d) @%d => %d %v \n  %q\n", d.prefix, len(b), off, n, err, b[:n])
+	return n, err
+}
+
 func Reader(reader io.Reader, prefix string) io.Reader {
 	return &ioReader{
 		reader: reader,

@@ -23,6 +23,7 @@ type Schema struct {
 	root        Node
 	deconstruct deconstructFunc
 	reconstruct reconstructFunc
+	readRow     columnReadRowFunc
 }
 
 // SchemaOf constructs a parquet schema from a Go value.
@@ -93,6 +94,7 @@ func NewSchema(name string, root Node) *Schema {
 		root:        root,
 		deconstruct: makeDeconstructFunc(root),
 		reconstruct: makeReconstructFunc(root),
+		readRow:     makeColumnReadRowFunc(root),
 	}
 }
 
@@ -123,8 +125,13 @@ func makeReconstructFunc(node Node) (reconstruct reconstructFunc) {
 	return reconstruct
 }
 
-// ConfigureWriter satisfies the WriterOption interface, allowing Schema
-// instances to be passed to NewWriter to predeclare the schema of the
+func makeColumnReadRowFunc(node Node) columnReadRowFunc {
+	_, readRow := columnReadRowFuncOf(node, 0, 0)
+	return readRow
+}
+
+// ConfigureRowGroup satisfies the RowGroupOption interface, allowing Schema
+// instances to be passed to NewRowGroup to predeclare the schema of the
 // output parquet file.
 func (s *Schema) ConfigureRowGroup(config *RowGroupConfig) { config.Schema = s }
 
@@ -166,7 +173,7 @@ func (s *Schema) Encoding() []encoding.Encoding { return s.root.Encoding() }
 // Compression returns the list of compression codecs in the child nodes of s.
 func (s *Schema) Compression() []compress.Codec { return s.root.Compression() }
 
-// Returns the Go type that best represents the schema.
+// GoType returns the Go type that best represents the schema.
 func (s *Schema) GoType() reflect.Type { return s.root.GoType() }
 
 // ValueByName is returns the sub-value with the givne name in base.
@@ -219,6 +226,20 @@ func (s *Schema) Reconstruct(value interface{}, row Row) error {
 		}
 	}
 	return err
+}
+
+func (s *Schema) forEachNode(do func(name string, node Node)) {
+	forEachNodeOf(s.Name(), s, do)
+}
+
+func forEachNodeOf(name string, node Node, do func(string, Node)) {
+	do(name, node)
+
+	if !isLeaf(node) {
+		for _, name := range node.ChildNames() {
+			forEachNodeOf(name, node.ChildByName(name), do)
+		}
+	}
 }
 
 type structNode struct {

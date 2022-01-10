@@ -118,11 +118,8 @@ func testColumnPageIndex(t *testing.T, rows rows) bool {
 func testColumnIndex(t *testing.T, f *parquet.File) error {
 	columnIndexes := f.ColumnIndexes()
 	i := 0
-	return forEachColumnChunk(f.Root(), func(col *parquet.Column, chunk *parquet.ColumnChunks) error {
-		columnIndex, err := chunk.ReadColumnIndex()
-		if err != nil {
-			return err
-		}
+	return forEachColumnChunk(f, func(col *parquet.Column, chunk parquet.ColumnChunk) error {
+		columnIndex := chunk.ColumnIndex()
 		if n := columnIndex.NumPages(); n <= 0 {
 			return fmt.Errorf("invalid number of pages found in the column index: %d", n)
 		}
@@ -140,11 +137,8 @@ func testColumnIndex(t *testing.T, f *parquet.File) error {
 func testOffsetIndex(t *testing.T, f *parquet.File) error {
 	offsetIndexes := f.OffsetIndexes()
 	i := 0
-	return forEachColumnChunk(f.Root(), func(col *parquet.Column, chunk *parquet.ColumnChunks) error {
-		offsetIndex, err := chunk.ReadOffsetIndex()
-		if err != nil {
-			return err
-		}
+	return forEachColumnChunk(f, func(col *parquet.Column, chunk parquet.ColumnChunk) error {
+		offsetIndex := chunk.OffsetIndex()
 		if n := offsetIndex.NumPages(); n <= 0 {
 			return fmt.Errorf("invalid number of pages found in the offset index: %d", n)
 		}

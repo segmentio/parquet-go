@@ -83,7 +83,7 @@ func TestValueClone(t *testing.T) {
 				if v.DefinitionLevel() != c.DefinitionLevel() {
 					t.Error("cloned values do not have the same definition level")
 				}
-				if v.ColumnIndex() != c.ColumnIndex() {
+				if v.Column() != c.Column() {
 					t.Error("cloned values do not have the same column index")
 				}
 			}

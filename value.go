@@ -14,6 +14,11 @@ import (
 	"github.com/segmentio/parquet/deprecated"
 )
 
+const (
+	// 170 x sizeof(Value) = 4KB
+	defaultValueBufferSize = 170
+)
+
 // The Value type is similar to the reflect.Value abstraction of Go values, but
 // for parquet values. Value instances wrap underlying Go values mapped to one
 // of the parquet physical types.
@@ -43,11 +48,10 @@ type ValueReader interface {
 	ReadValues([]Value) (int, error)
 }
 
-// ValueReaderAt is similar to ValueReader but instead of reading the next
-// batch of balues, the application must specify the index at which it wants to
-// read values from.
-type ValueReaderAt interface {
-	ReadValuesAt(int, []Value) (int, error)
+// ValueReaderFrom is an interface implemented by value writers to read values
+// from a reader.
+type ValueReaderFrom interface {
+	ReadValuesFrom(ValueReader) (int64, error)
 }
 
 // ValueWriter is an interface implemented by types that support reading
@@ -56,6 +60,64 @@ type ValueWriter interface {
 	// Write values from the buffer passed as argument and returns the number
 	// of values written.
 	WriteValues([]Value) (int, error)
+}
+
+// ValueWriterTo is an interface implemented by value readers to write values to
+// a writer.
+type ValueWriterTo interface {
+	WriteValuesTo(ValueWriter) (int64, error)
+}
+
+// CopyValues copies values from src to dst, returning the number of values
+// that were written.
+//
+// As an optimization, the reader and writer may choose to implement
+// ValueReaderFrom and ValueWriterTo to provide their own copy logic.
+//
+// The function returns any error it encounters reading or writing pages, except
+// for io.EOF from the reader which indicates that there were no more values to
+// read.
+func CopyValues(dst ValueWriter, src ValueReader) (int64, error) {
+	return copyValues(dst, src, nil)
+}
+
+func copyValues(dst ValueWriter, src ValueReader, buf []Value) (written int64, err error) {
+	if wt, ok := src.(ValueWriterTo); ok {
+		return wt.WriteValuesTo(dst)
+	}
+
+	if rf, ok := dst.(ValueReaderFrom); ok {
+		return rf.ReadValuesFrom(src)
+	}
+
+	if len(buf) == 0 {
+		buf = make([]Value, defaultValueBufferSize)
+	}
+
+	defer clearValues(buf)
+
+	for {
+		n, err := src.ReadValues(buf)
+
+		if n > 0 {
+			wn, werr := dst.WriteValues(buf[:n])
+			written += int64(wn)
+			if werr != nil {
+				return written, werr
+			}
+		}
+
+		if err != nil {
+			if err == io.EOF {
+				err = nil
+			}
+			return written, err
+		}
+
+		if n == 0 {
+			return written, io.ErrNoProgress
+		}
+	}
 }
 
 // ValueOf constructs a parquet value from a Go value v.
@@ -307,10 +369,10 @@ func (v Value) RepetitionLevel() int8 { return v.repetitionLevel }
 // DefinitionLevel returns the definition level of v.
 func (v Value) DefinitionLevel() int8 { return v.definitionLevel }
 
-// ColumnIndex returns the column index within the row that v was created from.
+// Column returns the column index within the row that v was created from.
 //
 // Returns -1 if the value does not carry a column index.
-func (v Value) ColumnIndex() int8 { return ^v.columnIndex }
+func (v Value) Column() int8 { return ^v.columnIndex }
 
 // Bytes returns the binary representation of v.
 //
@@ -369,7 +431,7 @@ func (v Value) Format(w fmt.State, r rune) {
 		if w.Flag('+') {
 			io.WriteString(w, "C:")
 		}
-		fmt.Fprint(w, v.ColumnIndex())
+		fmt.Fprint(w, v.Column())
 
 	case 'd':
 		if w.Flag('+') {
@@ -461,11 +523,11 @@ func (v Value) GoString() string {
 	return fmt.Sprintf("%#v", v)
 }
 
-// Level returns v with the repetition and definition levels set to the values
-// passed as arguments.
+// Level returns v with the repetition level, definition level, and column index
+// set to the values passed as arguments.
 //
 // The method panics if either argument is negative.
-func (v Value) Level(repetitionLevel, definitionLevel int8) Value {
+func (v Value) Level(repetitionLevel, definitionLevel, columnIndex int8) Value {
 	if repetitionLevel < 0 {
 		panic("cannot create a value with a negative repetition level")
 	}
@@ -474,14 +536,6 @@ func (v Value) Level(repetitionLevel, definitionLevel int8) Value {
 	}
 	v.repetitionLevel = repetitionLevel
 	v.definitionLevel = definitionLevel
-	return v
-}
-
-// Column returns v with the column index set to the given value.
-func (v Value) Column(columnIndex int8) Value {
-	if columnIndex < 0 {
-		panic("cannot create a value with a negative repetition level")
-	}
 	v.columnIndex = ^columnIndex
 	return v
 }
@@ -621,6 +675,43 @@ func assignValue(dst reflect.Value, src Value) error {
 	return fmt.Errorf("cannot assign parquet value of type %s to go value of type %s", srcKind.String(), dst.Type())
 }
 
+func parseValue(kind Kind, data []byte) (val Value, err error) {
+	switch kind {
+	case Boolean:
+		if len(data) == 1 {
+			val = makeValueBoolean(data[0] != 0)
+		}
+	case Int32:
+		if len(data) == 4 {
+			val = makeValueInt32(int32(binary.LittleEndian.Uint32(data)))
+		}
+	case Int64:
+		if len(data) == 8 {
+			val = makeValueInt64(int64(binary.LittleEndian.Uint64(data)))
+		}
+	case Int96:
+		if len(data) == 12 {
+			lo := binary.LittleEndian.Uint64(data[0:8])
+			hi := binary.LittleEndian.Uint32(data[8:12])
+			val = makeValueInt96(makeInt96(lo, hi))
+		}
+	case Float:
+		if len(data) == 4 {
+			val = makeValueFloat(float32(math.Float32frombits(binary.LittleEndian.Uint32(data))))
+		}
+	case Double:
+		if len(data) == 8 {
+			val = makeValueDouble(float64(math.Float64frombits(binary.LittleEndian.Uint64(data))))
+		}
+	case ByteArray, FixedLenByteArray:
+		val = makeValueBytes(kind, data)
+	}
+	if val.IsNull() {
+		err = fmt.Errorf("cannot decode %s value from input of length %d", kind, len(data))
+	}
+	return val, err
+}
+
 func copyBytes(b []byte) []byte {
 	c := make([]byte, len(b))
 	copy(c, b)
@@ -673,35 +764,6 @@ func Equal(v1, v2 Value) bool {
 	}
 }
 
-// NewValueReader constructs a ValueReader exposing values between offset and
-// offset+length.
-func NewValueReader(values ValueReaderAt, offset, length int) ValueReader {
-	return &valueReader{
-		values: values,
-		offset: offset,
-		length: length,
-	}
-}
-
-type valueReader struct {
-	values ValueReaderAt
-	offset int
-	length int
-}
-
-func (r *valueReader) ReadValues(values []Value) (int, error) {
-	if len(values) > r.length {
-		values = values[:r.length]
-	}
-	n, err := r.values.ReadValuesAt(r.offset, values)
-	r.offset += n
-	r.length -= n
-	if err == nil && r.length == 0 {
-		err = io.EOF
-	}
-	return n, err
-}
-
 var (
 	_ fmt.Formatter = Value{}
 	_ fmt.Stringer  = Value{}
@@ -712,3 +774,7 @@ func clearValues(values []Value) {
 		values[i] = Value{}
 	}
 }
+
+type errorValueReader struct{ err error }
+
+func (r *errorValueReader) ReadValues([]Value) (int, error) { return 0, r.err }

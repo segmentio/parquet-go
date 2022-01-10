@@ -51,13 +51,13 @@ type Type interface {
 	// For other types, the value is zero.
 	Length() int
 
-	// Compares two values and returns whether the first one is less than the
-	// other.
+	// Compares two values and returns a negative integer if a < b, positive if
+	// a > b, or zero if a == b.
 	//
-	// The values Kind must match the type, otherwise the result is undefined.
+	// The values' Kind must match the type, otherwise the result is undefined.
 	//
 	// The method panics if it is called on a group type.
-	Less(Value, Value) bool
+	Compare(a, b Value) int
 
 	// ColumnOrder returns the type's column order. For group types, this method
 	// returns nil.
@@ -109,10 +109,24 @@ type Type interface {
 	// The method panics if it is called on a group type.
 	NewDictionary(bufferSize int) Dictionary
 
-	// Creates a row group group column for values of this type.
+	// Creates a row group buffer column for values of this type.
+	//
+	// Column buffers are created using the index of the column they are
+	// accumulating values in memory for (relative to the parent schema),
+	// and the size of their memory buffer.
+	//
+	// The buffer size is given in bytes, because we want to control memory
+	// consumption of the application, which is simpler to achieve with buffer
+	// size expressed in bytes rather than number of elements.
+	//
+	// Note that the buffer size is not a hard limit, it defines the initial
+	// capacity of the column buffer, but may grow as needed. Programs can use
+	// the Size method of the column buffer (or the parent row group, when
+	// relevant) to determine how many bytes are being used, and perofrm a flush
+	// of the buffers to a storage layer.
 	//
 	// The method panics if it is called on a group type.
-	NewRowGroupColumn(bufferSize int) RowGroupColumn
+	NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer
 
 	// Creates a decoder for values of this type.
 	//
@@ -178,8 +192,8 @@ func (t booleanType) Kind() Kind { return Boolean }
 
 func (t booleanType) Length() int { return 1 }
 
-func (t booleanType) Less(v1, v2 Value) bool {
-	return !v1.Boolean() && v2.Boolean()
+func (t booleanType) Compare(a, b Value) int {
+	return compareBool(a.Boolean(), b.Boolean())
 }
 
 func (t booleanType) PhyiscalType() *format.Type {
@@ -194,8 +208,8 @@ func (t booleanType) NewDictionary(bufferSize int) Dictionary {
 	return newBooleanDictionary(t)
 }
 
-func (t booleanType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
-	return newBooleanRowGroupColumn(bufferSize)
+func (t booleanType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newBooleanColumnBuffer(columnIndex, bufferSize)
 }
 
 func (t booleanType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -210,8 +224,8 @@ func (t int32Type) Kind() Kind { return Int32 }
 
 func (t int32Type) Length() int { return 32 }
 
-func (t int32Type) Less(v1, v2 Value) bool {
-	return v1.Int32() < v2.Int32()
+func (t int32Type) Compare(a, b Value) int {
+	return compareInt32(a.Int32(), b.Int32())
 }
 
 func (t int32Type) PhyiscalType() *format.Type {
@@ -226,8 +240,8 @@ func (t int32Type) NewDictionary(bufferSize int) Dictionary {
 	return newInt32Dictionary(t, bufferSize)
 }
 
-func (t int32Type) NewRowGroupColumn(bufferSize int) RowGroupColumn {
-	return newInt32RowGroupColumn(bufferSize)
+func (t int32Type) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newInt32ColumnBuffer(columnIndex, bufferSize)
 }
 
 func (t int32Type) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -242,8 +256,8 @@ func (t int64Type) Kind() Kind { return Int64 }
 
 func (t int64Type) Length() int { return 64 }
 
-func (t int64Type) Less(v1, v2 Value) bool {
-	return v1.Int64() < v2.Int64()
+func (t int64Type) Compare(a, b Value) int {
+	return compareInt64(a.Int64(), b.Int64())
 }
 
 func (t int64Type) PhyiscalType() *format.Type {
@@ -258,8 +272,8 @@ func (t int64Type) NewDictionary(bufferSize int) Dictionary {
 	return newInt64Dictionary(t, bufferSize)
 }
 
-func (t int64Type) NewRowGroupColumn(bufferSize int) RowGroupColumn {
-	return newInt64RowGroupColumn(bufferSize)
+func (t int64Type) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newInt64ColumnBuffer(columnIndex, bufferSize)
 }
 
 func (t int64Type) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -274,8 +288,8 @@ func (t int96Type) Kind() Kind { return Int96 }
 
 func (t int96Type) Length() int { return 96 }
 
-func (t int96Type) Less(v1, v2 Value) bool {
-	return v1.Int96().Less(v2.Int96())
+func (t int96Type) Compare(a, b Value) int {
+	return compareInt96(a.Int96(), b.Int96())
 }
 
 func (t int96Type) PhyiscalType() *format.Type {
@@ -290,8 +304,8 @@ func (t int96Type) NewDictionary(bufferSize int) Dictionary {
 	return newInt96Dictionary(t, bufferSize)
 }
 
-func (t int96Type) NewRowGroupColumn(bufferSize int) RowGroupColumn {
-	return newInt96RowGroupColumn(bufferSize)
+func (t int96Type) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newInt96ColumnBuffer(columnIndex, bufferSize)
 }
 
 func (t int96Type) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -306,8 +320,8 @@ func (t floatType) Kind() Kind { return Float }
 
 func (t floatType) Length() int { return 32 }
 
-func (t floatType) Less(v1, v2 Value) bool {
-	return v1.Float() < v2.Float()
+func (t floatType) Compare(a, b Value) int {
+	return compareFloat32(a.Float(), b.Float())
 }
 
 func (t floatType) PhyiscalType() *format.Type {
@@ -322,8 +336,8 @@ func (t floatType) NewDictionary(bufferSize int) Dictionary {
 	return newFloatDictionary(t, bufferSize)
 }
 
-func (t floatType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
-	return newFloatRowGroupColumn(bufferSize)
+func (t floatType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newFloatColumnBuffer(columnIndex, bufferSize)
 }
 
 func (t floatType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -338,7 +352,9 @@ func (t doubleType) Kind() Kind { return Double }
 
 func (t doubleType) Length() int { return 64 }
 
-func (t doubleType) Less(v1, v2 Value) bool { return v1.Double() < v2.Double() }
+func (t doubleType) Compare(a, b Value) int {
+	return compareFloat64(a.Double(), b.Double())
+}
 
 func (t doubleType) PhyiscalType() *format.Type { return &physicalTypes[Double] }
 
@@ -350,8 +366,8 @@ func (t doubleType) NewDictionary(bufferSize int) Dictionary {
 	return newDoubleDictionary(t, bufferSize)
 }
 
-func (t doubleType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
-	return newDoubleRowGroupColumn(bufferSize)
+func (t doubleType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newDoubleColumnBuffer(columnIndex, bufferSize)
 }
 
 func (t doubleType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -366,11 +382,13 @@ func (t byteArrayType) Kind() Kind { return ByteArray }
 
 func (t byteArrayType) Length() int { return 0 }
 
-func (t byteArrayType) Less(v1, v2 Value) bool {
-	return bytes.Compare(v1.ByteArray(), v2.ByteArray()) < 0
+func (t byteArrayType) Compare(a, b Value) int {
+	return bytes.Compare(a.ByteArray(), b.ByteArray())
 }
 
-func (t byteArrayType) PhyiscalType() *format.Type { return &physicalTypes[ByteArray] }
+func (t byteArrayType) PhyiscalType() *format.Type {
+	return &physicalTypes[ByteArray]
+}
 
 func (t byteArrayType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	return newByteArrayColumnIndexer(sizeLimit)
@@ -380,8 +398,8 @@ func (t byteArrayType) NewDictionary(bufferSize int) Dictionary {
 	return newByteArrayDictionary(t, bufferSize)
 }
 
-func (t byteArrayType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
-	return newByteArrayRowGroupColumn(bufferSize)
+func (t byteArrayType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newByteArrayColumnBuffer(columnIndex, bufferSize)
 }
 
 func (t byteArrayType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -401,8 +419,8 @@ func (t *fixedLenByteArrayType) Kind() Kind { return FixedLenByteArray }
 
 func (t *fixedLenByteArrayType) Length() int { return t.length }
 
-func (t *fixedLenByteArrayType) Less(v1, v2 Value) bool {
-	return bytes.Compare(v1.ByteArray(), v2.ByteArray()) < 0
+func (t *fixedLenByteArrayType) Compare(a, b Value) int {
+	return bytes.Compare(a.ByteArray(), b.ByteArray())
 }
 
 func (t *fixedLenByteArrayType) PhyiscalType() *format.Type {
@@ -417,8 +435,8 @@ func (t *fixedLenByteArrayType) NewDictionary(bufferSize int) Dictionary {
 	return newFixedLenByteArrayDictionary(t, bufferSize)
 }
 
-func (t *fixedLenByteArrayType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
-	return newFixedLenByteArrayRowGroupColumn(t.length, bufferSize)
+func (t *fixedLenByteArrayType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newFixedLenByteArrayColumnBuffer(t.length, columnIndex, bufferSize)
 }
 
 func (t *fixedLenByteArrayType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -500,22 +518,22 @@ func (t *intType) Kind() Kind {
 
 func (t *intType) Length() int { return int(t.BitWidth) }
 
-func (t *intType) Less(v1, v2 Value) bool {
+func (t *intType) Compare(a, b Value) int {
 	if t.BitWidth == 64 {
-		i1 := v1.Int64()
-		i2 := v2.Int64()
+		i1 := a.Int64()
+		i2 := b.Int64()
 		if t.IsSigned {
-			return i1 < i2
+			return compareInt64(i1, i2)
 		} else {
-			return uint64(i1) < uint64(i2)
+			return compareUint64(uint64(i1), uint64(i2))
 		}
 	} else {
-		i1 := v1.Int32()
-		i2 := v2.Int32()
+		i1 := a.Int32()
+		i2 := b.Int32()
 		if t.IsSigned {
-			return i1 < i2
+			return compareInt32(i1, i2)
 		} else {
-			return uint32(i1) < uint32(i2)
+			return compareUint32(uint32(i1), uint32(i2))
 		}
 	}
 }
@@ -570,18 +588,18 @@ func (t *intType) NewDictionary(bufferSize int) Dictionary {
 	}
 }
 
-func (t *intType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
+func (t *intType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 	if t.IsSigned {
 		if t.BitWidth == 64 {
-			return newInt64RowGroupColumn(bufferSize)
+			return newInt64ColumnBuffer(columnIndex, bufferSize)
 		} else {
-			return newInt32RowGroupColumn(bufferSize)
+			return newInt32ColumnBuffer(columnIndex, bufferSize)
 		}
 	} else {
 		if t.BitWidth == 64 {
-			return newUint64RowGroupColumn(bufferSize)
+			return newUint64ColumnBuffer(columnIndex, bufferSize)
 		} else {
-			return newUint32RowGroupColumn(bufferSize)
+			return newUint32ColumnBuffer(columnIndex, bufferSize)
 		}
 	}
 }
@@ -641,8 +659,8 @@ func (t *stringType) Kind() Kind { return ByteArray }
 
 func (t *stringType) Length() int { return 0 }
 
-func (t *stringType) Less(v1, v2 Value) bool {
-	return bytes.Compare(v1.ByteArray(), v2.ByteArray()) < 0
+func (t *stringType) Compare(a, b Value) int {
+	return bytes.Compare(a.ByteArray(), b.ByteArray())
 }
 
 func (t *stringType) ColumnOrder() *format.ColumnOrder {
@@ -669,8 +687,8 @@ func (t *stringType) NewDictionary(bufferSize int) Dictionary {
 	return newByteArrayDictionary(t, bufferSize)
 }
 
-func (t *stringType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
-	return newByteArrayRowGroupColumn(bufferSize)
+func (t *stringType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newByteArrayColumnBuffer(columnIndex, bufferSize)
 }
 
 func (t *stringType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -694,8 +712,8 @@ func (t *uuidType) Kind() Kind { return FixedLenByteArray }
 
 func (t *uuidType) Length() int { return 16 }
 
-func (t *uuidType) Less(v1, v2 Value) bool {
-	return bytes.Compare(v1.ByteArray(), v2.ByteArray()) < 0
+func (t *uuidType) Compare(a, b Value) int {
+	return bytes.Compare(a.ByteArray(), b.ByteArray())
 }
 
 func (t *uuidType) ColumnOrder() *format.ColumnOrder {
@@ -720,8 +738,8 @@ func (t *uuidType) NewDictionary(bufferSize int) Dictionary {
 	return newFixedLenByteArrayDictionary(t, bufferSize)
 }
 
-func (t *uuidType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
-	return newFixedLenByteArrayRowGroupColumn(16, bufferSize)
+func (t *uuidType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newFixedLenByteArrayColumnBuffer(16, columnIndex, bufferSize)
 }
 
 func (t *uuidType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -745,8 +763,8 @@ func (t *enumType) Kind() Kind { return ByteArray }
 
 func (t *enumType) Length() int { return 0 }
 
-func (t *enumType) Less(v1, v2 Value) bool {
-	return bytes.Compare(v1.ByteArray(), v2.ByteArray()) < 0
+func (t *enumType) Compare(a, b Value) int {
+	return bytes.Compare(a.ByteArray(), b.ByteArray())
 }
 
 func (t *enumType) ColumnOrder() *format.ColumnOrder {
@@ -773,8 +791,8 @@ func (t *enumType) NewDictionary(bufferSize int) Dictionary {
 	return newByteArrayDictionary(t, bufferSize)
 }
 
-func (t *enumType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
-	return newByteArrayRowGroupColumn(bufferSize)
+func (t *enumType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newByteArrayColumnBuffer(columnIndex, bufferSize)
 }
 
 func (t *enumType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -798,8 +816,8 @@ func (t *jsonType) Kind() Kind { return ByteArray }
 
 func (t *jsonType) Length() int { return 0 }
 
-func (t *jsonType) Less(v1, v2 Value) bool {
-	return bytes.Compare(v1.ByteArray(), v2.ByteArray()) < 0
+func (t *jsonType) Compare(a, b Value) int {
+	return bytes.Compare(a.ByteArray(), b.ByteArray())
 }
 
 func (t *jsonType) ColumnOrder() *format.ColumnOrder {
@@ -826,8 +844,8 @@ func (t *jsonType) NewDictionary(bufferSize int) Dictionary {
 	return newByteArrayDictionary(t, bufferSize)
 }
 
-func (t *jsonType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
-	return newByteArrayRowGroupColumn(bufferSize)
+func (t *jsonType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newByteArrayColumnBuffer(columnIndex, bufferSize)
 }
 
 func (t *jsonType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -847,8 +865,8 @@ func (t *bsonType) Kind() Kind { return ByteArray }
 
 func (t *bsonType) Length() int { return 0 }
 
-func (t *bsonType) Less(v1, v2 Value) bool {
-	return bytes.Compare(v1.ByteArray(), v2.ByteArray()) < 0
+func (t *bsonType) Compare(a, b Value) int {
+	return bytes.Compare(a.ByteArray(), b.ByteArray())
 }
 
 func (t *bsonType) ColumnOrder() *format.ColumnOrder {
@@ -875,8 +893,8 @@ func (t *bsonType) NewDictionary(bufferSize int) Dictionary {
 	return newByteArrayDictionary(t, bufferSize)
 }
 
-func (t *bsonType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
-	return newByteArrayRowGroupColumn(bufferSize)
+func (t *bsonType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newByteArrayColumnBuffer(columnIndex, bufferSize)
 }
 
 func (t *bsonType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -896,7 +914,7 @@ func (t *dateType) Kind() Kind { return Int32 }
 
 func (t *dateType) Length() int { return 32 }
 
-func (t *dateType) Less(v1, v2 Value) bool { return v1.Int32() < v2.Int32() }
+func (t *dateType) Compare(a, b Value) int { return compareInt32(a.Int32(), b.Int32()) }
 
 func (t *dateType) ColumnOrder() *format.ColumnOrder {
 	return &typeDefinedColumnOrder
@@ -920,8 +938,8 @@ func (t *dateType) NewDictionary(bufferSize int) Dictionary {
 	return newInt32Dictionary(t, bufferSize)
 }
 
-func (t *dateType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
-	return newInt32RowGroupColumn(bufferSize)
+func (t *dateType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newInt32ColumnBuffer(columnIndex, bufferSize)
 }
 
 func (t *dateType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -993,11 +1011,11 @@ func (t *timeType) Length() int {
 	}
 }
 
-func (t *timeType) Less(v1, v2 Value) bool {
+func (t *timeType) Compare(a, b Value) int {
 	if t.Unit.Millis != nil {
-		return v1.Int32() < v2.Int32()
+		return compareInt32(a.Int32(), b.Int32())
 	} else {
-		return v1.Int64() < v2.Int64()
+		return compareInt64(a.Int64(), b.Int64())
 	}
 }
 
@@ -1044,11 +1062,11 @@ func (t *timeType) NewDictionary(bufferSize int) Dictionary {
 	}
 }
 
-func (t *timeType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
+func (t *timeType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 	if t.Unit.Millis != nil {
-		return newInt32RowGroupColumn(bufferSize)
+		return newInt32ColumnBuffer(columnIndex, bufferSize)
 	} else {
-		return newInt64RowGroupColumn(bufferSize)
+		return newInt64ColumnBuffer(columnIndex, bufferSize)
 	}
 }
 
@@ -1075,7 +1093,7 @@ func (t *timestampType) Kind() Kind { return Int64 }
 
 func (t *timestampType) Length() int { return 64 }
 
-func (t *timestampType) Less(v1, v2 Value) bool { return v1.Int64() < v2.Int64() }
+func (t *timestampType) Compare(a, b Value) int { return compareInt64(a.Int64(), b.Int64()) }
 
 func (t *timestampType) ColumnOrder() *format.ColumnOrder { return &typeDefinedColumnOrder }
 
@@ -1104,8 +1122,8 @@ func (t *timestampType) NewDictionary(bufferSize int) Dictionary {
 	return newInt64Dictionary(t, bufferSize)
 }
 
-func (t *timestampType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
-	return newInt64RowGroupColumn(bufferSize)
+func (t *timestampType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newInt64ColumnBuffer(columnIndex, bufferSize)
 }
 
 func (t *timestampType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -1131,7 +1149,7 @@ func (t *listType) Kind() Kind { panic("cannot call Kind on parquet LIST type") 
 
 func (t *listType) Length() int { return 0 }
 
-func (t *listType) Less(Value, Value) bool { panic("cannot compare values on parquet LIST type") }
+func (t *listType) Compare(Value, Value) int { panic("cannot compare values on parquet LIST type") }
 
 func (t *listType) ColumnOrder() *format.ColumnOrder { return nil }
 
@@ -1153,7 +1171,7 @@ func (t *listType) NewDictionary(bufferSize int) Dictionary {
 	panic("cannot create dictionary from parquet LIST type")
 }
 
-func (t *listType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
+func (t *listType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 	panic("cannot create row group column from parquet LIST type")
 }
 
@@ -1185,7 +1203,7 @@ func (t *mapType) Kind() Kind { panic("cannot call Kind on parquet MAP type") }
 
 func (t *mapType) Length() int { return 0 }
 
-func (t *mapType) Less(Value, Value) bool { panic("cannot compare values on parquet MAP type") }
+func (t *mapType) Compare(Value, Value) int { panic("cannot compare values on parquet MAP type") }
 
 func (t *mapType) ColumnOrder() *format.ColumnOrder { return nil }
 
@@ -1207,7 +1225,7 @@ func (t *mapType) NewDictionary(bufferSize int) Dictionary {
 	panic("cannot create dictionary from parquet MAP type")
 }
 
-func (t *mapType) NewRowGroupColumn(bufferSize int) RowGroupColumn {
+func (t *mapType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 	panic("cannot create row group column from parquet MAP type")
 }
 
@@ -1223,7 +1241,7 @@ func (t *nullType) Kind() Kind { panic("cannot call Kind on parquet NULL type") 
 
 func (t *nullType) Length() int { return 0 }
 
-func (t *nullType) Less(Value, Value) bool { panic("cannot compare values on parquet NULL type") }
+func (t *nullType) Compare(Value, Value) int { panic("cannot compare values on parquet NULL type") }
 
 func (t *nullType) ColumnOrder() *format.ColumnOrder { return nil }
 
@@ -1243,7 +1261,7 @@ func (t *nullType) NewDictionary(int) Dictionary {
 	panic("cannot create dictionary from parquet NULL type")
 }
 
-func (t *nullType) NewRowGroupColumn(int) RowGroupColumn {
+func (t *nullType) NewColumnBuffer(int, int) ColumnBuffer {
 	panic("cannot create row group column from parquet NULL type")
 }
 
@@ -1259,7 +1277,7 @@ func (groupType) Kind() Kind {
 	panic("cannot call Kind on parquet group")
 }
 
-func (groupType) Less(Value, Value) bool {
+func (groupType) Compare(Value, Value) int {
 	panic("cannot compare values on parquet group")
 }
 
@@ -1271,7 +1289,7 @@ func (groupType) NewDictionary(int) Dictionary {
 	panic("cannot create dictionary from parquet group")
 }
 
-func (t groupType) NewRowGroupColumn(int) RowGroupColumn {
+func (t groupType) NewColumnBuffer(int, int) ColumnBuffer {
 	panic("cannot create row group column from parquet group")
 }
 
@@ -1288,3 +1306,91 @@ func (groupType) PhyiscalType() *format.Type { return nil }
 func (groupType) LogicalType() *format.LogicalType { return nil }
 
 func (groupType) ConvertedType() *deprecated.ConvertedType { return nil }
+
+func compareBool(v1, v2 bool) int {
+	switch {
+	case !v1 && v2:
+		return -1
+	case v1 && !v2:
+		return +1
+	default:
+		return 0
+	}
+}
+
+func compareInt32(v1, v2 int32) int {
+	switch {
+	case v1 < v2:
+		return -1
+	case v1 > v2:
+		return +1
+	default:
+		return 0
+	}
+}
+
+func compareInt64(v1, v2 int64) int {
+	switch {
+	case v1 < v2:
+		return -1
+	case v1 > v2:
+		return +1
+	default:
+		return 0
+	}
+}
+
+func compareInt96(v1, v2 deprecated.Int96) int {
+	switch {
+	case v1.Less(v2):
+		return -1
+	case v2.Less(v1):
+		return +1
+	default:
+		return 0
+	}
+}
+
+func compareFloat32(v1, v2 float32) int {
+	switch {
+	case v1 < v2:
+		return -1
+	case v1 > v2:
+		return +1
+	default:
+		return 0
+	}
+}
+
+func compareFloat64(v1, v2 float64) int {
+	switch {
+	case v1 < v2:
+		return -1
+	case v1 > v2:
+		return +1
+	default:
+		return 0
+	}
+}
+
+func compareUint32(v1, v2 uint32) int {
+	switch {
+	case v1 < v2:
+		return -1
+	case v1 > v2:
+		return +1
+	default:
+		return 0
+	}
+}
+
+func compareUint64(v1, v2 uint64) int {
+	switch {
+	case v1 < v2:
+		return -1
+	case v1 > v2:
+		return +1
+	default:
+		return 0
+	}
+}

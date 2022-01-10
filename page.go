@@ -4,15 +4,31 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
+	"sync"
 
 	"github.com/segmentio/parquet/deprecated"
 	"github.com/segmentio/parquet/encoding"
 	"github.com/segmentio/parquet/internal/bits"
 )
 
-// Page values represent sequences of parquet values.
+// Page values represent sequences of parquet values. From the Parquet
+// documentation: "Column chunks are a chunk of the data for a particular
+// column. They live in a particular row group and are guaranteed to be
+// contiguous in the file. Column chunks are divided up into pages. A page is
+// conceptually an indivisible unit (in terms of compression and encoding).
+// There can be multiple page types which are interleaved in a column chunk."
+//
+// https://github.com/apache/parquet-format#glossary
 type Page interface {
-	ValueReaderAt
+	// Returns the column index that this page belongs to.
+	Column() int
+
+	// If the page contains indexed values, calling this method returns the
+	// dictionary in which the values are looked up. Otherwise, the method
+	// returns nil.
+	Dictionary() Dictionary
 
 	// Returns the number of rows, values, and nulls in the page. The number of
 	// rows may be less than the number of values in the page if the page is
@@ -24,25 +40,169 @@ type Page interface {
 	// Returns the min and max values currently buffered in the writter.
 	Bounds() (min, max Value)
 
+	// Returns the size of the page in bytes (uncompressed).
+	Size() int64
+
+	// Returns a reader exposing the values contained in the page.
+	Values() ValueReader
+}
+
+// BufferedPage is an extension of the Page interface implemented by pages
+// that are buffered in memory.
+type BufferedPage interface {
+	Page
+
 	// Returns a new page which is as slice of the receiver between value
 	// row indexes i and j.
-	Slice(i, j int) Page
+	Slice(i, j int) BufferedPage
 
-	// Write levels and values of the page to the encoder given as argument.
-	WriteRepetitionLevelsTo(encoding.Encoder) error
-	WriteDefinitionLevelsTo(encoding.Encoder) error
+	// Expose the lists of repetition and definition levels of the page.
+	//
+	// The returned slices may be empty when the page has no repetition or
+	// definition levels.
+	RepetitionLevels() []int8
+	DefinitionLevels() []int8
+
+	// Writes the page to the given encoder.
 	WriteTo(encoding.Encoder) error
 }
 
-func forEachPageSlice(page Page, pageSize, wantSize int64, do func(Page) error) error {
-	numPages := int((pageSize + (wantSize - 1)) / wantSize)
-	rowIndex := 0
-	numRows := page.NumRows()
+// CompressedPage is an extension of the Page interface implemented by pages
+// that have been compressed to their on-file representation.
+type CompressedPage interface {
+	Page
 
+	// Returns a representation of the page header.
+	PageHeader() PageHeader
+
+	// Returns a reader exposing the content of the compressed page.
+	PageData() io.Reader
+
+	// Returns the size of the page data.
+	PageSize() int64
+
+	// CRC returns the IEEE CRC32 checksum of the page.
+	CRC() uint32
+}
+
+// PageReader is an interface implemented by types that support producing a
+// sequence of pages.
+type PageReader interface {
+	ReadPage() (Page, error)
+}
+
+// PageWriter is an interface implemented by types that support writing pages
+// to an underlying storage medium.
+type PageWriter interface {
+	WritePage(Page) (int64, error)
+}
+
+type emptyPageReader struct{}
+
+func (emptyPageReader) Reset() {}
+
+func (emptyPageReader) ReadPage() (Page, error) { return nil, io.EOF }
+
+type singlePageReader struct {
+	page Page
+	used bool
+}
+
+func (r *singlePageReader) Reset() { r.used = false }
+
+func (r *singlePageReader) ReadPage() (Page, error) {
+	if !r.used {
+		r.used = true
+		return r.page, nil
+	}
+	return nil, io.EOF
+}
+
+func onePage(page Page) PageReader { return &singlePageReader{page: page} }
+
+type multiReusablePageReader struct {
+	pages []reusablePageReader
+	index int
+}
+
+func (r *multiReusablePageReader) Reset() {
+	for _, p := range r.pages {
+		p.Reset()
+	}
+	r.index = 0
+}
+
+func (r *multiReusablePageReader) ReadPage() (Page, error) {
+	for r.index < len(r.pages) {
+		p, err := r.pages[r.index].ReadPage()
+		if err == nil || err != io.EOF {
+			return p, err
+		}
+		r.index++
+	}
+	return nil, io.EOF
+}
+
+type reusablePageReader interface {
+	PageReader
+	Reset()
+}
+
+var (
+	_ reusablePageReader = emptyPageReader{}
+	_ reusablePageReader = (*singlePageReader)(nil)
+	_ reusablePageReader = (*multiReusablePageReader)(nil)
+)
+
+// CopyPages copies pages from src to dst, returning the number of values that
+// were copied.
+//
+// The function returns any error it encounters reading or writing pages, except
+// for io.EOF from the reader which indicates that there were no more pages to
+// read.
+func CopyPages(dst PageWriter, src PageReader) (numValues int64, err error) {
+	for {
+		p, err := src.ReadPage()
+		if err != nil {
+			if err == io.EOF {
+				err = nil
+			}
+			return numValues, err
+		}
+		n, err := dst.WritePage(p)
+		numValues += n
+		if err != nil {
+			return numValues, err
+		}
+	}
+}
+
+func sizeOfBytes(data []byte) int64 { return 1 * int64(len(data)) }
+
+func sizeOfBool(data []bool) int64 { return 1 * int64(len(data)) }
+
+func sizeOfInt8(data []int8) int64 { return 1 * int64(len(data)) }
+
+func sizeOfInt32(data []int32) int64 { return 4 * int64(len(data)) }
+
+func sizeOfInt64(data []int64) int64 { return 8 * int64(len(data)) }
+
+func sizeOfInt96(data []deprecated.Int96) int64 { return 12 * int64(len(data)) }
+
+func sizeOfFloat32(data []float32) int64 { return 4 * int64(len(data)) }
+
+func sizeOfFloat64(data []float64) int64 { return 8 * int64(len(data)) }
+
+func forEachPageSlice(page BufferedPage, wantSize int64, do func(BufferedPage) error) error {
+	numRows := page.NumRows()
 	if numRows == 0 {
 		return nil
 	}
-	if numRows == 1 {
+
+	pageSize := page.Size()
+	numPages := int((pageSize + (wantSize - 1)) / wantSize)
+	rowIndex := 0
+	if numPages < 2 {
 		return do(page)
 	}
 
@@ -58,17 +218,34 @@ func forEachPageSlice(page Page, pageSize, wantSize int64, do func(Page) error) 
 	return nil
 }
 
-type errorPage struct{ err error }
+type errorPage struct {
+	err         error
+	columnIndex int
+}
 
-func (page *errorPage) NumRows() int                                   { return 0 }
-func (page *errorPage) NumValues() int                                 { return 0 }
-func (page *errorPage) NumNulls() int                                  { return 0 }
-func (page *errorPage) Bounds() (min, max Value)                       { return }
-func (page *errorPage) Slice(i, j int) Page                            { return page }
-func (page *errorPage) WriteRepetitionLevelsTo(encoding.Encoder) error { return page.err }
-func (page *errorPage) WriteDefinitionLevelsTo(encoding.Encoder) error { return page.err }
-func (page *errorPage) WriteTo(encoding.Encoder) error                 { return page.err }
-func (page *errorPage) ReadValuesAt(int, []Value) (int, error)         { return 0, page.err }
+func newErrorPage(columnIndex int, msg string, args ...interface{}) *errorPage {
+	return &errorPage{
+		err:         fmt.Errorf(msg, args...),
+		columnIndex: columnIndex,
+	}
+}
+
+func (page *errorPage) Column() int                    { return page.columnIndex }
+func (page *errorPage) Dictionary() Dictionary         { return nil }
+func (page *errorPage) NumRows() int                   { return 0 }
+func (page *errorPage) NumValues() int                 { return 0 }
+func (page *errorPage) NumNulls() int                  { return 0 }
+func (page *errorPage) Bounds() (min, max Value)       { return }
+func (page *errorPage) Slice(i, j int) BufferedPage    { return page }
+func (page *errorPage) Size() int64                    { return 0 }
+func (page *errorPage) RepetitionLevels() []int8       { return nil }
+func (page *errorPage) DefinitionLevels() []int8       { return nil }
+func (page *errorPage) WriteTo(encoding.Encoder) error { return page.err }
+func (page *errorPage) Values() ValueReader            { return &errorValueReader{err: page.err} }
+
+func errPageBoundsOutOfRange(i, j, n int) error {
+	return fmt.Errorf("page bounds out of range [%d:%d]: with length %d", i, j, n)
+}
 
 func countLevelsEqual(levels []int8, value int8) int {
 	return bytes.Count(bits.Int8ToBytes(levels), []byte{byte(value)})
@@ -78,18 +255,46 @@ func countLevelsNotEqual(levels []int8, value int8) int {
 	return len(levels) - countLevelsEqual(levels, value)
 }
 
+func appendLevel(levels []int8, value int8, count int) []int8 {
+	if count > 0 {
+		i := len(levels)
+		j := len(levels) + 1
+
+		if n := len(levels) + count; cap(levels) < n {
+			newLevels := make([]int8, n)
+			copy(newLevels, levels)
+			levels = newLevels
+		} else {
+			levels = levels[:n]
+		}
+
+		for levels[i] = value; j < len(levels); j *= 2 {
+			copy(levels[j:], levels[i:j])
+		}
+	}
+	return levels
+}
+
 type optionalPage struct {
-	base               Page
+	base               BufferedPage
 	maxDefinitionLevel int8
 	definitionLevels   []int8
 }
 
-func newOptionalPage(base Page, maxDefinitionLevel int8, definitionLevels []int8) *optionalPage {
+func newOptionalPage(base BufferedPage, maxDefinitionLevel int8, definitionLevels []int8) *optionalPage {
 	return &optionalPage{
 		base:               base,
 		maxDefinitionLevel: maxDefinitionLevel,
 		definitionLevels:   definitionLevels,
 	}
+}
+
+func (page *optionalPage) Column() int {
+	return page.base.Column()
+}
+
+func (page *optionalPage) Dictionary() Dictionary {
+	return page.base.Dictionary()
 }
 
 func (page *optionalPage) NumRows() int {
@@ -108,7 +313,7 @@ func (page *optionalPage) Bounds() (min, max Value) {
 	return page.base.Bounds()
 }
 
-func (page *optionalPage) Slice(i, j int) Page {
+func (page *optionalPage) Slice(i, j int) BufferedPage {
 	numNulls1 := countLevelsNotEqual(page.definitionLevels[:i], page.maxDefinitionLevel)
 	numNulls2 := countLevelsNotEqual(page.definitionLevels[i:j], page.maxDefinitionLevel)
 	return newOptionalPage(
@@ -118,43 +323,56 @@ func (page *optionalPage) Slice(i, j int) Page {
 	)
 }
 
-func (page *optionalPage) WriteRepetitionLevelsTo(e encoding.Encoder) error {
+func (page *optionalPage) Size() int64 {
+	return page.base.Size() + sizeOfInt8(page.definitionLevels)
+}
+
+func (page *optionalPage) RepetitionLevels() []int8 {
 	return nil
 }
 
-func (page *optionalPage) WriteDefinitionLevelsTo(e encoding.Encoder) error {
-	return e.EncodeInt8(page.definitionLevels)
+func (page *optionalPage) DefinitionLevels() []int8 {
+	return page.definitionLevels
 }
 
 func (page *optionalPage) WriteTo(e encoding.Encoder) error {
 	return page.base.WriteTo(e)
 }
 
-func (page *optionalPage) ReadValuesAt(index int, values []Value) (n int, err error) {
-	if index >= len(page.definitionLevels) {
-		return 0, io.EOF
-	}
-	offset := countLevelsEqual(page.definitionLevels[:index], page.maxDefinitionLevel)
+func (page *optionalPage) Values() ValueReader {
+	return &optionalPageReader{page: page}
+}
 
-	for n < len(values) && index < len(page.definitionLevels) {
-		for n < len(values) && index < len(page.definitionLevels) && isNull(index, page.maxDefinitionLevel, page.definitionLevels) {
-			values[n] = Value{definitionLevel: page.definitionLevels[index]}
-			index++
+type optionalPageReader struct {
+	page   *optionalPage
+	values ValueReader
+	offset int
+}
+
+func (r *optionalPageReader) ReadValues(values []Value) (n int, err error) {
+	if r.values == nil {
+		r.values = r.page.base.Values()
+	}
+	maxDefinitionLevel := r.page.maxDefinitionLevel
+
+	for n < len(values) && r.offset < len(r.page.definitionLevels) {
+		for n < len(values) && r.offset < len(r.page.definitionLevels) && r.page.definitionLevels[r.offset] != maxDefinitionLevel {
+			values[n] = Value{definitionLevel: r.page.definitionLevels[r.offset]}
+			r.offset++
 			n++
 		}
 
-		i := index
-		j := n
-		for j < len(values) && i < len(page.definitionLevels) && !isNull(i, page.maxDefinitionLevel, page.definitionLevels) {
+		i := n
+		j := r.offset
+		for i < len(values) && j < len(r.page.definitionLevels) && r.page.definitionLevels[j] == maxDefinitionLevel {
 			i++
 			j++
 		}
 
-		if j > n {
-			for j, err = page.base.ReadValuesAt(offset, values[n:j]); j > 0; j-- {
-				values[n].definitionLevel = page.maxDefinitionLevel
-				offset++
-				index++
+		if n < i {
+			for j, err = r.values.ReadValues(values[n:i]); j > 0; j-- {
+				values[n].definitionLevel = maxDefinitionLevel
+				r.offset++
 				n++
 			}
 			if err != nil {
@@ -163,21 +381,21 @@ func (page *optionalPage) ReadValuesAt(index int, values []Value) (n int, err er
 		}
 	}
 
-	if index >= len(page.definitionLevels) {
+	if r.offset == len(r.page.definitionLevels) {
 		err = io.EOF
 	}
 	return n, err
 }
 
 type repeatedPage struct {
-	base               Page
+	base               BufferedPage
 	maxRepetitionLevel int8
 	maxDefinitionLevel int8
 	definitionLevels   []int8
 	repetitionLevels   []int8
 }
 
-func newRepeatedPage(base Page, maxRepetitionLevel, maxDefinitionLevel int8, repetitionLevels, definitionLevels []int8) *repeatedPage {
+func newRepeatedPage(base BufferedPage, maxRepetitionLevel, maxDefinitionLevel int8, repetitionLevels, definitionLevels []int8) *repeatedPage {
 	return &repeatedPage{
 		base:               base,
 		maxRepetitionLevel: maxRepetitionLevel,
@@ -187,12 +405,20 @@ func newRepeatedPage(base Page, maxRepetitionLevel, maxDefinitionLevel int8, rep
 	}
 }
 
+func (page *repeatedPage) Column() int {
+	return page.base.Column()
+}
+
+func (page *repeatedPage) Dictionary() Dictionary {
+	return page.base.Dictionary()
+}
+
 func (page *repeatedPage) NumRows() int {
 	return countLevelsNotEqual(page.repetitionLevels, page.maxRepetitionLevel)
 }
 
 func (page *repeatedPage) NumValues() int {
-	return page.base.NumValues() + page.NumNulls()
+	return len(page.definitionLevels)
 }
 
 func (page *repeatedPage) NumNulls() int {
@@ -203,11 +429,7 @@ func (page *repeatedPage) Bounds() (min, max Value) {
 	return page.base.Bounds()
 }
 
-func errPageBoundsOutOfRange(i, j, n int) error {
-	return fmt.Errorf("page bounds out of range [%d:%d]: with length %d", i, j, n)
-}
-
-func (page *repeatedPage) Slice(i, j int) Page {
+func (page *repeatedPage) Slice(i, j int) BufferedPage {
 	numRows := page.NumRows()
 	if i < 0 || i > numRows {
 		panic(errPageBoundsOutOfRange(i, j, numRows))
@@ -250,47 +472,60 @@ func (page *repeatedPage) Slice(i, j int) Page {
 	)
 }
 
-func (page *repeatedPage) WriteRepetitionLevelsTo(e encoding.Encoder) error {
-	return e.EncodeInt8(page.repetitionLevels)
+func (page *repeatedPage) Size() int64 {
+	return sizeOfInt8(page.repetitionLevels) + sizeOfInt8(page.definitionLevels) + page.base.Size()
 }
 
-func (page *repeatedPage) WriteDefinitionLevelsTo(e encoding.Encoder) error {
-	return e.EncodeInt8(page.definitionLevels)
+func (page *repeatedPage) RepetitionLevels() []int8 {
+	return page.repetitionLevels
+}
+
+func (page *repeatedPage) DefinitionLevels() []int8 {
+	return page.definitionLevels
 }
 
 func (page *repeatedPage) WriteTo(e encoding.Encoder) error {
 	return page.base.WriteTo(e)
 }
 
-func (page *repeatedPage) ReadValuesAt(index int, values []Value) (n int, err error) {
-	if index >= len(page.definitionLevels) {
-		return 0, io.EOF
-	}
-	offset := countLevelsEqual(page.definitionLevels[:index], page.maxDefinitionLevel)
+func (page *repeatedPage) Values() ValueReader {
+	return &repeatedPageReader{page: page}
+}
 
-	for n < len(values) && index < len(page.definitionLevels) {
-		for n < len(values) && index < len(page.definitionLevels) && isNull(index, page.maxDefinitionLevel, page.definitionLevels) {
+type repeatedPageReader struct {
+	page   *repeatedPage
+	values ValueReader
+	offset int
+}
+
+func (r *repeatedPageReader) ReadValues(values []Value) (n int, err error) {
+	if r.values == nil {
+		r.values = r.page.base.Values()
+	}
+	maxDefinitionLevel := r.page.maxDefinitionLevel
+
+	for n < len(values) && r.offset < len(r.page.definitionLevels) {
+		for n < len(values) && r.offset < len(r.page.definitionLevels) && r.page.definitionLevels[r.offset] != maxDefinitionLevel {
 			values[n] = Value{
-				repetitionLevel: page.repetitionLevels[index],
-				definitionLevel: page.definitionLevels[index],
+				repetitionLevel: r.page.repetitionLevels[r.offset],
+				definitionLevel: r.page.definitionLevels[r.offset],
 			}
-			index++
+			r.offset++
 			n++
 		}
 
-		i := index
-		j := n
-		for j < len(values) && i < len(page.definitionLevels) && !isNull(i, page.maxDefinitionLevel, page.definitionLevels) {
+		i := n
+		j := r.offset
+		for i < len(values) && j < len(r.page.definitionLevels) && r.page.definitionLevels[j] == maxDefinitionLevel {
 			i++
 			j++
 		}
 
-		if j > n {
-			for j, err = page.base.ReadValuesAt(offset, values[n:j]); j > 0; j-- {
-				values[n].repetitionLevel = page.repetitionLevels[index]
-				values[n].definitionLevel = page.maxDefinitionLevel
-				offset++
-				index++
+		if n < i {
+			for j, err = r.values.ReadValues(values[n:i]); j > 0; j-- {
+				values[n].repetitionLevel = r.page.repetitionLevels[r.offset]
+				values[n].definitionLevel = maxDefinitionLevel
+				r.offset++
 				n++
 			}
 			if err != nil {
@@ -299,15 +534,20 @@ func (page *repeatedPage) ReadValuesAt(index int, values []Value) (n int, err er
 		}
 	}
 
-	if index >= len(page.definitionLevels) {
+	if r.offset == len(r.page.definitionLevels) {
 		err = io.EOF
 	}
 	return n, err
 }
 
-type booleanPage struct{ values []bool }
+type booleanPage struct {
+	values      []bool
+	columnIndex int8
+}
 
-func newBooleanPage(values []bool) *booleanPage { return &booleanPage{values: values} }
+func (page *booleanPage) Column() int { return int(^page.columnIndex) }
+
+func (page *booleanPage) Dictionary() Dictionary { return nil }
 
 func (page *booleanPage) NumRows() int { return len(page.values) }
 
@@ -342,30 +582,49 @@ func (page *booleanPage) Bounds() (min, max Value) {
 	return min, max
 }
 
-func (page *booleanPage) Slice(i, j int) Page { return newBooleanPage(page.values[i:j]) }
+func (page *booleanPage) Slice(i, j int) BufferedPage {
+	return &booleanPage{
+		values:      page.values[i:j],
+		columnIndex: page.columnIndex,
+	}
+}
 
-func (page *booleanPage) WriteRepetitionLevelsTo(encoding.Encoder) error { return nil }
+func (page *booleanPage) Size() int64 { return sizeOfBool(page.values) }
 
-func (page *booleanPage) WriteDefinitionLevelsTo(encoding.Encoder) error { return nil }
+func (page *booleanPage) RepetitionLevels() []int8 { return nil }
+
+func (page *booleanPage) DefinitionLevels() []int8 { return nil }
 
 func (page *booleanPage) WriteTo(e encoding.Encoder) error { return e.EncodeBoolean(page.values) }
 
-func (page *booleanPage) ReadValuesAt(offset int, values []Value) (n int, err error) {
-	if offset < len(page.values) {
-		n = min(len(values), len(page.values)-offset)
-		for i := 0; i < n; i++ {
-			values[i] = makeValueBoolean(page.values[offset+i])
-		}
+func (page *booleanPage) Values() ValueReader { return &booleanPageReader{page: page} }
+
+type booleanPageReader struct {
+	page   *booleanPage
+	offset int
+}
+
+func (r *booleanPageReader) ReadValues(values []Value) (n int, err error) {
+	for n < len(values) && r.offset < len(r.page.values) {
+		values[n] = makeValueBoolean(r.page.values[r.offset])
+		values[n].columnIndex = r.page.columnIndex
+		r.offset++
+		n++
 	}
-	if offset+n >= len(page.values) {
+	if r.offset == len(r.page.values) {
 		err = io.EOF
 	}
 	return n, err
 }
 
-type int32Page struct{ values []int32 }
+type int32Page struct {
+	values      []int32
+	columnIndex int8
+}
 
-func newInt32Page(values []int32) *int32Page { return &int32Page{values: values} }
+func (page *int32Page) Column() int { return int(^page.columnIndex) }
+
+func (page *int32Page) Dictionary() Dictionary { return nil }
 
 func (page *int32Page) NumRows() int { return len(page.values) }
 
@@ -382,30 +641,49 @@ func (page *int32Page) Bounds() (min, max Value) {
 	return min, max
 }
 
-func (page *int32Page) Slice(i, j int) Page { return newInt32Page(page.values[i:j]) }
+func (page *int32Page) Slice(i, j int) BufferedPage {
+	return &int32Page{
+		values:      page.values[i:j],
+		columnIndex: page.columnIndex,
+	}
+}
 
-func (page *int32Page) WriteRepetitionLevelsTo(encoding.Encoder) error { return nil }
+func (page *int32Page) Size() int64 { return sizeOfInt32(page.values) }
 
-func (page *int32Page) WriteDefinitionLevelsTo(encoding.Encoder) error { return nil }
+func (page *int32Page) RepetitionLevels() []int8 { return nil }
+
+func (page *int32Page) DefinitionLevels() []int8 { return nil }
 
 func (page *int32Page) WriteTo(e encoding.Encoder) error { return e.EncodeInt32(page.values) }
 
-func (page *int32Page) ReadValuesAt(offset int, values []Value) (n int, err error) {
-	if offset < len(page.values) {
-		n = min(len(values), len(page.values)-offset)
-		for i := 0; i < n; i++ {
-			values[i] = makeValueInt32(page.values[offset+i])
-		}
+func (page *int32Page) Values() ValueReader { return &int32PageReader{page: page} }
+
+type int32PageReader struct {
+	page   *int32Page
+	offset int
+}
+
+func (r *int32PageReader) ReadValues(values []Value) (n int, err error) {
+	for n < len(values) && r.offset < len(r.page.values) {
+		values[n] = makeValueInt32(r.page.values[r.offset])
+		values[n].columnIndex = r.page.columnIndex
+		r.offset++
+		n++
 	}
-	if offset+n >= len(page.values) {
+	if r.offset == len(r.page.values) {
 		err = io.EOF
 	}
 	return n, err
 }
 
-type int64Page struct{ values []int64 }
+type int64Page struct {
+	values      []int64
+	columnIndex int8
+}
 
-func newInt64Page(values []int64) *int64Page { return &int64Page{values: values} }
+func (page *int64Page) Column() int { return int(^page.columnIndex) }
+
+func (page *int64Page) Dictionary() Dictionary { return nil }
 
 func (page *int64Page) NumRows() int { return len(page.values) }
 
@@ -422,30 +700,49 @@ func (page *int64Page) Bounds() (min, max Value) {
 	return min, max
 }
 
-func (page *int64Page) Slice(i, j int) Page { return newInt64Page(page.values[i:j]) }
+func (page *int64Page) Slice(i, j int) BufferedPage {
+	return &int64Page{
+		values:      page.values[i:j],
+		columnIndex: page.columnIndex,
+	}
+}
 
-func (page *int64Page) WriteRepetitionLevelsTo(encoding.Encoder) error { return nil }
+func (page *int64Page) Size() int64 { return sizeOfInt64(page.values) }
 
-func (page *int64Page) WriteDefinitionLevelsTo(encoding.Encoder) error { return nil }
+func (page *int64Page) RepetitionLevels() []int8 { return nil }
+
+func (page *int64Page) DefinitionLevels() []int8 { return nil }
 
 func (page *int64Page) WriteTo(e encoding.Encoder) error { return e.EncodeInt64(page.values) }
 
-func (page *int64Page) ReadValuesAt(offset int, values []Value) (n int, err error) {
-	if offset < len(page.values) {
-		n = min(len(values), len(page.values)-offset)
-		for i := 0; i < n; i++ {
-			values[i] = makeValueInt64(page.values[offset+i])
-		}
+func (page *int64Page) Values() ValueReader { return &int64PageReader{page: page} }
+
+type int64PageReader struct {
+	page   *int64Page
+	offset int
+}
+
+func (r *int64PageReader) ReadValues(values []Value) (n int, err error) {
+	for n < len(values) && r.offset < len(r.page.values) {
+		values[n] = makeValueInt64(r.page.values[r.offset])
+		values[n].columnIndex = r.page.columnIndex
+		r.offset++
+		n++
 	}
-	if offset+n >= len(page.values) {
+	if r.offset == len(r.page.values) {
 		err = io.EOF
 	}
 	return n, err
 }
 
-type int96Page struct{ values []deprecated.Int96 }
+type int96Page struct {
+	values      []deprecated.Int96
+	columnIndex int8
+}
 
-func newInt96Page(values []deprecated.Int96) *int96Page { return &int96Page{values: values} }
+func (page *int96Page) Column() int { return int(^page.columnIndex) }
+
+func (page *int96Page) Dictionary() Dictionary { return nil }
 
 func (page *int96Page) NumRows() int { return len(page.values) }
 
@@ -462,30 +759,49 @@ func (page *int96Page) Bounds() (min, max Value) {
 	return min, max
 }
 
-func (page *int96Page) Slice(i, j int) Page { return newInt96Page(page.values[i:j]) }
+func (page *int96Page) Slice(i, j int) BufferedPage {
+	return &int96Page{
+		values:      page.values[i:j],
+		columnIndex: page.columnIndex,
+	}
+}
 
-func (page *int96Page) WriteRepetitionLevelsTo(encoding.Encoder) error { return nil }
+func (page *int96Page) Size() int64 { return sizeOfInt96(page.values) }
 
-func (page *int96Page) WriteDefinitionLevelsTo(encoding.Encoder) error { return nil }
+func (page *int96Page) RepetitionLevels() []int8 { return nil }
+
+func (page *int96Page) DefinitionLevels() []int8 { return nil }
 
 func (page *int96Page) WriteTo(e encoding.Encoder) error { return e.EncodeInt96(page.values) }
 
-func (page *int96Page) ReadValuesAt(offset int, values []Value) (n int, err error) {
-	if offset < len(page.values) {
-		n = min(len(values), len(page.values)-offset)
-		for i := 0; i < n; i++ {
-			values[i] = makeValueInt96(page.values[offset+i])
-		}
+func (page *int96Page) Values() ValueReader { return &int96PageReader{page: page} }
+
+type int96PageReader struct {
+	page   *int96Page
+	offset int
+}
+
+func (r *int96PageReader) ReadValues(values []Value) (n int, err error) {
+	for n < len(values) && r.offset < len(r.page.values) {
+		values[n] = makeValueInt96(r.page.values[r.offset])
+		values[n].columnIndex = r.page.columnIndex
+		r.offset++
+		n++
 	}
-	if offset+n >= len(page.values) {
+	if r.offset == len(r.page.values) {
 		err = io.EOF
 	}
 	return n, err
 }
 
-type floatPage struct{ values []float32 }
+type floatPage struct {
+	values      []float32
+	columnIndex int8
+}
 
-func newFloatPage(values []float32) *floatPage { return &floatPage{values: values} }
+func (page *floatPage) Column() int { return int(^page.columnIndex) }
+
+func (page *floatPage) Dictionary() Dictionary { return nil }
 
 func (page *floatPage) NumRows() int { return len(page.values) }
 
@@ -502,30 +818,49 @@ func (page *floatPage) Bounds() (min, max Value) {
 	return min, max
 }
 
-func (page *floatPage) Slice(i, j int) Page { return newFloatPage(page.values[i:j]) }
+func (page *floatPage) Slice(i, j int) BufferedPage {
+	return &floatPage{
+		values:      page.values[i:j],
+		columnIndex: page.columnIndex,
+	}
+}
 
-func (page *floatPage) WriteRepetitionLevelsTo(encoding.Encoder) error { return nil }
+func (page *floatPage) Size() int64 { return sizeOfFloat32(page.values) }
 
-func (page *floatPage) WriteDefinitionLevelsTo(encoding.Encoder) error { return nil }
+func (page *floatPage) RepetitionLevels() []int8 { return nil }
+
+func (page *floatPage) DefinitionLevels() []int8 { return nil }
 
 func (page *floatPage) WriteTo(e encoding.Encoder) error { return e.EncodeFloat(page.values) }
 
-func (page *floatPage) ReadValuesAt(offset int, values []Value) (n int, err error) {
-	if offset < len(page.values) {
-		n = min(len(values), len(page.values)-offset)
-		for i := 0; i < n; i++ {
-			values[i] = makeValueFloat(page.values[offset+i])
-		}
+func (page *floatPage) Values() ValueReader { return &floatPageReader{page: page} }
+
+type floatPageReader struct {
+	page   *floatPage
+	offset int
+}
+
+func (r *floatPageReader) ReadValues(values []Value) (n int, err error) {
+	for n < len(values) && r.offset < len(r.page.values) {
+		values[n] = makeValueFloat(r.page.values[r.offset])
+		values[n].columnIndex = r.page.columnIndex
+		r.offset++
+		n++
 	}
-	if offset+n >= len(page.values) {
+	if r.offset == len(r.page.values) {
 		err = io.EOF
 	}
 	return n, err
 }
 
-type doublePage struct{ values []float64 }
+type doublePage struct {
+	values      []float64
+	columnIndex int8
+}
 
-func newDoublePage(values []float64) *doublePage { return &doublePage{values: values} }
+func (page *doublePage) Column() int { return int(^page.columnIndex) }
+
+func (page *doublePage) Dictionary() Dictionary { return nil }
 
 func (page *doublePage) NumRows() int { return len(page.values) }
 
@@ -542,32 +877,49 @@ func (page *doublePage) Bounds() (min, max Value) {
 	return min, max
 }
 
-func (page *doublePage) Slice(i, j int) Page { return newDoublePage(page.values[i:j]) }
+func (page *doublePage) Slice(i, j int) BufferedPage {
+	return &doublePage{
+		values:      page.values[i:j],
+		columnIndex: page.columnIndex,
+	}
+}
 
-func (page *doublePage) WriteRepetitionLevelsTo(encoding.Encoder) error { return nil }
+func (page *doublePage) Size() int64 { return sizeOfFloat64(page.values) }
 
-func (page *doublePage) WriteDefinitionLevelsTo(encoding.Encoder) error { return nil }
+func (page *doublePage) RepetitionLevels() []int8 { return nil }
+
+func (page *doublePage) DefinitionLevels() []int8 { return nil }
 
 func (page *doublePage) WriteTo(e encoding.Encoder) error { return e.EncodeDouble(page.values) }
 
-func (page *doublePage) ReadValuesAt(offset int, values []Value) (n int, err error) {
-	if offset < len(page.values) {
-		n = min(len(values), len(page.values)-offset)
-		for i := 0; i < n; i++ {
-			values[i] = makeValueDouble(page.values[offset+i])
-		}
+func (page *doublePage) Values() ValueReader { return &doublePageReader{page: page} }
+
+type doublePageReader struct {
+	page   *doublePage
+	offset int
+}
+
+func (r *doublePageReader) ReadValues(values []Value) (n int, err error) {
+	for n < len(values) && r.offset < len(r.page.values) {
+		values[n] = makeValueDouble(r.page.values[r.offset])
+		values[n].columnIndex = r.page.columnIndex
+		r.offset++
+		n++
 	}
-	if offset+n >= len(page.values) {
+	if r.offset == len(r.page.values) {
 		err = io.EOF
 	}
 	return n, err
 }
 
-type byteArrayPage struct{ values encoding.ByteArrayList }
-
-func newByteArrayPage(values encoding.ByteArrayList) *byteArrayPage {
-	return &byteArrayPage{values: values}
+type byteArrayPage struct {
+	values      encoding.ByteArrayList
+	columnIndex int8
 }
+
+func (page *byteArrayPage) Column() int { return int(^page.columnIndex) }
+
+func (page *byteArrayPage) Dictionary() Dictionary { return nil }
 
 func (page *byteArrayPage) NumRows() int { return page.values.Len() }
 
@@ -596,39 +948,50 @@ func (page *byteArrayPage) Bounds() (min, max Value) {
 	return min, max
 }
 
-func (page *byteArrayPage) Slice(i, j int) Page {
-	return newByteArrayPage(page.values.Slice(i, j))
-}
-
-func (page *byteArrayPage) WriteRepetitionLevelsTo(encoding.Encoder) error { return nil }
-
-func (page *byteArrayPage) WriteDefinitionLevelsTo(encoding.Encoder) error { return nil }
-
-func (page *byteArrayPage) WriteTo(e encoding.Encoder) error {
-	return e.EncodeByteArray(page.values)
-}
-
-func (page *byteArrayPage) ReadValuesAt(offset int, values []Value) (n int, err error) {
-	if offset < page.values.Len() {
-		n = min(len(values), page.values.Len()-offset)
-		for i := 0; i < n; i++ {
-			values[i] = makeValueBytes(ByteArray, page.values.Index(offset+i))
-		}
+func (page *byteArrayPage) Slice(i, j int) BufferedPage {
+	return &byteArrayPage{
+		values:      page.values.Slice(i, j),
+		columnIndex: page.columnIndex,
 	}
-	if offset+n >= page.values.Len() {
+}
+
+func (page *byteArrayPage) Size() int64 { return page.values.Size() }
+
+func (page *byteArrayPage) RepetitionLevels() []int8 { return nil }
+
+func (page *byteArrayPage) DefinitionLevels() []int8 { return nil }
+
+func (page *byteArrayPage) WriteTo(e encoding.Encoder) error { return e.EncodeByteArray(page.values) }
+
+func (page *byteArrayPage) Values() ValueReader { return &byteArrayPageReader{page: page} }
+
+type byteArrayPageReader struct {
+	page   *byteArrayPage
+	offset int
+}
+
+func (r *byteArrayPageReader) ReadValues(values []Value) (n int, err error) {
+	for n < len(values) && r.offset < r.page.values.Len() {
+		values[n] = makeValueBytes(ByteArray, r.page.values.Index(r.offset))
+		values[n].columnIndex = r.page.columnIndex
+		r.offset++
+		n++
+	}
+	if r.offset == r.page.values.Len() {
 		err = io.EOF
 	}
 	return n, err
 }
 
 type fixedLenByteArrayPage struct {
-	size int
-	data []byte
+	size        int
+	data        []byte
+	columnIndex int8
 }
 
-func newFixedLenByteArrayPage(size int, data []byte) *fixedLenByteArrayPage {
-	return &fixedLenByteArrayPage{size: size, data: data}
-}
+func (page *fixedLenByteArrayPage) Column() int { return int(^page.columnIndex) }
+
+func (page *fixedLenByteArrayPage) Dictionary() Dictionary { return nil }
 
 func (page *fixedLenByteArrayPage) NumRows() int { return len(page.data) / page.size }
 
@@ -645,29 +1008,41 @@ func (page *fixedLenByteArrayPage) Bounds() (min, max Value) {
 	return min, max
 }
 
-func (page *fixedLenByteArrayPage) Slice(i, j int) Page {
-	return newFixedLenByteArrayPage(page.size, page.data[i*page.size:j*page.size])
+func (page *fixedLenByteArrayPage) Slice(i, j int) BufferedPage {
+	return &fixedLenByteArrayPage{
+		size:        page.size,
+		data:        page.data[i*page.size : j*page.size],
+		columnIndex: page.columnIndex,
+	}
 }
 
-func (page *fixedLenByteArrayPage) WriteRepetitionLevelsTo(encoding.Encoder) error { return nil }
+func (page *fixedLenByteArrayPage) Size() int64 { return sizeOfBytes(page.data) }
 
-func (page *fixedLenByteArrayPage) WriteDefinitionLevelsTo(encoding.Encoder) error { return nil }
+func (page *fixedLenByteArrayPage) RepetitionLevels() []int8 { return nil }
+
+func (page *fixedLenByteArrayPage) DefinitionLevels() []int8 { return nil }
 
 func (page *fixedLenByteArrayPage) WriteTo(e encoding.Encoder) error {
 	return e.EncodeFixedLenByteArray(page.size, page.data)
 }
 
-func (page *fixedLenByteArrayPage) ReadValuesAt(offset int, values []Value) (n int, err error) {
-	if offset >= page.NumValues() {
-		return 0, io.EOF
-	}
-	i := offset * page.size
-	for i < len(page.data) && n < len(values) {
-		values[n] = makeValueBytes(FixedLenByteArray, page.data[i:i+page.size])
-		i += page.size
+func (page *fixedLenByteArrayPage) Values() ValueReader {
+	return &fixedLenByteArrayPageReader{page: page}
+}
+
+type fixedLenByteArrayPageReader struct {
+	page   *fixedLenByteArrayPage
+	offset int
+}
+
+func (r *fixedLenByteArrayPageReader) ReadValues(values []Value) (n int, err error) {
+	for n < len(values) && r.offset < len(r.page.data) {
+		values[n] = makeValueBytes(FixedLenByteArray, r.page.data[r.offset:r.offset+r.page.size])
+		values[n].columnIndex = r.page.columnIndex
+		r.offset += r.page.size
 		n++
 	}
-	if i >= len(page.data) {
+	if r.offset == len(r.page.data) {
 		err = io.EOF
 	}
 	return n, err
@@ -678,10 +1053,6 @@ func (page *fixedLenByteArrayPage) ReadValuesAt(offset int, values []Value) (n i
 
 type uint32Page struct{ *int32Page }
 
-func newUint32Page(values []int32) uint32Page {
-	return uint32Page{newInt32Page(values)}
-}
-
 func (page uint32Page) Bounds() (min, max Value) {
 	if len(page.values) > 0 {
 		minUint32, maxUint32 := bits.MinMaxUint32(bits.Int32ToUint32(page.values))
@@ -691,15 +1062,11 @@ func (page uint32Page) Bounds() (min, max Value) {
 	return min, max
 }
 
-func (page uint32Page) Slice(i, j int) Page {
-	return newUint32Page(page.values[i:j])
+func (page uint32Page) Slice(i, j int) BufferedPage {
+	return uint32Page{page.int32Page.Slice(i, j).(*int32Page)}
 }
 
 type uint64Page struct{ *int64Page }
-
-func newUint64Page(values []int64) uint64Page {
-	return uint64Page{newInt64Page(values)}
-}
 
 func (page uint64Page) Bounds() (min, max Value) {
 	if len(page.values) > 0 {
@@ -710,13 +1077,78 @@ func (page uint64Page) Bounds() (min, max Value) {
 	return min, max
 }
 
-func (page uint64Page) Slice(i, j int) Page {
-	return newUint64Page(page.values[i:j])
+func (page uint64Page) Slice(i, j int) BufferedPage {
+	return uint64Page{page.int64Page.Slice(i, j).(*int64Page)}
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
+type PageBufferPool interface {
+	GetPageBuffer() io.ReadWriter
+	PutPageBuffer(io.ReadWriter)
+}
+
+func NewPageBufferPool() PageBufferPool { return new(pageBufferPool) }
+
+type pageBufferPool struct{ sync.Pool }
+
+func (pool *pageBufferPool) GetPageBuffer() io.ReadWriter {
+	b, _ := pool.Get().(*bytes.Buffer)
+	if b == nil {
+		b = new(bytes.Buffer)
+	} else {
+		b.Reset()
 	}
 	return b
 }
+
+func (pool *pageBufferPool) PutPageBuffer(buf io.ReadWriter) {
+	if b, _ := buf.(*bytes.Buffer); b != nil {
+		pool.Put(b)
+	}
+}
+
+type fileBufferPool struct {
+	err     error
+	tempdir string
+	pattern string
+}
+
+func NewFileBufferPool(tempdir, pattern string) PageBufferPool {
+	pool := &fileBufferPool{
+		tempdir: tempdir,
+		pattern: pattern,
+	}
+	pool.tempdir, pool.err = filepath.Abs(pool.tempdir)
+	return pool
+}
+
+func (pool *fileBufferPool) GetPageBuffer() io.ReadWriter {
+	if pool.err != nil {
+		return &errorBuffer{err: pool.err}
+	}
+	f, err := os.CreateTemp(pool.tempdir, pool.pattern)
+	if err != nil {
+		return &errorBuffer{err: err}
+	}
+	return f
+}
+
+func (pool *fileBufferPool) PutPageBuffer(buf io.ReadWriter) {
+	if f, _ := buf.(*os.File); f != nil {
+		defer f.Close()
+		os.Remove(f.Name())
+	}
+}
+
+type errorBuffer struct{ err error }
+
+func (errbuf *errorBuffer) Read([]byte) (int, error)          { return 0, errbuf.err }
+func (errbuf *errorBuffer) Write([]byte) (int, error)         { return 0, errbuf.err }
+func (errbuf *errorBuffer) ReadFrom(io.Reader) (int64, error) { return 0, errbuf.err }
+func (errbuf *errorBuffer) WriteTo(io.Writer) (int64, error)  { return 0, errbuf.err }
+
+var (
+	defaultPageBufferPool pageBufferPool
+
+	_ io.ReaderFrom = (*errorBuffer)(nil)
+	_ io.WriterTo   = (*errorBuffer)(nil)
+)

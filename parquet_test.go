@@ -2,7 +2,6 @@ package parquet_test
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"reflect"
 
@@ -36,84 +35,50 @@ func forEachLeafColumn(col *parquet.Column, do func(*parquet.Column) error) erro
 	return nil
 }
 
-func forEachColumnChunk(col *parquet.Column, do func(*parquet.Column, *parquet.ColumnChunks) error) error {
+func forEachColumnPage(col *parquet.Column, do func(*parquet.Column, parquet.Page) error) error {
 	return forEachLeafColumn(col, func(leaf *parquet.Column) error {
-		chunks := leaf.Chunks()
-
-		for chunks.Next() {
-			if err := do(leaf, chunks); err != nil {
+		pages := leaf.Pages()
+		for {
+			p, err := pages.ReadPage()
+			if err != nil {
+				if err == io.EOF {
+					err = nil
+				}
+				return err
+			}
+			if err := do(leaf, p); err != nil {
 				return err
 			}
 		}
-
-		return nil
-	})
-}
-
-func forEachColumnPage(col *parquet.Column, do func(*parquet.Column, *parquet.PageReader) error) error {
-	return forEachColumnChunk(col, func(leaf *parquet.Column, chunks *parquet.ColumnChunks) error {
-		const bufferSize = 1024
-		pages := chunks.Pages()
-		dictionary := (parquet.Dictionary)(nil)
-		pageType := leaf.Type()
-
-		for pages.Next() {
-			switch header := pages.PageHeader().(type) {
-			case parquet.DictionaryPageHeader:
-				decoder := header.Encoding().NewDecoder(pages.PageData())
-				dictionary = leaf.Type().NewDictionary(0)
-				if err := dictionary.ReadFrom(decoder); err != nil {
-					return fmt.Errorf("reading dictionary page: %w", err)
-				}
-				pageType = dictionary.Type()
-
-			case parquet.DataPageHeader:
-				pageReader := parquet.NewPageReader(
-					pageType,
-					leaf.MaxRepetitionLevel(),
-					leaf.MaxDefinitionLevel(),
-					leaf.Index(),
-					bufferSize,
-				)
-
-				pageReader.Reset(
-					header.NumValues(),
-					header.RepetitionLevelEncoding().NewDecoder(pages.RepetitionLevels()),
-					header.DefinitionLevelEncoding().NewDecoder(pages.DefinitionLevels()),
-					header.Encoding().NewDecoder(pages.PageData()),
-				)
-
-				if err := do(leaf, pageReader); err != nil {
-					return fmt.Errorf("reading data page: %w", err)
-				}
-
-			default:
-				return fmt.Errorf("unsupported page header type: %#v", header)
-			}
-
-			if err := pages.Err(); err != nil {
-				return fmt.Errorf("after reading pages: %w", err)
-			}
-		}
-		return nil
 	})
 }
 
 func forEachColumnValue(col *parquet.Column, do func(*parquet.Column, parquet.Value) error) error {
-	return forEachColumnPage(col, func(leaf *parquet.Column, page *parquet.PageReader) error {
-		values := make([]parquet.Value, 10)
+	return forEachColumnPage(col, func(leaf *parquet.Column, page parquet.Page) error {
+		buffer := [1]parquet.Value{}
+		values := page.Values()
 		for {
-			n, err := page.ReadValues(values)
-			for i := 0; i < n; i++ {
-				if err := do(leaf, values[i]); err != nil {
+			n, err := values.ReadValues(buffer[:])
+			if n > 0 {
+				if err := do(leaf, buffer[0]); err != nil {
 					return err
 				}
 			}
 			if err != nil {
-				if err != io.EOF {
-					return err
+				if err == io.EOF {
+					err = nil
 				}
-				break
+				return err
+			}
+		}
+	})
+}
+
+func forEachColumnChunk(file *parquet.File, do func(*parquet.Column, parquet.ColumnChunk) error) error {
+	return forEachLeafColumn(file.Root(), func(leaf *parquet.Column) error {
+		for i, n := 0, file.NumRowGroups(); i < n; i++ {
+			if err := do(leaf, file.RowGroup(i).Column(int(leaf.Index()))); err != nil {
+				return err
 			}
 		}
 		return nil
@@ -143,16 +108,16 @@ func writeParquetFile(w io.Writer, rows rows, options ...parquet.WriterOption) e
 	return writer.Close()
 }
 
-func writeParquetFileWithRowGroup(w io.Writer, rows rows, options ...parquet.WriterOption) error {
-	rowGroup := parquet.NewRowGroup()
+func writeParquetFileWithBuffer(w io.Writer, rows rows, options ...parquet.WriterOption) error {
+	buffer := parquet.NewBuffer()
 	for _, row := range rows {
-		if err := rowGroup.Write(row); err != nil {
+		if err := buffer.Write(row); err != nil {
 			return err
 		}
 	}
 
 	writer := parquet.NewWriter(w, options...)
-	if err := writer.WriteRowGroup(rowGroup); err != nil {
+	if _, err := parquet.CopyRows(writer, buffer.Rows()); err != nil {
 		return err
 	}
 	return writer.Close()

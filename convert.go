@@ -5,9 +5,9 @@ import (
 	"sort"
 )
 
-// ConvertErorr is an error type returned by calls to Convert or ConvertFunc
-// when the conversion of parquet schemas is impossible or the input row for
-// the conversion is malformed.
+// ConvertError is an error type returned by calls to Convert when the conversion
+// of parquet schemas is impossible or the input row for the conversion is
+// malformed.
 type ConvertError struct {
 	Reason string
 	Path   []string
@@ -17,18 +17,46 @@ type ConvertError struct {
 
 // Error satisfies the error interface.
 func (e *ConvertError) Error() string {
-	return fmt.Sprintf("parquet conversion error: %s %q", e.Reason, join(e.Path))
+	return fmt.Sprintf("parquet conversion error: %s %q", e.Reason, columnPath(e.Path))
 }
 
-// ConvertFunc is a function type which converts a parquet row from one schema
-// to another.
-type ConvertFunc func(dst, src Row) (Row, error)
+// Conversion is an interface implemented by types that provide conversion of
+// parquet rows from one schema to another.
+//
+// Conversion instances must be safe to use concurrently from multiple goroutines.
+type Conversion interface {
+	// Applies the conversion logic on the src row, returning the result
+	// appended to dst.
+	Convert(dst, src Row) (Row, error)
+	// Returns the target schema of the conversion.
+	Schema() *Schema
+}
+
+type conversion struct {
+	convert convertFunc
+	schema  *Schema
+}
+
+func (c *conversion) Convert(dst, src Row) (Row, error) {
+	dst, src, err := c.convert(dst, src, levels{})
+	if len(src) != 0 && err == nil {
+		err = fmt.Errorf("%d values remain unused after converting parquet row", len(src))
+	}
+	return dst, err
+}
+
+func (c *conversion) Schema() *Schema { return c.schema }
 
 // Convert constructs a conversion function from one parquet schema to another.
 //
+// The function supports converting between schemas where the source or target
+// have extra columns; if there are more columns in the source, they will be
+// stripped out of the rows. Extra columns in the target schema will be set to
+// null or zero values.
+//
 // The returned function is intended to be used to append the converted soruce
 // row to the destinatination buffer.
-func Convert(to, from Node) (conv ConvertFunc, err error) {
+func Convert(to, from Node) (conv Conversion, err error) {
 	defer func() {
 		switch e := recover().(type) {
 		case nil:
@@ -39,17 +67,15 @@ func Convert(to, from Node) (conv ConvertFunc, err error) {
 		}
 	}()
 
-	_, _, conversion := convert(convertNode{node: to}, convertNode{node: from})
+	_, _, convertFunc := convert(convertNode{node: to}, convertNode{node: from})
 
-	conv = func(dst, src Row) (Row, error) {
-		dst, src, err := conversion(dst, src, levels{})
-		if len(src) != 0 && err == nil {
-			err = fmt.Errorf("%d values remain unused after converting parquet row", len(src))
-		}
-		return dst, err
+	c := &conversion{
+		convert: convertFunc,
 	}
-
-	return conv, nil
+	if c.schema, _ = to.(*Schema); c.schema == nil {
+		c.schema = NewSchema("", to)
+	}
+	return c, nil
 }
 
 type convertFunc func(Row, Row, levels) (Row, Row, error)
@@ -57,17 +83,13 @@ type convertFunc func(Row, Row, levels) (Row, Row, error)
 type convertNode struct {
 	columnIndex int
 	node        Node
-	path        []string
+	path        columnPath
 }
 
 func (c convertNode) child(name string) convertNode {
 	c.node = c.node.ChildByName(name)
-	c.path = appendPath(c.path, name)
+	c.path = c.path.append(name)
 	return c
-}
-
-func appendPath(path []string, name string) []string {
-	return append(path[:len(path):len(path)], name)
 }
 
 func convert(to, from convertNode) (int, int, convertFunc) {
@@ -286,20 +308,6 @@ func groupNodesAreEqual(node1, node2 Node) bool {
 	return true
 }
 
-func stringsAreEqual(strings1, strings2 []string) bool {
-	if len(strings1) != len(strings2) {
-		return false
-	}
-
-	for i := range strings1 {
-		if strings1[i] != strings2[i] {
-			return false
-		}
-	}
-
-	return true
-}
-
 func comm(sortedStrings1, sortedStrings2 []string) (only1, only2, both []string) {
 	i1 := 0
 	i2 := 0
@@ -338,4 +346,51 @@ func merge(s1, s2, s3 []string) []string {
 	merged = append(merged, s3...)
 	sort.Strings(merged)
 	return merged
+}
+
+// ConvertRowGroup constructs a wrapper of the given row group which appies
+// the given schema conversion on its rows.
+func ConvertRowGroup(rowGroup RowGroup, conv Conversion) RowGroup {
+	return &convertedRowGroup{RowGroup: rowGroup, conv: conv}
+}
+
+type convertedRowGroup struct {
+	RowGroup
+	conv Conversion
+}
+
+func (c *convertedRowGroup) Rows() RowReader {
+	return ConvertRowReader(c.RowGroup.Rows(), c.conv)
+}
+
+func (c *convertedRowGroup) Schema() *Schema {
+	return c.conv.Schema()
+}
+
+// ConvertRowReader constructs a wrapper of the given row reader which applies
+// the given schema conversion to the rows.
+func ConvertRowReader(rows RowReader, conv Conversion) RowReaderWithSchema {
+	return &convertedRowReader{rows: rows, conv: conv}
+}
+
+type convertedRowReader struct {
+	rows RowReader
+	buf  Row
+	conv Conversion
+}
+
+func (c *convertedRowReader) ReadRow(row Row) (Row, error) {
+	defer func() {
+		clearValues(c.buf)
+	}()
+	var err error
+	c.buf, err = c.rows.ReadRow(c.buf[:0])
+	if err != nil {
+		return row, err
+	}
+	return c.conv.Convert(row, c.buf)
+}
+
+func (c *convertedRowReader) Schema() *Schema {
+	return c.conv.Schema()
 }
