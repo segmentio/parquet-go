@@ -357,7 +357,7 @@ func (r *columnValueReader) writeRowsTo(w pageAndValueWriter, limit int64) (numR
 
 			pageRows := int64(p.NumRows())
 			// When the page is fully contained in the remaining range of rows
-			// that we intend to copy, we can use an optimized pagge copy rather
+			// that we intend to copy, we can use an optimized page copy rather
 			// than writing rows one at a time.
 			//
 			// Data pages v1 do not expose the number of rows available, which
