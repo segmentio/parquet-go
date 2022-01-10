@@ -227,7 +227,7 @@ func (buf *Buffer) WriteRowGroup(rowGroup RowGroup) (int64, error) {
 
 // Rows returns a reader exposing the current content of the buffer.
 //
-// The buffer and the returned reader share memory, mutating the buffer
+// The buffer and the returned reader share memory. Mutating the buffer
 // concurrently to reading rows may result in non-deterministic behavior.
 func (buf *Buffer) Rows() RowReader { return &rowGroupRowReader{rowGroup: buf} }
 
