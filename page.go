@@ -56,7 +56,7 @@ type BufferedPage interface {
 	// row indexes i and j.
 	Slice(i, j int) BufferedPage
 
-	// Expose the lists of repetition and definition levels of of the page.
+	// Expose the lists of repetition and definition levels of the page.
 	//
 	// The returned slices may be empty when the page has no repetition or
 	// definition levels.
