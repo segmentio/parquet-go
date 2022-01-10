@@ -17,6 +17,14 @@ var (
 	// errors.Is rather than equality comparisons to test the error values
 	// returned by encoders and decoders.
 	ErrNotSupported = errors.New("encoding not supported")
+
+	// ErrInvalidArguments is an error returned when arguments passed to the
+	// encoding functions are incorrect and will lead to an expected failure.
+	//
+	// As ErrNotSupported, this error may be wrapped with specific information
+	// about the problem and application are expected to use errors.Is for
+	// comparisons
+	ErrInvalidArguments = errors.New("invalid encoding arguments")
 )
 
 // NotSupported is a type satisfying the Encoding interface which does not
