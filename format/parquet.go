@@ -620,7 +620,7 @@ type BloomFilterHeader struct {
 }
 
 type PageHeader struct {
-	// The type of the page: indicates which of the *Header fields below is set.
+	// The type of the page indicates which of the *Header fields below is set.
 	Type PageType `thrift:"1,required"`
 
 	// Uncompressed page size in bytes (not including this header).
