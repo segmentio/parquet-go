@@ -236,12 +236,16 @@ func (buf *Buffer) Rows() RowReader { return &rowGroupRowReader{rowGroup: buf} }
 // rows by copying whole pages instead of calling WriteRow repeatedly.
 type bufferWriter struct{ buf *Buffer }
 
-func (r bufferWriter) WriteRow(row Row) error {
-	return r.buf.WriteRow(row)
+func (w bufferWriter) WriteRow(row Row) error {
+	return w.buf.WriteRow(row)
 }
 
-func (r bufferWriter) WritePage(page Page) (int64, error) {
-	return CopyValues(r.buf.columns[page.Column()], page.Values())
+func (w bufferWriter) WriteValues(values []Value) (int, error) {
+	return w.buf.columns[values[0].Column()].WriteValues(values)
+}
+
+func (w bufferWriter) WritePage(page Page) (int64, error) {
+	return CopyValues(w.buf.columns[page.Column()], page.Values())
 }
 
 var (
@@ -249,5 +253,7 @@ var (
 	_ RowGroupWriter = (*Buffer)(nil)
 	_ sort.Interface = (*Buffer)(nil)
 
-	_ PageWriter = (*bufferWriter)(nil)
+	_ RowWriter   = (*bufferWriter)(nil)
+	_ PageWriter  = (*bufferWriter)(nil)
+	_ ValueWriter = (*bufferWriter)(nil)
 )

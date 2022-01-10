@@ -316,7 +316,7 @@ func TestMergeRowGroups(t *testing.T) {
 								row2, err2 = mergedRows.ReadRow(row2[:0])
 
 								if err1 != err2 {
-									t.Fatalf("errors mismatched while comparing rows: want=%v got=%v", err1, err2)
+									t.Fatalf("errors mismatched while comparing row %+v: want=%v got=%v", row1, err1, err2)
 								}
 
 								if err1 != nil {

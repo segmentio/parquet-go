@@ -516,42 +516,38 @@ func (col *repeatedColumnBuffer) Swap(i, j int) {
 	col.rows[i], col.rows[j] = col.rows[j], col.rows[i]
 }
 
-func (col *repeatedColumnBuffer) WriteValues(values []Value) (n int, err error) {
+func (col *repeatedColumnBuffer) WriteValues(values []Value) (numValues int, err error) {
 	// The values may belong to the last row that was written if they do not
 	// start with a repetition level less than the column's maximum.
-	i := 0
-
-	for i < len(values) && values[i].repetitionLevel == col.maxRepetitionLevel {
-		i++
+	var continuation Row
+	if len(values) > 0 && values[0].repetitionLevel != 0 {
+		continuation, values = splitRowValues(values)
 	}
 
-	if i > 0 {
-		row := values[:i]
-		values = values[i:]
+	if len(continuation) > 0 {
 		lastRow := &col.rows[len(col.rows)-1]
 
-		for i, v := range row {
+		for i, v := range continuation {
 			if v.definitionLevel == col.maxDefinitionLevel {
-				if _, err := col.base.WriteValues(row[i : i+1]); err != nil {
-					return n, err
+				if _, err := col.base.WriteValues(continuation[i : i+1]); err != nil {
+					return numValues, err
 				}
-				n++
 			}
-			lastRow.length++
 			col.repetitionLevels = append(col.repetitionLevels, v.repetitionLevel)
 			col.definitionLevels = append(col.definitionLevels, v.definitionLevel)
+			lastRow.length++
+			numValues++
 		}
 	}
 
-	forEachRowOf(values, col.maxRepetitionLevel, func(row Row) bool {
-		if err = col.WriteRow(row); err != nil {
-			return false
+	err = forEachRepeatedRowOf(values, func(row Row) error {
+		if err := col.WriteRow(row); err != nil {
+			return err
 		}
-		n += len(row)
-		return true
+		numValues += len(row)
+		return nil
 	})
-
-	return n, err
+	return numValues, err
 }
 
 func (col *repeatedColumnBuffer) WriteRow(row Row) error {

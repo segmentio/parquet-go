@@ -262,6 +262,357 @@ func (m *mergedRowGroup) Rows() RowReader {
 	}
 }
 
+type rowGroupRowReader struct {
+	rowGroup RowGroup
+	schema   *Schema
+	columns  []columnValueReader
+}
+
+func (r *rowGroupRowReader) init(rowGroup RowGroup) {
+	r.schema = rowGroup.Schema()
+	r.columns = makeColumnValueReaders(rowGroup.NumColumns(), func(i int) PageReader {
+		return rowGroup.Column(i).Pages()
+	})
+}
+
+func (r *rowGroupRowReader) Schema() *Schema {
+	switch {
+	case r.schema != nil:
+		return r.schema
+	case r.rowGroup != nil:
+		return r.rowGroup.Schema()
+	default:
+		return nil
+	}
+}
+
+func (r *rowGroupRowReader) ReadRow(row Row) (Row, error) {
+	if r.rowGroup != nil {
+		r.init(r.rowGroup)
+		r.rowGroup = nil
+	}
+	if r.schema == nil {
+		return row, io.EOF
+	}
+	n := len(row)
+	row, err := r.schema.readRow(row, 0, r.columns)
+	if err == nil && len(row) == n {
+		err = io.EOF
+	}
+	return row, err
+}
+
+func (r *rowGroupRowReader) WriteRowsTo(w RowWriter) (int64, error) {
+	if r.rowGroup == nil {
+		return CopyRows(w, struct{ RowReaderWithSchema }{r})
+	}
+	defer func() { r.rowGroup = nil }()
+
+	switch dst := w.(type) {
+	case RowGroupWriter:
+		return dst.WriteRowGroup(r.rowGroup)
+
+	case PageWriter:
+		for i, n := 0, r.rowGroup.NumColumns(); i < n; i++ {
+			_, err := CopyPages(dst, r.rowGroup.Column(i).Pages())
+			if err != nil {
+				return 0, err
+			}
+		}
+		return int64(r.rowGroup.NumRows()), nil
+	}
+
+	return CopyRows(w, struct{ RowReaderWithSchema }{r})
+}
+
+func (r *rowGroupRowReader) writeRowsTo(w pageAndValueWriter, limit int64) (numRows int64, err error) {
+	for i := range r.columns {
+		n, err := r.columns[i].writeRowsTo(w, limit)
+		if err != nil {
+			return numRows, err
+		}
+		if i == 0 {
+			numRows = n
+		} else if numRows != n {
+			return numRows, fmt.Errorf("column %d wrote %d rows but the previous column(s) wrote %d rows", i, n, numRows)
+		}
+	}
+	return numRows, nil
+}
+
+type concatenatedRowGroupRowReader struct {
+	rowGroup  *mergedRowGroup
+	schema    *Schema
+	rowReader RowReader
+	rowGroups []RowGroup
+}
+
+func (r *concatenatedRowGroupRowReader) Schema() *Schema {
+	return r.schema
+}
+
+func (r *concatenatedRowGroupRowReader) ReadRow(row Row) (Row, error) {
+	r.rowGroup = nil // disable WriteRowGroup optimization
+	for {
+		if r.rowReader != nil {
+			var err error
+			row, err = r.rowReader.ReadRow(row)
+			if err == nil || err != io.EOF {
+				return row, err
+			}
+			r.rowReader = nil
+		}
+		if len(r.rowGroups) == 0 {
+			return row, io.EOF
+		}
+		r.rowReader = r.rowGroups[0].Rows()
+		r.rowGroups = r.rowGroups[1:]
+	}
+}
+
+func (r *concatenatedRowGroupRowReader) WriteRowsTo(w RowWriter) (int64, error) {
+	if r.rowGroup != nil {
+		if rgw, ok := w.(RowGroupWriter); ok {
+			defer func() { r.rowGroup = nil }()
+			return rgw.WriteRowGroup(r.rowGroup)
+		}
+	}
+	return CopyRows(w, struct{ RowReaderWithSchema }{r})
+}
+
+type mergedRowGroupRowReader struct {
+	rowGroup *mergedRowGroup
+	schema   *Schema
+	sorting  []columnSortFunc
+	cursors  []rowGroupCursor
+	values1  []Value
+	values2  []Value
+	err      error
+}
+
+func (r *mergedRowGroupRowReader) init(m *mergedRowGroup) {
+	if r.schema != nil {
+		numColumns := numColumnsOf(r.schema)
+		cursors := make([]bufferedRowGroupCursor, len(m.rowGroups))
+		buffers := make([][]Value, numColumns*len(m.rowGroups))
+
+		for i, rowGroup := range m.rowGroups {
+			cursors[i].reader = rowGroup.Rows()
+			cursors[i].columns, buffers = buffers[:numColumns:numColumns], buffers[numColumns:]
+		}
+
+		r.cursors = make([]rowGroupCursor, 0, len(cursors))
+		r.sorting = m.sortFuncs
+
+		for i := range cursors {
+			c := rowGroupCursor(&cursors[i])
+			// TODO: this is a bit of a weak model, it only works with types
+			// declared in this package; we may want to define an API to allow
+			// applications to participate in it.
+			if rd, ok := cursors[i].reader.(*rowGroupRowReader); ok {
+				rd.init(rd.rowGroup)
+				rd.rowGroup = nil
+				// TODO: this optimization is disabled for now, there are
+				// remaining blockers:
+				//
+				// * The optimized merge of pges for non-overlapping ranges is
+				//   not yet implemented in the mergedRowGroupRowReader type.
+				//
+				// * Using pages min/max to determine overlapping ranges does
+				//   not work for repeated columns; sorting by repeated columns
+				//   seems to be an edge case so probably not worth optimizing,
+				//   we still need to find a way to disable the optimization in
+				//   those cases.
+				//
+				//c = optimizedRowGroupCursor{rd}
+			}
+
+			if err := c.readNext(); err != nil {
+				if err == io.EOF {
+					continue
+				}
+				r.err = err
+				return
+			}
+
+			r.cursors = append(r.cursors, c)
+		}
+
+		heap.Init(r)
+	}
+}
+
+func (r *mergedRowGroupRowReader) ReadRow(row Row) (Row, error) {
+	if r.rowGroup != nil {
+		r.init(r.rowGroup)
+		r.rowGroup = nil
+	}
+	if r.err != nil {
+		return row, r.err
+	}
+	if len(r.cursors) == 0 {
+		return row, io.EOF
+	}
+
+	min := r.cursors[0]
+	row, err := min.readRow(row)
+	if err != nil {
+		return row, err
+	}
+
+	if err := min.readNext(); err != nil {
+		if err != io.EOF {
+			r.err = err
+			return row, err
+		}
+		heap.Pop(r)
+	} else {
+		heap.Fix(r, 0)
+	}
+	return row, nil
+}
+
+// func (r *mergedRowGroupRowReader) WriteRowsTo(w RowWriter) (int64, error) {
+// 	if r.rowGroup != nil {
+// 		defer func() { r.rowGroup = nil }()
+// 		switch dst := w.(type) {
+// 		case RowGroupWriter:
+// 			return dst.WriteRowGroup(r.rowGroup)
+// 		case pageAndValueWriter:
+// 			r.init(r.rowGroup)
+// 			return r.writeRowsTo(dst)
+// 		}
+// 	}
+// 	return CopyRows(w, struct{ RowReaderWithSchema }{r})
+// }
+
+func (r *mergedRowGroupRowReader) writeRowsTo(w pageAndValueWriter) (numRows int64, err error) {
+	// TODO: the intent of this method is to optimize the merge of rows by
+	// copying entire pages instead of individual rows when we detect ranges
+	// that don't overlap.
+	return
+}
+
+func (r *mergedRowGroupRowReader) Schema() *Schema {
+	return r.schema
+}
+
+func (r *mergedRowGroupRowReader) Len() int {
+	return len(r.cursors)
+}
+
+func (r *mergedRowGroupRowReader) Less(i, j int) bool {
+	cursor1 := r.cursors[i]
+	cursor2 := r.cursors[j]
+
+	for _, sorting := range r.sorting {
+		r.values1 = cursor1.nextRowValuesOf(r.values1[:0], sorting.columnIndex)
+		r.values2 = cursor2.nextRowValuesOf(r.values2[:0], sorting.columnIndex)
+		comp := sorting.compare(r.values1, r.values2)
+		switch {
+		case comp < 0:
+			return true
+		case comp > 0:
+			return false
+		}
+	}
+
+	return false
+}
+
+func (r *mergedRowGroupRowReader) Swap(i, j int) {
+	r.cursors[i], r.cursors[j] = r.cursors[j], r.cursors[i]
+}
+
+func (r *mergedRowGroupRowReader) Push(interface{}) {
+	panic("BUG: unreachable")
+}
+
+func (r *mergedRowGroupRowReader) Pop() interface{} {
+	n := len(r.cursors) - 1
+	c := r.cursors[n]
+	r.cursors = r.cursors[:n]
+	return c
+}
+
+type rowGroupCursor interface {
+	readRow(Row) (Row, error)
+	readNext() error
+	nextRowValuesOf([]Value, int) []Value
+}
+
+type columnSortFunc struct {
+	columnIndex int
+	compare     sortFunc
+}
+
+type bufferedRowGroupCursor struct {
+	reader  RowReader
+	rowbuf  Row
+	columns [][]Value
+}
+
+func (cur *bufferedRowGroupCursor) readRow(row Row) (Row, error) {
+	return append(row, cur.rowbuf...), nil
+}
+
+func (cur *bufferedRowGroupCursor) readNext() (err error) {
+	cur.rowbuf, err = cur.reader.ReadRow(cur.rowbuf[:0])
+	if err != nil {
+		return err
+	}
+	for i, c := range cur.columns {
+		cur.columns[i] = c[:0]
+	}
+	for _, v := range cur.rowbuf {
+		columnIndex := v.Column()
+		cur.columns[columnIndex] = append(cur.columns[columnIndex], v)
+	}
+	return nil
+}
+
+func (cur *bufferedRowGroupCursor) nextRowValuesOf(values []Value, columnIndex int) []Value {
+	return append(values, cur.columns[columnIndex]...)
+}
+
+type optimizedRowGroupCursor struct{ *rowGroupRowReader }
+
+func (cur optimizedRowGroupCursor) readRow(row Row) (Row, error) { return cur.ReadRow(row) }
+
+func (cur optimizedRowGroupCursor) readNext() error {
+	for i := range cur.columns {
+		c := &cur.columns[i]
+		if c.buffered() == 0 {
+			if err := c.readPage(); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (cur optimizedRowGroupCursor) nextRowValuesOf(values []Value, columnIndex int) []Value {
+	col := &cur.columns[columnIndex]
+	err := col.readValues()
+	if err != nil {
+		values = append(values, Value{})
+	} else {
+		values = append(values, col.buffer[col.offset])
+	}
+	return values
+}
+
+var (
+	_ RowReaderWithSchema = (*rowGroupRowReader)(nil)
+	_ RowWriterTo         = (*rowGroupRowReader)(nil)
+
+	_ RowReaderWithSchema = (*mergedRowGroupRowReader)(nil)
+	//_ RowWriterTo         = (*mergedRowGroupRowReader)(nil)
+
+	_ RowReaderWithSchema = (*concatenatedRowGroupRowReader)(nil)
+	_ RowWriterTo         = (*concatenatedRowGroupRowReader)(nil)
+)
+
 type sortFunc func(a, b []Value) int
 
 func sortFuncOf(t Type, maxDefinitionLevel, maxRepetitionLevel int8, descending, nullsFirst bool) (sort sortFunc) {
@@ -352,382 +703,3 @@ func sortFuncOfRepeated(t Type, nullsFirst bool) sortFunc {
 func sortFuncOfRequired(t Type) sortFunc {
 	return func(a, b []Value) int { return t.Compare(a[0], b[0]) }
 }
-
-type rowGroupRowReader struct {
-	rowGroup RowGroup
-	schema   *Schema
-	readRow  columnReadRowFunc
-	columns  []columnValueReader
-}
-
-func (r *rowGroupRowReader) Schema() *Schema {
-	switch {
-	case r.schema != nil:
-		return r.schema
-	case r.rowGroup != nil:
-		return r.rowGroup.Schema()
-	default:
-		return nil
-	}
-}
-
-func (r *rowGroupRowReader) ReadRow(row Row) (Row, error) {
-	if r.rowGroup != nil {
-		r.schema = r.rowGroup.Schema()
-		r.columns = makeColumnValueReaders(r.rowGroup.NumColumns(), func(i int) reusablePageReader {
-			return r.rowGroup.Column(i).Pages().(reusablePageReader)
-		})
-		r.rowGroup = nil
-	}
-	if r.schema == nil {
-		return row, io.EOF
-	}
-	n := len(row)
-	row, err := r.schema.readRow(row, 0, r.columns)
-	if err == nil && len(row) == n {
-		err = io.EOF
-	}
-	return row, err
-}
-
-func (r *rowGroupRowReader) WriteRowsTo(w RowWriter) (int64, error) {
-	if r.rowGroup == nil {
-		return 0, nil
-	}
-	defer func() {
-		r.rowGroup = nil
-	}()
-
-	switch dst := w.(type) {
-	case RowGroupWriter:
-		return dst.WriteRowGroup(r.rowGroup)
-
-	case PageWriter:
-		for i, n := 0, r.rowGroup.NumColumns(); i < n; i++ {
-			_, err := CopyPages(dst, r.rowGroup.Column(i).Pages())
-			if err != nil {
-				return 0, err
-			}
-		}
-		return int64(r.rowGroup.NumRows()), nil
-	}
-
-	return CopyRows(w, struct{ RowReaderWithSchema }{r})
-}
-
-type concatenatedRowGroupRowReader struct {
-	rowGroup  *mergedRowGroup
-	schema    *Schema
-	rowReader RowReader
-	rowGroups []RowGroup
-}
-
-func (r *concatenatedRowGroupRowReader) Schema() *Schema {
-	return r.schema
-}
-
-func (r *concatenatedRowGroupRowReader) ReadRow(row Row) (Row, error) {
-	r.rowGroup = nil // disable WriteRowGroup optimization
-	for {
-		if r.rowReader != nil {
-			var err error
-			row, err = r.rowReader.ReadRow(row)
-			if err == nil || err != io.EOF {
-				return row, err
-			}
-			r.rowReader = nil
-		}
-		if len(r.rowGroups) == 0 {
-			return row, io.EOF
-		}
-		r.rowReader = r.rowGroups[0].Rows()
-		r.rowGroups = r.rowGroups[1:]
-	}
-}
-
-func (r *concatenatedRowGroupRowReader) WriteRowsTo(w RowWriter) (int64, error) {
-	if r.rowGroup != nil {
-		if rgw, ok := w.(RowGroupWriter); ok {
-			defer func() { r.rowGroup = nil }()
-			return rgw.WriteRowGroup(r.rowGroup)
-		}
-	}
-	return CopyRows(w, struct{ RowReaderWithSchema }{r})
-}
-
-type columnSortFunc struct {
-	columnIndex int
-	compare     sortFunc
-}
-
-type columnRowCursor struct {
-	reader  RowReader
-	row     Row
-	err     error
-	columns [][]Value
-}
-
-func (cur *columnRowCursor) next() bool {
-	clearValues(cur.row)
-	cur.row, cur.err = cur.reader.ReadRow(cur.row[:0])
-	if cur.err != nil {
-		return false
-	}
-
-	for i, c := range cur.columns {
-		cur.columns[i] = c[:0]
-	}
-
-	for _, v := range cur.row {
-		columnIndex := v.Column()
-		cur.columns[columnIndex] = append(cur.columns[columnIndex], v)
-	}
-
-	return true
-}
-
-type mergedRowGroupRowReader struct {
-	rowGroup *mergedRowGroup
-	schema   *Schema
-	sorting  []columnSortFunc
-	columns  []columnValueReader
-	cursors  []*columnRowCursor
-	rowbuf   Row
-	err      error
-}
-
-func (r *mergedRowGroupRowReader) init(m *mergedRowGroup) {
-	if r.schema != nil {
-		numColumns := numColumnsOf(r.schema)
-
-		cursors := make([]columnRowCursor, len(m.rowGroups))
-		for i, rowGroup := range m.rowGroups {
-			cursors[i].reader = rowGroup.Rows()
-			cursors[i].columns = make([][]Value, numColumns)
-		}
-
-		r.cursors = make([]*columnRowCursor, len(cursors))
-		for i := range cursors {
-			r.cursors[i] = &cursors[i]
-		}
-
-		for _, cur := range r.cursors {
-			cur.next()
-		}
-
-		i := 0
-		for _, cur := range r.cursors {
-			if cur.err != nil {
-				if cur.err != io.EOF {
-					r.err = cur.err
-				}
-			} else {
-				r.cursors[i] = cur
-				i++
-			}
-		}
-
-		r.cursors = r.cursors[:i]
-		r.sorting = m.sortFuncs
-		r.rowbuf = make(Row, 0, len(r.cursors))
-		heap.Init(r)
-	}
-}
-
-func (r *mergedRowGroupRowReader) ReadRow(row Row) (Row, error) {
-	if r.rowGroup != nil {
-		r.init(r.rowGroup)
-		r.rowGroup = nil
-	}
-
-	if r.err != nil {
-		return row, r.err
-	}
-
-	if len(r.cursors) == 0 {
-		return row, io.EOF
-	}
-
-	min := r.cursors[0]
-	row = append(row, min.row...)
-
-	if min.next() {
-		heap.Fix(r, 0)
-	} else {
-		if err := min.err; err != io.EOF {
-			r.err = err
-			return row, err
-		}
-		heap.Pop(r)
-	}
-
-	return row, nil
-}
-
-// func (r *mergedRowGroupRowReader) WriteRowsTo(w RowWriter) (int64, error) {
-// 	if r.rowGroup != nil {
-// 		defer func() { r.rowGroup = nil }()
-// 		switch dst := w.(type) {
-// 		case RowGroupWriter:
-// 			return dst.WriteRowGroup(r.rowGroup)
-// 		case PageWriter:
-// 			return r.writeRowPagesTo(w, dst)
-// 		}
-// 	}
-// 	return CopyRows(w, struct{ RowReaderWithSchema }{r})
-// }
-
-// func (r *mergedRowGroupRowReader) writeRowPagesTo(rows RowWriter, pages PageWriter) (int64, error) {
-// 	r.init(r.rowGroup)
-// 	return r.writeRowsTo(rows, math.MaxInt64)
-// }
-
-// func (r *mergedRowGroupRowReader) writeRowsTo(w RowWriter, limit int64) (numRows int64, err error) {
-// 	for numRows < limit {
-// 		r.rowbuf, err = r.ReadRow(r.rowbuf[:0])
-// 		if err != nil {
-// 			if err == io.EOF {
-// 				err = nil
-// 			}
-// 			break
-// 		}
-// 		if err = w.WriteRow(r.rowbuf); err != nil {
-// 			break
-// 		}
-// 		numRows++
-// 	}
-// 	return numRows, err
-// }
-
-func (r *mergedRowGroupRowReader) Schema() *Schema {
-	return r.schema
-}
-
-func (r *mergedRowGroupRowReader) Len() int {
-	return len(r.cursors)
-}
-
-func (r *mergedRowGroupRowReader) Less(i, j int) bool {
-	columns1 := r.cursors[i].columns
-	columns2 := r.cursors[j].columns
-
-	for _, sorting := range r.sorting {
-		col1 := columns1[sorting.columnIndex]
-		col2 := columns2[sorting.columnIndex]
-		comp := sorting.compare(col1, col2)
-		switch {
-		case comp < 0:
-			return true
-		case comp > 0:
-			return false
-		}
-	}
-
-	return false
-}
-
-func (r *mergedRowGroupRowReader) Swap(i, j int) {
-	r.cursors[i], r.cursors[j] = r.cursors[j], r.cursors[i]
-}
-
-func (r *mergedRowGroupRowReader) Push(interface{}) {
-	panic("BUG: unreachable")
-}
-
-func (r *mergedRowGroupRowReader) Pop() interface{} {
-	n := len(r.cursors) - 1
-	c := r.cursors[n]
-	r.cursors = r.cursors[:n]
-	return c
-}
-
-// type columnWriteRowPagesFunc func(*mergedColumnRowReader, RowWriter, PageWriter, int64) (int64, error)
-
-// func columnWriteRowPagesFuncOf(node Node, columnIndex int, repetitionDepth int8) (int, columnWriteRowPagesFunc) {
-// 	var write columnWriteRowPagesFunc
-
-// 	if node.Repeated() {
-// 		repetitionDepth++
-// 	}
-
-// 	if isLeaf(node) {
-// 		columnIndex, write = columnWriteRowPagesFuncOfLeaf(columnIndex, repetitionDepth)
-// 	} else {
-// 		columnIndex, write = columnWriteRowPagesFuncOfGroup(node, columnIndex, repetitionDepth)
-// 	}
-
-// 	if node.Repeated() {
-// 		write = columnWriteRowPagesFuncOfRepeated(write, repetitionDepth)
-// 	}
-
-// 	return columnIndex, write
-// }
-
-// type rowOrPageWriter struct {
-// 	RowWriter
-// 	PageWriter
-// }
-
-// type mergedColumnRowReader struct {
-// 	rowGroup *mergedRowGroupRowReader
-// 	readRow  columnReadRowFunc
-// 	columnValueReader
-// }
-
-// func (r *mergedColumnRowReader) writeRowTo(w RowWriter, rowbuf Row) (numRows int64, _ Row, err error) {
-
-// }
-
-// func (r *mergedColumnRowReader) writeRowOrPagesTo(w rowOrPageWriter, limit int64, rowbuf Row) (numRows int64, _ Row, err error) {
-// mainLoop:
-// 	for numRows < limit {
-// 		for r.values != nil {
-// 			rowbuf, _ = r.readRow(rowbuf[:0], 0, nil)
-// 			if err = rows.WriteRow(rowbuf); err != nil {
-// 				break mainLoop
-// 			}
-// 			if numRows++; numRows == limit {
-// 				break mainLoop
-// 			}
-// 		}
-
-// 		r.buffer = r.buffer[:0]
-// 		r.offset = 0
-
-// 		for numRows < limit {
-// 			p, err := r.pages.ReadPage()
-// 			if err != nil {
-// 				return numRows, rowbuf, err
-// 			}
-
-// 			pageRows := int64(p.NumRows())
-// 			// When the page is fully contained in the remaining range of rows
-// 			// that we intend to copy, we can use an optimized pagge copy rather
-// 			// than writing rows one at a time.
-// 			//
-// 			// Data pages v1 do not expose the number of rows available, which
-// 			// means we cannot take the optimized page copy path in those cases.
-// 			if pageRows > 0 || int64(pageRows) > limit {
-// 				r.values = p.Values()
-// 				if err = r.readMoreValues(); err != nil {
-// 					break mainLoop
-// 				}
-// 				continue mainLoop
-// 			}
-
-// 			if _, err = w.WritePage(p); err != nil {
-// 				break mainLoop
-// 			}
-
-// 			numRows += pageRows
-// 		}
-// 	}
-// 	return numRows, rowbuf, err
-// }
-
-var (
-	_ RowWriterTo         = (*rowGroupRowReader)(nil)
-	_ RowReaderWithSchema = (*mergedRowGroupRowReader)(nil)
-	_ RowReaderWithSchema = (*concatenatedRowGroupRowReader)(nil)
-	_ RowWriterTo         = (*concatenatedRowGroupRowReader)(nil)
-)

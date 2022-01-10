@@ -172,22 +172,6 @@ func targetSchemaOf(w RowWriter) *Schema {
 	return nil
 }
 
-func forEachRowOf(values []Value, maxReptitionLevel int8, do func(Row) bool) {
-	for len(values) > 0 {
-		i := 1
-
-		for i < len(values) && values[i].repetitionLevel == maxReptitionLevel {
-			i++
-		}
-
-		if !do(values[:i]) {
-			break
-		}
-
-		values = values[i:]
-	}
-}
-
 func errRowIndexOutOfBounds(rowIndex, rowCount int) error {
 	return fmt.Errorf("row index out of bounds: %d/%d", rowIndex, rowCount)
 }
@@ -198,6 +182,72 @@ func errRowHasTooFewValues(numValues int) error {
 
 func errRowHasTooManyValues(numValues int) error {
 	return fmt.Errorf("row has too many values to be written to the column: %d", numValues)
+}
+
+func hasRepeatedRowValues(values []Value) bool {
+	for _, v := range values {
+		if v.repetitionLevel != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func countRowsOf(values []Value) (numRows int) {
+	if !hasRepeatedRowValues(values) {
+		return len(values) // Faster path when there are no repeated values.
+	}
+	if len(values) > 0 {
+		// The values may have not been at the start of a repeated row,
+		// it could be the continuation of a repeated row. Skip until we
+		// find the beginning of a row before starting to count how many
+		// rows there are.
+		if values[0].repetitionLevel != 0 {
+			_, values = splitRowValues(values)
+		}
+		for len(values) > 0 {
+			numRows++
+			_, values = splitRowValues(values)
+		}
+	}
+	return numRows
+}
+
+func limitRowValues(values []Value, rowCount int) []Value {
+	if !hasRepeatedRowValues(values) {
+		if len(values) > rowCount {
+			values = values[:rowCount]
+		}
+	} else {
+		var row Row
+		var limit int
+		for len(values) > 0 {
+			row, values = splitRowValues(values)
+			limit += len(row)
+		}
+		values = values[:limit]
+	}
+	return values
+}
+
+func splitRowValues(values []Value) (head, tail []Value) {
+	for i, v := range values {
+		if v.repetitionLevel == 0 {
+			return values[:i+1], values[i+1:]
+		}
+	}
+	return values, nil
+}
+
+func forEachRepeatedRowOf(values []Value, do func(Row) error) error {
+	var row Row
+	for len(values) > 0 {
+		row, values = splitRowValues(values)
+		if err := do(row); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // =============================================================================
