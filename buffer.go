@@ -140,7 +140,7 @@ func (buf *Buffer) SortingColumns() []SortingColumn { return buf.config.SortingC
 // Len returns the number of rows written to the buffer.
 func (buf *Buffer) Len() int { return buf.NumRows() }
 
-// Less returns true if the row[i] < row[j] in the buffer.
+// Less returns true if row[i] < row[j] in the buffer.
 func (buf *Buffer) Less(i, j int) bool {
 	for _, col := range buf.sorted {
 		switch {
