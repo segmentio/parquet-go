@@ -388,7 +388,7 @@ func ConvertRowGroup(rowGroup RowGroup, conv Conversion) RowGroup {
 	}
 
 	// Sorting columns must exist on the conversion schema in order to be
-	// advertized on the converted row group otherwise the resulting rows
+	// advertised on the converted row group otherwise the resulting rows
 	// would not be in the right order.
 	sorting := []SortingColumn{}
 	for _, col := range rowGroup.SortingColumns() {
