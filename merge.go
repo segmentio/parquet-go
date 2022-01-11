@@ -17,7 +17,7 @@ func (m *mergedRowGroup) SortingColumns() []SortingColumn {
 
 func (m *mergedRowGroup) Rows() RowReader {
 	// The row group needs to respect a sorting order; the merged row reader
-	// uses a heap to merge rows form the row groups.
+	// uses a heap to merge rows from the row groups.
 	return &mergedRowGroupRowReader{rowGroup: m, schema: m.schema}
 }
 
