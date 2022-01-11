@@ -31,7 +31,7 @@ type columnChunkReader struct {
 	// These two fields must be configured to initialize the reader.
 	column ColumnChunk // column chunk that the reader
 	buffer []Value     // buffer holding values read from the pages
-	// The rest of the fields are used to managae the state of the reader as it
+	// The rest of the fields are used to manage the state of the reader as it
 	// consumes values from the underlying pages.
 	offset int         // offset of the next value in the buffer
 	page   Page        // current page where values are being read from
