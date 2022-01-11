@@ -1,30 +1,9 @@
 package parquet
 
 import (
-	"container/heap"
 	"fmt"
 	"io"
 )
-
-// The ColumnChunk interface represents individual columns of a row group.
-type ColumnChunk interface {
-	// Returns the index of this column in its parent row group.
-	Column() int
-
-	// Returns a reader exposing the pages of the column.
-	Pages() PageReader
-
-	// Returns the components of the page index for this column chunk,
-	// containing details about the content and location of pages within the
-	// chunk.
-	//
-	// Note that the returned value may be the same across calls to these
-	// methods, programs must treat those as read-only.
-	//
-	// If the column chunk does not have a page index, the methods return nil.
-	ColumnIndex() *ColumnIndex
-	OffsetIndex() *OffsetIndex
-}
 
 // RowGroup is an interface representing a parquet row group. From the Parquet
 // docs, a RowGroup is "a logical horizontal partitioning of the data into rows.
@@ -154,125 +133,93 @@ func sortingColumnsAreEqual(s1, s2 SortingColumn) bool {
 // the output can be represented. If sorting columns are configured on the merge
 // they must be a prefix of sorting columns of all row groups being merged.
 func MergeRowGroups(rowGroups []RowGroup, options ...RowGroupOption) (RowGroup, error) {
-	config := DefaultRowGroupConfig()
-	config.Apply(options...)
-	if err := config.Validate(); err != nil {
+	config, err := NewRowGroupConfig(options...)
+	if err != nil {
 		return nil, err
 	}
 
-	m := &mergedRowGroup{
-		schema:  config.Schema,
-		sorting: config.SortingColumns,
-	}
-
+	schema := config.Schema
 	if len(rowGroups) == 0 {
-		return m, nil
+		return newEmptyRowGroup(schema), nil
 	}
-
-	if m.schema == nil {
-		m.schema = rowGroups[0].Schema()
+	if schema == nil {
+		schema = rowGroups[0].Schema()
 
 		for _, rowGroup := range rowGroups[1:] {
-			if !nodesAreEqual(m.schema, rowGroup.Schema()) {
+			if !nodesAreEqual(schema, rowGroup.Schema()) {
 				return nil, ErrRowGroupSchemaMismatch
 			}
 		}
 	}
 
-	if len(m.sorting) > 0 {
-		for _, rowGroup := range rowGroups {
-			if !sortingColumnsHavePrefix(rowGroup.SortingColumns(), m.sorting) {
-				return nil, ErrRowGroupSortingColumnsMismatch
-			}
-		}
+	mergedRowGroups := make([]RowGroup, len(rowGroups))
+	copy(mergedRowGroups, rowGroups)
 
-		m.sortFuncs = make([]columnSortFunc, len(m.sorting))
-		forEachLeafColumnOf(m.schema, func(leaf leafColumn) {
-			if sortingIndex := searchSortingColumn(m.sorting, leaf.path); sortingIndex < len(m.sorting) {
-				m.sortFuncs[sortingIndex] = columnSortFunc{
-					columnIndex: leaf.columnIndex,
-					compare: sortFuncOf(
-						leaf.node.Type(),
-						leaf.maxRepetitionLevel,
-						leaf.maxDefinitionLevel,
-						m.sorting[sortingIndex].Descending(),
-						m.sorting[sortingIndex].NullsFirst(),
-					),
-				}
-			}
-		})
-	}
-
-	m.rowGroups = make([]RowGroup, len(rowGroups))
-	copy(m.rowGroups, rowGroups)
-
-	for i, rowGroup := range m.rowGroups {
-		if schema := rowGroup.Schema(); !nodesAreEqual(m.schema, schema) {
-			conv, err := Convert(m.schema, schema)
+	for i, rowGroup := range mergedRowGroups {
+		if rowGroupSchema := rowGroup.Schema(); !nodesAreEqual(schema, rowGroupSchema) {
+			conv, err := Convert(schema, rowGroupSchema)
 			if err != nil {
 				return nil, fmt.Errorf("cannot merge row groups: %w", err)
 			}
-			m.rowGroups[i] = ConvertRowGroup(rowGroup, conv)
+			mergedRowGroups[i] = ConvertRowGroup(rowGroup, conv)
 		}
 	}
 
-	return m, nil
-}
+	m := &mergedRowGroup{sorting: config.SortingColumns}
+	m.init(schema, mergedRowGroups)
 
-type mergedRowGroup struct {
-	schema    *Schema
-	sorting   []SortingColumn
-	sortFuncs []columnSortFunc
-	rowGroups []RowGroup
-}
-
-func (m *mergedRowGroup) NumRows() (numRows int) {
-	for _, rowGroup := range m.rowGroups {
-		numRows += rowGroup.NumRows()
-	}
-	return numRows
-}
-
-func (m *mergedRowGroup) NumColumns() int { return 0 } // TODO
-
-func (m *mergedRowGroup) Column(int) ColumnChunk { return nil } // TODO
-
-func (m *mergedRowGroup) Schema() *Schema { return m.schema }
-
-func (m *mergedRowGroup) SortingColumns() []SortingColumn { return m.sorting }
-
-func (m *mergedRowGroup) Rows() RowReader {
-	if len(m.sortFuncs) == 0 {
+	if len(m.sorting) == 0 {
 		// When the row group has no ordering, use a simpler version of the
 		// merger which simply concatenates rows from each of the row groups.
 		// This is preferrable because it makes the output deterministic, the
 		// heap merge may otherwise reorder rows across groups.
-		return &concatenatedRowGroupRowReader{
-			rowGroup:  m,
-			schema:    m.schema,
-			rowGroups: m.rowGroups,
-		}
-	} else {
-		// The row group needs to respect a sorting order; the merged row reader
-		// uses a heap to merge rows form the row groups.
-		return &mergedRowGroupRowReader{
-			rowGroup: m,
-			schema:   m.schema,
+		return &m.concatenatedRowGroup, nil
+	}
+
+	for _, rowGroup := range m.rowGroups {
+		if !sortingColumnsHavePrefix(rowGroup.SortingColumns(), m.sorting) {
+			return nil, ErrRowGroupSortingColumnsMismatch
 		}
 	}
+
+	m.sortFuncs = make([]columnSortFunc, len(m.sorting))
+	forEachLeafColumnOf(schema, func(leaf leafColumn) {
+		if sortingIndex := searchSortingColumn(m.sorting, leaf.path); sortingIndex < len(m.sorting) {
+			m.sortFuncs[sortingIndex] = columnSortFunc{
+				columnIndex: leaf.columnIndex,
+				compare: sortFuncOf(
+					leaf.node.Type(),
+					leaf.maxRepetitionLevel,
+					leaf.maxDefinitionLevel,
+					m.sorting[sortingIndex].Descending(),
+					m.sorting[sortingIndex].NullsFirst(),
+				),
+			}
+		}
+	})
+
+	return m, nil
 }
 
 type rowGroupRowReader struct {
 	rowGroup RowGroup
 	schema   *Schema
-	columns  []columnValueReader
+	columns  []columnChunkReader
 }
 
 func (r *rowGroupRowReader) init(rowGroup RowGroup) {
+	const columnBufferSize = defaultValueBufferSize
+	numColumns := rowGroup.NumColumns()
+	buffer := make([]Value, columnBufferSize*numColumns)
+
 	r.schema = rowGroup.Schema()
-	r.columns = makeColumnValueReaders(rowGroup.NumColumns(), func(i int) PageReader {
-		return rowGroup.Column(i).Pages()
-	})
+	r.columns = make([]columnChunkReader, numColumns)
+
+	for i := 0; i < numColumns; i++ {
+		r.columns[i].column = rowGroup.Column(i)
+		r.columns[i].buffer = buffer[:0:columnBufferSize]
+		buffer = buffer[columnBufferSize:]
+	}
 }
 
 func (r *rowGroupRowReader) Schema() *Schema {
@@ -340,366 +287,46 @@ func (r *rowGroupRowReader) writeRowsTo(w pageAndValueWriter, limit int64) (numR
 	return numRows, nil
 }
 
-type concatenatedRowGroupRowReader struct {
-	rowGroup  *mergedRowGroup
-	schema    *Schema
-	rowReader RowReader
-	rowGroups []RowGroup
+type emptyRowGroup struct {
+	schema  *Schema
+	columns []emptyColumnChunk
 }
 
-func (r *concatenatedRowGroupRowReader) Schema() *Schema {
-	return r.schema
-}
-
-func (r *concatenatedRowGroupRowReader) ReadRow(row Row) (Row, error) {
-	r.rowGroup = nil // disable WriteRowGroup optimization
-	for {
-		if r.rowReader != nil {
-			var err error
-			row, err = r.rowReader.ReadRow(row)
-			if err == nil || err != io.EOF {
-				return row, err
-			}
-			r.rowReader = nil
-		}
-		if len(r.rowGroups) == 0 {
-			return row, io.EOF
-		}
-		r.rowReader = r.rowGroups[0].Rows()
-		r.rowGroups = r.rowGroups[1:]
+func newEmptyRowGroup(schema *Schema) *emptyRowGroup {
+	g := &emptyRowGroup{
+		schema:  schema,
+		columns: make([]emptyColumnChunk, numColumnsOf(schema)),
 	}
-}
-
-func (r *concatenatedRowGroupRowReader) WriteRowsTo(w RowWriter) (int64, error) {
-	if r.rowGroup != nil {
-		if rgw, ok := w.(RowGroupWriter); ok {
-			defer func() { r.rowGroup = nil }()
-			return rgw.WriteRowGroup(r.rowGroup)
-		}
+	for i := range g.columns {
+		g.columns[i].column = i
 	}
-	return CopyRows(w, struct{ RowReaderWithSchema }{r})
+	return g
 }
 
-type mergedRowGroupRowReader struct {
-	rowGroup *mergedRowGroup
-	schema   *Schema
-	sorting  []columnSortFunc
-	cursors  []rowGroupCursor
-	values1  []Value
-	values2  []Value
-	err      error
-}
+func (g *emptyRowGroup) NumRows() int                    { return 0 }
+func (g *emptyRowGroup) NumColumns() int                 { return len(g.columns) }
+func (g *emptyRowGroup) Column(i int) ColumnChunk        { return &g.columns[i] }
+func (g *emptyRowGroup) SortingColumns() []SortingColumn { return nil }
+func (g *emptyRowGroup) Schema() *Schema                 { return g.schema }
+func (g *emptyRowGroup) Rows() RowReader                 { return emptyRowReader{g.schema} }
 
-func (r *mergedRowGroupRowReader) init(m *mergedRowGroup) {
-	if r.schema != nil {
-		numColumns := numColumnsOf(r.schema)
-		cursors := make([]bufferedRowGroupCursor, len(m.rowGroups))
-		buffers := make([][]Value, numColumns*len(m.rowGroups))
+type emptyColumnChunk struct{ column int }
 
-		for i, rowGroup := range m.rowGroups {
-			cursors[i].reader = rowGroup.Rows()
-			cursors[i].columns, buffers = buffers[:numColumns:numColumns], buffers[numColumns:]
-		}
+func (c *emptyColumnChunk) Column() int               { return c.column }
+func (c *emptyColumnChunk) Pages() PageReader         { return emptyPageReader{} }
+func (c *emptyColumnChunk) ColumnIndex() *ColumnIndex { return nil }
+func (c *emptyColumnChunk) OffsetIndex() *OffsetIndex { return nil }
 
-		r.cursors = make([]rowGroupCursor, 0, len(cursors))
-		r.sorting = m.sortFuncs
+type emptyRowReader struct{ schema *Schema }
 
-		for i := range cursors {
-			c := rowGroupCursor(&cursors[i])
-			// TODO: this is a bit of a weak model, it only works with types
-			// declared in this package; we may want to define an API to allow
-			// applications to participate in it.
-			if rd, ok := cursors[i].reader.(*rowGroupRowReader); ok {
-				rd.init(rd.rowGroup)
-				rd.rowGroup = nil
-				// TODO: this optimization is disabled for now, there are
-				// remaining blockers:
-				//
-				// * The optimized merge of pges for non-overlapping ranges is
-				//   not yet implemented in the mergedRowGroupRowReader type.
-				//
-				// * Using pages min/max to determine overlapping ranges does
-				//   not work for repeated columns; sorting by repeated columns
-				//   seems to be an edge case so probably not worth optimizing,
-				//   we still need to find a way to disable the optimization in
-				//   those cases.
-				//
-				//c = optimizedRowGroupCursor{rd}
-			}
-
-			if err := c.readNext(); err != nil {
-				if err == io.EOF {
-					continue
-				}
-				r.err = err
-				return
-			}
-
-			r.cursors = append(r.cursors, c)
-		}
-
-		heap.Init(r)
-	}
-}
-
-func (r *mergedRowGroupRowReader) ReadRow(row Row) (Row, error) {
-	if r.rowGroup != nil {
-		r.init(r.rowGroup)
-		r.rowGroup = nil
-	}
-	if r.err != nil {
-		return row, r.err
-	}
-	if len(r.cursors) == 0 {
-		return row, io.EOF
-	}
-
-	min := r.cursors[0]
-	row, err := min.readRow(row)
-	if err != nil {
-		return row, err
-	}
-
-	if err := min.readNext(); err != nil {
-		if err != io.EOF {
-			r.err = err
-			return row, err
-		}
-		heap.Pop(r)
-	} else {
-		heap.Fix(r, 0)
-	}
-	return row, nil
-}
-
-// func (r *mergedRowGroupRowReader) WriteRowsTo(w RowWriter) (int64, error) {
-// 	if r.rowGroup != nil {
-// 		defer func() { r.rowGroup = nil }()
-// 		switch dst := w.(type) {
-// 		case RowGroupWriter:
-// 			return dst.WriteRowGroup(r.rowGroup)
-// 		case pageAndValueWriter:
-// 			r.init(r.rowGroup)
-// 			return r.writeRowsTo(dst)
-// 		}
-// 	}
-// 	return CopyRows(w, struct{ RowReaderWithSchema }{r})
-// }
-
-func (r *mergedRowGroupRowReader) writeRowsTo(w pageAndValueWriter) (numRows int64, err error) {
-	// TODO: the intent of this method is to optimize the merge of rows by
-	// copying entire pages instead of individual rows when we detect ranges
-	// that don't overlap.
-	return
-}
-
-func (r *mergedRowGroupRowReader) Schema() *Schema {
-	return r.schema
-}
-
-func (r *mergedRowGroupRowReader) Len() int {
-	return len(r.cursors)
-}
-
-func (r *mergedRowGroupRowReader) Less(i, j int) bool {
-	cursor1 := r.cursors[i]
-	cursor2 := r.cursors[j]
-
-	for _, sorting := range r.sorting {
-		r.values1 = cursor1.nextRowValuesOf(r.values1[:0], sorting.columnIndex)
-		r.values2 = cursor2.nextRowValuesOf(r.values2[:0], sorting.columnIndex)
-		comp := sorting.compare(r.values1, r.values2)
-		switch {
-		case comp < 0:
-			return true
-		case comp > 0:
-			return false
-		}
-	}
-
-	return false
-}
-
-func (r *mergedRowGroupRowReader) Swap(i, j int) {
-	r.cursors[i], r.cursors[j] = r.cursors[j], r.cursors[i]
-}
-
-func (r *mergedRowGroupRowReader) Push(interface{}) {
-	panic("BUG: unreachable")
-}
-
-func (r *mergedRowGroupRowReader) Pop() interface{} {
-	n := len(r.cursors) - 1
-	c := r.cursors[n]
-	r.cursors = r.cursors[:n]
-	return c
-}
-
-type rowGroupCursor interface {
-	readRow(Row) (Row, error)
-	readNext() error
-	nextRowValuesOf([]Value, int) []Value
-}
-
-type columnSortFunc struct {
-	columnIndex int
-	compare     sortFunc
-}
-
-type bufferedRowGroupCursor struct {
-	reader  RowReader
-	rowbuf  Row
-	columns [][]Value
-}
-
-func (cur *bufferedRowGroupCursor) readRow(row Row) (Row, error) {
-	return append(row, cur.rowbuf...), nil
-}
-
-func (cur *bufferedRowGroupCursor) readNext() (err error) {
-	cur.rowbuf, err = cur.reader.ReadRow(cur.rowbuf[:0])
-	if err != nil {
-		return err
-	}
-	for i, c := range cur.columns {
-		cur.columns[i] = c[:0]
-	}
-	for _, v := range cur.rowbuf {
-		columnIndex := v.Column()
-		cur.columns[columnIndex] = append(cur.columns[columnIndex], v)
-	}
-	return nil
-}
-
-func (cur *bufferedRowGroupCursor) nextRowValuesOf(values []Value, columnIndex int) []Value {
-	return append(values, cur.columns[columnIndex]...)
-}
-
-type optimizedRowGroupCursor struct{ *rowGroupRowReader }
-
-func (cur optimizedRowGroupCursor) readRow(row Row) (Row, error) { return cur.ReadRow(row) }
-
-func (cur optimizedRowGroupCursor) readNext() error {
-	for i := range cur.columns {
-		c := &cur.columns[i]
-		if c.buffered() == 0 {
-			if err := c.readPage(); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func (cur optimizedRowGroupCursor) nextRowValuesOf(values []Value, columnIndex int) []Value {
-	col := &cur.columns[columnIndex]
-	err := col.readValues()
-	if err != nil {
-		values = append(values, Value{})
-	} else {
-		values = append(values, col.buffer[col.offset])
-	}
-	return values
-}
+func (r emptyRowReader) Schema() *Schema                      { return r.schema }
+func (r emptyRowReader) ReadRow(row Row) (Row, error)         { return row, io.EOF }
+func (r emptyRowReader) WriteRowsTo(RowWriter) (int64, error) { return 0, nil }
 
 var (
 	_ RowReaderWithSchema = (*rowGroupRowReader)(nil)
 	_ RowWriterTo         = (*rowGroupRowReader)(nil)
 
-	_ RowReaderWithSchema = (*mergedRowGroupRowReader)(nil)
-	//_ RowWriterTo         = (*mergedRowGroupRowReader)(nil)
-
-	_ RowReaderWithSchema = (*concatenatedRowGroupRowReader)(nil)
-	_ RowWriterTo         = (*concatenatedRowGroupRowReader)(nil)
+	_ RowReaderWithSchema = emptyRowReader{}
+	_ RowWriterTo         = emptyRowReader{}
 )
-
-type sortFunc func(a, b []Value) int
-
-func sortFuncOf(t Type, maxDefinitionLevel, maxRepetitionLevel int8, descending, nullsFirst bool) (sort sortFunc) {
-	switch {
-	case maxRepetitionLevel > 0:
-		sort = sortFuncOfRepeated(t, nullsFirst)
-	case maxDefinitionLevel > 0:
-		sort = sortFuncOfOptional(t, nullsFirst)
-	default:
-		sort = sortFuncOfRequired(t)
-	}
-	if descending {
-		sort = sortFuncOfDescending(sort)
-	}
-	return sort
-}
-
-//go:noinline
-func sortFuncOfDescending(sort sortFunc) sortFunc {
-	return func(a, b []Value) int { return -sort(a, b) }
-}
-
-func sortFuncOfOptional(t Type, nullsFirst bool) sortFunc {
-	if nullsFirst {
-		return sortFuncOfOptionalNullsFirst(t)
-	} else {
-		return sortFuncOfOptionalNullsLast(t)
-	}
-}
-
-//go:noinline
-func sortFuncOfOptionalNullsFirst(t Type) sortFunc {
-	compare := sortFuncOfRequired(t)
-	return func(a, b []Value) int {
-		switch {
-		case a[0].IsNull():
-			if b[0].IsNull() {
-				return 0
-			}
-			return -1
-		case b[0].IsNull():
-			return +1
-		default:
-			return compare(a, b)
-		}
-	}
-}
-
-//go:noinline
-func sortFuncOfOptionalNullsLast(t Type) sortFunc {
-	compare := sortFuncOfRequired(t)
-	return func(a, b []Value) int {
-		switch {
-		case a[0].IsNull():
-			if b[0].IsNull() {
-				return 0
-			}
-			return +1
-		case b[0].IsNull():
-			return -1
-		default:
-			return compare(a, b)
-		}
-	}
-}
-
-//go:noinline
-func sortFuncOfRepeated(t Type, nullsFirst bool) sortFunc {
-	compare := sortFuncOfOptional(t, nullsFirst)
-	return func(a, b []Value) int {
-		n := len(a)
-		if n < len(b) {
-			n = len(b)
-		}
-
-		for i := 0; i < n; i++ {
-			k := compare(a[i:i+1], b[i:i+1])
-			if k != 0 {
-				return k
-			}
-		}
-
-		return len(a) - len(b)
-	}
-}
-
-//go:noinline
-func sortFuncOfRequired(t Type) sortFunc {
-	return func(a, b []Value) int { return t.Compare(a[0], b[0]) }
-}

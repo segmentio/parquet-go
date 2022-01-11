@@ -414,7 +414,7 @@ func (page *repeatedPage) Dictionary() Dictionary {
 }
 
 func (page *repeatedPage) NumRows() int {
-	return countLevelsNotEqual(page.repetitionLevels, page.maxRepetitionLevel)
+	return countLevelsEqual(page.repetitionLevels, 0)
 }
 
 func (page *repeatedPage) NumValues() int {

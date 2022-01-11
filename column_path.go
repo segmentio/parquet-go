@@ -95,3 +95,15 @@ func forEachLeafColumn(node Node, path columnPath, columnIndex int, maxRepetitio
 
 	return columnIndex
 }
+
+func lookupColumnPath(node Node, path columnPath) Node {
+	for node != nil && len(path) > 0 {
+		node = node.ChildByName(path[0])
+		path = path[1:]
+	}
+	return node
+}
+
+func hasColumnPath(node Node, path columnPath) bool {
+	return lookupColumnPath(node, path) != nil
+}

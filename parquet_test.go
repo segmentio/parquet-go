@@ -2,6 +2,7 @@ package parquet_test
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"reflect"
 
@@ -117,8 +118,12 @@ func writeParquetFileWithBuffer(w io.Writer, rows rows, options ...parquet.Write
 	}
 
 	writer := parquet.NewWriter(w, options...)
-	if _, err := parquet.CopyRows(writer, buffer.Rows()); err != nil {
+	numRows, err := parquet.CopyRows(writer, buffer.Rows())
+	if err != nil {
 		return err
+	}
+	if numRows != int64(len(rows)) {
+		return fmt.Errorf("wrong number of rows written from buffer to file: want=%d got=%d", len(rows), numRows)
 	}
 	return writer.Close()
 }

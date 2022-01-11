@@ -72,19 +72,15 @@ func (c *FileConfig) Validate() error {
 // as argument to the NewReader function when needed, for example:
 //
 //	reader := parquet.NewReader(output, schema, &parquet.ReaderConfig{
-//		PageBufferSize: 8192,
+//		// ...
 //	})
 //
-type ReaderConfig struct {
-	PageBufferSize int
-}
+type ReaderConfig struct{}
 
 // DefaultReaderConfig returns a new ReaderConfig value initialized with the
 // default reader configuration.
 func DefaultReaderConfig() *ReaderConfig {
-	return &ReaderConfig{
-		PageBufferSize: DefaultPageBufferSize,
-	}
+	return &ReaderConfig{}
 }
 
 // NewReaderConfig constructs a new reader configuration applying the options
@@ -107,17 +103,12 @@ func (c *ReaderConfig) Apply(options ...ReaderOption) {
 
 // ConfigureReader applies configuration options from c to config.
 func (c *ReaderConfig) ConfigureReader(config *ReaderConfig) {
-	*config = ReaderConfig{
-		PageBufferSize: coalesceInt(c.PageBufferSize, config.PageBufferSize),
-	}
+	*config = ReaderConfig{}
 }
 
 // Validate returns a non-nil error if the configuration of c is invalid.
 func (c *ReaderConfig) Validate() error {
-	const baseName = "parquet.(*ReaderConfig)."
-	return errorInvalidConfiguration(
-		validatePositiveInt(baseName+"PageBufferSize", c.PageBufferSize),
-	)
+	return nil
 }
 
 // The WriterConfig type carries configuration options for parquet writers.
@@ -296,8 +287,7 @@ func SkipPageIndex(skip bool) FileOption {
 	return fileOption(func(config *FileConfig) { config.SkipPageIndex = skip })
 }
 
-// PageBufferSize configures the size of column page buffers on parquet readers
-// or writers.
+// PageBufferSize configures the size of column page buffers on parquet writers.
 //
 // Note that the page buffer size refers to the in-memory buffers where pages
 // are generated, not the size of pages after encoding and compression.
@@ -306,10 +296,9 @@ func SkipPageIndex(skip bool) FileOption {
 // representation on disk.
 //
 // Defaults to 1 MiB.
-type PageBufferSize int
-
-func (size PageBufferSize) ConfigureReader(config *ReaderConfig) { config.PageBufferSize = int(size) }
-func (size PageBufferSize) ConfigureWriter(config *WriterConfig) { config.PageBufferSize = int(size) }
+func PageBufferSize(size int) WriterOption {
+	return writerOption(func(config *WriterConfig) { config.PageBufferSize = size })
+}
 
 // CreatedBy creates a configuration option which sets the name of the
 // application that created a parquet file.
@@ -541,6 +530,4 @@ var (
 	_ ReaderOption   = (*ReaderConfig)(nil)
 	_ WriterOption   = (*WriterConfig)(nil)
 	_ RowGroupOption = (*RowGroupConfig)(nil)
-	_ ReaderOption   = PageBufferSize(0)
-	_ WriterOption   = PageBufferSize(0)
 )
