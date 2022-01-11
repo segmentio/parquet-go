@@ -63,14 +63,14 @@ func (c *concatenatedColumnChunk) Pages() PageReader {
 	return &concatenatedPages{column: c}
 }
 
-func (c *concatenatedColumnChunk) ColumnIndex() *ColumnIndex {
+func (c *concatenatedColumnChunk) ColumnIndex() ColumnIndex {
 	// TODO: changin the ColumnIndex type from a concrete type to an interface
 	// means that we could create a concatenated view of the indexes instead of
 	// having to reallocate memory buffers.
 	return nil
 }
 
-func (c *concatenatedColumnChunk) OffsetIndex() *OffsetIndex {
+func (c *concatenatedColumnChunk) OffsetIndex() OffsetIndex {
 	// TODO: we cannot really reconstruct the offsets here because we do not
 	// know whether the parent row groups belong to the same file.
 	//

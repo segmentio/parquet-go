@@ -437,8 +437,8 @@ func (c *missingColumnChunk) Pages() PageReader {
 	return onePage(missingPage{c})
 }
 
-func (c *missingColumnChunk) ColumnIndex() *ColumnIndex {
-	return &ColumnIndex{
+func (c *missingColumnChunk) ColumnIndex() ColumnIndex {
+	return &columnIndex{
 		NullPages:  []bool{true},
 		MinValues:  [][]byte{nil},
 		MaxValues:  [][]byte{nil},
@@ -446,7 +446,7 @@ func (c *missingColumnChunk) ColumnIndex() *ColumnIndex {
 	}
 }
 
-func (c *missingColumnChunk) OffsetIndex() *OffsetIndex {
+func (c *missingColumnChunk) OffsetIndex() OffsetIndex {
 	return &zeroOffsetIndex
 }
 

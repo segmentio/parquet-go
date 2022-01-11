@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/segmentio/parquet"
 	"github.com/segmentio/parquet/deprecated"
+	"github.com/segmentio/parquet/format"
 )
 
 func TestColumnPageIndex(t *testing.T) {
@@ -126,7 +127,7 @@ func testColumnIndex(t *testing.T, f *parquet.File) error {
 		if i >= len(columnIndexes) {
 			return fmt.Errorf("more column indexes were read when iterating over column chunks than when reading from the file (i=%d,n=%d)", i, len(columnIndexes))
 		}
-		if !reflect.DeepEqual(&columnIndexes[i], columnIndex) {
+		if !reflect.DeepEqual(&columnIndexes[i], newColumnIndex(columnIndex)) {
 			return fmt.Errorf("column index at index %d mismatch:\nfile  = %#v\nchunk = %#v", i, &columnIndexes[i], columnIndex)
 		}
 		i++
@@ -145,10 +146,53 @@ func testOffsetIndex(t *testing.T, f *parquet.File) error {
 		if i >= len(offsetIndexes) {
 			return fmt.Errorf("more offset indexes were read when iterating over column chunks than when reading from the file (i=%d,n=%d)", i, len(offsetIndexes))
 		}
-		if !reflect.DeepEqual(&offsetIndexes[i], offsetIndex) {
+		if !reflect.DeepEqual(&offsetIndexes[i], newOffsetIndex(offsetIndex)) {
 			return fmt.Errorf("offset index at index %d mismatch:\nfile  = %#v\nchunk = %#v", i, &offsetIndexes[i], offsetIndex)
 		}
 		i++
 		return nil
 	})
+}
+
+func newColumnIndex(columnIndex parquet.ColumnIndex) *format.ColumnIndex {
+	numPages := columnIndex.NumPages()
+	index := &format.ColumnIndex{
+		NullPages:  make([]bool, numPages),
+		MinValues:  make([][]byte, numPages),
+		MaxValues:  make([][]byte, numPages),
+		NullCounts: make([]int64, numPages),
+	}
+
+	for i := 0; i < numPages; i++ {
+		index.NullPages[i] = columnIndex.NullPage(i)
+		index.MinValues[i] = columnIndex.MinValue(i)
+		index.MaxValues[i] = columnIndex.MaxValue(i)
+		index.NullCounts[i] = columnIndex.NullCount(i)
+	}
+
+	switch {
+	case columnIndex.IsAscending():
+		index.BoundaryOrder = format.Ascending
+	case columnIndex.IsDescending():
+		index.BoundaryOrder = format.Descending
+	}
+
+	return index
+}
+
+func newOffsetIndex(offsetIndex parquet.OffsetIndex) *format.OffsetIndex {
+	index := &format.OffsetIndex{
+		PageLocations: make([]format.PageLocation, offsetIndex.NumPages()),
+	}
+
+	for i := range index.PageLocations {
+		offset, compressedPageSize, firstRowIndex := offsetIndex.PageLocation(i)
+		index.PageLocations[i] = format.PageLocation{
+			Offset:             offset,
+			CompressedPageSize: int32(compressedPageSize),
+			FirstRowIndex:      firstRowIndex,
+		}
+	}
+
+	return index
 }

@@ -312,10 +312,10 @@ func (g *emptyRowGroup) Rows() RowReader                 { return emptyRowReader
 
 type emptyColumnChunk struct{ column int }
 
-func (c *emptyColumnChunk) Column() int               { return c.column }
-func (c *emptyColumnChunk) Pages() PageReader         { return emptyPageReader{} }
-func (c *emptyColumnChunk) ColumnIndex() *ColumnIndex { return nil }
-func (c *emptyColumnChunk) OffsetIndex() *OffsetIndex { return nil }
+func (c *emptyColumnChunk) Column() int              { return c.column }
+func (c *emptyColumnChunk) Pages() PageReader        { return emptyPageReader{} }
+func (c *emptyColumnChunk) ColumnIndex() ColumnIndex { return &emptyColumnIndex }
+func (c *emptyColumnChunk) OffsetIndex() OffsetIndex { return &emptyOffsetIndex }
 
 type emptyRowReader struct{ schema *Schema }
 
@@ -324,6 +324,9 @@ func (r emptyRowReader) ReadRow(row Row) (Row, error)         { return row, io.E
 func (r emptyRowReader) WriteRowsTo(RowWriter) (int64, error) { return 0, nil }
 
 var (
+	emptyColumnIndex = columnIndex{}
+	emptyOffsetIndex = offsetIndex{}
+
 	_ RowReaderWithSchema = (*rowGroupRowReader)(nil)
 	_ RowWriterTo         = (*rowGroupRowReader)(nil)
 

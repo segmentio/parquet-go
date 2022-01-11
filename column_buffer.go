@@ -69,12 +69,12 @@ var (
 	// single page starting at the first offset and first row of their parent
 	// row group; only the compressed page size information isn't available,
 	// so it is also set to zero.
-	zeroOffsetIndex = OffsetIndex{PageLocations: []format.PageLocation{{}}}
+	zeroOffsetIndex = offsetIndex{PageLocations: []format.PageLocation{{}}}
 )
 
-func columnIndexOf(col ColumnBuffer) *ColumnIndex {
+func columnIndexOf(col ColumnBuffer) *columnIndex {
 	min, max := col.Page().Bounds()
-	return &ColumnIndex{
+	return &columnIndex{
 		NullPages:  []bool{false},
 		MinValues:  [][]byte{min.Bytes()},
 		MaxValues:  [][]byte{max.Bytes()},
@@ -82,7 +82,7 @@ func columnIndexOf(col ColumnBuffer) *ColumnIndex {
 	}
 }
 
-func columnIndexOfNullable(col ColumnBuffer, maxDefinitionLevel int8, definitionLevels []int8) *ColumnIndex {
+func columnIndexOfNullable(col ColumnBuffer, maxDefinitionLevel int8, definitionLevels []int8) *columnIndex {
 	nullCount := countLevelsNotEqual(definitionLevels, maxDefinitionLevel)
 	columnIndex := columnIndexOf(col)
 	columnIndex.NullPages[0] = nullCount == len(definitionLevels)
@@ -154,11 +154,11 @@ func (col *optionalColumnBuffer) Clone() ColumnBuffer {
 	}
 }
 
-func (col *optionalColumnBuffer) ColumnIndex() *ColumnIndex {
+func (col *optionalColumnBuffer) ColumnIndex() ColumnIndex {
 	return columnIndexOfNullable(col.base, col.maxDefinitionLevel, col.definitionLevels)
 }
 
-func (col *optionalColumnBuffer) OffsetIndex() *OffsetIndex {
+func (col *optionalColumnBuffer) OffsetIndex() OffsetIndex {
 	return &zeroOffsetIndex
 }
 
@@ -392,11 +392,11 @@ func (col *repeatedColumnBuffer) Clone() ColumnBuffer {
 	}
 }
 
-func (col *repeatedColumnBuffer) ColumnIndex() *ColumnIndex {
+func (col *repeatedColumnBuffer) ColumnIndex() ColumnIndex {
 	return columnIndexOfNullable(col.base, col.maxDefinitionLevel, col.definitionLevels)
 }
 
-func (col *repeatedColumnBuffer) OffsetIndex() *OffsetIndex {
+func (col *repeatedColumnBuffer) OffsetIndex() OffsetIndex {
 	return &zeroOffsetIndex
 }
 
@@ -675,9 +675,9 @@ func (col *booleanColumnBuffer) Clone() ColumnBuffer {
 	}
 }
 
-func (col *booleanColumnBuffer) ColumnIndex() *ColumnIndex { return columnIndexOf(col) }
+func (col *booleanColumnBuffer) ColumnIndex() ColumnIndex { return columnIndexOf(col) }
 
-func (col *booleanColumnBuffer) OffsetIndex() *OffsetIndex { return &zeroOffsetIndex }
+func (col *booleanColumnBuffer) OffsetIndex() OffsetIndex { return &zeroOffsetIndex }
 
 func (col *booleanColumnBuffer) Dictionary() Dictionary { return nil }
 
@@ -750,9 +750,9 @@ func (col *int32ColumnBuffer) Clone() ColumnBuffer {
 	}
 }
 
-func (col *int32ColumnBuffer) ColumnIndex() *ColumnIndex { return columnIndexOf(col) }
+func (col *int32ColumnBuffer) ColumnIndex() ColumnIndex { return columnIndexOf(col) }
 
-func (col *int32ColumnBuffer) OffsetIndex() *OffsetIndex { return &zeroOffsetIndex }
+func (col *int32ColumnBuffer) OffsetIndex() OffsetIndex { return &zeroOffsetIndex }
 
 func (col *int32ColumnBuffer) Dictionary() Dictionary { return nil }
 
@@ -823,9 +823,9 @@ func (col *int64ColumnBuffer) Clone() ColumnBuffer {
 	}
 }
 
-func (col *int64ColumnBuffer) ColumnIndex() *ColumnIndex { return columnIndexOf(col) }
+func (col *int64ColumnBuffer) ColumnIndex() ColumnIndex { return columnIndexOf(col) }
 
-func (col *int64ColumnBuffer) OffsetIndex() *OffsetIndex { return &zeroOffsetIndex }
+func (col *int64ColumnBuffer) OffsetIndex() OffsetIndex { return &zeroOffsetIndex }
 
 func (col *int64ColumnBuffer) Dictionary() Dictionary { return nil }
 
@@ -896,9 +896,9 @@ func (col *int96ColumnBuffer) Clone() ColumnBuffer {
 	}
 }
 
-func (col *int96ColumnBuffer) ColumnIndex() *ColumnIndex { return columnIndexOf(col) }
+func (col *int96ColumnBuffer) ColumnIndex() ColumnIndex { return columnIndexOf(col) }
 
-func (col *int96ColumnBuffer) OffsetIndex() *OffsetIndex { return &zeroOffsetIndex }
+func (col *int96ColumnBuffer) OffsetIndex() OffsetIndex { return &zeroOffsetIndex }
 
 func (col *int96ColumnBuffer) Dictionary() Dictionary { return nil }
 
@@ -969,9 +969,9 @@ func (col *floatColumnBuffer) Clone() ColumnBuffer {
 	}
 }
 
-func (col *floatColumnBuffer) ColumnIndex() *ColumnIndex { return columnIndexOf(col) }
+func (col *floatColumnBuffer) ColumnIndex() ColumnIndex { return columnIndexOf(col) }
 
-func (col *floatColumnBuffer) OffsetIndex() *OffsetIndex { return &zeroOffsetIndex }
+func (col *floatColumnBuffer) OffsetIndex() OffsetIndex { return &zeroOffsetIndex }
 
 func (col *floatColumnBuffer) Dictionary() Dictionary { return nil }
 
@@ -1042,9 +1042,9 @@ func (col *doubleColumnBuffer) Clone() ColumnBuffer {
 	}
 }
 
-func (col *doubleColumnBuffer) ColumnIndex() *ColumnIndex { return columnIndexOf(col) }
+func (col *doubleColumnBuffer) ColumnIndex() ColumnIndex { return columnIndexOf(col) }
 
-func (col *doubleColumnBuffer) OffsetIndex() *OffsetIndex { return &zeroOffsetIndex }
+func (col *doubleColumnBuffer) OffsetIndex() OffsetIndex { return &zeroOffsetIndex }
 
 func (col *doubleColumnBuffer) Dictionary() Dictionary { return nil }
 
@@ -1115,9 +1115,9 @@ func (col *byteArrayColumnBuffer) Clone() ColumnBuffer {
 	}
 }
 
-func (col *byteArrayColumnBuffer) ColumnIndex() *ColumnIndex { return columnIndexOf(col) }
+func (col *byteArrayColumnBuffer) ColumnIndex() ColumnIndex { return columnIndexOf(col) }
 
-func (col *byteArrayColumnBuffer) OffsetIndex() *OffsetIndex { return &zeroOffsetIndex }
+func (col *byteArrayColumnBuffer) OffsetIndex() OffsetIndex { return &zeroOffsetIndex }
 
 func (col *byteArrayColumnBuffer) Dictionary() Dictionary { return nil }
 
@@ -1193,9 +1193,9 @@ func (col *fixedLenByteArrayColumnBuffer) Clone() ColumnBuffer {
 	}
 }
 
-func (col *fixedLenByteArrayColumnBuffer) ColumnIndex() *ColumnIndex { return columnIndexOf(col) }
+func (col *fixedLenByteArrayColumnBuffer) ColumnIndex() ColumnIndex { return columnIndexOf(col) }
 
-func (col *fixedLenByteArrayColumnBuffer) OffsetIndex() *OffsetIndex { return &zeroOffsetIndex }
+func (col *fixedLenByteArrayColumnBuffer) OffsetIndex() OffsetIndex { return &zeroOffsetIndex }
 
 func (col *fixedLenByteArrayColumnBuffer) Dictionary() Dictionary { return nil }
 

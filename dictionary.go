@@ -785,9 +785,9 @@ func (col *indexedColumnBuffer) Clone() ColumnBuffer {
 	}
 }
 
-func (col *indexedColumnBuffer) ColumnIndex() *ColumnIndex { return columnIndexOf(col) }
+func (col *indexedColumnBuffer) ColumnIndex() ColumnIndex { return columnIndexOf(col) }
 
-func (col *indexedColumnBuffer) OffsetIndex() *OffsetIndex { return &zeroOffsetIndex }
+func (col *indexedColumnBuffer) OffsetIndex() OffsetIndex { return &zeroOffsetIndex }
 
 func (col *indexedColumnBuffer) Dictionary() Dictionary { return col.dict }
 
