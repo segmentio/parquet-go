@@ -1263,9 +1263,19 @@ func newUint32ColumnBuffer(columnIndex, bufferSize int) uint32ColumnBuffer {
 	return uint32ColumnBuffer{newInt32ColumnBuffer(columnIndex, bufferSize)}
 }
 
-func (col uint32ColumnBuffer) Page() BufferedPage {
-	return uint32Page{&col.int32Page}
-}
+func (col uint32ColumnBuffer) ColumnIndex() ColumnIndex { return uint32ColumnIndex{col} }
+
+func (col uint32ColumnBuffer) page() uint32Page { return uint32Page{&col.int32Page} }
+
+func (col uint32ColumnBuffer) min() uint32 { return col.page().min() }
+
+func (col uint32ColumnBuffer) max() uint32 { return col.page().max() }
+
+func (col uint32ColumnBuffer) bounds() (min, max uint32) { return col.page().bounds() }
+
+func (col uint32ColumnBuffer) Page() BufferedPage { return col.page() }
+
+func (col uint32ColumnBuffer) Pages() PageReader { return onePage(col.page()) }
 
 func (col uint32ColumnBuffer) Clone() ColumnBuffer {
 	return uint32ColumnBuffer{col.int32ColumnBuffer.Clone().(*int32ColumnBuffer)}
@@ -1281,12 +1291,22 @@ func newUint64ColumnBuffer(columnIndex, bufferSize int) uint64ColumnBuffer {
 	return uint64ColumnBuffer{newInt64ColumnBuffer(columnIndex, bufferSize)}
 }
 
+func (col uint64ColumnBuffer) ColumnIndex() ColumnIndex { return uint64ColumnIndex{col} }
+
+func (col uint64ColumnBuffer) page() uint64Page { return uint64Page{&col.int64Page} }
+
+func (col uint64ColumnBuffer) min() uint64 { return col.page().min() }
+
+func (col uint64ColumnBuffer) max() uint64 { return col.page().max() }
+
+func (col uint64ColumnBuffer) bounds() (min, max uint64) { return col.page().bounds() }
+
+func (col uint64ColumnBuffer) Page() BufferedPage { return col.page() }
+
+func (col uint64ColumnBuffer) Pages() PageReader { return onePage(col.page()) }
+
 func (col uint64ColumnBuffer) Clone() ColumnBuffer {
 	return uint64ColumnBuffer{col.int64ColumnBuffer.Clone().(*int64ColumnBuffer)}
-}
-
-func (col uint64ColumnBuffer) Page() BufferedPage {
-	return uint64Page{&col.int64Page}
 }
 
 func (col uint64ColumnBuffer) Less(i, j int) bool {

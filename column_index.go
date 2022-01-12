@@ -130,6 +130,26 @@ func (index fixedLenByteArrayColumnIndex) IsDescending() bool {
 	return bytes.Compare(index.bounds()) > 0
 }
 
+type uint32ColumnIndex struct{ uint32ColumnBuffer }
+
+func (index uint32ColumnIndex) NumPages() int       { return 1 }
+func (index uint32ColumnIndex) NullCount(int) int64 { return 0 }
+func (index uint32ColumnIndex) NullPage(int) bool   { return false }
+func (index uint32ColumnIndex) MinValue(int) []byte { return plain.Int32(int32(index.min())) }
+func (index uint32ColumnIndex) MaxValue(int) []byte { return plain.Int32(int32(index.max())) }
+func (index uint32ColumnIndex) IsAscending() bool   { return compareUint32(index.bounds()) < 0 }
+func (index uint32ColumnIndex) IsDescending() bool  { return compareUint32(index.bounds()) > 0 }
+
+type uint64ColumnIndex struct{ uint64ColumnBuffer }
+
+func (index uint64ColumnIndex) NumPages() int       { return 1 }
+func (index uint64ColumnIndex) NullCount(int) int64 { return 0 }
+func (index uint64ColumnIndex) NullPage(int) bool   { return false }
+func (index uint64ColumnIndex) MinValue(int) []byte { return plain.Int64(int64(index.min())) }
+func (index uint64ColumnIndex) MaxValue(int) []byte { return plain.Int64(int64(index.max())) }
+func (index uint64ColumnIndex) IsAscending() bool   { return compareUint64(index.bounds()) < 0 }
+func (index uint64ColumnIndex) IsDescending() bool  { return compareUint64(index.bounds()) > 0 }
+
 // The ColumnIndexer interface is implemented by types that support generating
 // parquet column indexes.
 //

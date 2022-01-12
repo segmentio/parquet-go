@@ -1152,6 +1152,10 @@ func (r *fixedLenByteArrayPageReader) ReadValues(values []Value) (n int, err err
 
 type uint32Page struct{ *int32Page }
 
+func (page uint32Page) min() uint32 { return bits.MinUint32(bits.Int32ToUint32(page.values)) }
+
+func (page uint32Page) max() uint32 { return bits.MaxUint32(bits.Int32ToUint32(page.values)) }
+
 func (page uint32Page) bounds() (min, max uint32) {
 	return bits.MinMaxUint32(bits.Int32ToUint32(page.values))
 }
@@ -1170,6 +1174,10 @@ func (page uint32Page) Slice(i, j int) BufferedPage {
 }
 
 type uint64Page struct{ *int64Page }
+
+func (page uint64Page) min() uint64 { return bits.MinUint64(bits.Int64ToUint64(page.values)) }
+
+func (page uint64Page) max() uint64 { return bits.MaxUint64(bits.Int64ToUint64(page.values)) }
 
 func (page uint64Page) bounds() (min, max uint64) {
 	return bits.MinMaxUint64(bits.Int64ToUint64(page.values))

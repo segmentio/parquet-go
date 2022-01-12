@@ -151,10 +151,10 @@ func checkColumnChunkColumnIndex(columnChunk parquet.ColumnChunk) error {
 		indexMax := columnIndex.MaxValue(pagesRead)
 
 		if !bytes.Equal(pageMin, indexMin) {
-			return fmt.Errorf("max page value mismatch: index=%q page=%q", indexMin, pageMin)
+			return fmt.Errorf("max page value mismatch: index=%x page=%x", indexMin, pageMin)
 		}
 		if !bytes.Equal(pageMax, indexMax) {
-			return fmt.Errorf("max page value mismatch: index=%q page=%q", indexMax, pageMax)
+			return fmt.Errorf("max page value mismatch: index=%x page=%x", indexMax, pageMax)
 		}
 
 		numNulls := int64(0)
