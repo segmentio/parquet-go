@@ -4,6 +4,9 @@ import "io"
 
 // The ColumnChunk interface represents individual columns of a row group.
 type ColumnChunk interface {
+	// Returns the column type.
+	Type() Type
+
 	// Returns the index of this column in its parent row group.
 	Column() int
 

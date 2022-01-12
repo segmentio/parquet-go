@@ -369,10 +369,12 @@ func ConvertRowGroup(rowGroup RowGroup, conv Conversion) RowGroup {
 	numRows := rowGroup.NumRows()
 
 	columns := make([]ColumnChunk, numColumnsOf(schema))
-	for i := range columns {
-		j := conv.Column(i)
+	forEachLeafColumnOf(schema, func(leaf leafColumn) {
+		i := leaf.columnIndex
+		j := conv.Column(leaf.columnIndex)
 		if j < 0 {
 			columns[i] = &missingColumnChunk{
+				typ:    leaf.node.Type(),
 				column: i,
 				// TODO: we assume the number of values is the same as the
 				// number of rows, which may not be accurate when the column is
@@ -385,7 +387,7 @@ func ConvertRowGroup(rowGroup RowGroup, conv Conversion) RowGroup {
 		} else {
 			columns[i] = rowGroup.Column(j)
 		}
-	}
+	})
 
 	// Sorting columns must exist on the conversion schema in order to be
 	// advertised on the converted row group otherwise the resulting rows
@@ -423,10 +425,15 @@ func ConvertRowGroup(rowGroup RowGroup, conv Conversion) RowGroup {
 }
 
 type missingColumnChunk struct {
+	typ       Type
 	column    int
 	numRows   int
 	numValues int
 	numNulls  int
+}
+
+func (c *missingColumnChunk) Type() Type {
+	return c.typ
 }
 
 func (c *missingColumnChunk) Column() int {

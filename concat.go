@@ -55,6 +55,13 @@ type concatenatedColumnChunk struct {
 	chunks   []ColumnChunk
 }
 
+func (c *concatenatedColumnChunk) Type() Type {
+	if len(c.chunks) != 0 {
+		return c.chunks[0].Type() // all chunks should be of the same type
+	}
+	return nil
+}
+
 func (c *concatenatedColumnChunk) Column() int {
 	return c.column
 }

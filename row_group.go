@@ -297,9 +297,10 @@ func newEmptyRowGroup(schema *Schema) *emptyRowGroup {
 		schema:  schema,
 		columns: make([]emptyColumnChunk, numColumnsOf(schema)),
 	}
-	for i := range g.columns {
-		g.columns[i].column = i
-	}
+	forEachLeafColumnOf(schema, func(leaf leafColumn) {
+		g.columns[leaf.columnIndex].typ = leaf.node.Type()
+		g.columns[leaf.columnIndex].column = leaf.columnIndex
+	})
 	return g
 }
 
@@ -310,8 +311,12 @@ func (g *emptyRowGroup) SortingColumns() []SortingColumn { return nil }
 func (g *emptyRowGroup) Schema() *Schema                 { return g.schema }
 func (g *emptyRowGroup) Rows() RowReader                 { return emptyRowReader{g.schema} }
 
-type emptyColumnChunk struct{ column int }
+type emptyColumnChunk struct {
+	typ    Type
+	column int
+}
 
+func (c *emptyColumnChunk) Type() Type               { return c.typ }
 func (c *emptyColumnChunk) Column() int              { return c.column }
 func (c *emptyColumnChunk) Pages() PageReader        { return emptyPageReader{} }
 func (c *emptyColumnChunk) ColumnIndex() ColumnIndex { return &emptyColumnIndex }

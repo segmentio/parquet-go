@@ -684,7 +684,7 @@ func newIndexedType(typ Type, dict Dictionary) *indexedType {
 }
 
 func (t *indexedType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
-	return newIndexedColumnBuffer(t.dict, columnIndex, bufferSize)
+	return newIndexedColumnBuffer(t.dict, t, columnIndex, bufferSize)
 }
 
 func (t *indexedType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -763,15 +763,19 @@ func (r *indexedPageReader) ReadValues(values []Value) (n int, err error) {
 	return n, err
 }
 
-type indexedColumnBuffer struct{ indexedPage }
+type indexedColumnBuffer struct {
+	indexedPage
+	typ Type
+}
 
-func newIndexedColumnBuffer(dict Dictionary, columnIndex, bufferSize int) *indexedColumnBuffer {
+func newIndexedColumnBuffer(dict Dictionary, typ Type, columnIndex, bufferSize int) *indexedColumnBuffer {
 	return &indexedColumnBuffer{
 		indexedPage: indexedPage{
 			dict:        dict,
 			values:      make([]int32, 0, bufferSize/4),
 			columnIndex: ^int8(columnIndex),
 		},
+		typ: typ,
 	}
 }
 
@@ -782,8 +786,11 @@ func (col *indexedColumnBuffer) Clone() ColumnBuffer {
 			values:      append([]int32{}, col.values...),
 			columnIndex: col.columnIndex,
 		},
+		typ: col.typ,
 	}
 }
+
+func (col *indexedColumnBuffer) Type() Type { return col.typ }
 
 func (col *indexedColumnBuffer) ColumnIndex() ColumnIndex { return indexedColumnIndex{col} }
 
@@ -804,8 +811,7 @@ func (col *indexedColumnBuffer) Len() int { return len(col.values) }
 func (col *indexedColumnBuffer) Less(i, j int) bool {
 	u := col.dict.Index(int(col.values[i]))
 	v := col.dict.Index(int(col.values[j]))
-	t := col.dict.Type()
-	return t.Compare(u, v) < 0
+	return col.typ.Compare(u, v) < 0
 }
 
 func (col *indexedColumnBuffer) Swap(i, j int) {
@@ -857,10 +863,10 @@ func (index indexedColumnIndex) MaxValue(int) []byte {
 	return max.Bytes()
 }
 func (index indexedColumnIndex) IsAscending() bool {
-	return index.dict.Type().Compare(index.Bounds()) < 0
+	return index.typ.Compare(index.Bounds()) < 0
 }
 func (index indexedColumnIndex) IsDescending() bool {
-	return index.dict.Type().Compare(index.Bounds()) > 0
+	return index.typ.Compare(index.Bounds()) > 0
 }
 
 type indexedOffsetIndex struct{ *indexedColumnBuffer }

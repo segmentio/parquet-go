@@ -140,6 +140,7 @@ func checkRowGroupColumnIndex(rowGroup parquet.RowGroup) error {
 }
 
 func checkColumnChunkColumnIndex(columnChunk parquet.ColumnChunk) error {
+	columnType := columnChunk.Type()
 	columnIndex := columnChunk.ColumnIndex()
 	numPages := columnIndex.NumPages()
 	pagesRead := 0
@@ -180,7 +181,16 @@ func checkColumnChunkColumnIndex(columnChunk parquet.ColumnChunk) error {
 			return fmt.Errorf("page only contained null values but the index did not categorize it as a null page: nulls=%d", numNulls)
 		}
 
-		// TODO: the column chunk needs to expose its type so we can validate IsAscending/IsDescending
+		switch {
+		case columnIndex.IsAscending():
+			if columnType.Compare(min, max) > 0 {
+				return fmt.Errorf("column index is declared to be in ascending order but %v > %v", min, max)
+			}
+		case columnIndex.IsDescending():
+			if columnType.Compare(min, max) < 0 {
+				return fmt.Errorf("column index is declared to be in desending order but %v < %v", min, max)
+			}
+		}
 
 		pagesRead++
 		return nil

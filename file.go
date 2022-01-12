@@ -378,18 +378,8 @@ type fileColumnChunk struct {
 	chunk       *format.ColumnChunk
 }
 
-func (c *fileColumnChunk) ColumnIndex() ColumnIndex {
-	if c.columnIndex == nil {
-		return nil
-	}
-	return (*columnIndex)(c.columnIndex)
-}
-
-func (c *fileColumnChunk) OffsetIndex() OffsetIndex {
-	if c.offsetIndex == nil {
-		return nil
-	}
-	return (*offsetIndex)(c.offsetIndex)
+func (c *fileColumnChunk) Type() Type {
+	return c.column.Type()
 }
 
 func (c *fileColumnChunk) Column() int {
@@ -423,6 +413,20 @@ func (c *fileColumnChunk) setPagesOn(r *filePageReader) {
 	r.section = io.NewSectionReader(c.file, pageOffset, c.chunk.MetaData.TotalCompressedSize)
 	r.rbuf = bufio.NewReaderSize(r.section, defaultReadBufferSize)
 	r.decoder.Reset(r.protocol.NewReader(r.rbuf))
+}
+
+func (c *fileColumnChunk) ColumnIndex() ColumnIndex {
+	if c.columnIndex == nil {
+		return nil
+	}
+	return (*columnIndex)(c.columnIndex)
+}
+
+func (c *fileColumnChunk) OffsetIndex() OffsetIndex {
+	if c.offsetIndex == nil {
+		return nil
+	}
+	return (*offsetIndex)(c.offsetIndex)
 }
 
 type filePageReader struct {
