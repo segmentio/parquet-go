@@ -26,8 +26,8 @@ type Column struct {
 	names       []string
 	columns     []*Column
 	chunks      []*format.ColumnChunk
-	columnIndex []*ColumnIndex
-	offsetIndex []*OffsetIndex
+	columnIndex []*format.ColumnIndex
+	offsetIndex []*format.OffsetIndex
 	encoding    []encoding.Encoding
 	compression []compress.Codec
 
@@ -279,8 +279,8 @@ func (cl *columnLoader) open(file *File, path []string) (*Column, error) {
 		cl.rowGroupColumnIndex++
 
 		c.chunks = make([]*format.ColumnChunk, 0, len(rowGroups))
-		c.columnIndex = make([]*ColumnIndex, 0, len(rowGroups))
-		c.offsetIndex = make([]*OffsetIndex, 0, len(rowGroups))
+		c.columnIndex = make([]*format.ColumnIndex, 0, len(rowGroups))
+		c.offsetIndex = make([]*format.OffsetIndex, 0, len(rowGroups))
 
 		for i, rowGroup := range rowGroups {
 			if rowGroupColumnIndex >= len(rowGroup.Columns) {

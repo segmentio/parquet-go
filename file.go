@@ -29,8 +29,8 @@ type File struct {
 	reader        io.ReaderAt
 	size          int64
 	root          *Column
-	columnIndexes []ColumnIndex
-	offsetIndexes []OffsetIndex
+	columnIndexes []format.ColumnIndex
+	offsetIndexes []format.OffsetIndex
 	rowGroups     []fileRowGroup
 }
 
@@ -123,14 +123,14 @@ func OpenFile(r io.ReaderAt, size int64, options ...FileOption) (*File, error) {
 // reading the page index section until after the file was opened. Note that in
 // this case the page index is not cached within the file, programs are expected
 // to make use of independently from the parquet package.
-func (f *File) ReadPageIndex() ([]ColumnIndex, []OffsetIndex, error) {
+func (f *File) ReadPageIndex() ([]format.ColumnIndex, []format.OffsetIndex, error) {
 	section := acquireBufferedSectionReader(nil, 0, 0)
 	decoder := thrift.NewDecoder(f.protocol.NewReader(section))
 	defer releaseBufferedSectionReader(section)
 	return f.readPageIndex(section, decoder)
 }
 
-func (f *File) readPageIndex(section *bufferedSectionReader, decoder *thrift.Decoder) ([]ColumnIndex, []OffsetIndex, error) {
+func (f *File) readPageIndex(section *bufferedSectionReader, decoder *thrift.Decoder) ([]format.ColumnIndex, []format.OffsetIndex, error) {
 	if len(f.metadata.RowGroups) == 0 || len(f.metadata.RowGroups[0].Columns) == 0 {
 		return nil, nil, nil
 	}
@@ -151,14 +151,14 @@ func (f *File) readPageIndex(section *bufferedSectionReader, decoder *thrift.Dec
 	}
 
 	numColumnChunks := len(f.metadata.RowGroups) * len(f.metadata.RowGroups[0].Columns)
-	columnIndexes := make([]ColumnIndex, 0, numColumnChunks)
-	offsetIndexes := make([]OffsetIndex, 0, numColumnChunks)
+	columnIndexes := make([]format.ColumnIndex, 0, numColumnChunks)
+	offsetIndexes := make([]format.OffsetIndex, 0, numColumnChunks)
 	section.Reset(f.reader, indexOffset, indexLength)
 
 	for i := range f.metadata.RowGroups {
 		for j := range f.metadata.RowGroups[i].Columns {
 			n := len(columnIndexes)
-			columnIndexes = append(columnIndexes, ColumnIndex{})
+			columnIndexes = append(columnIndexes, format.ColumnIndex{})
 
 			if err := decoder.Decode(&columnIndexes[n]); err != nil {
 				return nil, nil, fmt.Errorf("reading column index %d of row group %d: %w", j, i, err)
@@ -169,7 +169,7 @@ func (f *File) readPageIndex(section *bufferedSectionReader, decoder *thrift.Dec
 	for i := range f.metadata.RowGroups {
 		for j := range f.metadata.RowGroups[i].Columns {
 			n := len(offsetIndexes)
-			offsetIndexes = append(offsetIndexes, OffsetIndex{})
+			offsetIndexes = append(offsetIndexes, format.OffsetIndex{})
 
 			if err := decoder.Decode(&offsetIndexes[n]); err != nil {
 				return nil, nil, fmt.Errorf("reading offset index %d of row group %d: %w", j, i, err)
@@ -215,13 +215,13 @@ func (f *File) ReadAt(b []byte, off int64) (int, error) {
 //
 // If the file did not contain a column index, the method returns an empty slice
 // and nil error.
-func (f *File) ColumnIndexes() []ColumnIndex { return f.columnIndexes }
+func (f *File) ColumnIndexes() []format.ColumnIndex { return f.columnIndexes }
 
 // OffsetIndexes returns the page index of the parquet file f.
 //
 // If the file did not contain an offset index, the method returns an empty
 // slice and nil error.
-func (f *File) OffsetIndexes() []OffsetIndex { return f.offsetIndexes }
+func (f *File) OffsetIndexes() []format.OffsetIndex { return f.offsetIndexes }
 
 // Lookup returns the value associated with the given key in the file key/value
 // metadata.
@@ -231,24 +231,24 @@ func (f *File) Lookup(key string) (value string, ok bool) {
 	return lookupKeyValueMetadata(f.metadata.KeyValueMetadata, key)
 }
 
-func (f *File) readColumnIndex(chunk *format.ColumnChunk) (*ColumnIndex, error) {
+func (f *File) readColumnIndex(chunk *format.ColumnChunk) (*format.ColumnIndex, error) {
 	columnIndex := new(format.ColumnIndex)
 
 	section := acquireBufferedSectionReader(f.reader, chunk.ColumnIndexOffset, int64(chunk.ColumnIndexLength))
 	defer releaseBufferedSectionReader(section)
 
 	err := thrift.NewDecoder(f.protocol.NewReader(section)).Decode(columnIndex)
-	return (*ColumnIndex)(columnIndex), err
+	return columnIndex, err
 }
 
-func (f *File) readOffsetIndex(chunk *format.ColumnChunk) (*OffsetIndex, error) {
+func (f *File) readOffsetIndex(chunk *format.ColumnChunk) (*format.OffsetIndex, error) {
 	offsetIndex := new(format.OffsetIndex)
 
 	section := acquireBufferedSectionReader(f.reader, chunk.OffsetIndexOffset, int64(chunk.OffsetIndexLength))
 	defer releaseBufferedSectionReader(section)
 
 	err := thrift.NewDecoder(f.protocol.NewReader(section)).Decode(offsetIndex)
-	return (*OffsetIndex)(offsetIndex), err
+	return offsetIndex, err
 }
 
 func (f *File) hasIndexes() bool {
@@ -373,17 +373,13 @@ func (s *fileSortingColumn) NullsFirst() bool { return s.nullsFirst }
 type fileColumnChunk struct {
 	file        *File
 	column      *Column
-	columnIndex *ColumnIndex
-	offsetIndex *OffsetIndex
+	columnIndex *format.ColumnIndex
+	offsetIndex *format.OffsetIndex
 	chunk       *format.ColumnChunk
 }
 
-func (c *fileColumnChunk) ColumnIndex() *ColumnIndex {
-	return c.columnIndex
-}
-
-func (c *fileColumnChunk) OffsetIndex() *OffsetIndex {
-	return c.offsetIndex
+func (c *fileColumnChunk) Type() Type {
+	return c.column.Type()
 }
 
 func (c *fileColumnChunk) Column() int {
@@ -419,9 +415,23 @@ func (c *fileColumnChunk) setPagesOn(r *filePageReader) {
 	r.decoder.Reset(r.protocol.NewReader(r.rbuf))
 }
 
+func (c *fileColumnChunk) ColumnIndex() ColumnIndex {
+	if c.columnIndex == nil {
+		return nil
+	}
+	return (*columnIndex)(c.columnIndex)
+}
+
+func (c *fileColumnChunk) OffsetIndex() OffsetIndex {
+	if c.offsetIndex == nil {
+		return nil
+	}
+	return (*offsetIndex)(c.offsetIndex)
+}
+
 type filePageReader struct {
-	columnIndex *ColumnIndex
-	offsetIndex *OffsetIndex
+	columnIndex *format.ColumnIndex
+	offsetIndex *format.OffsetIndex
 	chunk       *format.ColumnChunk
 	protocol    thrift.CompactProtocol
 	decoder     thrift.Decoder
@@ -588,7 +598,7 @@ func (p *filePage) statistics() *format.Statistics {
 	}
 }
 
-func (p *filePage) parseColumnIndex(columnIndex *ColumnIndex) (err error) {
+func (p *filePage) parseColumnIndex(columnIndex *format.ColumnIndex) (err error) {
 	if p.index >= len(columnIndex.NullPages) {
 		return p.errColumnIndex(errPageIndexExceedsColumnIndexNullPages)
 	}
@@ -602,7 +612,8 @@ func (p *filePage) parseColumnIndex(columnIndex *ColumnIndex) (err error) {
 		return p.errColumnIndex(errPageIndexExceedsColumnIndexNullCounts)
 	}
 
-	minValue, maxValue, nullPage := columnIndex.PageBounds(p.index)
+	minValue := columnIndex.MinValues[p.index]
+	maxValue := columnIndex.MaxValues[p.index]
 
 	if stats := p.statistics(); stats != nil {
 		if stats.MinValue == nil {
@@ -612,11 +623,11 @@ func (p *filePage) parseColumnIndex(columnIndex *ColumnIndex) (err error) {
 			stats.MaxValue = maxValue
 		}
 		if stats.NullCount == 0 {
-			stats.NullCount = columnIndex.PageNulls(p.index)
+			stats.NullCount = columnIndex.NullCounts[p.index]
 		}
 	}
 
-	if nullPage {
+	if columnIndex.NullPages[p.index] {
 		p.minValue = Value{}
 		p.maxValue = Value{}
 	} else {

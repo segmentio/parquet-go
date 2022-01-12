@@ -684,7 +684,7 @@ func newIndexedType(typ Type, dict Dictionary) *indexedType {
 }
 
 func (t *indexedType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
-	return newIndexedColumnBuffer(t.dict, columnIndex, bufferSize)
+	return newIndexedColumnBuffer(t.dict, t, columnIndex, bufferSize)
 }
 
 func (t *indexedType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -763,15 +763,19 @@ func (r *indexedPageReader) ReadValues(values []Value) (n int, err error) {
 	return n, err
 }
 
-type indexedColumnBuffer struct{ indexedPage }
+type indexedColumnBuffer struct {
+	indexedPage
+	typ Type
+}
 
-func newIndexedColumnBuffer(dict Dictionary, columnIndex, bufferSize int) *indexedColumnBuffer {
+func newIndexedColumnBuffer(dict Dictionary, typ Type, columnIndex, bufferSize int) *indexedColumnBuffer {
 	return &indexedColumnBuffer{
 		indexedPage: indexedPage{
 			dict:        dict,
 			values:      make([]int32, 0, bufferSize/4),
 			columnIndex: ^int8(columnIndex),
 		},
+		typ: typ,
 	}
 }
 
@@ -782,12 +786,15 @@ func (col *indexedColumnBuffer) Clone() ColumnBuffer {
 			values:      append([]int32{}, col.values...),
 			columnIndex: col.columnIndex,
 		},
+		typ: col.typ,
 	}
 }
 
-func (col *indexedColumnBuffer) ColumnIndex() *ColumnIndex { return columnIndexOf(col) }
+func (col *indexedColumnBuffer) Type() Type { return col.typ }
 
-func (col *indexedColumnBuffer) OffsetIndex() *OffsetIndex { return &zeroOffsetIndex }
+func (col *indexedColumnBuffer) ColumnIndex() ColumnIndex { return indexedColumnIndex{col} }
+
+func (col *indexedColumnBuffer) OffsetIndex() OffsetIndex { return indexedOffsetIndex{col} }
 
 func (col *indexedColumnBuffer) Dictionary() Dictionary { return col.dict }
 
@@ -804,8 +811,7 @@ func (col *indexedColumnBuffer) Len() int { return len(col.values) }
 func (col *indexedColumnBuffer) Less(i, j int) bool {
 	u := col.dict.Index(int(col.values[i]))
 	v := col.dict.Index(int(col.values[j]))
-	t := col.dict.Type()
-	return t.Compare(u, v) < 0
+	return col.typ.Compare(u, v) < 0
 }
 
 func (col *indexedColumnBuffer) Swap(i, j int) {
@@ -842,6 +848,31 @@ func (col *indexedColumnBuffer) ReadRowAt(row Row, index int) (Row, error) {
 		return append(row, v), nil
 	}
 }
+
+type indexedColumnIndex struct{ *indexedColumnBuffer }
+
+func (index indexedColumnIndex) NumPages() int       { return 1 }
+func (index indexedColumnIndex) NullCount(int) int64 { return 0 }
+func (index indexedColumnIndex) NullPage(int) bool   { return false }
+func (index indexedColumnIndex) MinValue(int) []byte {
+	min, _ := index.Bounds()
+	return min.Bytes()
+}
+func (index indexedColumnIndex) MaxValue(int) []byte {
+	_, max := index.Bounds()
+	return max.Bytes()
+}
+func (index indexedColumnIndex) IsAscending() bool {
+	return index.typ.Compare(index.Bounds()) < 0
+}
+func (index indexedColumnIndex) IsDescending() bool {
+	return index.typ.Compare(index.Bounds()) > 0
+}
+
+type indexedOffsetIndex struct{ *indexedColumnBuffer }
+
+func (index indexedOffsetIndex) NumPages() int                          { return 1 }
+func (index indexedOffsetIndex) PageLocation(int) (int64, int64, int64) { return 0, index.Size(), 0 }
 
 type indexedValueDecoder struct {
 	decoder encoding.Decoder

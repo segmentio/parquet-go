@@ -414,7 +414,7 @@ func (page *repeatedPage) Dictionary() Dictionary {
 }
 
 func (page *repeatedPage) NumRows() int {
-	return countLevelsNotEqual(page.repetitionLevels, page.maxRepetitionLevel)
+	return countLevelsEqual(page.repetitionLevels, 0)
 }
 
 func (page *repeatedPage) NumValues() int {
@@ -555,29 +555,52 @@ func (page *booleanPage) NumValues() int { return len(page.values) }
 
 func (page *booleanPage) NumNulls() int { return 0 }
 
+func (page *booleanPage) min() bool {
+	for _, value := range page.values {
+		if !value {
+			return false
+		}
+	}
+	return len(page.values) > 0
+}
+
+func (page *booleanPage) max() bool {
+	for _, value := range page.values {
+		if value {
+			return true
+		}
+	}
+	return false
+}
+
+func (page *booleanPage) bounds() (min, max bool) {
+	hasFalse, hasTrue := false, false
+
+	for _, value := range page.values {
+		if value {
+			hasTrue = true
+		} else {
+			hasFalse = true
+		}
+		if hasTrue && hasFalse {
+			break
+		}
+	}
+
+	if !hasFalse {
+		min = true
+	}
+	if hasTrue {
+		max = true
+	}
+	return min, max
+}
+
 func (page *booleanPage) Bounds() (min, max Value) {
 	if len(page.values) > 0 {
-		min = makeValueBoolean(false)
-		max = makeValueBoolean(false)
-		hasFalse, hasTrue := false, false
-
-		for _, value := range page.values {
-			if value {
-				hasTrue = true
-			} else {
-				hasFalse = true
-			}
-			if hasTrue && hasFalse {
-				break
-			}
-		}
-
-		if !hasFalse {
-			min = makeValueBoolean(true)
-		}
-		if hasTrue {
-			max = makeValueBoolean(true)
-		}
+		minBool, maxBool := page.bounds()
+		min = makeValueBoolean(minBool)
+		max = makeValueBoolean(maxBool)
 	}
 	return min, max
 }
@@ -632,9 +655,15 @@ func (page *int32Page) NumValues() int { return len(page.values) }
 
 func (page *int32Page) NumNulls() int { return 0 }
 
+func (page *int32Page) min() int32 { return bits.MinInt32(page.values) }
+
+func (page *int32Page) max() int32 { return bits.MaxInt32(page.values) }
+
+func (page *int32Page) bounds() (min, max int32) { return bits.MinMaxInt32(page.values) }
+
 func (page *int32Page) Bounds() (min, max Value) {
 	if len(page.values) > 0 {
-		minInt32, maxInt32 := bits.MinMaxInt32(page.values)
+		minInt32, maxInt32 := page.bounds()
 		min = makeValueInt32(minInt32)
 		max = makeValueInt32(maxInt32)
 	}
@@ -691,9 +720,15 @@ func (page *int64Page) NumValues() int { return len(page.values) }
 
 func (page *int64Page) NumNulls() int { return 0 }
 
+func (page *int64Page) min() int64 { return bits.MinInt64(page.values) }
+
+func (page *int64Page) max() int64 { return bits.MaxInt64(page.values) }
+
+func (page *int64Page) bounds() (min, max int64) { return bits.MinMaxInt64(page.values) }
+
 func (page *int64Page) Bounds() (min, max Value) {
 	if len(page.values) > 0 {
-		minInt64, maxInt64 := bits.MinMaxInt64(page.values)
+		minInt64, maxInt64 := page.bounds()
 		min = makeValueInt64(minInt64)
 		max = makeValueInt64(maxInt64)
 	}
@@ -750,9 +785,17 @@ func (page *int96Page) NumValues() int { return len(page.values) }
 
 func (page *int96Page) NumNulls() int { return 0 }
 
+func (page *int96Page) min() deprecated.Int96 { return deprecated.MinInt96(page.values) }
+
+func (page *int96Page) max() deprecated.Int96 { return deprecated.MaxInt96(page.values) }
+
+func (page *int96Page) bounds() (min, max deprecated.Int96) {
+	return deprecated.MinMaxInt96(page.values)
+}
+
 func (page *int96Page) Bounds() (min, max Value) {
 	if len(page.values) > 0 {
-		minInt96, maxInt96 := deprecated.MinMaxInt96(page.values)
+		minInt96, maxInt96 := page.bounds()
 		min = makeValueInt96(minInt96)
 		max = makeValueInt96(maxInt96)
 	}
@@ -809,9 +852,15 @@ func (page *floatPage) NumValues() int { return len(page.values) }
 
 func (page *floatPage) NumNulls() int { return 0 }
 
+func (page *floatPage) min() float32 { return bits.MinFloat32(page.values) }
+
+func (page *floatPage) max() float32 { return bits.MaxFloat32(page.values) }
+
+func (page *floatPage) bounds() (min, max float32) { return bits.MinMaxFloat32(page.values) }
+
 func (page *floatPage) Bounds() (min, max Value) {
 	if len(page.values) > 0 {
-		minFloat32, maxFloat32 := bits.MinMaxFloat32(page.values)
+		minFloat32, maxFloat32 := page.bounds()
 		min = makeValueFloat(minFloat32)
 		max = makeValueFloat(maxFloat32)
 	}
@@ -868,9 +917,15 @@ func (page *doublePage) NumValues() int { return len(page.values) }
 
 func (page *doublePage) NumNulls() int { return 0 }
 
+func (page *doublePage) min() float64 { return bits.MinFloat64(page.values) }
+
+func (page *doublePage) max() float64 { return bits.MaxFloat64(page.values) }
+
+func (page *doublePage) bounds() (min, max float64) { return bits.MinMaxFloat64(page.values) }
+
 func (page *doublePage) Bounds() (min, max Value) {
 	if len(page.values) > 0 {
-		minFloat64, maxFloat64 := bits.MinMaxFloat64(page.values)
+		minFloat64, maxFloat64 := page.bounds()
 		min = makeValueDouble(minFloat64)
 		max = makeValueDouble(maxFloat64)
 	}
@@ -927,21 +982,53 @@ func (page *byteArrayPage) NumValues() int { return page.values.Len() }
 
 func (page *byteArrayPage) NumNulls() int { return 0 }
 
-func (page *byteArrayPage) Bounds() (min, max Value) {
+func (page *byteArrayPage) min() (min []byte) {
 	if page.values.Len() > 0 {
-		minBytes := page.values.Index(0)
-		maxBytes := minBytes
+		min = page.values.Index(0)
+		for i := 1; i < page.values.Len(); i++ {
+			v := page.values.Index(i)
+			if string(v) < string(min) {
+				min = v
+			}
+		}
+	}
+	return min
+}
+
+func (page *byteArrayPage) max() (max []byte) {
+	if page.values.Len() > 0 {
+		max = page.values.Index(0)
+		for i := 1; i < page.values.Len(); i++ {
+			v := page.values.Index(i)
+			if string(v) > string(max) {
+				max = v
+			}
+		}
+	}
+	return max
+}
+
+func (page *byteArrayPage) bounds() (min, max []byte) {
+	if page.values.Len() > 0 {
+		min = page.values.Index(0)
+		max = min
 
 		for i := 1; i < page.values.Len(); i++ {
 			v := page.values.Index(i)
 			switch {
-			case string(v) < string(minBytes):
-				minBytes = v
-			case string(v) > string(maxBytes):
-				maxBytes = v
+			case string(v) < string(min):
+				min = v
+			case string(v) > string(max):
+				max = v
 			}
 		}
+	}
+	return min, max
+}
 
+func (page *byteArrayPage) Bounds() (min, max Value) {
+	if page.values.Len() > 0 {
+		minBytes, maxBytes := page.bounds()
 		min = makeValueBytes(ByteArray, minBytes)
 		max = makeValueBytes(ByteArray, maxBytes)
 	}
@@ -999,9 +1086,21 @@ func (page *fixedLenByteArrayPage) NumValues() int { return len(page.data) / pag
 
 func (page *fixedLenByteArrayPage) NumNulls() int { return 0 }
 
+func (page *fixedLenByteArrayPage) min() []byte {
+	return bits.MinFixedLenByteArray(page.size, page.data)
+}
+
+func (page *fixedLenByteArrayPage) max() []byte {
+	return bits.MaxFixedLenByteArray(page.size, page.data)
+}
+
+func (page *fixedLenByteArrayPage) bounds() (min, max []byte) {
+	return bits.MinMaxFixedLenByteArray(page.size, page.data)
+}
+
 func (page *fixedLenByteArrayPage) Bounds() (min, max Value) {
 	if len(page.data) > 0 {
-		minBytes, maxBytes := bits.MinMaxFixedLenByteArray(page.size, page.data)
+		minBytes, maxBytes := page.bounds()
 		min = makeValueBytes(FixedLenByteArray, minBytes)
 		max = makeValueBytes(FixedLenByteArray, maxBytes)
 	}
@@ -1053,9 +1152,17 @@ func (r *fixedLenByteArrayPageReader) ReadValues(values []Value) (n int, err err
 
 type uint32Page struct{ *int32Page }
 
+func (page uint32Page) min() uint32 { return bits.MinUint32(bits.Int32ToUint32(page.values)) }
+
+func (page uint32Page) max() uint32 { return bits.MaxUint32(bits.Int32ToUint32(page.values)) }
+
+func (page uint32Page) bounds() (min, max uint32) {
+	return bits.MinMaxUint32(bits.Int32ToUint32(page.values))
+}
+
 func (page uint32Page) Bounds() (min, max Value) {
 	if len(page.values) > 0 {
-		minUint32, maxUint32 := bits.MinMaxUint32(bits.Int32ToUint32(page.values))
+		minUint32, maxUint32 := page.bounds()
 		min = makeValueInt32(int32(minUint32))
 		max = makeValueInt32(int32(maxUint32))
 	}
@@ -1068,9 +1175,17 @@ func (page uint32Page) Slice(i, j int) BufferedPage {
 
 type uint64Page struct{ *int64Page }
 
+func (page uint64Page) min() uint64 { return bits.MinUint64(bits.Int64ToUint64(page.values)) }
+
+func (page uint64Page) max() uint64 { return bits.MaxUint64(bits.Int64ToUint64(page.values)) }
+
+func (page uint64Page) bounds() (min, max uint64) {
+	return bits.MinMaxUint64(bits.Int64ToUint64(page.values))
+}
+
 func (page uint64Page) Bounds() (min, max Value) {
 	if len(page.values) > 0 {
-		minUint64, maxUint64 := bits.MinMaxUint64(bits.Int64ToUint64(page.values))
+		minUint64, maxUint64 := page.bounds()
 		min = makeValueInt64(int64(minUint64))
 		max = makeValueInt64(int64(maxUint64))
 	}

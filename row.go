@@ -41,6 +41,12 @@ func (row Row) startsWith(columnIndex int) bool {
 	return len(row) > 0 && int(row[0].Column()) == columnIndex
 }
 
+// RowSeeker is an interface implemented by readers of parquet rows which can be
+// positioned at a specific row index.
+type RowSeeker interface {
+	SeekToRow(int64) error
+}
+
 // RowReader reads a sequence of parquet rows.
 type RowReader interface {
 	ReadRow(Row) (Row, error)

@@ -7,7 +7,6 @@ import (
 
 	"github.com/segmentio/parquet/deprecated"
 	"github.com/segmentio/parquet/encoding"
-	"github.com/segmentio/parquet/format"
 )
 
 // ColumnBuffer is an interface representing columns of a row group.
@@ -63,31 +62,26 @@ type ColumnBuffer interface {
 	Size() int64
 }
 
-var (
-	// This variable is used as placeholder when returning the offset index of
-	// column buffers declared in this file. All column buffers are made of a
-	// single page starting at the first offset and first row of their parent
-	// row group; only the compressed page size information isn't available,
-	// so it is also set to zero.
-	zeroOffsetIndex = OffsetIndex{PageLocations: []format.PageLocation{{}}}
-)
-
-func columnIndexOf(col ColumnBuffer) *ColumnIndex {
-	min, max := col.Page().Bounds()
-	return &ColumnIndex{
-		NullPages:  []bool{false},
-		MinValues:  [][]byte{min.Bytes()},
-		MaxValues:  [][]byte{max.Bytes()},
-		NullCounts: []int64{0},
+func columnIndexOfNullable(base ColumnBuffer, maxDefinitionLevel int8, definitionLevels []int8) ColumnIndex {
+	return &nullableColumnIndex{
+		ColumnIndex:        base.ColumnIndex(),
+		maxDefinitionLevel: maxDefinitionLevel,
+		definitionLevels:   definitionLevels,
 	}
 }
 
-func columnIndexOfNullable(col ColumnBuffer, maxDefinitionLevel int8, definitionLevels []int8) *ColumnIndex {
-	nullCount := countLevelsNotEqual(definitionLevels, maxDefinitionLevel)
-	columnIndex := columnIndexOf(col)
-	columnIndex.NullPages[0] = nullCount == len(definitionLevels)
-	columnIndex.NullCounts[0] = int64(nullCount)
-	return columnIndex
+type nullableColumnIndex struct {
+	ColumnIndex
+	maxDefinitionLevel int8
+	definitionLevels   []int8
+}
+
+func (index *nullableColumnIndex) NullPage(i int) bool {
+	return index.NullCount(i) == int64(len(index.definitionLevels))
+}
+
+func (index *nullableColumnIndex) NullCount(i int) int64 {
+	return int64(countLevelsNotEqual(index.definitionLevels, index.maxDefinitionLevel))
 }
 
 type nullOrdering func(column ColumnBuffer, i, j int, maxDefinitionLevel, definitionLevel1, definitionLevel2 int8) bool
@@ -154,12 +148,16 @@ func (col *optionalColumnBuffer) Clone() ColumnBuffer {
 	}
 }
 
-func (col *optionalColumnBuffer) ColumnIndex() *ColumnIndex {
+func (col *optionalColumnBuffer) Type() Type {
+	return col.base.Type()
+}
+
+func (col *optionalColumnBuffer) ColumnIndex() ColumnIndex {
 	return columnIndexOfNullable(col.base, col.maxDefinitionLevel, col.definitionLevels)
 }
 
-func (col *optionalColumnBuffer) OffsetIndex() *OffsetIndex {
-	return &zeroOffsetIndex
+func (col *optionalColumnBuffer) OffsetIndex() OffsetIndex {
+	return col.base.OffsetIndex()
 }
 
 func (col *optionalColumnBuffer) Dictionary() Dictionary {
@@ -392,12 +390,16 @@ func (col *repeatedColumnBuffer) Clone() ColumnBuffer {
 	}
 }
 
-func (col *repeatedColumnBuffer) ColumnIndex() *ColumnIndex {
+func (col *repeatedColumnBuffer) Type() Type {
+	return col.base.Type()
+}
+
+func (col *repeatedColumnBuffer) ColumnIndex() ColumnIndex {
 	return columnIndexOfNullable(col.base, col.maxDefinitionLevel, col.definitionLevels)
 }
 
-func (col *repeatedColumnBuffer) OffsetIndex() *OffsetIndex {
-	return &zeroOffsetIndex
+func (col *repeatedColumnBuffer) OffsetIndex() OffsetIndex {
+	return col.base.OffsetIndex()
 }
 
 func (col *repeatedColumnBuffer) Dictionary() Dictionary {
@@ -655,14 +657,18 @@ func maxRowLengthOf(rows []region) (maxLength uint32) {
 // See Type.NewColumnBuffer for details about how these types get created.
 // =============================================================================
 
-type booleanColumnBuffer struct{ booleanPage }
+type booleanColumnBuffer struct {
+	booleanPage
+	typ Type
+}
 
-func newBooleanColumnBuffer(columnIndex, bufferSize int) *booleanColumnBuffer {
+func newBooleanColumnBuffer(typ Type, columnIndex, bufferSize int) *booleanColumnBuffer {
 	return &booleanColumnBuffer{
 		booleanPage: booleanPage{
 			values:      make([]bool, 0, bufferSize),
 			columnIndex: ^int8(columnIndex),
 		},
+		typ: typ,
 	}
 }
 
@@ -672,12 +678,15 @@ func (col *booleanColumnBuffer) Clone() ColumnBuffer {
 			values:      append([]bool{}, col.values...),
 			columnIndex: col.columnIndex,
 		},
+		typ: col.typ,
 	}
 }
 
-func (col *booleanColumnBuffer) ColumnIndex() *ColumnIndex { return columnIndexOf(col) }
+func (col *booleanColumnBuffer) Type() Type { return col.typ }
 
-func (col *booleanColumnBuffer) OffsetIndex() *OffsetIndex { return &zeroOffsetIndex }
+func (col *booleanColumnBuffer) ColumnIndex() ColumnIndex { return booleanColumnIndex{col} }
+
+func (col *booleanColumnBuffer) OffsetIndex() OffsetIndex { return booleanOffsetIndex{col} }
 
 func (col *booleanColumnBuffer) Dictionary() Dictionary { return nil }
 
@@ -730,14 +739,18 @@ func (col *booleanColumnBuffer) ReadRowAt(row Row, index int) (Row, error) {
 	}
 }
 
-type int32ColumnBuffer struct{ int32Page }
+type int32ColumnBuffer struct {
+	int32Page
+	typ Type
+}
 
-func newInt32ColumnBuffer(columnIndex, bufferSize int) *int32ColumnBuffer {
+func newInt32ColumnBuffer(typ Type, columnIndex, bufferSize int) *int32ColumnBuffer {
 	return &int32ColumnBuffer{
 		int32Page: int32Page{
 			values:      make([]int32, 0, bufferSize/4),
 			columnIndex: ^int8(columnIndex),
 		},
+		typ: typ,
 	}
 }
 
@@ -747,12 +760,15 @@ func (col *int32ColumnBuffer) Clone() ColumnBuffer {
 			values:      append([]int32{}, col.values...),
 			columnIndex: col.columnIndex,
 		},
+		typ: col.typ,
 	}
 }
 
-func (col *int32ColumnBuffer) ColumnIndex() *ColumnIndex { return columnIndexOf(col) }
+func (col *int32ColumnBuffer) Type() Type { return col.typ }
 
-func (col *int32ColumnBuffer) OffsetIndex() *OffsetIndex { return &zeroOffsetIndex }
+func (col *int32ColumnBuffer) ColumnIndex() ColumnIndex { return int32ColumnIndex{col} }
+
+func (col *int32ColumnBuffer) OffsetIndex() OffsetIndex { return int32OffsetIndex{col} }
 
 func (col *int32ColumnBuffer) Dictionary() Dictionary { return nil }
 
@@ -803,14 +819,18 @@ func (col *int32ColumnBuffer) ReadRowAt(row Row, index int) (Row, error) {
 	}
 }
 
-type int64ColumnBuffer struct{ int64Page }
+type int64ColumnBuffer struct {
+	int64Page
+	typ Type
+}
 
-func newInt64ColumnBuffer(columnIndex, bufferSize int) *int64ColumnBuffer {
+func newInt64ColumnBuffer(typ Type, columnIndex, bufferSize int) *int64ColumnBuffer {
 	return &int64ColumnBuffer{
 		int64Page: int64Page{
 			values:      make([]int64, 0, bufferSize/8),
 			columnIndex: ^int8(columnIndex),
 		},
+		typ: typ,
 	}
 }
 
@@ -820,12 +840,15 @@ func (col *int64ColumnBuffer) Clone() ColumnBuffer {
 			values:      append([]int64{}, col.values...),
 			columnIndex: col.columnIndex,
 		},
+		typ: col.typ,
 	}
 }
 
-func (col *int64ColumnBuffer) ColumnIndex() *ColumnIndex { return columnIndexOf(col) }
+func (col *int64ColumnBuffer) Type() Type { return col.typ }
 
-func (col *int64ColumnBuffer) OffsetIndex() *OffsetIndex { return &zeroOffsetIndex }
+func (col *int64ColumnBuffer) ColumnIndex() ColumnIndex { return int64ColumnIndex{col} }
+
+func (col *int64ColumnBuffer) OffsetIndex() OffsetIndex { return int64OffsetIndex{col} }
 
 func (col *int64ColumnBuffer) Dictionary() Dictionary { return nil }
 
@@ -876,14 +899,18 @@ func (col *int64ColumnBuffer) ReadRowAt(row Row, index int) (Row, error) {
 	}
 }
 
-type int96ColumnBuffer struct{ int96Page }
+type int96ColumnBuffer struct {
+	int96Page
+	typ Type
+}
 
-func newInt96ColumnBuffer(columnIndex, bufferSize int) *int96ColumnBuffer {
+func newInt96ColumnBuffer(typ Type, columnIndex, bufferSize int) *int96ColumnBuffer {
 	return &int96ColumnBuffer{
 		int96Page: int96Page{
 			values:      make([]deprecated.Int96, 0, bufferSize/12),
 			columnIndex: ^int8(columnIndex),
 		},
+		typ: typ,
 	}
 }
 
@@ -893,12 +920,15 @@ func (col *int96ColumnBuffer) Clone() ColumnBuffer {
 			values:      append([]deprecated.Int96{}, col.values...),
 			columnIndex: col.columnIndex,
 		},
+		typ: col.typ,
 	}
 }
 
-func (col *int96ColumnBuffer) ColumnIndex() *ColumnIndex { return columnIndexOf(col) }
+func (col *int96ColumnBuffer) Type() Type { return col.typ }
 
-func (col *int96ColumnBuffer) OffsetIndex() *OffsetIndex { return &zeroOffsetIndex }
+func (col *int96ColumnBuffer) ColumnIndex() ColumnIndex { return int96ColumnIndex{col} }
+
+func (col *int96ColumnBuffer) OffsetIndex() OffsetIndex { return int96OffsetIndex{col} }
 
 func (col *int96ColumnBuffer) Dictionary() Dictionary { return nil }
 
@@ -949,14 +979,18 @@ func (col *int96ColumnBuffer) ReadRowAt(row Row, index int) (Row, error) {
 	}
 }
 
-type floatColumnBuffer struct{ floatPage }
+type floatColumnBuffer struct {
+	floatPage
+	typ Type
+}
 
-func newFloatColumnBuffer(columnIndex, bufferSize int) *floatColumnBuffer {
+func newFloatColumnBuffer(typ Type, columnIndex, bufferSize int) *floatColumnBuffer {
 	return &floatColumnBuffer{
 		floatPage: floatPage{
 			values:      make([]float32, 0, bufferSize/4),
 			columnIndex: ^int8(columnIndex),
 		},
+		typ: typ,
 	}
 }
 
@@ -966,12 +1000,15 @@ func (col *floatColumnBuffer) Clone() ColumnBuffer {
 			values:      append([]float32{}, col.values...),
 			columnIndex: col.columnIndex,
 		},
+		typ: col.typ,
 	}
 }
 
-func (col *floatColumnBuffer) ColumnIndex() *ColumnIndex { return columnIndexOf(col) }
+func (col *floatColumnBuffer) Type() Type { return col.typ }
 
-func (col *floatColumnBuffer) OffsetIndex() *OffsetIndex { return &zeroOffsetIndex }
+func (col *floatColumnBuffer) ColumnIndex() ColumnIndex { return floatColumnIndex{col} }
+
+func (col *floatColumnBuffer) OffsetIndex() OffsetIndex { return floatOffsetIndex{col} }
 
 func (col *floatColumnBuffer) Dictionary() Dictionary { return nil }
 
@@ -1022,14 +1059,18 @@ func (col *floatColumnBuffer) ReadRowAt(row Row, index int) (Row, error) {
 	}
 }
 
-type doubleColumnBuffer struct{ doublePage }
+type doubleColumnBuffer struct {
+	doublePage
+	typ Type
+}
 
-func newDoubleColumnBuffer(columnIndex, bufferSize int) *doubleColumnBuffer {
+func newDoubleColumnBuffer(typ Type, columnIndex, bufferSize int) *doubleColumnBuffer {
 	return &doubleColumnBuffer{
 		doublePage: doublePage{
 			values:      make([]float64, 0, bufferSize/8),
 			columnIndex: ^int8(columnIndex),
 		},
+		typ: typ,
 	}
 }
 
@@ -1039,12 +1080,15 @@ func (col *doubleColumnBuffer) Clone() ColumnBuffer {
 			values:      append([]float64{}, col.values...),
 			columnIndex: col.columnIndex,
 		},
+		typ: col.typ,
 	}
 }
 
-func (col *doubleColumnBuffer) ColumnIndex() *ColumnIndex { return columnIndexOf(col) }
+func (col *doubleColumnBuffer) Type() Type { return col.typ }
 
-func (col *doubleColumnBuffer) OffsetIndex() *OffsetIndex { return &zeroOffsetIndex }
+func (col *doubleColumnBuffer) ColumnIndex() ColumnIndex { return doubleColumnIndex{col} }
+
+func (col *doubleColumnBuffer) OffsetIndex() OffsetIndex { return doubleOffsetIndex{col} }
 
 func (col *doubleColumnBuffer) Dictionary() Dictionary { return nil }
 
@@ -1095,14 +1139,18 @@ func (col *doubleColumnBuffer) ReadRowAt(row Row, index int) (Row, error) {
 	}
 }
 
-type byteArrayColumnBuffer struct{ byteArrayPage }
+type byteArrayColumnBuffer struct {
+	byteArrayPage
+	typ Type
+}
 
-func newByteArrayColumnBuffer(columnIndex, bufferSize int) *byteArrayColumnBuffer {
+func newByteArrayColumnBuffer(typ Type, columnIndex, bufferSize int) *byteArrayColumnBuffer {
 	return &byteArrayColumnBuffer{
 		byteArrayPage: byteArrayPage{
 			values:      encoding.MakeByteArrayList(bufferSize / 16),
 			columnIndex: ^int8(columnIndex),
 		},
+		typ: typ,
 	}
 }
 
@@ -1112,12 +1160,15 @@ func (col *byteArrayColumnBuffer) Clone() ColumnBuffer {
 			values:      col.values.Clone(),
 			columnIndex: col.columnIndex,
 		},
+		typ: col.typ,
 	}
 }
 
-func (col *byteArrayColumnBuffer) ColumnIndex() *ColumnIndex { return columnIndexOf(col) }
+func (col *byteArrayColumnBuffer) Type() Type { return col.typ }
 
-func (col *byteArrayColumnBuffer) OffsetIndex() *OffsetIndex { return &zeroOffsetIndex }
+func (col *byteArrayColumnBuffer) ColumnIndex() ColumnIndex { return byteArrayColumnIndex{col} }
+
+func (col *byteArrayColumnBuffer) OffsetIndex() OffsetIndex { return byteArrayOffsetIndex{col} }
 
 func (col *byteArrayColumnBuffer) Dictionary() Dictionary { return nil }
 
@@ -1168,16 +1219,19 @@ func (col *byteArrayColumnBuffer) ReadRowAt(row Row, index int) (Row, error) {
 
 type fixedLenByteArrayColumnBuffer struct {
 	fixedLenByteArrayPage
+	typ Type
 	tmp []byte
 }
 
-func newFixedLenByteArrayColumnBuffer(size, columnIndex, bufferSize int) *fixedLenByteArrayColumnBuffer {
+func newFixedLenByteArrayColumnBuffer(typ Type, columnIndex, bufferSize int) *fixedLenByteArrayColumnBuffer {
+	size := typ.Length()
 	return &fixedLenByteArrayColumnBuffer{
 		fixedLenByteArrayPage: fixedLenByteArrayPage{
 			size:        size,
 			data:        make([]byte, 0, bufferSize),
 			columnIndex: ^int8(columnIndex),
 		},
+		typ: typ,
 		tmp: make([]byte, size),
 	}
 }
@@ -1189,13 +1243,20 @@ func (col *fixedLenByteArrayColumnBuffer) Clone() ColumnBuffer {
 			data:        append([]byte{}, col.data...),
 			columnIndex: col.columnIndex,
 		},
+		typ: col.typ,
 		tmp: make([]byte, col.size),
 	}
 }
 
-func (col *fixedLenByteArrayColumnBuffer) ColumnIndex() *ColumnIndex { return columnIndexOf(col) }
+func (col *fixedLenByteArrayColumnBuffer) Type() Type { return col.typ }
 
-func (col *fixedLenByteArrayColumnBuffer) OffsetIndex() *OffsetIndex { return &zeroOffsetIndex }
+func (col *fixedLenByteArrayColumnBuffer) ColumnIndex() ColumnIndex {
+	return fixedLenByteArrayColumnIndex{col}
+}
+
+func (col *fixedLenByteArrayColumnBuffer) OffsetIndex() OffsetIndex {
+	return fixedLenByteArrayOffsetIndex{col}
+}
 
 func (col *fixedLenByteArrayColumnBuffer) Dictionary() Dictionary { return nil }
 
@@ -1261,13 +1322,23 @@ func (col *fixedLenByteArrayColumnBuffer) ReadRowAt(row Row, index int) (Row, er
 
 type uint32ColumnBuffer struct{ *int32ColumnBuffer }
 
-func newUint32ColumnBuffer(columnIndex, bufferSize int) uint32ColumnBuffer {
-	return uint32ColumnBuffer{newInt32ColumnBuffer(columnIndex, bufferSize)}
+func newUint32ColumnBuffer(typ Type, columnIndex, bufferSize int) uint32ColumnBuffer {
+	return uint32ColumnBuffer{newInt32ColumnBuffer(typ, columnIndex, bufferSize)}
 }
 
-func (col uint32ColumnBuffer) Page() BufferedPage {
-	return uint32Page{&col.int32Page}
-}
+func (col uint32ColumnBuffer) ColumnIndex() ColumnIndex { return uint32ColumnIndex{col} }
+
+func (col uint32ColumnBuffer) page() uint32Page { return uint32Page{&col.int32Page} }
+
+func (col uint32ColumnBuffer) min() uint32 { return col.page().min() }
+
+func (col uint32ColumnBuffer) max() uint32 { return col.page().max() }
+
+func (col uint32ColumnBuffer) bounds() (min, max uint32) { return col.page().bounds() }
+
+func (col uint32ColumnBuffer) Page() BufferedPage { return col.page() }
+
+func (col uint32ColumnBuffer) Pages() PageReader { return onePage(col.page()) }
 
 func (col uint32ColumnBuffer) Clone() ColumnBuffer {
 	return uint32ColumnBuffer{col.int32ColumnBuffer.Clone().(*int32ColumnBuffer)}
@@ -1279,16 +1350,26 @@ func (col uint32ColumnBuffer) Less(i, j int) bool {
 
 type uint64ColumnBuffer struct{ *int64ColumnBuffer }
 
-func newUint64ColumnBuffer(columnIndex, bufferSize int) uint64ColumnBuffer {
-	return uint64ColumnBuffer{newInt64ColumnBuffer(columnIndex, bufferSize)}
+func newUint64ColumnBuffer(typ Type, columnIndex, bufferSize int) uint64ColumnBuffer {
+	return uint64ColumnBuffer{newInt64ColumnBuffer(typ, columnIndex, bufferSize)}
 }
+
+func (col uint64ColumnBuffer) ColumnIndex() ColumnIndex { return uint64ColumnIndex{col} }
+
+func (col uint64ColumnBuffer) page() uint64Page { return uint64Page{&col.int64Page} }
+
+func (col uint64ColumnBuffer) min() uint64 { return col.page().min() }
+
+func (col uint64ColumnBuffer) max() uint64 { return col.page().max() }
+
+func (col uint64ColumnBuffer) bounds() (min, max uint64) { return col.page().bounds() }
+
+func (col uint64ColumnBuffer) Page() BufferedPage { return col.page() }
+
+func (col uint64ColumnBuffer) Pages() PageReader { return onePage(col.page()) }
 
 func (col uint64ColumnBuffer) Clone() ColumnBuffer {
 	return uint64ColumnBuffer{col.int64ColumnBuffer.Clone().(*int64ColumnBuffer)}
-}
-
-func (col uint64ColumnBuffer) Page() BufferedPage {
-	return uint64Page{&col.int64Page}
 }
 
 func (col uint64ColumnBuffer) Less(i, j int) bool {

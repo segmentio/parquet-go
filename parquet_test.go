@@ -2,6 +2,7 @@ package parquet_test
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"reflect"
 
@@ -35,42 +36,48 @@ func forEachLeafColumn(col *parquet.Column, do func(*parquet.Column) error) erro
 	return nil
 }
 
-func forEachColumnPage(col *parquet.Column, do func(*parquet.Column, parquet.Page) error) error {
-	return forEachLeafColumn(col, func(leaf *parquet.Column) error {
-		pages := leaf.Pages()
-		for {
-			p, err := pages.ReadPage()
-			if err != nil {
-				if err == io.EOF {
-					err = nil
-				}
-				return err
+func forEachPage(pages parquet.PageReader, do func(parquet.Page) error) error {
+	for {
+		p, err := pages.ReadPage()
+		if err != nil {
+			if err == io.EOF {
+				err = nil
 			}
-			if err := do(leaf, p); err != nil {
+			return err
+		}
+		if err := do(p); err != nil {
+			return err
+		}
+	}
+}
+
+func forEachValue(values parquet.ValueReader, do func(parquet.Value) error) error {
+	buffer := [3]parquet.Value{}
+	for {
+		n, err := values.ReadValues(buffer[:])
+		for _, v := range buffer[:n] {
+			if err := do(v); err != nil {
 				return err
 			}
 		}
+		if err != nil {
+			if err == io.EOF {
+				err = nil
+			}
+			return err
+		}
+	}
+}
+
+func forEachColumnPage(col *parquet.Column, do func(*parquet.Column, parquet.Page) error) error {
+	return forEachLeafColumn(col, func(leaf *parquet.Column) error {
+		return forEachPage(leaf.Pages(), func(page parquet.Page) error { return do(leaf, page) })
 	})
 }
 
 func forEachColumnValue(col *parquet.Column, do func(*parquet.Column, parquet.Value) error) error {
 	return forEachColumnPage(col, func(leaf *parquet.Column, page parquet.Page) error {
-		buffer := [1]parquet.Value{}
-		values := page.Values()
-		for {
-			n, err := values.ReadValues(buffer[:])
-			if n > 0 {
-				if err := do(leaf, buffer[0]); err != nil {
-					return err
-				}
-			}
-			if err != nil {
-				if err == io.EOF {
-					err = nil
-				}
-				return err
-			}
-		}
+		return forEachValue(page.Values(), func(value parquet.Value) error { return do(leaf, value) })
 	})
 }
 
@@ -117,8 +124,12 @@ func writeParquetFileWithBuffer(w io.Writer, rows rows, options ...parquet.Write
 	}
 
 	writer := parquet.NewWriter(w, options...)
-	if _, err := parquet.CopyRows(writer, buffer.Rows()); err != nil {
+	numRows, err := parquet.CopyRows(writer, buffer.Rows())
+	if err != nil {
 		return err
+	}
+	if numRows != int64(len(rows)) {
+		return fmt.Errorf("wrong number of rows written from buffer to file: want=%d got=%d", len(rows), numRows)
 	}
 	return writer.Close()
 }
