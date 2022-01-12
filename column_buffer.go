@@ -7,7 +7,6 @@ import (
 
 	"github.com/segmentio/parquet/deprecated"
 	"github.com/segmentio/parquet/encoding"
-	"github.com/segmentio/parquet/format"
 )
 
 // ColumnBuffer is an interface representing columns of a row group.
@@ -63,31 +62,26 @@ type ColumnBuffer interface {
 	Size() int64
 }
 
-var (
-	// This variable is used as placeholder when returning the offset index of
-	// column buffers declared in this file. All column buffers are made of a
-	// single page starting at the first offset and first row of their parent
-	// row group; only the compressed page size information isn't available,
-	// so it is also set to zero.
-	zeroOffsetIndex = offsetIndex{PageLocations: []format.PageLocation{{}}}
-)
-
-func columnIndexOf(col ColumnBuffer) *columnIndex {
-	min, max := col.Page().Bounds()
-	return &columnIndex{
-		NullPages:  []bool{false},
-		MinValues:  [][]byte{min.Bytes()},
-		MaxValues:  [][]byte{max.Bytes()},
-		NullCounts: []int64{0},
+func columnIndexOfNullable(base ColumnBuffer, maxDefinitionLevel int8, definitionLevels []int8) ColumnIndex {
+	return &nullableColumnIndex{
+		ColumnIndex:        base.ColumnIndex(),
+		maxDefinitionLevel: maxDefinitionLevel,
+		definitionLevels:   definitionLevels,
 	}
 }
 
-func columnIndexOfNullable(col ColumnBuffer, maxDefinitionLevel int8, definitionLevels []int8) *columnIndex {
-	nullCount := countLevelsNotEqual(definitionLevels, maxDefinitionLevel)
-	columnIndex := columnIndexOf(col)
-	columnIndex.NullPages[0] = nullCount == len(definitionLevels)
-	columnIndex.NullCounts[0] = int64(nullCount)
-	return columnIndex
+type nullableColumnIndex struct {
+	ColumnIndex
+	maxDefinitionLevel int8
+	definitionLevels   []int8
+}
+
+func (index *nullableColumnIndex) NullPage(i int) bool {
+	return index.NullCount(i) == int64(len(index.definitionLevels))
+}
+
+func (index *nullableColumnIndex) NullCount(i int) int64 {
+	return int64(countLevelsNotEqual(index.definitionLevels, index.maxDefinitionLevel))
 }
 
 type nullOrdering func(column ColumnBuffer, i, j int, maxDefinitionLevel, definitionLevel1, definitionLevel2 int8) bool
@@ -159,7 +153,7 @@ func (col *optionalColumnBuffer) ColumnIndex() ColumnIndex {
 }
 
 func (col *optionalColumnBuffer) OffsetIndex() OffsetIndex {
-	return &zeroOffsetIndex
+	return col.base.OffsetIndex()
 }
 
 func (col *optionalColumnBuffer) Dictionary() Dictionary {
@@ -397,7 +391,7 @@ func (col *repeatedColumnBuffer) ColumnIndex() ColumnIndex {
 }
 
 func (col *repeatedColumnBuffer) OffsetIndex() OffsetIndex {
-	return &zeroOffsetIndex
+	return col.base.OffsetIndex()
 }
 
 func (col *repeatedColumnBuffer) Dictionary() Dictionary {
@@ -675,9 +669,9 @@ func (col *booleanColumnBuffer) Clone() ColumnBuffer {
 	}
 }
 
-func (col *booleanColumnBuffer) ColumnIndex() ColumnIndex { return columnIndexOf(col) }
+func (col *booleanColumnBuffer) ColumnIndex() ColumnIndex { return booleanColumnIndex{col} }
 
-func (col *booleanColumnBuffer) OffsetIndex() OffsetIndex { return &zeroOffsetIndex }
+func (col *booleanColumnBuffer) OffsetIndex() OffsetIndex { return booleanOffsetIndex{col} }
 
 func (col *booleanColumnBuffer) Dictionary() Dictionary { return nil }
 
@@ -750,9 +744,9 @@ func (col *int32ColumnBuffer) Clone() ColumnBuffer {
 	}
 }
 
-func (col *int32ColumnBuffer) ColumnIndex() ColumnIndex { return columnIndexOf(col) }
+func (col *int32ColumnBuffer) ColumnIndex() ColumnIndex { return int32ColumnIndex{col} }
 
-func (col *int32ColumnBuffer) OffsetIndex() OffsetIndex { return &zeroOffsetIndex }
+func (col *int32ColumnBuffer) OffsetIndex() OffsetIndex { return int32OffsetIndex{col} }
 
 func (col *int32ColumnBuffer) Dictionary() Dictionary { return nil }
 
@@ -823,9 +817,9 @@ func (col *int64ColumnBuffer) Clone() ColumnBuffer {
 	}
 }
 
-func (col *int64ColumnBuffer) ColumnIndex() ColumnIndex { return columnIndexOf(col) }
+func (col *int64ColumnBuffer) ColumnIndex() ColumnIndex { return int64ColumnIndex{col} }
 
-func (col *int64ColumnBuffer) OffsetIndex() OffsetIndex { return &zeroOffsetIndex }
+func (col *int64ColumnBuffer) OffsetIndex() OffsetIndex { return int64OffsetIndex{col} }
 
 func (col *int64ColumnBuffer) Dictionary() Dictionary { return nil }
 
@@ -896,9 +890,9 @@ func (col *int96ColumnBuffer) Clone() ColumnBuffer {
 	}
 }
 
-func (col *int96ColumnBuffer) ColumnIndex() ColumnIndex { return columnIndexOf(col) }
+func (col *int96ColumnBuffer) ColumnIndex() ColumnIndex { return int96ColumnIndex{col} }
 
-func (col *int96ColumnBuffer) OffsetIndex() OffsetIndex { return &zeroOffsetIndex }
+func (col *int96ColumnBuffer) OffsetIndex() OffsetIndex { return int96OffsetIndex{col} }
 
 func (col *int96ColumnBuffer) Dictionary() Dictionary { return nil }
 
@@ -969,9 +963,9 @@ func (col *floatColumnBuffer) Clone() ColumnBuffer {
 	}
 }
 
-func (col *floatColumnBuffer) ColumnIndex() ColumnIndex { return columnIndexOf(col) }
+func (col *floatColumnBuffer) ColumnIndex() ColumnIndex { return floatColumnIndex{col} }
 
-func (col *floatColumnBuffer) OffsetIndex() OffsetIndex { return &zeroOffsetIndex }
+func (col *floatColumnBuffer) OffsetIndex() OffsetIndex { return floatOffsetIndex{col} }
 
 func (col *floatColumnBuffer) Dictionary() Dictionary { return nil }
 
@@ -1042,9 +1036,9 @@ func (col *doubleColumnBuffer) Clone() ColumnBuffer {
 	}
 }
 
-func (col *doubleColumnBuffer) ColumnIndex() ColumnIndex { return columnIndexOf(col) }
+func (col *doubleColumnBuffer) ColumnIndex() ColumnIndex { return doubleColumnIndex{col} }
 
-func (col *doubleColumnBuffer) OffsetIndex() OffsetIndex { return &zeroOffsetIndex }
+func (col *doubleColumnBuffer) OffsetIndex() OffsetIndex { return doubleOffsetIndex{col} }
 
 func (col *doubleColumnBuffer) Dictionary() Dictionary { return nil }
 
@@ -1115,9 +1109,9 @@ func (col *byteArrayColumnBuffer) Clone() ColumnBuffer {
 	}
 }
 
-func (col *byteArrayColumnBuffer) ColumnIndex() ColumnIndex { return columnIndexOf(col) }
+func (col *byteArrayColumnBuffer) ColumnIndex() ColumnIndex { return byteArrayColumnIndex{col} }
 
-func (col *byteArrayColumnBuffer) OffsetIndex() OffsetIndex { return &zeroOffsetIndex }
+func (col *byteArrayColumnBuffer) OffsetIndex() OffsetIndex { return byteArrayOffsetIndex{col} }
 
 func (col *byteArrayColumnBuffer) Dictionary() Dictionary { return nil }
 
@@ -1193,9 +1187,13 @@ func (col *fixedLenByteArrayColumnBuffer) Clone() ColumnBuffer {
 	}
 }
 
-func (col *fixedLenByteArrayColumnBuffer) ColumnIndex() ColumnIndex { return columnIndexOf(col) }
+func (col *fixedLenByteArrayColumnBuffer) ColumnIndex() ColumnIndex {
+	return fixedLenByteArrayColumnIndex{col}
+}
 
-func (col *fixedLenByteArrayColumnBuffer) OffsetIndex() OffsetIndex { return &zeroOffsetIndex }
+func (col *fixedLenByteArrayColumnBuffer) OffsetIndex() OffsetIndex {
+	return fixedLenByteArrayOffsetIndex{col}
+}
 
 func (col *fixedLenByteArrayColumnBuffer) Dictionary() Dictionary { return nil }
 

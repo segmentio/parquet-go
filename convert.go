@@ -446,9 +446,12 @@ func (c *missingColumnChunk) ColumnIndex() ColumnIndex {
 	}
 }
 
-func (c *missingColumnChunk) OffsetIndex() OffsetIndex {
-	return &zeroOffsetIndex
-}
+func (c *missingColumnChunk) OffsetIndex() OffsetIndex { return missingOffsetIndex{} }
+
+type missingOffsetIndex struct{}
+
+func (missingOffsetIndex) NumPages() int                          { return 0 }
+func (missingOffsetIndex) PageLocation(int) (int64, int64, int64) { return 0, 0, 0 }
 
 type missingPage struct{ *missingColumnChunk }
 

@@ -785,9 +785,9 @@ func (col *indexedColumnBuffer) Clone() ColumnBuffer {
 	}
 }
 
-func (col *indexedColumnBuffer) ColumnIndex() ColumnIndex { return columnIndexOf(col) }
+func (col *indexedColumnBuffer) ColumnIndex() ColumnIndex { return indexedColumnIndex{col} }
 
-func (col *indexedColumnBuffer) OffsetIndex() OffsetIndex { return &zeroOffsetIndex }
+func (col *indexedColumnBuffer) OffsetIndex() OffsetIndex { return indexedOffsetIndex{col} }
 
 func (col *indexedColumnBuffer) Dictionary() Dictionary { return col.dict }
 
@@ -842,6 +842,31 @@ func (col *indexedColumnBuffer) ReadRowAt(row Row, index int) (Row, error) {
 		return append(row, v), nil
 	}
 }
+
+type indexedColumnIndex struct{ *indexedColumnBuffer }
+
+func (index indexedColumnIndex) NumPages() int       { return 1 }
+func (index indexedColumnIndex) NullCount(int) int64 { return 0 }
+func (index indexedColumnIndex) NullPage(int) bool   { return false }
+func (index indexedColumnIndex) MinValue(int) []byte {
+	min, _ := index.Bounds()
+	return min.Bytes()
+}
+func (index indexedColumnIndex) MaxValue(int) []byte {
+	_, max := index.Bounds()
+	return max.Bytes()
+}
+func (index indexedColumnIndex) IsAscending() bool {
+	return index.dict.Type().Compare(index.Bounds()) < 0
+}
+func (index indexedColumnIndex) IsDescending() bool {
+	return index.dict.Type().Compare(index.Bounds()) > 0
+}
+
+type indexedOffsetIndex struct{ *indexedColumnBuffer }
+
+func (index indexedOffsetIndex) NumPages() int                          { return 1 }
+func (index indexedOffsetIndex) PageLocation(int) (int64, int64, int64) { return 0, index.Size(), 0 }
 
 type indexedValueDecoder struct {
 	decoder encoding.Decoder

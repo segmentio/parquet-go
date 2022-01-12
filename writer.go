@@ -660,6 +660,9 @@ func (c *writerColumn) reset() {
 	if c.columnBuffer != nil {
 		c.columnBuffer.Reset()
 	}
+	if c.columnIndex != nil {
+		c.columnIndex.Reset()
+	}
 	if c.dictionary != nil {
 		c.dictionary.Reset()
 	}
