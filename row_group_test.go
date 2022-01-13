@@ -309,7 +309,7 @@ func TestMergeRowGroups(t *testing.T) {
 							var row2 parquet.Row
 							var err1 error
 							var err2 error
-							var numRows int
+							var numRows int64
 
 							for {
 								row1, err1 = expectedRows.ReadRow(row1[:0])

@@ -27,44 +27,42 @@ func (index *offsetIndex) PageLocation(i int) (int64, int64, int64) {
 	return page.Offset, int64(page.CompressedPageSize), page.FirstRowIndex
 }
 
-type booleanOffsetIndex struct{ *booleanColumnBuffer }
+func (index booleanPageIndex) PageLocation(int) (int64, int64, int64) {
+	return 0, index.page.Size(), 0
+}
 
-func (index booleanOffsetIndex) NumPages() int                          { return 1 }
-func (index booleanOffsetIndex) PageLocation(int) (int64, int64, int64) { return 0, index.Size(), 0 }
+func (index int32PageIndex) PageLocation(int) (int64, int64, int64) {
+	return 0, index.page.Size(), 0
+}
 
-type int32OffsetIndex struct{ *int32ColumnBuffer }
+func (index int64PageIndex) PageLocation(int) (int64, int64, int64) {
+	return 0, index.page.Size(), 0
+}
 
-func (index int32OffsetIndex) NumPages() int                          { return 1 }
-func (index int32OffsetIndex) PageLocation(int) (int64, int64, int64) { return 0, index.Size(), 0 }
+func (index int96PageIndex) PageLocation(int) (int64, int64, int64) {
+	return 0, index.page.Size(), 0
+}
 
-type int64OffsetIndex struct{ *int64ColumnBuffer }
+func (index floatPageIndex) PageLocation(int) (int64, int64, int64) {
+	return 0, index.page.Size(), 0
+}
 
-func (index int64OffsetIndex) NumPages() int                          { return 1 }
-func (index int64OffsetIndex) PageLocation(int) (int64, int64, int64) { return 0, index.Size(), 0 }
+func (index doublePageIndex) PageLocation(int) (int64, int64, int64) {
+	return 0, index.page.Size(), 0
+}
 
-type int96OffsetIndex struct{ *int96ColumnBuffer }
+func (index byteArrayPageIndex) PageLocation(int) (int64, int64, int64) {
+	return 0, index.page.Size(), 0
+}
 
-func (index int96OffsetIndex) NumPages() int                          { return 1 }
-func (index int96OffsetIndex) PageLocation(int) (int64, int64, int64) { return 0, index.Size(), 0 }
+func (index fixedLenByteArrayPageIndex) PageLocation(int) (int64, int64, int64) {
+	return 0, index.page.Size(), 0
+}
 
-type floatOffsetIndex struct{ *floatColumnBuffer }
+func (index uint32PageIndex) PageLocation(int) (int64, int64, int64) {
+	return 0, index.page.Size(), 0
+}
 
-func (index floatOffsetIndex) NumPages() int                          { return 1 }
-func (index floatOffsetIndex) PageLocation(int) (int64, int64, int64) { return 0, index.Size(), 0 }
-
-type doubleOffsetIndex struct{ *doubleColumnBuffer }
-
-func (index doubleOffsetIndex) NumPages() int                          { return 1 }
-func (index doubleOffsetIndex) PageLocation(int) (int64, int64, int64) { return 0, index.Size(), 0 }
-
-type byteArrayOffsetIndex struct{ *byteArrayColumnBuffer }
-
-func (index byteArrayOffsetIndex) NumPages() int                          { return 1 }
-func (index byteArrayOffsetIndex) PageLocation(int) (int64, int64, int64) { return 0, index.Size(), 0 }
-
-type fixedLenByteArrayOffsetIndex struct{ *fixedLenByteArrayColumnBuffer }
-
-func (index fixedLenByteArrayOffsetIndex) NumPages() int { return 1 }
-func (index fixedLenByteArrayOffsetIndex) PageLocation(int) (int64, int64, int64) {
-	return 0, index.Size(), 0
+func (index uint64PageIndex) PageLocation(int) (int64, int64, int64) {
+	return 0, index.page.Size(), 0
 }

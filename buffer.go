@@ -105,14 +105,7 @@ func (buf *Buffer) Size() int64 {
 }
 
 // NumRows returns the number of rows written to the buffer.
-func (buf *Buffer) NumRows() int {
-	if len(buf.columns) == 0 {
-		return 0
-	} else {
-		// All columns have the same number of rows.
-		return buf.columns[0].Len()
-	}
-}
+func (buf *Buffer) NumRows() int64 { return int64(buf.Len()) }
 
 // NumColumns returns the number of columns in the buffer.
 //
@@ -138,7 +131,14 @@ func (buf *Buffer) Schema() *Schema { return buf.schema }
 func (buf *Buffer) SortingColumns() []SortingColumn { return buf.config.SortingColumns }
 
 // Len returns the number of rows written to the buffer.
-func (buf *Buffer) Len() int { return buf.NumRows() }
+func (buf *Buffer) Len() int {
+	if len(buf.columns) == 0 {
+		return 0
+	} else {
+		// All columns have the same number of rows.
+		return buf.columns[0].Len()
+	}
+}
 
 // Less returns true if row[i] < row[j] in the buffer.
 func (buf *Buffer) Less(i, j int) bool {
@@ -222,14 +222,14 @@ func (buf *Buffer) WriteRowGroup(rowGroup RowGroup) (int64, error) {
 	}
 	n := buf.NumRows()
 	_, err := CopyRows(bufferWriter{buf}, rowGroup.Rows())
-	return int64(buf.NumRows() - n), err
+	return buf.NumRows() - n, err
 }
 
 // Rows returns a reader exposing the current content of the buffer.
 //
 // The buffer and the returned reader share memory. Mutating the buffer
 // concurrently to reading rows may result in non-deterministic behavior.
-func (buf *Buffer) Rows() RowReader { return &rowGroupRowReader{rowGroup: buf} }
+func (buf *Buffer) Rows() Rows { return &rowGroupRowReader{rowGroup: buf} }
 
 // bufferWriter is an adapter for Buffer which implements both RowWriter and
 // PageWriter to enable optimizations in CopyRows for types that support writing

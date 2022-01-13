@@ -11,7 +11,7 @@ type ColumnChunk interface {
 	Column() int
 
 	// Returns a reader exposing the pages of the column.
-	Pages() PageReader
+	Pages() Pages
 
 	// Returns the components of the page index for this column chunk,
 	// containing details about the content and location of pages within the
@@ -23,6 +23,13 @@ type ColumnChunk interface {
 	// If the column chunk does not have a page index, the methods return nil.
 	ColumnIndex() ColumnIndex
 	OffsetIndex() OffsetIndex
+}
+
+// Pages is an interface implemented by page readers returned by calling the
+// Pages method of ColumnChunk instances.
+type Pages interface {
+	PageReader
+	RowSeeker
 }
 
 type pageAndValueWriter interface {
@@ -38,27 +45,22 @@ type columnChunkReader struct {
 	// consumes values from the underlying pages.
 	offset int         // offset of the next value in the buffer
 	page   Page        // current page where values are being read from
-	reader PageReader  // reader of column pages
+	reader Pages       // reader of column pages
 	values ValueReader // reader for values from the current page
-}
-
-func (r *columnChunkReader) reset() {
-	clearValues(r.buffer)
-	r.buffer = r.buffer[:0]
-	r.offset = 0
-	r.page = nil
-	// If the underlying type does not implement resusablePageReader the next
-	// attempt to read values will be io.EOF because we set the pages to nil.
-	if p, ok := r.reader.(reusablePageReader); ok {
-		p.Reset()
-	} else {
-		r.reader = nil
-	}
-	r.values = nil
 }
 
 func (r *columnChunkReader) buffered() int {
 	return len(r.buffer) - r.offset
+}
+
+func (r *columnChunkReader) seekToRow(rowIndex int64) {
+	// clearValues(r.buffer)
+	// r.buffer = r.buffer[:0]
+	// r.offset = 0
+	// r.page = nil
+	// r.values = nil
+
+	// TODO: WIP
 }
 
 func (r *columnChunkReader) readPage() (err error) {

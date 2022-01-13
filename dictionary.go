@@ -701,11 +701,11 @@ func (page *indexedPage) Column() int { return int(^page.columnIndex) }
 
 func (page *indexedPage) Dictionary() Dictionary { return page.dict }
 
-func (page *indexedPage) NumRows() int { return len(page.values) }
+func (page *indexedPage) NumRows() int64 { return int64(len(page.values)) }
 
-func (page *indexedPage) NumValues() int { return len(page.values) }
+func (page *indexedPage) NumValues() int64 { return int64(len(page.values)) }
 
-func (page *indexedPage) NumNulls() int { return 0 }
+func (page *indexedPage) NumNulls() int64 { return 0 }
 
 func (page *indexedPage) Bounds() (min, max Value) {
 	if len(page.values) > 0 {
@@ -728,7 +728,7 @@ func (page *indexedPage) Bounds() (min, max Value) {
 	return min, max
 }
 
-func (page *indexedPage) Slice(i, j int) BufferedPage {
+func (page *indexedPage) Slice(i, j int64) BufferedPage {
 	return &indexedPage{
 		dict:        page.dict,
 		values:      page.values[i:j],
@@ -745,6 +745,8 @@ func (page *indexedPage) DefinitionLevels() []int8 { return nil }
 func (page *indexedPage) WriteTo(e encoding.Encoder) error { return e.EncodeInt32(page.values) }
 
 func (page *indexedPage) Values() ValueReader { return &indexedPageReader{page: page} }
+
+func (page *indexedPage) Buffer() BufferedPage { return page }
 
 type indexedPageReader struct {
 	page   *indexedPage
@@ -798,7 +800,7 @@ func (col *indexedColumnBuffer) OffsetIndex() OffsetIndex { return indexedOffset
 
 func (col *indexedColumnBuffer) Dictionary() Dictionary { return col.dict }
 
-func (col *indexedColumnBuffer) Pages() PageReader { return onePage(col.Page()) }
+func (col *indexedColumnBuffer) Pages() Pages { return onePage(col.Page()) }
 
 func (col *indexedColumnBuffer) Page() BufferedPage { return &col.indexedPage }
 

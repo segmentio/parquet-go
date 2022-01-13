@@ -168,7 +168,7 @@ func (col *optionalColumnBuffer) Column() int {
 	return col.base.Column()
 }
 
-func (col *optionalColumnBuffer) Pages() PageReader {
+func (col *optionalColumnBuffer) Pages() Pages {
 	return onePage(col.Page())
 }
 
@@ -410,7 +410,7 @@ func (col *repeatedColumnBuffer) Column() int {
 	return col.base.Column()
 }
 
-func (col *repeatedColumnBuffer) Pages() PageReader {
+func (col *repeatedColumnBuffer) Pages() Pages {
 	return onePage(col.Page())
 }
 
@@ -684,13 +684,13 @@ func (col *booleanColumnBuffer) Clone() ColumnBuffer {
 
 func (col *booleanColumnBuffer) Type() Type { return col.typ }
 
-func (col *booleanColumnBuffer) ColumnIndex() ColumnIndex { return booleanColumnIndex{col} }
+func (col *booleanColumnBuffer) ColumnIndex() ColumnIndex { return booleanPageIndex{&col.booleanPage} }
 
-func (col *booleanColumnBuffer) OffsetIndex() OffsetIndex { return booleanOffsetIndex{col} }
+func (col *booleanColumnBuffer) OffsetIndex() OffsetIndex { return booleanPageIndex{&col.booleanPage} }
 
 func (col *booleanColumnBuffer) Dictionary() Dictionary { return nil }
 
-func (col *booleanColumnBuffer) Pages() PageReader { return onePage(col.Page()) }
+func (col *booleanColumnBuffer) Pages() Pages { return onePage(col.Page()) }
 
 func (col *booleanColumnBuffer) Page() BufferedPage { return &col.booleanPage }
 
@@ -766,13 +766,13 @@ func (col *int32ColumnBuffer) Clone() ColumnBuffer {
 
 func (col *int32ColumnBuffer) Type() Type { return col.typ }
 
-func (col *int32ColumnBuffer) ColumnIndex() ColumnIndex { return int32ColumnIndex{col} }
+func (col *int32ColumnBuffer) ColumnIndex() ColumnIndex { return int32PageIndex{&col.int32Page} }
 
-func (col *int32ColumnBuffer) OffsetIndex() OffsetIndex { return int32OffsetIndex{col} }
+func (col *int32ColumnBuffer) OffsetIndex() OffsetIndex { return int32PageIndex{&col.int32Page} }
 
 func (col *int32ColumnBuffer) Dictionary() Dictionary { return nil }
 
-func (col *int32ColumnBuffer) Pages() PageReader { return onePage(col.Page()) }
+func (col *int32ColumnBuffer) Pages() Pages { return onePage(col.Page()) }
 
 func (col *int32ColumnBuffer) Page() BufferedPage { return &col.int32Page }
 
@@ -846,13 +846,13 @@ func (col *int64ColumnBuffer) Clone() ColumnBuffer {
 
 func (col *int64ColumnBuffer) Type() Type { return col.typ }
 
-func (col *int64ColumnBuffer) ColumnIndex() ColumnIndex { return int64ColumnIndex{col} }
+func (col *int64ColumnBuffer) ColumnIndex() ColumnIndex { return int64PageIndex{&col.int64Page} }
 
-func (col *int64ColumnBuffer) OffsetIndex() OffsetIndex { return int64OffsetIndex{col} }
+func (col *int64ColumnBuffer) OffsetIndex() OffsetIndex { return int64PageIndex{&col.int64Page} }
 
 func (col *int64ColumnBuffer) Dictionary() Dictionary { return nil }
 
-func (col *int64ColumnBuffer) Pages() PageReader { return onePage(col.Page()) }
+func (col *int64ColumnBuffer) Pages() Pages { return onePage(col.Page()) }
 
 func (col *int64ColumnBuffer) Page() BufferedPage { return &col.int64Page }
 
@@ -926,13 +926,13 @@ func (col *int96ColumnBuffer) Clone() ColumnBuffer {
 
 func (col *int96ColumnBuffer) Type() Type { return col.typ }
 
-func (col *int96ColumnBuffer) ColumnIndex() ColumnIndex { return int96ColumnIndex{col} }
+func (col *int96ColumnBuffer) ColumnIndex() ColumnIndex { return int96PageIndex{&col.int96Page} }
 
-func (col *int96ColumnBuffer) OffsetIndex() OffsetIndex { return int96OffsetIndex{col} }
+func (col *int96ColumnBuffer) OffsetIndex() OffsetIndex { return int96PageIndex{&col.int96Page} }
 
 func (col *int96ColumnBuffer) Dictionary() Dictionary { return nil }
 
-func (col *int96ColumnBuffer) Pages() PageReader { return onePage(col.Page()) }
+func (col *int96ColumnBuffer) Pages() Pages { return onePage(col.Page()) }
 
 func (col *int96ColumnBuffer) Page() BufferedPage { return &col.int96Page }
 
@@ -1006,13 +1006,13 @@ func (col *floatColumnBuffer) Clone() ColumnBuffer {
 
 func (col *floatColumnBuffer) Type() Type { return col.typ }
 
-func (col *floatColumnBuffer) ColumnIndex() ColumnIndex { return floatColumnIndex{col} }
+func (col *floatColumnBuffer) ColumnIndex() ColumnIndex { return floatPageIndex{&col.floatPage} }
 
-func (col *floatColumnBuffer) OffsetIndex() OffsetIndex { return floatOffsetIndex{col} }
+func (col *floatColumnBuffer) OffsetIndex() OffsetIndex { return floatPageIndex{&col.floatPage} }
 
 func (col *floatColumnBuffer) Dictionary() Dictionary { return nil }
 
-func (col *floatColumnBuffer) Pages() PageReader { return onePage(col.Page()) }
+func (col *floatColumnBuffer) Pages() Pages { return onePage(col.Page()) }
 
 func (col *floatColumnBuffer) Page() BufferedPage { return &col.floatPage }
 
@@ -1086,13 +1086,13 @@ func (col *doubleColumnBuffer) Clone() ColumnBuffer {
 
 func (col *doubleColumnBuffer) Type() Type { return col.typ }
 
-func (col *doubleColumnBuffer) ColumnIndex() ColumnIndex { return doubleColumnIndex{col} }
+func (col *doubleColumnBuffer) ColumnIndex() ColumnIndex { return doublePageIndex{&col.doublePage} }
 
-func (col *doubleColumnBuffer) OffsetIndex() OffsetIndex { return doubleOffsetIndex{col} }
+func (col *doubleColumnBuffer) OffsetIndex() OffsetIndex { return doublePageIndex{&col.doublePage} }
 
 func (col *doubleColumnBuffer) Dictionary() Dictionary { return nil }
 
-func (col *doubleColumnBuffer) Pages() PageReader { return onePage(col.Page()) }
+func (col *doubleColumnBuffer) Pages() Pages { return onePage(col.Page()) }
 
 func (col *doubleColumnBuffer) Page() BufferedPage { return &col.doublePage }
 
@@ -1166,13 +1166,17 @@ func (col *byteArrayColumnBuffer) Clone() ColumnBuffer {
 
 func (col *byteArrayColumnBuffer) Type() Type { return col.typ }
 
-func (col *byteArrayColumnBuffer) ColumnIndex() ColumnIndex { return byteArrayColumnIndex{col} }
+func (col *byteArrayColumnBuffer) ColumnIndex() ColumnIndex {
+	return byteArrayPageIndex{&col.byteArrayPage}
+}
 
-func (col *byteArrayColumnBuffer) OffsetIndex() OffsetIndex { return byteArrayOffsetIndex{col} }
+func (col *byteArrayColumnBuffer) OffsetIndex() OffsetIndex {
+	return byteArrayPageIndex{&col.byteArrayPage}
+}
 
 func (col *byteArrayColumnBuffer) Dictionary() Dictionary { return nil }
 
-func (col *byteArrayColumnBuffer) Pages() PageReader { return onePage(col.Page()) }
+func (col *byteArrayColumnBuffer) Pages() Pages { return onePage(col.Page()) }
 
 func (col *byteArrayColumnBuffer) Page() BufferedPage { return &col.byteArrayPage }
 
@@ -1251,16 +1255,16 @@ func (col *fixedLenByteArrayColumnBuffer) Clone() ColumnBuffer {
 func (col *fixedLenByteArrayColumnBuffer) Type() Type { return col.typ }
 
 func (col *fixedLenByteArrayColumnBuffer) ColumnIndex() ColumnIndex {
-	return fixedLenByteArrayColumnIndex{col}
+	return fixedLenByteArrayPageIndex{&col.fixedLenByteArrayPage}
 }
 
 func (col *fixedLenByteArrayColumnBuffer) OffsetIndex() OffsetIndex {
-	return fixedLenByteArrayOffsetIndex{col}
+	return fixedLenByteArrayPageIndex{&col.fixedLenByteArrayPage}
 }
 
 func (col *fixedLenByteArrayColumnBuffer) Dictionary() Dictionary { return nil }
 
-func (col *fixedLenByteArrayColumnBuffer) Pages() PageReader { return onePage(col.Page()) }
+func (col *fixedLenByteArrayColumnBuffer) Pages() Pages { return onePage(col.Page()) }
 
 func (col *fixedLenByteArrayColumnBuffer) Page() BufferedPage { return &col.fixedLenByteArrayPage }
 
@@ -1326,19 +1330,15 @@ func newUint32ColumnBuffer(typ Type, columnIndex, bufferSize int) uint32ColumnBu
 	return uint32ColumnBuffer{newInt32ColumnBuffer(typ, columnIndex, bufferSize)}
 }
 
-func (col uint32ColumnBuffer) ColumnIndex() ColumnIndex { return uint32ColumnIndex{col} }
+func (col uint32ColumnBuffer) ColumnIndex() ColumnIndex { return uint32PageIndex{col.page()} }
+
+func (col uint32ColumnBuffer) OffsetIndex() OffsetIndex { return uint32PageIndex{col.page()} }
 
 func (col uint32ColumnBuffer) page() uint32Page { return uint32Page{&col.int32Page} }
 
-func (col uint32ColumnBuffer) min() uint32 { return col.page().min() }
-
-func (col uint32ColumnBuffer) max() uint32 { return col.page().max() }
-
-func (col uint32ColumnBuffer) bounds() (min, max uint32) { return col.page().bounds() }
-
 func (col uint32ColumnBuffer) Page() BufferedPage { return col.page() }
 
-func (col uint32ColumnBuffer) Pages() PageReader { return onePage(col.page()) }
+func (col uint32ColumnBuffer) Pages() Pages { return onePage(col.page()) }
 
 func (col uint32ColumnBuffer) Clone() ColumnBuffer {
 	return uint32ColumnBuffer{col.int32ColumnBuffer.Clone().(*int32ColumnBuffer)}
@@ -1354,19 +1354,15 @@ func newUint64ColumnBuffer(typ Type, columnIndex, bufferSize int) uint64ColumnBu
 	return uint64ColumnBuffer{newInt64ColumnBuffer(typ, columnIndex, bufferSize)}
 }
 
-func (col uint64ColumnBuffer) ColumnIndex() ColumnIndex { return uint64ColumnIndex{col} }
+func (col uint64ColumnBuffer) ColumnIndex() ColumnIndex { return uint64PageIndex{col.page()} }
+
+func (col uint64ColumnBuffer) OffsetIndex() OffsetIndex { return uint64PageIndex{col.page()} }
 
 func (col uint64ColumnBuffer) page() uint64Page { return uint64Page{&col.int64Page} }
 
-func (col uint64ColumnBuffer) min() uint64 { return col.page().min() }
-
-func (col uint64ColumnBuffer) max() uint64 { return col.page().max() }
-
-func (col uint64ColumnBuffer) bounds() (min, max uint64) { return col.page().bounds() }
-
 func (col uint64ColumnBuffer) Page() BufferedPage { return col.page() }
 
-func (col uint64ColumnBuffer) Pages() PageReader { return onePage(col.page()) }
+func (col uint64ColumnBuffer) Pages() Pages { return onePage(col.page()) }
 
 func (col uint64ColumnBuffer) Clone() ColumnBuffer {
 	return uint64ColumnBuffer{col.int64ColumnBuffer.Clone().(*int64ColumnBuffer)}

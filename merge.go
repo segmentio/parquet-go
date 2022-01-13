@@ -2,6 +2,7 @@ package parquet
 
 import (
 	"container/heap"
+	"fmt"
 	"io"
 )
 
@@ -15,7 +16,7 @@ func (m *mergedRowGroup) SortingColumns() []SortingColumn {
 	return m.sorting
 }
 
-func (m *mergedRowGroup) Rows() RowReader {
+func (m *mergedRowGroup) Rows() Rows {
 	// The row group needs to respect a sorting order; the merged row reader
 	// uses a heap to merge rows from the row groups.
 	return &mergedRowGroupRowReader{rowGroup: m, schema: m.schema}
@@ -28,6 +29,8 @@ type mergedRowGroupRowReader struct {
 	cursors  []rowGroupCursor
 	values1  []Value
 	values2  []Value
+	seek     int64
+	index    int64
 	err      error
 }
 
@@ -83,6 +86,14 @@ func (r *mergedRowGroupRowReader) init(m *mergedRowGroup) {
 	}
 }
 
+func (r *mergedRowGroupRowReader) SeekToRow(rowIndex int64) error {
+	if rowIndex >= r.index {
+		r.seek = rowIndex
+		return nil
+	}
+	return fmt.Errorf("SeekToRow: merged row reader cannot seek backward from row %d to %d", r.index, rowIndex)
+}
+
 func (r *mergedRowGroupRowReader) ReadRow(row Row) (Row, error) {
 	if r.rowGroup != nil {
 		r.init(r.rowGroup)
@@ -91,26 +102,33 @@ func (r *mergedRowGroupRowReader) ReadRow(row Row) (Row, error) {
 	if r.err != nil {
 		return row, r.err
 	}
-	if len(r.cursors) == 0 {
-		return row, io.EOF
-	}
 
-	min := r.cursors[0]
-	row, err := min.readRow(row)
-	if err != nil {
-		return row, err
-	}
-
-	if err := min.readNext(); err != nil {
-		if err != io.EOF {
-			r.err = err
+	for {
+		if len(r.cursors) == 0 {
+			return row, io.EOF
+		}
+		min := r.cursors[0]
+		row, err := min.readRow(row)
+		if err != nil {
 			return row, err
 		}
-		heap.Pop(r)
-	} else {
-		heap.Fix(r, 0)
+
+		if err := min.readNext(); err != nil {
+			if err != io.EOF {
+				r.err = err
+				return row, err
+			}
+			heap.Pop(r)
+		} else {
+			heap.Fix(r, 0)
+		}
+
+		ret := r.index >= r.seek
+		r.index++
+		if ret {
+			return row, nil
+		}
 	}
-	return row, nil
 }
 
 // func (r *mergedRowGroupRowReader) WriteRowsTo(w RowWriter) (int64, error) {

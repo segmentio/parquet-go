@@ -9,7 +9,7 @@ import (
 // PageHeader is an interface implemented by parquet page headers.
 type PageHeader interface {
 	// Returns the number of values in the page (including nulls).
-	NumValues() int
+	NumValues() int64
 
 	// Returns the page encoding.
 	Encoding() format.Encoding
@@ -34,7 +34,7 @@ type DataPageHeader interface {
 	DefinitionLevelEncoding() format.Encoding
 
 	// Returns the number of null values in the page.
-	NullCount() int
+	NullCount() int64
 
 	// Returns the minimum value in the page based on the ordering rules of the
 	// column's logical type.
@@ -63,8 +63,8 @@ type DictionaryPageHeader struct {
 	header *format.DictionaryPageHeader
 }
 
-func (dict DictionaryPageHeader) NumValues() int {
-	return int(dict.header.NumValues)
+func (dict DictionaryPageHeader) NumValues() int64 {
+	return int64(dict.header.NumValues)
 }
 
 func (dict DictionaryPageHeader) Encoding() format.Encoding {
@@ -92,8 +92,8 @@ type DataPageHeaderV1 struct {
 	header *format.DataPageHeader
 }
 
-func (v1 DataPageHeaderV1) NumValues() int {
-	return int(v1.header.NumValues)
+func (v1 DataPageHeaderV1) NumValues() int64 {
+	return int64(v1.header.NumValues)
 }
 
 func (v1 DataPageHeaderV1) IsCompressed(codec format.CompressionCodec) bool {
@@ -116,8 +116,8 @@ func (v1 DataPageHeaderV1) PageType() format.PageType {
 	return format.DataPage
 }
 
-func (v1 DataPageHeaderV1) NullCount() int {
-	return int(v1.header.Statistics.NullCount)
+func (v1 DataPageHeaderV1) NullCount() int64 {
+	return v1.header.Statistics.NullCount
 }
 
 func (v1 DataPageHeaderV1) MinValue() []byte {
@@ -140,16 +140,16 @@ type DataPageHeaderV2 struct {
 	header *format.DataPageHeaderV2
 }
 
-func (v2 DataPageHeaderV2) NumValues() int {
-	return int(v2.header.NumValues)
+func (v2 DataPageHeaderV2) NumValues() int64 {
+	return int64(v2.header.NumValues)
 }
 
-func (v2 DataPageHeaderV2) NumNulls() int {
-	return int(v2.header.NumNulls)
+func (v2 DataPageHeaderV2) NumNulls() int64 {
+	return int64(v2.header.NumNulls)
 }
 
-func (v2 DataPageHeaderV2) NumRows() int {
-	return int(v2.header.NumRows)
+func (v2 DataPageHeaderV2) NumRows() int64 {
+	return int64(v2.header.NumRows)
 }
 
 func (v2 DataPageHeaderV2) IsCompressed(codec format.CompressionCodec) bool {
@@ -180,8 +180,8 @@ func (v2 DataPageHeaderV2) PageType() format.PageType {
 	return format.DataPageV2
 }
 
-func (v2 DataPageHeaderV2) NullCount() int {
-	return int(v2.header.Statistics.NullCount)
+func (v2 DataPageHeaderV2) NullCount() int64 {
+	return v2.header.Statistics.NullCount
 }
 
 func (v2 DataPageHeaderV2) MinValue() []byte {
@@ -204,7 +204,7 @@ type unknownPageHeader struct {
 	header *format.PageHeader
 }
 
-func (u unknownPageHeader) NumValues() int {
+func (u unknownPageHeader) NumValues() int64 {
 	return 0
 }
 

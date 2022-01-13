@@ -944,7 +944,7 @@ func (c *writerColumn) writeBufferedPage(page BufferedPage) (int64, error) {
 		return 0, err
 	}
 	c.recordPageStats(headerSize, pageHeader, page)
-	return int64(numValues), nil
+	return numValues, nil
 }
 
 func (c *writerColumn) writeCompressedPage(page CompressedPage) (int64, error) {
@@ -973,7 +973,7 @@ func (c *writerColumn) writeCompressedPage(page CompressedPage) (int64, error) {
 		return 0, err
 	}
 	c.recordPageStats(headerSize, pageHeader, page)
-	return int64(page.NumValues()), nil
+	return page.NumValues(), nil
 }
 
 func (c *writerColumn) writePage(size int64, header, data io.Reader) error {
@@ -1060,7 +1060,7 @@ func (c *writerColumn) compressedPage(w io.Writer) (compress.Writer, error) {
 }
 
 func (c *writerColumn) makePageStatistics(page Page) format.Statistics {
-	numNulls := int64(page.NumNulls())
+	numNulls := page.NumNulls()
 	minValue, maxValue := page.Bounds()
 	minValueBytes := minValue.Bytes()
 	maxValueBytes := maxValue.Bytes()
@@ -1082,7 +1082,7 @@ func (c *writerColumn) recordPageStats(headerSize int32, header *format.PageHead
 		numValues := page.NumValues()
 		minValue, maxValue := page.Bounds()
 		c.columnIndex.IndexPage(numValues, numNulls, minValue, maxValue)
-		c.columnChunk.MetaData.NumValues += int64(numValues)
+		c.columnChunk.MetaData.NumValues += numValues
 
 		c.offsetIndex.PageLocations = append(c.offsetIndex.PageLocations, format.PageLocation{
 			Offset:             c.columnChunk.MetaData.TotalCompressedSize,
@@ -1090,7 +1090,7 @@ func (c *writerColumn) recordPageStats(headerSize int32, header *format.PageHead
 			FirstRowIndex:      c.numRows,
 		})
 
-		c.numRows += int64(page.NumRows())
+		c.numRows += page.NumRows()
 	}
 
 	pageType := header.Type

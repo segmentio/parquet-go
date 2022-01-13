@@ -427,65 +427,61 @@ func ConvertRowGroup(rowGroup RowGroup, conv Conversion) RowGroup {
 type missingColumnChunk struct {
 	typ       Type
 	column    int
-	numRows   int
-	numValues int
-	numNulls  int
+	numRows   int64
+	numValues int64
+	numNulls  int64
 }
 
-func (c *missingColumnChunk) Type() Type {
-	return c.typ
-}
-
-func (c *missingColumnChunk) Column() int {
-	return c.column
-}
-
-func (c *missingColumnChunk) Pages() PageReader {
-	return onePage(missingPage{c})
-}
-
-func (c *missingColumnChunk) ColumnIndex() ColumnIndex {
-	return &columnIndex{
-		NullPages:  []bool{true},
-		MinValues:  [][]byte{nil},
-		MaxValues:  [][]byte{nil},
-		NullCounts: []int64{int64(c.numNulls)},
-	}
-}
-
+func (c *missingColumnChunk) Type() Type               { return c.typ }
+func (c *missingColumnChunk) Column() int              { return c.column }
+func (c *missingColumnChunk) Pages() Pages             { return onePage(missingPage{c}) }
+func (c *missingColumnChunk) ColumnIndex() ColumnIndex { return missingColumnIndex{c} }
 func (c *missingColumnChunk) OffsetIndex() OffsetIndex { return missingOffsetIndex{} }
+
+type missingColumnIndex struct{ *missingColumnChunk }
+
+func (i missingColumnIndex) NumPages() int       { return 1 }
+func (i missingColumnIndex) NullCount(int) int64 { return i.numNulls }
+func (i missingColumnIndex) NullPage(int) bool   { return true }
+func (i missingColumnIndex) MinValue(int) []byte { return nil }
+func (i missingColumnIndex) MaxValue(int) []byte { return nil }
+func (i missingColumnIndex) IsAscending() bool   { return true }
+func (i missingColumnIndex) IsDescending() bool  { return false }
 
 type missingOffsetIndex struct{}
 
-func (missingOffsetIndex) NumPages() int                          { return 0 }
+func (missingOffsetIndex) NumPages() int                          { return 1 }
 func (missingOffsetIndex) PageLocation(int) (int64, int64, int64) { return 0, 0, 0 }
 
 type missingPage struct{ *missingColumnChunk }
 
 func (p missingPage) Column() int              { return p.column }
 func (p missingPage) Dictionary() Dictionary   { return nil }
-func (p missingPage) NumRows() int             { return p.numRows }
-func (p missingPage) NumValues() int           { return p.numValues }
-func (p missingPage) NumNulls() int            { return p.numNulls }
+func (p missingPage) NumRows() int64           { return p.numRows }
+func (p missingPage) NumValues() int64         { return p.numValues }
+func (p missingPage) NumNulls() int64          { return p.numNulls }
 func (p missingPage) Bounds() (min, max Value) { return }
 func (p missingPage) Size() int64              { return 0 }
 func (p missingPage) Values() ValueReader      { return &missingValues{page: p} }
+func (p missingPage) Buffer() BufferedPage {
+	return newErrorPage(p.column, "cannot buffer missing page")
+}
 
 type missingValues struct {
 	page missingPage
-	read int
+	read int64
 }
 
 func (r *missingValues) ReadValues(values []Value) (int, error) {
 	remain := r.page.numValues - r.read
-	if len(values) > remain {
+	if int64(len(values)) > remain {
 		values = values[:remain]
 	}
 	for i := range values {
 		// TODO: how do we set the repetition and definition levels here?
 		values[i] = Value{columnIndex: ^int8(r.page.column)}
 	}
-	if r.read += len(values); r.read == r.page.numValues {
+	if r.read += int64(len(values)); r.read == r.page.numValues {
 		return len(values), io.EOF
 	}
 	return len(values), nil
@@ -498,26 +494,26 @@ type convertedRowGroup struct {
 	conv     Conversion
 }
 
-func (c *convertedRowGroup) NumRows() int                    { return c.rowGroup.NumRows() }
+func (c *convertedRowGroup) NumRows() int64                  { return c.rowGroup.NumRows() }
 func (c *convertedRowGroup) NumColumns() int                 { return len(c.columns) }
 func (c *convertedRowGroup) Column(i int) ColumnChunk        { return c.columns[i] }
 func (c *convertedRowGroup) SortingColumns() []SortingColumn { return c.sorting }
-func (c *convertedRowGroup) Rows() RowReader                 { return ConvertRowReader(c.rowGroup.Rows(), c.conv) }
+func (c *convertedRowGroup) Rows() Rows                      { return &convertedRows{rows: c.rowGroup.Rows(), conv: c.conv} }
 func (c *convertedRowGroup) Schema() *Schema                 { return c.conv.Schema() }
 
 // ConvertRowReader constructs a wrapper of the given row reader which applies
 // the given schema conversion to the rows.
 func ConvertRowReader(rows RowReader, conv Conversion) RowReaderWithSchema {
-	return &convertedRowReader{rows: rows, conv: conv}
+	return &convertedRows{rows: &forwardRowSeeker{rows: rows}, conv: conv}
 }
 
-type convertedRowReader struct {
-	rows RowReader
+type convertedRows struct {
+	rows RowReadSeeker
 	buf  Row
 	conv Conversion
 }
 
-func (c *convertedRowReader) ReadRow(row Row) (Row, error) {
+func (c *convertedRows) ReadRow(row Row) (Row, error) {
 	defer func() {
 		clearValues(c.buf)
 	}()
@@ -529,6 +525,10 @@ func (c *convertedRowReader) ReadRow(row Row) (Row, error) {
 	return c.conv.Convert(row, c.buf)
 }
 
-func (c *convertedRowReader) Schema() *Schema {
+func (c *convertedRows) Schema() *Schema {
 	return c.conv.Schema()
+}
+
+func (c *convertedRows) SeekToRow(rowIndex int64) error {
+	return c.rows.SeekToRow(rowIndex)
 }

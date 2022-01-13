@@ -13,7 +13,7 @@ import (
 // https://github.com/apache/parquet-format#glossary
 type RowGroup interface {
 	// Returns the number of rows in the group.
-	NumRows() int
+	NumRows() int64
 
 	// Returns the number of columns in the group.
 	NumColumns() int
@@ -31,7 +31,14 @@ type RowGroup interface {
 	SortingColumns() []SortingColumn
 
 	// Returns a reader exposing the rows of the row group.
-	Rows() RowReader
+	Rows() Rows
+}
+
+// Rows is an interface implemented by row readers returned by calling the Rows
+// method of RowGroup instances.
+type Rows interface {
+	RowReaderWithSchema
+	RowSeeker
 }
 
 // RowGroupReader is an interface implemented by types that expose sequences of
@@ -205,6 +212,7 @@ type rowGroupRowReader struct {
 	rowGroup RowGroup
 	schema   *Schema
 	columns  []columnChunkReader
+	seek     int64
 }
 
 func (r *rowGroupRowReader) init(rowGroup RowGroup) {
@@ -220,6 +228,12 @@ func (r *rowGroupRowReader) init(rowGroup RowGroup) {
 		r.columns[i].buffer = buffer[:0:columnBufferSize]
 		buffer = buffer[columnBufferSize:]
 	}
+
+	if r.seek > 0 {
+		for i := range r.columns {
+			r.columns[i].seekToRow(r.seek)
+		}
+	}
 }
 
 func (r *rowGroupRowReader) Schema() *Schema {
@@ -231,6 +245,14 @@ func (r *rowGroupRowReader) Schema() *Schema {
 	default:
 		return nil
 	}
+}
+
+func (r *rowGroupRowReader) SeekToRow(rowIndex int64) error {
+	for i := range r.columns {
+		r.columns[i].seekToRow(rowIndex)
+	}
+	r.seek = rowIndex
+	return nil
 }
 
 func (r *rowGroupRowReader) ReadRow(row Row) (Row, error) {
@@ -254,19 +276,23 @@ func (r *rowGroupRowReader) WriteRowsTo(w RowWriter) (int64, error) {
 		return CopyRows(w, struct{ RowReaderWithSchema }{r})
 	}
 	defer func() { r.rowGroup = nil }()
+	rowGroup := r.rowGroup
+	if r.seek > 0 {
+		rowGroup = &seekRowGroup{base: rowGroup, seek: r.seek}
+	}
 
 	switch dst := w.(type) {
 	case RowGroupWriter:
-		return dst.WriteRowGroup(r.rowGroup)
+		return dst.WriteRowGroup(rowGroup)
 
 	case PageWriter:
-		for i, n := 0, r.rowGroup.NumColumns(); i < n; i++ {
-			_, err := CopyPages(dst, r.rowGroup.Column(i).Pages())
+		for i, n := 0, rowGroup.NumColumns(); i < n; i++ {
+			_, err := CopyPages(dst, rowGroup.Column(i).Pages())
 			if err != nil {
 				return 0, err
 			}
 		}
-		return int64(r.rowGroup.NumRows()), nil
+		return rowGroup.NumRows(), nil
 	}
 
 	return CopyRows(w, struct{ RowReaderWithSchema }{r})
@@ -287,6 +313,64 @@ func (r *rowGroupRowReader) writeRowsTo(w pageAndValueWriter, limit int64) (numR
 	return numRows, nil
 }
 
+type seekRowGroup struct {
+	base RowGroup
+	seek int64
+}
+
+func (g *seekRowGroup) NumRows() int64 {
+	return g.base.NumRows() - g.seek
+}
+
+func (g *seekRowGroup) NumColumns() int {
+	return g.base.NumColumns()
+}
+
+func (g *seekRowGroup) Column(i int) ColumnChunk {
+	return &seekColumnChunk{base: g.base.Column(i), seek: g.seek}
+}
+
+func (g *seekRowGroup) Schema() *Schema {
+	return g.base.Schema()
+}
+
+func (g *seekRowGroup) SortingColumns() []SortingColumn {
+	return g.base.SortingColumns()
+}
+
+func (g *seekRowGroup) Rows() Rows {
+	rows := g.base.Rows()
+	rows.SeekToRow(g.seek)
+	return rows
+}
+
+type seekColumnChunk struct {
+	base ColumnChunk
+	seek int64
+}
+
+func (c *seekColumnChunk) Type() Type {
+	return c.base.Type()
+}
+
+func (c *seekColumnChunk) Column() int {
+	return c.base.Column()
+}
+
+func (c *seekColumnChunk) Pages() Pages {
+	pages := c.base.Pages()
+	pages.SeekToRow(c.seek)
+	return pages
+}
+
+func (c *seekColumnChunk) ColumnIndex() ColumnIndex {
+	return c.base.ColumnIndex()
+}
+
+func (c *seekColumnChunk) OffsetIndex() OffsetIndex {
+	return c.base.OffsetIndex()
+}
+
 type emptyRowGroup struct {
 	schema  *Schema
 	columns []emptyColumnChunk
@@ -304,12 +388,12 @@ func newEmptyRowGroup(schema *Schema) *emptyRowGroup {
 	return g
 }
 
-func (g *emptyRowGroup) NumRows() int                    { return 0 }
+func (g *emptyRowGroup) NumRows() int64                  { return 0 }
 func (g *emptyRowGroup) NumColumns() int                 { return len(g.columns) }
 func (g *emptyRowGroup) Column(i int) ColumnChunk        { return &g.columns[i] }
 func (g *emptyRowGroup) SortingColumns() []SortingColumn { return nil }
 func (g *emptyRowGroup) Schema() *Schema                 { return g.schema }
-func (g *emptyRowGroup) Rows() RowReader                 { return emptyRowReader{g.schema} }
+func (g *emptyRowGroup) Rows() Rows                      { return emptyRowReader{g.schema} }
 
 type emptyColumnChunk struct {
 	typ    Type
@@ -318,7 +402,7 @@ type emptyColumnChunk struct {
 
 func (c *emptyColumnChunk) Type() Type               { return c.typ }
 func (c *emptyColumnChunk) Column() int              { return c.column }
-func (c *emptyColumnChunk) Pages() PageReader        { return emptyPageReader{} }
+func (c *emptyColumnChunk) Pages() Pages             { return emptyPages{} }
 func (c *emptyColumnChunk) ColumnIndex() ColumnIndex { return &emptyColumnIndex }
 func (c *emptyColumnChunk) OffsetIndex() OffsetIndex { return &emptyOffsetIndex }
 
@@ -326,7 +410,13 @@ type emptyRowReader struct{ schema *Schema }
 
 func (r emptyRowReader) Schema() *Schema                      { return r.schema }
 func (r emptyRowReader) ReadRow(row Row) (Row, error)         { return row, io.EOF }
+func (r emptyRowReader) SeekToRow(int64) error                { return nil }
 func (r emptyRowReader) WriteRowsTo(RowWriter) (int64, error) { return 0, nil }
+
+type emptyPages struct{}
+
+func (emptyPages) ReadPage() (Page, error) { return nil, io.EOF }
+func (emptyPages) SeekToRow(int64) error   { return nil }
 
 var (
 	emptyColumnIndex = columnIndex{}

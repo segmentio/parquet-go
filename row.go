@@ -69,6 +69,13 @@ type RowReaderWithSchema interface {
 	Schema() *Schema
 }
 
+// RowReadSeeker is an interface implemented by row readers which support
+// seeking to arbitrary row positions.
+type RowReadSeeker interface {
+	RowReader
+	RowSeeker
+}
+
 // RowWriter writes parquet rows to an underlying medium.
 type RowWriter interface {
 	WriteRow(Row) error
@@ -89,6 +96,35 @@ type RowWriterTo interface {
 type RowWriterWithSchema interface {
 	RowWriter
 	Schema() *Schema
+}
+
+type forwardRowSeeker struct {
+	rows  RowReader
+	seek  int64
+	index int64
+}
+
+func (r *forwardRowSeeker) ReadRow(row Row) (Row, error) {
+	n := len(row)
+	for {
+		row, err := r.rows.ReadRow(row[:n])
+		if err != nil {
+			return row, err
+		}
+		ret := r.index >= r.seek
+		r.index++
+		if ret {
+			return row, err
+		}
+	}
+}
+
+func (r *forwardRowSeeker) SeekToRow(rowIndex int64) error {
+	if rowIndex >= r.index {
+		r.seek = rowIndex
+		return nil
+	}
+	return fmt.Errorf("SeekToRow: %T does not implement parquet.RowSeeker: cannot seek backward from row %d to %d", r.rows, r.index, rowIndex)
 }
 
 // CopyRows copies rows from src to dst.
