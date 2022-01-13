@@ -215,7 +215,7 @@ type rowGroupRowReader struct {
 	seek     int64
 }
 
-func (r *rowGroupRowReader) init(rowGroup RowGroup) {
+func (r *rowGroupRowReader) init(rowGroup RowGroup) error {
 	const columnBufferSize = defaultValueBufferSize
 	numColumns := rowGroup.NumColumns()
 	buffer := make([]Value, columnBufferSize*numColumns)
@@ -230,10 +230,9 @@ func (r *rowGroupRowReader) init(rowGroup RowGroup) {
 	}
 
 	if r.seek > 0 {
-		for i := range r.columns {
-			r.columns[i].seekToRow(r.seek)
-		}
+		return r.SeekToRow(r.seek)
 	}
+	return nil
 }
 
 func (r *rowGroupRowReader) Schema() *Schema {
@@ -249,7 +248,9 @@ func (r *rowGroupRowReader) Schema() *Schema {
 
 func (r *rowGroupRowReader) SeekToRow(rowIndex int64) error {
 	for i := range r.columns {
-		r.columns[i].seekToRow(rowIndex)
+		if err := r.columns[i].seekToRow(rowIndex); err != nil {
+			return err
+		}
 	}
 	r.seek = rowIndex
 	return nil
@@ -257,8 +258,11 @@ func (r *rowGroupRowReader) SeekToRow(rowIndex int64) error {
 
 func (r *rowGroupRowReader) ReadRow(row Row) (Row, error) {
 	if r.rowGroup != nil {
-		r.init(r.rowGroup)
+		err := r.init(r.rowGroup)
 		r.rowGroup = nil
+		if err != nil {
+			return row, err
+		}
 	}
 	if r.schema == nil {
 		return row, io.EOF

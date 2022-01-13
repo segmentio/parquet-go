@@ -2,7 +2,6 @@ package parquet
 
 import (
 	"io"
-	"sort"
 )
 
 // The ColumnChunk interface represents individual columns of a row group.
@@ -56,30 +55,30 @@ func (r *columnChunkReader) buffered() int {
 	return len(r.buffer) - r.offset
 }
 
-func (r *columnChunkReader) seekToRow(rowIndex int64) {
-	// clearValues(r.buffer)
-	// r.buffer = r.buffer[:0]
-	// r.offset = 0
-	// r.page = nil
-	// r.values = nil
-	pageIndex := 0
+func (r *columnChunkReader) seekToRow(rowIndex int64) error {
+	// TODO: there are a few optimizations we can make here:
+	// * is the row buffered already? => advance the offset
+	// * is the row in the current page? => seek in values
+	clearValues(r.buffer)
+	r.buffer = r.buffer[:0]
+	r.offset = 0
+	r.page = nil
+	r.values = nil
 
-	if offsetIndex := r.column.OffsetIndex(); offsetIndex == nil {
-
-	} else {
-		numPages := offsetIndex.NumPages()
-		pageIndex = sort.Search(numPages, func(i int) bool {
-			return offsetIndex.FirstRowIndex(i) >= rowIndex
-		})
-
-		switch {
-		case pageIndex == 0:
-		case pageIndex == numPages:
-
+	if r.reader == nil {
+		if r.column != nil {
+			r.reader = r.column.Pages()
 		}
 	}
 
-	// TODO: WIP
+	if r.reader != nil {
+		if err := r.reader.SeekToRow(rowIndex); err != nil {
+			r.reader = nil
+			r.column = nil
+			return err
+		}
+	}
+	return nil
 }
 
 func (r *columnChunkReader) readPage() (err error) {
