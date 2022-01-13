@@ -206,7 +206,7 @@ type columnSortFunc struct {
 }
 
 type bufferedRowGroupCursor struct {
-	reader  RowReader
+	reader  Rows
 	rowbuf  Row
 	columns [][]Value
 }
