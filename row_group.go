@@ -275,7 +275,7 @@ func (r *rowGroupRowReader) WriteRowsTo(w RowWriter) (int64, error) {
 	if r.rowGroup == nil {
 		return CopyRows(w, struct{ RowReaderWithSchema }{r})
 	}
-	defer func() { r.rowGroup = nil }()
+	defer func() { r.rowGroup, r.seek = nil, 0 }()
 	rowGroup := r.rowGroup
 	if r.seek > 0 {
 		rowGroup = &seekRowGroup{base: rowGroup, seek: r.seek}
