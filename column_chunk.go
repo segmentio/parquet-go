@@ -1,6 +1,9 @@
 package parquet
 
-import "io"
+import (
+	"io"
+	"sort"
+)
 
 // The ColumnChunk interface represents individual columns of a row group.
 type ColumnChunk interface {
@@ -59,6 +62,22 @@ func (r *columnChunkReader) seekToRow(rowIndex int64) {
 	// r.offset = 0
 	// r.page = nil
 	// r.values = nil
+	pageIndex := 0
+
+	if offsetIndex := r.column.OffsetIndex(); offsetIndex == nil {
+
+	} else {
+		numPages := offsetIndex.NumPages()
+		pageIndex = sort.Search(numPages, func(i int) bool {
+			return offsetIndex.FirstRowIndex(i) >= rowIndex
+		})
+
+		switch {
+		case pageIndex == 0:
+		case pageIndex == numPages:
+
+		}
+	}
 
 	// TODO: WIP
 }

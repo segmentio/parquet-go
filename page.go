@@ -47,10 +47,10 @@ type Page interface {
 	Values() ValueReader
 
 	// Buffer returns the page as a BufferedPage, which may be the page itself
-	// if it could be buffered already.
+	// if it was already buffered.
 	//
 	// Compressed pages will be consumed to create the returned buffered page,
-	// their content will no be readable anymore.
+	// their content will no be readable anymore after the call.
 	Buffer() BufferedPage
 }
 
@@ -59,8 +59,8 @@ type Page interface {
 type BufferedPage interface {
 	Page
 
-	// Returns a new page which is as slice of the receiver between value
-	// row indexes i and j.
+	// Returns a new page which is as slice of the receiver between row indexes
+	// i and j.
 	Slice(i, j int64) BufferedPage
 
 	// Expose the lists of repetition and definition levels of the page.

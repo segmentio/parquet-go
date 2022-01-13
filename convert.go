@@ -450,8 +450,10 @@ func (i missingColumnIndex) IsDescending() bool  { return false }
 
 type missingOffsetIndex struct{}
 
-func (missingOffsetIndex) NumPages() int                          { return 1 }
-func (missingOffsetIndex) PageLocation(int) (int64, int64, int64) { return 0, 0, 0 }
+func (missingOffsetIndex) NumPages() int                { return 1 }
+func (missingOffsetIndex) Offset(int) int64             { return 0 }
+func (missingOffsetIndex) CompressedPageSize(int) int64 { return 0 }
+func (missingOffsetIndex) FirstRowIndex(int) int64      { return 0 }
 
 type missingPage struct{ *missingColumnChunk }
 

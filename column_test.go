@@ -220,8 +220,7 @@ func checkColumnChunkOffsetIndex(columnChunk parquet.ColumnChunk) error {
 	rowIndex := int64(0)
 
 	err := forEachPage(columnChunk.Pages(), func(page parquet.Page) error {
-		_, _, firstRowIndex := offsetIndex.PageLocation(pagesRead)
-		if firstRowIndex != rowIndex {
+		if firstRowIndex := offsetIndex.FirstRowIndex(pagesRead); firstRowIndex != rowIndex {
 			return fmt.Errorf("row number mismatch: index=%d page=%d", firstRowIndex, rowIndex)
 		}
 		rowIndex += int64(page.NumRows())
@@ -339,11 +338,10 @@ func newOffsetIndex(offsetIndex parquet.OffsetIndex) *format.OffsetIndex {
 	}
 
 	for i := range index.PageLocations {
-		offset, compressedPageSize, firstRowIndex := offsetIndex.PageLocation(i)
 		index.PageLocations[i] = format.PageLocation{
-			Offset:             offset,
-			CompressedPageSize: int32(compressedPageSize),
-			FirstRowIndex:      firstRowIndex,
+			Offset:             offsetIndex.Offset(i),
+			CompressedPageSize: int32(offsetIndex.CompressedPageSize(i)),
+			FirstRowIndex:      offsetIndex.FirstRowIndex(i),
 		}
 	}
 
