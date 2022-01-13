@@ -31,7 +31,7 @@ type Reader struct {
 	readSchema *Schema
 	seen       reflect.Type
 	rowGroup   RowGroup
-	rows       RowReader
+	rows       Rows
 	buffer     []Value
 	values     []Value
 	conv       Conversion
@@ -194,3 +194,18 @@ func (r *Reader) ReadRow(row Row) (Row, error) {
 
 // Schema returns the schema of rows read by r.
 func (r *Reader) Schema() *Schema { return r.fileSchema }
+
+// NumRows returns the number of rows that can be read from r.
+func (r *Reader) NumRows() int64 { return r.rowGroup.NumRows() }
+
+// SeekToRow positions r at the given row index.
+func (r *Reader) SeekToRow(rowIndex int64) error {
+	if r.rows == nil {
+		r.rows = r.rowGroup.Rows()
+	}
+	return r.rows.SeekToRow(rowIndex)
+}
+
+var (
+	_ Rows = (*Reader)(nil)
+)
