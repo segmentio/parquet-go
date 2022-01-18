@@ -155,8 +155,8 @@ including a description of the schema of the tables represented by the rows and
 columns they contain.
 
 Parquet files are also immutable; once written, there is not mechanism for
-_updating_ a file. If their contents need to be changed, files must be
-rewritten.
+_updating_ a file. If their contents need to be changed, rows must be read,
+modified, and written to a new file.
 
 Because applications evolve, the schema written to parquet files also tend to
 evolve over time. Those requirements creating challenges when applications need
