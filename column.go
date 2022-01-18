@@ -2,8 +2,8 @@ package parquet
 
 import (
 	"fmt"
+	"reflect"
 	"sort"
-	"strings"
 
 	"github.com/segmentio/parquet/compress"
 	"github.com/segmentio/parquet/deprecated"
@@ -22,39 +22,34 @@ type Column struct {
 	file        *File
 	schema      *format.SchemaElement
 	order       *format.ColumnOrder
-	path        []string
+	path        columnPath
 	names       []string
 	columns     []*Column
 	chunks      []*format.ColumnChunk
-	columnIndex []*ColumnIndex
-	offsetIndex []*OffsetIndex
+	columnIndex []*format.ColumnIndex
+	offsetIndex []*format.OffsetIndex
 	encoding    []encoding.Encoding
 	compression []compress.Codec
 
 	depth              int8
 	maxRepetitionLevel int8
 	maxDefinitionLevel int8
+	index              int8
 }
-
-// Schema returns the underlying schema element of c.
-func (c *Column) Schema() *format.SchemaElement { return c.schema }
-
-// Order returns the underlying column order of c.
-func (c *Column) Order() *format.ColumnOrder { return c.order }
 
 // Type returns the type of the column.
 //
 // The returned value is unspecified if c is not a leaf column.
 func (c *Column) Type() Type { return c.typ }
 
-// Required returns true if the column is required.
-func (c *Column) Required() bool { return schemaRepetitionTypeOf(c.schema) == format.Required }
-
 // Optional returns true if the column is optional.
 func (c *Column) Optional() bool { return schemaRepetitionTypeOf(c.schema) == format.Optional }
 
 // Repeated returns true if the column may repeat.
 func (c *Column) Repeated() bool { return schemaRepetitionTypeOf(c.schema) == format.Repeated }
+
+// Required returns true if the column is required.
+func (c *Column) Required() bool { return schemaRepetitionTypeOf(c.schema) == format.Required }
 
 // NumChildren returns the number of child columns.
 //
@@ -66,11 +61,33 @@ func (c *Column) NumChildren() int { return len(c.columns) }
 // This method contributes to satisfying the Node interface.
 func (c *Column) ChildNames() []string { return c.names }
 
+// Children returns the children of c.
+//
+// The method returns a reference to an internal field of c that the application
+// must treat as a read-only value.
+func (c *Column) Children() []*Column { return c.columns }
+
 // ChildByName returns a Node value representing the child column matching the
 // name passed as argument.
 //
 // This method contributes to satisfying the Node interface.
-func (c *Column) ChildByName(name string) Node { return c.Column(name) }
+func (c *Column) ChildByName(name string) Node {
+	if child := c.Column(name); child != nil {
+		return child
+	}
+	return nil
+}
+
+// ChildByIndex returns a Node value representing the child column at the given
+// index.
+//
+// This method contributes to satisfying the IndexedNode interface.
+func (c *Column) ChildByIndex(index int) Node {
+	if index >= 0 && index < len(c.columns) {
+		return c.columns[index]
+	}
+	return nil
+}
 
 // Encoding returns the encodings used by this column.
 func (c *Column) Encoding() []encoding.Encoding { return c.encoding }
@@ -101,11 +118,30 @@ func (c *Column) Column(name string) *Column {
 	return nil
 }
 
-// Chunks returns an iterator over the column chunks that compose this column.
-func (c *Column) Chunks() *ColumnChunks { return &ColumnChunks{column: c, index: -1} }
+// Pages returns a reader exposing all pages in this column, across row groups.
+func (c *Column) Pages() PageReader {
+	if c.index < 0 {
+		return emptyPageReader{}
+	}
+	r := new(multiReusablePageReader)
+	c.setPagesOn(r)
+	return r
+}
+
+func (c *Column) setPagesOn(r *multiReusablePageReader) {
+	pages := make([]filePageReader, len(c.file.rowGroups))
+	columnIndex := int(c.index)
+	for i := range pages {
+		c.file.rowGroups[i].columns[columnIndex].setPagesOn(&pages[i])
+	}
+	r.pages = make([]reusablePageReader, len(pages))
+	for i := range pages {
+		r.pages[i] = &pages[i]
+	}
+}
 
 // Depth returns the position of the column relative to the root.
-func (c *Column) Depth() int { return int(c.depth) }
+func (c *Column) Depth() int8 { return c.depth }
 
 // MaxRepetitionLevel returns the maximum value of repetition levels on this
 // column.
@@ -115,37 +151,38 @@ func (c *Column) MaxRepetitionLevel() int8 { return c.maxRepetitionLevel }
 // column.
 func (c *Column) MaxDefinitionLevel() int8 { return c.maxDefinitionLevel }
 
-// String returns a human-redable string representation of the oclumn.
-func (c *Column) String() string {
-	switch {
-	case c.columns != nil:
-		return fmt.Sprintf("%s{%s,R=%d,D=%d}",
-			join(c.path),
-			c.schema.RepetitionType,
-			c.maxRepetitionLevel,
-			c.maxDefinitionLevel)
+// Index returns the position of the column in a row. Only leaf columns have a
+// column index, the method returns -1 when called on non-leaf columns.
+func (c *Column) Index() int8 { return c.index }
 
-	case c.Type().Kind() == FixedLenByteArray:
-		return fmt.Sprintf("%s{%s(%d),%s,R=%d,D=%d}",
-			join(c.path),
-			c.schema.Type,
-			c.schema.TypeLength,
-			c.schema.RepetitionType,
-			c.maxRepetitionLevel,
-			c.maxDefinitionLevel)
-
-	default:
-		return fmt.Sprintf("%s{%s,%s,R=%d,D=%d}",
-			join(c.path),
-			c.schema.Type,
-			c.schema.RepetitionType,
-			c.maxRepetitionLevel,
-			c.maxDefinitionLevel)
+// ValueByName returns the sub-value with the given name in base.
+func (c *Column) ValueByName(base reflect.Value, name string) reflect.Value {
+	if len(c.columns) == 0 { // leaf?
+		panic("cannot call ValueByName on leaf column")
 	}
+	return base.MapIndex(reflect.ValueOf(name))
 }
 
-func join(path []string) string {
-	return strings.Join(path, ".")
+// ValueByIndex returns the sub-value in base for the child column at the given
+// index.
+func (c *Column) ValueByIndex(base reflect.Value, index int) reflect.Value {
+	return c.ValueByName(base, c.columns[index].Name())
+}
+
+// GoType returns the Go type that best represents the parquet column.
+func (c *Column) GoType() reflect.Type { return goTypeOf(c) }
+
+// String returns a human-redable string representation of the column.
+func (c *Column) String() string { return c.path.String() + ": " + sprint(c.Name(), c) }
+
+func (c *Column) forEachLeaf(do func(*Column)) {
+	if len(c.columns) == 0 {
+		do(c)
+	} else {
+		for _, child := range c.columns {
+			child.forEachLeaf(do)
+		}
+	}
 }
 
 func openColumns(file *File) (*Column, error) {
@@ -166,11 +203,25 @@ func openColumns(file *File) (*Column, error) {
 		}
 	}
 
-	return c, setMaxLevels(c, 0, 0, 0)
+	_, err = c.setLevels(0, 0, 0, 0)
+	return c, err
 }
 
-func setMaxLevels(col *Column, depth, repetition, definition int8) error {
-	switch schemaRepetitionTypeOf(col.schema) {
+func (c *Column) setLevels(depth, repetition, definition, index int) (int, error) {
+	if depth > MaxColumnDepth {
+		return -1, fmt.Errorf("cannot represent parquet columns with more than %d nested levels: %s", MaxColumnDepth, c.path)
+	}
+	if index > MaxColumnIndex {
+		return -1, fmt.Errorf("cannot represent parquet rows with more than %d columns: %s", MaxColumnIndex, c.path)
+	}
+	if repetition > MaxRepetitionLevel {
+		return -1, fmt.Errorf("cannot represent parquet columns with more than %d repetition levels: %s", MaxRepetitionLevel, c.path)
+	}
+	if definition > MaxDefinitionLevel {
+		return -1, fmt.Errorf("cannot represent parquet columns with more than %d definition levels: %s", MaxDefinitionLevel, c.path)
+	}
+
+	switch schemaRepetitionTypeOf(c.schema) {
 	case format.Optional:
 		definition++
 	case format.Repeated:
@@ -178,28 +229,25 @@ func setMaxLevels(col *Column, depth, repetition, definition int8) error {
 		definition++
 	}
 
-	col.depth = depth
-	col.maxRepetitionLevel = repetition
-	col.maxDefinitionLevel = definition
+	c.depth = int8(depth)
+	c.maxRepetitionLevel = int8(repetition)
+	c.maxDefinitionLevel = int8(definition)
 	depth++
 
-	if depth < 0 {
-		return fmt.Errorf("cannot represent parquet columns with more than 127 nested levels: %s", join(col.path))
-	}
-	if repetition < 0 {
-		return fmt.Errorf("cannot represent parquet columns with more than 127 repetition levels: %s", join(col.path))
-	}
-	if definition < 0 {
-		return fmt.Errorf("cannot represent parquet columns with more than 127 definition levels: %s", join(col.path))
+	if len(c.columns) > 0 {
+		c.index = -1
+	} else {
+		c.index = int8(index)
+		index++
 	}
 
-	for _, c := range col.columns {
-		if err := setMaxLevels(c, depth, repetition, definition); err != nil {
-			return err
+	var err error
+	for _, child := range c.columns {
+		if index, err = child.setLevels(depth, repetition, definition, index); err != nil {
+			return -1, err
 		}
 	}
-
-	return nil
+	return index, nil
 }
 
 type columnLoader struct {
@@ -213,7 +261,7 @@ func (cl *columnLoader) open(file *File, path []string) (*Column, error) {
 		file:   file,
 		schema: &file.metadata.Schema[cl.schemaIndex],
 	}
-	c.path = append(path[:len(path):len(path)], c.schema.Name)
+	c.path = c.path.append(c.schema.Name)
 
 	cl.schemaIndex++
 	numChildren := int(c.schema.NumChildren)
@@ -231,8 +279,8 @@ func (cl *columnLoader) open(file *File, path []string) (*Column, error) {
 		cl.rowGroupColumnIndex++
 
 		c.chunks = make([]*format.ColumnChunk, 0, len(rowGroups))
-		c.columnIndex = make([]*ColumnIndex, 0, len(rowGroups))
-		c.offsetIndex = make([]*OffsetIndex, 0, len(rowGroups))
+		c.columnIndex = make([]*format.ColumnIndex, 0, len(rowGroups))
+		c.offsetIndex = make([]*format.OffsetIndex, 0, len(rowGroups))
 
 		for i, rowGroup := range rowGroups {
 			if rowGroupColumnIndex >= len(rowGroup.Columns) {
@@ -473,5 +521,6 @@ func schemaRepetitionTypeOf(s *format.SchemaElement) format.FieldRepetitionType 
 }
 
 var (
-	_ Node = (*Column)(nil)
+	_ Node        = (*Column)(nil)
+	_ IndexedNode = (*Column)(nil)
 )

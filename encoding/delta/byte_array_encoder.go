@@ -7,7 +7,6 @@ import (
 	"math"
 
 	"github.com/segmentio/parquet/encoding"
-	"github.com/segmentio/parquet/encoding/plain"
 	"github.com/segmentio/parquet/format"
 )
 
@@ -16,6 +15,7 @@ type ByteArrayEncoder struct {
 	deltas   BinaryPackedEncoder
 	arrays   LengthByteArrayEncoder
 	prefixes []int32
+	suffixes encoding.ByteArrayList
 }
 
 func NewByteArrayEncoder(w io.Writer) *ByteArrayEncoder {
@@ -28,34 +28,41 @@ func (e *ByteArrayEncoder) Reset(w io.Writer) {
 	e.deltas.Reset(w)
 	e.arrays.Reset(w)
 	e.prefixes = e.prefixes[:0]
+	e.suffixes.Reset()
 }
 
 func (e *ByteArrayEncoder) Encoding() format.Encoding {
 	return format.DeltaByteArray
 }
 
-func (e *ByteArrayEncoder) EncodeByteArray(data []byte) error {
-	lastValue := ([]byte)(nil)
-	suffixes := data[:0] // TODO: is it OK to reuse the input buffer?
-	e.prefixes = e.prefixes[:0]
+func (e *ByteArrayEncoder) EncodeByteArray(data encoding.ByteArrayList) error {
+	return e.encode(data.Len(), data.Index)
+}
 
-	_, err := plain.ScanByteArrayList(data, plain.All, func(value []byte) error {
+func (e *ByteArrayEncoder) EncodeFixedLenByteArray(size int, data []byte) error {
+	return e.encode(len(data)/size, func(i int) []byte { return data[i*size : (i+1)*size] })
+}
+
+func (e *ByteArrayEncoder) encode(count int, valueAt func(int) []byte) error {
+	lastValue := ([]byte)(nil)
+	e.prefixes = e.prefixes[:0]
+	e.suffixes.Reset()
+
+	for i := 0; i < count; i++ {
+		value := valueAt(i)
 		if len(value) > math.MaxInt32 {
 			return fmt.Errorf("DELTA_BYTE_ARRAY: byte array of length %d is too large to be encoded", len(value))
 		}
 		n := prefixLength(lastValue, value)
 		e.prefixes = append(e.prefixes, int32(n))
+		e.suffixes.Push(value[n:])
 		lastValue = value
-		suffixes = plain.AppendByteArray(suffixes, value[n:])
-		return nil
-	})
-	if err != nil {
-		return err
 	}
+
 	if err := e.deltas.EncodeInt32(e.prefixes); err != nil {
 		return err
 	}
-	return e.arrays.EncodeByteArray(suffixes)
+	return e.arrays.EncodeByteArray(e.suffixes)
 }
 
 func prefixLength(base, data []byte) int {

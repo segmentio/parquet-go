@@ -6,7 +6,9 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
+	"github.com/google/uuid"
 	"github.com/segmentio/parquet/compress"
 	"github.com/segmentio/parquet/deprecated"
 	"github.com/segmentio/parquet/encoding"
@@ -17,9 +19,11 @@ import (
 // Schema implements the Node interface to represent the root node of a parquet
 // schema.
 type Schema struct {
-	name     string
-	root     Node
-	traverse traverseFunc
+	name        string
+	root        Node
+	deconstruct deconstructFunc
+	reconstruct reconstructFunc
+	readRow     columnReadRowFunc
 }
 
 // SchemaOf constructs a parquet schema from a Go value.
@@ -54,7 +58,7 @@ type Schema struct {
 // representing the scale and the second the precision; for example:
 //
 //	type Item struct {
-//		Cost int64 `parquet:"cost,decimal(0,3)"`
+//		Cost int64 `parquet:"cost,decimal(0:3)"`
 //	}
 //
 // Invalid combination of struct tags and Go types, or repeating options will
@@ -62,42 +66,82 @@ type Schema struct {
 //
 // The schema name is the Go type name of the value.
 func SchemaOf(model interface{}) *Schema {
-	t := reflect.TypeOf(model)
+	return schemaOf(dereference(reflect.TypeOf(model)))
+}
+
+var cachedSchemas sync.Map // map[reflect.Type]*Schema
+
+func schemaOf(model reflect.Type) *Schema {
+	cached, _ := cachedSchemas.Load(model)
+	schema, _ := cached.(*Schema)
+	if schema != nil {
+		return schema
+	}
+	if model.Kind() != reflect.Struct {
+		panic("cannot construct parquet schema from value of type " + model.String())
+	}
+	schema = NewSchema(model.Name(), nodeOf(model))
+	if actual, loaded := cachedSchemas.LoadOrStore(model, schema); loaded {
+		schema = actual.(*Schema)
+	}
+	return schema
+}
+
+// NewSchema constructs a new Schema object with the given name and root node.
+func NewSchema(name string, root Node) *Schema {
+	return &Schema{
+		name:        name,
+		root:        root,
+		deconstruct: makeDeconstructFunc(root),
+		reconstruct: makeReconstructFunc(root),
+		readRow:     makeColumnReadRowFunc(root),
+	}
+}
+
+func dereference(t reflect.Type) reflect.Type {
 	if t.Kind() == reflect.Ptr {
 		t = t.Elem()
 	}
-	return NamedSchemaOf(t.Name(), model)
+	return t
 }
 
-// NamedSchemaOf is like SchemaOf but allows the program to customize the name
-// of the parquet schema.
-func NamedSchemaOf(name string, model interface{}) *Schema {
-	return namedSchemaOf(name, reflect.ValueOf(model))
-}
-
-func namedSchemaOf(name string, model reflect.Value) *Schema {
-	switch t := model.Type(); t.Kind() {
-	case reflect.Struct:
-		node, _, traverse := structNodeOf(t, 0)
-		return newSchema(name, node, traverse)
-
-	case reflect.Ptr:
-		if elem := t.Elem(); elem.Kind() == reflect.Struct {
-			node, _, traverse := structNodeOf(elem, 0)
-			return newSchema(name, node, traverse)
-		}
+func makeDeconstructFunc(node Node) (deconstruct deconstructFunc) {
+	if schema, _ := node.(*Schema); schema != nil {
+		return schema.deconstruct
 	}
-
-	panic("cannot construct parquet schema from value of type " + model.Type().String())
-}
-
-func newSchema(name string, root Node, traverse traverseFunc) *Schema {
-	return &Schema{
-		name:     name,
-		root:     root,
-		traverse: traverse,
+	if !isLeaf(node) {
+		_, deconstruct = deconstructFuncOf(0, node)
 	}
+	return deconstruct
 }
+
+func makeReconstructFunc(node Node) (reconstruct reconstructFunc) {
+	if schema, _ := node.(*Schema); schema != nil {
+		return schema.reconstruct
+	}
+	if !isLeaf(node) {
+		_, reconstruct = reconstructFuncOf(0, node)
+	}
+	return reconstruct
+}
+
+func makeColumnReadRowFunc(node Node) columnReadRowFunc {
+	_, readRow := columnReadRowFuncOf(node, 0, 0)
+	return readRow
+}
+
+// ConfigureRowGroup satisfies the RowGroupOption interface, allowing Schema
+// instances to be passed to NewRowGroup to predeclare the schema of the
+// output parquet file.
+func (s *Schema) ConfigureRowGroup(config *RowGroupConfig) { config.Schema = s }
+
+// ConfigureWriter satisfies the WriterOption interface, allowing Schema
+// instances to be passed to NewWriter to predeclare the schema of the
+// output parquet file.
+func (s *Schema) ConfigureWriter(config *WriterConfig) { config.Schema = s }
+
+// String returns a parquet schema representation of s.
+func (s *Schema) String() string { return sprint(s.name, s.root) }
 
 // Name returns the name of s.
 func (s *Schema) Name() string { return s.name }
@@ -129,42 +173,20 @@ func (s *Schema) Encoding() []encoding.Encoding { return s.root.Encoding() }
 // Compression returns the list of compression codecs in the child nodes of s.
 func (s *Schema) Compression() []compress.Codec { return s.root.Compression() }
 
-// String returns a parquet schema representation of s.
-func (s *Schema) String() string {
-	b := new(strings.Builder)
-	Print(b, s.name, s.root)
-	return b.String()
+// GoType returns the Go type that best represents the schema.
+func (s *Schema) GoType() reflect.Type { return s.root.GoType() }
+
+// ValueByName is returns the sub-value with the givne name in base.
+func (s *Schema) ValueByName(base reflect.Value, name string) reflect.Value {
+	return s.root.ValueByName(base, name)
 }
 
-// Traversal is an interface used to implement the parquet schema traversal
-// algorithm.
-type Traversal interface {
-	// The Traverse method is called for each column index and parquet value
-	// when traversing a Go value with its parquet schema.
-	//
-	// The repetition and definition levels of the parquet value will be set
-	// according to the structure of the input Go value.
-	Traverse(columnIndex int, value Value) error
-}
-
-// TraversalFunc is an implementation of the Traverse interface for regular
-// Go functions and methods.
-type TraversalFunc func(int, Value) error
-
-// Traverse satisfies the Traversal interface.
-func (f TraversalFunc) Traverse(columnIndex int, value Value) error { return f(columnIndex, value) }
-
-// Traverse is the implementation of the traversal algorithm which converts
-// Go values into a sequence of column index + parquet value pairs by calling
-// the given traversal callback.
+// Deconstruct deconstructs a Go value and appends it to a row.
 //
-// The type of the Go value must match the parquet schema or the method will
-// panic.
-//
-// The traversal callback must not be nil or the method will panic.
-func (s *Schema) Traverse(value interface{}, traversal Traversal) error {
+// The method panics is the structure of the go value does not match the
+// parquet schema.
+func (s *Schema) Deconstruct(row Row, value interface{}) Row {
 	v := reflect.ValueOf(value)
-
 	if v.Kind() == reflect.Ptr {
 		if v.IsNil() {
 			v = reflect.Value{}
@@ -172,32 +194,77 @@ func (s *Schema) Traverse(value interface{}, traversal Traversal) error {
 			v = v.Elem()
 		}
 	}
+	if s.deconstruct != nil {
+		row = s.deconstruct(row, levels{}, v)
+	}
+	return row
+}
 
-	return s.traverse(levels{}, v, traversal)
+// Reconstruct reconstructs a Go value from a row.
+//
+// The go value passed as first argument must be a non-nil pointer for the
+// row to be decoded into.
+//
+// The method panics if the structure of the go value and parquet row do not
+// match.
+func (s *Schema) Reconstruct(value interface{}, row Row) error {
+	v := reflect.ValueOf(value)
+	if !v.IsValid() {
+		panic("cannot reconstruct row into go value of type <nil>")
+	}
+	if v.Kind() != reflect.Ptr {
+		panic("cannot reconstruct row into go value of non-pointer type " + v.Type().String())
+	}
+	if v.IsNil() {
+		panic("cannot reconstruct row into nil pointer of type " + v.Type().String())
+	}
+	var err error
+	if s.reconstruct != nil {
+		row, err = s.reconstruct(v.Elem(), levels{}, row)
+		if len(row) > 0 && err == nil {
+			err = fmt.Errorf("%d values remain unused after reconstructing go value of type %s from parquet row", len(row), v.Type())
+		}
+	}
+	return err
+}
+
+func (s *Schema) forEachNode(do func(name string, node Node)) {
+	forEachNodeOf(s.Name(), s, do)
+}
+
+func forEachNodeOf(name string, node Node, do func(string, Node)) {
+	do(name, node)
+
+	if !isLeaf(node) {
+		for _, name := range node.ChildNames() {
+			forEachNodeOf(name, node.ChildByName(name), do)
+		}
+	}
 }
 
 type structNode struct {
-	node
+	gotype reflect.Type
 	fields []structField
 	names  []string
 }
 
-func structNodeOf(t reflect.Type, columnIndex int) (*structNode, int, traverseFunc) {
+func structNodeOf(t reflect.Type) *structNode {
 	// Collect struct fields first so we can order them before generating the
 	// column indexes.
 	fields := structFieldsOf(t)
 
 	s := &structNode{
+		gotype: t,
 		fields: make([]structField, len(fields)),
 		names:  make([]string, len(fields)),
 	}
 
 	for i := range fields {
-		s.fields[i], columnIndex = makeStructField(fields[i], columnIndex)
+		s.fields[i] = makeStructField(fields[i])
 		s.names[i] = fields[i].Name
 	}
 
-	return s, columnIndex, s.traverse
+	return s
 }
 
 func structFieldsOf(t reflect.Type) []reflect.StructField {
@@ -236,40 +303,82 @@ func appendStructFields(t reflect.Type, fields []reflect.StructField, index []in
 	return fields
 }
 
-func (s *structNode) traverse(levels levels, value reflect.Value, traversal Traversal) error {
-	fieldByIndex := reflect.Value.FieldByIndex
+func (s *structNode) Optional() bool { return false }
 
-	if !value.IsValid() {
-		fieldByIndex = func(reflect.Value, []int) reflect.Value { return reflect.Value{} }
-	}
+func (s *structNode) Repeated() bool { return false }
 
-	for i := range s.fields {
-		f := &s.fields[i]
-		if err := f.traverse(levels, fieldByIndex(value, f.index), traversal); err != nil {
-			return err
-		}
-	}
+func (s *structNode) Required() bool { return true }
 
-	return nil
+func (s *structNode) Encoding() []encoding.Encoding { return nil }
+
+func (s *structNode) Compression() []compress.Codec { return nil }
+
+func (s *structNode) GoType() reflect.Type { return s.gotype }
+
+func (s *structNode) String() string { return sprint("", s) }
+
+func (s *structNode) Type() Type { return groupType{} }
+
+func (s *structNode) NumChildren() int { return len(s.fields) }
+
+func (s *structNode) ChildNames() []string { return s.names }
+
+func (s *structNode) ChildByName(name string) Node { return s.ChildByIndex(s.indexOf(name)) }
+
+func (s *structNode) ChildByIndex(index int) Node { return &s.fields[index] }
+
+func (s *structNode) ValueByName(base reflect.Value, name string) reflect.Value {
+	return s.ValueByIndex(base, s.indexOf(name))
 }
 
-func (s *structNode) Type() Type           { return groupType{} }
-func (s *structNode) NumChildren() int     { return len(s.fields) }
-func (s *structNode) ChildNames() []string { return s.names }
-func (s *structNode) ChildByName(name string) Node {
+func (s *structNode) ValueByIndex(base reflect.Value, index int) reflect.Value {
+	switch base.Kind() {
+	case reflect.Map:
+		if index >= 0 && index < len(s.names) {
+			return base.MapIndex(reflect.ValueOf(&s.names[index]).Elem())
+		}
+	default:
+		if index >= 0 && index < len(s.fields) {
+			f := &s.fields[index]
+			if len(f.index) == 1 {
+				return base.Field(f.index[0])
+			} else {
+				return fieldByIndex(base, f.index)
+			}
+		}
+	}
+	return reflect.Value{}
+}
+
+func (s *structNode) indexOf(name string) int {
 	i := sort.Search(len(s.names), func(i int) bool {
 		return s.names[i] >= name
 	})
-	if i >= 0 && i < len(s.fields) {
-		return &s.fields[i]
+	if i == len(s.names) || s.names[i] != name {
+		i = -1
 	}
-	panic("column not found in parquet schema: " + name)
+	return i
+}
+
+// fieldByIndex is like reflect.Value.FieldByIndex but returns the zero-value of
+// reflect.Value if one of the fields was a nil pointer instead of panicking.
+func fieldByIndex(v reflect.Value, index []int) reflect.Value {
+	for _, i := range index {
+		if v = v.Field(i); v.Kind() == reflect.Ptr {
+			if v.IsNil() {
+				v = reflect.Value{}
+				break
+			} else {
+				v = v.Elem()
+			}
+		}
+	}
+	return v
 }
 
 type structField struct {
-	Node
-	index    []int
-	traverse traverseFunc
+	wrappedNode
+	index []int
 }
 
 func structFieldString(f reflect.StructField) string {
@@ -288,7 +397,7 @@ func throwInvalidStructField(msg string, field reflect.StructField) {
 	panic(msg + ": " + structFieldString(field))
 }
 
-func makeStructField(f reflect.StructField, columnIndex int) (structField, int) {
+func makeStructField(f reflect.StructField) structField {
 	var (
 		field     = structField{index: f.Index}
 		optional  bool
@@ -297,12 +406,11 @@ func makeStructField(f reflect.StructField, columnIndex int) (structField, int) 
 		codecs    []compress.Codec
 	)
 
-	setNode := func(node Node, traverse traverseFunc) {
+	setNode := func(node Node) {
 		if field.Node != nil {
 			throwInvalidStructField("struct field has multiple logical parquet types declared", f)
 		}
 		field.Node = node
-		field.traverse = traverse
 	}
 
 	setOptional := func() {
@@ -339,7 +447,6 @@ func makeStructField(f reflect.StructField, columnIndex int) (structField, int) 
 
 	if tag := f.Tag.Get("parquet"); tag != "" {
 		var element Node
-		var traverse traverseFunc
 		_, tag = split(tag) // skip the field name
 
 		for tag != "" {
@@ -366,6 +473,9 @@ func makeStructField(f reflect.StructField, columnIndex int) (structField, int) 
 			case "zstd":
 				setCompression(&Zstd)
 
+			case "uncompressed":
+				setCompression(&Uncompressed)
+
 			case "plain":
 				setEncoding(&Plain)
 
@@ -384,6 +494,12 @@ func makeStructField(f reflect.StructField, columnIndex int) (structField, int) 
 					} else {
 						throwInvalidFieldTag(f, option)
 					}
+				case reflect.Array:
+					if f.Type.Elem().Kind() == reflect.Uint8 { // [N]byte?
+						setEncoding(&DeltaByteArray)
+					} else {
+						throwInvalidFieldTag(f, option)
+					}
 				default:
 					throwInvalidFieldTag(f, option)
 				}
@@ -391,8 +507,8 @@ func makeStructField(f reflect.StructField, columnIndex int) (structField, int) 
 			case "list":
 				switch f.Type.Kind() {
 				case reflect.Slice:
-					element, columnIndex, traverse = nodeOf(f.Type.Elem(), columnIndex)
-					setNode(element, traverse)
+					element = nodeOf(f.Type.Elem())
+					setNode(element)
 					setList()
 				default:
 					throwInvalidFieldTag(f, option)
@@ -401,17 +517,13 @@ func makeStructField(f reflect.StructField, columnIndex int) (structField, int) 
 			case "enum":
 				switch f.Type.Kind() {
 				case reflect.String:
-					setNode(Enum(), traverseLeaf(ByteArray, f.Type, columnIndex))
-					columnIndex++
+					setNode(Enum())
 				default:
 					throwInvalidFieldTag(f, option)
 				}
 
 			case "uuid":
 				switch f.Type.Kind() {
-				case reflect.String:
-					setNode(UUID(), traverseLeaf(ByteArray, f.Type, columnIndex))
-					columnIndex++
 				case reflect.Array:
 					if f.Type.Elem().Kind() != reflect.Uint8 || f.Type.Len() != 16 {
 						throwInvalidFieldTag(f, option)
@@ -434,7 +546,7 @@ func makeStructField(f reflect.StructField, columnIndex int) (structField, int) 
 				default:
 					throwInvalidFieldTag(f, option)
 				}
-				setNode(Decimal(scale, precision, baseType), traverseLeaf(baseType.Kind(), f.Type, columnIndex))
+				setNode(Decimal(scale, precision, baseType))
 
 			default:
 				throwUnknownFieldTag(f, option)
@@ -443,7 +555,7 @@ func makeStructField(f reflect.StructField, columnIndex int) (structField, int) 
 	}
 
 	if field.Node == nil {
-		field.Node, columnIndex, field.traverse = nodeOf(f.Type, columnIndex)
+		field.Node = nodeOf(f.Type)
 	}
 
 	field.Node = Compressed(field.Node, codecs...)
@@ -451,66 +563,76 @@ func makeStructField(f reflect.StructField, columnIndex int) (structField, int) 
 
 	if list {
 		field.Node = List(field.Node)
-		field.traverse = traverseSlice(field.traverse)
 	}
 
 	if optional {
 		field.Node = Optional(field.Node)
-		field.traverse = traverseOptional(field.traverse)
 	}
 
-	return field, columnIndex
+	return field
 }
 
-func nodeOf(t reflect.Type, columnIndex int) (Node, int, traverseFunc) {
+func nodeOf(t reflect.Type) Node {
 	switch t {
 	case reflect.TypeOf(deprecated.Int96{}):
-		return Leaf(Int96Type), columnIndex + 1, traverseLeaf(Int96, t, columnIndex)
+		return Leaf(Int96Type)
+	case reflect.TypeOf(uuid.UUID{}):
+		return UUID()
 	}
 
+	var n Node
 	switch t.Kind() {
 	case reflect.Bool:
-		return Leaf(BooleanType), columnIndex + 1, traverseLeaf(Boolean, t, columnIndex)
+		n = Leaf(BooleanType)
 
 	case reflect.Int, reflect.Int64:
-		return Int(64), columnIndex + 1, traverseLeaf(Int64, t, columnIndex)
+		n = Int(64)
 
 	case reflect.Int8, reflect.Int16, reflect.Int32:
-		return Int(t.Bits()), columnIndex + 1, traverseLeaf(Int32, t, columnIndex)
+		n = Int(t.Bits())
 
 	case reflect.Uint, reflect.Uintptr, reflect.Uint64:
-		return Uint(64), columnIndex + 1, traverseLeaf(Int64, t, columnIndex)
+		n = Uint(64)
 
 	case reflect.Uint8, reflect.Uint16, reflect.Uint32:
-		return Uint(t.Bits()), columnIndex + 1, traverseLeaf(Int32, t, columnIndex)
+		n = Uint(t.Bits())
 
 	case reflect.Float32:
-		return Leaf(FloatType), columnIndex + 1, traverseLeaf(Float, t, columnIndex)
+		n = Leaf(FloatType)
 
 	case reflect.Float64:
-		return Leaf(DoubleType), columnIndex + 1, traverseLeaf(Double, t, columnIndex)
+		n = Leaf(DoubleType)
 
 	case reflect.String:
-		return String(), columnIndex + 1, traverseLeaf(ByteArray, t, columnIndex)
+		n = String()
 
 	case reflect.Ptr:
-		node, columnIndex, traverse := nodeOf(t.Elem(), columnIndex)
-		return Optional(node), columnIndex, traversePointer(traverse)
-
-	case reflect.Struct:
-		return structNodeOf(t, columnIndex)
+		n = Optional(nodeOf(t.Elem()))
 
 	case reflect.Slice:
-		node, columnIndex, traverse := nodeOf(t.Elem(), columnIndex)
-		return Repeated(node), columnIndex, traverseSlice(traverse)
+		if elem := t.Elem(); elem.Kind() == reflect.Uint8 { // []byte?
+			n = Leaf(ByteArrayType)
+		} else {
+			n = Repeated(nodeOf(elem))
+		}
 
 	case reflect.Array:
-		if t.Elem().Kind() == reflect.Uint8 && t.Len() == 16 {
-			return UUID(), columnIndex + 1, traverseLeaf(FixedLenByteArray, t, columnIndex)
+		if t.Elem().Kind() == reflect.Uint8 {
+			n = Leaf(FixedLenByteArrayType(t.Len()))
 		}
+
+	case reflect.Map:
+		n = Map(nodeOf(t.Key()), nodeOf(t.Elem()))
+
+	case reflect.Struct:
+		return structNodeOf(t)
 	}
 
-	panic("cannot create parquet node from go value of type " + t.String())
+	if n == nil {
+		panic("cannot create parquet node from go value of type " + t.String())
+	}
+
+	return &goNode{wrappedNode: wrap(n), gotype: t}
 }
 
 func split(s string) (head, tail string) {
@@ -536,7 +658,7 @@ func parseDecimalArgs(args string) (scale, precision int, err error) {
 	}
 	args = strings.TrimPrefix(args, "(")
 	args = strings.TrimSuffix(args, ")")
-	parts := strings.Split(args, ",")
+	parts := strings.Split(args, ":")
 	if len(parts) != 2 {
 		return 0, 0, fmt.Errorf("malformed decimal args: (%s)", args)
 	}
@@ -551,141 +673,15 @@ func parseDecimalArgs(args string) (scale, precision int, err error) {
 	return int(s), int(p), nil
 }
 
-type traverseFunc func(levels levels, value reflect.Value, traversal Traversal) error
-
-func traverseLeaf(k Kind, t reflect.Type, columnIndex int) traverseFunc {
-	var makeValue func(reflect.Value) Value
-
-	// Same rules as implemented in makeValue but using the reflect.Type to
-	// precompute the constructors.
-	switch k {
-	case Boolean:
-		switch t.Kind() {
-		case reflect.Bool:
-			makeValue = func(v reflect.Value) Value { return makeValueBoolean(v.Bool()) }
-		}
-
-	case Int32:
-		switch t.Kind() {
-		case reflect.Int8, reflect.Int16, reflect.Int32:
-			makeValue = func(v reflect.Value) Value { return makeValueInt32(int32(v.Int())) }
-		case reflect.Uint8, reflect.Uint16, reflect.Uint32:
-			makeValue = func(v reflect.Value) Value { return makeValueInt32(int32(v.Uint())) }
-		}
-
-	case Int64:
-		switch t.Kind() {
-		case reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Int:
-			makeValue = func(v reflect.Value) Value { return makeValueInt64(v.Int()) }
-		case reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uint, reflect.Uintptr:
-			makeValue = func(v reflect.Value) Value { return makeValueInt64(int64(v.Uint())) }
-		}
-
-	case Int96:
-		switch t {
-		case reflect.TypeOf(deprecated.Int96{}):
-			makeValue = func(v reflect.Value) Value { return makeValueInt96(v.Interface().(deprecated.Int96)) }
-		}
-
-	case Float:
-		switch t.Kind() {
-		case reflect.Float32:
-			makeValue = func(v reflect.Value) Value { return makeValueFloat(float32(v.Float())) }
-		}
-
-	case Double:
-		switch t.Kind() {
-		case reflect.Float64:
-			makeValue = func(v reflect.Value) Value { return makeValueDouble(v.Float()) }
-		}
-
-	case ByteArray:
-		switch t.Kind() {
-		case reflect.String:
-			makeValue = func(v reflect.Value) Value { return makeValueString(k, v.String()) }
-		case reflect.Slice:
-			if t.Elem().Kind() == reflect.Uint8 {
-				makeValue = func(v reflect.Value) Value { return makeValueBytes(k, v.Bytes()) }
-			}
-		}
-
-	case FixedLenByteArray:
-		switch t.Kind() {
-		case reflect.String:
-			makeValue = func(v reflect.Value) Value { return makeValueString(k, v.String()) }
-		case reflect.Array:
-			if t.Elem().Kind() == reflect.Uint8 {
-				makeValue = makeValueFixedLenByteArray
-			}
-		}
-	}
-
-	if makeValue == nil {
-		panic("traverseLeaf called with invalid combination of parquet and go types: " + k.String() + "/" + t.String())
-	}
-
-	return func(levels levels, value reflect.Value, traversal Traversal) error {
-		var v Value
-
-		if value.IsValid() {
-			v = makeValue(value)
-		}
-
-		v.repetitionLevel = levels.repetitionLevel
-		v.definitionLevel = levels.definitionLevel
-		return traversal.Traverse(columnIndex, v)
-	}
+type goNode struct {
+	wrappedNode
+	gotype reflect.Type
 }
 
-func traversePointer(traverse traverseFunc) traverseFunc {
-	return func(levels levels, value reflect.Value, traversal Traversal) error {
-		if value.IsValid() {
-			if value.IsNil() {
-				value = reflect.Value{}
-			} else {
-				levels.definitionLevel++
-				value = value.Elem()
-			}
-		}
-		return traverse(levels, value, traversal)
-	}
-}
+func (n *goNode) GoType() reflect.Type { return n.gotype }
 
-func traverseOptional(traverse traverseFunc) traverseFunc {
-	return func(levels levels, value reflect.Value, traversal Traversal) error {
-		if value.IsValid() {
-			if value.IsZero() {
-				value = reflect.Value{}
-			} else {
-				levels.definitionLevel++
-			}
-		}
-		return traverse(levels, value, traversal)
-	}
-}
-
-func traverseSlice(traverse traverseFunc) traverseFunc {
-	return func(levels levels, value reflect.Value, traversal Traversal) error {
-		var numValues int
-		var err error
-
-		if value.IsValid() {
-			numValues = value.Len()
-			levels.repetitionDepth++
-			if !value.IsNil() {
-				levels.definitionLevel++
-			}
-		}
-
-		if numValues == 0 {
-			err = traverse(levels, reflect.Value{}, traversal)
-		} else {
-			for i := 0; i < numValues && err == nil; i++ {
-				err = traverse(levels, value.Index(i), traversal)
-				levels.repetitionLevel = levels.repetitionDepth
-			}
-		}
-
-		return err
-	}
-}
+var (
+	_ RowGroupOption = (*Schema)(nil)
+	_ WriterOption   = (*Schema)(nil)
+	_ IndexedNode    = (*structNode)(nil)
+)

@@ -3,10 +3,11 @@ package parquet
 import (
 	"bytes"
 	"fmt"
+	"reflect"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/segmentio/parquet/deprecated"
-	"github.com/segmentio/parquet/encoding"
 	"github.com/segmentio/parquet/format"
 	"github.com/segmentio/parquet/internal/bits"
 )
@@ -50,13 +51,13 @@ type Type interface {
 	// For other types, the value is zero.
 	Length() int
 
-	// Compares two values and returns whether the first one is less than the
-	// other.
+	// Compares two values and returns a negative integer if a < b, positive if
+	// a > b, or zero if a == b.
 	//
-	// The values Kind must match the type, otherwise the result is undefined.
+	// The values' Kind must match the type, otherwise the result is undefined.
 	//
 	// The method panics if it is called on a group type.
-	Less(Value, Value) bool
+	Compare(a, b Value) int
 
 	// ColumnOrder returns the type's column order. For group types, this method
 	// returns nil.
@@ -108,15 +109,29 @@ type Type interface {
 	// The method panics if it is called on a group type.
 	NewDictionary(bufferSize int) Dictionary
 
-	// Creates a page writer for values of this type.
+	// Creates a row group buffer column for values of this type.
+	//
+	// Column buffers are created using the index of the column they are
+	// accumulating values in memory for (relative to the parent schema),
+	// and the size of their memory buffer.
+	//
+	// The buffer size is given in bytes, because we want to control memory
+	// consumption of the application, which is simpler to achieve with buffer
+	// size expressed in bytes rather than number of elements.
+	//
+	// Note that the buffer size is not a hard limit, it defines the initial
+	// capacity of the column buffer, but may grow as needed. Programs can use
+	// the Size method of the column buffer (or the parent row group, when
+	// relevant) to determine how many bytes are being used, and perofrm a flush
+	// of the buffers to a storage layer.
 	//
 	// The method panics if it is called on a group type.
-	NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader
+	NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer
 
-	// Creates a page reader for values of this type.
+	// Creates a decoder for values of this type.
 	//
 	// The method panics if it is called on a group type.
-	NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter
+	NewValueDecoder(bufferSize int) ValueDecoder
 }
 
 // In the current parquet version supported by this library, only type-defined
@@ -161,46 +176,6 @@ var convertedTypes = [...]deprecated.ConvertedType{
 	21: deprecated.Interval,
 }
 
-// 0-64 of cached type lengths
-var typeLengths = [...]int32{
-	0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-	0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
-
-	0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
-	0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F,
-
-	0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27,
-	0x28, 0x29, 0x2A, 0x2B, 0x2C, 0x2D, 0x2E, 0x2F,
-
-	0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37,
-	0x38, 0x39, 0x3A, 0x3B, 0x3C, 0x3D, 0x3E, 0x3F,
-}
-
-func typeBitsOf(t Type) uint {
-	switch t.Kind() {
-	case ByteArray, FixedLenByteArray:
-		return bits.BitCount(t.Length())
-	default:
-		return uint(t.Length())
-	}
-}
-
-func typeSizeOf(t Type) int {
-	return bits.ByteCount(typeBitsOf(t))
-}
-
-func typeLengthOf(t Type) *int32 {
-	switch n := t.Length(); {
-	case n == 0:
-		return nil
-	case n > 0 && n < len(typeLengths):
-		return &typeLengths[n]
-	default:
-		typeLength := int32(n)
-		return &typeLength
-	}
-}
-
 type primitiveType struct{}
 
 func (t primitiveType) ColumnOrder() *format.ColumnOrder { return &typeDefinedColumnOrder }
@@ -217,28 +192,28 @@ func (t booleanType) Kind() Kind { return Boolean }
 
 func (t booleanType) Length() int { return 1 }
 
+func (t booleanType) Compare(a, b Value) int {
+	return compareBool(a.Boolean(), b.Boolean())
+}
+
 func (t booleanType) PhyiscalType() *format.Type {
 	return &physicalTypes[Boolean]
 }
 
-func (t booleanType) Less(v1, v2 Value) bool {
-	return !v1.Boolean() && v2.Boolean()
-}
-
 func (t booleanType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
-	return newBooleanColumnIndexer(t)
+	return newBooleanColumnIndexer()
 }
 
 func (t booleanType) NewDictionary(bufferSize int) Dictionary {
 	return newBooleanDictionary(t)
 }
 
-func (t booleanType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
-	return newBooleanPageReader(t, decoder, bufferSize)
+func (t booleanType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newBooleanColumnBuffer(t, columnIndex, bufferSize)
 }
 
-func (t booleanType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
-	return newBooleanPageWriter(t, encoder, bufferSize)
+func (t booleanType) NewValueDecoder(bufferSize int) ValueDecoder {
+	return newBooleanValueDecoder(bufferSize)
 }
 
 type int32Type struct{ primitiveType }
@@ -249,8 +224,8 @@ func (t int32Type) Kind() Kind { return Int32 }
 
 func (t int32Type) Length() int { return 32 }
 
-func (t int32Type) Less(v1, v2 Value) bool {
-	return v1.Int32() < v2.Int32()
+func (t int32Type) Compare(a, b Value) int {
+	return compareInt32(a.Int32(), b.Int32())
 }
 
 func (t int32Type) PhyiscalType() *format.Type {
@@ -258,19 +233,19 @@ func (t int32Type) PhyiscalType() *format.Type {
 }
 
 func (t int32Type) NewColumnIndexer(sizeLimit int) ColumnIndexer {
-	return newInt32ColumnIndexer(t)
+	return newInt32ColumnIndexer()
 }
 
 func (t int32Type) NewDictionary(bufferSize int) Dictionary {
 	return newInt32Dictionary(t, bufferSize)
 }
 
-func (t int32Type) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
-	return newInt32PageReader(t, decoder, bufferSize)
+func (t int32Type) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newInt32ColumnBuffer(t, columnIndex, bufferSize)
 }
 
-func (t int32Type) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
-	return newInt32PageWriter(t, encoder, bufferSize)
+func (t int32Type) NewValueDecoder(bufferSize int) ValueDecoder {
+	return newInt32ValueDecoder(bufferSize)
 }
 
 type int64Type struct{ primitiveType }
@@ -281,8 +256,8 @@ func (t int64Type) Kind() Kind { return Int64 }
 
 func (t int64Type) Length() int { return 64 }
 
-func (t int64Type) Less(v1, v2 Value) bool {
-	return v1.Int64() < v2.Int64()
+func (t int64Type) Compare(a, b Value) int {
+	return compareInt64(a.Int64(), b.Int64())
 }
 
 func (t int64Type) PhyiscalType() *format.Type {
@@ -290,19 +265,19 @@ func (t int64Type) PhyiscalType() *format.Type {
 }
 
 func (t int64Type) NewColumnIndexer(sizeLimit int) ColumnIndexer {
-	return newInt64ColumnIndexer(t)
+	return newInt64ColumnIndexer()
 }
 
 func (t int64Type) NewDictionary(bufferSize int) Dictionary {
 	return newInt64Dictionary(t, bufferSize)
 }
 
-func (t int64Type) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
-	return newInt64PageReader(t, decoder, bufferSize)
+func (t int64Type) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newInt64ColumnBuffer(t, columnIndex, bufferSize)
 }
 
-func (t int64Type) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
-	return newInt64PageWriter(t, encoder, bufferSize)
+func (t int64Type) NewValueDecoder(bufferSize int) ValueDecoder {
+	return newInt64ValueDecoder(bufferSize)
 }
 
 type int96Type struct{ primitiveType }
@@ -313,8 +288,8 @@ func (t int96Type) Kind() Kind { return Int96 }
 
 func (t int96Type) Length() int { return 96 }
 
-func (t int96Type) Less(v1, v2 Value) bool {
-	return v1.Int96().Less(v2.Int96())
+func (t int96Type) Compare(a, b Value) int {
+	return compareInt96(a.Int96(), b.Int96())
 }
 
 func (t int96Type) PhyiscalType() *format.Type {
@@ -322,19 +297,19 @@ func (t int96Type) PhyiscalType() *format.Type {
 }
 
 func (t int96Type) NewColumnIndexer(sizeLimit int) ColumnIndexer {
-	return newInt96ColumnIndexer(t)
+	return newInt96ColumnIndexer()
 }
 
 func (t int96Type) NewDictionary(bufferSize int) Dictionary {
 	return newInt96Dictionary(t, bufferSize)
 }
 
-func (t int96Type) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
-	return newInt96PageReader(t, decoder, bufferSize)
+func (t int96Type) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newInt96ColumnBuffer(t, columnIndex, bufferSize)
 }
 
-func (t int96Type) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
-	return newInt96PageWriter(t, encoder, bufferSize)
+func (t int96Type) NewValueDecoder(bufferSize int) ValueDecoder {
+	return newInt96ValueDecoder(bufferSize)
 }
 
 type floatType struct{ primitiveType }
@@ -345,8 +320,8 @@ func (t floatType) Kind() Kind { return Float }
 
 func (t floatType) Length() int { return 32 }
 
-func (t floatType) Less(v1, v2 Value) bool {
-	return v1.Float() < v2.Float()
+func (t floatType) Compare(a, b Value) int {
+	return compareFloat32(a.Float(), b.Float())
 }
 
 func (t floatType) PhyiscalType() *format.Type {
@@ -354,19 +329,19 @@ func (t floatType) PhyiscalType() *format.Type {
 }
 
 func (t floatType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
-	return newFloatColumnIndexer(t)
+	return newFloatColumnIndexer()
 }
 
 func (t floatType) NewDictionary(bufferSize int) Dictionary {
 	return newFloatDictionary(t, bufferSize)
 }
 
-func (t floatType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
-	return newFloatPageReader(t, decoder, bufferSize)
+func (t floatType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newFloatColumnBuffer(t, columnIndex, bufferSize)
 }
 
-func (t floatType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
-	return newFloatPageWriter(t, encoder, bufferSize)
+func (t floatType) NewValueDecoder(bufferSize int) ValueDecoder {
+	return newFloatValueDecoder(bufferSize)
 }
 
 type doubleType struct{ primitiveType }
@@ -377,24 +352,26 @@ func (t doubleType) Kind() Kind { return Double }
 
 func (t doubleType) Length() int { return 64 }
 
-func (t doubleType) Less(v1, v2 Value) bool { return v1.Double() < v2.Double() }
+func (t doubleType) Compare(a, b Value) int {
+	return compareFloat64(a.Double(), b.Double())
+}
 
 func (t doubleType) PhyiscalType() *format.Type { return &physicalTypes[Double] }
 
 func (t doubleType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
-	return newDoubleColumnIndexer(t)
+	return newDoubleColumnIndexer()
 }
 
 func (t doubleType) NewDictionary(bufferSize int) Dictionary {
 	return newDoubleDictionary(t, bufferSize)
 }
 
-func (t doubleType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
-	return newDoublePageReader(t, decoder, bufferSize)
+func (t doubleType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newDoubleColumnBuffer(t, columnIndex, bufferSize)
 }
 
-func (t doubleType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
-	return newDoublePageWriter(t, encoder, bufferSize)
+func (t doubleType) NewValueDecoder(bufferSize int) ValueDecoder {
+	return newDoubleValueDecoder(bufferSize)
 }
 
 type byteArrayType struct{ primitiveType }
@@ -405,26 +382,28 @@ func (t byteArrayType) Kind() Kind { return ByteArray }
 
 func (t byteArrayType) Length() int { return 0 }
 
-func (t byteArrayType) Less(v1, v2 Value) bool {
-	return bytes.Compare(v1.ByteArray(), v2.ByteArray()) < 0
+func (t byteArrayType) Compare(a, b Value) int {
+	return bytes.Compare(a.ByteArray(), b.ByteArray())
 }
 
-func (t byteArrayType) PhyiscalType() *format.Type { return &physicalTypes[ByteArray] }
+func (t byteArrayType) PhyiscalType() *format.Type {
+	return &physicalTypes[ByteArray]
+}
 
 func (t byteArrayType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
-	return newByteArrayColumnIndexer(t, sizeLimit)
+	return newByteArrayColumnIndexer(sizeLimit)
 }
 
 func (t byteArrayType) NewDictionary(bufferSize int) Dictionary {
 	return newByteArrayDictionary(t, bufferSize)
 }
 
-func (t byteArrayType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
-	return newByteArrayPageReader(t, decoder, bufferSize)
+func (t byteArrayType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newByteArrayColumnBuffer(t, columnIndex, bufferSize)
 }
 
-func (t byteArrayType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
-	return newByteArrayPageWriter(t, encoder, bufferSize)
+func (t byteArrayType) NewValueDecoder(bufferSize int) ValueDecoder {
+	return newByteArrayValueDecoder(bufferSize)
 }
 
 type fixedLenByteArrayType struct {
@@ -440,8 +419,8 @@ func (t *fixedLenByteArrayType) Kind() Kind { return FixedLenByteArray }
 
 func (t *fixedLenByteArrayType) Length() int { return t.length }
 
-func (t *fixedLenByteArrayType) Less(v1, v2 Value) bool {
-	return bytes.Compare(v1.ByteArray(), v2.ByteArray()) < 0
+func (t *fixedLenByteArrayType) Compare(a, b Value) int {
+	return bytes.Compare(a.ByteArray(), b.ByteArray())
 }
 
 func (t *fixedLenByteArrayType) PhyiscalType() *format.Type {
@@ -449,19 +428,19 @@ func (t *fixedLenByteArrayType) PhyiscalType() *format.Type {
 }
 
 func (t *fixedLenByteArrayType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
-	return newFixedLenByteArrayColumnIndexer(t, sizeLimit)
+	return newFixedLenByteArrayColumnIndexer(t.length, sizeLimit)
 }
 
 func (t *fixedLenByteArrayType) NewDictionary(bufferSize int) Dictionary {
 	return newFixedLenByteArrayDictionary(t, bufferSize)
 }
 
-func (t *fixedLenByteArrayType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
-	return newFixedLenByteArrayPageReader(t, decoder, bufferSize)
+func (t *fixedLenByteArrayType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newFixedLenByteArrayColumnBuffer(t, columnIndex, bufferSize)
 }
 
-func (t *fixedLenByteArrayType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
-	return newFixedLenByteArrayPageWriter(t, encoder, bufferSize)
+func (t *fixedLenByteArrayType) NewValueDecoder(bufferSize int) ValueDecoder {
+	return newFixedLenByteArrayValueDecoder(t.length, bufferSize)
 }
 
 var (
@@ -539,22 +518,22 @@ func (t *intType) Kind() Kind {
 
 func (t *intType) Length() int { return int(t.BitWidth) }
 
-func (t *intType) Less(v1, v2 Value) bool {
+func (t *intType) Compare(a, b Value) int {
 	if t.BitWidth == 64 {
-		i1 := v1.Int64()
-		i2 := v2.Int64()
+		i1 := a.Int64()
+		i2 := b.Int64()
 		if t.IsSigned {
-			return i1 < i2
+			return compareInt64(i1, i2)
 		} else {
-			return uint64(i1) < uint64(i2)
+			return compareUint64(uint64(i1), uint64(i2))
 		}
 	} else {
-		i1 := v1.Int32()
-		i2 := v2.Int32()
+		i1 := a.Int32()
+		i2 := b.Int32()
 		if t.IsSigned {
-			return i1 < i2
+			return compareInt32(i1, i2)
 		} else {
-			return uint32(i1) < uint32(i2)
+			return compareUint32(uint32(i1), uint32(i2))
 		}
 	}
 }
@@ -588,15 +567,15 @@ func (t *intType) ConvertedType() *deprecated.ConvertedType {
 func (t *intType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	if t.IsSigned {
 		if t.BitWidth == 64 {
-			return newInt64ColumnIndexer(t)
+			return newInt64ColumnIndexer()
 		} else {
-			return newInt32ColumnIndexer(t)
+			return newInt32ColumnIndexer()
 		}
 	} else {
 		if t.BitWidth == 64 {
-			return newUint64ColumnIndexer(t)
+			return newUint64ColumnIndexer()
 		} else {
-			return newUint32ColumnIndexer(t)
+			return newUint32ColumnIndexer()
 		}
 	}
 }
@@ -609,27 +588,27 @@ func (t *intType) NewDictionary(bufferSize int) Dictionary {
 	}
 }
 
-func (t *intType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
-	if t.BitWidth == 64 {
-		return newInt64PageReader(t, decoder, bufferSize)
+func (t *intType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	if t.IsSigned {
+		if t.BitWidth == 64 {
+			return newInt64ColumnBuffer(t, columnIndex, bufferSize)
+		} else {
+			return newInt32ColumnBuffer(t, columnIndex, bufferSize)
+		}
 	} else {
-		return newInt32PageReader(t, decoder, bufferSize)
+		if t.BitWidth == 64 {
+			return newUint64ColumnBuffer(t, columnIndex, bufferSize)
+		} else {
+			return newUint32ColumnBuffer(t, columnIndex, bufferSize)
+		}
 	}
 }
 
-func (t *intType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
-	if t.IsSigned {
-		if t.BitWidth == 64 {
-			return newInt64PageWriter(t, encoder, bufferSize)
-		} else {
-			return newInt32PageWriter(t, encoder, bufferSize)
-		}
+func (t *intType) NewValueDecoder(bufferSize int) ValueDecoder {
+	if t.BitWidth == 64 {
+		return newInt64ValueDecoder(bufferSize)
 	} else {
-		if t.BitWidth == 64 {
-			return newUint64PageWriter(t, encoder, bufferSize)
-		} else {
-			return newUint32PageWriter(t, encoder, bufferSize)
-		}
+		return newInt32ValueDecoder(bufferSize)
 	}
 }
 
@@ -680,8 +659,8 @@ func (t *stringType) Kind() Kind { return ByteArray }
 
 func (t *stringType) Length() int { return 0 }
 
-func (t *stringType) Less(v1, v2 Value) bool {
-	return bytes.Compare(v1.ByteArray(), v2.ByteArray()) < 0
+func (t *stringType) Compare(a, b Value) int {
+	return bytes.Compare(a.ByteArray(), b.ByteArray())
 }
 
 func (t *stringType) ColumnOrder() *format.ColumnOrder {
@@ -701,19 +680,23 @@ func (t *stringType) ConvertedType() *deprecated.ConvertedType {
 }
 
 func (t *stringType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
-	return newByteArrayColumnIndexer(t, sizeLimit)
+	return newByteArrayColumnIndexer(sizeLimit)
 }
 
 func (t *stringType) NewDictionary(bufferSize int) Dictionary {
 	return newByteArrayDictionary(t, bufferSize)
 }
 
-func (t *stringType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
-	return newByteArrayPageReader(t, decoder, bufferSize)
+func (t *stringType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newByteArrayColumnBuffer(t, columnIndex, bufferSize)
 }
 
-func (t *stringType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
-	return newByteArrayPageWriter(t, encoder, bufferSize)
+func (t *stringType) NewValueDecoder(bufferSize int) ValueDecoder {
+	return newByteArrayValueDecoder(bufferSize)
+}
+
+func (t *stringType) GoType() reflect.Type {
+	return reflect.TypeOf("")
 }
 
 // UUID constructs a leaf node of UUID logical type.
@@ -729,8 +712,8 @@ func (t *uuidType) Kind() Kind { return FixedLenByteArray }
 
 func (t *uuidType) Length() int { return 16 }
 
-func (t *uuidType) Less(v1, v2 Value) bool {
-	return bytes.Compare(v1.ByteArray(), v2.ByteArray()) < 0
+func (t *uuidType) Compare(a, b Value) int {
+	return bytes.Compare(a.ByteArray(), b.ByteArray())
 }
 
 func (t *uuidType) ColumnOrder() *format.ColumnOrder {
@@ -748,19 +731,23 @@ func (t *uuidType) LogicalType() *format.LogicalType {
 func (t *uuidType) ConvertedType() *deprecated.ConvertedType { return nil }
 
 func (t *uuidType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
-	return newFixedLenByteArrayColumnIndexer(t, sizeLimit)
+	return newFixedLenByteArrayColumnIndexer(16, sizeLimit)
 }
 
 func (t *uuidType) NewDictionary(bufferSize int) Dictionary {
-	return uuidDictionary{newFixedLenByteArrayDictionary(t, bufferSize)}
+	return newFixedLenByteArrayDictionary(t, bufferSize)
 }
 
-func (t *uuidType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
-	return newFixedLenByteArrayPageReader(t, decoder, bufferSize)
+func (t *uuidType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newFixedLenByteArrayColumnBuffer(t, columnIndex, bufferSize)
 }
 
-func (t *uuidType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
-	return uuidPageWriter{newFixedLenByteArrayPageWriter(t, encoder, bufferSize)}
+func (t *uuidType) NewValueDecoder(bufferSize int) ValueDecoder {
+	return newFixedLenByteArrayValueDecoder(16, bufferSize)
+}
+
+func (t *uuidType) GoType() reflect.Type {
+	return reflect.TypeOf(uuid.UUID{})
 }
 
 // Enum constructs a leaf node with a logical type representing enumerations.
@@ -776,8 +763,8 @@ func (t *enumType) Kind() Kind { return ByteArray }
 
 func (t *enumType) Length() int { return 0 }
 
-func (t *enumType) Less(v1, v2 Value) bool {
-	return bytes.Compare(v1.ByteArray(), v2.ByteArray()) < 0
+func (t *enumType) Compare(a, b Value) int {
+	return bytes.Compare(a.ByteArray(), b.ByteArray())
 }
 
 func (t *enumType) ColumnOrder() *format.ColumnOrder {
@@ -797,19 +784,23 @@ func (t *enumType) ConvertedType() *deprecated.ConvertedType {
 }
 
 func (t *enumType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
-	return newByteArrayColumnIndexer(t, sizeLimit)
+	return newByteArrayColumnIndexer(sizeLimit)
 }
 
 func (t *enumType) NewDictionary(bufferSize int) Dictionary {
 	return newByteArrayDictionary(t, bufferSize)
 }
 
-func (t *enumType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
-	return newByteArrayPageReader(t, decoder, bufferSize)
+func (t *enumType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newByteArrayColumnBuffer(t, columnIndex, bufferSize)
 }
 
-func (t *enumType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
-	return newByteArrayPageWriter(t, encoder, bufferSize)
+func (t *enumType) NewValueDecoder(bufferSize int) ValueDecoder {
+	return newByteArrayValueDecoder(bufferSize)
+}
+
+func (t *enumType) GoType() reflect.Type {
+	return reflect.TypeOf("")
 }
 
 // JSON constructs a leaf node of JSON logical type.
@@ -825,8 +816,8 @@ func (t *jsonType) Kind() Kind { return ByteArray }
 
 func (t *jsonType) Length() int { return 0 }
 
-func (t *jsonType) Less(v1, v2 Value) bool {
-	return bytes.Compare(v1.ByteArray(), v2.ByteArray()) < 0
+func (t *jsonType) Compare(a, b Value) int {
+	return bytes.Compare(a.ByteArray(), b.ByteArray())
 }
 
 func (t *jsonType) ColumnOrder() *format.ColumnOrder {
@@ -846,19 +837,19 @@ func (t *jsonType) ConvertedType() *deprecated.ConvertedType {
 }
 
 func (t *jsonType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
-	return newByteArrayColumnIndexer(t, sizeLimit)
+	return newByteArrayColumnIndexer(sizeLimit)
 }
 
 func (t *jsonType) NewDictionary(bufferSize int) Dictionary {
 	return newByteArrayDictionary(t, bufferSize)
 }
 
-func (t *jsonType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
-	return newByteArrayPageReader(t, decoder, bufferSize)
+func (t *jsonType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newByteArrayColumnBuffer(t, columnIndex, bufferSize)
 }
 
-func (t *jsonType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
-	return newByteArrayPageWriter(t, encoder, bufferSize)
+func (t *jsonType) NewValueDecoder(bufferSize int) ValueDecoder {
+	return newByteArrayValueDecoder(bufferSize)
 }
 
 // BSON constructs a leaf node of BSON logical type.
@@ -874,8 +865,8 @@ func (t *bsonType) Kind() Kind { return ByteArray }
 
 func (t *bsonType) Length() int { return 0 }
 
-func (t *bsonType) Less(v1, v2 Value) bool {
-	return bytes.Compare(v1.ByteArray(), v2.ByteArray()) < 0
+func (t *bsonType) Compare(a, b Value) int {
+	return bytes.Compare(a.ByteArray(), b.ByteArray())
 }
 
 func (t *bsonType) ColumnOrder() *format.ColumnOrder {
@@ -895,19 +886,19 @@ func (t *bsonType) ConvertedType() *deprecated.ConvertedType {
 }
 
 func (t *bsonType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
-	return newByteArrayColumnIndexer(t, sizeLimit)
+	return newByteArrayColumnIndexer(sizeLimit)
 }
 
 func (t *bsonType) NewDictionary(bufferSize int) Dictionary {
 	return newByteArrayDictionary(t, bufferSize)
 }
 
-func (t *bsonType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
-	return newByteArrayPageReader(t, decoder, bufferSize)
+func (t *bsonType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newByteArrayColumnBuffer(t, columnIndex, bufferSize)
 }
 
-func (t *bsonType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
-	return newByteArrayPageWriter(t, encoder, bufferSize)
+func (t *bsonType) NewValueDecoder(bufferSize int) ValueDecoder {
+	return newByteArrayValueDecoder(bufferSize)
 }
 
 // Date constructs a leaf node of DATE logical type.
@@ -923,7 +914,7 @@ func (t *dateType) Kind() Kind { return Int32 }
 
 func (t *dateType) Length() int { return 32 }
 
-func (t *dateType) Less(v1, v2 Value) bool { return v1.Int32() < v2.Int32() }
+func (t *dateType) Compare(a, b Value) int { return compareInt32(a.Int32(), b.Int32()) }
 
 func (t *dateType) ColumnOrder() *format.ColumnOrder {
 	return &typeDefinedColumnOrder
@@ -940,19 +931,19 @@ func (t *dateType) ConvertedType() *deprecated.ConvertedType {
 }
 
 func (t *dateType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
-	return newInt32ColumnIndexer(t)
+	return newInt32ColumnIndexer()
 }
 
 func (t *dateType) NewDictionary(bufferSize int) Dictionary {
 	return newInt32Dictionary(t, bufferSize)
 }
 
-func (t *dateType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
-	return newInt32PageReader(t, decoder, bufferSize)
+func (t *dateType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newInt32ColumnBuffer(t, columnIndex, bufferSize)
 }
 
-func (t *dateType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
-	return newInt32PageWriter(t, encoder, bufferSize)
+func (t *dateType) NewValueDecoder(bufferSize int) ValueDecoder {
+	return newInt32ValueDecoder(bufferSize)
 }
 
 // TimeUnit represents units of time in the parquet type system.
@@ -1020,11 +1011,11 @@ func (t *timeType) Length() int {
 	}
 }
 
-func (t *timeType) Less(v1, v2 Value) bool {
+func (t *timeType) Compare(a, b Value) int {
 	if t.Unit.Millis != nil {
-		return v1.Int32() < v2.Int32()
+		return compareInt32(a.Int32(), b.Int32())
 	} else {
-		return v1.Int64() < v2.Int64()
+		return compareInt64(a.Int64(), b.Int64())
 	}
 }
 
@@ -1057,9 +1048,9 @@ func (t *timeType) ConvertedType() *deprecated.ConvertedType {
 
 func (t *timeType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	if t.Unit.Millis != nil {
-		return newInt32ColumnIndexer(t)
+		return newInt32ColumnIndexer()
 	} else {
-		return newInt64ColumnIndexer(t)
+		return newInt64ColumnIndexer()
 	}
 }
 
@@ -1071,19 +1062,19 @@ func (t *timeType) NewDictionary(bufferSize int) Dictionary {
 	}
 }
 
-func (t *timeType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
+func (t *timeType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 	if t.Unit.Millis != nil {
-		return newInt32PageReader(t, decoder, bufferSize)
+		return newInt32ColumnBuffer(t, columnIndex, bufferSize)
 	} else {
-		return newInt64PageReader(t, decoder, bufferSize)
+		return newInt64ColumnBuffer(t, columnIndex, bufferSize)
 	}
 }
 
-func (t *timeType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
+func (t *timeType) NewValueDecoder(bufferSize int) ValueDecoder {
 	if t.Unit.Millis != nil {
-		return newInt32PageWriter(t, encoder, bufferSize)
+		return newInt32ValueDecoder(bufferSize)
 	} else {
-		return newInt64PageWriter(t, encoder, bufferSize)
+		return newInt64ValueDecoder(bufferSize)
 	}
 }
 
@@ -1102,7 +1093,7 @@ func (t *timestampType) Kind() Kind { return Int64 }
 
 func (t *timestampType) Length() int { return 64 }
 
-func (t *timestampType) Less(v1, v2 Value) bool { return v1.Int64() < v2.Int64() }
+func (t *timestampType) Compare(a, b Value) int { return compareInt64(a.Int64(), b.Int64()) }
 
 func (t *timestampType) ColumnOrder() *format.ColumnOrder { return &typeDefinedColumnOrder }
 
@@ -1124,19 +1115,19 @@ func (t *timestampType) ConvertedType() *deprecated.ConvertedType {
 }
 
 func (t *timestampType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
-	return newInt64ColumnIndexer(t)
+	return newInt64ColumnIndexer()
 }
 
 func (t *timestampType) NewDictionary(bufferSize int) Dictionary {
 	return newInt64Dictionary(t, bufferSize)
 }
 
-func (t *timestampType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
-	return newInt64PageReader(t, decoder, bufferSize)
+func (t *timestampType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newInt64ColumnBuffer(t, columnIndex, bufferSize)
 }
 
-func (t *timestampType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
-	return newInt64PageWriter(t, encoder, bufferSize)
+func (t *timestampType) NewValueDecoder(bufferSize int) ValueDecoder {
+	return newInt64ValueDecoder(bufferSize)
 }
 
 // List constructs a node eof LIST logical type.
@@ -1158,7 +1149,7 @@ func (t *listType) Kind() Kind { panic("cannot call Kind on parquet LIST type") 
 
 func (t *listType) Length() int { return 0 }
 
-func (t *listType) Less(Value, Value) bool { panic("cannot compare values on parquet LIST type") }
+func (t *listType) Compare(Value, Value) int { panic("cannot compare values on parquet LIST type") }
 
 func (t *listType) ColumnOrder() *format.ColumnOrder { return nil }
 
@@ -1180,12 +1171,12 @@ func (t *listType) NewDictionary(bufferSize int) Dictionary {
 	panic("cannot create dictionary from parquet LIST type")
 }
 
-func (t *listType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
-	panic("cannot create page reader from parquet LIST type")
+func (t *listType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	panic("cannot create row group column from parquet LIST type")
 }
 
-func (t *listType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
-	panic("cannot create page writer from parquet LIST type")
+func (t *listType) NewValueDecoder(bufferSize int) ValueDecoder {
+	panic("cannot create page reader from parquet LIST type")
 }
 
 // Map constructs a node of MAP logical type.
@@ -1212,7 +1203,7 @@ func (t *mapType) Kind() Kind { panic("cannot call Kind on parquet MAP type") }
 
 func (t *mapType) Length() int { return 0 }
 
-func (t *mapType) Less(Value, Value) bool { panic("cannot compare values on parquet MAP type") }
+func (t *mapType) Compare(Value, Value) int { panic("cannot compare values on parquet MAP type") }
 
 func (t *mapType) ColumnOrder() *format.ColumnOrder { return nil }
 
@@ -1234,12 +1225,12 @@ func (t *mapType) NewDictionary(bufferSize int) Dictionary {
 	panic("cannot create dictionary from parquet MAP type")
 }
 
-func (t *mapType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
-	panic("cannot create page reader from parquet MAP type")
+func (t *mapType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	panic("cannot create row group column from parquet MAP type")
 }
 
-func (t *mapType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
-	panic("cannot create page writer from parquet MAP type")
+func (t *mapType) NewValueDecoder(bufferSize int) ValueDecoder {
+	panic("cannot create page reader from parquet MAP type")
 }
 
 type nullType format.NullType
@@ -1250,7 +1241,7 @@ func (t *nullType) Kind() Kind { panic("cannot call Kind on parquet NULL type") 
 
 func (t *nullType) Length() int { return 0 }
 
-func (t *nullType) Less(Value, Value) bool { panic("cannot compare values on parquet NULL type") }
+func (t *nullType) Compare(Value, Value) int { panic("cannot compare values on parquet NULL type") }
 
 func (t *nullType) ColumnOrder() *format.ColumnOrder { return nil }
 
@@ -1262,20 +1253,20 @@ func (t *nullType) LogicalType() *format.LogicalType {
 
 func (t *nullType) ConvertedType() *deprecated.ConvertedType { return nil }
 
-func (t *nullType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
+func (t *nullType) NewColumnIndexer(int) ColumnIndexer {
 	panic("create create a column indexer from parquet NULL type")
 }
 
-func (t *nullType) NewDictionary(bufferSize int) Dictionary {
-	panic("cannot create dictionary for parquet NULL type")
+func (t *nullType) NewDictionary(int) Dictionary {
+	panic("cannot create dictionary from parquet NULL type")
 }
 
-func (t *nullType) NewPageReader(decoder encoding.Decoder, bufferSize int) PageReader {
-	panic("cannot create page reader for parquet NULL type")
+func (t *nullType) NewColumnBuffer(int, int) ColumnBuffer {
+	panic("cannot create row group column from parquet NULL type")
 }
 
-func (t *nullType) NewPageWriter(encoder encoding.Encoder, bufferSize int) PageWriter {
-	panic("cannot create page writer for parquet NULL type")
+func (t *nullType) NewValueDecoder(int) ValueDecoder {
+	panic("cannot create page reader from parquet NULL type")
 }
 
 type groupType struct{}
@@ -1286,7 +1277,7 @@ func (groupType) Kind() Kind {
 	panic("cannot call Kind on parquet group")
 }
 
-func (groupType) Less(Value, Value) bool {
+func (groupType) Compare(Value, Value) int {
 	panic("cannot compare values on parquet group")
 }
 
@@ -1298,12 +1289,12 @@ func (groupType) NewDictionary(int) Dictionary {
 	panic("cannot create dictionary from parquet group")
 }
 
-func (groupType) NewPageReader(encoding.Decoder, int) PageReader {
-	panic("cannot create page reader from parquet group")
+func (t groupType) NewColumnBuffer(int, int) ColumnBuffer {
+	panic("cannot create row group column from parquet group")
 }
 
-func (groupType) NewPageWriter(encoding.Encoder, int) PageWriter {
-	panic("cannot create page writer from parquet group")
+func (groupType) NewValueDecoder(int) ValueDecoder {
+	panic("cannot create value decoder from parquet group")
 }
 
 func (groupType) Length() int { return 0 }
@@ -1315,3 +1306,91 @@ func (groupType) PhyiscalType() *format.Type { return nil }
 func (groupType) LogicalType() *format.LogicalType { return nil }
 
 func (groupType) ConvertedType() *deprecated.ConvertedType { return nil }
+
+func compareBool(v1, v2 bool) int {
+	switch {
+	case !v1 && v2:
+		return -1
+	case v1 && !v2:
+		return +1
+	default:
+		return 0
+	}
+}
+
+func compareInt32(v1, v2 int32) int {
+	switch {
+	case v1 < v2:
+		return -1
+	case v1 > v2:
+		return +1
+	default:
+		return 0
+	}
+}
+
+func compareInt64(v1, v2 int64) int {
+	switch {
+	case v1 < v2:
+		return -1
+	case v1 > v2:
+		return +1
+	default:
+		return 0
+	}
+}
+
+func compareInt96(v1, v2 deprecated.Int96) int {
+	switch {
+	case v1.Less(v2):
+		return -1
+	case v2.Less(v1):
+		return +1
+	default:
+		return 0
+	}
+}
+
+func compareFloat32(v1, v2 float32) int {
+	switch {
+	case v1 < v2:
+		return -1
+	case v1 > v2:
+		return +1
+	default:
+		return 0
+	}
+}
+
+func compareFloat64(v1, v2 float64) int {
+	switch {
+	case v1 < v2:
+		return -1
+	case v1 > v2:
+		return +1
+	default:
+		return 0
+	}
+}
+
+func compareUint32(v1, v2 uint32) int {
+	switch {
+	case v1 < v2:
+		return -1
+	case v1 > v2:
+		return +1
+	default:
+		return 0
+	}
+}
+
+func compareUint64(v1, v2 uint64) int {
+	switch {
+	case v1 < v2:
+		return -1
+	case v1 > v2:
+		return +1
+	default:
+		return 0
+	}
+}

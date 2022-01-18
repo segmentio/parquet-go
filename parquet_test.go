@@ -9,6 +9,17 @@ import (
 	"github.com/segmentio/parquet"
 )
 
+type Contact struct {
+	Name        string `parquet:"name"`
+	PhoneNumber string `parquet:"phoneNumber,optional,snappy"`
+}
+
+type AddressBook struct {
+	Owner             string    `parquet:"owner,zstd"`
+	OwnerPhoneNumbers []string  `parquet:"ownerPhoneNumbers,gzip"`
+	Contacts          []Contact `parquet:"contacts"`
+}
+
 func forEachLeafColumn(col *parquet.Column, do func(*parquet.Column) error) error {
 	children := col.Columns()
 
@@ -25,83 +36,55 @@ func forEachLeafColumn(col *parquet.Column, do func(*parquet.Column) error) erro
 	return nil
 }
 
-func forEachColumnChunk(col *parquet.Column, do func(*parquet.Column, *parquet.ColumnChunks) error) error {
-	return forEachLeafColumn(col, func(leaf *parquet.Column) error {
-		chunks := leaf.Chunks()
-
-		for chunks.Next() {
-			if err := do(leaf, chunks); err != nil {
-				return err
+func forEachPage(pages parquet.PageReader, do func(parquet.Page) error) error {
+	for {
+		p, err := pages.ReadPage()
+		if err != nil {
+			if err == io.EOF {
+				err = nil
 			}
+			return err
 		}
-
-		return nil
-	})
+		if err := do(p); err != nil {
+			return err
+		}
+	}
 }
 
-func forEachColumnPage(col *parquet.Column, do func(*parquet.Column, *parquet.DataPageReader) error) error {
-	return forEachColumnChunk(col, func(leaf *parquet.Column, chunks *parquet.ColumnChunks) error {
-		const bufferSize = 1024
-		pages := chunks.Pages()
-		dictionary := (parquet.Dictionary)(nil)
-
-		for pages.Next() {
-			switch header := pages.PageHeader().(type) {
-			case parquet.DictionaryPageHeader:
-				decoder := header.Encoding().NewDecoder(pages.PageData())
-				dictionary = leaf.Type().NewDictionary(0)
-
-				if err := dictionary.ReadFrom(decoder); err != nil {
-					return err
-				}
-
-			case parquet.DataPageHeader:
-				var pageReader parquet.PageReader
-				var pageData = header.Encoding().NewDecoder(pages.PageData())
-
-				if dictionary != nil {
-					pageReader = parquet.NewIndexedPageReader(pageData, bufferSize, dictionary)
-				} else {
-					pageReader = leaf.Type().NewPageReader(pageData, bufferSize)
-				}
-
-				dataPageReader := parquet.NewDataPageReader(
-					header.RepetitionLevelEncoding().NewDecoder(pages.RepetitionLevels()),
-					header.DefinitionLevelEncoding().NewDecoder(pages.DefinitionLevels()),
-					header.NumValues(),
-					pageReader,
-					leaf.MaxRepetitionLevel(),
-					leaf.MaxDefinitionLevel(),
-					bufferSize,
-				)
-
-				if err := do(leaf, dataPageReader); err != nil {
-					return err
-				}
-
-			default:
-				return fmt.Errorf("unsupported page header type: %#v", header)
-			}
-
-			if err := pages.Err(); err != nil {
+func forEachValue(values parquet.ValueReader, do func(parquet.Value) error) error {
+	buffer := [3]parquet.Value{}
+	for {
+		n, err := values.ReadValues(buffer[:])
+		for _, v := range buffer[:n] {
+			if err := do(v); err != nil {
 				return err
 			}
 		}
-		return nil
+		if err != nil {
+			if err == io.EOF {
+				err = nil
+			}
+			return err
+		}
+	}
+}
+
+func forEachColumnPage(col *parquet.Column, do func(*parquet.Column, parquet.Page) error) error {
+	return forEachLeafColumn(col, func(leaf *parquet.Column) error {
+		return forEachPage(leaf.Pages(), func(page parquet.Page) error { return do(leaf, page) })
 	})
 }
 
 func forEachColumnValue(col *parquet.Column, do func(*parquet.Column, parquet.Value) error) error {
-	return forEachColumnPage(col, func(leaf *parquet.Column, page *parquet.DataPageReader) error {
-		for {
-			v, err := page.ReadValue()
-			if err != nil {
-				if err != io.EOF {
-					return err
-				}
-				break
-			}
-			if err := do(leaf, v); err != nil {
+	return forEachColumnPage(col, func(leaf *parquet.Column, page parquet.Page) error {
+		return forEachValue(page.Values(), func(value parquet.Value) error { return do(leaf, value) })
+	})
+}
+
+func forEachColumnChunk(file *parquet.File, do func(*parquet.Column, parquet.ColumnChunk) error) error {
+	return forEachLeafColumn(file.Root(), func(leaf *parquet.Column) error {
+		for i, n := 0, file.NumRowGroups(); i < n; i++ {
+			if err := do(leaf, file.RowGroup(i).Column(int(leaf.Index()))); err != nil {
 				return err
 			}
 		}
@@ -121,15 +104,33 @@ func createParquetFile(rows rows, options ...parquet.WriterOption) (*parquet.Fil
 }
 
 func writeParquetFile(w io.Writer, rows rows, options ...parquet.WriterOption) error {
-	schema := parquet.SchemaOf(rows[0])
-	writer := parquet.NewWriter(w, schema, options...)
+	writer := parquet.NewWriter(w, options...)
 
 	for _, row := range rows {
-		if err := writer.WriteRow(row); err != nil {
+		if err := writer.Write(row); err != nil {
 			return err
 		}
 	}
 
+	return writer.Close()
+}
+
+func writeParquetFileWithBuffer(w io.Writer, rows rows, options ...parquet.WriterOption) error {
+	buffer := parquet.NewBuffer()
+	for _, row := range rows {
+		if err := buffer.Write(row); err != nil {
+			return err
+		}
+	}
+
+	writer := parquet.NewWriter(w, options...)
+	numRows, err := parquet.CopyRows(writer, buffer.Rows())
+	if err != nil {
+		return err
+	}
+	if numRows != int64(len(rows)) {
+		return fmt.Errorf("wrong number of rows written from buffer to file: want=%d got=%d", len(rows), numRows)
+	}
 	return writer.Close()
 }
 

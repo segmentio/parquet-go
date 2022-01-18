@@ -468,7 +468,10 @@ const (
 	DataPage       PageType = 0
 	IndexPage      PageType = 1
 	DictionaryPage PageType = 2
-	DataPageV2     PageType = 3
+	// Version 2 is indicated in the PageHeader and the use of DataPageHeaderV2,
+	// and allows you to read repetition and definition level data without
+	// decompressing the Page.
+	DataPageV2 PageType = 3
 )
 
 func (p PageType) String() string {
@@ -617,7 +620,7 @@ type BloomFilterHeader struct {
 }
 
 type PageHeader struct {
-	// The type of the page: indicates which of the *_header fields is set.
+	// The type of the page indicates which of the *Header fields below is set.
 	Type PageType `thrift:"1,required"`
 
 	// Uncompressed page size in bytes (not including this header).

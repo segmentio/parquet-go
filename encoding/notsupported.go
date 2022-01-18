@@ -1,11 +1,22 @@
 package encoding
 
 import (
+	"errors"
 	"fmt"
 	"io"
 
 	"github.com/segmentio/parquet/deprecated"
 	"github.com/segmentio/parquet/format"
+)
+
+var (
+	// ErrNotSupported is an error returned when the underlying encoding does
+	// not support the type of values being encoded or decoded.
+	//
+	// This error may be wrapped with type information, applications must use
+	// errors.Is rather than equality comparisons to test the error values
+	// returned by encoders and decoders.
+	ErrNotSupported = errors.New("encoding not supported")
 )
 
 // NotSupported is a type satisfying the Encoding interface which does not
@@ -82,7 +93,7 @@ func (NotSupportedDecoder) DecodeDouble([]float64) (int, error) {
 	return 0, errNotSupported("DOUBLE")
 }
 
-func (NotSupportedDecoder) DecodeByteArray([]byte) (int, error) {
+func (NotSupportedDecoder) DecodeByteArray(*ByteArrayList) (int, error) {
 	return 0, errNotSupported("BYTE_ARRAY")
 }
 
@@ -142,7 +153,7 @@ func (NotSupportedEncoder) EncodeDouble([]float64) error {
 	return errNotSupported("DOUBLE")
 }
 
-func (NotSupportedEncoder) EncodeByteArray([]byte) error {
+func (NotSupportedEncoder) EncodeByteArray(ByteArrayList) error {
 	return errNotSupported("BYTE_ARRAY")
 }
 

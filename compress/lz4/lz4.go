@@ -45,6 +45,10 @@ type Codec struct {
 	Concurrency int
 }
 
+func (c *Codec) String() string {
+	return "LZ4_RAW"
+}
+
 func (c *Codec) CompressionCodec() format.CompressionCodec {
 	return format.Lz4Raw
 }

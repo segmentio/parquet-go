@@ -46,7 +46,7 @@ func (r *Reader) ReadBits(count uint) (uint64, uint, error) {
 			n = r.length
 		}
 
-		bits = (bits << n) | (r.cache & ((1 << n) - 1))
+		bits |= (r.cache & ((1 << n) - 1)) << nbits
 		nbits += n
 		count -= n
 		r.length -= n
@@ -61,6 +61,10 @@ type Writer struct {
 	length uint
 	cache  uint64
 	buffer []byte
+}
+
+func (w *Writer) Buffered() int {
+	return len(w.buffer)
 }
 
 func (w *Writer) Reset(ww io.Writer) {

@@ -26,6 +26,10 @@ type Codec struct {
 	Level int
 }
 
+func (c *Codec) String() string {
+	return "GZIP"
+}
+
 func (c *Codec) CompressionCodec() format.CompressionCodec {
 	return format.Gzip
 }

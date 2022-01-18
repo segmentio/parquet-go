@@ -2,7 +2,6 @@ package delta
 
 import (
 	"bufio"
-	"encoding/binary"
 	"fmt"
 	"io"
 
@@ -41,7 +40,23 @@ func (d *ByteArrayDecoder) Encoding() format.Encoding {
 	return format.DeltaByteArray
 }
 
-func (d *ByteArrayDecoder) DecodeByteArray(data []byte) (int, error) {
+func (d *ByteArrayDecoder) DecodeByteArray(data *encoding.ByteArrayList) (int, error) {
+	return d.decode(data.Cap()-data.Len(), func(n int) ([]byte, error) { return data.PushSize(n), nil })
+}
+
+func (d *ByteArrayDecoder) DecodeFixedLenByteArray(size int, data []byte) (int, error) {
+	i := 0
+	return d.decode(len(data)/size, func(n int) ([]byte, error) {
+		if n != size {
+			return nil, fmt.Errorf("decoding fixed length byte array of size %d but a value of length %d was found", size, n)
+		}
+		v := data[i : i+n]
+		i += n
+		return v, nil
+	})
+}
+
+func (d *ByteArrayDecoder) decode(limit int, push func(int) ([]byte, error)) (int, error) {
 	if d.arrays.index < 0 {
 		if err := d.decodePrefixes(); err != nil {
 			return 0, err
@@ -50,46 +65,36 @@ func (d *ByteArrayDecoder) DecodeByteArray(data []byte) (int, error) {
 			return 0, err
 		}
 	}
-	if len(data) == 0 {
-		return 0, nil
-	}
-	if len(data) < 4 {
-		return 0, encoding.ErrBufferTooShort
-	}
+
 	if d.arrays.index == len(d.arrays.lengths) {
 		return 0, io.EOF
 	}
 
 	decoded := 0
-	for d.arrays.index < len(d.arrays.lengths) && len(data) >= 4 {
-		prefixLength := uint(len(d.previous))
-		suffixLength := uint(d.arrays.lengths[d.arrays.index])
+	for d.arrays.index < len(d.arrays.lengths) && decoded < limit {
+		prefixLength := len(d.previous)
+		suffixLength := int(d.arrays.lengths[d.arrays.index])
 		length := prefixLength + suffixLength
-		binary.LittleEndian.PutUint32(data, uint32(length))
-		data = data[4:]
 
-		if uint(len(data)) < length {
-			if decoded == 0 {
-				return 0, encoding.ErrValueTooLarge
-			}
-			break
+		value, err := push(length)
+		if err != nil {
+			return decoded, fmt.Errorf("DELTA_BYTE_ARRAY: %w", err)
 		}
 
-		copy(data[:prefixLength], d.previous[:prefixLength])
-		if err := d.arrays.readFull(data[prefixLength:length]); err != nil {
+		copy(value, d.previous[:prefixLength])
+		if err := d.arrays.readFull(value[prefixLength:]); err != nil {
 			return decoded, fmt.Errorf("DELTA_BYTE_ARRAY: decoding byte array at index %d/%d: %w", d.arrays.index, len(d.arrays.lengths), err)
 		}
 
 		if i := d.arrays.index + 1; i < len(d.prefixes) {
-			j := uint(d.prefixes[i])
-			k := uint(len(data))
+			j := int(d.prefixes[i])
+			k := len(value)
 			if j > k {
 				return decoded, fmt.Errorf("DELTA_BYTE_ARRAY: next prefix is longer than the last decoded byte array (%d>%d)", j, k)
 			}
-			d.previous = append(d.previous[:0], data[:j]...)
+			d.previous = append(d.previous[:0], value[:j]...)
 		}
 
-		data = data[length:]
 		decoded++
 		d.arrays.index++
 	}
