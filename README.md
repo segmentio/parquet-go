@@ -46,16 +46,12 @@ Note that Go 1.17 or later is required to use the package.
 A parquet file is a collection of rows sharing the same schema, arranged in
 columns to support faster scan operations on subsets of the data set.
 
-The `parquet.Schema` type is a in-memory representation of the schema of parquet
-rows, and is translated from the type of Go values.
-
 The `parquet.Writer` type denormalizes rows into columns, then encodes the
 columns into a parquet file, generating row groups, column chunks, and pages
 based on configurable heuristics.
 
 ```go
-schema := parquet.SchemaOf(rows[0])
-writer := parquet.NewWriter(file, schema)
+writer := parquet.NewWriter(file)
 
 for _, row := range rows {
     if err := writer.Write(row); err != nil {
@@ -63,9 +59,25 @@ for _, row := range rows {
     }
 }
 
+// Closing the writer is necessary to flush buffers and write the file footer.
 if err := writer.Close(); err != nil {
     ...
 }
+```
+
+By default, the writer will lazily determine the schema of rows by introspecting
+the struct types of row values.
+
+Explicit declaration of the parquet schema on a writer is useful when the
+application needs to ensure that data written to a file adheres to a predefined
+schema and the rows come from dynamic or user input. The `parquet.Schema` type
+is a in-memory representation of the schema of parquet rows, translated from the
+type of Go values, and can be used for this purpose.
+
+```go
+schema := parquet.SchemaOf(rows[0])
+writer := parquet.NewWriter(file, schema)
+...
 ```
 
 ### Reading Parquet Files: [parquet.Reader](https://pkg.go.dev/github.com/segmentio/parquet#Reader)
@@ -93,6 +105,22 @@ for {
     }
     ...
 }
+```
+
+The expected schema of rows can be explicitly declared when the reader is
+constructed, which is useful to ensure that the program receives rows matching
+an specific format; for example, when dealing with files from remote storage
+sources that applications cannot trust to have used an expected schema.
+
+Configuring the schema of a reader is done by passing a `parquet.Schema`
+instance as argument when constructing a reader. When the schema is declared,
+conversion rules implemented by the package are applied to ensure that rows
+read by the application match the desired format (see **Evolving Parquet Schemas**).
+
+```go
+schema := parquet.SchemaOf(new(RowType))
+reader := parquet.NewReader(file, schema)
+...
 ```
 
 ### Inspecting Parquet Files: [parquet.File](https://pkg.go.dev/github.com/segmentio/parquet#File)
