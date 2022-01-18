@@ -253,7 +253,7 @@ Parquet files are often used as part of the underlying engine for data
 processing or storage layers, in which cases merging multiple row groups
 into one that contains more rows can be a useful operation to improve query
 performance; for example, bloom filters in parquet files are stored for each
-row group, the larger the row group the fewer filters need to be stored and
+row group, the larger the row group, the fewer filters need to be stored and
 the more effective they become.
 
 The `segmentio/parquet` package supports creating merged views of row groups,
