@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/segmentio/parquet/deprecated"
-	"github.com/segmentio/parquet/format"
+	"github.com/segmentio/parquet-go/deprecated"
+	"github.com/segmentio/parquet-go/format"
 )
 
 var (

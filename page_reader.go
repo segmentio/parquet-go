@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/segmentio/parquet/encoding"
-	"github.com/segmentio/parquet/internal/bits"
+	"github.com/segmentio/parquet-go/encoding"
+	"github.com/segmentio/parquet-go/internal/bits"
 )
 
 // dataPageReader reads values from a data page.

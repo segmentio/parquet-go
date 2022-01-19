@@ -11,8 +11,8 @@ import (
 	"testing/quick"
 
 	"github.com/google/uuid"
-	"github.com/segmentio/parquet"
-	"github.com/segmentio/parquet/deprecated"
+	"github.com/segmentio/parquet-go"
+	"github.com/segmentio/parquet-go/deprecated"
 )
 
 type booleanColumn struct {

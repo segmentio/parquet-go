@@ -7,7 +7,7 @@ import (
 	. "math/bits"
 	"testing"
 
-	"github.com/segmentio/parquet/internal/bits"
+	"github.com/segmentio/parquet-go/internal/bits"
 )
 
 func TestRunLength(t *testing.T) {

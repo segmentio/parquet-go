@@ -7,14 +7,14 @@ import (
 	"math"
 	"testing"
 
-	"github.com/segmentio/parquet/deprecated"
-	"github.com/segmentio/parquet/encoding"
-	"github.com/segmentio/parquet/encoding/bytestreamsplit"
-	"github.com/segmentio/parquet/encoding/delta"
-	"github.com/segmentio/parquet/encoding/plain"
-	"github.com/segmentio/parquet/encoding/rle"
-	"github.com/segmentio/parquet/format"
-	"github.com/segmentio/parquet/internal/bits"
+	"github.com/segmentio/parquet-go/deprecated"
+	"github.com/segmentio/parquet-go/encoding"
+	"github.com/segmentio/parquet-go/encoding/bytestreamsplit"
+	"github.com/segmentio/parquet-go/encoding/delta"
+	"github.com/segmentio/parquet-go/encoding/plain"
+	"github.com/segmentio/parquet-go/encoding/rle"
+	"github.com/segmentio/parquet-go/format"
+	"github.com/segmentio/parquet-go/internal/bits"
 )
 
 var booleanTests = [...][]bool{

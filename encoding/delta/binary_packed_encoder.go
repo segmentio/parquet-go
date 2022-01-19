@@ -4,9 +4,9 @@ import (
 	"encoding/binary"
 	"io"
 
-	"github.com/segmentio/parquet/encoding"
-	"github.com/segmentio/parquet/format"
-	"github.com/segmentio/parquet/internal/bits"
+	"github.com/segmentio/parquet-go/encoding"
+	"github.com/segmentio/parquet-go/format"
+	"github.com/segmentio/parquet-go/internal/bits"
 )
 
 // TODO: figure out better heuristics to determine those values,

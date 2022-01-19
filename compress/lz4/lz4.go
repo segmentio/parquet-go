@@ -5,8 +5,8 @@ import (
 	"io"
 
 	"github.com/pierrec/lz4/v4"
-	"github.com/segmentio/parquet/compress"
-	"github.com/segmentio/parquet/format"
+	"github.com/segmentio/parquet-go/compress"
+	"github.com/segmentio/parquet-go/format"
 )
 
 type BlockSize = lz4.BlockSize

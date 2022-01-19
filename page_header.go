@@ -3,7 +3,7 @@ package parquet
 import (
 	"fmt"
 
-	"github.com/segmentio/parquet/format"
+	"github.com/segmentio/parquet-go/format"
 )
 
 // PageHeader is an interface implemented by parquet page headers.

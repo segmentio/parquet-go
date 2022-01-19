@@ -11,7 +11,7 @@ import (
 	"github.com/hexops/gotextdiff"
 	"github.com/hexops/gotextdiff/myers"
 	"github.com/hexops/gotextdiff/span"
-	"github.com/segmentio/parquet"
+	"github.com/segmentio/parquet-go"
 )
 
 const (

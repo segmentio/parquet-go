@@ -7,7 +7,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/segmentio/parquet/internal/bits"
+	"github.com/segmentio/parquet-go/internal/bits"
 )
 
 func TestBitPack(t *testing.T) {

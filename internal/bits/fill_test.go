@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/segmentio/parquet/internal/bits"
+	"github.com/segmentio/parquet-go/internal/bits"
 )
 
 func TestFill(t *testing.T) {

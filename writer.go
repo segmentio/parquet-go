@@ -9,11 +9,11 @@ import (
 	"sort"
 
 	"github.com/segmentio/encoding/thrift"
-	"github.com/segmentio/parquet/compress"
-	"github.com/segmentio/parquet/encoding"
-	"github.com/segmentio/parquet/encoding/plain"
-	"github.com/segmentio/parquet/format"
-	"github.com/segmentio/parquet/internal/bits"
+	"github.com/segmentio/parquet-go/compress"
+	"github.com/segmentio/parquet-go/encoding"
+	"github.com/segmentio/parquet-go/encoding/plain"
+	"github.com/segmentio/parquet-go/format"
+	"github.com/segmentio/parquet-go/internal/bits"
 )
 
 // A Writer uses a parquet schema and sequence of Go values to produce a parquet

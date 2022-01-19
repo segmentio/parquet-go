@@ -5,8 +5,8 @@ package encoding
 import (
 	"io"
 
-	"github.com/segmentio/parquet/deprecated"
-	"github.com/segmentio/parquet/format"
+	"github.com/segmentio/parquet-go/deprecated"
+	"github.com/segmentio/parquet-go/format"
 )
 
 // The Encoding interface is implemented by types representing parquet column

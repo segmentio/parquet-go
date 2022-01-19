@@ -3,7 +3,7 @@ package bits_test
 import (
 	"testing"
 
-	"github.com/segmentio/parquet/internal/bits"
+	"github.com/segmentio/parquet-go/internal/bits"
 )
 
 func TestMaxLen8(t *testing.T) {
