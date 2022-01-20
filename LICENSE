@@ -205,8 +205,8 @@
 
 This product includes code from Apache Parquet.
 
-* deprecated/parquet.go is based on Parquet's thrift file
-* schema/parquet.go is based on Parquet's thrift file
+* deprecated/parquet.go is based on Apache Parquet's thrift file
+* format/parquet.go is based on Apache Parquet's thrift file
 
 Copyright: 2014 The Apache Software Foundation.
 Home page: https://github.com/apache/parquet-format
