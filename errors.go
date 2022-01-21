@@ -25,4 +25,8 @@ var (
 	// write a row group but the sorting columns differ in the source and
 	// destination.
 	ErrRowGroupSortingColumnsMismatch = errors.New("cannot write row groups with mismatching sorting columns")
+
+	// ErrSeekOutOfRange is an error returned when seeking to a row index which
+	// is less than the first row of a page.
+	ErrSeekOutOfRange = errors.New("seek to row index out of page range")
 )

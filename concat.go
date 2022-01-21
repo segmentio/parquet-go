@@ -32,7 +32,7 @@ type concatenatedRowGroup struct {
 	columns   []concatenatedColumnChunk
 }
 
-func (c *concatenatedRowGroup) NumRows() (numRows int) {
+func (c *concatenatedRowGroup) NumRows() (numRows int64) {
 	for _, rowGroup := range c.rowGroups {
 		numRows += rowGroup.NumRows()
 	}
@@ -47,7 +47,7 @@ func (c *concatenatedRowGroup) SortingColumns() []SortingColumn { return nil }
 
 func (c *concatenatedRowGroup) Schema() *Schema { return c.schema }
 
-func (c *concatenatedRowGroup) Rows() RowReader { return &rowGroupRowReader{rowGroup: c} }
+func (c *concatenatedRowGroup) Rows() Rows { return &rowGroupRowReader{rowGroup: c} }
 
 type concatenatedColumnChunk struct {
 	rowGroup *concatenatedRowGroup
@@ -66,7 +66,7 @@ func (c *concatenatedColumnChunk) Column() int {
 	return c.column
 }
 
-func (c *concatenatedColumnChunk) Pages() PageReader {
+func (c *concatenatedColumnChunk) Pages() Pages {
 	return &concatenatedPages{column: c}
 }
 
@@ -89,14 +89,9 @@ func (c *concatenatedColumnChunk) OffsetIndex() OffsetIndex {
 }
 
 type concatenatedPages struct {
-	pages  PageReader
+	pages  Pages
 	index  int
 	column *concatenatedColumnChunk
-}
-
-func (r *concatenatedPages) Reset() {
-	r.pages = nil
-	r.index = 0
 }
 
 func (r *concatenatedPages) ReadPage() (Page, error) {
@@ -116,6 +111,25 @@ func (r *concatenatedPages) ReadPage() (Page, error) {
 	}
 }
 
-var (
-	_ reusablePageReader = (*concatenatedPages)(nil)
-)
+func (r *concatenatedPages) SeekToRow(rowIndex int64) error {
+	rowGroups := r.column.rowGroup.rowGroups
+	numRows := int64(0)
+	r.pages = nil
+	r.index = 0
+
+	for r.index < len(rowGroups) {
+		numRows = rowGroups[r.index].NumRows()
+		if rowIndex < numRows {
+			break
+		}
+		rowIndex -= numRows
+		r.index++
+	}
+
+	if r.index < len(rowGroups) {
+		r.pages = r.column.chunks[r.index].Pages()
+		r.index++
+		return r.pages.SeekToRow(rowIndex)
+	}
+	return nil
+}

@@ -46,109 +46,109 @@ func (index *columnIndex) MaxValue(i int) []byte { return index.MaxValues[i] }
 func (index *columnIndex) IsAscending() bool     { return index.BoundaryOrder == format.Ascending }
 func (index *columnIndex) IsDescending() bool    { return index.BoundaryOrder == format.Descending }
 
-type booleanColumnIndex struct{ *booleanColumnBuffer }
+type booleanPageIndex struct{ page *booleanPage }
 
-func (index booleanColumnIndex) NumPages() int       { return 1 }
-func (index booleanColumnIndex) NullCount(int) int64 { return 0 }
-func (index booleanColumnIndex) NullPage(int) bool   { return false }
-func (index booleanColumnIndex) MinValue(int) []byte { return plain.Boolean(index.min()) }
-func (index booleanColumnIndex) MaxValue(int) []byte { return plain.Boolean(index.max()) }
-func (index booleanColumnIndex) IsAscending() bool   { return compareBool(index.bounds()) < 0 }
-func (index booleanColumnIndex) IsDescending() bool  { return compareBool(index.bounds()) > 0 }
+func (index booleanPageIndex) NumPages() int       { return 1 }
+func (index booleanPageIndex) NullCount(int) int64 { return 0 }
+func (index booleanPageIndex) NullPage(int) bool   { return false }
+func (index booleanPageIndex) MinValue(int) []byte { return plain.Boolean(index.page.min()) }
+func (index booleanPageIndex) MaxValue(int) []byte { return plain.Boolean(index.page.max()) }
+func (index booleanPageIndex) IsAscending() bool   { return compareBool(index.page.bounds()) < 0 }
+func (index booleanPageIndex) IsDescending() bool  { return compareBool(index.page.bounds()) > 0 }
 
-type int32ColumnIndex struct{ *int32ColumnBuffer }
+type int32PageIndex struct{ page *int32Page }
 
-func (index int32ColumnIndex) NumPages() int       { return 1 }
-func (index int32ColumnIndex) NullCount(int) int64 { return 0 }
-func (index int32ColumnIndex) NullPage(int) bool   { return false }
-func (index int32ColumnIndex) MinValue(int) []byte { return plain.Int32(index.min()) }
-func (index int32ColumnIndex) MaxValue(int) []byte { return plain.Int32(index.max()) }
-func (index int32ColumnIndex) IsAscending() bool   { return compareInt32(index.bounds()) < 0 }
-func (index int32ColumnIndex) IsDescending() bool  { return compareInt32(index.bounds()) > 0 }
+func (index int32PageIndex) NumPages() int       { return 1 }
+func (index int32PageIndex) NullCount(int) int64 { return 0 }
+func (index int32PageIndex) NullPage(int) bool   { return false }
+func (index int32PageIndex) MinValue(int) []byte { return plain.Int32(index.page.min()) }
+func (index int32PageIndex) MaxValue(int) []byte { return plain.Int32(index.page.max()) }
+func (index int32PageIndex) IsAscending() bool   { return compareInt32(index.page.bounds()) < 0 }
+func (index int32PageIndex) IsDescending() bool  { return compareInt32(index.page.bounds()) > 0 }
 
-type int64ColumnIndex struct{ *int64ColumnBuffer }
+type int64PageIndex struct{ page *int64Page }
 
-func (index int64ColumnIndex) NumPages() int       { return 1 }
-func (index int64ColumnIndex) NullCount(int) int64 { return 0 }
-func (index int64ColumnIndex) NullPage(int) bool   { return false }
-func (index int64ColumnIndex) MinValue(int) []byte { return plain.Int64(index.min()) }
-func (index int64ColumnIndex) MaxValue(int) []byte { return plain.Int64(index.max()) }
-func (index int64ColumnIndex) IsAscending() bool   { return compareInt64(index.bounds()) < 0 }
-func (index int64ColumnIndex) IsDescending() bool  { return compareInt64(index.bounds()) > 0 }
+func (index int64PageIndex) NumPages() int       { return 1 }
+func (index int64PageIndex) NullCount(int) int64 { return 0 }
+func (index int64PageIndex) NullPage(int) bool   { return false }
+func (index int64PageIndex) MinValue(int) []byte { return plain.Int64(index.page.min()) }
+func (index int64PageIndex) MaxValue(int) []byte { return plain.Int64(index.page.max()) }
+func (index int64PageIndex) IsAscending() bool   { return compareInt64(index.page.bounds()) < 0 }
+func (index int64PageIndex) IsDescending() bool  { return compareInt64(index.page.bounds()) > 0 }
 
-type int96ColumnIndex struct{ *int96ColumnBuffer }
+type int96PageIndex struct{ page *int96Page }
 
-func (index int96ColumnIndex) NumPages() int       { return 1 }
-func (index int96ColumnIndex) NullCount(int) int64 { return 0 }
-func (index int96ColumnIndex) NullPage(int) bool   { return false }
-func (index int96ColumnIndex) MinValue(int) []byte { return plain.Int96(index.min()) }
-func (index int96ColumnIndex) MaxValue(int) []byte { return plain.Int96(index.max()) }
-func (index int96ColumnIndex) IsAscending() bool   { return compareInt96(index.bounds()) < 0 }
-func (index int96ColumnIndex) IsDescending() bool  { return compareInt96(index.bounds()) > 0 }
+func (index int96PageIndex) NumPages() int       { return 1 }
+func (index int96PageIndex) NullCount(int) int64 { return 0 }
+func (index int96PageIndex) NullPage(int) bool   { return false }
+func (index int96PageIndex) MinValue(int) []byte { return plain.Int96(index.page.min()) }
+func (index int96PageIndex) MaxValue(int) []byte { return plain.Int96(index.page.max()) }
+func (index int96PageIndex) IsAscending() bool   { return compareInt96(index.page.bounds()) < 0 }
+func (index int96PageIndex) IsDescending() bool  { return compareInt96(index.page.bounds()) > 0 }
 
-type floatColumnIndex struct{ *floatColumnBuffer }
+type floatPageIndex struct{ page *floatPage }
 
-func (index floatColumnIndex) NumPages() int       { return 1 }
-func (index floatColumnIndex) NullCount(int) int64 { return 0 }
-func (index floatColumnIndex) NullPage(int) bool   { return false }
-func (index floatColumnIndex) MinValue(int) []byte { return plain.Float(index.min()) }
-func (index floatColumnIndex) MaxValue(int) []byte { return plain.Float(index.max()) }
-func (index floatColumnIndex) IsAscending() bool   { return compareFloat32(index.bounds()) < 0 }
-func (index floatColumnIndex) IsDescending() bool  { return compareFloat32(index.bounds()) > 0 }
+func (index floatPageIndex) NumPages() int       { return 1 }
+func (index floatPageIndex) NullCount(int) int64 { return 0 }
+func (index floatPageIndex) NullPage(int) bool   { return false }
+func (index floatPageIndex) MinValue(int) []byte { return plain.Float(index.page.min()) }
+func (index floatPageIndex) MaxValue(int) []byte { return plain.Float(index.page.max()) }
+func (index floatPageIndex) IsAscending() bool   { return compareFloat32(index.page.bounds()) < 0 }
+func (index floatPageIndex) IsDescending() bool  { return compareFloat32(index.page.bounds()) > 0 }
 
-type doubleColumnIndex struct{ *doubleColumnBuffer }
+type doublePageIndex struct{ page *doublePage }
 
-func (index doubleColumnIndex) NumPages() int       { return 1 }
-func (index doubleColumnIndex) NullCount(int) int64 { return 0 }
-func (index doubleColumnIndex) NullPage(int) bool   { return false }
-func (index doubleColumnIndex) MinValue(int) []byte { return plain.Double(index.min()) }
-func (index doubleColumnIndex) MaxValue(int) []byte { return plain.Double(index.max()) }
-func (index doubleColumnIndex) IsAscending() bool   { return compareFloat64(index.bounds()) < 0 }
-func (index doubleColumnIndex) IsDescending() bool  { return compareFloat64(index.bounds()) > 0 }
+func (index doublePageIndex) NumPages() int       { return 1 }
+func (index doublePageIndex) NullCount(int) int64 { return 0 }
+func (index doublePageIndex) NullPage(int) bool   { return false }
+func (index doublePageIndex) MinValue(int) []byte { return plain.Double(index.page.min()) }
+func (index doublePageIndex) MaxValue(int) []byte { return plain.Double(index.page.max()) }
+func (index doublePageIndex) IsAscending() bool   { return compareFloat64(index.page.bounds()) < 0 }
+func (index doublePageIndex) IsDescending() bool  { return compareFloat64(index.page.bounds()) > 0 }
 
-type byteArrayColumnIndex struct{ *byteArrayColumnBuffer }
+type byteArrayPageIndex struct{ page *byteArrayPage }
 
-func (index byteArrayColumnIndex) NumPages() int       { return 1 }
-func (index byteArrayColumnIndex) NullCount(int) int64 { return 0 }
-func (index byteArrayColumnIndex) NullPage(int) bool   { return false }
-func (index byteArrayColumnIndex) MinValue(int) []byte { return copyBytes(index.min()) }
-func (index byteArrayColumnIndex) MaxValue(int) []byte { return copyBytes(index.max()) }
-func (index byteArrayColumnIndex) IsAscending() bool   { return bytes.Compare(index.bounds()) < 0 }
-func (index byteArrayColumnIndex) IsDescending() bool  { return bytes.Compare(index.bounds()) > 0 }
+func (index byteArrayPageIndex) NumPages() int       { return 1 }
+func (index byteArrayPageIndex) NullCount(int) int64 { return 0 }
+func (index byteArrayPageIndex) NullPage(int) bool   { return false }
+func (index byteArrayPageIndex) MinValue(int) []byte { return copyBytes(index.page.min()) }
+func (index byteArrayPageIndex) MaxValue(int) []byte { return copyBytes(index.page.max()) }
+func (index byteArrayPageIndex) IsAscending() bool   { return bytes.Compare(index.page.bounds()) < 0 }
+func (index byteArrayPageIndex) IsDescending() bool  { return bytes.Compare(index.page.bounds()) > 0 }
 
-type fixedLenByteArrayColumnIndex struct{ *fixedLenByteArrayColumnBuffer }
+type fixedLenByteArrayPageIndex struct{ page *fixedLenByteArrayPage }
 
-func (index fixedLenByteArrayColumnIndex) NumPages() int       { return 1 }
-func (index fixedLenByteArrayColumnIndex) NullCount(int) int64 { return 0 }
-func (index fixedLenByteArrayColumnIndex) NullPage(int) bool   { return false }
-func (index fixedLenByteArrayColumnIndex) MinValue(int) []byte { return copyBytes(index.min()) }
-func (index fixedLenByteArrayColumnIndex) MaxValue(int) []byte { return copyBytes(index.max()) }
-func (index fixedLenByteArrayColumnIndex) IsAscending() bool {
-	return bytes.Compare(index.bounds()) < 0
+func (index fixedLenByteArrayPageIndex) NumPages() int       { return 1 }
+func (index fixedLenByteArrayPageIndex) NullCount(int) int64 { return 0 }
+func (index fixedLenByteArrayPageIndex) NullPage(int) bool   { return false }
+func (index fixedLenByteArrayPageIndex) MinValue(int) []byte { return copyBytes(index.page.min()) }
+func (index fixedLenByteArrayPageIndex) MaxValue(int) []byte { return copyBytes(index.page.max()) }
+func (index fixedLenByteArrayPageIndex) IsAscending() bool {
+	return bytes.Compare(index.page.bounds()) < 0
 }
-func (index fixedLenByteArrayColumnIndex) IsDescending() bool {
-	return bytes.Compare(index.bounds()) > 0
+func (index fixedLenByteArrayPageIndex) IsDescending() bool {
+	return bytes.Compare(index.page.bounds()) > 0
 }
 
-type uint32ColumnIndex struct{ uint32ColumnBuffer }
+type uint32PageIndex struct{ page uint32Page }
 
-func (index uint32ColumnIndex) NumPages() int       { return 1 }
-func (index uint32ColumnIndex) NullCount(int) int64 { return 0 }
-func (index uint32ColumnIndex) NullPage(int) bool   { return false }
-func (index uint32ColumnIndex) MinValue(int) []byte { return plain.Int32(int32(index.min())) }
-func (index uint32ColumnIndex) MaxValue(int) []byte { return plain.Int32(int32(index.max())) }
-func (index uint32ColumnIndex) IsAscending() bool   { return compareUint32(index.bounds()) < 0 }
-func (index uint32ColumnIndex) IsDescending() bool  { return compareUint32(index.bounds()) > 0 }
+func (index uint32PageIndex) NumPages() int       { return 1 }
+func (index uint32PageIndex) NullCount(int) int64 { return 0 }
+func (index uint32PageIndex) NullPage(int) bool   { return false }
+func (index uint32PageIndex) MinValue(int) []byte { return plain.Int32(int32(index.page.min())) }
+func (index uint32PageIndex) MaxValue(int) []byte { return plain.Int32(int32(index.page.max())) }
+func (index uint32PageIndex) IsAscending() bool   { return compareUint32(index.page.bounds()) < 0 }
+func (index uint32PageIndex) IsDescending() bool  { return compareUint32(index.page.bounds()) > 0 }
 
-type uint64ColumnIndex struct{ uint64ColumnBuffer }
+type uint64PageIndex struct{ page uint64Page }
 
-func (index uint64ColumnIndex) NumPages() int       { return 1 }
-func (index uint64ColumnIndex) NullCount(int) int64 { return 0 }
-func (index uint64ColumnIndex) NullPage(int) bool   { return false }
-func (index uint64ColumnIndex) MinValue(int) []byte { return plain.Int64(int64(index.min())) }
-func (index uint64ColumnIndex) MaxValue(int) []byte { return plain.Int64(int64(index.max())) }
-func (index uint64ColumnIndex) IsAscending() bool   { return compareUint64(index.bounds()) < 0 }
-func (index uint64ColumnIndex) IsDescending() bool  { return compareUint64(index.bounds()) > 0 }
+func (index uint64PageIndex) NumPages() int       { return 1 }
+func (index uint64PageIndex) NullCount(int) int64 { return 0 }
+func (index uint64PageIndex) NullPage(int) bool   { return false }
+func (index uint64PageIndex) MinValue(int) []byte { return plain.Int64(int64(index.page.min())) }
+func (index uint64PageIndex) MaxValue(int) []byte { return plain.Int64(int64(index.page.max())) }
+func (index uint64PageIndex) IsAscending() bool   { return compareUint64(index.page.bounds()) < 0 }
+func (index uint64PageIndex) IsDescending() bool  { return compareUint64(index.page.bounds()) > 0 }
 
 // The ColumnIndexer interface is implemented by types that support generating
 // parquet column indexes.
@@ -160,7 +160,7 @@ type ColumnIndexer interface {
 	Reset()
 
 	// Add a page to the column indexer.
-	IndexPage(numValues, numNulls int, min, max Value)
+	IndexPage(numValues, numNulls int64, min, max Value)
 
 	// Generates a format.ColumnIndex value from the current state of the
 	// column indexer.
@@ -181,9 +181,9 @@ func (index *columnIndexer) reset() {
 	index.nullCounts = index.nullCounts[:0]
 }
 
-func (index *columnIndexer) observe(numValues, numNulls int) {
+func (index *columnIndexer) observe(numValues, numNulls int64) {
 	index.nullPages = append(index.nullPages, numValues == numNulls)
-	index.nullCounts = append(index.nullCounts, int64(numNulls))
+	index.nullCounts = append(index.nullCounts, numNulls)
 }
 
 func (index *columnIndexer) columnIndex(minValues, maxValues [][]byte, minOrder, maxOrder int) format.ColumnIndex {
@@ -212,7 +212,7 @@ func (index *booleanColumnIndexer) Reset() {
 	index.maxValues = index.maxValues[:0]
 }
 
-func (index *booleanColumnIndexer) IndexPage(numValues, numNulls int, min, max Value) {
+func (index *booleanColumnIndexer) IndexPage(numValues, numNulls int64, min, max Value) {
 	index.observe(numValues, numNulls)
 	index.minValues = append(index.minValues, min.Boolean())
 	index.maxValues = append(index.maxValues, max.Boolean())
@@ -243,7 +243,7 @@ func (index *int32ColumnIndexer) Reset() {
 	index.maxValues = index.maxValues[:0]
 }
 
-func (index *int32ColumnIndexer) IndexPage(numValues, numNulls int, min, max Value) {
+func (index *int32ColumnIndexer) IndexPage(numValues, numNulls int64, min, max Value) {
 	index.observe(numValues, numNulls)
 	index.minValues = append(index.minValues, min.Int32())
 	index.maxValues = append(index.maxValues, max.Int32())
@@ -274,7 +274,7 @@ func (index *int64ColumnIndexer) Reset() {
 	index.maxValues = index.maxValues[:0]
 }
 
-func (index *int64ColumnIndexer) IndexPage(numValues, numNulls int, min, max Value) {
+func (index *int64ColumnIndexer) IndexPage(numValues, numNulls int64, min, max Value) {
 	index.observe(numValues, numNulls)
 	index.minValues = append(index.minValues, min.Int64())
 	index.maxValues = append(index.maxValues, max.Int64())
@@ -305,7 +305,7 @@ func (index *int96ColumnIndexer) Reset() {
 	index.maxValues = index.maxValues[:0]
 }
 
-func (index *int96ColumnIndexer) IndexPage(numValues, numNulls int, min, max Value) {
+func (index *int96ColumnIndexer) IndexPage(numValues, numNulls int64, min, max Value) {
 	index.observe(numValues, numNulls)
 	index.minValues = append(index.minValues, min.Int96())
 	index.maxValues = append(index.maxValues, max.Int96())
@@ -336,7 +336,7 @@ func (index *floatColumnIndexer) Reset() {
 	index.maxValues = index.maxValues[:0]
 }
 
-func (index *floatColumnIndexer) IndexPage(numValues, numNulls int, min, max Value) {
+func (index *floatColumnIndexer) IndexPage(numValues, numNulls int64, min, max Value) {
 	index.observe(numValues, numNulls)
 	index.minValues = append(index.minValues, min.Float())
 	index.maxValues = append(index.maxValues, max.Float())
@@ -367,7 +367,7 @@ func (index *doubleColumnIndexer) Reset() {
 	index.maxValues = index.maxValues[:0]
 }
 
-func (index *doubleColumnIndexer) IndexPage(numValues, numNulls int, min, max Value) {
+func (index *doubleColumnIndexer) IndexPage(numValues, numNulls int64, min, max Value) {
 	index.observe(numValues, numNulls)
 	index.minValues = append(index.minValues, min.Double())
 	index.maxValues = append(index.maxValues, max.Double())
@@ -399,7 +399,7 @@ func (index *byteArrayColumnIndexer) Reset() {
 	index.maxValues.Reset()
 }
 
-func (index *byteArrayColumnIndexer) IndexPage(numValues, numNulls int, min, max Value) {
+func (index *byteArrayColumnIndexer) IndexPage(numValues, numNulls int64, min, max Value) {
 	index.observe(numValues, numNulls)
 	index.minValues.Push(min.ByteArray())
 	index.maxValues.Push(max.ByteArray())
@@ -505,7 +505,7 @@ func (index *fixedLenByteArrayColumnIndexer) Reset() {
 	index.maxValues = index.maxValues[:0]
 }
 
-func (index *fixedLenByteArrayColumnIndexer) IndexPage(numValues, numNulls int, min, max Value) {
+func (index *fixedLenByteArrayColumnIndexer) IndexPage(numValues, numNulls int64, min, max Value) {
 	index.observe(numValues, numNulls)
 	index.minValues = append(index.minValues, min.ByteArray()...)
 	index.maxValues = append(index.maxValues, max.ByteArray()...)

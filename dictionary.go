@@ -701,11 +701,11 @@ func (page *indexedPage) Column() int { return int(^page.columnIndex) }
 
 func (page *indexedPage) Dictionary() Dictionary { return page.dict }
 
-func (page *indexedPage) NumRows() int { return len(page.values) }
+func (page *indexedPage) NumRows() int64 { return int64(len(page.values)) }
 
-func (page *indexedPage) NumValues() int { return len(page.values) }
+func (page *indexedPage) NumValues() int64 { return int64(len(page.values)) }
 
-func (page *indexedPage) NumNulls() int { return 0 }
+func (page *indexedPage) NumNulls() int64 { return 0 }
 
 func (page *indexedPage) Bounds() (min, max Value) {
 	if len(page.values) > 0 {
@@ -728,7 +728,7 @@ func (page *indexedPage) Bounds() (min, max Value) {
 	return min, max
 }
 
-func (page *indexedPage) Slice(i, j int) BufferedPage {
+func (page *indexedPage) Slice(i, j int64) BufferedPage {
 	return &indexedPage{
 		dict:        page.dict,
 		values:      page.values[i:j],
@@ -745,6 +745,8 @@ func (page *indexedPage) DefinitionLevels() []int8 { return nil }
 func (page *indexedPage) WriteTo(e encoding.Encoder) error { return e.EncodeInt32(page.values) }
 
 func (page *indexedPage) Values() ValueReader { return &indexedPageReader{page: page} }
+
+func (page *indexedPage) Buffer() BufferedPage { return page }
 
 type indexedPageReader struct {
 	page   *indexedPage
@@ -798,7 +800,7 @@ func (col *indexedColumnBuffer) OffsetIndex() OffsetIndex { return indexedOffset
 
 func (col *indexedColumnBuffer) Dictionary() Dictionary { return col.dict }
 
-func (col *indexedColumnBuffer) Pages() PageReader { return onePage(col.Page()) }
+func (col *indexedColumnBuffer) Pages() Pages { return onePage(col.Page()) }
 
 func (col *indexedColumnBuffer) Page() BufferedPage { return &col.indexedPage }
 
@@ -849,30 +851,32 @@ func (col *indexedColumnBuffer) ReadRowAt(row Row, index int) (Row, error) {
 	}
 }
 
-type indexedColumnIndex struct{ *indexedColumnBuffer }
+type indexedColumnIndex struct{ col *indexedColumnBuffer }
 
 func (index indexedColumnIndex) NumPages() int       { return 1 }
 func (index indexedColumnIndex) NullCount(int) int64 { return 0 }
 func (index indexedColumnIndex) NullPage(int) bool   { return false }
 func (index indexedColumnIndex) MinValue(int) []byte {
-	min, _ := index.Bounds()
+	min, _ := index.col.Bounds()
 	return min.Bytes()
 }
 func (index indexedColumnIndex) MaxValue(int) []byte {
-	_, max := index.Bounds()
+	_, max := index.col.Bounds()
 	return max.Bytes()
 }
 func (index indexedColumnIndex) IsAscending() bool {
-	return index.typ.Compare(index.Bounds()) < 0
+	return index.col.typ.Compare(index.col.Bounds()) < 0
 }
 func (index indexedColumnIndex) IsDescending() bool {
-	return index.typ.Compare(index.Bounds()) > 0
+	return index.col.typ.Compare(index.col.Bounds()) > 0
 }
 
-type indexedOffsetIndex struct{ *indexedColumnBuffer }
+type indexedOffsetIndex struct{ col *indexedColumnBuffer }
 
-func (index indexedOffsetIndex) NumPages() int                          { return 1 }
-func (index indexedOffsetIndex) PageLocation(int) (int64, int64, int64) { return 0, index.Size(), 0 }
+func (index indexedOffsetIndex) NumPages() int                { return 1 }
+func (index indexedOffsetIndex) Offset(int) int64             { return 0 }
+func (index indexedOffsetIndex) CompressedPageSize(int) int64 { return index.col.Size() }
+func (index indexedOffsetIndex) FirstRowIndex(int) int64      { return 0 }
 
 type indexedValueDecoder struct {
 	decoder encoding.Decoder

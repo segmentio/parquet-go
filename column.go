@@ -2,6 +2,7 @@ package parquet
 
 import (
 	"fmt"
+	"io"
 	"reflect"
 	"sort"
 
@@ -119,25 +120,57 @@ func (c *Column) Column(name string) *Column {
 }
 
 // Pages returns a reader exposing all pages in this column, across row groups.
-func (c *Column) Pages() PageReader {
+func (c *Column) Pages() Pages {
 	if c.index < 0 {
-		return emptyPageReader{}
+		return emptyPages{}
 	}
-	r := new(multiReusablePageReader)
-	c.setPagesOn(r)
+	r := &columnPages{
+		pages: make([]filePages, len(c.file.rowGroups)),
+	}
+	for i := range r.pages {
+		c.file.rowGroups[i].columns[c.index].setPagesOn(&r.pages[i])
+	}
 	return r
 }
 
-func (c *Column) setPagesOn(r *multiReusablePageReader) {
-	pages := make([]filePageReader, len(c.file.rowGroups))
-	columnIndex := int(c.index)
-	for i := range pages {
-		c.file.rowGroups[i].columns[columnIndex].setPagesOn(&pages[i])
+type columnPages struct {
+	pages []filePages
+	index int
+}
+
+func (r *columnPages) ReadPage() (Page, error) {
+	for {
+		if r.index >= len(r.pages) {
+			return nil, io.EOF
+		}
+		p, err := r.pages[r.index].ReadPage()
+		if err == nil || err != io.EOF {
+			return p, err
+		}
+		r.index++
 	}
-	r.pages = make([]reusablePageReader, len(pages))
-	for i := range pages {
-		r.pages[i] = &pages[i]
+}
+
+func (r *columnPages) SeekToRow(rowIndex int64) error {
+	r.index = 0
+
+	for r.index < len(r.pages) && r.pages[r.index].column.rowGroup.NumRows >= rowIndex {
+		rowIndex -= r.pages[r.index].column.rowGroup.NumRows
+		r.index++
 	}
+
+	if r.index < len(r.pages) {
+		if err := r.pages[r.index].SeekToRow(rowIndex); err != nil {
+			return err
+		}
+		for i := range r.pages[r.index:] {
+			p := &r.pages[r.index+i]
+			if err := p.SeekToRow(0); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // Depth returns the position of the column relative to the root.
