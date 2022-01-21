@@ -2,8 +2,11 @@ package parquet_test
 
 import (
 	"bytes"
+	"math/rand"
+	"reflect"
 	"sort"
 	"testing"
+	"testing/quick"
 
 	"github.com/segmentio/parquet-go"
 )
@@ -18,13 +21,89 @@ func sortedRowGroup(options []parquet.RowGroupOption, rows ...interface{}) parqu
 }
 
 type Person struct {
-	FirstName string
-	LastName  string
+	FirstName utf8string
+	LastName  utf8string
 	Age       int
 }
 
 type LastNameOnly struct {
-	LastName string
+	LastName utf8string
+}
+
+func newPeopleBuffer(people []Person) parquet.RowGroup {
+	buffer := parquet.NewBuffer()
+	for i := range people {
+		buffer.Write(&people[i])
+	}
+	return buffer
+}
+
+func newPeopleFile(people []Person) parquet.RowGroup {
+	buffer := new(bytes.Buffer)
+	writer := parquet.NewWriter(buffer)
+	for i := range people {
+		writer.Write(&people[i])
+	}
+	writer.Close()
+	reader := bytes.NewReader(buffer.Bytes())
+	f, err := parquet.OpenFile(reader, reader.Size())
+	if err != nil {
+		panic(err)
+	}
+	return f.RowGroup(0)
+}
+
+func TestSeekToRow(t *testing.T) {
+	for _, config := range []struct {
+		name        string
+		newRowGroup func([]Person) parquet.RowGroup
+	}{
+		{name: "buffer", newRowGroup: newPeopleBuffer},
+		{name: "file", newRowGroup: newPeopleFile},
+	} {
+		t.Run(config.name, func(t *testing.T) { testSeekToRow(t, config.newRowGroup) })
+	}
+}
+
+func testSeekToRow(t *testing.T, newRowGroup func([]Person) parquet.RowGroup) {
+	f := func(people []Person) bool {
+		if len(people) == 0 { // TODO: fix creation of empty parquet files
+			return true
+		}
+		rowGroup := newRowGroup(people)
+		rows := rowGroup.Rows()
+		rbuf := parquet.Row{}
+		pers := Person{}
+		schema := parquet.SchemaOf(&pers)
+
+		for i := range people {
+			err := rows.SeekToRow(int64(i))
+			if err != nil {
+				t.Errorf("seeking to row %d: %+v", i, err)
+				return false
+			}
+			rbuf, err = rows.ReadRow(rbuf[:0])
+			if err != nil {
+				t.Errorf("reading row %d: %+v", i, err)
+				return false
+			}
+			if err := schema.Reconstruct(&pers, rbuf); err != nil {
+				t.Errorf("deconstructing row %d: %+v", i, err)
+				return false
+			}
+			if !reflect.DeepEqual(&pers, &people[i]) {
+				t.Errorf("row %d mismatch", i)
+				return false
+			}
+		}
+
+		return true
+	}
+	if err := quick.Check(f, &quick.Config{
+		Rand: rand.New(rand.NewSource(3)),
+	}); err != nil {
+		t.Error(err)
+	}
 }
 
 var mergeRowGroupsTests = [...]struct {

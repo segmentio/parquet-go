@@ -509,7 +509,12 @@ func (w *writer) writeRowGroup(rowGroupSchema *Schema, rowGroupSortingColumns []
 			}
 		}
 
-		c.columnChunk.MetaData.DataPageOffset = w.writer.offset
+		dataPageOffset := w.writer.offset
+		c.columnChunk.MetaData.DataPageOffset = dataPageOffset
+		for j := range c.offsetIndex.PageLocations {
+			c.offsetIndex.PageLocations[j].Offset += dataPageOffset
+		}
+
 		for _, page := range c.pages {
 			if _, err := io.Copy(&w.writer, page); err != nil {
 				return 0, fmt.Errorf("writing buffered pages of row group column %d: %w", i, err)

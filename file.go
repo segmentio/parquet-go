@@ -231,26 +231,6 @@ func (f *File) Lookup(key string) (value string, ok bool) {
 	return lookupKeyValueMetadata(f.metadata.KeyValueMetadata, key)
 }
 
-func (f *File) readColumnIndex(chunk *format.ColumnChunk) (*format.ColumnIndex, error) {
-	columnIndex := new(format.ColumnIndex)
-
-	section := acquireBufferedSectionReader(f.reader, chunk.ColumnIndexOffset, int64(chunk.ColumnIndexLength))
-	defer releaseBufferedSectionReader(section)
-
-	err := thrift.NewDecoder(f.protocol.NewReader(section)).Decode(columnIndex)
-	return columnIndex, err
-}
-
-func (f *File) readOffsetIndex(chunk *format.ColumnChunk) (*format.OffsetIndex, error) {
-	offsetIndex := new(format.OffsetIndex)
-
-	section := acquireBufferedSectionReader(f.reader, chunk.OffsetIndexOffset, int64(chunk.OffsetIndexLength))
-	defer releaseBufferedSectionReader(section)
-
-	err := thrift.NewDecoder(f.protocol.NewReader(section)).Decode(offsetIndex)
-	return offsetIndex, err
-}
-
 func (f *File) hasIndexes() bool {
 	return f.columnIndexes != nil && f.offsetIndexes != nil
 }
@@ -593,30 +573,14 @@ func (r *filePages) SeekToRow(rowIndex int64) (err error) {
 	} else {
 		pages := r.column.offsetIndex.PageLocations
 		index := sort.Search(len(pages), func(i int) bool {
-			return pages[i].FirstRowIndex >= rowIndex
-		})
-
-		switch {
-		case index == 0:
-			_, err = r.section.Seek(r.dataOffset, io.SeekStart)
-			r.skip = rowIndex
-			r.page.index = 0
-
-		case index == len(pages):
-			_, err = r.section.Seek(0, io.SeekEnd)
-			r.skip = 0
-			r.page.index = len(pages)
-
-		case pages[index].FirstRowIndex == rowIndex:
-			_, err = r.section.Seek(pages[index].Offset-r.dataOffset, io.SeekStart)
-			r.skip = rowIndex - pages[index].FirstRowIndex
-			r.page.index = index
-
-		default:
-			_, err = r.section.Seek(pages[index-1].Offset-r.dataOffset, io.SeekStart)
-			r.skip = rowIndex - pages[index-1].FirstRowIndex
-			r.page.index = index - 1
+			return pages[i].FirstRowIndex > rowIndex
+		}) - 1
+		if index < 0 {
+			return ErrSeekOutOfRange
 		}
+		_, err = r.section.Seek(pages[index].Offset-r.dataOffset, io.SeekStart)
+		r.skip = rowIndex - pages[index].FirstRowIndex
+		r.page.index = index
 	}
 	r.rbuf.Reset(r.section)
 	return err
