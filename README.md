@@ -1,4 +1,4 @@
-# segmentio/parquet-go ![build status](https://github.com/segmentio/parquet-go/actions/workflows/test.yml/badge.svg) [![GoDoc](https://pkg.go.dev/github.com/segmentio/parquet-go?status.svg)](https://pkg.go.dev/github.com/segmentio/parquet-go)
+# segmentio/parquet-go ![build status](https://github.com/segmentio/parquet-go/actions/workflows/test.yml/badge.svg) [![Go Reference](https://pkg.go.dev/badge/github.com/segmentio/parquet-go.svg)](https://pkg.go.dev/github.com/segmentio/parquet-go)
 
 High-performance Go library to manipulate parquet files.
 
