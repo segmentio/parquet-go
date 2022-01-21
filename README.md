@@ -2,20 +2,18 @@
 
 High-performance Go library to manipulate parquet files.
 
-## Motivations
+## Motivation
 
-Parquet has been established as a powerful solution to representing columnar
-data on persistent storage mediums, achieving levels of compression and query
+Parquet has been established as a powerful solution to represent columnar data
+on persistent storage mediums, achieving levels of compression and query
 performance that enable managing data sets at scales that reach the petabytes.
-More importantly, having intensive data application sharing a common format
-creates opportunities for interperability and composability in our tool kits,
-providing greater leverage and value to engineers maintaining and operating
-those systems.
+In addition, having intensive data applications sharing a common format creates
+opportunities for interperation and composition in our tool kits, providing
+greater leverage and value to engineers maintaining and operating those systems.
 
-The creation and evolution of large scale data management system, combined with
-realtime requirements come with the need for both powerful APIs and challenging
-performance constraints; requirements that existing solutions to use parquet
-with Go were not addressing unfortunately.
+The creation and evolution of large scale data management systems, combined with
+realtime expectations come with challenging maintenance and performance
+requirements, that existing solutions to use parquet with Go were not addressing.
 
 The `segmentio/parquet-go` package was designed and developed to respond to those
 challenges, offering high level APIs to read and write parquet files, while
@@ -37,7 +35,7 @@ dependency on and install with the following command:
 $ go get github.com/segmentio/parquet-go
 ```
 
-Note that Go 1.17 or later is required to use the package.
+Go 1.17 or later is required to use the package.
 
 ## Usage
 
