@@ -5,7 +5,7 @@ import (
 	"io"
 	"testing"
 
-	"github.com/segmentio/parquet/internal/bits"
+	"github.com/segmentio/parquet-go/internal/bits"
 )
 
 func TestReader(t *testing.T) {

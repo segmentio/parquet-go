@@ -6,8 +6,8 @@ import (
 	"io"
 
 	"github.com/klauspost/compress/snappy"
-	"github.com/segmentio/parquet/compress"
-	"github.com/segmentio/parquet/format"
+	"github.com/segmentio/parquet-go/compress"
+	"github.com/segmentio/parquet-go/format"
 )
 
 type Codec struct {

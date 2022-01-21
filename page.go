@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/segmentio/parquet/deprecated"
-	"github.com/segmentio/parquet/encoding"
-	"github.com/segmentio/parquet/internal/bits"
+	"github.com/segmentio/parquet-go/deprecated"
+	"github.com/segmentio/parquet-go/encoding"
+	"github.com/segmentio/parquet-go/internal/bits"
 )
 
 // Page values represent sequences of parquet values. From the Parquet

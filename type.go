@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/segmentio/parquet/deprecated"
-	"github.com/segmentio/parquet/format"
-	"github.com/segmentio/parquet/internal/bits"
+	"github.com/segmentio/parquet-go/deprecated"
+	"github.com/segmentio/parquet-go/format"
+	"github.com/segmentio/parquet-go/internal/bits"
 )
 
 // Kind is an enumeration type representing the physical types supported by the

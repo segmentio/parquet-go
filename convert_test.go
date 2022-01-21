@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/segmentio/parquet"
+	"github.com/segmentio/parquet-go"
 )
 
 var conversionTests = [...]struct {

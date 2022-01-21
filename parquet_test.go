@@ -6,7 +6,7 @@ import (
 	"io"
 	"reflect"
 
-	"github.com/segmentio/parquet"
+	"github.com/segmentio/parquet-go"
 )
 
 type Contact struct {

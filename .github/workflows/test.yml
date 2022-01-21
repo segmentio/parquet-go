@@ -1,5 +1,4 @@
 name: Test
-
 on:
 - pull_request
 
@@ -22,6 +21,9 @@ jobs:
 
     - name: Download Dependencies
       run: go mod download
+
+    - name: Validate Formatting
+      run: test -z $(find . -name '*.go' | xargs gofmt -l)
 
     - name: Run Tests
       run: go test ./...

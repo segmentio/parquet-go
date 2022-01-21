@@ -7,14 +7,14 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/segmentio/parquet/compress"
-	"github.com/segmentio/parquet/compress/brotli"
-	"github.com/segmentio/parquet/compress/gzip"
-	"github.com/segmentio/parquet/compress/lz4"
-	"github.com/segmentio/parquet/compress/snappy"
-	"github.com/segmentio/parquet/compress/uncompressed"
-	"github.com/segmentio/parquet/compress/zstd"
-	"github.com/segmentio/parquet/format"
+	"github.com/segmentio/parquet-go/compress"
+	"github.com/segmentio/parquet-go/compress/brotli"
+	"github.com/segmentio/parquet-go/compress/gzip"
+	"github.com/segmentio/parquet-go/compress/lz4"
+	"github.com/segmentio/parquet-go/compress/snappy"
+	"github.com/segmentio/parquet-go/compress/uncompressed"
+	"github.com/segmentio/parquet-go/compress/zstd"
+	"github.com/segmentio/parquet-go/format"
 )
 
 var (

@@ -3,8 +3,8 @@ package parquet
 import (
 	"io"
 
-	"github.com/segmentio/parquet/deprecated"
-	"github.com/segmentio/parquet/encoding"
+	"github.com/segmentio/parquet-go/deprecated"
+	"github.com/segmentio/parquet-go/encoding"
 )
 
 // ValueDecoder is an extension of the ValueReader interface for types that

@@ -7,7 +7,7 @@ package compress
 import (
 	"io"
 
-	"github.com/segmentio/parquet/format"
+	"github.com/segmentio/parquet-go/format"
 )
 
 // The Codec interface represents parquet compression codecs implemented by the

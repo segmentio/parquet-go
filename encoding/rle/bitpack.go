@@ -5,7 +5,7 @@ import (
 	"io"
 	. "math/bits"
 
-	"github.com/segmentio/parquet/internal/bits"
+	"github.com/segmentio/parquet-go/internal/bits"
 )
 
 type bitPackRunDecoder struct {

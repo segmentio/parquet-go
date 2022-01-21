@@ -6,10 +6,10 @@ import (
 	"reflect"
 	"sort"
 
-	"github.com/segmentio/parquet/compress"
-	"github.com/segmentio/parquet/deprecated"
-	"github.com/segmentio/parquet/encoding"
-	"github.com/segmentio/parquet/format"
+	"github.com/segmentio/parquet-go/compress"
+	"github.com/segmentio/parquet-go/deprecated"
+	"github.com/segmentio/parquet-go/encoding"
+	"github.com/segmentio/parquet-go/format"
 )
 
 // Column represents a column in a parquet file.

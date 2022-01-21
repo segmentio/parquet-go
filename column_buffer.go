@@ -5,8 +5,8 @@ import (
 	"io"
 	"sort"
 
-	"github.com/segmentio/parquet/deprecated"
-	"github.com/segmentio/parquet/encoding"
+	"github.com/segmentio/parquet-go/deprecated"
+	"github.com/segmentio/parquet-go/encoding"
 )
 
 // ColumnBuffer is an interface representing columns of a row group.

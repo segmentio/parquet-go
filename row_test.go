@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/segmentio/parquet"
+	"github.com/segmentio/parquet-go"
 )
 
 func TestDeconstructionReconstruction(t *testing.T) {

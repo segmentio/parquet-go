@@ -6,8 +6,8 @@ package uncompressed
 import (
 	"io"
 
-	"github.com/segmentio/parquet/compress"
-	"github.com/segmentio/parquet/format"
+	"github.com/segmentio/parquet-go/compress"
+	"github.com/segmentio/parquet-go/format"
 )
 
 type Codec struct {

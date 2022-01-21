@@ -3,7 +3,7 @@ package format
 import (
 	"fmt"
 
-	"github.com/segmentio/parquet/deprecated"
+	"github.com/segmentio/parquet-go/deprecated"
 )
 
 // Types supported by Parquet. These types are intended to be used incombination

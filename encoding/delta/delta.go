@@ -3,7 +3,7 @@ package delta
 import (
 	"io"
 
-	"github.com/segmentio/parquet/encoding"
+	"github.com/segmentio/parquet-go/encoding"
 )
 
 const (

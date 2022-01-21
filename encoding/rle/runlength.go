@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"io"
 
-	"github.com/segmentio/parquet/internal/bits"
+	"github.com/segmentio/parquet-go/internal/bits"
 )
 
 type runLengthRunDecoder struct {

@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	DefaultCreatedBy            = "github.com/segmentio/parquet"
+	DefaultCreatedBy            = "github.com/segmentio/parquet-go"
 	DefaultColumnIndexSizeLimit = 16
 	DefaultColumnBufferSize     = 1 * 1024 * 1024
 	DefaultPageBufferSize       = 1 * 1024 * 1024

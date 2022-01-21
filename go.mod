@@ -1,4 +1,4 @@
-module github.com/segmentio/parquet
+module github.com/segmentio/parquet-go
 
 go 1.17
 

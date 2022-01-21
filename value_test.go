@@ -5,7 +5,7 @@ import (
 	"testing"
 	"unsafe"
 
-	"github.com/segmentio/parquet"
+	"github.com/segmentio/parquet-go"
 )
 
 func TestSizeOfValue(t *testing.T) {

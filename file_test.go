@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/segmentio/parquet"
+	"github.com/segmentio/parquet-go"
 )
 
 var fixtureFiles = [...]string{
