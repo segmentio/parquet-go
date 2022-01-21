@@ -8,8 +8,8 @@ Parquet has been established as a powerful solution to represent columnar data
 on persistent storage mediums, achieving levels of compression and query
 performance that enable managing data sets at scales that reach the petabytes.
 In addition, having intensive data applications sharing a common format creates
-opportunities for interperation and composition in our tool kits, providing
-greater leverage and value to engineers maintaining and operating those systems.
+opportunities for interoperation in our tool kits, providing greater leverage
+and value to engineers maintaining and operating those systems.
 
 The creation and evolution of large scale data management systems, combined with
 realtime expectations come with challenging maintenance and performance
