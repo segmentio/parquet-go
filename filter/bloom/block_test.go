@@ -22,11 +22,11 @@ func TestBlock(t *testing.T) {
 }
 
 func BenchmarkBlockInsert(b *testing.B) {
+	x := bloom.Block{}
 	for i := 0; i < b.N; i++ {
-		x := bloom.Block{}
 		x.Insert(uint32(i))
 	}
-	b.SetBytes(4)
+	b.SetBytes(bloom.BlockSize)
 }
 
 func BenchmarkBlockCheck(b *testing.B) {
@@ -35,5 +35,5 @@ func BenchmarkBlockCheck(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		x.Check(42)
 	}
-	b.SetBytes(4)
+	b.SetBytes(bloom.BlockSize)
 }

@@ -12,9 +12,18 @@ package bloom
 // pkg: github.com/segmentio/parquet-go/filter/bloom
 // cpu: Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 //
-// name         old time/op  new time/op  delta
-// BlockInsert  10.7ns ± 4%   5.5ns ± 2%  -48.62%  (p=0.000 n=9+9)
-// BlockCheck   10.6ns ± 4%   2.0ns ± 2%  -80.78%  (p=0.000 n=9+8)
+// name         old time/op    new time/op     delta
+// BlockInsert    11.6ns ± 4%      2.0ns ± 3%   -82.37%  (p=0.000 n=8+8)
+// BlockCheck     12.6ns ±28%      2.1ns ± 4%   -83.12%  (p=0.000 n=10+8)
+//
+// name         old speed      new speed       delta
+// BlockInsert  2.73GB/s ±13%  15.70GB/s ± 3%  +475.96%  (p=0.000 n=9+8)
+// BlockCheck   2.59GB/s ±23%  15.06GB/s ± 4%  +482.25%  (p=0.000 n=10+8)
+//
+// Note that the numbers above are a comparison to the routines implemented in
+// block_optimized.go; the delta comparing to functions in block_default.go is
+// significantly larger but not very intersting since those functions have no
+// practical use cases.
 
 //go:noescape
 func block_insert(b *Block, x uint32)

@@ -13,9 +13,16 @@ package bloom
 // pkg: github.com/segmentio/parquet-go/filter/bloom
 // cpu: Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 //
-// name          old time/op  new time/op  delta
-// BlockInsert   326ns ± 1%    11ns ± 4%  -96.72%  (p=0.000 n=8+9)
-// BlockCheck    242ns ± 1%    11ns ± 4%  -95.61%  (p=0.000 n=9+9)
+// name         old time/op    new time/op      delta
+// BlockInsert     327ns ± 1%        12ns ± 4%    -96.47%  (p=0.000 n=9+8)
+// BlockCheck      240ns ± 4%        13ns ±28%    -94.75%  (p=0.000 n=8+10)
+//
+// name         old speed      new speed        delta
+// BlockInsert  97.8MB/s ± 1%  2725.0MB/s ±13%  +2686.59%  (p=0.000 n=9+9)
+// BlockCheck    133MB/s ± 4%    2587MB/s ±23%  +1838.46%  (p=0.000 n=8+10)
+//
+// The benchmarks measure throughput based on the byte size of a bloom filter
+// block.
 
 func mask(x uint32) Block {
 	return Block{

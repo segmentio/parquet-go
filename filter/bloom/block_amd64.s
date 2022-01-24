@@ -23,9 +23,8 @@ DATA salt<>+28(SB)/4, $0x5c6bfb31
 GLOBL salt<>(SB), RODATA|NOPTR, $32
 
 // This initial block is a SIMD implementation of the mask function declared in
-// block_default.go and block_optimized.go, it is repeated in block_check as
-// well. For each of the 8 x 32 bits words of the bloom filter block, the
-// operation performed is:
+// block_default.go and block_optimized.go. For each of the 8 x 32 bits words of
+// the bloom filter block, the operation performed is:
 //
 //      block[i] = 1 << ((x * salt[i]) >> 27)
 //

@@ -66,3 +66,20 @@ func newSerializedFilter(b []byte) *serializedFilter {
 	f.Reset(b)
 	return f
 }
+
+func BenchmarkFilterInsert(b *testing.B) {
+	f := make(bloom.Filter, 1)
+	for i := 0; i < b.N; i++ {
+		f.Insert(uint64(i))
+	}
+	b.SetBytes(bloom.BlockSize)
+}
+
+func BenchmarkFilterCheck(b *testing.B) {
+	f := make(bloom.Filter, 1)
+	f.Insert(42)
+	for i := 0; i < b.N; i++ {
+		f.Check(42)
+	}
+	b.SetBytes(bloom.BlockSize)
+}
