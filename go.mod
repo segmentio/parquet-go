@@ -4,6 +4,7 @@ go 1.17
 
 require (
 	github.com/andybalholm/brotli v1.0.3
+	github.com/cespare/xxhash/v2 v2.1.2
 	github.com/google/uuid v1.3.0
 	github.com/hexops/gotextdiff v1.0.3
 	github.com/klauspost/compress v1.13.6

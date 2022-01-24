@@ -5,26 +5,22 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/segmentio/parquet-go/filter/bloom"
+	"github.com/segmentio/parquet-go/bloom"
 )
 
-func TestFilter(t *testing.T) {
+func TestSplitBlockFilter(t *testing.T) {
 	const N = 1000
 	const S = 3
-	f := make(bloom.Filter, bloom.NumBlocksOf(N, 10))
+	f := make(bloom.SplitBlockFilter, bloom.NumSplitBlocksOf(N, 10))
 	p := rand.New(rand.NewSource(S))
 
 	for i := 0; i < N; i++ {
 		f.Insert(p.Uint64())
 	}
 
-	type filter interface {
-		Check(uint64) bool
-	}
-
 	for _, test := range []struct {
 		scenario string
-		filter   filter
+		filter   bloom.Filter
 	}{
 		{scenario: "filter", filter: f},
 		{scenario: "reader", filter: newSerializedFilter(f.Bytes())},
@@ -57,7 +53,7 @@ type serializedFilter struct {
 }
 
 func (f *serializedFilter) Check(x uint64) bool {
-	ok, _ := bloom.Check(&f.Reader, f.Size(), &f.buf, x)
+	ok, _ := bloom.CheckSplitBlock(&f.Reader, f.Size(), &f.buf, x)
 	return ok
 }
 
@@ -68,7 +64,7 @@ func newSerializedFilter(b []byte) *serializedFilter {
 }
 
 func BenchmarkFilterInsert(b *testing.B) {
-	f := make(bloom.Filter, 1)
+	f := make(bloom.SplitBlockFilter, 1)
 	for i := 0; i < b.N; i++ {
 		f.Insert(uint64(i))
 	}
@@ -76,7 +72,7 @@ func BenchmarkFilterInsert(b *testing.B) {
 }
 
 func BenchmarkFilterCheck(b *testing.B) {
-	f := make(bloom.Filter, 1)
+	f := make(bloom.SplitBlockFilter, 1)
 	f.Insert(42)
 	for i := 0; i < b.N; i++ {
 		f.Check(42)
