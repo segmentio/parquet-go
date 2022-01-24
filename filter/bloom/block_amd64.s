@@ -54,19 +54,23 @@ TEXT ·block_insert(SB), NOSPLIT, $0-16
     // holding the odd indexes is shifted left by 32 bits, and the registers
     // for the even and odd indexes are blended to produce the combined results
     // of all the multiplications.
+    //
+    // An alternative could be to use VPMULLD which keeps only the lower 32 bits
+    // of the multiplication; however, it appeared to yield worse performance on
+    // the benchmarks we ran.
     VPBROADCASTD x+8(FP), Y0
     VPBROADCASTD x+8(FP), Y1
-    VMOVDQA ones<>(SB), Y3
+    VMOVDQA ones<>(SB), Y2
     VPMULUDQ salt_even<>+0(SB), Y0, Y0
     VPMULUDQ salt_odd<>+0(SB), Y1, Y1
     VPSLLVQ shift_odd<>+0(SB), Y1, Y1
     VBLENDPS $0b01010101, Y0, Y1, Y1
     VPSRLD $27, Y1, Y1
-    VPSLLVD Y1, Y3, Y3
+    VPSLLVD Y1, Y2, Y2
 
     // Set all 1 bits of the mask in the bloom filter block.
-    VPOR (AX), Y3, Y3
-    VMOVUPS Y3, (AX)
+    VPOR (AX), Y2, Y2
+    VMOVUPS Y2, (AX)
     VZEROUPPER
     RET
 
@@ -78,19 +82,19 @@ TEXT ·block_check(SB), NOSPLIT, $0-17
     // See block_insert for a description of this algorithm.
     VPBROADCASTD x+8(FP), Y0
     VPBROADCASTD x+8(FP), Y1
-    VMOVDQA ones<>(SB), Y3
+    VMOVDQA ones<>(SB), Y2
     VPMULUDQ salt_even<>+0(SB), Y0, Y0
     VPMULUDQ salt_odd<>+0(SB), Y1, Y1
     VPSLLVQ shift_odd<>+0(SB), Y1, Y1
     VBLENDPS $0b01010101, Y0, Y1, Y1
     VPSRLD $27, Y1, Y1
-    VPSLLVD Y1, Y3, Y3
+    VPSLLVD Y1, Y2, Y2
 
     // Compare the 1 bits of the mask with the bloom filter block, then compare
     // the result with the mask, expecting equality if the value `x` was present
     // in the block.
-    VPAND (AX), Y3, Y0 // Y0 = block & mask
-    VPTEST Y3, Y0      // if (Y3 & ^Y0) != 0 { CF = 1 }
+    VPAND (AX), Y2, Y0 // Y0 = block & mask
+    VPTEST Y2, Y0      // if (Y2 & ^Y0) != 0 { CF = 1 }
     SETCS ret+16(FP)   // return CF == 1
     VZEROUPPER
     RET
