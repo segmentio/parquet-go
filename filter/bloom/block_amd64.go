@@ -13,8 +13,8 @@ package bloom
 // cpu: Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 //
 // name         old time/op  new time/op  delta
-// BlockInsert  10.7ns ± 4%   5.5ns ± 2%  -48.93%  (p=0.000 n=9+9)
-// BlockCheck   10.6ns ± 4%   2.2ns ± 1%  -79.48%  (p=0.000 n=9+8)
+// BlockInsert  10.7ns ± 4%   5.5ns ± 2%  -48.62%  (p=0.000 n=9+9)
+// BlockCheck   10.6ns ± 4%   2.0ns ± 2%  -80.78%  (p=0.000 n=9+8)
 
 //go:noescape
 func block_insert(b *Block, x uint32)

@@ -26,6 +26,7 @@ func BenchmarkBlockInsert(b *testing.B) {
 		x := bloom.Block{}
 		x.Insert(uint32(i))
 	}
+	b.SetBytes(4)
 }
 
 func BenchmarkBlockCheck(b *testing.B) {
@@ -34,4 +35,5 @@ func BenchmarkBlockCheck(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		x.Check(42)
 	}
+	b.SetBytes(4)
 }
