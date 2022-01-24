@@ -324,8 +324,9 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 			c.encodings = addEncoding(c.encodings, format.Plain)
 		}
 
-		c.encodings = addEncoding(c.encodings, encoding.Encoding())
 		c.page.encoder = encoding.NewEncoder(nil)
+		c.page.encoding = encoding.Encoding()
+		c.encodings = addEncoding(c.encodings, c.page.encoding)
 		sortPageEncodings(c.encodings)
 
 		w.columns = append(w.columns, c)
@@ -641,6 +642,7 @@ type writerColumn struct {
 		buffer       *bytes.Buffer
 		compressed   compress.Writer
 		uncompressed offsetTrackingWriter
+		encoding     format.Encoding
 		encoder      encoding.Encoder
 	}
 
@@ -907,7 +909,6 @@ func (c *writerColumn) writeBufferedPage(page BufferedPage) (int64, error) {
 	levelsByteLength := repetitionLevelsByteLength + definitionLevelsByteLength
 	uncompressedPageSize := c.page.uncompressed.offset + int64(levelsByteLength)
 	compressedPageSize := c.page.buffer.Len()
-	encoding := c.page.encoder.Encoding()
 
 	pageHeader := &format.PageHeader{
 		Type:                 c.dataPageType,
@@ -922,7 +923,7 @@ func (c *writerColumn) writeBufferedPage(page BufferedPage) (int64, error) {
 	case format.DataPage:
 		pageHeader.DataPageHeader = &format.DataPageHeader{
 			NumValues:               int32(numValues),
-			Encoding:                encoding,
+			Encoding:                c.page.encoding,
 			DefinitionLevelEncoding: format.RLE,
 			RepetitionLevelEncoding: format.RLE,
 			Statistics:              statistics,
@@ -932,7 +933,7 @@ func (c *writerColumn) writeBufferedPage(page BufferedPage) (int64, error) {
 			NumValues:                  int32(numValues),
 			NumNulls:                   int32(numNulls),
 			NumRows:                    int32(numRows),
-			Encoding:                   encoding,
+			Encoding:                   c.page.encoding,
 			DefinitionLevelsByteLength: definitionLevelsByteLength,
 			RepetitionLevelsByteLength: repetitionLevelsByteLength,
 			IsCompressed:               &c.isCompressed,

@@ -51,9 +51,6 @@ type Encoder interface {
 	// Calling Reset does not override the bit-width configured on the encoder.
 	Reset(io.Writer)
 
-	// Returns the parquet code for the encoding supported by this encoder.
-	Encoding() format.Encoding
-
 	// Encodes an array of boolean values using this encoder.
 	EncodeBoolean(data []bool) error
 
@@ -116,9 +113,6 @@ type Decoder interface {
 	//
 	// Calling Reset does not override the bit-width configured on the decoder.
 	Reset(io.Reader)
-
-	// Returns the parquet code for the encoding supported by this decoder.
-	Encoding() format.Encoding
 
 	// Decodes an array of boolean values using this decoder, returning
 	// the number of decoded values, and io.EOF if the end of the underlying

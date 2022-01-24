@@ -7,7 +7,6 @@ import (
 	"io"
 
 	"github.com/segmentio/parquet-go/encoding"
-	"github.com/segmentio/parquet-go/format"
 	"github.com/segmentio/parquet-go/internal/bits"
 )
 
@@ -22,10 +21,6 @@ type Encoder struct {
 
 func NewEncoder(w io.Writer) *Encoder {
 	return &Encoder{writer: w}
-}
-
-func (e *Encoder) Encoding() format.Encoding {
-	return format.RLE
 }
 
 func (e *Encoder) Write(b []byte) (int, error) {

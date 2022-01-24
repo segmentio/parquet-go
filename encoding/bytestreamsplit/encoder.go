@@ -5,7 +5,6 @@ import (
 	"math"
 
 	"github.com/segmentio/parquet-go/encoding"
-	"github.com/segmentio/parquet-go/format"
 )
 
 type Encoder struct {
@@ -18,10 +17,6 @@ func NewEncoder(w io.Writer) *Encoder {
 	return &Encoder{
 		writer: w,
 	}
-}
-
-func (e *Encoder) Encoding() format.Encoding {
-	return format.ByteStreamSplit
 }
 
 func (e *Encoder) Write(b []byte) (int, error) {

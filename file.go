@@ -814,14 +814,17 @@ type filePageValueReaderState struct {
 	}
 
 	repetitions struct {
-		decoder encoding.Decoder
+		encoding format.Encoding
+		decoder  encoding.Decoder
 	}
 
 	definitions struct {
-		decoder encoding.Decoder
+		encoding format.Encoding
+		decoder  encoding.Decoder
 	}
 
 	page struct {
+		encoding   format.Encoding
 		decoder    encoding.Decoder
 		compressed *compressedPageReader
 	}
@@ -871,9 +874,17 @@ func (s *filePageValueReaderState) init(columnType Type, column *Column, codec f
 		return fmt.Errorf("cannot read values from page of type %s", h.PageType())
 	}
 
-	s.repetitions.decoder = makeDecoder(s.repetitions.decoder, pageHeader.RepetitionLevelEncoding(), repetitionLevels)
-	s.definitions.decoder = makeDecoder(s.definitions.decoder, pageHeader.DefinitionLevelEncoding(), definitionLevels)
-	s.page.decoder = makeDecoder(s.page.decoder, pageHeader.Encoding(), pageData)
+	repetitionLevelEncoding := pageHeader.RepetitionLevelEncoding()
+	definitionLevelEncoding := pageHeader.DefinitionLevelEncoding()
+	pageEncoding := pageHeader.Encoding()
+
+	s.repetitions.decoder = makeDecoder(s.repetitions.decoder, s.repetitions.encoding, repetitionLevelEncoding, repetitionLevels)
+	s.definitions.decoder = makeDecoder(s.definitions.decoder, s.definitions.encoding, definitionLevelEncoding, definitionLevels)
+	s.page.decoder = makeDecoder(s.page.decoder, s.page.encoding, pageEncoding, pageData)
+
+	s.repetitions.encoding = repetitionLevelEncoding
+	s.definitions.encoding = definitionLevelEncoding
+	s.page.encoding = pageEncoding
 
 	if s.reader == nil {
 		s.reader = newDataPageReader(
@@ -1004,9 +1015,9 @@ func makeCompressedPage(page *compressedPageReader, codec format.CompressionCode
 	return page
 }
 
-func makeDecoder(decoder encoding.Decoder, encoding format.Encoding, input io.Reader) encoding.Decoder {
-	if decoder == nil || encoding != decoder.Encoding() {
-		decoder = LookupEncoding(encoding).NewDecoder(input)
+func makeDecoder(decoder encoding.Decoder, oldEncoding, newEncoding format.Encoding, input io.Reader) encoding.Decoder {
+	if decoder == nil || oldEncoding != newEncoding {
+		decoder = LookupEncoding(newEncoding).NewDecoder(input)
 	} else {
 		decoder.Reset(input)
 	}

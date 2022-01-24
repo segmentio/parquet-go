@@ -6,7 +6,6 @@ import (
 	"io"
 
 	"github.com/segmentio/parquet-go/encoding"
-	"github.com/segmentio/parquet-go/format"
 	"github.com/segmentio/parquet-go/internal/bits"
 )
 
@@ -22,10 +21,6 @@ type Decoder struct {
 
 func NewDecoder(r io.Reader) *Decoder {
 	return &Decoder{reader: r}
-}
-
-func (d *Decoder) Encoding() format.Encoding {
-	return format.RLE
 }
 
 func (d *Decoder) BitWidth() int {

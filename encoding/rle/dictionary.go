@@ -42,10 +42,6 @@ func (d dictionaryDecoder) Reset(r io.Reader) {
 	d.rle.SetBitWidth(0)
 }
 
-func (d dictionaryDecoder) Encoding() format.Encoding {
-	return format.RLEDictionary
-}
-
 func (d dictionaryDecoder) DecodeInt32(data []int32) (int, error) {
 	if d.rle.BitWidth() == 0 {
 		bitWidth, err := d.decodeBitWidth()
@@ -79,10 +75,6 @@ type dictionaryEncoder struct {
 
 func (e dictionaryEncoder) Reset(w io.Writer) {
 	e.rle.Reset(w)
-}
-
-func (e dictionaryEncoder) Encoding() format.Encoding {
-	return format.RLEDictionary
 }
 
 func (e dictionaryEncoder) EncodeInt32(data []int32) error {

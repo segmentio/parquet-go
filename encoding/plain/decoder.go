@@ -8,7 +8,6 @@ import (
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/encoding/rle"
-	"github.com/segmentio/parquet-go/format"
 	"github.com/segmentio/parquet-go/internal/bits"
 )
 
@@ -21,10 +20,6 @@ type Decoder struct {
 
 func NewDecoder(r io.Reader) *Decoder {
 	return &Decoder{reader: r}
-}
-
-func (d *Decoder) Encoding() format.Encoding {
-	return format.Plain
 }
 
 func (d *Decoder) Reset(r io.Reader) {

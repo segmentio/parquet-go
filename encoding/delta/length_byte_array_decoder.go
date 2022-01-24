@@ -5,7 +5,6 @@ import (
 	"io"
 
 	"github.com/segmentio/parquet-go/encoding"
-	"github.com/segmentio/parquet-go/format"
 )
 
 type LengthByteArrayDecoder struct {
@@ -25,10 +24,6 @@ func (d *LengthByteArrayDecoder) Reset(r io.Reader) {
 	d.binpack.Reset(r)
 	d.lengths = d.lengths[:0]
 	d.index = -1
-}
-
-func (d *LengthByteArrayDecoder) Encoding() format.Encoding {
-	return format.DeltaLengthByteArray
 }
 
 func (d *LengthByteArrayDecoder) DecodeByteArray(data *encoding.ByteArrayList) (n int, err error) {

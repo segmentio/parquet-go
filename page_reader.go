@@ -117,7 +117,7 @@ func (r *dataPageReader) ReadValues(values []Value) (int, error) {
 				// decoded levels.
 				err = fmt.Errorf("after reading %d/%d values: %w", r.numValues-r.remain, r.numValues, io.ErrUnexpectedEOF)
 			}
-			return read, fmt.Errorf("decoding %s values from data page of column %d: %w", r.values.Decoder().Encoding(), ^r.columnIndex, err)
+			return read, fmt.Errorf("decoding values from data page of column %d: %w", ^r.columnIndex, err)
 		}
 
 		for i, j := n-1, len(definitionLevels)-1; j >= 0; j-- {

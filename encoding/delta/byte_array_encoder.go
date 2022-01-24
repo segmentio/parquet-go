@@ -7,7 +7,6 @@ import (
 	"math"
 
 	"github.com/segmentio/parquet-go/encoding"
-	"github.com/segmentio/parquet-go/format"
 )
 
 type ByteArrayEncoder struct {
@@ -29,10 +28,6 @@ func (e *ByteArrayEncoder) Reset(w io.Writer) {
 	e.arrays.Reset(w)
 	e.prefixes = e.prefixes[:0]
 	e.suffixes.Reset()
-}
-
-func (e *ByteArrayEncoder) Encoding() format.Encoding {
-	return format.DeltaByteArray
 }
 
 func (e *ByteArrayEncoder) EncodeByteArray(data encoding.ByteArrayList) error {

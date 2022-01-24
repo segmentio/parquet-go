@@ -6,7 +6,6 @@ import (
 	"math"
 
 	"github.com/segmentio/parquet-go/encoding"
-	"github.com/segmentio/parquet-go/format"
 )
 
 type LengthByteArrayEncoder struct {
@@ -23,10 +22,6 @@ func NewLengthByteArrayEncoder(w io.Writer) *LengthByteArrayEncoder {
 
 func (e *LengthByteArrayEncoder) Reset(w io.Writer) {
 	e.binpack.Reset(w)
-}
-
-func (e *LengthByteArrayEncoder) Encoding() format.Encoding {
-	return format.DeltaLengthByteArray
 }
 
 func (e *LengthByteArrayEncoder) EncodeByteArray(data encoding.ByteArrayList) (err error) {
