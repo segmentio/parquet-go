@@ -40,6 +40,10 @@ func (d *ByteArrayDecoder) DecodeByteArray(data *encoding.ByteArrayList) (int, e
 }
 
 func (d *ByteArrayDecoder) DecodeFixedLenByteArray(size int, data []byte) (int, error) {
+	if size <= 0 {
+		return 0, fmt.Errorf("%w: size can't be < 1", encoding.ErrInvalidArguments)
+	}
+
 	i := 0
 	return d.decode(len(data)/size, func(n int) ([]byte, error) {
 		if n != size {

@@ -28,7 +28,11 @@ func (r *Reader) ReadBits(count uint) (uint64, uint, error) {
 
 	for count > 0 {
 		if r.length == 0 {
-			n, err := r.reader.Read(r.buffer[:ByteCount(count)])
+			byteCount := ByteCount(count)
+			if byteCount > 8 {
+				byteCount = 8
+			}
+			n, err := r.reader.Read(r.buffer[:byteCount])
 			if err != nil && n == 0 {
 				if err == io.EOF && nbits != 0 {
 					err = io.ErrUnexpectedEOF

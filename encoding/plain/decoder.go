@@ -78,8 +78,8 @@ func (d *Decoder) DecodeByteArray(data *encoding.ByteArrayList) (n int, err erro
 }
 
 func (d *Decoder) DecodeFixedLenByteArray(size int, data []byte) (int, error) {
-	if (len(data) % size) != 0 {
-		return 0, fmt.Errorf("length of fixed byte array is not a multiple of its size: size=%d length=%d", size, len(data))
+	if size == 0 || (len(data)%size) != 0 {
+		return 0, fmt.Errorf("%w: length of fixed byte array is not a multiple of its size: size=%d length=%d", encoding.ErrInvalidArguments, size, len(data))
 	}
 	return readFull(d.reader, size, data)
 }
