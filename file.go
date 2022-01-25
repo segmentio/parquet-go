@@ -407,6 +407,10 @@ func (c *fileColumnChunk) OffsetIndex() OffsetIndex {
 	return (*offsetIndex)(c.offsetIndex)
 }
 
+func (c *fileColumnChunk) NumValues() int64 {
+	return c.chunk.MetaData.NumValues
+}
+
 type filePages struct {
 	column     *fileColumnChunk
 	protocol   thrift.CompactProtocol

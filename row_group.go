@@ -15,10 +15,10 @@ type RowGroup interface {
 	// Returns the number of rows in the group.
 	NumRows() int64
 
-	// Returns the number of columns in the group.
+	// Returns the number of leaf columns in the group.
 	NumColumns() int
 
-	// Returns the column at the given index in the group.
+	// Returns the leaf column at the given index in the group.
 	Column(int) ColumnChunk
 
 	// Returns the schema of rows in the group.
@@ -375,6 +375,10 @@ func (c *seekColumnChunk) OffsetIndex() OffsetIndex {
 	return c.base.OffsetIndex()
 }
 
+func (c *seekColumnChunk) NumValues() int64 {
+	return c.base.NumValues()
+}
+
 type emptyRowGroup struct {
 	schema  *Schema
 	columns []emptyColumnChunk
@@ -409,6 +413,7 @@ func (c *emptyColumnChunk) Column() int              { return c.column }
 func (c *emptyColumnChunk) Pages() Pages             { return emptyPages{} }
 func (c *emptyColumnChunk) ColumnIndex() ColumnIndex { return &emptyColumnIndex }
 func (c *emptyColumnChunk) OffsetIndex() OffsetIndex { return &emptyOffsetIndex }
+func (c *emptyColumnChunk) NumValues() int64         { return 0 }
 
 type emptyRowReader struct{ schema *Schema }
 

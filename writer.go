@@ -9,6 +9,7 @@ import (
 	"sort"
 
 	"github.com/segmentio/encoding/thrift"
+	"github.com/segmentio/parquet-go/bloom"
 	"github.com/segmentio/parquet-go/compress"
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/encoding/plain"
@@ -165,6 +166,7 @@ func (w *Writer) WriteRowGroup(rowGroup RowGroup) (int64, error) {
 	if err := w.writer.flush(); err != nil {
 		return 0, err
 	}
+	w.writer.configureBloomFilters(rowGroup)
 	n, err := CopyRows(w.writer, rowGroup.Rows())
 	if err != nil {
 		return n, err
@@ -282,6 +284,7 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 			columnPath:         leaf.path,
 			columnType:         columnType,
 			columnIndex:        columnType.NewColumnIndexer(config.ColumnIndexSizeLimit),
+			columnFilter:       searchBloomFilter(config.BloomFilters, leaf.path),
 			compression:        compression,
 			dictionary:         dictionary,
 			dataPageType:       dataPageType,
@@ -405,6 +408,14 @@ func (w *writer) writeFileHeader() error {
 		return err
 	}
 	return nil
+}
+
+func (w *writer) configureBloomFilters(rowGroup RowGroup) {
+	for i, c := range w.columns {
+		if c.columnFilter != nil {
+			c.page.filter = c.columnFilter.NewEncoder(rowGroup.Column(i).NumValues())
+		}
+	}
 }
 
 func (w *writer) writeFileFooter() error {
@@ -612,6 +623,7 @@ type writerColumn struct {
 	columnType   Type
 	columnIndex  ColumnIndexer
 	columnBuffer ColumnBuffer
+	columnFilter BloomFilter
 	compression  compress.Codec
 	dictionary   Dictionary
 
@@ -640,6 +652,7 @@ type writerColumn struct {
 
 	page struct {
 		buffer       *bytes.Buffer
+		filter       bloom.Encoder
 		compressed   compress.Writer
 		uncompressed offsetTrackingWriter
 		encoding     format.Encoding
@@ -769,6 +782,26 @@ func (c *writerColumn) WriteValues(values []Value) (numValues int, err error) {
 		c.columnBuffer = c.newColumnBuffer()
 		c.maxValues = int32(c.columnBuffer.Cap())
 	}
+
+	if c.page.filter != nil {
+		// TODO: this is likely a slow code path, but it should not be taken
+		// very often. If it becomes a problem, the values are expected to all
+		// be of the same type, which makes it possible to amortize some of the
+		// work done in AppendBytes. We might also be able to buffer a batch of
+		// values into their concrete type and call the Encode{Type} method of
+		// the bloom filter encoder instead making individual calls to Encode
+		// (maybe we can remove the Encode API as well then, it was added to
+		// support this code path).
+		b := make([]byte, 64)
+
+		for _, v := range values {
+			b = v.AppendBytes(b[:0])
+			if err := c.page.filter.Encode(b); err != nil {
+				return 0, err
+			}
+		}
+	}
+
 	numValues, err = c.columnBuffer.WriteValues(values)
 	c.numValues += int32(numValues)
 	return numValues, err
@@ -890,6 +923,12 @@ func (c *writerColumn) writeBufferedPage(page BufferedPage) (int64, error) {
 		}
 	}
 
+	if c.page.filter != nil {
+		if err := page.WriteTo(c.page.filter); err != nil {
+			return 0, err
+		}
+	}
+
 	statistics := format.Statistics{}
 	if c.writePageStats {
 		statistics = c.makePageStatistics(page)
@@ -954,6 +993,21 @@ func (c *writerColumn) writeBufferedPage(page BufferedPage) (int64, error) {
 }
 
 func (c *writerColumn) writeCompressedPage(page CompressedPage) (int64, error) {
+	if c.page.filter != nil {
+		// TODO: modify the Buffer method to accept some kind of buffer pool as
+		// argument so we can use a pre-allocated page buffer to load the page
+		// and reduce the memory footprint.
+		bufferedPage := page.Buffer()
+		// The compressed page must be decompressed here in order to generate
+		// the bloom filter. Note that we don't re-compress it which still saves
+		// most of the compute cost (compression algorithms are usually designed
+		// to make decompressing much cheaper than compressing since it happens
+		// more often).
+		if err := bufferedPage.WriteTo(c.page.filter); err != nil {
+			return 0, err
+		}
+	}
+
 	pageHeader := &format.PageHeader{
 		UncompressedPageSize: int32(page.Size()),
 		CompressedPageSize:   int32(page.PageSize()),

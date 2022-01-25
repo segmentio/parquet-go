@@ -13,14 +13,6 @@ type Filter interface {
 	Check(uint64) bool
 }
 
-// MultableFilter is an extension of the Filter interface for bloom filters
-// which support updating the state of the filter.
-type MutableFilter interface {
-	Filter
-	Reset()
-	Insert(uint64)
-}
-
 // SplitBlockFilter is an in-memory implementation of the parquet bloom filters.
 //
 // This type is useful to construct bloom filters that are later serialized
@@ -36,7 +28,9 @@ type SplitBlockFilter []Block
 //	f := make(bloom.SplitBlockFilter, bloom.NumSplitBlocksOf(n, 10))
 //
 func NumSplitBlocksOf(numValues, bitsPerValue int) int {
-	return (bits.ByteCount(uint(numValues)*uint(bitsPerValue)) + (BlockSize - 1)) / BlockSize
+	numBytes := bits.ByteCount(uint(numValues) * uint(bitsPerValue))
+	numBlocks := (numBytes + (BlockSize - 1)) / BlockSize
+	return numBlocks
 }
 
 // Reset clears the content of the filter f.

@@ -152,6 +152,10 @@ func (col *optionalColumnBuffer) Type() Type {
 	return col.base.Type()
 }
 
+func (col *optionalColumnBuffer) NumValues() int64 {
+	return int64(len(col.definitionLevels))
+}
+
 func (col *optionalColumnBuffer) ColumnIndex() ColumnIndex {
 	return columnIndexOfNullable(col.base, col.maxDefinitionLevel, col.definitionLevels)
 }
@@ -392,6 +396,10 @@ func (col *repeatedColumnBuffer) Clone() ColumnBuffer {
 
 func (col *repeatedColumnBuffer) Type() Type {
 	return col.base.Type()
+}
+
+func (col *repeatedColumnBuffer) NumValues() int64 {
+	return int64(len(col.definitionLevels))
 }
 
 func (col *repeatedColumnBuffer) ColumnIndex() ColumnIndex {

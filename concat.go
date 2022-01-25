@@ -62,6 +62,14 @@ func (c *concatenatedColumnChunk) Type() Type {
 	return nil
 }
 
+func (c *concatenatedColumnChunk) NumValues() int64 {
+	n := int64(0)
+	for i := range c.chunks {
+		n += c.chunks[i].NumValues()
+	}
+	return n
+}
+
 func (c *concatenatedColumnChunk) Column() int {
 	return c.column
 }
