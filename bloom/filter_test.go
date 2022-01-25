@@ -14,8 +14,19 @@ func TestSplitBlockFilter(t *testing.T) {
 	f := make(bloom.SplitBlockFilter, bloom.NumSplitBlocksOf(N, 10))
 	p := rand.New(rand.NewSource(S))
 
-	for i := 0; i < N; i++ {
+	// Half of the values are inserted individually.
+	for i := 0; i < N/2; i++ {
 		f.Insert(p.Uint64())
+	}
+	// The other half is inserted as a bulk operation.
+	b := make([]uint64, N/2)
+	for i := range b {
+		b[i] = p.Uint64()
+	}
+	f.InsertBulk(b)
+
+	if f.Block(0) == nil {
+		t.Fatal("looking up filter block returned impossible nil value")
 	}
 
 	for _, test := range []struct {
@@ -33,7 +44,7 @@ func TestSplitBlockFilter(t *testing.T) {
 				x := p.Uint64()
 
 				if !test.filter.Check(x) {
-					t.Fatalf("bloom filter block does not contain the value that was inserted: %d", x)
+					t.Fatalf("bloom filter block does not contain the value #%d that was inserted: %d", i, x)
 				}
 				if test.filter.Check(^x) {
 					falsePositives++
@@ -45,6 +56,25 @@ func TestSplitBlockFilter(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("Reset", func(t *testing.T) {
+		allZeros := true
+		for _, b := range f.Bytes() {
+			if b != 0 {
+				allZeros = false
+				break
+			}
+		}
+		if allZeros {
+			t.Fatal("bloom filter bytes were all zero after inserting keys")
+		}
+		f.Reset()
+		for i, b := range f.Bytes() {
+			if b != 0 {
+				t.Fatalf("bloom filter byte at index %d was not zero after resetting the filter: %02X", i, b)
+			}
+		}
+	})
 }
 
 type serializedFilter struct {
@@ -61,6 +91,22 @@ func newSerializedFilter(b []byte) *serializedFilter {
 	f := new(serializedFilter)
 	f.Reset(b)
 	return f
+}
+
+func BenchmarkFilterInsertBulk(b *testing.B) {
+	f := make(bloom.SplitBlockFilter, 99)
+	x := make([]uint64, 16)
+	r := rand.NewSource(0).(rand.Source64)
+
+	for i := range x {
+		x[i] = r.Uint64()
+	}
+
+	for i := 0; i < b.N; i++ {
+		f.InsertBulk(x)
+	}
+
+	b.SetBytes(bloom.BlockSize * int64(len(x)))
 }
 
 func BenchmarkFilterInsert(b *testing.B) {

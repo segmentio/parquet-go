@@ -43,42 +43,17 @@ func (f SplitBlockFilter) Reset() {
 // Block returns a pointer to the block that the given value hashes to in the
 // bloom filter.
 func (f SplitBlockFilter) Block(x uint64) *Block {
-	// Note: the call to blockIndex causes the function cost to exceed the
-	// inlining budget in SplitBlockFilter.Insert and SplitBlockFilter.Check,
-	// preventing those functions from being inlined. It is technically possible
-	// to allow inlining by manually copying the code of blockIndex in
-	// SplitBlockFilter.Insert and SplitBlockFilter.Check, at the expense of
-	// readability and maintainability, which is why we don't do it.
-	//
-	//	$ go build -gcflags '-m -m'
-	//	...
-	//	can inline blockIndex with cost 8 as: func(uint64, uint64) uint64 { return x >> 32 * n >> 32 }
-	//	can inline SplitBlockFilter.Block with cost 18 as: method(SplitBlockFilter) func(uint64) *Block { return &f[blockIndex(x, uint64(len(f)))] }
-	//	cannot inline SplitBlockFilter.Insert: function too complex: cost 87 exceeds budget 80
-	//	cannot inline SplitBlockFilter.Check: function too complex: cost 89 exceeds budget 80
-	//
-	// If inlining is important, the program should be compiled with
-	// -gcflags=-l=4, in which case the compiler is able to inline the methods:
-	//
-	//	$ go build -gcflags '-m -m -l=4'
-	//	...
-	//	can inline blockIndex with cost 8 as: func(uint64, uint64) uint64 { return x >> 32 * n >> 32 }
-	//	can inline SplitBlockFilter.Block with cost 18 as: method(SplitBlockFilter) func(uint64) *Block { return &f[blockIndex(x, uint64(len(f)))] }
-	//	can inline SplitBlockFilter.Insert with cost 31 as: method(SplitBlockFilter) func(uint64) { f.Block(x).Insert(uint32(x)) }
-	//	can inline SplitBlockFilter.Check with cost 33 as: method(SplitBlockFilter) func(uint64) bool { return f.Block(x).Check(uint32(x)) }
-	//
-	return &f[blockIndex(x, uint64(len(f)))]
+	return &f[fasthash1x64(x, int32(len(f)))]
 }
+
+// InsertBulk adds all values from x into f.
+func (f SplitBlockFilter) InsertBulk(x []uint64) { filterInsertBulk(f, x) }
 
 // Insert adds x to f.
-func (f SplitBlockFilter) Insert(x uint64) {
-	f.Block(x).Insert(uint32(x))
-}
+func (f SplitBlockFilter) Insert(x uint64) { filterInsert(f, x) }
 
 // Check tests whether x is in f.
-func (f SplitBlockFilter) Check(x uint64) bool {
-	return f.Block(x).Check(uint32(x))
-}
+func (f SplitBlockFilter) Check(x uint64) bool { return filterCheck(f, x) }
 
 // Bytes converts f to a byte slice.
 //
@@ -94,11 +69,7 @@ func (f SplitBlockFilter) Bytes() []byte {
 //
 // The size n of the bloom filter is assumed to be a multiple of the block size.
 func CheckSplitBlock(r io.ReaderAt, n int64, b *Block, x uint64) (bool, error) {
-	offset := BlockSize * blockIndex(x, uint64(n)/BlockSize)
+	offset := BlockSize * fasthash1x64(x, int32(n/BlockSize))
 	_, err := r.ReadAt(b.Bytes(), int64(offset))
 	return b.Check(uint32(x)), err
-}
-
-func blockIndex(x, n uint64) uint64 {
-	return ((x >> 32) * n) >> 32
 }

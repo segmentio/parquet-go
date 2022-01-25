@@ -60,3 +60,9 @@ func (b *Block) Check(x uint32) bool {
 		((b[6] & masked[6]) != 0) &&
 		((b[7] & masked[7]) != 0)
 }
+
+func (f SplitBlockFilter) insertBulk(x []uint64) {
+	for i := range x {
+		f.Insert(x[i])
+	}
+}

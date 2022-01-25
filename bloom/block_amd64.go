@@ -26,11 +26,11 @@ package bloom
 // practical use cases.
 
 //go:noescape
-func block_insert(b *Block, x uint32)
+func blockInsert(b *Block, x uint32)
 
 //go:noescape
-func block_check(b *Block, x uint32) bool
+func blockCheck(b *Block, x uint32) bool
 
-func (b *Block) Insert(x uint32) { block_insert(b, x) }
+func (b *Block) Insert(x uint32) { blockInsert(b, x) }
 
-func (b *Block) Check(x uint32) bool { return block_check(b, x) }
+func (b *Block) Check(x uint32) bool { return blockCheck(b, x) }
