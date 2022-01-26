@@ -14,22 +14,6 @@ GLOBL prime3<>(SB), RODATA|NOPTR, $8
 DATA prime5<>+0(SB)/8, $PRIME5
 GLOBL prime5<>(SB), RODATA|NOPTR, $8
 
-// 4 x PRIME1; used to multiply 4 accumulators at a time in the vectorized round
-// function.
-DATA prime1v<>+0(SB)/8, $PRIME1
-DATA prime1v<>+8(SB)/8, $PRIME1
-DATA prime1v<>+16(SB)/8, $PRIME1
-DATA prime1v<>+24(SB)/8, $PRIME1
-GLOBL prime1v<>(SB), RODATA|NOPTR, $32
-
-// 4 x PRIME2; used to multiply 4 inputs at a time in the vectorized round
-// function.
-DATA prime2v<>+0(SB)/8, $PRIME2
-DATA prime2v<>+8(SB)/8, $PRIME2
-DATA prime2v<>+16(SB)/8, $PRIME2
-DATA prime2v<>+24(SB)/8, $PRIME2
-GLOBL prime2v<>(SB), RODATA|NOPTR, $32
-
 // Register allocation:
 // AX	h
 // SI	pointer to advance through b

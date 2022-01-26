@@ -56,7 +56,7 @@ func TestMultiSum64Uint8(t *testing.T) {
 			b := [1]byte{byte(v[i])}
 			x := xxhash.Sum64(b[:])
 			if h[i] != x {
-				t.Errorf("sum at index %d mismatch: got 0x%x; want 0x%x", i, h, x)
+				t.Errorf("sum at index %d mismatch: got 0x%x; want 0x%x", i, h[i], x)
 				return false
 			}
 		}
@@ -80,7 +80,7 @@ func TestMultiSum64Uint16(t *testing.T) {
 			binary.LittleEndian.PutUint16(b[:], v[i])
 			x := xxhash.Sum64(b[:])
 			if h[i] != x {
-				t.Errorf("sum at index %d mismatch: got 0x%x; want 0x%x", i, h, x)
+				t.Errorf("sum at index %d mismatch: got 0x%x; want 0x%x", i, h[i], x)
 				return false
 			}
 		}
@@ -104,7 +104,7 @@ func TestMultiSum64Uint32(t *testing.T) {
 			binary.LittleEndian.PutUint32(b[:], v[i])
 			x := xxhash.Sum64(b[:])
 			if h[i] != x {
-				t.Errorf("sum at index %d mismatch: got 0x%x; want 0x%x", i, h, x)
+				t.Errorf("sum at index %d mismatch: got 0x%x; want 0x%x", i, h[i], x)
 				return false
 			}
 		}
@@ -128,7 +128,7 @@ func TestMultiSum64Uint64(t *testing.T) {
 			binary.LittleEndian.PutUint64(b[:], v[i])
 			x := xxhash.Sum64(b[:])
 			if h[i] != x {
-				t.Errorf("sum at index %d mismatch: got 0x%x; want 0x%x", i, h, x)
+				t.Errorf("sum at index %d mismatch: got 0x%x; want 0x%x", i, h[i], x)
 				return false
 			}
 		}
