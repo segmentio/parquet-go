@@ -35,8 +35,8 @@ type SplitBlockFilter []Block
 //
 //	f := make(bloom.SplitBlockFilter, bloom.NumSplitBlocksOf(n, 10))
 //
-func NumSplitBlocksOf(numValues, bitsPerValue int) int {
-	numBytes := bits.ByteCount(uint(numValues) * uint(bitsPerValue))
+func NumSplitBlocksOf(numValues int64, bitsPerValue uint) int {
+	numBytes := bits.ByteCount(uint(numValues) * bitsPerValue)
 	numBlocks := (numBytes + (BlockSize - 1)) / BlockSize
 	return numBlocks
 }
