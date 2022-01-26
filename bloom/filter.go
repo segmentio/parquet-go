@@ -13,6 +13,14 @@ type Filter interface {
 	Check(uint64) bool
 }
 
+// MutableFilter is an extension of the Filter interface which supports
+// inserting keys to the filter.
+type MutableFilter interface {
+	Filter
+	Insert(uint64)
+	InsertBulk([]uint64)
+}
+
 // SplitBlockFilter is an in-memory implementation of the parquet bloom filters.
 //
 // This type is useful to construct bloom filters that are later serialized
@@ -42,9 +50,7 @@ func (f SplitBlockFilter) Reset() {
 
 // Block returns a pointer to the block that the given value hashes to in the
 // bloom filter.
-func (f SplitBlockFilter) Block(x uint64) *Block {
-	return &f[fasthash1x64(x, int32(len(f)))]
-}
+func (f SplitBlockFilter) Block(x uint64) *Block { return &f[fasthash1x64(x, int32(len(f)))] }
 
 // InsertBulk adds all values from x into f.
 func (f SplitBlockFilter) InsertBulk(x []uint64) { filterInsertBulk(f, x) }
@@ -73,3 +79,7 @@ func CheckSplitBlock(r io.ReaderAt, n int64, b *Block, x uint64) (bool, error) {
 	_, err := r.ReadAt(b.Bytes(), int64(offset))
 	return b.Check(uint32(x)), err
 }
+
+var (
+	_ MutableFilter = (SplitBlockFilter)(nil)
+)
