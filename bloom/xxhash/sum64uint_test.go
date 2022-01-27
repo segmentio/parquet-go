@@ -141,6 +141,9 @@ func TestMultiSum64Uint64(t *testing.T) {
 
 func BenchmarkMultiSum64Uint64(b *testing.B) {
 	for _, bb := range benchmarks {
+		if bb.n < 8 {
+			continue // we want to tst with at least one input value
+		}
 		in := make([]uint64, bb.n/8)
 		for i := range in {
 			in[i] = uint64(i)
