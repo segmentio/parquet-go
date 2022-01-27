@@ -12,11 +12,13 @@
 #define prime2 R13
 #define prime3 R14
 #define prime4 R15
+#define prime5 R15 // same as prime4 because they are not used together
 
 #define prime1YMM Y12
 #define prime2YMM Y13
 #define prime3YMM Y14
 #define prime4YMM Y15
+#define prime5YMM Y15
 
 #define tmp1YMM Y6
 #define tmp2YMM Y7
@@ -54,6 +56,18 @@ DATA prime5vec<>+8(SB)/8, $PRIME5
 DATA prime5vec<>+16(SB)/8, $PRIME5
 DATA prime5vec<>+24(SB)/8, $PRIME5
 GLOBL prime5vec<>(SB), RODATA|NOPTR, $32
+
+DATA prime5plus1vec<>+0(SB)/8, $PRIME5+1
+DATA prime5plus1vec<>+8(SB)/8, $PRIME5+1
+DATA prime5plus1vec<>+16(SB)/8, $PRIME5+1
+DATA prime5plus1vec<>+24(SB)/8, $PRIME5+1
+GLOBL prime5plus1vec<>(SB), RODATA|NOPTR, $32
+
+DATA prime5plus2vec<>+0(SB)/8, $PRIME5+2
+DATA prime5plus2vec<>+8(SB)/8, $PRIME5+2
+DATA prime5plus2vec<>+16(SB)/8, $PRIME5+2
+DATA prime5plus2vec<>+24(SB)/8, $PRIME5+2
+GLOBL prime5plus2vec<>(SB), RODATA|NOPTR, $32
 
 DATA prime5plus4vec<>+0(SB)/8, $PRIME5+4
 DATA prime5plus4vec<>+8(SB)/8, $PRIME5+4
@@ -122,6 +136,83 @@ GLOBL prime5plus8vec<>(SB), RODATA|NOPTR, $32
     SHRQ $32, tmp \
     XORQ tmp, acc
 
+// func MultiSum64Uint8(h []uint64, v []uint8) int
+TEXT ·MultiSum64Uint8(SB), NOSPLIT, $0-54
+    MOVQ $PRIME1, prime1
+    MOVQ $PRIME2, prime2
+    MOVQ $PRIME3, prime3
+    MOVQ $PRIME5, prime5
+
+    MOVQ h_base+0(FP), AX
+    MOVQ h_len+8(FP), CX
+    MOVQ v_base+24(FP), BX
+    MOVQ v_len+32(FP), DX
+
+    CMPQ CX, DX
+    CMOVQGT DX, CX
+    MOVQ CX, ret+48(FP)
+
+    XORQ SI, SI
+    MOVQ CX, DI
+    SHRQ $3, DI
+    SHLQ $3, DI
+
+    CMPQ DI, $8
+    JB loop
+
+    VMOVDQA prime1vec<>(SB), prime1YMM
+    VMOVDQA prime2vec<>(SB), prime2YMM
+    VMOVDQA prime3vec<>(SB), prime3YMM
+    VMOVDQA prime5vec<>(SB), prime5YMM
+loop4x64:
+    VMOVDQA prime5plus1vec<>(SB), Y0
+    VMOVDQA prime5plus1vec<>(SB), Y3
+
+    VPMOVZXBQ (BX)(SI*1), Y1
+    VPMOVZXBQ 4(BX)(SI*1), Y4
+
+    mulvec4x64(tmp1YMM, tmp2YMM, prime5YMM, Y1, Y2)
+    mulvec4x64(tmp4YMM, tmp5YMM, prime5YMM, Y4, Y5)
+
+    VPXOR Y2, Y0, Y0
+    VPXOR Y5, Y3, Y3
+
+    rotvec4x64(tmp1YMM, 11, Y0)
+    rotvec4x64(tmp1YMM, 11, Y3)
+
+    mulvec4x64(tmp1YMM, tmp2YMM, prime1YMM, Y0, Y1)
+    mulvec4x64(tmp4YMM, tmp5YMM, prime1YMM, Y3, Y4)
+
+    avalanche4x64(tmp1YMM, tmp2YMM, tmp3YMM, Y1)
+    avalanche4x64(tmp4YMM, tmp5YMM, tmp6YMM, Y4)
+
+    VMOVDQU Y1, (AX)(SI*8)
+    VMOVDQU Y4, 32(AX)(SI*8)
+
+    ADDQ $8, SI
+    CMPQ SI, DI
+    JB loop4x64
+    VZEROUPPER
+loop:
+    CMPQ SI, CX
+    JE done
+
+    MOVQ $PRIME5+1, R8
+    MOVBQZX (BX)(SI*1), R9
+
+    IMULQ prime5, R9
+    XORQ R9, R8
+    ROLQ $11, R8
+    IMULQ prime1, R8
+    avalanche(R9, R8)
+
+    MOVQ R8, (AX)(SI*8)
+
+    INCQ SI
+    JMP loop
+done:
+    RET
+
 // func MultiSum64Uint32(h []uint64, v []uint32) int
 TEXT ·MultiSum64Uint32(SB), NOSPLIT, $0-54
     MOVQ $PRIME1, prime1
@@ -152,10 +243,8 @@ loop4x64:
     VMOVDQA prime5plus4vec<>(SB), Y0
     VMOVDQA prime5plus4vec<>(SB), Y3
 
-    VMOVDQU (BX)(SI*4), X1
-    VMOVDQU 16(BX)(SI*4), X4
-    VPMOVZXDQ X1, Y1
-    VPMOVZXDQ X4, Y4
+    VPMOVZXDQ (BX)(SI*4), Y1
+    VPMOVZXDQ 16(BX)(SI*4), Y4
 
     mulvec4x64(tmp1YMM, tmp2YMM, prime1YMM, Y1, Y2)
     mulvec4x64(tmp4YMM, tmp5YMM, prime1YMM, Y4, Y5)
@@ -182,7 +271,6 @@ loop4x64:
     CMPQ SI, DI
     JB loop4x64
     VZEROUPPER
-
 loop:
     CMPQ SI, CX
     JE done
@@ -203,7 +291,6 @@ loop:
     JMP loop
 done:
     RET
-
 
 // func MultiSum64Uint64(h []uint64, v []uint64) int
 TEXT ·MultiSum64Uint64(SB), NOSPLIT, $0-54
@@ -265,7 +352,6 @@ loop4x64:
     CMPQ SI, DI
     JB loop4x64
     VZEROUPPER
-
 loop:
     CMPQ SI, CX
     JE done

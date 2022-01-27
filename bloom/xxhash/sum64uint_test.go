@@ -53,8 +53,7 @@ func TestMultiSum64Uint8(t *testing.T) {
 			return false
 		}
 		for i := range h {
-			b := [1]byte{byte(v[i])}
-			x := xxhash.Sum64(b[:])
+			x := xxhash.Sum64(v[i : i+1])
 			if h[i] != x {
 				t.Errorf("sum at index %d mismatch: got %064b; want %064b", i, h[i], x)
 				return false
@@ -136,6 +135,22 @@ func TestMultiSum64Uint64(t *testing.T) {
 	}
 	if err := quick.Check(f, nil); err != nil {
 		t.Error(err)
+	}
+}
+
+func BenchmarkMultiSum64Uint8(b *testing.B) {
+	for _, bb := range benchmarks {
+		in := make([]uint8, bb.n)
+		for i := range in {
+			in[i] = uint8(i)
+		}
+		out := make([]uint64, len(in))
+		b.Run(bb.name, func(b *testing.B) {
+			b.SetBytes(bb.n)
+			for i := 0; i < b.N; i++ {
+				_ = xxhash.MultiSum64Uint8(out, in)
+			}
+		})
 	}
 }
 

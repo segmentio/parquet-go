@@ -2,6 +2,16 @@
 
 package xxhash
 
+func MultiSum64Uint8(h []uint64, v []uint8) int {
+	n := min(len(h), len(v))
+	h = h[:n]
+	v = v[:n]
+	for i := range v {
+		h[i] = Sum64Uint8(v[i])
+	}
+	return n
+}
+
 func MultiSum64Uint32(h []uint64, v []uint32) int {
 	n := min(len(h), len(v))
 	h = h[:n]
