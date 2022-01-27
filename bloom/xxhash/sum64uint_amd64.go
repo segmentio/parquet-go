@@ -23,4 +23,7 @@ package xxhash
 // MultiSum64Uint64/10MB  3.59GB/s ± 1%  4.48GB/s ± 3%  +24.72%  (p=0.008 n=5+5)
 
 //go:noescape
+func MultiSum64Uint32(h []uint64, v []uint32) int
+
+//go:noescape
 func MultiSum64Uint64(h []uint64, v []uint64) int
