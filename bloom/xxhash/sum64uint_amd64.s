@@ -81,6 +81,12 @@ DATA prime5plus8vec<>+16(SB)/8, $PRIME5+8
 DATA prime5plus8vec<>+24(SB)/8, $PRIME5+8
 GLOBL prime5plus8vec<>(SB), RODATA|NOPTR, $32
 
+DATA lowbytemask<>+0(SB)/8, $0xFF
+DATA lowbytemask<>+8(SB)/8, $0xFF
+DATA lowbytemask<>+16(SB)/8, $0xFF
+DATA lowbytemask<>+24(SB)/8, $0xFF
+GLOBL lowbytemask<>(SB), RODATA|NOPTR, $32
+
 #define mulvec4x64(tmp1, tmp2, a, b, m) \
     VPSRLQ $32, b, m \
     VPSRLQ $32, a, tmp2 \
@@ -204,6 +210,103 @@ loop:
     XORQ R9, R8
     ROLQ $11, R8
     IMULQ prime1, R8
+    avalanche(R9, R8)
+
+    MOVQ R8, (AX)(SI*8)
+
+    INCQ SI
+    JMP loop
+done:
+    RET
+
+// func MultiSum64Uint16(h []uint64, v []uint16) int
+TEXT ·MultiSum64Uint16(SB), NOSPLIT, $0-54
+    MOVQ $PRIME1, prime1
+    MOVQ $PRIME2, prime2
+    MOVQ $PRIME3, prime3
+    MOVQ $PRIME5, prime5
+
+    MOVQ h_base+0(FP), AX
+    MOVQ h_len+8(FP), CX
+    MOVQ v_base+24(FP), BX
+    MOVQ v_len+32(FP), DX
+
+    CMPQ CX, DX
+    CMOVQGT DX, CX
+    MOVQ CX, ret+48(FP)
+
+    XORQ SI, SI
+    MOVQ CX, DI
+    SHRQ $3, DI
+    SHLQ $3, DI
+
+    CMPQ DI, $8
+    JB loop
+
+    VMOVDQA prime1vec<>(SB), prime1YMM
+    VMOVDQA prime2vec<>(SB), prime2YMM
+    VMOVDQA prime3vec<>(SB), prime3YMM
+    VMOVDQA prime5vec<>(SB), prime5YMM
+loop4x64:
+    VMOVDQA prime5plus2vec<>(SB), Y0
+    VMOVDQA prime5plus2vec<>(SB), Y3
+
+    VPMOVZXWQ (BX)(SI*2), Y1
+    VPMOVZXWQ 8(BX)(SI*2), Y4
+    VPSRLQ $8, Y1, tmp3YMM
+    VPSRLQ $8, Y4, tmp6YMM
+    VPAND lowbytemask<>(SB), Y1, Y1
+    VPAND lowbytemask<>(SB), Y4, Y4
+
+    mulvec4x64(tmp1YMM, tmp2YMM, prime5YMM, Y1, Y2)
+    mulvec4x64(tmp4YMM, tmp5YMM, prime5YMM, Y4, Y5)
+    VPXOR Y2, Y0, Y0
+    VPXOR Y5, Y3, Y3
+    rotvec4x64(tmp1YMM, 11, Y0)
+    rotvec4x64(tmp1YMM, 11, Y3)
+    mulvec4x64(tmp1YMM, tmp2YMM, prime1YMM, Y0, Y1)
+    mulvec4x64(tmp4YMM, tmp5YMM, prime1YMM, Y3, Y4)
+
+    mulvec4x64(tmp1YMM, tmp2YMM, prime5YMM, tmp3YMM, Y2)
+    mulvec4x64(tmp4YMM, tmp5YMM, prime5YMM, tmp6YMM, Y5)
+    VPXOR Y2, Y1, Y0
+    VPXOR Y5, Y4, Y3
+    rotvec4x64(tmp1YMM, 11, Y0)
+    rotvec4x64(tmp1YMM, 11, Y3)
+    mulvec4x64(tmp1YMM, tmp2YMM, prime1YMM, Y0, Y1)
+    mulvec4x64(tmp4YMM, tmp5YMM, prime1YMM, Y3, Y4)
+
+    avalanche4x64(tmp1YMM, tmp2YMM, tmp3YMM, Y1)
+    avalanche4x64(tmp4YMM, tmp5YMM, tmp6YMM, Y4)
+
+    VMOVDQU Y1, (AX)(SI*8)
+    VMOVDQU Y4, 32(AX)(SI*8)
+
+    ADDQ $8, SI
+    CMPQ SI, DI
+    JB loop4x64
+    VZEROUPPER
+loop:
+    CMPQ SI, CX
+    JE done
+
+    MOVQ $PRIME5+2, R8
+    MOVWQZX (BX)(SI*2), R9
+
+    MOVQ R9, R10
+    SHRQ $8, R10
+    ANDQ $0xFF, R9
+
+    IMULQ prime5, R9
+    XORQ R9, R8
+    ROLQ $11, R8
+    IMULQ prime1, R8
+
+    IMULQ prime5, R10
+    XORQ R10, R8
+    ROLQ $11, R8
+    IMULQ prime1, R8
+
     avalanche(R9, R8)
 
     MOVQ R8, (AX)(SI*8)

@@ -154,6 +154,25 @@ func BenchmarkMultiSum64Uint8(b *testing.B) {
 	}
 }
 
+func BenchmarkMultiSum64Uint16(b *testing.B) {
+	for _, bb := range benchmarks {
+		if bb.n < 2 {
+			continue
+		}
+		in := make([]uint16, bb.n)
+		for i := range in {
+			in[i] = uint16(i)
+		}
+		out := make([]uint64, len(in))
+		b.Run(bb.name, func(b *testing.B) {
+			b.SetBytes(bb.n)
+			for i := 0; i < b.N; i++ {
+				_ = xxhash.MultiSum64Uint16(out, in)
+			}
+		})
+	}
+}
+
 func BenchmarkMultiSum64Uint32(b *testing.B) {
 	for _, bb := range benchmarks {
 		if bb.n < 4 {

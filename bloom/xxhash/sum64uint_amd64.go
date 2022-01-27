@@ -26,6 +26,9 @@ package xxhash
 func MultiSum64Uint8(h []uint64, v []uint8) int
 
 //go:noescape
+func MultiSum64Uint16(h []uint64, v []uint16) int
+
+//go:noescape
 func MultiSum64Uint32(h []uint64, v []uint32) int
 
 //go:noescape

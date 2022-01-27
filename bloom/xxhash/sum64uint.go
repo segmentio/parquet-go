@@ -26,20 +26,3 @@ func Sum64Uint64(v uint64) uint64 {
 	h ^= round(0, v)
 	return avalanche((rol27(h) * prime1) + prime4)
 }
-
-func MultiSum64Uint16(h []uint64, v []uint16) int {
-	n := min(len(h), len(v))
-	h = h[:n]
-	v = v[:n]
-	for i := range v {
-		h[i] = Sum64Uint16(v[i])
-	}
-	return n
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
