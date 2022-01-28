@@ -1,3 +1,4 @@
+// Package bloom implements parquet bloom filters.
 package bloom
 
 func fasthash1x64(value uint64, scale int32) uint64 {
