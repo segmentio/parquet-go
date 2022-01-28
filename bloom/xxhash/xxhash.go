@@ -14,7 +14,7 @@ const (
 	prime4 uint64 = 0x85EBCA77C2B2AE63
 	prime5 uint64 = 0x27D4EB2F165667C5
 	// Precomputed operations because the compiler otherwise complains that the
-	// results overflow 64 bits integers.
+	// results overflow 64 bit integers.
 	prime1plus2 uint64 = 0x60EA27EEADC0B5D6 // prime1 + prime2
 	negprime1   uint64 = 0x61C8864E7A143579 // -prime1
 )
