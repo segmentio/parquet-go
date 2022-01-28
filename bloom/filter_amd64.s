@@ -41,7 +41,7 @@ TEXT ·filterInsertBulk(SB), NOSPLIT, $0-48
     VPBROADCASTQ f_base+8(FP), Y0
 
     // Loop initialization, SI holds the current index in `x`, DI is the number
-    // of elements in `x` rounded down the nearest multiple of 4.
+    // of elements in `x` rounded down to the nearest multiple of 4.
     XORQ SI, SI
     MOVQ DX, DI
     SHRQ $2, DI
