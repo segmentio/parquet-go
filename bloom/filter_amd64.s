@@ -77,7 +77,7 @@ loop4x64:
     // a measurable impact on throughput. This would be frequent for small bloom
     // filters which may have only a few blocks, the probability of seeing
     // overlapping blocks on large filters should be small enough to make this
-    // a non-issue tho.
+    // a non-issue though.
     applyMask(Y6, (AX)(R8*1))
     applyMask(Y7, (AX)(R9*1))
     applyMask(Y8, (AX)(R10*1))
