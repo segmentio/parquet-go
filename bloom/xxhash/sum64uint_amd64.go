@@ -10,17 +10,22 @@ package xxhash
 // computing multiple hash values in parallel compared to hashing values
 // individually in loops:
 //
-// name                   old time/op    new time/op    delta
-// MultiSum64Uint64/16B     5.97ns ± 1%    6.01ns ± 3%     ~     (p=0.841 n=5+5)
-// MultiSum64Uint64/100B    27.1ns ± 6%    22.9ns ± 1%  -15.38%  (p=0.008 n=5+5)
-// MultiSum64Uint64/4KB     1.05µs ± 1%    0.79µs ± 3%  -25.33%  (p=0.008 n=5+5)
-// MultiSum64Uint64/10MB    2.78ms ± 1%    2.23ms ± 3%  -19.79%  (p=0.008 n=5+5)
-//
 // name                   old speed      new speed      delta
-// MultiSum64Uint64/16B   2.68GB/s ± 1%  2.66GB/s ± 3%     ~     (p=0.841 n=5+5)
-// MultiSum64Uint64/100B  3.69GB/s ± 6%  4.36GB/s ± 1%  +18.06%  (p=0.008 n=5+5)
-// MultiSum64Uint64/4KB   3.80GB/s ± 1%  5.09GB/s ± 3%  +33.95%  (p=0.008 n=5+5)
-// MultiSum64Uint64/10MB  3.59GB/s ± 1%  4.48GB/s ± 3%  +24.72%  (p=0.008 n=5+5)
+// MultiSum64Uint8/4KB    4.94GB/s ± 2%  6.82GB/s ± 5%  +38.00%  (p=0.000 n=10+10)
+// MultiSum64Uint16/4KB   3.44GB/s ± 2%  4.63GB/s ± 4%  +34.56%  (p=0.000 n=10+10)
+// MultiSum64Uint32/4KB   4.84GB/s ± 2%  6.39GB/s ± 4%  +31.94%  (p=0.000 n=10+10)
+// MultiSum64Uint64/4KB   3.77GB/s ± 2%  4.95GB/s ± 2%  +31.14%  (p=0.000 n=9+10)
+// MultiSum64Uint128/4KB  1.84GB/s ± 2%  3.11GB/s ± 4%  +68.70%  (p=0.000 n=9+10)
+//
+// name                   old hash/s     new hash/s     delta
+// MultiSum64Uint8/4KB        617M ± 2%      852M ± 5%  +38.00%  (p=0.000 n=10+10)
+// MultiSum64Uint16/4KB       431M ± 2%      579M ± 4%  +34.56%  (p=0.000 n=10+10)
+// MultiSum64Uint32/4KB       605M ± 2%      799M ± 4%  +31.94%  (p=0.000 n=10+10)
+// MultiSum64Uint64/4KB       471M ± 2%      618M ± 2%  +31.14%  (p=0.000 n=9+10)
+// MultiSum64Uint128/4KB      231M ± 2%      389M ± 4%  +68.70%  (p=0.000 n=9+10)
+//
+// The benchmarks measure the throughput of hashes produces, as a rate of values
+// and bytes.
 
 //go:noescape
 func MultiSum64Uint8(h []uint64, v []uint8) int
@@ -33,3 +38,6 @@ func MultiSum64Uint32(h []uint64, v []uint32) int
 
 //go:noescape
 func MultiSum64Uint64(h []uint64, v []uint64) int
+
+//go:noescape
+func MultiSum64Uint128(h []uint64, v [][16]byte) int

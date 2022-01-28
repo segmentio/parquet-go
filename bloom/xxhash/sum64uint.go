@@ -18,11 +18,20 @@ func Sum64Uint16(v uint16) uint64 {
 func Sum64Uint32(v uint32) uint64 {
 	h := prime5 + 4
 	h ^= uint64(v) * prime1
-	return avalanche((rol23(h) * prime2) + prime3)
+	return avalanche(rol23(h)*prime2 + prime3)
 }
 
 func Sum64Uint64(v uint64) uint64 {
 	h := prime5 + 8
 	h ^= round(0, v)
-	return avalanche((rol27(h) * prime1) + prime4)
+	return avalanche(rol27(h)*prime1 + prime4)
+}
+
+func Sum64Uint128(v [16]byte) uint64 {
+	h := prime5 + 16
+	h ^= round(0, u64(v[:8]))
+	h = rol27(h)*prime1 + prime4
+	h ^= round(0, u64(v[8:]))
+	h = rol27(h)*prime1 + prime4
+	return avalanche(h)
 }

@@ -42,6 +42,16 @@ func MultiSum64Uint64(h []uint64, v []uint64) int {
 	return n
 }
 
+func MultiSum64Uint128(h []uint64, v [][16]byte) int {
+	n := min(len(h), len(v))
+	h = h[:n]
+	v = v[:n]
+	for i := range v {
+		h[i] = Sum64Uint128(v[i])
+	}
+	return n
+}
+
 func min(a, b int) int {
 	if a < b {
 		return a

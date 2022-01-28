@@ -430,6 +430,9 @@ loop4x64:
     VMOVDQU (BX)(SI*8), Y1
     VMOVDQU 32(BX)(SI*8), Y4
 
+    VPXOR Y2, Y2, Y2
+    VPXOR Y5, Y5, Y5
+
     round4x64(tmp1YMM, tmp2YMM, Y1, Y2)
     round4x64(tmp4YMM, tmp5YMM, Y4, Y5)
 
@@ -472,6 +475,74 @@ loop:
 
     MOVQ R8, (AX)(SI*8)
 
+    INCQ SI
+    JMP loop
+done:
+    RET
+
+// func MultiSum64Uint128(h []uint64, v [][16]byte) int
+TEXT ·MultiSum64Uint128(SB), NOSPLIT, $0-54
+    MOVQ $PRIME1, prime1
+    MOVQ $PRIME2, prime2
+    MOVQ $PRIME3, prime3
+    MOVQ $PRIME4, prime4
+
+    MOVQ h_base+0(FP), AX
+    MOVQ h_len+8(FP), CX
+    MOVQ v_base+24(FP), BX
+    MOVQ v_len+32(FP), DX
+
+    CMPQ CX, DX
+    CMOVQGT DX, CX
+    MOVQ CX, ret+48(FP)
+
+    // I attempted to vectorize this algorithm but it yielded similar or
+    // worse performance:
+    //
+    // * When computing one hash per 128 bit halves of YMM registers,
+    //   throughput was half of what we get with the scalar version.
+    //
+    // * When computing two hashes per 128 bit halves of YMM register,
+    //   the performance were similar to the scalar version with an
+    //   excessive amount of added complexity.
+    //
+    // Hashing 128 bits inputs performs two iterations of the 64 bits loop,
+    // so it makes sense that the vectorized version ended up being half as
+    // fast as hashing 64 bits values, it is running 2x the number of CPU
+    // instructions, and does not offer more opportunities to parallelize
+    // computation..
+    //
+    // I also tried unrolling two iterations of the loop using scalar
+    // instructions but the throughput improvements were minimal for a lot
+    // of added complexity.
+    XORQ SI, SI
+loop:
+    CMPQ SI, CX
+    JE done
+
+    MOVQ $PRIME5+16, R8
+    MOVQ (BX), DX
+    MOVQ 8(BX), DI
+
+    XORQ R9, R9
+    XORQ R10, R10
+    round(DX, R9)
+    round(DI, R10)
+
+    XORQ R9, R8
+    ROLQ $27, R8
+    IMULQ prime1, R8
+    ADDQ prime4, R8
+
+    XORQ R10, R8
+    ROLQ $27, R8
+    IMULQ prime1, R8
+    ADDQ prime4, R8
+
+    avalanche(R9, R8)
+
+    MOVQ R8, (AX)(SI*8)
+    ADDQ $16, BX
     INCQ SI
     JMP loop
 done:
