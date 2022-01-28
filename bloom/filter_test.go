@@ -77,6 +77,15 @@ func TestSplitBlockFilter(t *testing.T) {
 	})
 }
 
+func TestSplitBlockFilterBug1(t *testing.T) {
+	h := [1]uint64{0b1000101001000001001001111000000100011011001000011110011100110000}
+	f := make(bloom.SplitBlockFilter, 1)
+	f.InsertBulk(h[:])
+	if !f.Check(h[0]) {
+		t.Error("value inserted in the filter was not found")
+	}
+}
+
 type serializedFilter struct {
 	bytes.Reader
 	buf bloom.Block

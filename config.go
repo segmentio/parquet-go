@@ -130,7 +130,7 @@ type WriterConfig struct {
 	DataPageStatistics   bool
 	KeyValueMetadata     map[string]string
 	Schema               *Schema
-	BloomFilters         []BloomFilterConfig
+	BloomFilters         []BloomFilterColumn
 }
 
 // DefaultWriterConfig returns a new WriterConfig value initialized with the
@@ -376,8 +376,8 @@ func KeyValueMetadata(key, value string) WriterOption {
 // of a parquet schema can be significant, so by default no filters are created
 // and applications need to explicitly declare the columns that they want to
 // create filters for.
-func BloomFilters(filters ...BloomFilterConfig) WriterOption {
-	filters = append([]BloomFilterConfig{}, filters...)
+func BloomFilters(filters ...BloomFilterColumn) WriterOption {
+	filters = append([]BloomFilterColumn{}, filters...)
 	return writerOption(func(config *WriterConfig) { config.BloomFilters = filters })
 }
 
@@ -469,7 +469,7 @@ func coalesceSortingColumns(s1, s2 []SortingColumn) []SortingColumn {
 	return s2
 }
 
-func coalesceBloomFilters(f1, f2 []BloomFilter) []BloomFilter {
+func coalesceBloomFilters(f1, f2 []BloomFilterColumn) []BloomFilterColumn {
 	if f1 != nil {
 		return f1
 	}

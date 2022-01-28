@@ -9,7 +9,6 @@ import (
 	"sort"
 
 	"github.com/segmentio/encoding/thrift"
-	"github.com/segmentio/parquet-go/bloom"
 	"github.com/segmentio/parquet-go/compress"
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/encoding/plain"
@@ -284,7 +283,7 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 			columnPath:         leaf.path,
 			columnType:         columnType,
 			columnIndex:        columnType.NewColumnIndexer(config.ColumnIndexSizeLimit),
-			columnFilter:       searchBloomFilter(config.BloomFilters, leaf.path),
+			columnFilter:       searchBloomFilterColumn(config.BloomFilters, leaf.path),
 			compression:        compression,
 			dictionary:         dictionary,
 			dataPageType:       dataPageType,
@@ -413,7 +412,10 @@ func (w *writer) writeFileHeader() error {
 func (w *writer) configureBloomFilters(rowGroup RowGroup) {
 	for i, c := range w.columns {
 		if c.columnFilter != nil {
-			c.page.filter = c.columnFilter.NewEncoder(rowGroup.Column(i).NumValues())
+			const bitsPerValue = 10 // TODO: make this configurable
+			c.page.filter = &bloomFilterEncoder{
+				filter: c.columnFilter.NewFilter(rowGroup.Column(i).NumValues(), bitsPerValue),
+			}
 		}
 	}
 }
@@ -623,7 +625,7 @@ type writerColumn struct {
 	columnType   Type
 	columnIndex  ColumnIndexer
 	columnBuffer ColumnBuffer
-	columnFilter BloomFilter
+	columnFilter BloomFilterColumn
 	compression  compress.Codec
 	dictionary   Dictionary
 
@@ -652,7 +654,7 @@ type writerColumn struct {
 
 	page struct {
 		buffer       *bytes.Buffer
-		filter       bloom.Encoder
+		filter       *bloomFilterEncoder
 		compressed   compress.Writer
 		uncompressed offsetTrackingWriter
 		encoding     format.Encoding

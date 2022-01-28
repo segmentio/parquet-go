@@ -12,13 +12,11 @@ import (
 	"github.com/segmentio/parquet-go/encoding"
 )
 
-func TestSplitBlockEncoder(t *testing.T) {
-	hash := xxhash.Sum64
-
-	newEncoder := func(numValues int) *splitBlockEncoder {
-		return newSplitBlockEncoder(
-			make(bloom.SplitBlockFilter, bloom.NumSplitBlocksOf(numValues, 11)),
-		)
+func TestBloomFilterEncoder(t *testing.T) {
+	newFilter := func(numValues int) *bloomFilterEncoder {
+		return &bloomFilterEncoder{
+			filter: make(bloom.SplitBlockFilter, bloom.NumSplitBlocksOf(int64(numValues), 11)),
+		}
 	}
 
 	tests := []struct {
@@ -28,15 +26,14 @@ func TestSplitBlockEncoder(t *testing.T) {
 		{
 			scenario: "BOOLEAN",
 			function: func(values []bool) bool {
-				e := newEncoder(len(values))
-				f := e.Filter()
-				e.EncodeBoolean(values)
+				f := newFilter(len(values))
+				f.EncodeBoolean(values)
 				for _, v := range values {
 					b := make([]byte, 1)
 					if v {
 						b[0] = 1
 					}
-					if !f.Check(hash(b)) {
+					if !f.Check(b) {
 						return false
 					}
 				}
@@ -47,13 +44,12 @@ func TestSplitBlockEncoder(t *testing.T) {
 		{
 			scenario: "INT8",
 			function: func(values []int8) bool {
-				e := newEncoder(len(values))
-				f := e.Filter()
-				e.EncodeInt8(values)
+				f := newFilter(len(values))
+				f.EncodeInt8(values)
 				for _, v := range values {
 					b := make([]byte, 1)
 					b[0] = byte(v)
-					if !f.Check(hash(b)) {
+					if !f.Check(b) {
 						return false
 					}
 				}
@@ -64,13 +60,12 @@ func TestSplitBlockEncoder(t *testing.T) {
 		{
 			scenario: "INT16",
 			function: func(values []int16) bool {
-				e := newEncoder(len(values))
-				f := e.Filter()
-				e.EncodeInt16(values)
+				f := newFilter(len(values))
+				f.EncodeInt16(values)
 				for _, v := range values {
 					b := make([]byte, 2)
 					binary.LittleEndian.PutUint16(b, uint16(v))
-					if !f.Check(hash(b)) {
+					if !f.Check(b) {
 						return false
 					}
 				}
@@ -81,13 +76,12 @@ func TestSplitBlockEncoder(t *testing.T) {
 		{
 			scenario: "INT32",
 			function: func(values []int32) bool {
-				e := newEncoder(len(values))
-				f := e.Filter()
-				e.EncodeInt32(values)
+				f := newFilter(len(values))
+				f.EncodeInt32(values)
 				for _, v := range values {
 					b := make([]byte, 4)
 					binary.LittleEndian.PutUint32(b, uint32(v))
-					if !f.Check(hash(b)) {
+					if !f.Check(b) {
 						return false
 					}
 				}
@@ -98,13 +92,12 @@ func TestSplitBlockEncoder(t *testing.T) {
 		{
 			scenario: "INT64",
 			function: func(values []int64) bool {
-				e := newEncoder(len(values))
-				f := e.Filter()
-				e.EncodeInt64(values)
+				f := newFilter(len(values))
+				f.EncodeInt64(values)
 				for _, v := range values {
 					b := make([]byte, 8)
 					binary.LittleEndian.PutUint64(b, uint64(v))
-					if !f.Check(hash(b)) {
+					if !f.Check(b) {
 						return false
 					}
 				}
@@ -115,15 +108,14 @@ func TestSplitBlockEncoder(t *testing.T) {
 		{
 			scenario: "INT96",
 			function: func(values []deprecated.Int96) bool {
-				e := newEncoder(len(values))
-				f := e.Filter()
-				e.EncodeInt96(values)
+				f := newFilter(len(values))
+				f.EncodeInt96(values)
 				for _, v := range values {
 					b := make([]byte, 12)
 					binary.LittleEndian.PutUint32(b[0:4], v[0])
 					binary.LittleEndian.PutUint32(b[4:8], v[1])
 					binary.LittleEndian.PutUint32(b[8:12], v[2])
-					if !f.Check(hash(b)) {
+					if !f.Check(b) {
 						return false
 					}
 				}
@@ -134,13 +126,12 @@ func TestSplitBlockEncoder(t *testing.T) {
 		{
 			scenario: "FLOAT",
 			function: func(values []float32) bool {
-				e := newEncoder(len(values))
-				f := e.Filter()
-				e.EncodeFloat(values)
+				f := newFilter(len(values))
+				f.EncodeFloat(values)
 				for _, v := range values {
 					b := make([]byte, 4)
 					binary.LittleEndian.PutUint32(b, math.Float32bits(v))
-					if !f.Check(hash(b)) {
+					if !f.Check(b) {
 						return false
 					}
 				}
@@ -151,13 +142,12 @@ func TestSplitBlockEncoder(t *testing.T) {
 		{
 			scenario: "DOUBLE",
 			function: func(values []float64) bool {
-				e := newEncoder(len(values))
-				f := e.Filter()
-				e.EncodeDouble(values)
+				f := newFilter(len(values))
+				f.EncodeDouble(values)
 				for _, v := range values {
 					b := make([]byte, 8)
 					binary.LittleEndian.PutUint64(b, math.Float64bits(v))
-					if !f.Check(hash(b)) {
+					if !f.Check(b) {
 						return false
 					}
 				}
@@ -172,11 +162,10 @@ func TestSplitBlockEncoder(t *testing.T) {
 				for _, v := range values {
 					a.Push(v)
 				}
-				e := newEncoder(len(values))
-				f := e.Filter()
-				e.EncodeByteArray(a)
+				f := newFilter(len(values))
+				f.EncodeByteArray(a)
 				for _, v := range values {
-					if !f.Check(hash(v)) {
+					if !f.Check(v) {
 						return false
 					}
 				}
@@ -191,11 +180,10 @@ func TestSplitBlockEncoder(t *testing.T) {
 				for _, v := range values {
 					a.Push(v)
 				}
-				e := newEncoder(len(values))
-				f := e.Filter()
-				e.EncodeByteArray(a)
+				f := newFilter(len(values))
+				f.EncodeByteArray(a)
 				for _, v := range values {
-					if !f.Check(hash(v)) {
+					if !f.Check(v) {
 						return false
 					}
 				}
@@ -206,15 +194,14 @@ func TestSplitBlockEncoder(t *testing.T) {
 		{
 			scenario: "VALUE",
 			function: func(values [][]byte) bool {
-				e := newEncoder(len(values))
-				f := e.Filter()
+				f := newFilter(len(values))
 				for _, v := range values {
-					if e.Encode(v) != nil {
+					if f.Encode(v) != nil {
 						return false
 					}
 				}
 				for _, v := range values {
-					if !f.Check(hash(v)) {
+					if !f.Check(v) {
 						return false
 					}
 				}
@@ -232,11 +219,11 @@ func TestSplitBlockEncoder(t *testing.T) {
 	}
 
 	t.Run("Reset", func(t *testing.T) {
-		e := newEncoder(1)
-		e.EncodeBoolean([]bool{false, true})
+		f := newFilter(1)
+		f.EncodeBoolean([]bool{false, true})
 
 		allZeros := true
-		for _, b := range e.Bytes() {
+		for _, b := range f.Bytes() {
 			if b != 0 {
 				allZeros = false
 				break
@@ -246,8 +233,8 @@ func TestSplitBlockEncoder(t *testing.T) {
 			t.Fatal("bloom filter bytes were all zero after encoding values")
 		}
 
-		e.Reset(nil)
-		for i, b := range e.Bytes() {
+		f.Reset(nil)
+		for i, b := range f.Bytes() {
 			if b != 0 {
 				t.Fatalf("bloom filter byte at index %d was not zero after resetting the encoder: %02X", i, b)
 			}
@@ -255,11 +242,11 @@ func TestSplitBlockEncoder(t *testing.T) {
 	})
 }
 
-func BenchmarkSplitBockEncoder(b *testing.B) {
+func BenchmarkBloomFilterEncoder(b *testing.B) {
 	const N = 1000
-	e := bloom.NewSplitBlockEncoder(
-		make(bloom.SplitBlockFilter, bloom.NumSplitBlocksOf(N, 10)),
-	)
+	f := &bloomFilterEncoder{
+		filter: make(bloom.SplitBlockFilter, bloom.NumSplitBlocksOf(N, 10)),
+	}
 
 	v := make([]int64, N)
 	r := rand.NewSource(10)
@@ -268,7 +255,7 @@ func BenchmarkSplitBockEncoder(b *testing.B) {
 	}
 
 	for i := 0; i < b.N; i++ {
-		e.EncodeInt64(v)
+		f.EncodeInt64(v)
 	}
 
 	b.SetBytes(8 * N)

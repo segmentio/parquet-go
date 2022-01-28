@@ -35,14 +35,15 @@
 // func filterInsertBulk(f []Block, x []uint64)
 TEXT ·filterInsertBulk(SB), NOSPLIT, $0-48
     MOVQ f_base+0(FP), AX
-    MOVQ f_len+8(FP), BX
-    MOVQ x_base+24(FP), CX
-    MOVQ x_len+32(FP), DI
+    MOVQ f_len+8(FP), CX
+    MOVQ x_base+24(FP), BX
+    MOVQ x_len+32(FP), DX
     VPBROADCASTQ f_base+8(FP), Y0
 
     // Loop initialization, SI holds the current index in `x`, DI is the number
     // of elements in `x` rounded down the nearest multiple of 4.
     XORQ SI, SI
+    MOVQ DX, DI
     SHRQ $2, DI
     SHLQ $2, DI
 loop4x64:
@@ -54,11 +55,11 @@ loop4x64:
     // to compute all 4 indexes in parallel. The lower 32 bits of the hashes are
     // also broadcasted in 4 YMM registers to compute the 4 masks that will then
     // be applied to the filter.
-    VMOVDQU (CX)(SI*8), Y1
-    VPBROADCASTD 0(CX)(SI*8), Y2
-    VPBROADCASTD 8(CX)(SI*8), Y3
-    VPBROADCASTD 16(CX)(SI*8), Y4
-    VPBROADCASTD 24(CX)(SI*8), Y5
+    VMOVDQU (BX)(SI*8), Y1
+    VPBROADCASTD 0(BX)(SI*8), Y2
+    VPBROADCASTD 8(BX)(SI*8), Y3
+    VPBROADCASTD 16(BX)(SI*8), Y4
+    VPBROADCASTD 24(BX)(SI*8), Y5
 
     fasthash4x64(Y0, Y1)
     generateMask(Y2, Y6)
@@ -88,11 +89,11 @@ loop:
     // Compute trailing elements in `x` if the length was not a multiple of 4.
     // This is the same algorthim as the one in the loop4x64 section, working
     // on a single mask/block pair at a time.
-    CMPQ SI, DI
+    CMPQ SI, DX
     JE done
-    MOVQ (CX)(SI*8), R8
-    VPBROADCASTD (CX)(SI*8), Y0
-    fasthash1x64(BX, R8)
+    MOVQ (BX)(SI*8), R8
+    VPBROADCASTD (BX)(SI*8), Y0
+    fasthash1x64(CX, R8)
     generateMask(Y0, Y1)
     applyMask(Y1, (AX)(R8*1))
     INCQ SI

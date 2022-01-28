@@ -17,8 +17,10 @@ type Filter interface {
 // inserting keys to the filter.
 type MutableFilter interface {
 	Filter
+	Reset()
 	Insert(uint64)
 	InsertBulk([]uint64)
+	Bytes() []byte
 }
 
 // SplitBlockFilter is an in-memory implementation of the parquet bloom filters.
