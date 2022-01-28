@@ -31,7 +31,7 @@ type MutableFilter interface {
 type SplitBlockFilter []Block
 
 // NumSplitBlocksOf returns the number of blocks in a filter intended to hold
-// the given nuumber of values and bits of filter per value.
+// the given number of values and bits of filter per value.
 //
 // This function is useful to determine the number of blocks when creating bloom
 // filters in memory, for example:
