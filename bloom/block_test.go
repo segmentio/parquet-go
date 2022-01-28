@@ -15,6 +15,12 @@ func TestBlock(t *testing.T) {
 		if !b.Check(x) {
 			t.Fatalf("bloom filter block does not contain the value that was inserted: %d", x)
 		}
+		if b.Check(x - 1) {
+			t.Fatalf("bloom filter block contains value that was not inserted: %d", ^x)
+		}
+		if b.Check(x + 1) {
+			t.Fatalf("bloom filter block contains value that was not inserted: %d", ^x)
+		}
 		if b.Check(^x) {
 			t.Fatalf("bloom filter block contains value that was not inserted: %d", ^x)
 		}
