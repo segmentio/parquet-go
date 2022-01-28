@@ -24,7 +24,7 @@ package xxhash
 // MultiSum64Uint64/4KB       471M ± 2%      618M ± 2%  +31.14%  (p=0.000 n=9+10)
 // MultiSum64Uint128/4KB      231M ± 2%      389M ± 4%  +68.70%  (p=0.000 n=9+10)
 //
-// The benchmarks measure the throughput of hashes produces, as a rate of values
+// The benchmarks measure the throughput of hashes produced, as a rate of values
 // and bytes.
 
 //go:noescape
