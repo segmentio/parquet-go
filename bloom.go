@@ -16,16 +16,21 @@ type BloomFilter interface {
 	// Implement the io.ReaderAt interface as a mechanism to allow reading the
 	// raw bits of the filter.
 	io.ReaderAt
+
 	// Returns the size of the bloom filter (in bytes).
 	Size() int64
-	// Tests whether the key is present in the filter.
+
+	// Tests whether the given value is present in the filter.
+	//
+	// The parquet value is expected to be PLAIN-encoded, as it would be by
+	// calling the parquet.Value.Bytes method.
 	//
 	// A non-nil error may be returned if reading the filter failed. This may
 	// happen if the filter was lazily loaded from a storage medium during the
 	// call to Check for example. Applications that can guarantee that the
 	// filter was in memory at the time Check was called can safely ignore the
 	// error, which would always be nil in this case.
-	Check(key []byte) (bool, error)
+	Check(value []byte) (bool, error)
 }
 
 type bloomFilter struct {
@@ -34,8 +39,8 @@ type bloomFilter struct {
 	check func(io.ReaderAt, int64, uint64) (bool, error)
 }
 
-func (f *bloomFilter) Check(key []byte) (bool, error) {
-	return f.check(&f.SectionReader, f.Size(), f.hash.Sum64(key))
+func (f *bloomFilter) Check(value []byte) (bool, error) {
+	return f.check(&f.SectionReader, f.Size(), f.hash.Sum64(value))
 }
 
 func newBloomFilter(file io.ReaderAt, offset int64, header *format.BloomFilterHeader) *bloomFilter {
@@ -58,9 +63,11 @@ func newBloomFilter(file io.ReaderAt, offset int64, header *format.BloomFilterHe
 type BloomFilterColumn interface {
 	// Returns the path of the column that the filter applies to.
 	Path() []string
-	// Returns the hashing algorithm used when inserting keys into a bloom
+
+	// Returns the hashing algorithm used when inserting values into a bloom
 	// filter.
 	Hash() bloom.Hash
+
 	// NewFilter constructs a new bloom filter configured to hold the given
 	// number of values and bits of filter per value.
 	NewFilter(numValues int64, bitsPerValue uint) bloom.MutableFilter
