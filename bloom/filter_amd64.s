@@ -72,8 +72,8 @@ loop4x64:
     // to the filter.
     extract4x64(Y1, X1, X10, R8, R9, R10, R11)
 
-    // Apply masks to the filter; this operation is sensitive to aliasing, the
-    // blocks overlap the CPU has to serialize the reads and writes, which has
+    // Apply masks to the filter; this operation is sensitive to aliasing, when
+    // blocks overlap the, CPU has to serialize the reads and writes, which has
     // a measurable impact on throughput. This would be frequent for small bloom
     // filters which may have only a few blocks, the probability of seeing
     // overlapping blocks on large filters should be small enough to make this
