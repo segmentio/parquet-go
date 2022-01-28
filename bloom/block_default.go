@@ -2,7 +2,7 @@
 
 package bloom
 
-// This file contains direct translation of the algortihms described in the
+// This file contains direct translation of the algorithms described in the
 // parquet bloom filter spec:
 // https://github.com/apache/parquet-format/blob/master/BloomFilter.md
 //
