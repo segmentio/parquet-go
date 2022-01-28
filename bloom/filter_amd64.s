@@ -51,7 +51,7 @@ loop4x64:
     JAE loop
 
     // The masks and indexes for 4 input hashes are computed in each loop
-    // iteration. The hashes are loaded in Y1 so we can used vector instructions
+    // iteration. The hashes are loaded in Y1 so we can use vector instructions
     // to compute all 4 indexes in parallel. The lower 32 bits of the hashes are
     // also broadcasted in 4 YMM registers to compute the 4 masks that will then
     // be applied to the filter.
