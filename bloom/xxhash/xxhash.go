@@ -1,3 +1,5 @@
+// Package xxhash is an extension of github.com/cespare/xxhash which adds
+// routines optimized to hash arrays of fixed size elements.
 package xxhash
 
 import (
