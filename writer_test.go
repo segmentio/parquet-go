@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+	"testing/quick"
 
 	"github.com/hexops/gotextdiff"
 	"github.com/hexops/gotextdiff/myers"
@@ -458,4 +459,71 @@ func parquetTools(cmd, path string) ([]byte, error) {
 	}
 
 	return bytes.Join(lines, []byte("\n")), nil
+}
+
+func TestWriterGenerateBloomFilters(t *testing.T) {
+	type Person struct {
+		FirstName utf8string `parquet:"first_name"`
+		LastName  utf8string `parquet:"last_name"`
+	}
+
+	f := func(rows []Person) bool {
+		if len(rows) == 0 { // TODO: support writing files with no rows
+			return true
+		}
+
+		buffer := new(bytes.Buffer)
+		writer := parquet.NewWriter(buffer,
+			parquet.BloomFilters(
+				parquet.SplitBlockFilter("last_name"),
+			),
+		)
+		for i := range rows {
+			if err := writer.Write(&rows[i]); err != nil {
+				t.Error(err)
+				return false
+			}
+		}
+		if err := writer.Close(); err != nil {
+			t.Error(err)
+			return false
+		}
+
+		reader := bytes.NewReader(buffer.Bytes())
+		f, err := parquet.OpenFile(reader, reader.Size())
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+		rowGroup := f.RowGroup(0)
+		firstName := rowGroup.Column(0)
+		lastName := rowGroup.Column(1)
+
+		if firstName.BloomFilter() != nil {
+			t.Errorf(`"first_name" column has a bloom filter even though none were configured`)
+			return false
+		}
+
+		bloomFilter := lastName.BloomFilter()
+		if bloomFilter == nil {
+			t.Error(`"last_name" column has no bloom filter despite being configured to have one`)
+			return false
+		}
+
+		for i, row := range rows {
+			if ok, err := bloomFilter.Check([]byte(row.LastName)); err != nil {
+				t.Errorf("unexpected error checking bloom filter: %v", err)
+				return false
+			} else if !ok {
+				t.Errorf("bloom filter does not contain value %q of row %d", row.LastName, i)
+				return false
+			}
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, nil); err != nil {
+		t.Error(err)
+	}
 }

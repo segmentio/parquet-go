@@ -2,6 +2,7 @@ package bloom
 
 import (
 	"io"
+	"sync"
 	"unsafe"
 
 	"github.com/segmentio/parquet-go/internal/bits"
@@ -72,16 +73,33 @@ func (f SplitBlockFilter) Bytes() []byte {
 }
 
 // CheckSplitBlock is similar to bloom.SplitBlockFilter.Check but reads the
-// bloom filter of n bytes from r, using b as buffer to load the block in which
-// to check for the existance of x.
+// bloom filter of n bytes from r.
 //
 // The size n of the bloom filter is assumed to be a multiple of the block size.
-func CheckSplitBlock(r io.ReaderAt, n int64, b *Block, x uint64) (bool, error) {
+func CheckSplitBlock(r io.ReaderAt, n int64, x uint64) (bool, error) {
+	block := acquireBlock()
+	defer releaseBlock(block)
 	offset := BlockSize * fasthash1x64(x, int32(n/BlockSize))
-	_, err := r.ReadAt(b.Bytes(), int64(offset))
-	return b.Check(uint32(x)), err
+	_, err := r.ReadAt(block.Bytes(), int64(offset))
+	return block.Check(uint32(x)), err
 }
 
 var (
 	_ MutableFilter = (SplitBlockFilter)(nil)
+
+	blockPool sync.Pool
 )
+
+func acquireBlock() *Block {
+	b, _ := blockPool.Get().(*Block)
+	if b == nil {
+		b = new(Block)
+	}
+	return b
+}
+
+func releaseBlock(b *Block) {
+	if b != nil {
+		blockPool.Put(b)
+	}
+}

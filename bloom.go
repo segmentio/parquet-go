@@ -5,7 +5,6 @@ import (
 	"unsafe"
 
 	"github.com/segmentio/parquet-go/bloom"
-	"github.com/segmentio/parquet-go/bloom/xxhash"
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/format"
@@ -14,7 +13,38 @@ import (
 // BloomFilter is an interface allowing applications to test whether a key
 // exists in a bloom filter.
 type BloomFilter interface {
-	Check(key []byte) bool
+	// Implement the io.ReaderAt interface as a mechanism to allow reading the
+	// raw bits of the filter.
+	io.ReaderAt
+	// Returns the size of the bloom filter (in bytes).
+	Size() int64
+	// Tests whether the key is present in the filter.
+	Check(key []byte) (bool, error)
+}
+
+type bloomFilter struct {
+	io.SectionReader
+	hash  bloom.Hash
+	check func(io.ReaderAt, int64, uint64) (bool, error)
+}
+
+func (f *bloomFilter) Check(key []byte) (bool, error) {
+	return f.check(&f.SectionReader, f.Size(), f.hash.Sum64(key))
+}
+
+func newBloomFilter(file io.ReaderAt, offset int64, header *format.BloomFilterHeader) *bloomFilter {
+	if header.Algorithm.Block != nil {
+		if header.Hash.XxHash != nil {
+			if header.Compression.Uncompressed != nil {
+				return &bloomFilter{
+					SectionReader: *io.NewSectionReader(file, offset, int64(header.NumBytes)),
+					hash:          bloom.XXH64{},
+					check:         bloom.CheckSplitBlock,
+				}
+			}
+		}
+	}
+	return nil
 }
 
 // The BloomFilterColumn interface is a declarative representation of bloom filters
@@ -24,7 +54,7 @@ type BloomFilterColumn interface {
 	Path() []string
 	// Returns the hashing algorithm used when inserting keys into a bloom
 	// filter.
-	Hash() BloomFilterHash
+	Hash() bloom.Hash
 	// NewFilter constructs a new bloom filter configured to hold the given
 	// number of values and bits of filter per value.
 	NewFilter(numValues int64, bitsPerValue uint) bloom.MutableFilter
@@ -36,8 +66,8 @@ func SplitBlockFilter(path ...string) BloomFilterColumn { return splitBlockFilte
 
 type splitBlockFilter []string
 
-func (f splitBlockFilter) Path() []string        { return f }
-func (f splitBlockFilter) Hash() BloomFilterHash { return bloomFilterXXH64{} }
+func (f splitBlockFilter) Path() []string   { return f }
+func (f splitBlockFilter) Hash() bloom.Hash { return bloom.XXH64{} }
 func (f splitBlockFilter) NewFilter(numValues int64, bitsPerValue uint) bloom.MutableFilter {
 	return make(bloom.SplitBlockFilter, bloom.NumSplitBlocksOf(numValues, bitsPerValue))
 }
@@ -49,11 +79,11 @@ func (f splitBlockFilter) NewFilter(numValues int64, bitsPerValue uint) bloom.Mu
 // are added to the parquet specs.
 func bloomFilterHeader(filter BloomFilterColumn) (header format.BloomFilterHeader) {
 	switch filter.(type) {
-	case *splitBlockFilter:
+	case splitBlockFilter:
 		header.Algorithm.Block = &format.SplitBlockAlgorithm{}
 	}
 	switch filter.Hash().(type) {
-	case bloomFilterXXH64:
+	case bloom.XXH64:
 		header.Hash.XxHash = &format.XxHash{}
 	}
 	header.Compression.Uncompressed = &format.BloomFilterUncompressed{}
@@ -69,63 +99,20 @@ func searchBloomFilterColumn(filters []BloomFilterColumn, path columnPath) Bloom
 	return nil
 }
 
-// BloomFilterHash is an interface abstracting the hashing algorithm used in
-// bloom filters.
-//
-// BloomFilterHash instances must be safe to use concurrently from multiple
-// goroutines.
-type BloomFilterHash interface {
-	// Returns the 64 bit hash of the value passed as argument.
-	Sum64(value []byte) uint64
-	// Compute hashes of the array of fixed size values passed as arguments,
-	// returning the number of hashes written to the destination buffer.
-	MultiSum64Uint8(dst []uint64, src []uint8) int
-	MultiSum64Uint16(dst []uint64, src []uint16) int
-	MultiSum64Uint32(dst []uint64, src []uint32) int
-	MultiSum64Uint64(dst []uint64, src []uint64) int
-	MultiSum64Uint128(dst []uint64, src [][16]byte) int
-}
-
-type bloomFilterXXH64 struct{}
-
-func (bloomFilterXXH64) Sum64(b []byte) uint64 {
-	return xxhash.Sum64(b)
-}
-
-func (bloomFilterXXH64) MultiSum64Uint8(h []uint64, v []uint8) int {
-	return xxhash.MultiSum64Uint8(h, v)
-}
-
-func (bloomFilterXXH64) MultiSum64Uint16(h []uint64, v []uint16) int {
-	return xxhash.MultiSum64Uint16(h, v)
-}
-
-func (bloomFilterXXH64) MultiSum64Uint32(h []uint64, v []uint32) int {
-	return xxhash.MultiSum64Uint32(h, v)
-}
-
-func (bloomFilterXXH64) MultiSum64Uint64(h []uint64, v []uint64) int {
-	return xxhash.MultiSum64Uint64(h, v)
-}
-
-func (bloomFilterXXH64) MultiSum64Uint128(h []uint64, v [][16]byte) int {
-	return xxhash.MultiSum64Uint128(h, v)
-}
-
 // bloomFilterEncoder is an adapter type which implements the encoding.Encoder
 // interface on top of a bloom filter.
 type bloomFilterEncoder struct {
 	filter bloom.MutableFilter
-	hash   BloomFilterHash
+	hash   bloom.Hash
 	keys   [128]uint64
 }
 
-func newBloomFilterEncoder(filter bloom.MutableFilter, hash BloomFilterHash) *bloomFilterEncoder {
+func newBloomFilterEncoder(filter bloom.MutableFilter, hash bloom.Hash) *bloomFilterEncoder {
 	return &bloomFilterEncoder{filter: filter, hash: hash}
 }
 
 func (e *bloomFilterEncoder) Check(value []byte) bool {
-	return e.filter.Check(xxhash.Sum64(value))
+	return e.filter.Check(e.hash.Sum64(value))
 }
 
 func (e *bloomFilterEncoder) Bytes() []byte {
@@ -185,11 +172,6 @@ func (e *bloomFilterEncoder) EncodeFixedLenByteArray(size int, data []byte) erro
 		i += size
 		j += size
 	}
-	return nil
-}
-
-func (e *bloomFilterEncoder) Encode(value []byte) error {
-	e.insert(value)
 	return nil
 }
 

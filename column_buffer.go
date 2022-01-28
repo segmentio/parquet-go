@@ -164,6 +164,10 @@ func (col *optionalColumnBuffer) OffsetIndex() OffsetIndex {
 	return col.base.OffsetIndex()
 }
 
+func (col *optionalColumnBuffer) BloomFilter() BloomFilter {
+	return col.base.BloomFilter()
+}
+
 func (col *optionalColumnBuffer) Dictionary() Dictionary {
 	return col.base.Dictionary()
 }
@@ -408,6 +412,10 @@ func (col *repeatedColumnBuffer) ColumnIndex() ColumnIndex {
 
 func (col *repeatedColumnBuffer) OffsetIndex() OffsetIndex {
 	return col.base.OffsetIndex()
+}
+
+func (col *repeatedColumnBuffer) BloomFilter() BloomFilter {
+	return col.base.BloomFilter()
 }
 
 func (col *repeatedColumnBuffer) Dictionary() Dictionary {
@@ -696,6 +704,8 @@ func (col *booleanColumnBuffer) ColumnIndex() ColumnIndex { return booleanPageIn
 
 func (col *booleanColumnBuffer) OffsetIndex() OffsetIndex { return booleanPageIndex{&col.booleanPage} }
 
+func (col *booleanColumnBuffer) BloomFilter() BloomFilter { return nil }
+
 func (col *booleanColumnBuffer) Dictionary() Dictionary { return nil }
 
 func (col *booleanColumnBuffer) Pages() Pages { return onePage(col.Page()) }
@@ -778,6 +788,8 @@ func (col *int32ColumnBuffer) ColumnIndex() ColumnIndex { return int32PageIndex{
 
 func (col *int32ColumnBuffer) OffsetIndex() OffsetIndex { return int32PageIndex{&col.int32Page} }
 
+func (col *int32ColumnBuffer) BloomFilter() BloomFilter { return nil }
+
 func (col *int32ColumnBuffer) Dictionary() Dictionary { return nil }
 
 func (col *int32ColumnBuffer) Pages() Pages { return onePage(col.Page()) }
@@ -857,6 +869,8 @@ func (col *int64ColumnBuffer) Type() Type { return col.typ }
 func (col *int64ColumnBuffer) ColumnIndex() ColumnIndex { return int64PageIndex{&col.int64Page} }
 
 func (col *int64ColumnBuffer) OffsetIndex() OffsetIndex { return int64PageIndex{&col.int64Page} }
+
+func (col *int64ColumnBuffer) BloomFilter() BloomFilter { return nil }
 
 func (col *int64ColumnBuffer) Dictionary() Dictionary { return nil }
 
@@ -938,6 +952,8 @@ func (col *int96ColumnBuffer) ColumnIndex() ColumnIndex { return int96PageIndex{
 
 func (col *int96ColumnBuffer) OffsetIndex() OffsetIndex { return int96PageIndex{&col.int96Page} }
 
+func (col *int96ColumnBuffer) BloomFilter() BloomFilter { return nil }
+
 func (col *int96ColumnBuffer) Dictionary() Dictionary { return nil }
 
 func (col *int96ColumnBuffer) Pages() Pages { return onePage(col.Page()) }
@@ -1018,6 +1034,8 @@ func (col *floatColumnBuffer) ColumnIndex() ColumnIndex { return floatPageIndex{
 
 func (col *floatColumnBuffer) OffsetIndex() OffsetIndex { return floatPageIndex{&col.floatPage} }
 
+func (col *floatColumnBuffer) BloomFilter() BloomFilter { return nil }
+
 func (col *floatColumnBuffer) Dictionary() Dictionary { return nil }
 
 func (col *floatColumnBuffer) Pages() Pages { return onePage(col.Page()) }
@@ -1097,6 +1115,8 @@ func (col *doubleColumnBuffer) Type() Type { return col.typ }
 func (col *doubleColumnBuffer) ColumnIndex() ColumnIndex { return doublePageIndex{&col.doublePage} }
 
 func (col *doubleColumnBuffer) OffsetIndex() OffsetIndex { return doublePageIndex{&col.doublePage} }
+
+func (col *doubleColumnBuffer) BloomFilter() BloomFilter { return nil }
 
 func (col *doubleColumnBuffer) Dictionary() Dictionary { return nil }
 
@@ -1181,6 +1201,8 @@ func (col *byteArrayColumnBuffer) ColumnIndex() ColumnIndex {
 func (col *byteArrayColumnBuffer) OffsetIndex() OffsetIndex {
 	return byteArrayPageIndex{&col.byteArrayPage}
 }
+
+func (col *byteArrayColumnBuffer) BloomFilter() BloomFilter { return nil }
 
 func (col *byteArrayColumnBuffer) Dictionary() Dictionary { return nil }
 
@@ -1269,6 +1291,8 @@ func (col *fixedLenByteArrayColumnBuffer) ColumnIndex() ColumnIndex {
 func (col *fixedLenByteArrayColumnBuffer) OffsetIndex() OffsetIndex {
 	return fixedLenByteArrayPageIndex{&col.fixedLenByteArrayPage}
 }
+
+func (col *fixedLenByteArrayColumnBuffer) BloomFilter() BloomFilter { return nil }
 
 func (col *fixedLenByteArrayColumnBuffer) Dictionary() Dictionary { return nil }
 

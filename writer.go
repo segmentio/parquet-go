@@ -412,11 +412,7 @@ func (w *writer) writeFileHeader() error {
 func (w *writer) configureBloomFilters(rowGroup RowGroup) {
 	for i, c := range w.columns {
 		if c.columnFilter != nil {
-			const bitsPerValue = 10 // TODO: make this configurable
-			c.page.filter = newBloomFilterEncoder(
-				c.columnFilter.NewFilter(rowGroup.Column(i).NumValues(), bitsPerValue),
-				c.columnFilter.Hash(),
-			)
+			c.page.filter = c.newBloomFilterEncoder(rowGroup.Column(i).NumValues())
 		}
 	}
 }
@@ -505,6 +501,9 @@ func (w *writer) writeRowGroup(rowGroupSchema *Schema, rowGroupSortingColumns []
 
 	for _, c := range w.columns {
 		if err := c.flush(); err != nil {
+			return 0, err
+		}
+		if err := c.flushFilterPages(); err != nil {
 			return 0, err
 		}
 	}
@@ -627,6 +626,7 @@ type writerColumn struct {
 	insert func(*writerColumn, Row) error
 	commit func(*writerColumn) error
 	values []Value
+	filter []BufferedPage
 
 	pool  PageBufferPool
 	pages []io.ReadWriter
@@ -701,9 +701,13 @@ func (c *writerColumn) reset() {
 	for _, page := range c.pages {
 		c.pool.PutPageBuffer(page)
 	}
+	for i := range c.filter {
+		c.filter[i] = nil
+	}
 	for i := range c.pages {
 		c.pages[i] = nil
 	}
+	c.filter = c.filter[:0]
 	c.pages = c.pages[:0]
 	c.numRows = 0
 	c.numValues = 0
@@ -749,6 +753,24 @@ func (c *writerColumn) flush() (err error) {
 	return err
 }
 
+func (c *writerColumn) flushFilterPages() error {
+	if c.columnFilter != nil {
+		numValues := int64(0)
+		for _, page := range c.filter {
+			numValues += page.NumValues()
+		}
+		if c.page.filter == nil {
+			c.page.filter = c.newBloomFilterEncoder(numValues)
+		}
+		for _, page := range c.filter {
+			if err := page.WriteTo(c.page.filter); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func (c *writerColumn) insertRepeated(row Row) error {
 	c.values = append(c.values, row...)
 	return nil
@@ -771,6 +793,14 @@ func (c *writerColumn) newColumnBuffer() ColumnBuffer {
 		column = newOptionalColumnBuffer(column, c.maxDefinitionLevel, nullsGoLast)
 	}
 	return column
+}
+
+func (c *writerColumn) newBloomFilterEncoder(numRows int64) *bloomFilterEncoder {
+	const bitsPerValue = 10 // TODO: make this configurable
+	return newBloomFilterEncoder(
+		c.columnFilter.NewFilter(numRows, bitsPerValue),
+		c.columnFilter.Hash(),
+	)
 }
 
 func (c *writerColumn) WriteRow(row Row) error {
@@ -799,26 +829,6 @@ func (c *writerColumn) WriteValues(values []Value) (numValues int, err error) {
 		c.columnBuffer = c.newColumnBuffer()
 		c.maxValues = int32(c.columnBuffer.Cap())
 	}
-
-	if c.page.filter != nil {
-		// TODO: this is likely a slow code path, but it should not be taken
-		// very often. If it becomes a problem, the values are expected to all
-		// be of the same type, which makes it possible to amortize some of the
-		// work done in AppendBytes. We might also be able to buffer a batch of
-		// values into their concrete type and call the Encode{Type} method of
-		// the bloom filter encoder instead making individual calls to Encode
-		// (maybe we can remove the Encode API as well then, it was added to
-		// support this code path).
-		b := make([]byte, 64)
-
-		for _, v := range values {
-			b = v.AppendBytes(b[:0])
-			if err := c.page.filter.Encode(b); err != nil {
-				return 0, err
-			}
-		}
-	}
-
 	numValues, err = c.columnBuffer.WriteValues(values)
 	c.numValues += int32(numValues)
 	return numValues, err
@@ -952,10 +962,13 @@ func (c *writerColumn) writeBufferedPage(page BufferedPage) (int64, error) {
 		}
 	}
 
-	if c.page.filter != nil {
+	switch {
+	case c.page.filter != nil:
 		if err := page.WriteTo(c.page.filter); err != nil {
 			return 0, err
 		}
+	case c.columnFilter != nil:
+		c.filter = append(c.filter, page.Clone())
 	}
 
 	statistics := format.Statistics{}
@@ -1022,7 +1035,8 @@ func (c *writerColumn) writeBufferedPage(page BufferedPage) (int64, error) {
 }
 
 func (c *writerColumn) writeCompressedPage(page CompressedPage) (int64, error) {
-	if c.page.filter != nil {
+	switch {
+	case c.page.filter != nil:
 		// TODO: modify the Buffer method to accept some kind of buffer pool as
 		// argument so we can use a pre-allocated page buffer to load the page
 		// and reduce the memory footprint.
@@ -1035,6 +1049,11 @@ func (c *writerColumn) writeCompressedPage(page CompressedPage) (int64, error) {
 		if err := bufferedPage.WriteTo(c.page.filter); err != nil {
 			return 0, err
 		}
+	case c.columnFilter != nil:
+		// When a column filter is configured but no page filter was allocated,
+		// we need to buffer the page in order to have access to the number of
+		// values and properly size the bloom filter when writing the row group.
+		c.filter = append(c.filter, page.Buffer())
 	}
 
 	pageHeader := &format.PageHeader{

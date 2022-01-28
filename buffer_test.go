@@ -2,10 +2,12 @@ package parquet_test
 
 import (
 	"bytes"
+	"encoding/binary"
 	"io"
 	"math"
 	"sort"
 	"testing"
+	"testing/quick"
 
 	"github.com/segmentio/parquet-go"
 	"github.com/segmentio/parquet-go/encoding"
@@ -337,5 +339,88 @@ func testBuffer(t *testing.T, node parquet.Node, reader parquet.ValueReader, buf
 		if i != len(test.values) {
 			t.Errorf("wrong number of values read from %q reader: want=%d got=%d", test.scenario, len(test.values), i)
 		}
+	}
+}
+
+func TestBufferGenerateBloomFilters(t *testing.T) {
+	type Point3D struct {
+		X float64
+		Y float64
+		Z float64
+	}
+
+	f := func(rows []Point3D) bool {
+		if len(rows) == 0 { // TODO: support writing files with no rows
+			return true
+		}
+
+		output := new(bytes.Buffer)
+		buffer := parquet.NewBuffer()
+		writer := parquet.NewWriter(output,
+			parquet.BloomFilters(
+				parquet.SplitBlockFilter("X"),
+				parquet.SplitBlockFilter("Y"),
+				parquet.SplitBlockFilter("Z"),
+			),
+		)
+		for i := range rows {
+			buffer.Write(&rows[i])
+		}
+		_, err := parquet.CopyRows(writer, buffer.Rows())
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+		if err := writer.Close(); err != nil {
+			t.Error(err)
+			return false
+		}
+
+		reader := bytes.NewReader(output.Bytes())
+		f, err := parquet.OpenFile(reader, reader.Size())
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+		rowGroup := f.RowGroup(0)
+		x := rowGroup.Column(0)
+		y := rowGroup.Column(1)
+		z := rowGroup.Column(2)
+
+		for i, col := range []parquet.ColumnChunk{x, y, z} {
+			if col.BloomFilter() == nil {
+				t.Errorf("column %d has no bloom filter despite being configured to have one", i)
+				return false
+			}
+		}
+
+		fx := x.BloomFilter()
+		fy := y.BloomFilter()
+		fz := z.BloomFilter()
+
+		test := func(f parquet.BloomFilter, v float64) bool {
+			b := [8]byte{}
+			binary.LittleEndian.PutUint64(b[:], math.Float64bits(v))
+			if ok, err := f.Check(b[:]); err != nil {
+				t.Errorf("unexpected error checking bloom filter: %v", err)
+				return false
+			} else if !ok {
+				t.Errorf("bloom filter does not contain value %g", v)
+				return false
+			}
+			return true
+		}
+
+		for _, row := range rows {
+			if !test(fx, row.X) || !test(fy, row.Y) || !test(fz, row.Z) {
+				return false
+			}
+		}
+
+		return true
+	}
+
+	if err := quick.Check(f, nil); err != nil {
+		t.Error(err)
 	}
 }

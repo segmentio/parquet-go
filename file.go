@@ -93,6 +93,31 @@ func OpenFile(r io.ReaderAt, size int64, options ...FileOption) (*File, error) {
 		f.rowGroups[i].init(f, schema, columns, &f.metadata.RowGroups[i])
 	}
 
+	if !c.SkipBloomFilters {
+		h := format.BloomFilterHeader{}
+		p := thrift.CompactProtocol{}
+		s := io.NewSectionReader(r, 0, size)
+		d := thrift.NewDecoder(p.NewReader(s))
+
+		for i := range f.rowGroups {
+			g := &f.rowGroups[i]
+
+			for j := range g.columns {
+				c := &g.columns[j]
+
+				if offset := c.chunk.MetaData.BloomFilterOffset; offset > 0 {
+					s.Seek(offset, io.SeekStart)
+					h = format.BloomFilterHeader{}
+					if err := d.Decode(&h); err != nil {
+						return nil, err
+					}
+					offset, _ = s.Seek(0, io.SeekCurrent)
+					c.bloomFilter = newBloomFilter(r, offset, &h)
+				}
+			}
+		}
+	}
+
 	sortKeyValueMetadata(f.metadata.KeyValueMetadata)
 	return f, nil
 }
@@ -354,6 +379,7 @@ func (s *fileSortingColumn) NullsFirst() bool { return s.nullsFirst }
 type fileColumnChunk struct {
 	file        *File
 	column      *Column
+	bloomFilter *bloomFilter
 	rowGroup    *format.RowGroup
 	columnIndex *format.ColumnIndex
 	offsetIndex *format.OffsetIndex
@@ -405,6 +431,13 @@ func (c *fileColumnChunk) OffsetIndex() OffsetIndex {
 		return nil
 	}
 	return (*offsetIndex)(c.offsetIndex)
+}
+
+func (c *fileColumnChunk) BloomFilter() BloomFilter {
+	if c.bloomFilter == nil {
+		return nil
+	}
+	return c.bloomFilter
 }
 
 func (c *fileColumnChunk) NumValues() int64 {

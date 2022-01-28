@@ -375,6 +375,10 @@ func (c *seekColumnChunk) OffsetIndex() OffsetIndex {
 	return c.base.OffsetIndex()
 }
 
+func (c *seekColumnChunk) BloomFilter() BloomFilter {
+	return c.base.BloomFilter()
+}
+
 func (c *seekColumnChunk) NumValues() int64 {
 	return c.base.NumValues()
 }
@@ -413,7 +417,14 @@ func (c *emptyColumnChunk) Column() int              { return c.column }
 func (c *emptyColumnChunk) Pages() Pages             { return emptyPages{} }
 func (c *emptyColumnChunk) ColumnIndex() ColumnIndex { return &emptyColumnIndex }
 func (c *emptyColumnChunk) OffsetIndex() OffsetIndex { return &emptyOffsetIndex }
+func (c *emptyColumnChunk) BloomFilter() BloomFilter { return emptyBloomFilter{} }
 func (c *emptyColumnChunk) NumValues() int64         { return 0 }
+
+type emptyBloomFilter struct{}
+
+func (emptyBloomFilter) ReadAt([]byte, int64) (int, error) { return 0, io.EOF }
+func (emptyBloomFilter) Size() int64                       { return 0 }
+func (emptyBloomFilter) Check([]byte) (bool, error)        { return false, nil }
 
 type emptyRowReader struct{ schema *Schema }
 

@@ -88,11 +88,10 @@ func TestSplitBlockFilterBug1(t *testing.T) {
 
 type serializedFilter struct {
 	bytes.Reader
-	buf bloom.Block
 }
 
 func (f *serializedFilter) Check(x uint64) bool {
-	ok, _ := bloom.CheckSplitBlock(&f.Reader, f.Size(), &f.buf, x)
+	ok, _ := bloom.CheckSplitBlock(&f.Reader, f.Size(), x)
 	return ok
 }
 

@@ -728,6 +728,14 @@ func (page *indexedPage) Bounds() (min, max Value) {
 	return min, max
 }
 
+func (page *indexedPage) Clone() BufferedPage {
+	return &indexedPage{
+		dict:        page.dict,
+		values:      append([]int32{}, page.values...),
+		columnIndex: page.columnIndex,
+	}
+}
+
 func (page *indexedPage) Slice(i, j int64) BufferedPage {
 	return &indexedPage{
 		dict:        page.dict,
@@ -797,6 +805,8 @@ func (col *indexedColumnBuffer) Type() Type { return col.typ }
 func (col *indexedColumnBuffer) ColumnIndex() ColumnIndex { return indexedColumnIndex{col} }
 
 func (col *indexedColumnBuffer) OffsetIndex() OffsetIndex { return indexedOffsetIndex{col} }
+
+func (col *indexedColumnBuffer) BloomFilter() BloomFilter { return nil }
 
 func (col *indexedColumnBuffer) Dictionary() Dictionary { return col.dict }
 

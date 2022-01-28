@@ -16,8 +16,12 @@ func TestBloomFilterEncoder(t *testing.T) {
 	newFilter := func(numValues int) *bloomFilterEncoder {
 		return newBloomFilterEncoder(
 			make(bloom.SplitBlockFilter, bloom.NumSplitBlocksOf(int64(numValues), 11)),
-			bloomFilterXXH64{},
+			bloom.XXH64{},
 		)
+	}
+
+	check := func(e *bloomFilterEncoder, b []byte) bool {
+		return e.filter.Check(e.hash.Sum64(b))
 	}
 
 	tests := []struct {
@@ -34,7 +38,7 @@ func TestBloomFilterEncoder(t *testing.T) {
 					if v {
 						b[0] = 1
 					}
-					if !f.Check(b) {
+					if !check(f, b) {
 						return false
 					}
 				}
@@ -50,7 +54,7 @@ func TestBloomFilterEncoder(t *testing.T) {
 				for _, v := range values {
 					b := make([]byte, 1)
 					b[0] = byte(v)
-					if !f.Check(b) {
+					if !check(f, b) {
 						return false
 					}
 				}
@@ -66,7 +70,7 @@ func TestBloomFilterEncoder(t *testing.T) {
 				for _, v := range values {
 					b := make([]byte, 2)
 					binary.LittleEndian.PutUint16(b, uint16(v))
-					if !f.Check(b) {
+					if !check(f, b) {
 						return false
 					}
 				}
@@ -82,7 +86,7 @@ func TestBloomFilterEncoder(t *testing.T) {
 				for _, v := range values {
 					b := make([]byte, 4)
 					binary.LittleEndian.PutUint32(b, uint32(v))
-					if !f.Check(b) {
+					if !check(f, b) {
 						return false
 					}
 				}
@@ -98,7 +102,7 @@ func TestBloomFilterEncoder(t *testing.T) {
 				for _, v := range values {
 					b := make([]byte, 8)
 					binary.LittleEndian.PutUint64(b, uint64(v))
-					if !f.Check(b) {
+					if !check(f, b) {
 						return false
 					}
 				}
@@ -116,7 +120,7 @@ func TestBloomFilterEncoder(t *testing.T) {
 					binary.LittleEndian.PutUint32(b[0:4], v[0])
 					binary.LittleEndian.PutUint32(b[4:8], v[1])
 					binary.LittleEndian.PutUint32(b[8:12], v[2])
-					if !f.Check(b) {
+					if !check(f, b) {
 						return false
 					}
 				}
@@ -132,7 +136,7 @@ func TestBloomFilterEncoder(t *testing.T) {
 				for _, v := range values {
 					b := make([]byte, 4)
 					binary.LittleEndian.PutUint32(b, math.Float32bits(v))
-					if !f.Check(b) {
+					if !check(f, b) {
 						return false
 					}
 				}
@@ -148,7 +152,7 @@ func TestBloomFilterEncoder(t *testing.T) {
 				for _, v := range values {
 					b := make([]byte, 8)
 					binary.LittleEndian.PutUint64(b, math.Float64bits(v))
-					if !f.Check(b) {
+					if !check(f, b) {
 						return false
 					}
 				}
@@ -183,24 +187,6 @@ func TestBloomFilterEncoder(t *testing.T) {
 				}
 				f := newFilter(len(values))
 				f.EncodeByteArray(a)
-				for _, v := range values {
-					if !f.Check(v) {
-						return false
-					}
-				}
-				return true
-			},
-		},
-
-		{
-			scenario: "VALUE",
-			function: func(values [][]byte) bool {
-				f := newFilter(len(values))
-				for _, v := range values {
-					if f.Encode(v) != nil {
-						return false
-					}
-				}
 				for _, v := range values {
 					if !f.Check(v) {
 						return false
@@ -247,7 +233,7 @@ func BenchmarkBloomFilterEncoder(b *testing.B) {
 	const N = 1000
 	f := newBloomFilterEncoder(
 		make(bloom.SplitBlockFilter, bloom.NumSplitBlocksOf(N, 10)),
-		bloomFilterXXH64{},
+		bloom.XXH64{},
 	)
 
 	v := make([]int64, N)

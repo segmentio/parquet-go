@@ -13,6 +13,7 @@ const (
 	DefaultDataPageVersion      = 2
 	DefaultDataPageStatistics   = false
 	DefaultSkipPageIndex        = false
+	DefaultSkipBloomFilters     = false
 )
 
 // The FileConfig type carries configuration options for parquet files.
@@ -21,18 +22,21 @@ const (
 // as argument to the OpenFile function when needed, for example:
 //
 //	f, err := parquet.OpenFile(reader, size, &parquet.FileConfig{
-//		SkipPageIndex: true,
+//		SkipPageIndex:    true,
+//		SkipBloomFilters: true,
 //	})
 //
 type FileConfig struct {
-	SkipPageIndex bool
+	SkipPageIndex    bool
+	SkipBloomFilters bool
 }
 
 // DefaultFileConfig returns a new FileConfig value initialized with the
 // default file configuration.
 func DefaultFileConfig() *FileConfig {
 	return &FileConfig{
-		SkipPageIndex: DefaultSkipPageIndex,
+		SkipPageIndex:    DefaultSkipPageIndex,
+		SkipBloomFilters: DefaultSkipBloomFilters,
 	}
 }
 
@@ -57,7 +61,8 @@ func (c *FileConfig) Apply(options ...FileOption) {
 // ConfigureFile applies configuration options from c to config.
 func (c *FileConfig) ConfigureFile(config *FileConfig) {
 	*config = FileConfig{
-		SkipPageIndex: config.SkipPageIndex,
+		SkipPageIndex:    config.SkipPageIndex,
+		SkipBloomFilters: config.SkipBloomFilters,
 	}
 }
 

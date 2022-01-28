@@ -25,6 +25,7 @@ type ColumnChunk interface {
 	// If the column chunk does not have a page index, the methods return nil.
 	ColumnIndex() ColumnIndex
 	OffsetIndex() OffsetIndex
+	BloomFilter() BloomFilter
 
 	// Returns the number of volumnes in the column chunk.
 	//
