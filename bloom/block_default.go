@@ -6,7 +6,7 @@ package bloom
 // parquet bloom filter spec:
 // https://github.com/apache/parquet-format/blob/master/BloomFilter.md
 //
-// There are no practical reasons to unable the parquet.bloom.no_unroll build
+// There are no practical reasons to eable the parquet.bloom.no_unroll build
 // tag, the code is left here as a reference to ensure that the optimized
 // implementations of block operations behave the same as the functions in this
 // file.
