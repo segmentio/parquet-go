@@ -19,6 +19,12 @@ type BloomFilter interface {
 	// Returns the size of the bloom filter (in bytes).
 	Size() int64
 	// Tests whether the key is present in the filter.
+	//
+	// A non-nil error may be returned if reading the filter failed. This may
+	// happen if the filter was lazily loaded from a storage medium during the
+	// call to Check for example. Applications that can guarantee that the
+	// filter was in memory at the time Check was called can safely ignore the
+	// error, which would always be nil in this case.
 	Check(key []byte) (bool, error)
 }
 
