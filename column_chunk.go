@@ -27,7 +27,7 @@ type ColumnChunk interface {
 	OffsetIndex() OffsetIndex
 	BloomFilter() BloomFilter
 
-	// Returns the number of volumnes in the column chunk.
+	// Returns the number of values in the column chunk.
 	//
 	// This quantity may differ from the number of rows in the parent row group
 	// because repeated columns may hold zero or more values per row.
