@@ -87,7 +87,7 @@ loop4x64:
     JMP loop4x64
 loop:
     // Compute trailing elements in `x` if the length was not a multiple of 4.
-    // This is the same algorthim as the one in the loop4x64 section, working
+    // This is the same algorithm as the one in the loop4x64 section, working
     // on a single mask/block pair at a time.
     CMPQ SI, DX
     JE done
