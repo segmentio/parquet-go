@@ -245,7 +245,7 @@ if err := writer.Close(); err != nil {
 }
 ```
 
-### Merging Row Groups: [parquet.MergeRowGroups](http://pkg.go.dev/github.com/segmentio/parquet-go#MergeRowGroups)
+### Merging Row Groups: [parquet.MergeRowGroups](https://pkg.go.dev/github.com/segmentio/parquet-go#MergeRowGroups)
 
 Parquet files are often used as part of the underlying engine for data
 processing or storage layers, in which cases merging multiple row groups
@@ -284,6 +284,72 @@ if err != nil {
 }
 if err := writer.Close(); err != nil {
     ...
+}
+```
+
+### Using Bloom Filters: [parquet.BloomFilter](https://pkg.go.dev/github.com/segmentio/parquet-go#BloomFilter)
+
+Parquet files can embed bloom filters to help improve the performance of point
+lookups in the files. The format of parquet bloom filters is documented in
+the parquet specification: [Parquet Bloom Filter](https://github.com/apache/parquet-format/blob/master/BloomFilter.md)
+
+By default, no bloom filters are created in parquet files, but applications can
+configure the list of columns to create filters for using the `parquet.BloomFilters`
+option when instantiating writers; for example:
+
+```go
+writer := parquet.NewWriter(output,
+    parquet.BloomFilters(
+        // Configures the write to generate split-block bloom filters for the
+        // "first_name" and "last_name" columns of the parquet schema of rows
+        // witten by the application.
+        parquet.SplitBlockFilter("first_name"),
+        parquet.SplitBlockFilter("last_name"),
+    ),
+)
+...
+```
+
+Generating bloom filters requires to know how many values exist in a column
+chunk in order to properly size the filter, which requires buffering all the
+values written to the column in memory. Because of it, the memory footprint
+of `parquet.Writer` increases linearly with the number of columns that the
+writer needs to generate filters for. This extra cost is optimized away when
+rows are copied from a `parquet.Buffer` to a writer, since in this case the
+number of values per column in known since the buffer already holds all the
+values in memory.
+
+When reading parquet files, column chunks expose the generated bloom filters
+with the `parquet.ColumnChunk.BloomFilter` method, returning a
+`parquet.BloomFilter` instance if a filter was available, or `nil` when there
+were no filters.
+
+Using bloom filters in parquet files is useful when performing point-lookups in
+parquet files; searching for column rows matching a given value. Programs can
+quickly eliminate column chunks that they know does not contain the value they
+search for by checking the filter first, which is often multiple orders of
+magnitude faster than scanning the column.
+
+The following code snippet hilights how filters are typically used:
+
+```go
+var candidateChunks []parquet.ColumnChunk
+
+for i, n := 0, file.NumRowGroups(); i < n; i++ {
+    columnChunk := file.RowGroup(i).Column(columnIndex)
+    bloomFilter := columnChunk.BloomFilter()
+
+    if bloomFilter != nil {
+        if ok, err := bloomFilter.Check(value); err != nil {
+            ...
+        } else if !ok {
+            // Bloom filters may return false positives, but never return false
+            // negatives, we know this column chunk does not contain the value.
+            continue
+        }
+    }
+
+    candidateChunks = append(candidateChunks, columnChunk)
 }
 ```
 
