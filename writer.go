@@ -413,9 +413,10 @@ func (w *writer) configureBloomFilters(rowGroup RowGroup) {
 	for i, c := range w.columns {
 		if c.columnFilter != nil {
 			const bitsPerValue = 10 // TODO: make this configurable
-			c.page.filter = &bloomFilterEncoder{
-				filter: c.columnFilter.NewFilter(rowGroup.Column(i).NumValues(), bitsPerValue),
-			}
+			c.page.filter = newBloomFilterEncoder(
+				c.columnFilter.NewFilter(rowGroup.Column(i).NumValues(), bitsPerValue),
+				c.columnFilter.Hash(),
+			)
 		}
 	}
 }
@@ -512,6 +513,15 @@ func (w *writer) writeRowGroup(rowGroupSchema *Schema, rowGroupSortingColumns []
 		return 0, err
 	}
 	fileOffset := w.writer.offset
+
+	for _, c := range w.columns {
+		if c.page.filter != nil {
+			c.columnChunk.MetaData.BloomFilterOffset = w.writer.offset
+			if err := c.writeBloomFilter(&w.writer); err != nil {
+				return 0, err
+			}
+		}
+	}
 
 	for i, c := range w.columns {
 		w.columnIndex[i] = format.ColumnIndex(c.columnIndex.ColumnIndex())
@@ -711,6 +721,11 @@ func (c *writerColumn) reset() {
 	// the number of pages should be roughly the same between row groups written
 	// by the writer.
 	c.offsetIndex.PageLocations = make([]format.PageLocation, 0, cap(c.offsetIndex.PageLocations))
+	// Bloom filters may change in size between row groups; we may want to
+	// optimize this by retaining the filter and reusing it if needed, but
+	// for now we take the simpler approach of freeing it and having the
+	// write path lazily reallocate it if the writer is reused.
+	c.page.filter = nil
 }
 
 func (c *writerColumn) totalRowCount() int64 {
@@ -869,6 +884,18 @@ func (c *writerColumn) writePageValues(page ValueReader) (numValues int64, err e
 		err = c.flush()
 	}
 	return numValues, err
+}
+
+func (c *writerColumn) writeBloomFilter(w io.Writer) error {
+	e := thrift.NewEncoder(c.header.protocol.NewWriter(w))
+	h := bloomFilterHeader(c.columnFilter)
+	b := c.page.filter.Bytes()
+	h.NumBytes = int32(len(b))
+	if err := e.Encode(&h); err != nil {
+		return err
+	}
+	_, err := w.Write(b)
+	return err
 }
 
 func (c *writerColumn) writeBufferedPage(page BufferedPage) (int64, error) {

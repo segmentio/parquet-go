@@ -14,9 +14,10 @@ import (
 
 func TestBloomFilterEncoder(t *testing.T) {
 	newFilter := func(numValues int) *bloomFilterEncoder {
-		return &bloomFilterEncoder{
-			filter: make(bloom.SplitBlockFilter, bloom.NumSplitBlocksOf(int64(numValues), 11)),
-		}
+		return newBloomFilterEncoder(
+			make(bloom.SplitBlockFilter, bloom.NumSplitBlocksOf(int64(numValues), 11)),
+			bloomFilterXXH64{},
+		)
 	}
 
 	tests := []struct {
@@ -244,9 +245,10 @@ func TestBloomFilterEncoder(t *testing.T) {
 
 func BenchmarkBloomFilterEncoder(b *testing.B) {
 	const N = 1000
-	f := &bloomFilterEncoder{
-		filter: make(bloom.SplitBlockFilter, bloom.NumSplitBlocksOf(N, 10)),
-	}
+	f := newBloomFilterEncoder(
+		make(bloom.SplitBlockFilter, bloom.NumSplitBlocksOf(N, 10)),
+		bloomFilterXXH64{},
+	)
 
 	v := make([]int64, N)
 	r := rand.NewSource(10)
