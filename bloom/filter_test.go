@@ -78,6 +78,13 @@ func TestSplitBlockFilter(t *testing.T) {
 }
 
 func TestSplitBlockFilterBug1(t *testing.T) {
+	// This test exercises the case where we bulk insert a single key in the
+	// filter, which skips the core of the optimized assembly routines and runs
+	// through the loop handling tails of remaining keys after consuming groups
+	// of two or more.
+	//
+	// The use of quick.Check in bloom filter tests of the parquet package had
+	// uncovered a bug which was reproduced here in isolation when debugging.
 	h := [1]uint64{0b1000101001000001001001111000000100011011001000011110011100110000}
 	f := make(bloom.SplitBlockFilter, 1)
 	f.InsertBulk(h[:])
