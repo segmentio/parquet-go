@@ -95,6 +95,7 @@ func (c *concatenatedColumnChunk) BloomFilter() BloomFilter {
 type concatenatedBloomFilter struct{ *concatenatedColumnChunk }
 
 func (f concatenatedBloomFilter) ReadAt(b []byte, off int64) (int, error) {
+	// TODO: add a test for this function
 	i := 0
 
 	for i < len(f.chunks) {

@@ -132,7 +132,7 @@ func (r *singlePage) SeekToRow(rowIndex int64) error {
 
 func onePage(page Page) Pages { return &singlePage{page: page} }
 
-// ClonePages copies pages from src to dst, returning the number of values that
+// CopyPages copies pages from src to dst, returning the number of values that
 // were copied.
 //
 // The function returns any error it encounters reading or writing pages, except
