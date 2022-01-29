@@ -62,6 +62,14 @@ func (c *concatenatedColumnChunk) Type() Type {
 	return nil
 }
 
+func (c *concatenatedColumnChunk) NumValues() int64 {
+	n := int64(0)
+	for i := range c.chunks {
+		n += c.chunks[i].NumValues()
+	}
+	return n
+}
+
 func (c *concatenatedColumnChunk) Column() int {
 	return c.column
 }
@@ -71,21 +79,81 @@ func (c *concatenatedColumnChunk) Pages() Pages {
 }
 
 func (c *concatenatedColumnChunk) ColumnIndex() ColumnIndex {
-	// TODO: changin the ColumnIndex type from a concrete type to an interface
-	// means that we could create a concatenated view of the indexes instead of
-	// having to reallocate memory buffers.
+	// TODO: implement
 	return nil
 }
 
 func (c *concatenatedColumnChunk) OffsetIndex() OffsetIndex {
-	// TODO: we cannot really reconstruct the offsets here because we do not
-	// know whether the parent row groups belong to the same file.
-	//
-	// Here as well, changing the OffsetIndex type to an interface could let us
-	// embed useful information to map the index back to the original chunk and
-	// allow leveraging it to lookup pages, even if there are no absolute file
-	// offset.
+	// TODO: implement
 	return nil
+}
+
+func (c *concatenatedColumnChunk) BloomFilter() BloomFilter {
+	return concatenatedBloomFilter{c}
+}
+
+type concatenatedBloomFilter struct{ *concatenatedColumnChunk }
+
+func (f concatenatedBloomFilter) ReadAt(b []byte, off int64) (int, error) {
+	// TODO: add a test for this function
+	i := 0
+
+	for i < len(f.chunks) {
+		if r := f.chunks[i].BloomFilter(); r != nil {
+			size := r.Size()
+			if off < size {
+				break
+			}
+			off -= size
+		}
+		i++
+	}
+
+	if i == len(f.chunks) {
+		return 0, io.EOF
+	}
+
+	rn := int(0)
+	for len(b) > 0 {
+		if r := f.chunks[i].BloomFilter(); r != nil {
+			n, err := r.ReadAt(b, off)
+			rn += n
+			if err != nil {
+				return rn, err
+			}
+			if b = b[n:]; len(b) == 0 {
+				return rn, nil
+			}
+			off += int64(n)
+		}
+		i++
+	}
+
+	if i == len(f.chunks) {
+		return rn, io.EOF
+	}
+	return rn, nil
+}
+
+func (f concatenatedBloomFilter) Size() int64 {
+	size := int64(0)
+	for _, c := range f.chunks {
+		if b := c.BloomFilter(); b != nil {
+			size += b.Size()
+		}
+	}
+	return size
+}
+
+func (f concatenatedBloomFilter) Check(key []byte) (bool, error) {
+	for _, c := range f.chunks {
+		if b := c.BloomFilter(); b != nil {
+			if ok, err := b.Check(key); ok || err != nil {
+				return ok, err
+			}
+		}
+	}
+	return false, nil
 }
 
 type concatenatedPages struct {

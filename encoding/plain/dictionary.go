@@ -19,21 +19,13 @@ func (e DictionaryEncoding) CanEncode(t format.Type) bool {
 }
 
 func (e DictionaryEncoding) NewDecoder(r io.Reader) encoding.Decoder {
-	return dictionaryDecoder{NewDecoder(r)}
+	return NewDecoder(r)
 }
 
 func (e DictionaryEncoding) NewEncoder(w io.Writer) encoding.Encoder {
-	return dictionaryEncoder{NewEncoder(w)}
+	return NewEncoder(w)
 }
 
 func (e DictionaryEncoding) String() string {
 	return "DICT_DICTIONARY"
 }
-
-type dictionaryDecoder struct{ *Decoder }
-
-func (d dictionaryDecoder) Encoding() format.Encoding { return format.PlainDictionary }
-
-type dictionaryEncoder struct{ *Encoder }
-
-func (e dictionaryEncoder) Encoding() format.Encoding { return format.PlainDictionary }

@@ -93,6 +93,31 @@ func OpenFile(r io.ReaderAt, size int64, options ...FileOption) (*File, error) {
 		f.rowGroups[i].init(f, schema, columns, &f.metadata.RowGroups[i])
 	}
 
+	if !c.SkipBloomFilters {
+		h := format.BloomFilterHeader{}
+		p := thrift.CompactProtocol{}
+		s := io.NewSectionReader(r, 0, size)
+		d := thrift.NewDecoder(p.NewReader(s))
+
+		for i := range f.rowGroups {
+			g := &f.rowGroups[i]
+
+			for j := range g.columns {
+				c := &g.columns[j]
+
+				if offset := c.chunk.MetaData.BloomFilterOffset; offset > 0 {
+					s.Seek(offset, io.SeekStart)
+					h = format.BloomFilterHeader{}
+					if err := d.Decode(&h); err != nil {
+						return nil, err
+					}
+					offset, _ = s.Seek(0, io.SeekCurrent)
+					c.bloomFilter = newBloomFilter(r, offset, &h)
+				}
+			}
+		}
+	}
+
 	sortKeyValueMetadata(f.metadata.KeyValueMetadata)
 	return f, nil
 }
@@ -354,6 +379,7 @@ func (s *fileSortingColumn) NullsFirst() bool { return s.nullsFirst }
 type fileColumnChunk struct {
 	file        *File
 	column      *Column
+	bloomFilter *bloomFilter
 	rowGroup    *format.RowGroup
 	columnIndex *format.ColumnIndex
 	offsetIndex *format.OffsetIndex
@@ -405,6 +431,17 @@ func (c *fileColumnChunk) OffsetIndex() OffsetIndex {
 		return nil
 	}
 	return (*offsetIndex)(c.offsetIndex)
+}
+
+func (c *fileColumnChunk) BloomFilter() BloomFilter {
+	if c.bloomFilter == nil {
+		return nil
+	}
+	return c.bloomFilter
+}
+
+func (c *fileColumnChunk) NumValues() int64 {
+	return c.chunk.MetaData.NumValues
 }
 
 type filePages struct {
@@ -814,14 +851,17 @@ type filePageValueReaderState struct {
 	}
 
 	repetitions struct {
-		decoder encoding.Decoder
+		encoding format.Encoding
+		decoder  encoding.Decoder
 	}
 
 	definitions struct {
-		decoder encoding.Decoder
+		encoding format.Encoding
+		decoder  encoding.Decoder
 	}
 
 	page struct {
+		encoding   format.Encoding
 		decoder    encoding.Decoder
 		compressed *compressedPageReader
 	}
@@ -871,9 +911,17 @@ func (s *filePageValueReaderState) init(columnType Type, column *Column, codec f
 		return fmt.Errorf("cannot read values from page of type %s", h.PageType())
 	}
 
-	s.repetitions.decoder = makeDecoder(s.repetitions.decoder, pageHeader.RepetitionLevelEncoding(), repetitionLevels)
-	s.definitions.decoder = makeDecoder(s.definitions.decoder, pageHeader.DefinitionLevelEncoding(), definitionLevels)
-	s.page.decoder = makeDecoder(s.page.decoder, pageHeader.Encoding(), pageData)
+	repetitionLevelEncoding := pageHeader.RepetitionLevelEncoding()
+	definitionLevelEncoding := pageHeader.DefinitionLevelEncoding()
+	pageEncoding := pageHeader.Encoding()
+
+	s.repetitions.decoder = makeDecoder(s.repetitions.decoder, s.repetitions.encoding, repetitionLevelEncoding, repetitionLevels)
+	s.definitions.decoder = makeDecoder(s.definitions.decoder, s.definitions.encoding, definitionLevelEncoding, definitionLevels)
+	s.page.decoder = makeDecoder(s.page.decoder, s.page.encoding, pageEncoding, pageData)
+
+	s.repetitions.encoding = repetitionLevelEncoding
+	s.definitions.encoding = definitionLevelEncoding
+	s.page.encoding = pageEncoding
 
 	if s.reader == nil {
 		s.reader = newDataPageReader(
@@ -1004,9 +1052,9 @@ func makeCompressedPage(page *compressedPageReader, codec format.CompressionCode
 	return page
 }
 
-func makeDecoder(decoder encoding.Decoder, encoding format.Encoding, input io.Reader) encoding.Decoder {
-	if decoder == nil || encoding != decoder.Encoding() {
-		decoder = LookupEncoding(encoding).NewDecoder(input)
+func makeDecoder(decoder encoding.Decoder, oldEncoding, newEncoding format.Encoding, input io.Reader) encoding.Decoder {
+	if decoder == nil || oldEncoding != newEncoding {
+		decoder = LookupEncoding(newEncoding).NewDecoder(input)
 	} else {
 		decoder.Reset(input)
 	}

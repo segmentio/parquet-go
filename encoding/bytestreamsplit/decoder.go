@@ -6,7 +6,6 @@ import (
 	"math"
 
 	"github.com/segmentio/parquet-go/encoding"
-	"github.com/segmentio/parquet-go/format"
 )
 
 type Decoder struct {
@@ -18,10 +17,6 @@ type Decoder struct {
 
 func NewDecoder(r io.Reader) *Decoder {
 	return &Decoder{reader: r}
-}
-
-func (d *Decoder) Encoding() format.Encoding {
-	return format.ByteStreamSplit
 }
 
 func (d *Decoder) Reset(r io.Reader) {

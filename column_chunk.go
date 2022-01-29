@@ -25,6 +25,13 @@ type ColumnChunk interface {
 	// If the column chunk does not have a page index, the methods return nil.
 	ColumnIndex() ColumnIndex
 	OffsetIndex() OffsetIndex
+	BloomFilter() BloomFilter
+
+	// Returns the number of values in the column chunk.
+	//
+	// This quantity may differ from the number of rows in the parent row group
+	// because repeated columns may hold zero or more values per row.
+	NumValues() int64
 }
 
 // Pages is an interface implemented by page readers returned by calling the

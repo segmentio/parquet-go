@@ -13,6 +13,7 @@ const (
 	DefaultDataPageVersion      = 2
 	DefaultDataPageStatistics   = false
 	DefaultSkipPageIndex        = false
+	DefaultSkipBloomFilters     = false
 )
 
 // The FileConfig type carries configuration options for parquet files.
@@ -21,18 +22,21 @@ const (
 // as argument to the OpenFile function when needed, for example:
 //
 //	f, err := parquet.OpenFile(reader, size, &parquet.FileConfig{
-//		SkipPageIndex: true,
+//		SkipPageIndex:    true,
+//		SkipBloomFilters: true,
 //	})
 //
 type FileConfig struct {
-	SkipPageIndex bool
+	SkipPageIndex    bool
+	SkipBloomFilters bool
 }
 
 // DefaultFileConfig returns a new FileConfig value initialized with the
 // default file configuration.
 func DefaultFileConfig() *FileConfig {
 	return &FileConfig{
-		SkipPageIndex: DefaultSkipPageIndex,
+		SkipPageIndex:    DefaultSkipPageIndex,
+		SkipBloomFilters: DefaultSkipBloomFilters,
 	}
 }
 
@@ -57,7 +61,8 @@ func (c *FileConfig) Apply(options ...FileOption) {
 // ConfigureFile applies configuration options from c to config.
 func (c *FileConfig) ConfigureFile(config *FileConfig) {
 	*config = FileConfig{
-		SkipPageIndex: config.SkipPageIndex,
+		SkipPageIndex:    config.SkipPageIndex,
+		SkipBloomFilters: config.SkipBloomFilters,
 	}
 }
 
@@ -130,6 +135,7 @@ type WriterConfig struct {
 	DataPageStatistics   bool
 	KeyValueMetadata     map[string]string
 	Schema               *Schema
+	BloomFilters         []BloomFilterColumn
 }
 
 // DefaultWriterConfig returns a new WriterConfig value initialized with the
@@ -183,6 +189,7 @@ func (c *WriterConfig) ConfigureWriter(config *WriterConfig) {
 		DataPageStatistics:   config.DataPageStatistics,
 		KeyValueMetadata:     keyValueMetadata,
 		Schema:               coalesceSchema(c.Schema, config.Schema),
+		BloomFilters:         coalesceBloomFilters(c.BloomFilters, config.BloomFilters),
 	}
 }
 
@@ -367,6 +374,18 @@ func KeyValueMetadata(key, value string) WriterOption {
 	})
 }
 
+// BloomFilters creates a configuration option which defines the bloom filters
+// that parquet writers should generate.
+//
+// The compute and memory footprint of generating bloom filters for all columns
+// of a parquet schema can be significant, so by default no filters are created
+// and applications need to explicitly declare the columns that they want to
+// create filters for.
+func BloomFilters(filters ...BloomFilterColumn) WriterOption {
+	filters = append([]BloomFilterColumn{}, filters...)
+	return writerOption(func(config *WriterConfig) { config.BloomFilters = filters })
+}
+
 // ColumnBufferSize creates a configuration option which defines the size of
 // row group column buffers.
 //
@@ -453,6 +472,13 @@ func coalesceSortingColumns(s1, s2 []SortingColumn) []SortingColumn {
 		return s1
 	}
 	return s2
+}
+
+func coalesceBloomFilters(f1, f2 []BloomFilterColumn) []BloomFilterColumn {
+	if f1 != nil {
+		return f1
+	}
+	return f2
 }
 
 func validatePositiveInt(optionName string, optionValue int) error {

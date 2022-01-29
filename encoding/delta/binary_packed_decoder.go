@@ -7,7 +7,6 @@ import (
 	"io"
 
 	"github.com/segmentio/parquet-go/encoding"
-	"github.com/segmentio/parquet-go/format"
 	"github.com/segmentio/parquet-go/internal/bits"
 )
 
@@ -55,10 +54,6 @@ func (d *BinaryPackedDecoder) Reset(r io.Reader) {
 	}
 
 	d.miniBlocks.Reset(d.reader)
-}
-
-func (e *BinaryPackedDecoder) Encoding() format.Encoding {
-	return format.DeltaBinaryPacked
 }
 
 func (d *BinaryPackedDecoder) DecodeInt32(data []int32) (int, error) {
