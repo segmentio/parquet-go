@@ -122,7 +122,7 @@ type Type interface {
 	// Note that the buffer size is not a hard limit, it defines the initial
 	// capacity of the column buffer, but may grow as needed. Programs can use
 	// the Size method of the column buffer (or the parent row group, when
-	// relevant) to determine how many bytes are being used, and perofrm a flush
+	// relevant) to determine how many bytes are being used, and perform a flush
 	// of the buffers to a storage layer.
 	//
 	// The method panics if it is called on a group type.
