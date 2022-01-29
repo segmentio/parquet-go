@@ -53,7 +53,6 @@ TEXT ·MultiSum64Uint8(SB), NOSPLIT, $0-54
 loop:
     CMPQ SI, CX
     JE done
-
     MOVQ $PRIME5+1, R8
     MOVBQZX (BX)(SI*1), R9
 
@@ -64,7 +63,6 @@ loop:
     avalanche(R9, R8)
 
     MOVQ R8, (AX)(SI*8)
-
     INCQ SI
     JMP loop
 done:
@@ -90,7 +88,6 @@ TEXT ·MultiSum64Uint16(SB), NOSPLIT, $0-54
 loop:
     CMPQ SI, CX
     JE done
-
     MOVQ $PRIME5+2, R8
     MOVWQZX (BX)(SI*2), R9
 
@@ -111,7 +108,6 @@ loop:
     avalanche(R9, R8)
 
     MOVQ R8, (AX)(SI*8)
-
     INCQ SI
     JMP loop
 done:
@@ -136,7 +132,6 @@ TEXT ·MultiSum64Uint32(SB), NOSPLIT, $0-54
 loop:
     CMPQ SI, CX
     JE done
-
     MOVQ $PRIME5+4, R8
     MOVLQZX (BX)(SI*4), R9
 
@@ -148,7 +143,6 @@ loop:
     avalanche(R9, R8)
 
     MOVQ R8, (AX)(SI*8)
-
     INCQ SI
     JMP loop
 done:
@@ -174,7 +168,6 @@ TEXT ·MultiSum64Uint64(SB), NOSPLIT, $0-54
 loop:
     CMPQ SI, CX
     JE done
-
     MOVQ $PRIME5+8, R8
     MOVQ (BX)(SI*8), R9
 
@@ -187,7 +180,6 @@ loop:
     avalanche(R9, R8)
 
     MOVQ R8, (AX)(SI*8)
-
     INCQ SI
     JMP loop
 done:
@@ -213,7 +205,6 @@ TEXT ·MultiSum64Uint128(SB), NOSPLIT, $0-54
 loop:
     CMPQ SI, CX
     JE done
-
     MOVQ $PRIME5+16, R8
     MOVQ (BX), DX
     MOVQ 8(BX), DI
@@ -234,7 +225,6 @@ loop:
     ADDQ prime4, R8
 
     avalanche(R9, R8)
-
     MOVQ R8, (AX)(SI*8)
     ADDQ $16, BX
     INCQ SI
