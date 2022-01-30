@@ -2,6 +2,8 @@
 
 package bloom
 
+import "golang.org/x/sys/cpu"
+
 // This file contains the signatures for bloom filter algorithms implemented in
 // filter_amd64.s.
 //
@@ -23,11 +25,38 @@ package bloom
 // FilterInsert      9.19GB/s ± 2%  12.56GB/s ± 1%  +36.71%  (p=0.000 n=10+8)
 // FilterCheck       8.80GB/s ± 3%  12.03GB/s ± 2%  +36.61%  (p=0.000 n=10+9)
 
-//go:noescape
-func filterInsertBulk(f []Block, x []uint64)
+func filterInsertBulk(f []Block, x []uint64) {
+	switch {
+	case cpu.X86.HasAVX2:
+		filterInsertBulkAVX2(f, x)
+	default:
+		filterInsertBulkGeneric(f, x)
+	}
+}
+
+func filterInsert(f []Block, x uint64) {
+	switch {
+	case cpu.X86.HasAVX2:
+		filterInsertAVX2(f, x)
+	default:
+		filterInsertGeneric(f, x)
+	}
+}
+
+func filterCheck(f []Block, x uint64) bool {
+	switch {
+	case cpu.X86.HasAVX2:
+		return filterCheckAVX2(f, x)
+	default:
+		return filterCheckGeneric(f, x)
+	}
+}
 
 //go:noescape
-func filterInsert(f []Block, x uint64)
+func filterInsertBulkAVX2(f []Block, x []uint64)
 
 //go:noescape
-func filterCheck(f []Block, x uint64) bool
+func filterInsertAVX2(f []Block, x uint64)
+
+//go:noescape
+func filterCheckAVX2(f []Block, x uint64) bool
