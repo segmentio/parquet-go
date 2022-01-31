@@ -15,7 +15,7 @@ instruction from the two steps in parallel due to having no data dependencies
 between the inputs and outputs.
 
 The use of AVX-512 yields a significant increase in throughput on all the
-algorithms, in most part thanks to the VPMULLQ instructions which computes
+algorithms, in most part thanks to the VPMULLQ instructions which compute
 8 x 64 bits multiplication. There were no equivalent instruction in AVX2, which
 required emulating vector multiplication with a combination of 32 bits mulitply,
 additions, shifts, and masks: the amount of instructions and data dependencies
