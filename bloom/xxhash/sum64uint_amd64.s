@@ -2,6 +2,60 @@
 
 #include "textflag.h"
 
+/*
+The algorithms in this file are assembly versions of the Go functions in the
+sum64uint_default.go file.
+
+The implementations are mostly direct translations of the Go code to assembly,
+leveraging SIMD instructions to process chunks of the input variables in
+parallel at each loop iteration. To maximize utilization of the CPU capacity,
+some of the functions unroll two steps of the vectorized loop per iteration,
+which yields further throughput because the CPU is able to process some of the
+instruction from the two steps in parallel due to having no data dependencies
+between the inputs and outputs.
+
+The use of AVX-512 yields a signficiant increase in throughput on all the
+algorithms, in most part thanks to the VPMULLQ instructions which computes
+8 x 64 bits multiplication. There were no equivalent instruction in AVX2, which
+required emulating vector multiplication with a combination of 32 bits mulitply,
+additions, shifts, and masks: the amount of instructions and data dependencies
+resulted in the AVX2 code yielding equivalent performance characteristics for a
+much higher complexity.
+
+The benchmark results below showcase the improvements that the AVX-512 code
+yields on the XXH64 algorithms:
+
+name                   old speed      new speed       delta
+MultiSum64Uint8/4KB    4.97GB/s ± 0%  14.59GB/s ± 1%  +193.73%  (p=0.000 n=10+10)
+MultiSum64Uint16/4KB   3.55GB/s ± 0%   9.46GB/s ± 0%  +166.20%  (p=0.000 n=10+9)
+MultiSum64Uint32/4KB   4.48GB/s ± 0%  13.93GB/s ± 1%  +210.93%  (p=0.000 n=10+10)
+MultiSum64Uint64/4KB   3.57GB/s ± 0%  11.12GB/s ± 1%  +211.73%  (p=0.000 n=9+10)
+MultiSum64Uint128/4KB  2.54GB/s ± 0%   6.49GB/s ± 1%  +155.69%  (p=0.000 n=10+10)
+
+name                   old hash/s     new hash/s      delta
+MultiSum64Uint8/4KB        621M ± 0%      1823M ± 1%  +193.73%  (p=0.000 n=10+10)
+MultiSum64Uint16/4KB       444M ± 0%      1182M ± 0%  +166.20%  (p=0.000 n=10+9)
+MultiSum64Uint32/4KB       560M ± 0%      1742M ± 1%  +210.93%  (p=0.000 n=10+10)
+MultiSum64Uint64/4KB       446M ± 0%      1391M ± 1%  +211.73%  (p=0.000 n=9+10)
+MultiSum64Uint128/4KB      317M ± 0%       811M ± 1%  +155.69%  (p=0.000 n=10+10)
+
+The functions perform runtime detection of AVX-512 support by testing the value
+of the xxhash.hasAVX512 variable declared and initialized in sum64uint_amd64.go.
+Branch mispredications on those tests are very unlikely since the value is never
+modified by the application. The cost of the comparisons are also amortized by
+the bulk APIs of the MultiSum64* functions (a single test is required per call).
+
+If a bug is suspected in the vectorized code, compiling the program or running
+the tests with -tags=purego can help verify whether the behavior changes when
+the program does not use the assembly versions.
+
+Maintenance of these functions can be complex; however, the XXH64 algorithm is
+unlikely to evolve, and the implementations unlikely to change. The tests in
+sum64uint_test.go compare the outputs of MultiSum64* functions with the
+reference xxhash.Sum64 function, future maintainers can rely on those tests
+passing as a guarantee that they have not introduced regressions.
+*/
+
 #define PRIME1 0x9E3779B185EBCA87
 #define PRIME2 0xC2B2AE3D27D4EB4F
 #define PRIME3 0x165667B19E3779F9
@@ -13,18 +67,6 @@
 #define prime3 R14
 #define prime4 R15
 #define prime5 R15 // same as prime4 because they are not used together
-
-#define prime1XMM X12
-#define prime2XMM X13
-#define prime3XMM X14
-#define prime4XMM X15
-#define prime5XMM X15
-
-#define prime1YMM Y12
-#define prime2YMM Y13
-#define prime3YMM Y14
-#define prime4YMM Y15
-#define prime5YMM Y15
 
 #define prime1ZMM Z12
 #define prime2ZMM Z13
@@ -180,38 +222,6 @@ GLOBL vpermi2qodd<>(SB), RODATA|NOPTR, $64
     MOVQ acc, tmp \
     SHRQ $32, tmp \
     XORQ tmp, acc
-
-#define round2x64(input, acc) \
-    VPMULLQ prime2XMM, input, input \
-    VPADDQ input, acc, acc \
-    VPROLQ $31, acc, acc \
-    VPMULLQ prime1XMM, acc, acc
-
-#define avalanche2x64(tmp, acc) \
-    VPSRLQ $33, acc, tmp \
-    VPXORQ tmp, acc, acc \
-    VPMULLQ prime2XMM, acc, acc \
-    VPSRLQ $29, acc, tmp \
-    VPXORQ tmp, acc, acc \
-    VPMULLQ prime3XMM, acc, acc \
-    VPSRLQ $32, acc, tmp \
-    VPXORQ tmp, acc, acc
-
-#define round4x64(input, acc) \
-    VPMULLQ prime2YMM, input, input \
-    VPADDQ input, acc, acc \
-    VPROLQ $31, acc, acc \
-    VPMULLQ prime1YMM, acc, acc
-
-#define avalanche4x64(tmp, acc) \
-    VPSRLQ $33, acc, tmp \
-    VPXORQ tmp, acc, acc \
-    VPMULLQ prime2YMM, acc, acc \
-    VPSRLQ $29, acc, tmp \
-    VPXORQ tmp, acc, acc \
-    VPMULLQ prime3YMM, acc, acc \
-    VPSRLQ $32, acc, tmp \
-    VPXORQ tmp, acc, acc
 
 #define round8x64(input, acc) \
     VPMULLQ prime2ZMM, input, input \
@@ -643,7 +653,20 @@ TEXT ·MultiSum64Uint128(SB), NOSPLIT, $0-54
     VMOVDQU64 prime5vec16<>(SB), Z6
     VMOVDQU64 vpermi2qeven<>(SB), Z7
     VMOVDQU64 vpermi2qodd<>(SB), Z8
-loop8x64:
+loop16x64:
+    // This algorithm is slightly different from the other ones, because it is
+    // the only case where the input values are larger than the output (128 bits
+    // vs 64 bits).
+    //
+    // Computing the XXH64 of 128 bits values requires doing two passes over the
+    // lower and upper 64 bits. The lower and upper quad/ words are split in
+    // separate vectors, the first pass is applied on the vector holding the
+    // lower bits of 8 input values, then the second pass is applied with the
+    // vector holding the upper bits.
+    //
+    // Following the model used in the other functions, we unroll the work of
+    // two consecutive groups of 8 values per loop iteration in order to
+    // maximize utilization of CPU resources.
     CMPQ SI, DI
     JE loop
     VMOVDQA64 Z6, Z0
@@ -663,6 +686,7 @@ loop8x64:
     VPERMI2Q Z29, Z21, Z22
     VPERMI2Q Z29, Z21, Z23
 
+    // Compute the rounds on inputs.
     VPXORQ Z4, Z4, Z4
     VPXORQ Z5, Z5, Z5
     VPXORQ Z24, Z24, Z24
@@ -672,6 +696,7 @@ loop8x64:
     round8x64(Z22, Z24)
     round8x64(Z23, Z25)
 
+    // Lower 64 bits.
     VPXORQ Z4, Z0, Z0
     VPXORQ Z24, Z20, Z20
     VPROLQ $27, Z0, Z0
@@ -681,6 +706,7 @@ loop8x64:
     VPADDQ prime4ZMM, Z0, Z0
     VPADDQ prime4ZMM, Z20, Z20
 
+    // Upper 64 bits.
     VPXORQ Z5, Z0, Z0
     VPXORQ Z25, Z20, Z20
     VPROLQ $27, Z0, Z0
@@ -696,7 +722,7 @@ loop8x64:
     VMOVDQU64 Z20, 64(AX)(SI*8)
     ADDQ $256, BX
     ADDQ $16, SI
-    JMP loop8x64
+    JMP loop16x64
     VZEROUPPER
 loop:
     CMPQ SI, CX
