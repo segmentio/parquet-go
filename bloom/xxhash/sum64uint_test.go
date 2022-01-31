@@ -2,6 +2,7 @@ package xxhash_test
 
 import (
 	"encoding/binary"
+	"fmt"
 	"testing"
 	"testing/quick"
 	"time"
@@ -180,105 +181,80 @@ func reportThroughput(b *testing.B, loops, count int, start time.Time) {
 	b.ReportMetric(throughput, "hash/s")
 }
 
+const benchmarkBufferSize = 4096
+
 func BenchmarkMultiSum64Uint8(b *testing.B) {
-	for _, bb := range benchmarks {
-		if bb.n < 16 {
-			// Skip smaller inputs that are not relevant to benchmarks that
-			// exercise bulk operations.
-			continue
-		}
-		in := make([]uint8, bb.n)
-		for i := range in {
-			in[i] = uint8(i)
-		}
-		out := make([]uint64, len(in))
-		b.Run(bb.name, func(b *testing.B) {
-			start := time.Now()
-			for i := 0; i < b.N; i++ {
-				_ = xxhash.MultiSum64Uint8(out, in)
-			}
-			reportThroughput(b, b.N, len(out), start)
-		})
+	in := make([]uint8, benchmarkBufferSize)
+	for i := range in {
+		in[i] = uint8(i)
 	}
+	b.Run(fmt.Sprintf("%dKB", benchmarkBufferSize/1024), func(b *testing.B) {
+		out := make([]uint64, len(in))
+		start := time.Now()
+		for i := 0; i < b.N; i++ {
+			_ = xxhash.MultiSum64Uint8(out, in)
+		}
+		reportThroughput(b, b.N, len(out), start)
+	})
 }
 
 func BenchmarkMultiSum64Uint16(b *testing.B) {
-	for _, bb := range benchmarks {
-		if bb.n < 16 {
-			continue
-		}
-		in := make([]uint16, bb.n)
-		for i := range in {
-			in[i] = uint16(i)
-		}
-		out := make([]uint64, len(in))
-		b.Run(bb.name, func(b *testing.B) {
-			start := time.Now()
-			for i := 0; i < b.N; i++ {
-				_ = xxhash.MultiSum64Uint16(out, in)
-			}
-			reportThroughput(b, b.N, len(out), start)
-		})
+	in := make([]uint16, benchmarkBufferSize/2)
+	for i := range in {
+		in[i] = uint16(i)
 	}
+	b.Run(fmt.Sprintf("%dKB", benchmarkBufferSize/1024), func(b *testing.B) {
+		out := make([]uint64, len(in))
+		start := time.Now()
+		for i := 0; i < b.N; i++ {
+			_ = xxhash.MultiSum64Uint16(out, in)
+		}
+		reportThroughput(b, b.N, len(out), start)
+	})
 }
 
 func BenchmarkMultiSum64Uint32(b *testing.B) {
-	for _, bb := range benchmarks {
-		if bb.n < 4 {
-			continue
-		}
-		in := make([]uint32, bb.n/4)
-		for i := range in {
-			in[i] = uint32(i)
-		}
-		out := make([]uint64, len(in))
-		b.Run(bb.name, func(b *testing.B) {
-			start := time.Now()
-			for i := 0; i < b.N; i++ {
-				_ = xxhash.MultiSum64Uint32(out, in)
-			}
-			reportThroughput(b, b.N, len(out), start)
-		})
+	in := make([]uint32, benchmarkBufferSize/4)
+	for i := range in {
+		in[i] = uint32(i)
 	}
+	b.Run(fmt.Sprintf("%dKB", benchmarkBufferSize/1024), func(b *testing.B) {
+		out := make([]uint64, len(in))
+		start := time.Now()
+		for i := 0; i < b.N; i++ {
+			_ = xxhash.MultiSum64Uint32(out, in)
+		}
+		reportThroughput(b, b.N, len(out), start)
+	})
 }
 
 func BenchmarkMultiSum64Uint64(b *testing.B) {
-	for _, bb := range benchmarks {
-		if bb.n < 16 {
-			continue
-		}
-		in := make([]uint64, bb.n/8)
-		for i := range in {
-			in[i] = uint64(i)
-		}
-		out := make([]uint64, len(in))
-		b.Run(bb.name, func(b *testing.B) {
-			start := time.Now()
-			for i := 0; i < b.N; i++ {
-				_ = xxhash.MultiSum64Uint64(out, in)
-			}
-			reportThroughput(b, b.N, len(out), start)
-		})
+	in := make([]uint64, benchmarkBufferSize/8)
+	for i := range in {
+		in[i] = uint64(i)
 	}
+	b.Run(fmt.Sprintf("%dKB", benchmarkBufferSize/1024), func(b *testing.B) {
+		out := make([]uint64, len(in))
+		start := time.Now()
+		for i := 0; i < b.N; i++ {
+			_ = xxhash.MultiSum64Uint64(out, in)
+		}
+		reportThroughput(b, b.N, len(out), start)
+	})
 }
 
 func BenchmarkMultiSum64Uint128(b *testing.B) {
-	for _, bb := range benchmarks {
-		if bb.n < 16 {
-			continue
-		}
-		in := make([][16]byte, bb.n/16)
-		for i := range in {
-			binary.LittleEndian.PutUint64(in[i][:8], uint64(i))
-			binary.LittleEndian.PutUint64(in[i][8:], uint64(i))
-		}
-		out := make([]uint64, len(in))
-		b.Run(bb.name, func(b *testing.B) {
-			start := time.Now()
-			for i := 0; i < b.N; i++ {
-				_ = xxhash.MultiSum64Uint128(out, in)
-			}
-			reportThroughput(b, b.N, len(out), start)
-		})
+	in := make([][16]byte, benchmarkBufferSize/16)
+	for i := range in {
+		binary.LittleEndian.PutUint64(in[i][:8], uint64(i))
+		binary.LittleEndian.PutUint64(in[i][8:], uint64(i))
 	}
+	b.Run(fmt.Sprintf("%dKB", benchmarkBufferSize/1024), func(b *testing.B) {
+		out := make([]uint64, len(in))
+		start := time.Now()
+		for i := 0; i < b.N; i++ {
+			_ = xxhash.MultiSum64Uint128(out, in)
+		}
+		reportThroughput(b, b.N, len(out), start)
+	})
 }

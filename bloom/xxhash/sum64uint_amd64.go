@@ -2,6 +2,8 @@
 
 package xxhash
 
+import "golang.org/x/sys/cpu"
+
 // This file contains the declaration of signatures for the multi hashing
 // functions implemented in sum64uint_amd64.s, which provides vectorized
 // versions of the algorithms written in sum64uint_purego.go.
@@ -26,6 +28,10 @@ package xxhash
 //
 // The benchmarks measure the throughput of hashes produced, as a rate of values
 // and bytes.
+
+var hasAVX512 = cpu.X86.HasAVX512 &&
+	cpu.X86.HasAVX512F &&
+	cpu.X86.HasAVX512CD
 
 //go:noescape
 func MultiSum64Uint8(h []uint64, v []uint8) int
