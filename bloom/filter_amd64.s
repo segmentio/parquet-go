@@ -32,8 +32,8 @@
     MOVQ tmpXMM, r2 \
     VPEXTRQ $1, tmpXMM, r3
 
-// func filterInsertBulkAVX2(f []Block, x []uint64)
-TEXT ·filterInsertBulkAVX2(SB), NOSPLIT, $0-48
+// func filterInsertBulk(f []Block, x []uint64)
+TEXT ·filterInsertBulk(SB), NOSPLIT, $0-48
     MOVQ f_base+0(FP), AX
     MOVQ f_len+8(FP), CX
     MOVQ x_base+24(FP), BX
@@ -102,8 +102,8 @@ done:
     VZEROUPPER
     RET
 
-// func filterInsertAVX2(f []Block, x uint64)
-TEXT ·filterInsertAVX2(SB), NOSPLIT, $0-32
+// func filterInsert(f []Block, x uint64)
+TEXT ·filterInsert(SB), NOSPLIT, $0-32
     MOVQ f_base+0(FP), AX
     MOVQ f_len+8(FP), BX
     MOVQ x+24(FP), CX
@@ -114,8 +114,8 @@ TEXT ·filterInsertAVX2(SB), NOSPLIT, $0-32
     VZEROUPPER
     RET
 
-// func filterCheckAVX2(f []Block, x uint64) bool
-TEXT ·filterCheckAVX2(SB), NOSPLIT, $0-33
+// func filterCheck(f []Block, x uint64) bool
+TEXT ·filterCheck(SB), NOSPLIT, $0-33
     MOVQ f_base+0(FP), AX
     MOVQ f_len+8(FP), BX
     MOVQ x+24(FP), CX

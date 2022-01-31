@@ -3,13 +3,15 @@
 package bloom
 
 func filterInsertBulk(f []Block, x []uint64) {
-	filterInsertBulkGeneric(f, x)
+	for i := range x {
+		filterInsert(f, x[i])
+	}
 }
 
 func filterInsert(f []Block, x uint64) {
-	filterInsertGeneric(f, x)
+	f[fasthash1x64(x, int32(len(f)))].Insert(uint32(x))
 }
 
 func filterCheck(f []Block, x uint64) bool {
-	return filterCheckGeneric(f, x)
+	return f[fasthash1x64(x, int32(len(f)))].Check(uint32(x))
 }
