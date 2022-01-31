@@ -61,7 +61,7 @@ func (c *conversion) Schema() *Schema { return c.schema }
 // stripped out of the rows. Extra columns in the target schema will be set to
 // null or zero values.
 //
-// The returned function is intended to be used to append the converted soruce
+// The returned function is intended to be used to append the converted source
 // row to the destinatination buffer.
 func Convert(to, from Node) (conv Conversion, err error) {
 	defer func() {
@@ -362,8 +362,8 @@ func merge(s1, s2, s3 []string) []string {
 	return merged
 }
 
-// ConvertRowGroup constructs a wrapper of the given row group which appies
-// the given schema conversion on its rows.
+// ConvertRowGroup constructs a wrapper of the given row group which applies
+// the given schema conversion to its rows.
 func ConvertRowGroup(rowGroup RowGroup, conv Conversion) RowGroup {
 	schema := conv.Schema()
 	numRows := rowGroup.NumRows()

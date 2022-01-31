@@ -47,7 +47,7 @@ func (NotSupported) String() string {
 // NotSupportedDecoder is an implementation of the Decoder interface which does
 // not support decoding any value types.
 //
-// Many parquet decodings only support decoding a subset of the parquet types,
+// Many parquet encodings only support decoding a subset of the parquet types,
 // they can embed this type to default to not supporting any decoding, then
 // override specific Decode* methods to provide implementations for the types
 // they do support.

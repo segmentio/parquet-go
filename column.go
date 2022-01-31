@@ -205,7 +205,7 @@ func (c *Column) ValueByIndex(base reflect.Value, index int) reflect.Value {
 // GoType returns the Go type that best represents the parquet column.
 func (c *Column) GoType() reflect.Type { return goTypeOf(c) }
 
-// String returns a human-redable string representation of the column.
+// String returns a human-readable string representation of the column.
 func (c *Column) String() string { return c.path.String() + ": " + sprint(c.Name(), c) }
 
 func (c *Column) forEachLeaf(do func(*Column)) {

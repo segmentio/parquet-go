@@ -59,7 +59,7 @@ func (r *mergedRowGroupRowReader) init(m *mergedRowGroup) {
 				// TODO: this optimization is disabled for now, there are
 				// remaining blockers:
 				//
-				// * The optimized merge of pges for non-overlapping ranges is
+				// * The optimized merge of pages for non-overlapping ranges is
 				//   not yet implemented in the mergedRowGroupRowReader type.
 				//
 				// * Using pages min/max to determine overlapping ranges does

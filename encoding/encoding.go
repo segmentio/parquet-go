@@ -14,7 +14,7 @@ import (
 //
 // Encoding instances must be safe to use concurrently from multiple goroutines.
 type Encoding interface {
-	// Returns a human-redable name for the encoding.
+	// Returns a human-readable name for the encoding.
 	String() string
 
 	// Returns the parquet code representing the encoding.
