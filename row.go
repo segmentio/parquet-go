@@ -135,7 +135,7 @@ func (r *forwardRowSeeker) SeekToRow(rowIndex int64) error {
 // function will attempt to automatically convert the rows from the source
 // schema to the destination.
 //
-// As an optimization, the src argument may implemnt RowWriterTo to bypass
+// As an optimization, the src argument may implement RowWriterTo to bypass
 // the default row copy logic and provide its own. The dst argument may also
 // implement RowReaderFrom for the same purpose.
 //
@@ -299,7 +299,7 @@ func forEachRepeatedRowOf(values []Value, do func(Row) error) error {
 // Because some of the functions are very short (simply return a closure), the
 // compiler inlines when at their call site, which result in the closure being
 // named something like parquet.deconstructFuncOf.func2 instead of the original
-// parquet.deconstructFuncOfLeaf.func1; the latter being much more meanginful
+// parquet.deconstructFuncOfLeaf.func1; the latter being much more meaningful
 // when reading CPU or memory profiles.
 // =============================================================================
 

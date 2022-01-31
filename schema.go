@@ -54,7 +54,7 @@ type Schema struct {
 //	uuid     | for string and [16]byte types, use the parquet UUID logical type
 //	decimal  | for int32 and int64 types, use the parquet DECIMAL logical type
 //
-// The decimal tag must be followed by two ineger parameters, the first integer
+// The decimal tag must be followed by two integer parameters, the first integer
 // representing the scale and the second the precision; for example:
 //
 //	type Item struct {
@@ -131,12 +131,12 @@ func makeColumnReadRowFunc(node Node) columnReadRowFunc {
 }
 
 // ConfigureRowGroup satisfies the RowGroupOption interface, allowing Schema
-// instances to be passed to NewRowGroup to predeclare the schema of the
-// output parquet file.
+// instances to be passed to row group constructors to pre-declare the schema of
+// the output parquet file.
 func (s *Schema) ConfigureRowGroup(config *RowGroupConfig) { config.Schema = s }
 
 // ConfigureWriter satisfies the WriterOption interface, allowing Schema
-// instances to be passed to NewWriter to predeclare the schema of the
+// instances to be passed to NewWriter to pre-declare the schema of the
 // output parquet file.
 func (s *Schema) ConfigureWriter(config *WriterConfig) { config.Schema = s }
 
@@ -176,7 +176,7 @@ func (s *Schema) Compression() []compress.Codec { return s.root.Compression() }
 // GoType returns the Go type that best represents the schema.
 func (s *Schema) GoType() reflect.Type { return s.root.GoType() }
 
-// ValueByName is returns the sub-value with the givne name in base.
+// ValueByName is returns the sub-value with the given name in base.
 func (s *Schema) ValueByName(base reflect.Value, name string) reflect.Value {
 	return s.root.ValueByName(base, name)
 }

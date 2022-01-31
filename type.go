@@ -34,7 +34,7 @@ func (k Kind) String() string { return format.Type(k).String() }
 //
 // Types are immutable and therefore safe to access from multiple goroutines.
 type Type interface {
-	// Returns a human-redable representation of the parquet type.
+	// Returns a human-readable representation of the parquet type.
 	String() string
 
 	// Returns the Kind value representing the underlying physical type.
@@ -62,7 +62,7 @@ type Type interface {
 	// ColumnOrder returns the type's column order. For group types, this method
 	// returns nil.
 	//
-	// The order describes the comprison logic implemented by the Less method.
+	// The order describes the comparison logic implemented by the Less method.
 	//
 	// As an optimization, the method may return the same pointer across
 	// multiple calls. Applications must treat the returned value as immutable,
@@ -85,7 +85,7 @@ type Type interface {
 	// mutating the value will result in undefined behavior.
 	LogicalType() *format.LogicalType
 
-	// Returns the logical type's equivaleent converted type. When there are
+	// Returns the logical type's equivalent converted type. When there are
 	// no equivalent converted type, the method returns nil.
 	//
 	// As an optimization, the method may return the same pointer across
@@ -467,7 +467,7 @@ func Int(bitWidth int) Node {
 	return Leaf(integerType(bitWidth, &signedIntTypes))
 }
 
-// Uint constructts a leaf node of unsigned integer logical type of the given
+// Uint constructs a leaf node of unsigned integer logical type of the given
 // bit width.
 //
 // The bit width must be one of 8, 16, 32, 64, or the function will panic.
@@ -612,8 +612,8 @@ func (t *intType) NewValueDecoder(bufferSize int) ValueDecoder {
 	}
 }
 
-// Decimal constructs a leaf node of decimal logical ttype with the given
-// sccale, precision, and underlying type.
+// Decimal constructs a leaf node of decimal logical type with the given
+// scale, precision, and underlying type.
 //
 // https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#decimal
 func Decimal(scale, precision int, typ Type) Node {
@@ -1130,7 +1130,7 @@ func (t *timestampType) NewValueDecoder(bufferSize int) ValueDecoder {
 	return newInt64ValueDecoder(bufferSize)
 }
 
-// List constructs a node eof LIST logical type.
+// List constructs a node of LIST logical type.
 //
 // https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#lists
 func List(of Node) Node {

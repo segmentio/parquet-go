@@ -278,7 +278,7 @@ type WriterOption interface {
 	ConfigureWriter(*WriterConfig)
 }
 
-// RowGroupOption is an interface implemented by types that carryconfiguration
+// RowGroupOption is an interface implemented by types that carry configuration
 // options for parquet row groups.
 type RowGroupOption interface {
 	ConfigureRowGroup(*RowGroupConfig)

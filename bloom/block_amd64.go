@@ -22,7 +22,7 @@ package bloom
 //
 // Note that the numbers above are a comparison to the routines implemented in
 // block_optimized.go; the delta comparing to functions in block_default.go is
-// significantly larger but not very intersting since those functions have no
+// significantly larger but not very interesting since those functions have no
 // practical use cases.
 
 //go:noescape

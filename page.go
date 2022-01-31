@@ -37,7 +37,7 @@ type Page interface {
 	NumValues() int64
 	NumNulls() int64
 
-	// Returns the min and max values currently buffered in the writter.
+	// Returns the min and max values currently buffered in the writer.
 	Bounds() (min, max Value)
 
 	// Returns the size of the page in bytes (uncompressed).

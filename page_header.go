@@ -41,7 +41,7 @@ type DataPageHeader interface {
 	//
 	// As an optimization, the method may return the same slice across multiple
 	// calls. Programs must treat the returned value as immutable to prevent
-	// unpredicatable behaviors.
+	// unpredictable behaviors.
 	//
 	// If the page only contains only null values, an empty slice is returned.
 	MinValue() []byte
@@ -51,7 +51,7 @@ type DataPageHeader interface {
 	//
 	// As an optimization, the method may return the same slice across multiple
 	// calls. Programs must treat the returned value as immutable to prevent
-	// unpredicatable behaviors.
+	// unpredictable behaviors.
 	//
 	// If the page only contains only null values, an empty slice is returned.
 	MaxValue() []byte

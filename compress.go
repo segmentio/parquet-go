@@ -68,7 +68,7 @@ var (
 // LookupCompressionCodec returns the compression codec associated with the
 // given code.
 //
-// The function nevers returns nil. If the encoding is not supported,
+// The function never returns nil. If the encoding is not supported,
 // an "unsupported" codec is returned.
 func LookupCompressionCodec(codec format.CompressionCodec) compress.Codec {
 	if codec >= 0 && int(codec) < len(compressionCodecs) {

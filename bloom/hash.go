@@ -17,7 +17,7 @@ type Hash interface {
 	MultiSum64Uint128(dst []uint64, src [][16]byte) int
 }
 
-// XXH64 is an implementation fo the Hash interface using the XXH64 algorithm.
+// XXH64 is an implementation of the Hash interface using the XXH64 algorithm.
 type XXH64 struct{}
 
 func (XXH64) Sum64(b []byte) uint64 {

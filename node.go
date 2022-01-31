@@ -43,7 +43,7 @@ type Node interface {
 	// The method returns zero on leaf nodes.
 	NumChildren() int
 
-	// Returns the sorted list of child node namees.
+	// Returns the sorted list of child node names.
 	//
 	// The method returns an empty slice on leaf nodes.
 	//
@@ -57,7 +57,7 @@ type Node interface {
 	// The method panics if it is called on a leaf node.
 	ChildByName(name string) Node
 
-	// ValueByName is returns the sub-value with the givne name in base.
+	// ValueByName is returns the sub-value with the given name in base.
 	ValueByName(base reflect.Value, name string) reflect.Value
 
 	// Returns the list of encodings used by the node and its children.
@@ -113,7 +113,7 @@ type WrappedNode interface {
 	Node
 	// Unwrap returns the underlying base node.
 	//
-	// Note that Unwrap is not intended to recursively unwrap multple layers of
+	// Note that Unwrap is not intended to recursively unwrap multiple layers of
 	// wrappers, it returns the immediate next layer.
 	Unwrap() Node
 }

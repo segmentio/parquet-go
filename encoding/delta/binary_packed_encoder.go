@@ -13,7 +13,7 @@ import (
 // of the encoder/decoder at ~8KB.
 const (
 	blockSize64     = 128
-	numMiniBlock64  = 4 // (BlockSize / NumMiniBlock) % 32 == 0
+	numMiniBlock64  = 4 // (blockSize64 / numMiniBlock64) % 32 == 0
 	miniBlockSize64 = blockSize64 / numMiniBlock64
 
 	blockSize32     = 2 * blockSize64
