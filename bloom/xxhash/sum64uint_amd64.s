@@ -41,7 +41,7 @@ MultiSum64Uint128/4KB      317M ± 0%       811M ± 1%  +155.69%  (p=0.000 n=10+
 
 The functions perform runtime detection of AVX-512 support by testing the value
 of the xxhash.hasAVX512 variable declared and initialized in sum64uint_amd64.go.
-Branch mispredications on those tests are very unlikely since the value is never
+Branch mispredictions on those tests are very unlikely since the value is never
 modified by the application. The cost of the comparisons are also amortized by
 the bulk APIs of the MultiSum64* functions (a single test is required per call).
 
