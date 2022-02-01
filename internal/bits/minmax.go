@@ -10,7 +10,7 @@ func boolEqualAll(data []bool, value bool) bool {
 			return false
 		}
 	}
-	return true
+	return len(data) > 0
 }
 
 func MinMaxBool(data []bool) (min, max bool) {
