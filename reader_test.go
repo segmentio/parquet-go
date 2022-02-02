@@ -342,8 +342,8 @@ func TestReaderReadSubset(t *testing.T) {
 	// In this example we'll write 3 columns to the file - X, Y, and Z, but
 	// we'll only read out the X and Y columns. Returns true if all writes
 	// and reads were successful, and false otherwise.
-	type Point3D struct { X, Y, Z int64 }
-	type Point2D struct { X, Y int64 }
+	type Point3D struct{ X, Y, Z int64 }
+	type Point2D struct{ X, Y int64 }
 
 	f := func(points3D []Point3D) bool {
 		if len(points3D) == 0 {
@@ -356,7 +356,7 @@ func TestReaderReadSubset(t *testing.T) {
 			return false
 		}
 		reader := parquet.NewReader(bytes.NewReader(buf.Bytes()))
-		for i := 0; ; i++{
+		for i := 0; ; i++ {
 			row := Point2D{}
 			err := reader.Read(&row)
 			if err != nil {
@@ -367,7 +367,7 @@ func TestReaderReadSubset(t *testing.T) {
 				return false
 			}
 			if row != (Point2D{X: points3D[i].X, Y: points3D[i].Y}) {
-				t.Errorf("points mismatch at row index %d: want=%v got=%v", i,points3D[i], row)
+				t.Errorf("points mismatch at row index %d: want=%v got=%v", i, points3D[i], row)
 				return false
 			}
 		}
