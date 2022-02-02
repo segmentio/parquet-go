@@ -337,3 +337,40 @@ func BenchmarkReader(b *testing.B) {
 		})
 	}
 }
+
+func TestReaderReadSubset(t *testing.T) {
+	type Point3D struct { X, Y, Z int64 }
+	type Point2D struct { X, Y int64 }
+
+	f := func(points3D []Point3D) bool {
+		if len(points3D) == 0 {
+			return true
+		}
+		buf := new(bytes.Buffer)
+		err := writeParquetFile(buf, makeRows(points3D))
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+		reader := parquet.NewReader(bytes.NewReader(buf.Bytes()))
+		for i := 0; ; i++{
+			row := Point2D{}
+			err := reader.Read(&row)
+			if err != nil {
+				if err == io.EOF && i == len(points3D) {
+					break
+				}
+				t.Error(err)
+				return false
+			}
+			if row != (Point2D{X: points3D[i].X, Y: points3D[i].Y}) {
+				t.Errorf("points mismatch at row index %d: want=%v got=%v", i,points3D[i], row)
+				return false
+			}
+		}
+		return true
+	}
+	if err := quick.Check(f, nil); err != nil {
+		t.Error(err)
+	}
+}
