@@ -2,87 +2,19 @@ package bits
 
 import "bytes"
 
-func MinBool(data []bool) (min bool) {
-	return boolEqualAll(data, true)
-}
+func MinBool(data []bool) (min bool) { return boolEqualAll(data, true) }
 
-func MinInt32(data []int32) (min int32) {
-	if len(data) > 0 {
-		min = data[0]
+func MinInt32(data []int32) (min int32) { return minInt32(data) }
 
-		for _, value := range data {
-			if value < min {
-				min = value
-			}
-		}
-	}
-	return min
-}
+func MinInt64(data []int64) (min int64) { return minInt64(data) }
 
-func MinInt64(data []int64) (min int64) {
-	if len(data) > 0 {
-		min = data[0]
+func MinUint32(data []uint32) (min uint32) { return minUint32(data) }
 
-		for _, value := range data {
-			if value < min {
-				min = value
-			}
-		}
-	}
-	return min
-}
+func MinUint64(data []uint64) (min uint64) { return minUint64(data) }
 
-func MinUint32(data []uint32) (min uint32) {
-	if len(data) > 0 {
-		min = data[0]
+func MinFloat32(data []float32) (min float32) { return minFloat32(data) }
 
-		for _, value := range data {
-			if value < min {
-				min = value
-			}
-		}
-	}
-	return min
-}
-
-func MinUint64(data []uint64) (min uint64) {
-	if len(data) > 0 {
-		min = data[0]
-
-		for _, value := range data {
-			if value < min {
-				min = value
-			}
-		}
-	}
-	return min
-}
-
-func MinFloat32(data []float32) (min float32) {
-	if len(data) > 0 {
-		min = data[0]
-
-		for _, value := range data {
-			if value < min {
-				min = value
-			}
-		}
-	}
-	return min
-}
-
-func MinFloat64(data []float64) (min float64) {
-	if len(data) > 0 {
-		min = data[0]
-
-		for _, value := range data {
-			if value < min {
-				min = value
-			}
-		}
-	}
-	return min
-}
+func MinFloat64(data []float64) (min float64) { return minFloat64(data) }
 
 func MinFixedLenByteArray(size int, data []byte) (min []byte) {
 	if len(data) > 0 {
