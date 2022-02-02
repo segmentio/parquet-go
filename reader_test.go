@@ -339,6 +339,9 @@ func BenchmarkReader(b *testing.B) {
 }
 
 func TestReaderReadSubset(t *testing.T) {
+	// In this example we'll write 3 columns to the file - X, Y, and Z, but
+	// we'll only read out the X and Y columns. Returns true if all writes
+	// and reads were successful, and false otherwise.
 	type Point3D struct { X, Y, Z int64 }
 	type Point2D struct { X, Y int64 }
 
