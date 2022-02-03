@@ -2,6 +2,8 @@
 
 package bits
 
+import "encoding/binary"
+
 func minInt32(data []int32) (min int32) {
 	if len(data) > 0 {
 		min = data[0]
@@ -76,6 +78,29 @@ func minFloat64(data []float64) (min float64) {
 				min = value
 			}
 		}
+	}
+	return min
+}
+
+func minBE128(data []byte) (min []byte) {
+	if len(data) > 0 {
+		be128 := BytesToUint128(data)
+		m := binary.BigEndian.Uint64(be128[0][:8])
+		j := 0
+		for i := 1; i < len(be128); i++ {
+			x := binary.BigEndian.Uint64(be128[i][:8])
+			switch {
+			case x < m:
+				m, j = x, i
+			case x == m:
+				y := binary.BigEndian.Uint64(be128[i][8:])
+				n := binary.BigEndian.Uint64(be128[j][:8])
+				if y < n {
+					m, j = x, i
+				}
+			}
+		}
+		min = be128[j][:]
 	}
 	return min
 }

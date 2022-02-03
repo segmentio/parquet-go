@@ -400,3 +400,36 @@ loop:
 done:
     MOVQ BX, ret+24(FP)
     RET
+
+// func minBE128(data []byte) []byte
+TEXT ·minBE128(SB), NOSPLIT, $-48
+    MOVQ data_base+0(FP), AX
+    MOVQ data_len+8(FP), CX
+    MOVQ CX, DX // len
+    MOVQ AX, BX // min
+    ADDQ AX, CX // end
+    ADDQ $16, AX
+    MOVQ $1, R15
+    CMPQ AX, CX
+    JE done
+loop:
+    MOVBEQQ (AX), R8
+    MOVBEQQ (BX), R9
+    CMPQ R8, R9
+    JB less
+    JA next
+    MOVBEQQ 8(AX), R8
+    MOVBEQQ 8(BX), R9
+    CMPQ R8, R9
+    JAE next
+less:
+    MOVQ AX, BX
+next:
+    ADDQ $16, AX
+    CMPQ AX, CX
+    JB loop
+done:
+    MOVQ BX, ret+24(FP)
+    MOVQ $16, ret+32(FP)
+    MOVQ $16, ret+40(FP)
+    RET

@@ -1,6 +1,8 @@
 package bits
 
-import "bytes"
+import (
+	"bytes"
+)
 
 func MinBool(data []bool) (min bool) { return boolEqualAll(data, true) }
 
@@ -17,6 +19,13 @@ func MinFloat32(data []float32) (min float32) { return minFloat32(data) }
 func MinFloat64(data []float64) (min float64) { return minFloat64(data) }
 
 func MinFixedLenByteArray(size int, data []byte) (min []byte) {
+	if size == 16 {
+		return minBE128(data)
+	}
+	return minFixedLenByteArray(size, data)
+}
+
+func minFixedLenByteArray(size int, data []byte) (min []byte) {
 	if len(data) > 0 {
 		min = data[:size]
 

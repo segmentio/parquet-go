@@ -134,7 +134,26 @@ func TestMinFloat64(t *testing.T) {
 	}
 }
 
-func TestMinFixedLenByteArray(t *testing.T) {
+func TestMinFixedLenByteArray1(t *testing.T) {
+	f := func(values []byte) bool {
+		min := [1]byte{}
+		if len(values) > 0 {
+			min[0] = values[0]
+			for _, v := range values[1:] {
+				if v < min[0] {
+					min[0] = v
+				}
+			}
+		}
+		ret := bits.MinFixedLenByteArray(1, values)
+		return (len(values) == 0 && ret == nil) || bytes.Equal(min[:], ret)
+	}
+	if err := quick.Check(f, nil); err != nil {
+		t.Error(err)
+	}
+}
+
+func TestMinFixedLenByteArray16(t *testing.T) {
 	f := func(values [][16]byte) bool {
 		min := [16]byte{}
 		if len(values) > 0 {
