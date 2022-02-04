@@ -2,24 +2,6 @@
 
 #include "textflag.h"
 
-DATA indexes+0(SB)/4, $8
-DATA indexes+4(SB)/4, $9
-DATA indexes+8(SB)/4, $10
-DATA indexes+12(SB)/4, $11
-DATA indexes+16(SB)/4, $12
-DATA indexes+20(SB)/4, $13
-DATA indexes+24(SB)/4, $14
-DATA indexes+28(SB)/4, $15
-DATA indexes+32(SB)/4, $4
-DATA indexes+36(SB)/4, $5
-DATA indexes+40(SB)/4, $6
-DATA indexes+44(SB)/4, $7
-DATA indexes+48(SB)/4, $2
-DATA indexes+52(SB)/4, $3
-DATA indexes+56(SB)/4, $0
-DATA indexes+60(SB)/4, $1
-GLOBL indexes(SB), RODATA|NOPTR, $64
-
 // func minInt32(data []int32) int32
 TEXT ·minInt32(SB), NOSPLIT, $-28
     MOVQ data_base+0(FP), AX
@@ -401,6 +383,18 @@ done:
     MOVQ BX, ret+24(FP)
     RET
 
+#define vpminu128(srcValues, srcIndexes, minValues, minIndexes, K1, K2, K3) \
+    VPCMPUQ $0, minValues, srcValues, K1 \ // EQ ?
+    VPCMPUQ $1, minValues, srcValues, K2 \ // LT ?
+    KSHIFTLQ $1, K2, K3 \
+    KANDQ K3, K1, K1 \
+    KORQ K2, K1, K1 \
+    KANDQ K7, K1, K1 \
+    KSHIFTRQ $1, K1, K2 \
+    KORQ K2, K1, K1 \
+    VPBLENDMQ srcValues, minValues, K1, minValues \
+    VPBLENDMQ srcIndexes, minIndexes, K1, minIndexes
+
 // func minBE128(data []byte) []byte
 TEXT ·minBE128(SB), NOSPLIT, $-48
     MOVQ data_base+0(FP), AX
@@ -408,10 +402,130 @@ TEXT ·minBE128(SB), NOSPLIT, $-48
     MOVQ CX, DX // len
     MOVQ AX, BX // min
     ADDQ AX, CX // end
-    ADDQ $16, AX
-    MOVQ $1, R15
     CMPQ AX, CX
     JE done
+
+    CMPQ DX, $256
+    JB loop
+
+    CMPQ ·hasAVX512(SB), $0
+    JB loop
+
+    // Z30 holds a vector of the count by which we increment the vectors of
+    // indexes at each loop iteration.
+    MOVQ $16, DI
+    VPBROADCASTQ DI, Z30
+
+    // Z31 holds the shuffle mask used to convert 128 bits elements from big to
+    // little endian so we can apply vectorized comparison instructions.
+    VMOVDQU64 bswap128(SB), Z31
+
+    // These vectors hold four lanes of minimum values found in the input.
+    VBROADCASTI64X2 (AX), Z0
+    VPSHUFB Z31, Z0, Z0
+    VMOVDQU64 Z0, Z5
+    VMOVDQU64 Z0, Z10
+    VMOVDQU64 Z0, Z15
+
+    // These vectors hold four lanes of indexes of minimum values.
+    //
+    // We initialize them at zero because we broadcast the first value of the
+    // input in the vectors that track the minimums of each lane; in other
+    // words, we assume the minimum value is at the first offset and work our
+    // way up from there.
+    VPXORQ Z2, Z2, Z2
+    VPXORQ Z7, Z7, Z7
+    VPXORQ Z12, Z12, Z12
+    VPXORQ Z17, Z17, Z17
+
+    // These vectors are used to compute the indexes of minimum values held
+    // in [Z1, Z5, Z10, Z15]. Each vector holds a contiguous sequence of
+    // indexes; for example, Z3 is initialized with [0, 1, 2, 3]. At each
+    // loop iteration, the indexes are incremented by the number of elements
+    // consumed from the input (4x4=16).
+    VMOVDQU64 init128(SB), Z3
+    VPXORQ Z8, Z8, Z8
+    VPXORQ Z13, Z13, Z13
+    VPXORQ Z18, Z18, Z18
+    MOVQ $4, DI
+    VPBROADCASTQ DI, Z1
+    VPADDQ Z1, Z3, Z8
+    VPADDQ Z1, Z8, Z13
+    VPADDQ Z1, Z13, Z18
+
+    // This bit mask is used to merge the results of the "less than" and "equal"
+    // comparison that we perform on each lane of minimum vectors. We use the
+    // upper bits to compute four results of the operation which determines
+    // which of the pair of quad words repreenting the 128 bits elements is the
+    // minimum:
+    //
+    //  A[1] < B[1] || (A[1] == B[1] && A[0] < B[0])
+    //
+    MOVQ $0b10101010, DI
+    KMOVQ DI, K7
+
+    SHRQ $8, DX
+    SHLQ $8, DX
+    ADDQ AX, DX
+loop16:
+    // Compute 4x4 minimum values in vector registers, along with their indexes
+    // in the input array.
+    VMOVDQU64 (AX), Z1
+    VMOVDQU64 64(AX), Z6
+    VMOVDQU64 128(AX), Z11
+    VMOVDQU64 192(AX), Z16
+    VPSHUFB Z31, Z1, Z1
+    VPSHUFB Z31, Z6, Z6
+    VPSHUFB Z31, Z11, Z11
+    VPSHUFB Z31, Z16, Z16
+    vpminu128(Z1, Z3, Z0, Z2, K1, K2, K3)
+    vpminu128(Z6, Z8, Z5, Z7, K4, K5, K6)
+    vpminu128(Z11, Z13, Z10, Z12, K1, K2, K3)
+    vpminu128(Z16, Z18, Z15, Z17, K4, K5, K6)
+    VPADDQ Z30, Z3, Z3
+    VPADDQ Z30, Z8, Z8
+    VPADDQ Z30, Z13, Z13
+    VPADDQ Z30, Z18, Z18
+    ADDQ $256, AX
+    CMPQ AX, DX
+    JB loop16
+
+    // After the loop completed, we need to merge the lanes that each contain
+    // 4 minimum values (so 16 total candidate at this stage). The results are
+    // reduced into 4 candidates in Z0, with their indexes in Z2.
+    vpminu128(Z10, Z12, Z0, Z2, K1, K2, K3)
+    vpminu128(Z15, Z17, Z5, Z7, K4, K5, K6)
+    vpminu128(Z5, Z7, Z0, Z2, K1, K2, K3)
+
+    // Further reduce the results by swapping the upper and lower parts of the
+    // vector registers, and comparing them to determine which values are the
+    // smallest. We compare 2x2 values at this step, then 2x1 values at the next
+    // to find the index of the minimum.
+    VMOVDQU64 indexes128+0(SB), Z1
+    VMOVDQU64 indexes128+0(SB), Z3
+    VPERMI2Q Z0, Z0, Z1
+    VPERMI2Q Z2, Z2, Z3
+    vpminu128(Y1, Y3, Y0, Y2, K1, K2, K3)
+
+    VMOVDQU64 indexes128+32(SB), Y1
+    VMOVDQU64 indexes128+32(SB), Y3
+    VPERMI2Q Y0, Y0, Y1
+    VPERMI2Q Y2, Y2, Y3
+    vpminu128(X1, X3, X0, X2, K1, K2, K3)
+    VZEROUPPER
+
+    // Extract the index of the minimum value computed in the lower 64 bits of
+    // X2 and position the BX pointer at the index of the minimum value.
+    MOVQ X2, DX
+    SHLQ $4, DX
+    ADDQ DX, BX
+    CMPQ AX, CX
+    JE done
+
+    // Unless the input was aligned on 256 bytes, we need to perform a few more
+    // iterations on the remaining elements.
+    //
+    // This loop is also take if the CPU has no support for AVX-512.
 loop:
     MOVBEQQ (AX), R8
     MOVBEQQ (BX), R9

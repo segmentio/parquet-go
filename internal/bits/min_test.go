@@ -164,7 +164,10 @@ func TestMinFixedLenByteArray16(t *testing.T) {
 				}
 			}
 		}
-		ret := bits.MinFixedLenByteArray(16, bits.Uint128ToBytes(values))
+		// Increase the size of the input to make sure we are exercising the
+		// vectorized code paths.
+		data := bytes.Repeat(bits.Uint128ToBytes(values), 4)
+		ret := bits.MinFixedLenByteArray(16, data)
 		return (len(values) == 0 && ret == nil) || bytes.Equal(min[:], ret)
 	}
 	if err := quick.Check(f, nil); err != nil {
