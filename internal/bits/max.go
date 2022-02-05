@@ -3,7 +3,7 @@ package bits
 import "bytes"
 
 func MaxBool(data []bool) (max bool) {
-	return !boolEqualAll(data, false)
+	return len(data) > 0 && !boolEqualAll(data, false)
 }
 
 func MaxInt32(data []int32) (max int32) {
