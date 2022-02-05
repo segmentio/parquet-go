@@ -7,6 +7,10 @@ import (
 	"github.com/segmentio/parquet-go/internal/bits"
 )
 
+const (
+	bufferSize = 4 * 1024
+)
+
 func TestNearestPowerOfTwo(t *testing.T) {
 	for _, test := range []struct {
 		input  uint32

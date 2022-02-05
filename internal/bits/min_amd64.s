@@ -31,15 +31,15 @@ loop32:
     CMPQ SI, DI
     JNE loop32
 
-    VMOVDQU32 indexes+0(SB), Z1
+    VMOVDQU32 indexes32+0(SB), Z1
     VPERMI2D Z0, Z0, Z1
     VPMINSD Y1, Y0, Y0
 
-    VMOVDQU32 indexes+32(SB), Y1
+    VMOVDQU32 indexes32+32(SB), Y1
     VPERMI2D Y0, Y0, Y1
     VPMINSD X1, X0, X0
 
-    VMOVDQU32 indexes+48(SB), X1
+    VMOVDQU32 indexes32+48(SB), X1
     VPERMI2D X0, X0, X1
     VPMINSD X1, X0, X0
     VZEROUPPER
@@ -96,15 +96,15 @@ loop32:
     CMPQ SI, DI
     JNE loop32
 
-    VMOVDQU64 indexes+0(SB), Z1
+    VMOVDQU32 indexes32+0(SB), Z1
     VPERMI2D Z0, Z0, Z1
     VPMINSQ Y1, Y0, Y0
 
-    VMOVDQU64 indexes+32(SB), Y1
+    VMOVDQU32 indexes32+32(SB), Y1
     VPERMI2D Y0, Y0, Y1
     VPMINSQ X1, X0, X0
 
-    VMOVDQU64 indexes+48(SB), X1
+    VMOVDQU32 indexes32+48(SB), X1
     VPERMI2D X0, X0, X1
     VPMINSQ X1, X0, X0
     VZEROUPPER
@@ -152,15 +152,15 @@ loop32:
     CMPQ SI, DI
     JNE loop32
 
-    VMOVDQU32 indexes+0(SB), Z1
+    VMOVDQU32 indexes32+0(SB), Z1
     VPERMI2D Z0, Z0, Z1
     VPMINUD Y1, Y0, Y0
 
-    VMOVDQU32 indexes+32(SB), Y1
+    VMOVDQU32 indexes32+32(SB), Y1
     VPERMI2D Y0, Y0, Y1
     VPMINUD X1, X0, X0
 
-    VMOVDQU32 indexes+48(SB), X1
+    VMOVDQU32 indexes32+48(SB), X1
     VPERMI2D X0, X0, X1
     VPMINUD X1, X0, X0
     VZEROUPPER
@@ -217,15 +217,15 @@ loop32:
     CMPQ SI, DI
     JNE loop32
 
-    VMOVDQU64 indexes+0(SB), Z1
+    VMOVDQU32 indexes32+0(SB), Z1
     VPERMI2D Z0, Z0, Z1
     VPMINUQ Y1, Y0, Y0
 
-    VMOVDQU64 indexes+32(SB), Y1
+    VMOVDQU32 indexes32+32(SB), Y1
     VPERMI2D Y0, Y0, Y1
     VPMINUQ X1, X0, X0
 
-    VMOVDQU64 indexes+48(SB), X1
+    VMOVDQU32 indexes32+48(SB), X1
     VPERMI2D X0, X0, X1
     VPMINUQ X1, X0, X0
     VZEROUPPER
@@ -281,15 +281,15 @@ loop64:
     CMPQ SI, DI
     JNE loop64
 
-    VMOVDQU32 indexes+0(SB), Z1
+    VMOVDQU32 indexes32+0(SB), Z1
     VPERMI2D Z0, Z0, Z1
     VMINPS Y1, Y0, Y0
 
-    VMOVDQU32 indexes+32(SB), Y1
+    VMOVDQU32 indexes32+32(SB), Y1
     VPERMI2D Y0, Y0, Y1
     VMINPS X1, X0, X0
 
-    VMOVDQU32 indexes+48(SB), X1
+    VMOVDQU32 indexes32+48(SB), X1
     VPERMI2D X0, X0, X1
     VMINPS X1, X0, X0
     VZEROUPPER
@@ -354,15 +354,15 @@ loop32:
     CMPQ SI, DI
     JNE loop32
 
-    VMOVDQU64 indexes+0(SB), Z1
+    VMOVDQU64 indexes32+0(SB), Z1
     VPERMI2D Z0, Z0, Z1
     VMINPD Y1, Y0, Y0
 
-    VMOVDQU64 indexes+32(SB), Y1
+    VMOVDQU64 indexes32+32(SB), Y1
     VPERMI2D Y0, Y0, Y1
     VMINPD X1, X0, X0
 
-    VMOVDQU64 indexes+48(SB), X1
+    VMOVDQU64 indexes32+48(SB), X1
     VPERMI2D X0, X0, X1
     VMINPD X1, X0, X0
     VZEROUPPER
@@ -501,14 +501,14 @@ loop16:
     // vector registers, and comparing them to determine which values are the
     // smallest. We compare 2x2 values at this step, then 2x1 values at the next
     // to find the index of the minimum.
-    VMOVDQU64 indexes128+0(SB), Z1
-    VMOVDQU64 indexes128+0(SB), Z3
+    VMOVDQU64 indexes64+0(SB), Z1
+    VMOVDQU64 indexes64+0(SB), Z3
     VPERMI2Q Z0, Z0, Z1
     VPERMI2Q Z2, Z2, Z3
     vpminu128(Y1, Y3, Y0, Y2, K1, K2, K3)
 
-    VMOVDQU64 indexes128+32(SB), Y1
-    VMOVDQU64 indexes128+32(SB), Y3
+    VMOVDQU64 indexes64+32(SB), Y1
+    VMOVDQU64 indexes64+32(SB), Y3
     VPERMI2Q Y0, Y0, Y1
     VPERMI2Q Y2, Y2, Y3
     vpminu128(X1, X3, X0, X2, K1, K2, K3)

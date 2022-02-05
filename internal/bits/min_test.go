@@ -175,8 +175,6 @@ func TestMinFixedLenByteArray16(t *testing.T) {
 	}
 }
 
-const bufferSize = 4 * 1024
-
 func BenchmarkMinBool(b *testing.B) {
 	values := make([]bool, bufferSize/1)
 	for i := range values {
