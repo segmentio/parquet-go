@@ -1,6 +1,7 @@
 package bits_test
 
 import (
+	"bytes"
 	"fmt"
 	"testing"
 
@@ -10,6 +11,48 @@ import (
 const (
 	bufferSize = 4 * 1024
 )
+
+func repeatBool(values []bool, n int) []bool {
+	return bits.BytesToBool(
+		bytes.Repeat(bits.BoolToBytes(values), n),
+	)
+}
+
+func repeatInt32(values []int32, n int) []int32 {
+	return bits.BytesToInt32(
+		bytes.Repeat(bits.Int32ToBytes(values), n),
+	)
+}
+
+func repeatInt64(values []int64, n int) []int64 {
+	return bits.BytesToInt64(
+		bytes.Repeat(bits.Int64ToBytes(values), n),
+	)
+}
+
+func repeatUint32(values []uint32, n int) []uint32 {
+	return bits.BytesToUint32(
+		bytes.Repeat(bits.Uint32ToBytes(values), n),
+	)
+}
+
+func repeatUint64(values []uint64, n int) []uint64 {
+	return bits.BytesToUint64(
+		bytes.Repeat(bits.Uint64ToBytes(values), n),
+	)
+}
+
+func repeatFloat32(values []float32, n int) []float32 {
+	return bits.BytesToFloat32(
+		bytes.Repeat(bits.Float32ToBytes(values), n),
+	)
+}
+
+func repeatFloat64(values []float64, n int) []float64 {
+	return bits.BytesToFloat64(
+		bytes.Repeat(bits.Float64ToBytes(values), n),
+	)
+}
 
 func TestNearestPowerOfTwo(t *testing.T) {
 	for _, test := range []struct {

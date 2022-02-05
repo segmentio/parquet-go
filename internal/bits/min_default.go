@@ -4,6 +4,10 @@ package bits
 
 import "encoding/binary"
 
+func minBool(data []bool) (min bool) {
+	return countByte(BoolToBytes(data), 0) == len(data)
+}
+
 func minInt32(data []int32) (min int32) {
 	if len(data) > 0 {
 		min = data[0]

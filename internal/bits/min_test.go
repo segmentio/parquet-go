@@ -12,6 +12,7 @@ import (
 
 func TestMinBool(t *testing.T) {
 	f := func(values []bool) bool {
+		values = repeatBool(values, 4)
 		min := len(values) > 0
 		for _, v := range values {
 			if !v {
@@ -24,10 +25,19 @@ func TestMinBool(t *testing.T) {
 	if err := quick.Check(f, nil); err != nil {
 		t.Error(err)
 	}
+
+	values := make([]bool, 200)
+	for i := range values {
+		values[i] = true
+	}
+	if !bits.MinBool(values) {
+		t.Error("min value must be true when all input values are true")
+	}
 }
 
 func TestMinInt32(t *testing.T) {
 	f := func(values []int32) bool {
+		values = repeatInt32(values, 4)
 		min := int32(0)
 		if len(values) > 0 {
 			min = values[0]
@@ -46,6 +56,7 @@ func TestMinInt32(t *testing.T) {
 
 func TestMinInt64(t *testing.T) {
 	f := func(values []int64) bool {
+		values = repeatInt64(values, 4)
 		min := int64(0)
 		if len(values) > 0 {
 			min = values[0]
@@ -64,6 +75,7 @@ func TestMinInt64(t *testing.T) {
 
 func TestMinUint32(t *testing.T) {
 	f := func(values []uint32) bool {
+		values = repeatUint32(values, 4)
 		min := uint32(0)
 		if len(values) > 0 {
 			min = values[0]
@@ -82,6 +94,7 @@ func TestMinUint32(t *testing.T) {
 
 func TestMinUint64(t *testing.T) {
 	f := func(values []uint64) bool {
+		values = repeatUint64(values, 4)
 		min := uint64(0)
 		if len(values) > 0 {
 			min = values[0]
@@ -100,6 +113,7 @@ func TestMinUint64(t *testing.T) {
 
 func TestMinFloat32(t *testing.T) {
 	f := func(values []float32) bool {
+		values = repeatFloat32(values, 4)
 		min := float32(0)
 		if len(values) > 0 {
 			min = values[0]
@@ -118,6 +132,7 @@ func TestMinFloat32(t *testing.T) {
 
 func TestMinFloat64(t *testing.T) {
 	f := func(values []float64) bool {
+		values = repeatFloat64(values, 4)
 		min := float64(0)
 		if len(values) > 0 {
 			min = values[0]
@@ -136,6 +151,7 @@ func TestMinFloat64(t *testing.T) {
 
 func TestMinFixedLenByteArray1(t *testing.T) {
 	f := func(values []byte) bool {
+		values = bytes.Repeat(values, 4)
 		min := [1]byte{}
 		if len(values) > 0 {
 			min[0] = values[0]

@@ -2,6 +2,63 @@
 
 #include "textflag.h"
 
+// func minBool(data []bool) bool
+TEXT ·minBool(SB), NOSPLIT, $-25
+    MOVQ data_base+0(FP), AX
+    MOVQ data_len+8(FP), CX
+    XORQ SI, SI
+
+    CMPQ CX, $0
+    JE false
+
+    CMPB ·hasAVX512(SB), $0
+    JE loop
+
+    CMPQ CX, $128
+    JB loop
+
+    MOVQ CX, DX
+    SHRQ $7, DX
+    SHLQ $7, DX
+
+    MOVQ $0x0101010101010101, DI
+    VPBROADCASTQ DI, Z0
+    VPBROADCASTQ DI, Z1
+loop128:
+    VMOVDQU64 (AX)(SI*1), Z2
+    VMOVDQU64 64(AX)(SI*1), Z3
+    VPANDQ Z2, Z0, Z0
+    VPANDQ Z3, Z1, Z1
+    ADDQ $128, SI
+    CMPQ SI, DX
+    JNE loop128
+
+    VPBROADCASTQ DI, Z2
+    VPANDQ Z1, Z0, Z0
+    VPCMPUB $0, Z0, Z2, K1
+    VZEROUPPER
+
+    KMOVQ K1, DI
+    POPCNTQ DI, DI
+    CMPQ DI, $64
+    JNE false
+
+    CMPQ SI, CX
+    JE true
+loop:
+    MOVBQZX (AX)(SI*1), DX
+    CMPQ DX, $0
+    JE false
+    INCQ SI
+    CMPQ SI, CX
+    JNE loop
+true:
+    MOVB $1, ret+24(FP)
+    RET
+false:
+    MOVB $0, ret+24(FP)
+    RET
+
 // func minInt32(data []int32) int32
 TEXT ·minInt32(SB), NOSPLIT, $-28
     MOVQ data_base+0(FP), AX

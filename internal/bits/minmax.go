@@ -5,12 +5,8 @@ import (
 )
 
 func boolEqualAll(data []bool, value bool) bool {
-	for i := range data {
-		if data[i] != value {
-			return false
-		}
-	}
-	return len(data) > 0
+	n := CountByte(BoolToBytes(data), 0)
+	return len(data) > 0 && ((n == 0 && value) || (n == len(data) && !value))
 }
 
 func MinMaxBool(data []bool) (min, max bool) {

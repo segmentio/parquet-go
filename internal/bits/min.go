@@ -4,7 +4,7 @@ import (
 	"bytes"
 )
 
-func MinBool(data []bool) (min bool) { return boolEqualAll(data, true) }
+func MinBool(data []bool) (min bool) { return minBool(data) }
 
 func MinInt32(data []int32) (min int32) { return minInt32(data) }
 

@@ -58,6 +58,10 @@ func Uint64ToInt64(data []uint64) []int64 {
 	return unsafe.Slice(*(**int64)(unsafe.Pointer(&data)), len(data))
 }
 
+func BytesToBool(data []byte) []bool {
+	return unsafe.Slice(*(**bool)(unsafe.Pointer(&data)), len(data))
+}
+
 func BytesToInt8(data []byte) []int8 {
 	return unsafe.Slice(*(**int8)(unsafe.Pointer(&data)), len(data))
 }
