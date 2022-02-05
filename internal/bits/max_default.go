@@ -4,89 +4,89 @@ package bits
 
 import "encoding/binary"
 
-func minBool(data []bool) (min bool) {
-	return boolEqualAll(data, true)
+func maxBool(data []bool) (max bool) {
+	return len(data) > 0 && !boolEqualAll(data, false)
 }
 
-func minInt32(data []int32) (min int32) {
+func maxInt32(data []int32) (max int32) {
 	if len(data) > 0 {
-		min = data[0]
+		max = data[0]
 
 		for _, value := range data {
-			if value < min {
-				min = value
+			if value > max {
+				max = value
 			}
 		}
 	}
-	return min
+	return max
 }
 
-func minInt64(data []int64) (min int64) {
+func maxInt64(data []int64) (max int64) {
 	if len(data) > 0 {
-		min = data[0]
+		max = data[0]
 
 		for _, value := range data {
-			if value < min {
-				min = value
+			if value > max {
+				max = value
 			}
 		}
 	}
-	return min
+	return max
 }
 
-func minUint32(data []uint32) (min uint32) {
+func maxUint32(data []uint32) (max uint32) {
 	if len(data) > 0 {
-		min = data[0]
+		max = data[0]
 
 		for _, value := range data {
-			if value < min {
-				min = value
+			if value > max {
+				max = value
 			}
 		}
 	}
-	return min
+	return max
 }
 
-func minUint64(data []uint64) (min uint64) {
+func maxUint64(data []uint64) (max uint64) {
 	if len(data) > 0 {
-		min = data[0]
+		max = data[0]
 
 		for _, value := range data {
-			if value < min {
-				min = value
+			if value > max {
+				max = value
 			}
 		}
 	}
-	return min
+	return max
 }
 
-func minFloat32(data []float32) (min float32) {
+func maxFloat32(data []float32) (max float32) {
 	if len(data) > 0 {
-		min = data[0]
+		max = data[0]
 
 		for _, value := range data {
-			if value < min {
-				min = value
+			if value > max {
+				max = value
 			}
 		}
 	}
-	return min
+	return max
 }
 
-func minFloat64(data []float64) (min float64) {
+func maxFloat64(data []float64) (max float64) {
 	if len(data) > 0 {
-		min = data[0]
+		max = data[0]
 
 		for _, value := range data {
-			if value < min {
-				min = value
+			if value > max {
+				max = value
 			}
 		}
 	}
-	return min
+	return max
 }
 
-func minBE128(data []byte) (min []byte) {
+func maxBE128(data []byte) (min []byte) {
 	if len(data) > 0 {
 		be128 := BytesToUint128(data)
 		m := binary.BigEndian.Uint64(be128[0][:8])
@@ -94,12 +94,12 @@ func minBE128(data []byte) (min []byte) {
 		for i := 1; i < len(be128); i++ {
 			x := binary.BigEndian.Uint64(be128[i][:8])
 			switch {
-			case x < m:
+			case x > m:
 				m, j = x, i
 			case x == m:
 				y := binary.BigEndian.Uint64(be128[i][8:])
 				n := binary.BigEndian.Uint64(be128[j][:8])
-				if y < n {
+				if y > n {
 					m, j = x, i
 				}
 			}
