@@ -28,6 +28,12 @@ func TestMaxBool(t *testing.T) {
 
 	values := make([]bool, 200)
 	if bits.MaxBool(values) {
+		t.Error("max value must be false when all input values are false")
+	}
+	for i := range values {
+		values[i] = true
+	}
+	if !bits.MaxBool(values) {
 		t.Error("max value must be true when all input values are true")
 	}
 }

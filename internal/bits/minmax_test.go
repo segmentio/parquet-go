@@ -10,9 +10,11 @@ import (
 	"github.com/segmentio/parquet-go/internal/bits"
 )
 
+const scaleFactor = 6000
+
 func TestMinMaxBool(t *testing.T) {
 	f := func(values []bool) bool {
-		values = repeatBool(values, 4)
+		values = repeatBool(values, scaleFactor)
 		min := len(values) > 0
 		max := false
 		for _, v := range values {
@@ -30,6 +32,9 @@ func TestMinMaxBool(t *testing.T) {
 	}
 
 	values := make([]bool, 200)
+	if minValue, maxValue := bits.MinMaxBool(values); minValue || maxValue {
+		t.Error("min and max values must be false when all input values are false")
+	}
 	for i := range values {
 		values[i] = true
 	}
@@ -40,7 +45,7 @@ func TestMinMaxBool(t *testing.T) {
 
 func TestMinMaxInt32(t *testing.T) {
 	f := func(values []int32) bool {
-		values = repeatInt32(values, 4)
+		values = repeatInt32(values, scaleFactor)
 		min := int32(0)
 		max := int32(0)
 		if len(values) > 0 {
@@ -65,7 +70,7 @@ func TestMinMaxInt32(t *testing.T) {
 
 func TestMinMaxInt64(t *testing.T) {
 	f := func(values []int64) bool {
-		values = repeatInt64(values, 4)
+		values = repeatInt64(values, scaleFactor)
 		min := int64(0)
 		max := int64(0)
 		if len(values) > 0 {
@@ -90,7 +95,7 @@ func TestMinMaxInt64(t *testing.T) {
 
 func TestMinMaxUint32(t *testing.T) {
 	f := func(values []uint32) bool {
-		values = repeatUint32(values, 4)
+		values = repeatUint32(values, scaleFactor)
 		min := uint32(0)
 		max := uint32(0)
 		if len(values) > 0 {
@@ -115,7 +120,7 @@ func TestMinMaxUint32(t *testing.T) {
 
 func TestMinMaxUint64(t *testing.T) {
 	f := func(values []uint64) bool {
-		values = repeatUint64(values, 4)
+		values = repeatUint64(values, scaleFactor)
 		min := uint64(0)
 		max := uint64(0)
 		if len(values) > 0 {
@@ -140,7 +145,7 @@ func TestMinMaxUint64(t *testing.T) {
 
 func TestMinMaxFloat32(t *testing.T) {
 	f := func(values []float32) bool {
-		values = repeatFloat32(values, 4)
+		values = repeatFloat32(values, scaleFactor)
 		min := float32(0)
 		max := float32(0)
 		if len(values) > 0 {
@@ -165,7 +170,7 @@ func TestMinMaxFloat32(t *testing.T) {
 
 func TestMinMaxFloat64(t *testing.T) {
 	f := func(values []float64) bool {
-		values = repeatFloat64(values, 4)
+		values = repeatFloat64(values, scaleFactor)
 		min := float64(0)
 		max := float64(0)
 		if len(values) > 0 {
@@ -190,7 +195,7 @@ func TestMinMaxFloat64(t *testing.T) {
 
 func TestMinMaxFixedLenByteArray1(t *testing.T) {
 	f := func(values []byte) bool {
-		values = bytes.Repeat(values, 4)
+		values = bytes.Repeat(values, scaleFactor)
 		min := [1]byte{}
 		max := [1]byte{}
 		if len(values) > 0 {
@@ -232,7 +237,7 @@ func TestMinMaxFixedLenByteArray16(t *testing.T) {
 		}
 		// Increase the size of the input to make sure we are exercising the
 		// vectorized code paths.
-		data := bytes.Repeat(bits.Uint128ToBytes(values), 4)
+		data := bytes.Repeat(bits.Uint128ToBytes(values), scaleFactor)
 		minValue, maxValue := bits.MinMaxFixedLenByteArray(16, data)
 		return (len(values) == 0 && minValue == nil && maxValue == nil) ||
 			(bytes.Equal(min[:], minValue) && bytes.Equal(max[:], maxValue))

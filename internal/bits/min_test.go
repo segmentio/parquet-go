@@ -27,6 +27,9 @@ func TestMinBool(t *testing.T) {
 	}
 
 	values := make([]bool, 200)
+	if bits.MinBool(values) {
+		t.Error("min value must be false when all input values are false")
+	}
 	for i := range values {
 		values[i] = true
 	}

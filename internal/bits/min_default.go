@@ -98,7 +98,7 @@ func minBE128(data []byte) (min []byte) {
 				m, j = x, i
 			case x == m:
 				y := binary.BigEndian.Uint64(be128[i][8:])
-				n := binary.BigEndian.Uint64(be128[j][:8])
+				n := binary.BigEndian.Uint64(be128[j][8:])
 				if y < n {
 					m, j = x, i
 				}

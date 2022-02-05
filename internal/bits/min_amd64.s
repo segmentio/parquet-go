@@ -1,15 +1,16 @@
 //go:build !purego
 
 #include "textflag.h"
+#include "min_amd64.h"
 
 // func minBool(data []bool) bool
 TEXT ·minBool(SB), NOSPLIT, $-25
     MOVQ data_base+0(FP), AX
     MOVQ data_len+8(FP), CX
-    XORQ SI, SI
 
     CMPQ CX, $0
     JE false
+    XORQ SI, SI
 
     CMPB ·hasAVX512(SB), $0
     JE loop
@@ -63,18 +64,19 @@ false:
 TEXT ·minInt32(SB), NOSPLIT, $-28
     MOVQ data_base+0(FP), AX
     MOVQ data_len+8(FP), CX
-
     XORQ BX, BX
-    XORQ SI, SI
+
     CMPQ CX, $0
     JE done
-    MOVL (AX), BX
+    XORQ SI, SI
+    MOVLQZX (AX), BX
 
     CMPB ·hasAVX512(SB), $0
     JE loop
 
     CMPQ CX, $32
     JB loop
+
     MOVQ CX, DI
     SHRQ $5, DI
     SHLQ $5, DI
@@ -110,7 +112,7 @@ loop32:
     CMPQ SI, CX
     JE done
 loop:
-    MOVL (AX)(SI*4), DX
+    MOVLQZX (AX)(SI*4), DX
     CMPL DX, BX
     CMOVLLT DX, BX
     INCQ SI
@@ -124,11 +126,11 @@ done:
 TEXT ·minInt64(SB), NOSPLIT, $-32
     MOVQ data_base+0(FP), AX
     MOVQ data_len+8(FP), CX
-
     XORQ BX, BX
-    XORQ SI, SI
+
     CMPQ CX, $0
     JE done
+    XORQ SI, SI
     MOVQ (AX), BX
 
     CMPB ·hasAVX512(SB), $0
@@ -136,6 +138,7 @@ TEXT ·minInt64(SB), NOSPLIT, $-32
 
     CMPQ CX, $32
     JB loop
+
     MOVQ CX, DI
     SHRQ $5, DI
     SHLQ $5, DI
@@ -184,18 +187,19 @@ done:
 TEXT ·minUint32(SB), NOSPLIT, $-28
     MOVQ data_base+0(FP), AX
     MOVQ data_len+8(FP), CX
-
     XORQ BX, BX
-    XORQ SI, SI
+
     CMPQ CX, $0
     JE done
-    MOVL (AX), BX
+    XORQ SI, SI
+    MOVLQZX (AX), BX
 
     CMPB ·hasAVX512(SB), $0
     JE loop
 
     CMPQ CX, $32
     JB loop
+
     MOVQ CX, DI
     SHRQ $5, DI
     SHLQ $5, DI
@@ -231,7 +235,7 @@ loop32:
     CMPQ SI, CX
     JE done
 loop:
-    MOVL (AX)(SI*4), DX
+    MOVLQZX (AX)(SI*4), DX
     CMPL DX, BX
     CMOVLCS DX, BX
     INCQ SI
@@ -245,11 +249,11 @@ done:
 TEXT ·minUint64(SB), NOSPLIT, $-32
     MOVQ data_base+0(FP), AX
     MOVQ data_len+8(FP), CX
-
     XORQ BX, BX
-    XORQ SI, SI
+
     CMPQ CX, $0
     JE done
+    XORQ SI, SI
     MOVQ (AX), BX
 
     CMPB ·hasAVX512(SB), $0
@@ -257,6 +261,7 @@ TEXT ·minUint64(SB), NOSPLIT, $-32
 
     CMPQ CX, $32
     JB loop
+
     MOVQ CX, DI
     SHRQ $5, DI
     SHLQ $5, DI
@@ -305,15 +310,14 @@ done:
 TEXT ·minFloat32(SB), NOSPLIT, $-28
     MOVQ data_base+0(FP), AX
     MOVQ data_len+8(FP), CX
-
-    XORPS X0, X0
-    XORPS X1, X1
     XORQ BX, BX
-    XORQ DX, DX
-    XORQ SI, SI
+
     CMPQ CX, $0
     JE done
-    MOVL (AX), BX
+    XORPS X0, X0
+    XORPS X1, X1
+    XORQ SI, SI
+    MOVLQZX (AX), BX
     MOVQ BX, X0
 
     CMPB ·hasAVX512(SB), $0
@@ -321,6 +325,7 @@ TEXT ·minFloat32(SB), NOSPLIT, $-28
 
     CMPQ CX, $64
     JB loop
+
     MOVQ CX, DI
     SHRQ $6, DI
     SHLQ $6, DI
@@ -355,15 +360,15 @@ loop64:
     PSRLQ $32, X1
     MOVQ X0, BX
     MOVQ X1, DX
-    MOVQ BX, X0
     UCOMISS X0, X1
     CMOVLCS DX, BX
 
     CMPQ SI, CX
     JE done
+    MOVQ BX, X0
 loop:
-    MOVSS (AX)(SI*4), X1
-    MOVQ X1, DX
+    MOVLQZX (AX)(SI*4), DX
+    MOVQ DX, X1
     UCOMISS X0, X1
     CMOVLCS DX, BX
     MOVQ BX, X0
@@ -378,14 +383,13 @@ done:
 TEXT ·minFloat64(SB), NOSPLIT, $-32
     MOVQ data_base+0(FP), AX
     MOVQ data_len+8(FP), CX
-
-    XORPS X0, X0
-    XORPS X1, X1
     XORQ BX, BX
-    XORQ DX, DX
-    XORQ SI, SI
+
     CMPQ CX, $0
     JE done
+    XORPD X0, X0
+    XORPD X1, X1
+    XORQ SI, SI
     MOVQ (AX), BX
     MOVQ BX, X0
 
@@ -394,6 +398,7 @@ TEXT ·minFloat64(SB), NOSPLIT, $-32
 
     CMPQ CX, $32
     JB loop
+
     MOVQ CX, DI
     SHRQ $5, DI
     SHLQ $5, DI
@@ -428,8 +433,8 @@ loop32:
     CMPQ SI, CX
     JE done
 loop:
-    MOVSD (AX)(SI*8), X1
-    MOVQ X1, DX
+    MOVQ (AX)(SI*8), DX
+    MOVQ DX, X1
     UCOMISD X0, X1
     CMOVQCS DX, BX
     MOVQ BX, X0
@@ -440,32 +445,16 @@ done:
     MOVQ BX, ret+24(FP)
     RET
 
-#define vpminu128(srcValues, srcIndexes, minValues, minIndexes, K1, K2, R1, R2, R3) \
-    VPCMPUQ $0, minValues, srcValues, K1 \ // EQ ?
-    VPCMPUQ $1, minValues, srcValues, K2 \ // LT ?
-    KMOVQ K1, R1 \
-    KMOVQ K2, R2 \
-    MOVQ R2, R3 \
-    SHLQ $1, R3 \
-    ANDQ R3, R1 \
-    ORQ R2, R1 \
-    ANDQ DI, R1 \
-    MOVQ R1, R2 \
-    SHRQ $1, R2 \
-    ORQ R2, R1 \
-    KMOVQ R1, K1 \
-    VPBLENDMQ srcValues, minValues, K1, minValues \
-    VPBLENDMQ srcIndexes, minIndexes, K1, minIndexes
-
 // func minBE128(data []byte) []byte
 TEXT ·minBE128(SB), NOSPLIT, $-48
     MOVQ data_base+0(FP), AX
     MOVQ data_len+8(FP), CX
+    CMPQ CX, $0
+    JE null
+
     MOVQ CX, DX // len
     MOVQ AX, BX // min
     ADDQ AX, CX // end
-    CMPQ AX, CX
-    JE done
 
     CMPQ DX, $256
     JB loop
@@ -515,15 +504,7 @@ TEXT ·minBE128(SB), NOSPLIT, $-48
     VPADDQ Z1, Z8, Z13
     VPADDQ Z1, Z13, Z18
 
-    // This bit mask is used to merge the results of the "less than" and "equal"
-    // comparison that we perform on each lane of minimum vectors. We use the
-    // upper bits to compute four results of the operation which determines
-    // which of the pair of quad words repreenting the 128 bits elements is the
-    // minimum:
-    //
-    //  A[1] < B[1] || (A[1] == B[1] && A[0] < B[0])
-    //
-    MOVQ $0b10101010, DI
+    vpminu128mask(DI)
     SHRQ $8, DX
     SHLQ $8, DX
     ADDQ AX, DX
@@ -538,10 +519,10 @@ loop16:
     VPSHUFB Z31, Z6, Z6
     VPSHUFB Z31, Z11, Z11
     VPSHUFB Z31, Z16, Z16
-    vpminu128(Z1, Z3, Z0, Z2, K1, K2, R8, R9, R10)
-    vpminu128(Z6, Z8, Z5, Z7, K3, K4, R11, R12, R13)
-    vpminu128(Z11, Z13, Z10, Z12, K1, K2, R8, R9, R10)
-    vpminu128(Z16, Z18, Z15, Z17, K3, K4, R11, R12, R13)
+    vpminu128(Z1, Z3, Z0, Z2, K1, K2, R8, R9, R10, DI)
+    vpminu128(Z6, Z8, Z5, Z7, K3, K4, R11, R12, R13, DI)
+    vpminu128(Z11, Z13, Z10, Z12, K1, K2, R8, R9, R10, DI)
+    vpminu128(Z16, Z18, Z15, Z17, K3, K4, R11, R12, R13, DI)
     VPADDQ Z19, Z3, Z3
     VPADDQ Z19, Z8, Z8
     VPADDQ Z19, Z13, Z13
@@ -553,9 +534,9 @@ loop16:
     // After the loop completed, we need to merge the lanes that each contain
     // 4 minimum values (so 16 total candidate at this stage). The results are
     // reduced into 4 candidates in Z0, with their indexes in Z2.
-    vpminu128(Z10, Z12, Z0, Z2, K1, K2, R8, R9, R10)
-    vpminu128(Z15, Z17, Z5, Z7, K3, K4, R11, R12, R13)
-    vpminu128(Z5, Z7, Z0, Z2, K1, K2, R8, R9, R10)
+    vpminu128(Z10, Z12, Z0, Z2, K1, K2, R8, R9, R10, DI)
+    vpminu128(Z15, Z17, Z5, Z7, K3, K4, R11, R12, R13, DI)
+    vpminu128(Z5, Z7, Z0, Z2, K1, K2, R8, R9, R10, DI)
 
     // Further reduce the results by swapping the upper and lower parts of the
     // vector registers, and comparing them to determine which values are the
@@ -565,13 +546,13 @@ loop16:
     VMOVDQU64 indexes64+0(SB), Z3
     VPERMI2Q Z0, Z0, Z1
     VPERMI2Q Z2, Z2, Z3
-    vpminu128(Y1, Y3, Y0, Y2, K1, K2, R8, R9, R10)
+    vpminu128(Y1, Y3, Y0, Y2, K1, K2, R8, R9, R10, DI)
 
     VMOVDQU64 indexes64+32(SB), Y1
     VMOVDQU64 indexes64+32(SB), Y3
     VPERMI2Q Y0, Y0, Y1
     VPERMI2Q Y2, Y2, Y3
-    vpminu128(X1, X3, X0, X2, K1, K2, R8, R9, R10)
+    vpminu128(X1, X3, X0, X2, K1, K2, R8, R9, R10, DI)
     VZEROUPPER
 
     // Extract the index of the minimum value computed in the lower 64 bits of
@@ -606,4 +587,10 @@ done:
     MOVQ BX, ret+24(FP)
     MOVQ $16, ret+32(FP)
     MOVQ $16, ret+40(FP)
+    RET
+null:
+    XORQ BX, BX
+    MOVQ BX, min+24(FP)
+    MOVQ BX, min+32(FP)
+    MOVQ BX, min+40(FP)
     RET

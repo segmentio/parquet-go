@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	bufferSize = 4 * 1024
+	bufferSize = 256 * 1024
 )
 
 func repeatBool(values []bool, n int) []bool {
