@@ -39,7 +39,7 @@ package bits
 // to running less instructions per loop. The performance starts to equalize
 // around 256KiB, and degrade beyond 1MiB, so we use this threshold to determine
 // which approach to prefer.
-const combinedMinMaxThreshold = 256 * 1024
+const combinedMinMaxThreshold = 1 * 1024 * 1024
 
 //go:noescape
 func combinedMinMaxBool(data []bool) (min, max bool)
@@ -129,9 +129,10 @@ func minMaxFloat64(data []float64) (min, max float64) {
 }
 
 func minMaxBE128(data []byte) (min, max []byte) {
-	if len(data) >= combinedMinMaxThreshold {
-		return combinedMinMaxBE128(data)
-	}
+	// TODO: min/max BE128 is really complex to vectorize, and the returns
+	// were barely better than doing the min and max independently, for all
+	// input sizes. We should revisit if we find ways to improve the min or
+	// max algorithms which can be transposed to the combined version.
 	min = minBE128(data)
 	max = maxBE128(data)
 	return
