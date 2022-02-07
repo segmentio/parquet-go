@@ -15,40 +15,40 @@ DATA bswap128+48(SB)/8, $bswap128lo
 DATA bswap128+56(SB)/8, $bswap128hi
 GLOBL bswap128(SB), RODATA|NOPTR, $64
 
-DATA init128+0(SB)/8, $0
-DATA init128+8(SB)/8, $0
-DATA init128+16(SB)/8, $1
-DATA init128+24(SB)/8, $1
-DATA init128+32(SB)/8, $2
-DATA init128+40(SB)/8, $2
-DATA init128+48(SB)/8, $3
-DATA init128+56(SB)/8, $3
-GLOBL init128(SB), RODATA|NOPTR, $64
+DATA indexes128+0(SB)/8, $0
+DATA indexes128+8(SB)/8, $0
+DATA indexes128+16(SB)/8, $1
+DATA indexes128+24(SB)/8, $1
+DATA indexes128+32(SB)/8, $2
+DATA indexes128+40(SB)/8, $2
+DATA indexes128+48(SB)/8, $3
+DATA indexes128+56(SB)/8, $3
+GLOBL indexes128(SB), RODATA|NOPTR, $64
 
-DATA indexes64+0(SB)/8, $4
-DATA indexes64+8(SB)/8, $5
-DATA indexes64+16(SB)/8, $6
-DATA indexes64+24(SB)/8, $7
-DATA indexes64+32(SB)/8, $2
-DATA indexes64+40(SB)/8, $3
-DATA indexes64+48(SB)/8, $0
-DATA indexes64+56(SB)/8, $1
-GLOBL indexes64(SB), RODATA|NOPTR, $64
+DATA swap64+0(SB)/8, $4
+DATA swap64+8(SB)/8, $5
+DATA swap64+16(SB)/8, $6
+DATA swap64+24(SB)/8, $7
+DATA swap64+32(SB)/8, $2
+DATA swap64+40(SB)/8, $3
+DATA swap64+48(SB)/8, $0
+DATA swap64+56(SB)/8, $1
+GLOBL swap64(SB), RODATA|NOPTR, $64
 
-DATA indexes32+0(SB)/4, $8
-DATA indexes32+4(SB)/4, $9
-DATA indexes32+8(SB)/4, $10
-DATA indexes32+12(SB)/4, $11
-DATA indexes32+16(SB)/4, $12
-DATA indexes32+20(SB)/4, $13
-DATA indexes32+24(SB)/4, $14
-DATA indexes32+28(SB)/4, $15
-DATA indexes32+32(SB)/4, $4
-DATA indexes32+36(SB)/4, $5
-DATA indexes32+40(SB)/4, $6
-DATA indexes32+44(SB)/4, $7
-DATA indexes32+48(SB)/4, $2
-DATA indexes32+52(SB)/4, $3
-DATA indexes32+56(SB)/4, $0
-DATA indexes32+60(SB)/4, $1
-GLOBL indexes32(SB), RODATA|NOPTR, $64
+DATA swap32+0(SB)/4, $8
+DATA swap32+4(SB)/4, $9
+DATA swap32+8(SB)/4, $10
+DATA swap32+12(SB)/4, $11
+DATA swap32+16(SB)/4, $12
+DATA swap32+20(SB)/4, $13
+DATA swap32+24(SB)/4, $14
+DATA swap32+28(SB)/4, $15
+DATA swap32+32(SB)/4, $4
+DATA swap32+36(SB)/4, $5
+DATA swap32+40(SB)/4, $6
+DATA swap32+44(SB)/4, $7
+DATA swap32+48(SB)/4, $2
+DATA swap32+52(SB)/4, $3
+DATA swap32+56(SB)/4, $0
+DATA swap32+60(SB)/4, $1
+GLOBL swap32(SB), RODATA|NOPTR, $64

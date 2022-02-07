@@ -89,15 +89,15 @@ loop32:
     CMPQ SI, DI
     JNE loop32
 
-    VMOVDQU32 indexes32+0(SB), Z1
+    VMOVDQU32 swap32+0(SB), Z1
     VPERMI2D Z0, Z0, Z1
     VPMAXSD Y1, Y0, Y0
 
-    VMOVDQU32 indexes32+32(SB), Y1
+    VMOVDQU32 swap32+32(SB), Y1
     VPERMI2D Y0, Y0, Y1
     VPMAXSD X1, X0, X0
 
-    VMOVDQU32 indexes32+48(SB), X1
+    VMOVDQU32 swap32+48(SB), X1
     VPERMI2D X0, X0, X1
     VPMAXSD X1, X0, X0
     VZEROUPPER
@@ -155,15 +155,15 @@ loop32:
     CMPQ SI, DI
     JNE loop32
 
-    VMOVDQU32 indexes32+0(SB), Z1
+    VMOVDQU32 swap32+0(SB), Z1
     VPERMI2D Z0, Z0, Z1
     VPMAXSQ Y1, Y0, Y0
 
-    VMOVDQU32 indexes32+32(SB), Y1
+    VMOVDQU32 swap32+32(SB), Y1
     VPERMI2D Y0, Y0, Y1
     VPMAXSQ X1, X0, X0
 
-    VMOVDQU32 indexes32+48(SB), X1
+    VMOVDQU32 swap32+48(SB), X1
     VPERMI2D X0, X0, X1
     VPMAXSQ X1, X0, X0
     VZEROUPPER
@@ -212,15 +212,15 @@ loop32:
     CMPQ SI, DI
     JNE loop32
 
-    VMOVDQU32 indexes32+0(SB), Z1
+    VMOVDQU32 swap32+0(SB), Z1
     VPERMI2D Z0, Z0, Z1
     VPMAXUD Y1, Y0, Y0
 
-    VMOVDQU32 indexes32+32(SB), Y1
+    VMOVDQU32 swap32+32(SB), Y1
     VPERMI2D Y0, Y0, Y1
     VPMAXUD X1, X0, X0
 
-    VMOVDQU32 indexes32+48(SB), X1
+    VMOVDQU32 swap32+48(SB), X1
     VPERMI2D X0, X0, X1
     VPMAXUD X1, X0, X0
     VZEROUPPER
@@ -278,15 +278,15 @@ loop32:
     CMPQ SI, DI
     JNE loop32
 
-    VMOVDQU32 indexes32+0(SB), Z1
+    VMOVDQU32 swap32+0(SB), Z1
     VPERMI2D Z0, Z0, Z1
     VPMAXUQ Y1, Y0, Y0
 
-    VMOVDQU32 indexes32+32(SB), Y1
+    VMOVDQU32 swap32+32(SB), Y1
     VPERMI2D Y0, Y0, Y1
     VPMAXUQ X1, X0, X0
 
-    VMOVDQU32 indexes32+48(SB), X1
+    VMOVDQU32 swap32+48(SB), X1
     VPERMI2D X0, X0, X1
     VPMAXUQ X1, X0, X0
     VZEROUPPER
@@ -342,15 +342,15 @@ loop64:
     CMPQ SI, DI
     JNE loop64
 
-    VMOVDQU32 indexes32+0(SB), Z1
+    VMOVDQU32 swap32+0(SB), Z1
     VPERMI2D Z0, Z0, Z1
     VMAXPS Y1, Y0, Y0
 
-    VMOVDQU32 indexes32+32(SB), Y1
+    VMOVDQU32 swap32+32(SB), Y1
     VPERMI2D Y0, Y0, Y1
     VMAXPS X1, X0, X0
 
-    VMOVDQU32 indexes32+48(SB), X1
+    VMOVDQU32 swap32+48(SB), X1
     VPERMI2D X0, X0, X1
     VMAXPS X1, X0, X0
     VZEROUPPER
@@ -415,15 +415,15 @@ loop32:
     CMPQ SI, DI
     JNE loop32
 
-    VMOVDQU64 indexes32+0(SB), Z1
+    VMOVDQU64 swap32+0(SB), Z1
     VPERMI2D Z0, Z0, Z1
     VMAXPD Y1, Y0, Y0
 
-    VMOVDQU64 indexes32+32(SB), Y1
+    VMOVDQU64 swap32+32(SB), Y1
     VPERMI2D Y0, Y0, Y1
     VMAXPD X1, X0, X0
 
-    VMOVDQU64 indexes32+48(SB), X1
+    VMOVDQU64 swap32+48(SB), X1
     VPERMI2D X0, X0, X1
     VMAXPD X1, X0, X0
     VZEROUPPER
@@ -462,7 +462,7 @@ TEXT ·maxBE128(SB), NOSPLIT, $-48
     JB loop
 
     // Z19 holds a vector of the count by which we increment the vectors of
-    // indexes at each loop iteration.
+    // swap at each loop iteration.
     MOVQ $16, DI
     VPBROADCASTQ DI, Z19
 
@@ -477,7 +477,7 @@ TEXT ·maxBE128(SB), NOSPLIT, $-48
     VMOVDQU64 Z0, Z10
     VMOVDQU64 Z0, Z15
 
-    // These vectors hold four lanes of indexes of maximum values.
+    // These vectors hold four lanes of swap of maximum values.
     //
     // We initialize them at zero because we broadcast the first value of the
     // input in the vectors that track the maximums of each lane; in other
@@ -488,12 +488,12 @@ TEXT ·maxBE128(SB), NOSPLIT, $-48
     VPXORQ Z12, Z12, Z12
     VPXORQ Z17, Z17, Z17
 
-    // These vectors are used to compute the indexes of maximum values held
+    // These vectors are used to compute the swap of maximum values held
     // in [Z1, Z5, Z10, Z15]. Each vector holds a contiguous sequence of
-    // indexes; for example, Z3 is initialized with [0, 1, 2, 3]. At each
-    // loop iteration, the indexes are incremented by the number of elements
+    // swap; for example, Z3 is initialized with [0, 1, 2, 3]. At each
+    // loop iteration, the swap are incremented by the number of elements
     // consumed from the input (4x4=16).
-    VMOVDQU64 init128(SB), Z3
+    VMOVDQU64 indexes128(SB), Z3
     VPXORQ Z8, Z8, Z8
     VPXORQ Z13, Z13, Z13
     VPXORQ Z18, Z18, Z18
@@ -513,7 +513,7 @@ TEXT ·maxBE128(SB), NOSPLIT, $-48
     SHLQ $8, DX
     ADDQ AX, DX
 loop16:
-    // Compute 4x4 maximum values in vector registers, along with their indexes
+    // Compute 4x4 maximum values in vector registers, along with their swap
     // in the input array.
     VMOVDQU64 (AX), Z1
     VMOVDQU64 64(AX), Z6
@@ -537,7 +537,7 @@ loop16:
 
     // After the loop completed, we need to merge the lanes that each contain
     // 4 maximum values (so 16 total candidate at this stage). The results are
-    // reduced into 4 candidates in Z0, with their indexes in Z2.
+    // reduced into 4 candidates in Z0, with their swap in Z2.
     vpmaxu128(Z10, Z12, Z0, Z2, K1, K2, R8, R9, R10, DI)
     vpmaxu128(Z15, Z17, Z5, Z7, K3, K4, R11, R12, R13, DI)
     vpmaxu128(Z5, Z7, Z0, Z2, K1, K2, R8, R9, R10, DI)
@@ -546,14 +546,14 @@ loop16:
     // vector registers, and comparing them to determaxe which values are the
     // smallest. We compare 2x2 values at this step, then 2x1 values at the next
     // to find the index of the maximum.
-    VMOVDQU64 indexes64+0(SB), Z1
-    VMOVDQU64 indexes64+0(SB), Z3
+    VMOVDQU64 swap64+0(SB), Z1
+    VMOVDQU64 swap64+0(SB), Z3
     VPERMI2Q Z0, Z0, Z1
     VPERMI2Q Z2, Z2, Z3
     vpmaxu128(Y1, Y3, Y0, Y2, K1, K2, R8, R9, R10, DI)
 
-    VMOVDQU64 indexes64+32(SB), Y1
-    VMOVDQU64 indexes64+32(SB), Y3
+    VMOVDQU64 swap64+32(SB), Y1
+    VMOVDQU64 swap64+32(SB), Y3
     VPERMI2Q Y0, Y0, Y1
     VPERMI2Q Y2, Y2, Y3
     vpmaxu128(X1, X3, X0, X2, K1, K2, R8, R9, R10, DI)

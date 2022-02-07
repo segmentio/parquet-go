@@ -57,15 +57,15 @@ loop128:
 
     VPADDQ Z1, Z0, Z0
 
-    VMOVDQU64 indexes64+0(SB), Z1
+    VMOVDQU64 swap64+0(SB), Z1
     VPERMI2Q Z0, Z0, Z1
     VPADDQ Y1, Y0, Y0
 
-    VMOVDQU64 indexes64+32(SB), Y1
+    VMOVDQU64 swap64+32(SB), Y1
     VPERMI2Q Y0, Y0, Y1
     VPADDQ X1, X0, X0
 
-    VMOVDQU64 indexes64+48(SB), X1
+    VMOVDQU64 swap64+48(SB), X1
     VPERMI2Q X0, X0, X1
     VPEXTRQ $1, X1, R12
     VZEROUPPER
@@ -132,22 +132,22 @@ loop32:
     CMPQ SI, DI
     JNE loop32
 
-    VMOVDQU32 indexes32+0(SB), Z1
-    VMOVDQU32 indexes32+0(SB), Z2
+    VMOVDQU32 swap32+0(SB), Z1
+    VMOVDQU32 swap32+0(SB), Z2
     VPERMI2D Z0, Z0, Z1
     VPERMI2D Z3, Z3, Z2
     VPMINSD Y1, Y0, Y0
     VPMAXSD Y2, Y3, Y3
 
-    VMOVDQU32 indexes32+32(SB), Y1
-    VMOVDQU32 indexes32+32(SB), Y2
+    VMOVDQU32 swap32+32(SB), Y1
+    VMOVDQU32 swap32+32(SB), Y2
     VPERMI2D Y0, Y0, Y1
     VPERMI2D Y3, Y3, Y2
     VPMINSD X1, X0, X0
     VPMAXSD X2, X3, X3
 
-    VMOVDQU32 indexes32+48(SB), X1
-    VMOVDQU32 indexes32+48(SB), X2
+    VMOVDQU32 swap32+48(SB), X1
+    VMOVDQU32 swap32+48(SB), X2
     VPERMI2D X0, X0, X1
     VPERMI2D X3, X3, X2
     VPMINSD X1, X0, X0
@@ -216,22 +216,22 @@ loop16:
     CMPQ SI, DI
     JNE loop16
 
-    VMOVDQU32 indexes32+0(SB), Z1
-    VMOVDQU32 indexes32+0(SB), Z2
+    VMOVDQU32 swap32+0(SB), Z1
+    VMOVDQU32 swap32+0(SB), Z2
     VPERMI2D Z0, Z0, Z1
     VPERMI2D Z3, Z3, Z2
     VPMINSQ Y1, Y0, Y0
     VPMAXSQ Y2, Y3, Y3
 
-    VMOVDQU32 indexes32+32(SB), Y1
-    VMOVDQU32 indexes32+32(SB), Y2
+    VMOVDQU32 swap32+32(SB), Y1
+    VMOVDQU32 swap32+32(SB), Y2
     VPERMI2D Y0, Y0, Y1
     VPERMI2D Y3, Y3, Y2
     VPMINSQ X1, X0, X0
     VPMAXSQ X2, X3, X3
 
-    VMOVDQU32 indexes32+48(SB), X1
-    VMOVDQU32 indexes32+48(SB), X2
+    VMOVDQU32 swap32+48(SB), X1
+    VMOVDQU32 swap32+48(SB), X2
     VPERMI2D X0, X0, X1
     VPERMI2D X3, X3, X2
     VPMINSQ X1, X0, X0
@@ -291,22 +291,22 @@ loop32:
     CMPQ SI, DI
     JNE loop32
 
-    VMOVDQU32 indexes32+0(SB), Z1
-    VMOVDQU32 indexes32+0(SB), Z2
+    VMOVDQU32 swap32+0(SB), Z1
+    VMOVDQU32 swap32+0(SB), Z2
     VPERMI2D Z0, Z0, Z1
     VPERMI2D Z3, Z3, Z2
     VPMINUD Y1, Y0, Y0
     VPMAXUD Y2, Y3, Y3
 
-    VMOVDQU32 indexes32+32(SB), Y1
-    VMOVDQU32 indexes32+32(SB), Y2
+    VMOVDQU32 swap32+32(SB), Y1
+    VMOVDQU32 swap32+32(SB), Y2
     VPERMI2D Y0, Y0, Y1
     VPERMI2D Y3, Y3, Y2
     VPMINUD X1, X0, X0
     VPMAXUD X2, X3, X3
 
-    VMOVDQU32 indexes32+48(SB), X1
-    VMOVDQU32 indexes32+48(SB), X2
+    VMOVDQU32 swap32+48(SB), X1
+    VMOVDQU32 swap32+48(SB), X2
     VPERMI2D X0, X0, X1
     VPERMI2D X3, X3, X2
     VPMINUD X1, X0, X0
@@ -375,22 +375,22 @@ loop16:
     CMPQ SI, DI
     JNE loop16
 
-    VMOVDQU32 indexes32+0(SB), Z1
-    VMOVDQU32 indexes32+0(SB), Z2
+    VMOVDQU32 swap32+0(SB), Z1
+    VMOVDQU32 swap32+0(SB), Z2
     VPERMI2D Z0, Z0, Z1
     VPERMI2D Z3, Z3, Z2
     VPMINUQ Y1, Y0, Y0
     VPMAXUQ Y2, Y3, Y3
 
-    VMOVDQU32 indexes32+32(SB), Y1
-    VMOVDQU32 indexes32+32(SB), Y2
+    VMOVDQU32 swap32+32(SB), Y1
+    VMOVDQU32 swap32+32(SB), Y2
     VPERMI2D Y0, Y0, Y1
     VPERMI2D Y3, Y3, Y2
     VPMINUQ X1, X0, X0
     VPMAXUQ X2, X3, X3
 
-    VMOVDQU32 indexes32+48(SB), X1
-    VMOVDQU32 indexes32+48(SB), X2
+    VMOVDQU32 swap32+48(SB), X1
+    VMOVDQU32 swap32+48(SB), X2
     VPERMI2D X0, X0, X1
     VPERMI2D X3, X3, X2
     VPMINUQ X1, X0, X0
@@ -454,22 +454,22 @@ loop32:
     CMPQ SI, DI
     JNE loop32
 
-    VMOVDQU32 indexes32+0(SB), Z1
-    VMOVDQU32 indexes32+0(SB), Z2
+    VMOVDQU32 swap32+0(SB), Z1
+    VMOVDQU32 swap32+0(SB), Z2
     VPERMI2D Z0, Z0, Z1
     VPERMI2D Z3, Z3, Z2
     VMINPS Y1, Y0, Y0
     VMAXPS Y2, Y3, Y3
 
-    VMOVDQU32 indexes32+32(SB), Y1
-    VMOVDQU32 indexes32+32(SB), Y2
+    VMOVDQU32 swap32+32(SB), Y1
+    VMOVDQU32 swap32+32(SB), Y2
     VPERMI2D Y0, Y0, Y1
     VPERMI2D Y3, Y3, Y2
     VMINPS X1, X0, X0
     VMAXPS X2, X3, X3
 
-    VMOVDQU32 indexes32+48(SB), X1
-    VMOVDQU32 indexes32+48(SB), X2
+    VMOVDQU32 swap32+48(SB), X1
+    VMOVDQU32 swap32+48(SB), X2
     VPERMI2D X0, X0, X1
     VPERMI2D X3, X3, X2
     VMINPS X1, X0, X0
@@ -551,22 +551,22 @@ loop16:
     CMPQ SI, DI
     JNE loop16
 
-    VMOVDQU64 indexes32+0(SB), Z1
-    VMOVDQU64 indexes32+0(SB), Z2
+    VMOVDQU64 swap32+0(SB), Z1
+    VMOVDQU64 swap32+0(SB), Z2
     VPERMI2D Z0, Z0, Z1
     VPERMI2D Z3, Z3, Z2
     VMINPD Y1, Y0, Y0
     VMAXPD Y2, Y3, Y3
 
-    VMOVDQU64 indexes32+32(SB), Y1
-    VMOVDQU64 indexes32+32(SB), Y2
+    VMOVDQU64 swap32+32(SB), Y1
+    VMOVDQU64 swap32+32(SB), Y2
     VPERMI2D Y0, Y0, Y1
     VPERMI2D Y3, Y3, Y2
     VMINPD X1, X0, X0
     VMAXPD X2, X3, X3
 
-    VMOVDQU64 indexes32+48(SB), X1
-    VMOVDQU64 indexes32+48(SB), X2
+    VMOVDQU64 swap32+48(SB), X1
+    VMOVDQU64 swap32+48(SB), X2
     VPERMI2D X0, X0, X1
     VPERMI2D X3, X3, X2
     VMINPD X1, X0, X0
