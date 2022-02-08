@@ -15,7 +15,11 @@ func OrderOfBool(data []bool) int {
 		if data[0] { // true => false: descending
 			k = -1
 			i = strakeOfTrue(data)
-			i += strakeOfFalse(data[i:])
+			if i == len(data) {
+				k = +1
+			} else {
+				i += strakeOfFalse(data[i:])
+			}
 		} else { // false => true: ascending
 			k = +1
 			i = strakeOfFalse(data)
@@ -116,7 +120,7 @@ func OrderOfBytes(data [][]byte) int {
 	if len(data) == 1 {
 		return 1
 	}
-	data = skipBytesEqual(data[1:], data[0])
+	data = skipBytesStrake(data)
 	if len(data) < 2 {
 		return 1
 	}
@@ -134,13 +138,13 @@ func OrderOfBytes(data [][]byte) int {
 	return 0
 }
 
-func skipBytesEqual(data [][]byte, value []byte) [][]byte {
-	for i := range data {
-		if !bytes.Equal(data[i], value) {
-			return data[i:]
+func skipBytesStrake(data [][]byte) [][]byte {
+	for i := 1; i < len(data); i++ {
+		if !bytes.Equal(data[i], data[0]) {
+			return data[i-1:]
 		}
 	}
-	return nil
+	return data[len(data)-1:]
 }
 
 func bytesAreInAscendingOrder(data [][]byte) bool {
