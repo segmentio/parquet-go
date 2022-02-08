@@ -31,7 +31,7 @@ TEXT ·countByte(SB), NOSPLIT, $0-40
     SHRQ $8, DX
     SHLQ $8, DX
     ADDQ AX, DX
-    VPBROADCASTB value+24(FP), Z0
+    VPBROADCASTB BX, Z0
 loopAVX512:
     VMOVDQU64 (AX), Z1
     VMOVDQU64 64(AX), Z2
