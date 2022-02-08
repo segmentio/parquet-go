@@ -3,13 +3,13 @@ package bits
 import "bytes"
 
 func OrderOfBool(data []bool) int {
-	k := 0
-
 	switch len(data) {
 	case 0:
+		return 0
 	case 1:
-		k = +1
+		return 1
 	default:
+		k := 0
 		i := 0
 
 		if data[0] { // true => false: descending
@@ -25,81 +25,88 @@ func OrderOfBool(data []bool) int {
 		if i != len(data) {
 			k = 0
 		}
+		return k
 	}
+}
 
-	return k
+func strakeOfTrue(data []bool) int {
+	if i := bytes.IndexByte(BoolToBytes(data), 0); i >= 0 {
+		return i
+	}
+	return len(data)
+}
+
+func strakeOfFalse(data []bool) int {
+	if i := bytes.IndexByte(BoolToBytes(data), 1); i >= 0 {
+		return i
+	}
+	return len(data)
 }
 
 func OrderOfInt32(data []int32) int {
-	if len(data) > 0 {
-		if int32AreInAscendingOrder(data) {
-			return +1
-		}
-		if int32AreInDescendingOrder(data) {
-			return -1
-		}
+	switch len(data) {
+	case 0:
+		return 0
+	case 1:
+		return 1
+	default:
+		return orderOfInt32(data)
 	}
-	return 0
 }
 
 func OrderOfInt64(data []int64) int {
-	if len(data) > 0 {
-		if int64AreInAscendingOrder(data) {
-			return +1
-		}
-		if int64AreInDescendingOrder(data) {
-			return -1
-		}
+	switch len(data) {
+	case 0:
+		return 0
+	case 1:
+		return 1
+	default:
+		return orderOfInt64(data)
 	}
-	return 0
 }
 
 func OrderOfUint32(data []uint32) int {
-	if len(data) > 0 {
-		if uint32AreInAscendingOrder(data) {
-			return +1
-		}
-		if uint32AreInDescendingOrder(data) {
-			return -1
-		}
+	switch len(data) {
+	case 0:
+		return 0
+	case 1:
+		return 1
+	default:
+		return orderOfUint32(data)
 	}
-	return 0
 }
 
 func OrderOfUint64(data []uint64) int {
-	if len(data) > 0 {
-		if uint64AreInAscendingOrder(data) {
-			return +1
-		}
-		if uint64AreInDescendingOrder(data) {
-			return -1
-		}
+	switch len(data) {
+	case 0:
+		return 0
+	case 1:
+		return 1
+	default:
+		return orderOfUint64(data)
 	}
-	return 0
 }
 
 func OrderOfFloat32(data []float32) int {
-	if len(data) > 0 {
-		if float32AreInAscendingOrder(data) {
-			return +1
-		}
-		if float32AreInDescendingOrder(data) {
-			return -1
-		}
+	switch len(data) {
+	case 0:
+		return 0
+	case 1:
+		return 1
+	default:
+		return orderOfFloat32(data)
 	}
-	return 0
 }
 
 func OrderOfFloat64(data []float64) int {
-	if len(data) > 0 {
-		if float64AreInAscendingOrder(data) {
-			return +1
-		}
-		if float64AreInDescendingOrder(data) {
-			return -1
-		}
+	switch len(data) {
+	case 0:
+		return 0
+	case 1:
+		return 1
+	default:
+		return orderOfFloat64(data)
 	}
-	return 0
 }
 
 func OrderOfBytes(data [][]byte) int {
@@ -109,137 +116,47 @@ func OrderOfBytes(data [][]byte) int {
 	if len(data) == 1 {
 		return 1
 	}
-	k := bytes.Compare(data[len(data)-2], data[len(data)-1])
-	for i := len(data) - 2; i > 0; i-- {
-		if bytes.Compare(data[i-1], data[i]) != k {
-			return 0
+	data = skipBytesEqual(data[1:], data[0])
+	if len(data) < 2 {
+		return 1
+	}
+	ordering := bytes.Compare(data[0], data[1])
+	switch {
+	case ordering > 0:
+		if bytesAreInAscendingOrder(data[1:]) {
+			return +1
+		}
+	case ordering < 0:
+		if bytesAreInDescendingOrder(data[1:]) {
+			return -1
 		}
 	}
-	return k
+	return 0
 }
 
-func strakeOfTrue(data []bool) int {
+func skipBytesEqual(data [][]byte, value []byte) [][]byte {
 	for i := range data {
-		if !data[i] {
-			return i
+		if !bytes.Equal(data[i], value) {
+			return data[i:]
 		}
 	}
-	return len(data)
+	return nil
 }
 
-func strakeOfFalse(data []bool) int {
-	for i := range data {
-		if data[i] {
-			return i
-		}
-	}
-	return len(data)
-}
-
-// generics please! :'(
-
-func int32AreInAscendingOrder(data []int32) bool {
+func bytesAreInAscendingOrder(data [][]byte) bool {
 	for i := len(data) - 1; i > 0; i-- {
-		if data[i-1] > data[i] {
+		k := bytes.Compare(data[i-1], data[i])
+		if k > 0 {
 			return false
 		}
 	}
 	return true
 }
 
-func int32AreInDescendingOrder(data []int32) bool {
+func bytesAreInDescendingOrder(data [][]byte) bool {
 	for i := len(data) - 1; i > 0; i-- {
-		if data[i-1] < data[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func int64AreInAscendingOrder(data []int64) bool {
-	for i := len(data) - 1; i > 0; i-- {
-		if data[i-1] > data[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func int64AreInDescendingOrder(data []int64) bool {
-	for i := len(data) - 1; i > 0; i-- {
-		if data[i-1] < data[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func uint32AreInAscendingOrder(data []uint32) bool {
-	for i := len(data) - 1; i > 0; i-- {
-		if data[i-1] > data[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func uint32AreInDescendingOrder(data []uint32) bool {
-	for i := len(data) - 1; i > 0; i-- {
-		if data[i-1] < data[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func uint64AreInAscendingOrder(data []uint64) bool {
-	for i := len(data) - 1; i > 0; i-- {
-		if data[i-1] > data[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func uint64AreInDescendingOrder(data []uint64) bool {
-	for i := len(data) - 1; i > 0; i-- {
-		if data[i-1] < data[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func float32AreInAscendingOrder(data []float32) bool {
-	for i := len(data) - 1; i > 0; i-- {
-		if data[i-1] > data[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func float32AreInDescendingOrder(data []float32) bool {
-	for i := len(data) - 1; i > 0; i-- {
-		if data[i-1] < data[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func float64AreInAscendingOrder(data []float64) bool {
-	for i := len(data) - 1; i > 0; i-- {
-		if data[i-1] > data[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func float64AreInDescendingOrder(data []float64) bool {
-	for i := len(data) - 1; i > 0; i-- {
-		if data[i-1] < data[i] {
+		k := bytes.Compare(data[i-1], data[i])
+		if k < 0 {
 			return false
 		}
 	}

@@ -1,6 +1,7 @@
 package bits_test
 
 import (
+	"bytes"
 	"sort"
 	"testing"
 
@@ -48,6 +49,12 @@ type float64Order []float64
 func (v float64Order) Len() int           { return len(v) }
 func (v float64Order) Less(i, j int) bool { return v[i] < v[j] }
 func (v float64Order) Swap(i, j int)      { v[i], v[j] = v[j], v[i] }
+
+type bytesOrder [][]byte
+
+func (v bytesOrder) Len() int           { return len(v) }
+func (v bytesOrder) Less(i, j int) bool { return bytes.Compare(v[i], v[j]) < 0 }
+func (v bytesOrder) Swap(i, j int)      { v[i], v[j] = v[j], v[i] }
 
 const (
 	ascending  = "ascending"
@@ -265,6 +272,33 @@ func TestOrderOfFloat64(t *testing.T) {
 	}
 }
 
+func TestOrderOfBytes(t *testing.T) {
+	check := func(values [][]byte) bool {
+		return checkOrdering(t, bytesOrder(values), bits.OrderOfBytes(values))
+	}
+	err := quickCheck(func(values [][16]byte) bool {
+		slices := make([][]byte, len(values))
+		for i, v := range values {
+			slices[i] = v[:]
+		}
+		if !check(slices) {
+			return false
+		}
+		sort.Sort(bytesOrder(slices))
+		if !check(slices) {
+			return false
+		}
+		sort.Sort(sort.Reverse(bytesOrder(slices)))
+		if !check(slices) {
+			return false
+		}
+		return true
+	})
+	if err != nil {
+		t.Error(err)
+	}
+}
+
 func BenchmarkOrderOfBool(b *testing.B) {
 	forEachBenchmarkBufferSize(b, func(b *testing.B, bufferSize int) {
 		values := make([]bool, bufferSize/1)
@@ -324,6 +358,19 @@ func BenchmarkOrderOfFloat64(b *testing.B) {
 		values := make([]float64, bufferSize/1)
 		for i := 0; i < b.N; i++ {
 			bits.OrderOfFloat64(values)
+		}
+	})
+}
+
+func BenchmarkOrderOfBytes(b *testing.B) {
+	forEachBenchmarkBufferSize(b, func(b *testing.B, bufferSize int) {
+		data := make([]byte, bufferSize)
+		values := make([][]byte, len(data)/16)
+		for i := range values {
+			values[i] = data[i*16 : (i+1)*16]
+		}
+		for i := 0; i < b.N; i++ {
+			bits.OrderOfBytes(values)
 		}
 	})
 }
