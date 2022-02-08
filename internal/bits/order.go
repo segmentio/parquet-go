@@ -5,15 +5,19 @@ import "bytes"
 func OrderOfBool(data []bool) int {
 	k := 0
 
-	if len(data) > 0 {
+	switch len(data) {
+	case 0:
+	case 1:
+		k = +1
+	default:
 		i := 0
 
 		if data[0] { // true => false: descending
-			k = +1
+			k = -1
 			i = strakeOfTrue(data)
 			i += strakeOfFalse(data[i:])
 		} else { // false => true: ascending
-			k = -1
+			k = +1
 			i = strakeOfFalse(data)
 			i += strakeOfTrue(data[i:])
 		}
@@ -115,15 +119,19 @@ func OrderOfBytes(data [][]byte) int {
 }
 
 func strakeOfTrue(data []bool) int {
-	if i := bytes.IndexByte(BoolToBytes(data), 0); i >= 0 {
-		return i
+	for i := range data {
+		if !data[i] {
+			return i
+		}
 	}
 	return len(data)
 }
 
 func strakeOfFalse(data []bool) int {
-	if i := bytes.IndexByte(BoolToBytes(data), 1); i >= 0 {
-		return i
+	for i := range data {
+		if data[i] {
+			return i
+		}
 	}
 	return len(data)
 }
