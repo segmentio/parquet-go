@@ -46,7 +46,7 @@
 //
 // The bit mask is used to merge the results of the "greater than" and "equal"
 // comparison that are performed on each lane of maximum vectors. The upper bits
-// are used to compute results of the operation to determaxes which of the pairs
+// are used to compute results of the operation to determine which of the pairs
 // of quad words representing the 128 bits elements are the maximums.
 #define vpmaxu128mask(M) MOVQ $0b10101010, M
 
