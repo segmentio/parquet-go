@@ -16,7 +16,7 @@
 // overwriting the inputs. `srcValues` and `srcIndexes` are read-only
 // parameters.
 //
-// At a high level, for two pairs of quard words forming two 128 bits values
+// At a high level, for two pairs of quad words forming two 128 bits values
 // A and B, the test implemented by this macro is:
 //
 //   A[1] < B[1] || (A[1] == B[1] && A[0] < B[0])

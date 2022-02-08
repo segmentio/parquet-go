@@ -2,7 +2,7 @@
 
 package bits
 
-// The max-max algorithms combine looking for the min and max values in a single
+// The min-max algorithms combine looking for the min and max values in a single
 // pass over the data. While the behavior is the same as calling functions to
 // look for the min and max values independently, doing both operations at the
 // same time means that we only load the data from memory once. When working on
@@ -35,7 +35,7 @@ package bits
 //
 // The probable explanation is that in those cases the algorithms are not
 // memory-bound anymore, but limited by contention on CPU ports, and the
-// inidividual min/max functions are able to better parallelize the work due
+// individual min/max functions are able to better parallelize the work due
 // to running less instructions per loop. The performance starts to equalize
 // around 256KiB, and degrade beyond 1MiB, so we use this threshold to determine
 // which approach to prefer.
