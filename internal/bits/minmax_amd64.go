@@ -13,10 +13,10 @@ package bits
 // the min-max search, compared to calling the min and max functions separately:
 //
 // name                 old time/op    new time/op    delta
-// MinMaxInt64/10240KB     590µs ±15%     330µs ±10%  -44.01%  (p=0.000 n=10+10)
+// MinMaxInt64/10240KiB    590µs ±15%     330µs ±10%  -44.01%  (p=0.000 n=10+10)
 //
 // name                 old speed      new speed      delta
-// MinMaxInt64/10240KB  17.9GB/s ±13%  31.8GB/s ±11%  +78.13%  (p=0.000 n=10+10)
+// MinMaxInt64/10240KiB 17.9GB/s ±13%  31.8GB/s ±11%  +78.13%  (p=0.000 n=10+10)
 //
 // As expected, since the functions are memory-bound in those cases, and load
 // half as much data, we see significant improvements. The gains are not 2x because
@@ -24,14 +24,14 @@ package bits
 // on CPU ports.
 //
 //
-// As all things are always trade offs, using min/max functions independently
-// actually yields better throughput when the data resides in CPU caches:
+// Optimizations being trade offs, using min/max functions independently appears
+// to yield better throughput when the data resides in CPU caches:
 //
 // name             old time/op    new time/op    delta
-// MinMaxInt64/4KB    46.2ns ± 1%    52.1ns ± 0%  +12.65%  (p=0.000 n=10+10)
+// MinMaxInt64/4KiB   52.1ns ± 0%    46.2ns ± 1%  -12.65%  (p=0.000 n=10+10)
 //
 // name             old speed      new speed      delta
-// MinMaxInt64/4KB  88.6GB/s ± 1%  78.6GB/s ± 0%  -11.23%  (p=0.000 n=10+10)
+// MinMaxInt64/4KiB 78.6GB/s ± 0%  88.6GB/s ± 1%  +11.23%  (p=0.000 n=10+10)
 //
 // The probable explanation is that in those cases the algorithms are not
 // memory-bound anymore, but limited by contention on CPU ports, and the
