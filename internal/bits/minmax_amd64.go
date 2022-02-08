@@ -19,7 +19,7 @@ package bits
 // MinMaxInt64/10240KB  17.9GB/s ±13%  31.8GB/s ±11%  +78.13%  (p=0.000 n=10+10)
 //
 // As expected, since the functions are memory-bound in those cases, and load
-// half as much data, we significant improvements. The gains are not 2x because
+// half as much data, we see significant improvements. The gains are not 2x because
 // running more AVX-512 instructions in the tight loops causes more contention
 // on CPU ports.
 //
