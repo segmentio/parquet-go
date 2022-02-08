@@ -46,12 +46,20 @@ func Uint64ToBytes(data []uint64) []byte {
 	return unsafe.Slice(*(**byte)(unsafe.Pointer(&data)), 8*len(data))
 }
 
+func Uint128ToBytes(data [][16]byte) []byte {
+	return unsafe.Slice(*(**byte)(unsafe.Pointer(&data)), 16*len(data))
+}
+
 func Uint32ToInt32(data []uint32) []int32 {
 	return unsafe.Slice(*(**int32)(unsafe.Pointer(&data)), len(data))
 }
 
 func Uint64ToInt64(data []uint64) []int64 {
 	return unsafe.Slice(*(**int64)(unsafe.Pointer(&data)), len(data))
+}
+
+func BytesToBool(data []byte) []bool {
+	return unsafe.Slice(*(**bool)(unsafe.Pointer(&data)), len(data))
 }
 
 func BytesToInt8(data []byte) []int8 {
@@ -78,16 +86,16 @@ func BytesToUint64(data []byte) []uint64 {
 	return unsafe.Slice(*(**uint64)(unsafe.Pointer(&data)), len(data)/8)
 }
 
+func BytesToUint128(data []byte) [][16]byte {
+	return unsafe.Slice(*(**[16]byte)(unsafe.Pointer(&data)), len(data)/16)
+}
+
 func BytesToFloat32(data []byte) []float32 {
 	return unsafe.Slice(*(**float32)(unsafe.Pointer(&data)), len(data)/4)
 }
 
 func BytesToFloat64(data []byte) []float64 {
 	return unsafe.Slice(*(**float64)(unsafe.Pointer(&data)), len(data)/8)
-}
-
-func BytesToBE128(data []byte) [][16]byte {
-	return unsafe.Slice(*(**[16]byte)(unsafe.Pointer(&data)), len(data)/16)
 }
 
 func BytesToString(data []byte) string {

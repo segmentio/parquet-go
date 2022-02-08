@@ -228,7 +228,7 @@ func errPageBoundsOutOfRange(i, j, n int64) error {
 }
 
 func countLevelsEqual(levels []int8, value int8) int {
-	return bytes.Count(bits.Int8ToBytes(levels), []byte{byte(value)})
+	return bits.CountByte(bits.Int8ToBytes(levels), byte(value))
 }
 
 func countLevelsNotEqual(levels []int8, value int8) int {
