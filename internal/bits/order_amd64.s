@@ -36,56 +36,60 @@ GLOBL shift1x64<>(SB), RODATA|NOPTR, $64
 
 // func orderOfInt32(data []int32) int
 TEXT ·orderOfInt32(SB), NOSPLIT, $-32
-    MOVQ data_base+0(FP), AX
-    MOVQ data_len+8(FP), CX
+    MOVQ data_base+0(FP), R8
+    MOVQ data_len+8(FP), R9
     XORQ SI, SI
     XORQ DI, DI
 
     CMPB ·hasAVX512(SB), $0
     JE test
 
-    CMPQ CX, $16
+    CMPQ R9, $16
     JB test
 
-    MOVQ CX, DX
-    SHRQ $4, DX
-    SHLQ $4, DX
-    DECQ CX
+    XORQ DX, DX
+    MOVQ R9, AX
+    SHRQ $4, AX
+    SHLQ $4, AX
+    MOVQ $15, CX
+    IDIVQ CX
+    IMULQ $15, AX
+    DECQ R9
 
     VMOVDQU32 shift1x32<>(SB), Z2
     KXORW K2, K2, K2
-testAscending16:
-    VMOVDQU32 (AX)(SI*4), Z0
+testAscending15:
+    VMOVDQU32 (R8)(SI*4), Z0
     VMOVDQU32 Z2, Z1
     VPERMI2D Z0, Z0, Z1
     VPCMPD $2, Z1, Z0, K1
     KORTESTW K2, K1
-    JNC testDescending16
-    ADDQ $16, SI
-    CMPQ SI, DX
-    JNE testAscending16
+    JNC testDescending15
+    ADDQ $15, SI
+    CMPQ SI, AX
+    JNE testAscending15
     VZEROUPPER
     JMP testAscending
-testDescending16:
-    VMOVDQU32 (AX)(DI*4), Z0
+testDescending15:
+    VMOVDQU32 (R8)(DI*4), Z0
     VMOVDQU32 Z2, Z1
     VPERMI2D Z0, Z0, Z1
     VPCMPD $5, Z1, Z0, K1
     KORTESTW K2, K1
-    JNC undefined16
-    ADDQ $16, DI
-    CMPQ DI, DX
-    JNE testDescending16
+    JNC undefined15
+    ADDQ $15, DI
+    CMPQ DI, AX
+    JNE testDescending15
     VZEROUPPER
     JMP testDescending
 
 test:
-    DECQ CX
+    DECQ R9
 testAscending:
-    CMPQ SI, CX
+    CMPQ SI, R9
     JAE ascending
-    MOVL (AX)(SI*4), BX
-    MOVL 4(AX)(SI*4), DX
+    MOVL (R8)(SI*4), BX
+    MOVL 4(R8)(SI*4), DX
     INCQ SI
     CMPL BX, DX
     JLE testAscending
@@ -94,10 +98,10 @@ ascending:
     MOVQ $ASCENDING, ret+24(FP)
     RET
 testDescending:
-    CMPQ DI, CX
+    CMPQ DI, R9
     JAE descending
-    MOVL (AX)(DI*4), BX
-    MOVL 4(AX)(DI*4), DX
+    MOVL (R8)(DI*4), BX
+    MOVL 4(R8)(DI*4), DX
     INCQ DI
     CMPL BX, DX
     JGE testDescending
@@ -105,7 +109,7 @@ testDescending:
 descending:
     MOVQ $DESCENDING, ret+24(FP)
     RET
-undefined16:
+undefined15:
     VZEROUPPER
 undefined:
     MOVQ $UNDEFINED, ret+24(FP)
@@ -113,56 +117,60 @@ undefined:
 
 // func orderOfInt64(data []int64) int
 TEXT ·orderOfInt64(SB), NOSPLIT, $-32
-    MOVQ data_base+0(FP), AX
-    MOVQ data_len+8(FP), CX
+    MOVQ data_base+0(FP), R8
+    MOVQ data_len+8(FP), R9
     XORQ SI, SI
     XORQ DI, DI
 
     CMPB ·hasAVX512(SB), $0
     JE test
 
-    CMPQ CX, $8
+    CMPQ R9, $8
     JB test
 
-    MOVQ CX, DX
-    SHRQ $3, DX
-    SHLQ $3, DX
-    DECQ CX
+    XORQ DX, DX
+    MOVQ R9, AX
+    SHRQ $3, AX
+    SHLQ $3, AX
+    MOVQ $7, CX
+    IDIVQ CX
+    IMULQ $7, AX
+    DECQ R9
 
     VMOVDQU64 shift1x64<>(SB), Z2
     KXORB K2, K2, K2
-testAscending8:
-    VMOVDQU64 (AX)(SI*8), Z0
+testAscending7:
+    VMOVDQU64 (R8)(SI*8), Z0
     VMOVDQU64 Z2, Z1
     VPERMI2Q Z0, Z0, Z1
     VPCMPQ $2, Z1, Z0, K1
     KORTESTB K2, K1
-    JNC testDescending8
-    ADDQ $8, SI
-    CMPQ SI, DX
-    JNE testAscending8
+    JNC testDescending7
+    ADDQ $7, SI
+    CMPQ SI, AX
+    JNE testAscending7
     VZEROUPPER
     JMP testAscending
-testDescending8:
-    VMOVDQU64 (AX)(DI*8), Z0
+testDescending7:
+    VMOVDQU64 (R8)(DI*8), Z0
     VMOVDQU64 Z2, Z1
     VPERMI2Q Z0, Z0, Z1
     VPCMPQ $5, Z1, Z0, K1
     KORTESTB K2, K1
-    JNC undefined8
-    ADDQ $8, DI
-    CMPQ DI, DX
-    JNE testDescending8
+    JNC undefined7
+    ADDQ $7, DI
+    CMPQ DI, AX
+    JNE testDescending7
     VZEROUPPER
     JMP testDescending
 
 test:
-    DECQ CX
+    DECQ R9
 testAscending:
-    CMPQ SI, CX
+    CMPQ SI, R9
     JAE ascending
-    MOVQ (AX)(SI*8), BX
-    MOVQ 8(AX)(SI*8), DX
+    MOVQ (R8)(SI*8), BX
+    MOVQ 8(R8)(SI*8), DX
     INCQ SI
     CMPQ BX, DX
     JLE testAscending
@@ -171,10 +179,10 @@ ascending:
     MOVQ $ASCENDING, ret+24(FP)
     RET
 testDescending:
-    CMPQ DI, CX
+    CMPQ DI, R9
     JAE descending
-    MOVQ (AX)(DI*8), BX
-    MOVQ 8(AX)(DI*8), DX
+    MOVQ (R8)(DI*8), BX
+    MOVQ 8(R8)(DI*8), DX
     INCQ DI
     CMPQ BX, DX
     JGE testDescending
@@ -182,7 +190,7 @@ testDescending:
 descending:
     MOVQ $DESCENDING, ret+24(FP)
     RET
-undefined8:
+undefined7:
     VZEROUPPER
 undefined:
     MOVQ $UNDEFINED, ret+24(FP)
@@ -190,56 +198,60 @@ undefined:
 
 // func orderOfUint32(data []uint32) int
 TEXT ·orderOfUint32(SB), NOSPLIT, $-32
-    MOVQ data_base+0(FP), AX
-    MOVQ data_len+8(FP), CX
+    MOVQ data_base+0(FP), R8
+    MOVQ data_len+8(FP), R9
     XORQ SI, SI
     XORQ DI, DI
 
     CMPB ·hasAVX512(SB), $0
     JE test
 
-    CMPQ CX, $16
+    CMPQ R9, $16
     JB test
 
-    MOVQ CX, DX
-    SHRQ $4, DX
-    SHLQ $4, DX
-    DECQ CX
+    XORQ DX, DX
+    MOVQ R9, AX
+    SHRQ $4, AX
+    SHLQ $4, AX
+    MOVQ $15, CX
+    IDIVQ CX
+    IMULQ $15, AX
+    DECQ R9
 
     VMOVDQU32 shift1x32<>(SB), Z2
     KXORW K2, K2, K2
-testAscending16:
-    VMOVDQU32 (AX)(SI*4), Z0
+testAscending15:
+    VMOVDQU32 (R8)(SI*4), Z0
     VMOVDQU32 Z2, Z1
     VPERMI2D Z0, Z0, Z1
     VPCMPUD $2, Z1, Z0, K1
     KORTESTW K2, K1
-    JNC testDescending16
-    ADDQ $16, SI
-    CMPQ SI, DX
-    JNE testAscending16
+    JNC testDescending15
+    ADDQ $15, SI
+    CMPQ SI, AX
+    JNE testAscending15
     VZEROUPPER
     JMP testAscending
-testDescending16:
-    VMOVDQU32 (AX)(DI*4), Z0
+testDescending15:
+    VMOVDQU32 (R8)(DI*4), Z0
     VMOVDQU32 Z2, Z1
     VPERMI2D Z0, Z0, Z1
     VPCMPUD $5, Z1, Z0, K1
     KORTESTW K2, K1
-    JNC undefined16
-    ADDQ $16, DI
-    CMPQ DI, DX
-    JNE testDescending16
+    JNC undefined15
+    ADDQ $15, DI
+    CMPQ DI, AX
+    JNE testDescending15
     VZEROUPPER
     JMP testDescending
 
 test:
-    DECQ CX
+    DECQ R9
 testAscending:
-    CMPQ SI, CX
+    CMPQ SI, R9
     JAE ascending
-    MOVL (AX)(SI*4), BX
-    MOVL 4(AX)(SI*4), DX
+    MOVL (R8)(SI*4), BX
+    MOVL 4(R8)(SI*4), DX
     INCQ SI
     CMPL BX, DX
     JBE testAscending
@@ -248,10 +260,10 @@ ascending:
     MOVQ $ASCENDING, ret+24(FP)
     RET
 testDescending:
-    CMPQ DI, CX
+    CMPQ DI, R9
     JAE descending
-    MOVL (AX)(DI*4), BX
-    MOVL 4(AX)(DI*4), DX
+    MOVL (R8)(DI*4), BX
+    MOVL 4(R8)(DI*4), DX
     INCQ DI
     CMPL BX, DX
     JAE testDescending
@@ -259,7 +271,7 @@ testDescending:
 descending:
     MOVQ $DESCENDING, ret+24(FP)
     RET
-undefined16:
+undefined15:
     VZEROUPPER
 undefined:
     MOVQ $UNDEFINED, ret+24(FP)
@@ -267,56 +279,60 @@ undefined:
 
 // func orderOfUint64(data []uint64) int
 TEXT ·orderOfUint64(SB), NOSPLIT, $-32
-    MOVQ data_base+0(FP), AX
-    MOVQ data_len+8(FP), CX
+    MOVQ data_base+0(FP), R8
+    MOVQ data_len+8(FP), R9
     XORQ SI, SI
     XORQ DI, DI
 
     CMPB ·hasAVX512(SB), $0
     JE test
 
-    CMPQ CX, $8
+    CMPQ R9, $8
     JB test
 
-    MOVQ CX, DX
-    SHRQ $3, DX
-    SHLQ $3, DX
-    DECQ CX
+    XORQ DX, DX
+    MOVQ R9, AX
+    SHRQ $3, AX
+    SHLQ $3, AX
+    MOVQ $7, CX
+    IDIVQ CX
+    IMULQ $7, AX
+    DECQ R9
 
     VMOVDQU64 shift1x64<>(SB), Z2
     KXORB K2, K2, K2
-testAscending8:
-    VMOVDQU64 (AX)(SI*8), Z0
+testAscending7:
+    VMOVDQU64 (R8)(SI*8), Z0
     VMOVDQU64 Z2, Z1
     VPERMI2Q Z0, Z0, Z1
     VPCMPUQ $2, Z1, Z0, K1
     KORTESTB K2, K1
-    JNC testDescending8
-    ADDQ $8, SI
-    CMPQ SI, DX
-    JNE testAscending8
+    JNC testDescending7
+    ADDQ $7, SI
+    CMPQ SI, AX
+    JNE testAscending7
     VZEROUPPER
     JMP testAscending
-testDescending8:
-    VMOVDQU64 (AX)(DI*8), Z0
+testDescending7:
+    VMOVDQU64 (R8)(DI*8), Z0
     VMOVDQU64 Z2, Z1
     VPERMI2Q Z0, Z0, Z1
     VPCMPUQ $5, Z1, Z0, K1
     KORTESTB K2, K1
-    JNC undefined8
-    ADDQ $8, DI
-    CMPQ DI, DX
-    JNE testDescending8
+    JNC undefined7
+    ADDQ $7, DI
+    CMPQ DI, AX
+    JNE testDescending7
     VZEROUPPER
     JMP testDescending
 
 test:
-    DECQ CX
+    DECQ R9
 testAscending:
-    CMPQ SI, CX
+    CMPQ SI, R9
     JAE ascending
-    MOVQ (AX)(SI*8), BX
-    MOVQ 8(AX)(SI*8), DX
+    MOVQ (R8)(SI*8), BX
+    MOVQ 8(R8)(SI*8), DX
     INCQ SI
     CMPQ BX, DX
     JBE testAscending
@@ -325,10 +341,10 @@ ascending:
     MOVQ $ASCENDING, ret+24(FP)
     RET
 testDescending:
-    CMPQ DI, CX
+    CMPQ DI, R9
     JAE descending
-    MOVQ (AX)(DI*8), BX
-    MOVQ 8(AX)(DI*8), DX
+    MOVQ (R8)(DI*8), BX
+    MOVQ 8(R8)(DI*8), DX
     INCQ DI
     CMPQ BX, DX
     JAE testDescending
@@ -336,7 +352,7 @@ testDescending:
 descending:
     MOVQ $DESCENDING, ret+24(FP)
     RET
-undefined8:
+undefined7:
     VZEROUPPER
 undefined:
     MOVQ $UNDEFINED, ret+24(FP)
@@ -344,56 +360,60 @@ undefined:
 
 // func orderOfFloat32(data []float32) int
 TEXT ·orderOfFloat32(SB), NOSPLIT, $-32
-    MOVQ data_base+0(FP), AX
-    MOVQ data_len+8(FP), CX
+    MOVQ data_base+0(FP), R8
+    MOVQ data_len+8(FP), R9
     XORQ SI, SI
     XORQ DI, DI
 
     CMPB ·hasAVX512(SB), $0
     JE test
 
-    CMPQ CX, $16
+    CMPQ R9, $16
     JB test
 
-    MOVQ CX, DX
-    SHRQ $4, DX
-    SHLQ $4, DX
-    DECQ CX
+    XORQ DX, DX
+    MOVQ R9, AX
+    SHRQ $4, AX
+    SHLQ $4, AX
+    MOVQ $15, CX
+    IDIVQ CX
+    IMULQ $15, AX
+    DECQ R9
 
     VMOVDQU32 shift1x32<>(SB), Z2
     KXORW K2, K2, K2
-testAscending16:
-    VMOVDQU32 (AX)(SI*4), Z0
+testAscending15:
+    VMOVDQU32 (R8)(SI*4), Z0
     VMOVDQU32 Z2, Z1
     VPERMI2D Z0, Z0, Z1
     VCMPPS $2, Z1, Z0, K1
     KORTESTW K2, K1
-    JNC testDescending16
-    ADDQ $16, SI
-    CMPQ SI, DX
-    JNE testAscending16
+    JNC testDescending15
+    ADDQ $15, SI
+    CMPQ SI, AX
+    JNE testAscending15
     VZEROUPPER
     JMP testAscending
-testDescending16:
-    VMOVDQU32 (AX)(DI*4), Z0
+testDescending15:
+    VMOVDQU32 (R8)(DI*4), Z0
     VMOVDQU32 Z2, Z1
     VPERMI2D Z0, Z0, Z1
     VCMPPS $5, Z1, Z0, K1
     KORTESTW K2, K1
-    JNC undefined16
-    ADDQ $16, DI
-    CMPQ DI, DX
-    JNE testDescending16
+    JNC undefined15
+    ADDQ $15, DI
+    CMPQ DI, AX
+    JNE testDescending15
     VZEROUPPER
     JMP testDescending
 
 test:
-    DECQ CX
+    DECQ R9
 testAscending:
-    CMPQ SI, CX
+    CMPQ SI, R9
     JAE ascending
-    MOVLQZX (AX)(SI*4), BX
-    MOVLQZX 4(AX)(SI*4), DX
+    MOVLQZX (R8)(SI*4), BX
+    MOVLQZX 4(R8)(SI*4), DX
     INCQ SI
     MOVQ BX, X0
     MOVQ DX, X1
@@ -404,10 +424,10 @@ ascending:
     MOVQ $ASCENDING, ret+24(FP)
     RET
 testDescending:
-    CMPQ DI, CX
+    CMPQ DI, R9
     JAE descending
-    MOVLQZX (AX)(DI*4), BX
-    MOVLQZX 4(AX)(DI*4), DX
+    MOVLQZX (R8)(DI*4), BX
+    MOVLQZX 4(R8)(DI*4), DX
     INCQ DI
     MOVQ BX, X0
     MOVQ DX, X1
@@ -417,7 +437,7 @@ testDescending:
 descending:
     MOVQ $DESCENDING, ret+24(FP)
     RET
-undefined16:
+undefined15:
     VZEROUPPER
 undefined:
     MOVQ $UNDEFINED, ret+24(FP)
@@ -425,56 +445,60 @@ undefined:
 
 // func orderOfFloat64(data []uint64) int
 TEXT ·orderOfFloat64(SB), NOSPLIT, $-32
-    MOVQ data_base+0(FP), AX
-    MOVQ data_len+8(FP), CX
+    MOVQ data_base+0(FP), R8
+    MOVQ data_len+8(FP), R9
     XORQ SI, SI
     XORQ DI, DI
 
     CMPB ·hasAVX512(SB), $0
     JE test
 
-    CMPQ CX, $8
+    CMPQ R9, $8
     JB test
 
-    MOVQ CX, DX
-    SHRQ $3, DX
-    SHLQ $3, DX
-    DECQ CX
+    XORQ DX, DX
+    MOVQ R9, AX
+    SHRQ $3, AX
+    SHLQ $3, AX
+    MOVQ $7, CX
+    IDIVQ CX
+    IMULQ $7, AX
+    DECQ R9
 
     VMOVDQU64 shift1x64<>(SB), Z2
     KXORB K2, K2, K2
-testAscending8:
-    VMOVDQU64 (AX)(SI*8), Z0
+testAscending7:
+    VMOVDQU64 (R8)(SI*8), Z0
     VMOVDQU64 Z2, Z1
     VPERMI2Q Z0, Z0, Z1
     VCMPPD $2, Z1, Z0, K1
     KORTESTB K2, K1
-    JNC testDescending8
-    ADDQ $8, SI
-    CMPQ SI, DX
-    JNE testAscending8
+    JNC testDescending7
+    ADDQ $7, SI
+    CMPQ SI, AX
+    JNE testAscending7
     VZEROUPPER
     JMP testAscending
-testDescending8:
-    VMOVDQU64 (AX)(DI*8), Z0
+testDescending7:
+    VMOVDQU64 (R8)(DI*8), Z0
     VMOVDQU64 Z2, Z1
     VPERMI2Q Z0, Z0, Z1
     VCMPPD $5, Z1, Z0, K1
     KORTESTB K2, K1
-    JNC undefined8
-    ADDQ $8, DI
-    CMPQ DI, DX
-    JNE testDescending8
+    JNC undefined7
+    ADDQ $7, DI
+    CMPQ DI, AX
+    JNE testDescending7
     VZEROUPPER
     JMP testDescending
 
 test:
-    DECQ CX
+    DECQ R9
 testAscending:
-    CMPQ SI, CX
+    CMPQ SI, R9
     JAE ascending
-    MOVQ (AX)(SI*8), BX
-    MOVQ 8(AX)(SI*8), DX
+    MOVQ (R8)(SI*8), BX
+    MOVQ 8(R8)(SI*8), DX
     INCQ SI
     MOVQ BX, X0
     MOVQ DX, X1
@@ -485,10 +509,10 @@ ascending:
     MOVQ $ASCENDING, ret+24(FP)
     RET
 testDescending:
-    CMPQ DI, CX
+    CMPQ DI, R9
     JAE descending
-    MOVQ (AX)(DI*8), BX
-    MOVQ 8(AX)(DI*8), DX
+    MOVQ (R8)(DI*8), BX
+    MOVQ 8(R8)(DI*8), DX
     INCQ DI
     MOVQ BX, X0
     MOVQ DX, X1
@@ -498,7 +522,7 @@ testDescending:
 descending:
     MOVQ $DESCENDING, ret+24(FP)
     RET
-undefined8:
+undefined7:
     VZEROUPPER
 undefined:
     MOVQ $UNDEFINED, ret+24(FP)

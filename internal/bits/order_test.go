@@ -155,6 +155,21 @@ func TestOrderOfInt32(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+
+	// This extra test validates that out-of-order values at 64 byte boundaries
+	// are properly detected; it tests corner cases of the vectorized code path
+	// which works on 64 bytes per loop iteration.
+	values := []int32{
+		0, 1, 2, 3, 4, 5, 6, 7,
+		8, 9, 10, 11, 12, 13, 14, 15,
+		// 15 > 14, the algorithm must detect that the values are not ordered.
+		14, 17, 18, 19, 20, 21, 22, 23,
+		24, 25, 26, 27, 28, 29, 30, 31,
+	}
+
+	if !check(values) {
+		t.Error("failed due to not checking the connection between sequences of of 16 elements")
+	}
 }
 
 func TestOrderOfInt64(t *testing.T) {
@@ -177,6 +192,17 @@ func TestOrderOfInt64(t *testing.T) {
 	})
 	if err != nil {
 		t.Error(err)
+	}
+
+	values := []int64{
+		0, 1, 2, 3, 4, 5, 6, 7,
+		6, 9, 10, 11, 12, 13, 14, 15,
+		14, 17, 18, 19, 20, 21, 22, 23,
+		24, 25, 26, 27, 28, 29, 30, 31,
+	}
+
+	if !check(values) {
+		t.Error("failed due to not checking the connection between sequences of of 8 elements")
 	}
 }
 
@@ -201,6 +227,17 @@ func TestOrderOfUint32(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+
+	values := []uint32{
+		0, 1, 2, 3, 4, 5, 6, 7,
+		8, 9, 10, 11, 12, 13, 14, 15,
+		14, 17, 18, 19, 20, 21, 22, 23,
+		24, 25, 26, 27, 28, 29, 30, 31,
+	}
+
+	if !check(values) {
+		t.Error("failed due to not checking the connection between sequences of of 16 elements")
+	}
 }
 
 func TestOrderOfUint64(t *testing.T) {
@@ -223,6 +260,17 @@ func TestOrderOfUint64(t *testing.T) {
 	})
 	if err != nil {
 		t.Error(err)
+	}
+
+	values := []uint64{
+		0, 1, 2, 3, 4, 5, 6, 7,
+		6, 9, 10, 11, 12, 13, 14, 15,
+		14, 17, 18, 19, 20, 21, 22, 23,
+		24, 25, 26, 27, 28, 29, 30, 31,
+	}
+
+	if !check(values) {
+		t.Error("failed due to not checking the connection between sequences of of 8 elements")
 	}
 }
 
@@ -247,6 +295,17 @@ func TestOrderOfFloat32(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+
+	values := []float32{
+		0, 1, 2, 3, 4, 5, 6, 7,
+		8, 9, 10, 11, 12, 13, 14, 15,
+		14, 17, 18, 19, 20, 21, 22, 23,
+		24, 25, 26, 27, 28, 29, 30, 31,
+	}
+
+	if !check(values) {
+		t.Error("failed due to not checking the connection between sequences of of 16 elements")
+	}
 }
 
 func TestOrderOfFloat64(t *testing.T) {
@@ -269,6 +328,17 @@ func TestOrderOfFloat64(t *testing.T) {
 	})
 	if err != nil {
 		t.Error(err)
+	}
+
+	values := []float64{
+		0, 1, 2, 3, 4, 5, 6, 7,
+		6, 9, 10, 11, 12, 13, 14, 15,
+		14, 17, 18, 19, 20, 21, 22, 23,
+		24, 25, 26, 27, 28, 29, 30, 31,
+	}
+
+	if !check(values) {
+		t.Error("failed due to not checking the connection between sequences of of 8 elements")
 	}
 }
 
