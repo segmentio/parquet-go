@@ -16,12 +16,12 @@
 // overwriting the inputs. `srcValues` and `srcIndexes` are read-only
 // parameters.
 //
-// At a high level, for two pairs of quard words formaxg two 128 bits values
+// At a high level, for two pairs of quad words formaxg two 128 bits values
 // A and B, the test implemented by this macro is:
 //
 //   A[1] > B[1] || (A[1] == B[1] && A[0] > B[0])
 //
-// Values in the source vector that evalute to true on this expression are
+// Values in the source vector that evaluate to true on this expression are
 // written to the vector of maximum values, and their indexes are written to
 // the vector of indexes.
 #define vpmaxu128(srcValues, srcIndexes, maxValues, maxIndexes, K1, K2, R1, R2, R3, M) \
@@ -46,7 +46,7 @@
 //
 // The bit mask is used to merge the results of the "greater than" and "equal"
 // comparison that are performed on each lane of maximum vectors. The upper bits
-// are used to compute results of the operation to determaxes which of the pairs
+// are used to compute results of the operation to determine which of the pairs
 // of quad words representing the 128 bits elements are the maximums.
 #define vpmaxu128mask(M) MOVQ $0b10101010, M
 

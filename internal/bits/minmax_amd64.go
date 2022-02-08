@@ -2,14 +2,14 @@
 
 package bits
 
-// The max-max algorithms combine looking for the min and max values in a single
+// The min-max algorithms combine looking for the min and max values in a single
 // pass over the data. While the behavior is the same as calling functions to
 // look for the min and max values independently, doing both operations at the
 // same time means that we only load the data from memory once. When working on
 // large arrays the algorithms are limited by memory bandwidth, computing both
 // the min and max together shrinks by half the amount of data read from memory.
 //
-// The following benchmarks results were highlighitng the benefits of combining
+// The following benchmarks results were highlighting the benefits of combining
 // the min-max search, compared to calling the min and max functions separately:
 //
 // name                 old time/op    new time/op    delta
@@ -19,7 +19,7 @@ package bits
 // MinMaxInt64/10240KB  17.9GB/s ±13%  31.8GB/s ±11%  +78.13%  (p=0.000 n=10+10)
 //
 // As expected, since the functions are memory-bound in those cases, and load
-// half as much data, we significant improvements. The gains are not 2x because
+// half as much data, we see significant improvements. The gains are not 2x because
 // running more AVX-512 instructions in the tight loops causes more contention
 // on CPU ports.
 //
@@ -35,7 +35,7 @@ package bits
 //
 // The probable explanation is that in those cases the algorithms are not
 // memory-bound anymore, but limited by contention on CPU ports, and the
-// inidividual min/max functions are able to better parallelize the work due
+// individual min/max functions are able to better parallelize the work due
 // to running less instructions per loop. The performance starts to equalize
 // around 256KiB, and degrade beyond 1MiB, so we use this threshold to determine
 // which approach to prefer.
