@@ -458,7 +458,7 @@ TEXT ·maxBE128(SB), NOSPLIT, $-48
     CMPQ DX, $256
     JB loop
 
-    CMPQ ·hasAVX512(SB), $0
+    CMPQ ·hasAVX512MinMaxBE128(SB), $0
     JB loop
 
     // Z19 holds a vector of the count by which we increment the vectors of
