@@ -22,7 +22,7 @@ TEXT ·countByte(SB), NOSPLIT, $0-40
     XORQ R14, R14
     XORQ R15, R15
 
-    CMPB ·hasAVX512(SB), $0
+    CMPB ·hasAVX512CountByte(SB), $0
     JE initAVX2
 
     CMPQ DX, $256
