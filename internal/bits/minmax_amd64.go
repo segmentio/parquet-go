@@ -9,7 +9,7 @@ package bits
 // large arrays the algorithms are limited by memory bandwidth, computing both
 // the min and max together shrinks by half the amount of data read from memory.
 //
-// The following benchmarks results were highlighitng the benefits of combining
+// The following benchmarks results were highlighting the benefits of combining
 // the min-max search, compared to calling the min and max functions separately:
 //
 // name                 old time/op    new time/op    delta
