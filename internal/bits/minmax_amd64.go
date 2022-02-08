@@ -25,7 +25,7 @@ package bits
 //
 //
 // Optimizations being trade offs, using min/max functions independently appears
-// to yields better throughput when the data resides in CPU caches:
+// to yield better throughput when the data resides in CPU caches:
 //
 // name             old time/op    new time/op    delta
 // MinMaxInt64/4KiB   52.1ns ± 0%    46.2ns ± 1%  -12.65%  (p=0.000 n=10+10)
