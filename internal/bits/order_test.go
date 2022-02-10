@@ -338,7 +338,7 @@ func TestOrderOfFloat64(t *testing.T) {
 	}
 
 	if !check(values) {
-		t.Error("failed due to not checking the connection between sequences of of 8 elements")
+		t.Error("failed due to not checking the connection between sequences of 8 elements")
 	}
 }
 
