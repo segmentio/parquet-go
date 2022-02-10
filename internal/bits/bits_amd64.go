@@ -23,7 +23,7 @@ var hasAVX512MinBool = hasAVX512 &&
 var hasAVX512MaxBool = hasAVX512 &&
 	cpu.X86.HasAVX512BW
 
-// The use AVX-512 instructions in the countByte algorithm relies operations
+// These use AVX-512 instructions in the countByte algorithm relies operations
 // that are avilable in the AVX512BW extension:
 // * VPCMPUB
 // * KMOVQ
