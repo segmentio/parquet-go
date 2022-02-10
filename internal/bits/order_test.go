@@ -168,7 +168,7 @@ func TestOrderOfInt32(t *testing.T) {
 	}
 
 	if !check(values) {
-		t.Error("failed due to not checking the connection between sequences of of 16 elements")
+		t.Error("failed due to not checking the connection between sequences of 16 elements")
 	}
 }
 
