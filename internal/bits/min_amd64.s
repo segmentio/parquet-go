@@ -12,7 +12,7 @@ TEXT ·minBool(SB), NOSPLIT, $-25
     JE false
     XORQ SI, SI
 
-    CMPB ·hasAVX512(SB), $0
+    CMPB ·hasAVX512MinBool(SB), $0
     JE loop
 
     CMPQ CX, $128

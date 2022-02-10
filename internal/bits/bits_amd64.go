@@ -8,3 +8,27 @@ var hasAVX512 = cpu.X86.HasAVX512 &&
 
 var hasAVX512MinMaxBool = hasAVX512 &&
 	cpu.X86.HasAVX512VPOPCNTDQ
+
+// These use AVX-512 instructions in the minBool algorithm relies operations
+// that are avilable in the AVX512BW extension:
+// * VPCMPUB
+// * KMOVQ
+var hasAVX512MinBool = hasAVX512 &&
+	cpu.X86.HasAVX512BW
+
+// These use AVX-512 instructions in the maxBool algorithm relies operations
+// that are avilable in the AVX512BW extension:
+// * VPCMPUB
+// * KMOVQ
+var hasAVX512MaxBool = hasAVX512 &&
+	cpu.X86.HasAVX512BW
+
+// These use AVX-512 instructions in the countByte algorithm relies operations
+// that are avilable in the AVX512BW extension:
+// * VPCMPUB
+// * KMOVQ
+//
+// Note that the function will fallback to an AVX2 version if those instructions
+// are not available.
+var hasAVX512CountByte = hasAVX512 &&
+	cpu.X86.HasAVX512BW
