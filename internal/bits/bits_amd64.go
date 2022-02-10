@@ -9,7 +9,7 @@ var hasAVX512 = cpu.X86.HasAVX512 &&
 var hasAVX512MinMaxBool = hasAVX512 &&
 	cpu.X86.HasAVX512VPOPCNTDQ
 
-// The use AVX-512 instructions in the minBOol algorithm relies operations
+// These use AVX-512 instructions in the minBool algorithm relies operations
 // that are avilable in the AVX512BW extension:
 // * VPCMPUB
 // * KMOVQ
