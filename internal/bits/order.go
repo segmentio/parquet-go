@@ -14,16 +14,16 @@ func OrderOfBool(data []bool) int {
 
 		if data[0] { // true => false: descending
 			k = -1
-			i = strakeOfTrue(data)
+			i = streakOfTrue(data)
 			if i == len(data) {
 				k = +1
 			} else {
-				i += strakeOfFalse(data[i:])
+				i += streakOfFalse(data[i:])
 			}
 		} else { // false => true: ascending
 			k = +1
-			i = strakeOfFalse(data)
-			i += strakeOfTrue(data[i:])
+			i = streakOfFalse(data)
+			i += streakOfTrue(data[i:])
 		}
 
 		if i != len(data) {
@@ -33,14 +33,14 @@ func OrderOfBool(data []bool) int {
 	}
 }
 
-func strakeOfTrue(data []bool) int {
+func streakOfTrue(data []bool) int {
 	if i := bytes.IndexByte(BoolToBytes(data), 0); i >= 0 {
 		return i
 	}
 	return len(data)
 }
 
-func strakeOfFalse(data []bool) int {
+func streakOfFalse(data []bool) int {
 	if i := bytes.IndexByte(BoolToBytes(data), 1); i >= 0 {
 		return i
 	}
@@ -120,7 +120,7 @@ func OrderOfBytes(data [][]byte) int {
 	if len(data) == 1 {
 		return 1
 	}
-	data = skipBytesStrake(data)
+	data = skipBytesStreak(data)
 	if len(data) < 2 {
 		return 1
 	}
@@ -138,7 +138,7 @@ func OrderOfBytes(data [][]byte) int {
 	return 0
 }
 
-func skipBytesStrake(data [][]byte) [][]byte {
+func skipBytesStreak(data [][]byte) [][]byte {
 	for i := 1; i < len(data); i++ {
 		if !bytes.Equal(data[i], data[0]) {
 			return data[i-1:]
