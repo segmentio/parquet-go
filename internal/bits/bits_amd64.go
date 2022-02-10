@@ -16,7 +16,7 @@ var hasAVX512MinMaxBool = hasAVX512 &&
 var hasAVX512MinBool = hasAVX512 &&
 	cpu.X86.HasAVX512BW
 
-// The use AVX-512 instructions in the maxBOol algorithm relies operations
+// These use AVX-512 instructions in the maxBool algorithm relies operations
 // that are avilable in the AVX512BW extension:
 // * VPCMPUB
 // * KMOVQ
