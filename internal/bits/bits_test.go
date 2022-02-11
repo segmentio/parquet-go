@@ -218,10 +218,12 @@ func quickCheck(f interface{}) error {
 		2000, 2095, 2048, 2049,
 		4000, 4095, 4096, 4097,
 	} {
-		in := makeArray(n)
-		ok := v.Call([]reflect.Value{reflect.ValueOf(in)})
-		if !ok[0].Bool() {
-			return fmt.Errorf("failed on input of size %d: %#v\n", n, in)
+		for i := 0; i < 3; i++ {
+			in := makeArray(n)
+			ok := v.Call([]reflect.Value{reflect.ValueOf(in)})
+			if !ok[0].Bool() {
+				return fmt.Errorf("test #%d: failed on input of size %d: %#v\n", i+1, n, in)
+			}
 		}
 	}
 	return nil

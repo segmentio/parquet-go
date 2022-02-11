@@ -27,17 +27,17 @@
 #define vpmaxu128(srcValues, srcIndexes, maxValues, maxIndexes, K1, K2, R1, R2, R3, M) \
     VPCMPUQ $0, maxValues, srcValues, K1 \
     VPCMPUQ $6, maxValues, srcValues, K2 \
-    KMOVQ K1, R1 \
-    KMOVQ K2, R2 \
-    MOVQ R2, R3 \
-    SHLQ $1, R3 \
-    ANDQ R3, R1 \
-    ORQ R2, R1 \
-    ANDQ M, R1 \
-    MOVQ R1, R2 \
-    SHRQ $1, R2 \
-    ORQ R2, R1 \
-    KMOVQ R1, K1 \
+    KMOVB K1, R1 \
+    KMOVB K2, R2 \
+    MOVB R2, R3 \
+    SHLB $1, R3 \
+    ANDB R3, R1 \
+    ORB R2, R1 \
+    ANDB M, R1 \
+    MOVB R1, R2 \
+    SHRB $1, R2 \
+    ORB R2, R1 \
+    KMOVB R1, K1 \
     VPBLENDMQ srcValues, maxValues, K1, maxValues \
     VPBLENDMQ srcIndexes, maxIndexes, K1, maxIndexes
 
@@ -48,6 +48,6 @@
 // comparison that are performed on each lane of maximum vectors. The upper bits
 // are used to compute results of the operation to determine which of the pairs
 // of quad words representing the 128 bits elements are the maximums.
-#define vpmaxu128mask(M) MOVQ $0b10101010, M
+#define vpmaxu128mask(M) MOVB $0b10101010, M
 
 #endif

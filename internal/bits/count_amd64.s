@@ -22,7 +22,7 @@ TEXT ·countByte(SB), NOSPLIT, $0-40
     XORQ R14, R14
     XORQ R15, R15
 
-    CMPB ·hasAVX512(SB), $0
+    CMPB ·hasAVX512CountByte(SB), $0
     JE initAVX2
 
     CMPQ DX, $256
@@ -31,7 +31,7 @@ TEXT ·countByte(SB), NOSPLIT, $0-40
     SHRQ $8, DX
     SHLQ $8, DX
     ADDQ AX, DX
-    VPBROADCASTB value+24(FP), Z0
+    VPBROADCASTB BX, Z0
 loopAVX512:
     VMOVDQU64 (AX), Z1
     VMOVDQU64 64(AX), Z2

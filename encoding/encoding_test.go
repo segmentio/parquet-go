@@ -61,7 +61,7 @@ var int8Tests = [...][]int8{
 		0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
 		0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F,
 	},
-	{ // strakes of repeating values
+	{ // streaks of repeating values
 		0, 0, 0, 0, 1, 1, 1, 1,
 		2, 2, 2, 2, 3, 3, 3, 3,
 		4, 4, 4, 4, 5, 5, 5, 5,
@@ -86,7 +86,7 @@ var int16Tests = [...][]int16{
 		0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
 		0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F,
 	},
-	{ // strakes of repeating values
+	{ // streaks of repeating values
 		0, 0, 0, 0, 1, 1, 1, 1,
 		2, 2, 2, 2, 3, 3, 3, 3,
 		4, 4, 4, 4, 5, 5, 5, 5,
@@ -111,7 +111,7 @@ var int32Tests = [...][]int32{
 		0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
 		0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F,
 	},
-	{ // strakes of repeating values
+	{ // streaks of repeating values
 		0, 0, 0, 0, 1, 1, 1, 1,
 		2, 2, 2, 2, 3, 3, 3, 3,
 		4, 4, 4, 4, 5, 5, 5, 5,
@@ -139,14 +139,14 @@ var int64Tests = [...][]int64{
 		0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
 		0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F,
 	},
-	{ // strakes of repeating values
+	{ // streaks of repeating values
 		0, 0, 0, 0, 1, 1, 1, 1,
 		2, 2, 2, 2, 3, 3, 3, 3,
 		4, 4, 4, 4, 5, 5, 5, 5,
 		6, 6, 6, 7, 7, 7, 8, 8,
 		8, 9, 9, 9,
 	},
-	{ // strakes of repeating values
+	{ // streaks of repeating values
 		0, 0, 0, 0, 1, 1, 1, 1,
 		2, 2, 2, 2, 3, 3, 3, 3,
 		4, 4, 4, 4, 5, 5, 5, 5,
