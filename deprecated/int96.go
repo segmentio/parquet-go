@@ -71,6 +71,15 @@ func Int96ToBytes(data []Int96) []byte {
 	return unsafe.Slice(*(**byte)(unsafe.Pointer(&data)), 12*len(data))
 }
 
+// BytesToInt96 converts the byte slice passed as argument to a slice of Int96
+// sharing the same backing array.
+//
+// When the number of bytes in the input is not a multiple of 12, the function
+// truncates it in the returned slice.
+func BytesToInt96(data []byte) []Int96 {
+	return unsafe.Slice(*(**Int96)(unsafe.Pointer(&data)), len(data)/12)
+}
+
 func MaxLenInt96(data []Int96) int {
 	max := 0
 	for i := range data {

@@ -2,11 +2,14 @@ package parquet
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"sort"
 
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
+	"github.com/segmentio/parquet-go/encoding/plain"
+	"github.com/segmentio/parquet-go/internal/bits"
 )
 
 // ColumnBuffer is an interface representing columns of a row group.
@@ -726,6 +729,15 @@ func (col *booleanColumnBuffer) Swap(i, j int) {
 	col.values[i], col.values[j] = col.values[j], col.values[i]
 }
 
+func (col *booleanColumnBuffer) Write(b []byte) (int, error) {
+	return col.WriteBooleans(bits.BytesToBool(b))
+}
+
+func (col *booleanColumnBuffer) WriteBooleans(values []bool) (int, error) {
+	col.values = append(col.values, values...)
+	return len(values), nil
+}
+
 func (col *booleanColumnBuffer) WriteValues(values []Value) (int, error) {
 	for _, v := range values {
 		col.values = append(col.values, v.Boolean())
@@ -806,6 +818,19 @@ func (col *int32ColumnBuffer) Less(i, j int) bool { return col.values[i] < col.v
 
 func (col *int32ColumnBuffer) Swap(i, j int) {
 	col.values[i], col.values[j] = col.values[j], col.values[i]
+}
+
+func (col *int32ColumnBuffer) Write(b []byte) (int, error) {
+	if (len(b) % 4) != 0 {
+		return 0, fmt.Errorf("cannot write INT32 values from input of size %d", len(b))
+	}
+	col.values = append(col.values, bits.BytesToInt32(b)...)
+	return len(b), nil
+}
+
+func (col *int32ColumnBuffer) WriteInt32s(values []int32) (int, error) {
+	col.values = append(col.values, values...)
+	return len(values), nil
 }
 
 func (col *int32ColumnBuffer) WriteValues(values []Value) (int, error) {
@@ -890,6 +915,19 @@ func (col *int64ColumnBuffer) Swap(i, j int) {
 	col.values[i], col.values[j] = col.values[j], col.values[i]
 }
 
+func (col *int64ColumnBuffer) Write(b []byte) (int, error) {
+	if (len(b) % 8) != 0 {
+		return 0, fmt.Errorf("cannot write INT64 values from input of size %d", len(b))
+	}
+	col.values = append(col.values, bits.BytesToInt64(b)...)
+	return len(b), nil
+}
+
+func (col *int64ColumnBuffer) WriteInt64s(values []int64) (int, error) {
+	col.values = append(col.values, values...)
+	return len(values), nil
+}
+
 func (col *int64ColumnBuffer) WriteValues(values []Value) (int, error) {
 	for _, v := range values {
 		col.values = append(col.values, v.Int64())
@@ -970,6 +1008,19 @@ func (col *int96ColumnBuffer) Less(i, j int) bool { return col.values[i].Less(co
 
 func (col *int96ColumnBuffer) Swap(i, j int) {
 	col.values[i], col.values[j] = col.values[j], col.values[i]
+}
+
+func (col *int96ColumnBuffer) Write(b []byte) (int, error) {
+	if (len(b) % 12) != 0 {
+		return 0, fmt.Errorf("cannot write INT96 values from input of size %d", len(b))
+	}
+	col.values = append(col.values, deprecated.BytesToInt96(b)...)
+	return len(b), nil
+}
+
+func (col *int96ColumnBuffer) WriteInt96s(values []deprecated.Int96) (int, error) {
+	col.values = append(col.values, values...)
+	return len(values), nil
 }
 
 func (col *int96ColumnBuffer) WriteValues(values []Value) (int, error) {
@@ -1054,6 +1105,19 @@ func (col *floatColumnBuffer) Swap(i, j int) {
 	col.values[i], col.values[j] = col.values[j], col.values[i]
 }
 
+func (col *floatColumnBuffer) Write(b []byte) (int, error) {
+	if (len(b) % 4) != 0 {
+		return 0, fmt.Errorf("cannot write FLOAT values from input of size %d", len(b))
+	}
+	col.values = append(col.values, bits.BytesToFloat32(b)...)
+	return len(b), nil
+}
+
+func (col *floatColumnBuffer) WriteFloats(values []float32) (int, error) {
+	col.values = append(col.values, values...)
+	return len(values), nil
+}
+
 func (col *floatColumnBuffer) WriteValues(values []Value) (int, error) {
 	for _, v := range values {
 		col.values = append(col.values, v.Float())
@@ -1134,6 +1198,19 @@ func (col *doubleColumnBuffer) Less(i, j int) bool { return col.values[i] < col.
 
 func (col *doubleColumnBuffer) Swap(i, j int) {
 	col.values[i], col.values[j] = col.values[j], col.values[i]
+}
+
+func (col *doubleColumnBuffer) Write(b []byte) (int, error) {
+	if (len(b) % 8) != 0 {
+		return 0, fmt.Errorf("cannot write DOUBLE values from input of size %d", len(b))
+	}
+	col.values = append(col.values, bits.BytesToFloat64(b)...)
+	return len(b), nil
+}
+
+func (col *doubleColumnBuffer) WriteDoubles(values []float64) (int, error) {
+	col.values = append(col.values, values...)
+	return len(values), nil
 }
 
 func (col *doubleColumnBuffer) WriteValues(values []Value) (int, error) {
@@ -1219,6 +1296,26 @@ func (col *byteArrayColumnBuffer) Len() int { return col.values.Len() }
 func (col *byteArrayColumnBuffer) Less(i, j int) bool { return col.values.Less(i, j) }
 
 func (col *byteArrayColumnBuffer) Swap(i, j int) { col.values.Swap(i, j) }
+
+func (col *byteArrayColumnBuffer) Write(b []byte) (int, error) {
+	_, n, err := col.writeByteArrays(b)
+	return n, err
+}
+
+func (col *byteArrayColumnBuffer) WriteByteArrays(values []byte) (int, error) {
+	n, _, err := col.writeByteArrays(values)
+	return n, err
+}
+
+func (col *byteArrayColumnBuffer) writeByteArrays(values []byte) (c, n int, err error) {
+	err = plain.RangeByteArrays(values, func(v []byte) error {
+		col.values.Push(v)
+		n += plain.ByteArrayLengthSize + len(v)
+		c++
+		return nil
+	})
+	return c, n, err
+}
 
 func (col *byteArrayColumnBuffer) WriteValues(values []Value) (int, error) {
 	for _, v := range values {
@@ -1323,6 +1420,20 @@ func (col *fixedLenByteArrayColumnBuffer) index(i int) []byte {
 	return col.data[j:k:k]
 }
 
+func (col *fixedLenByteArrayColumnBuffer) Write(b []byte) (int, error) {
+	n, err := col.WriteFixedLenByteArrays(b)
+	return n * col.size, err
+}
+
+func (col *fixedLenByteArrayColumnBuffer) WriteFixedLenByteArrays(values []byte) (int, error) {
+	d, m := len(values)/col.size, len(values)%col.size
+	if m != 0 {
+		return 0, fmt.Errorf("cannot write FIXED_LEN_BYTE_ARRAY values of size %d from input of size %d", col.size, len(values))
+	}
+	col.data = append(col.data, values...)
+	return d, nil
+}
+
 func (col *fixedLenByteArrayColumnBuffer) WriteValues(values []Value) (int, error) {
 	for _, v := range values {
 		col.data = append(col.data, v.ByteArray()...)
@@ -1406,4 +1517,22 @@ func (col uint64ColumnBuffer) Less(i, j int) bool {
 
 var (
 	_ sort.Interface = (ColumnBuffer)(nil)
+
+	_ io.Writer = (*booleanColumnBuffer)(nil)
+	_ io.Writer = (*int32ColumnBuffer)(nil)
+	_ io.Writer = (*int64ColumnBuffer)(nil)
+	_ io.Writer = (*int96ColumnBuffer)(nil)
+	_ io.Writer = (*floatColumnBuffer)(nil)
+	_ io.Writer = (*doubleColumnBuffer)(nil)
+	_ io.Writer = (*byteArrayColumnBuffer)(nil)
+	_ io.Writer = (*fixedLenByteArrayColumnBuffer)(nil)
+
+	_ BooleanWriter           = (*booleanColumnBuffer)(nil)
+	_ Int32Writer             = (*int32ColumnBuffer)(nil)
+	_ Int64Writer             = (*int64ColumnBuffer)(nil)
+	_ Int96Writer             = (*int96ColumnBuffer)(nil)
+	_ FloatWriter             = (*floatColumnBuffer)(nil)
+	_ DoubleWriter            = (*doubleColumnBuffer)(nil)
+	_ ByteArrayWriter         = (*byteArrayColumnBuffer)(nil)
+	_ FixedLenByteArrayWriter = (*fixedLenByteArrayColumnBuffer)(nil)
 )

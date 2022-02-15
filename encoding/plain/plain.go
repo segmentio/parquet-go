@@ -5,12 +5,17 @@ package plain
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
 	"math"
 
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/format"
+)
+
+const (
+	ByteArrayLengthSize = 4
 )
 
 type Encoding struct {
@@ -47,6 +52,8 @@ func Int96(v deprecated.Int96) []byte { return AppendInt96(nil, v) }
 func Float(v float32) []byte { return AppendFloat(nil, v) }
 
 func Double(v float64) []byte { return AppendDouble(nil, v) }
+
+func ByteArray(v []byte) []byte { return AppendByteArray(nil, v) }
 
 func AppendBoolean(b []byte, v bool) []byte {
 	if v {
@@ -87,4 +94,41 @@ func AppendDouble(b []byte, v float64) []byte {
 	x := [8]byte{}
 	binary.LittleEndian.PutUint64(x[:], math.Float64bits(v))
 	return append(b, x[:]...)
+}
+
+func AppendByteArray(b, v []byte) []byte {
+	i := len(b)
+	j := i + 4
+	b = append(b, 0, 0, 0, 0)
+	b = append(b, v...)
+	PutByteArrayLength(b[i:j:j], len(v))
+	return b
+}
+
+func PutByteArrayLength(b []byte, n int) {
+	binary.LittleEndian.PutUint32(b, uint32(n))
+}
+
+func RangeByteArrays(b []byte, do func([]byte) error) (err error) {
+	for len(b) > 0 {
+		var v []byte
+		if v, b, err = NextByteArray(b); err != nil {
+			return err
+		}
+		if err = do(v); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func NextByteArray(b []byte) (v, r []byte, err error) {
+	if len(b) < 4 {
+		return nil, b, fmt.Errorf("input of length %d is too short to contain a PLAIN encoded byte array: %w", len(b), io.ErrUnexpectedEOF)
+	}
+	n := 4 + int(binary.LittleEndian.Uint32(b))
+	if n > len(b) {
+		return nil, b, fmt.Errorf("input of length %d is too short to contain a PLAIN encoded byte array of length %d: %w", len(b)-4, n-4, io.ErrUnexpectedEOF)
+	}
+	return b[4:n], b[n:], nil
 }

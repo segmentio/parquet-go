@@ -10,6 +10,7 @@ import (
 
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
+	"github.com/segmentio/parquet-go/encoding/plain"
 	"github.com/segmentio/parquet-go/internal/bits"
 )
 
@@ -642,6 +643,19 @@ type booleanPageReader struct {
 	offset int
 }
 
+func (r *booleanPageReader) Read(b []byte) (n int, err error) {
+	return r.ReadBooleans(bits.BytesToBool(b))
+}
+
+func (r *booleanPageReader) ReadBooleans(values []bool) (n int, err error) {
+	n = copy(values, r.page.values[r.offset:])
+	r.offset += n
+	if r.offset == len(r.page.values) {
+		err = io.EOF
+	}
+	return n, err
+}
+
 func (r *booleanPageReader) ReadValues(values []Value) (n int, err error) {
 	for n < len(values) && r.offset < len(r.page.values) {
 		values[n] = makeValueBoolean(r.page.values[r.offset])
@@ -716,6 +730,20 @@ type int32PageReader struct {
 	offset int
 }
 
+func (r *int32PageReader) Read(b []byte) (n int, err error) {
+	n, err = r.ReadInt32s(bits.BytesToInt32(b))
+	return 4 * n, err
+}
+
+func (r *int32PageReader) ReadInt32s(values []int32) (n int, err error) {
+	n = copy(values, r.page.values[r.offset:])
+	r.offset += n
+	if r.offset == len(r.page.values) {
+		err = io.EOF
+	}
+	return n, err
+}
+
 func (r *int32PageReader) ReadValues(values []Value) (n int, err error) {
 	for n < len(values) && r.offset < len(r.page.values) {
 		values[n] = makeValueInt32(r.page.values[r.offset])
@@ -788,6 +816,20 @@ func (page *int64Page) Buffer() BufferedPage { return page }
 type int64PageReader struct {
 	page   *int64Page
 	offset int
+}
+
+func (r *int64PageReader) Read(b []byte) (n int, err error) {
+	n, err = r.ReadInt64s(bits.BytesToInt64(b))
+	return 8 * n, err
+}
+
+func (r *int64PageReader) ReadInt64s(values []int64) (n int, err error) {
+	n = copy(values, r.page.values[r.offset:])
+	r.offset += n
+	if r.offset == len(r.page.values) {
+		err = io.EOF
+	}
+	return n, err
 }
 
 func (r *int64PageReader) ReadValues(values []Value) (n int, err error) {
@@ -866,6 +908,20 @@ type int96PageReader struct {
 	offset int
 }
 
+func (r *int96PageReader) Read(b []byte) (n int, err error) {
+	n, err = r.ReadInt96s(deprecated.BytesToInt96(b))
+	return 12 * n, err
+}
+
+func (r *int96PageReader) ReadInt96s(values []deprecated.Int96) (n int, err error) {
+	n = copy(values, r.page.values[r.offset:])
+	r.offset += n
+	if r.offset == len(r.page.values) {
+		err = io.EOF
+	}
+	return n, err
+}
+
 func (r *int96PageReader) ReadValues(values []Value) (n int, err error) {
 	for n < len(values) && r.offset < len(r.page.values) {
 		values[n] = makeValueInt96(r.page.values[r.offset])
@@ -940,6 +996,20 @@ type floatPageReader struct {
 	offset int
 }
 
+func (r *floatPageReader) Read(b []byte) (n int, err error) {
+	n, err = r.ReadFloats(bits.BytesToFloat32(b))
+	return 4 * n, err
+}
+
+func (r *floatPageReader) ReadFloats(values []float32) (n int, err error) {
+	n = copy(values, r.page.values[r.offset:])
+	r.offset += n
+	if r.offset == len(r.page.values) {
+		err = io.EOF
+	}
+	return n, err
+}
+
 func (r *floatPageReader) ReadValues(values []Value) (n int, err error) {
 	for n < len(values) && r.offset < len(r.page.values) {
 		values[n] = makeValueFloat(r.page.values[r.offset])
@@ -1012,6 +1082,20 @@ func (page *doublePage) Buffer() BufferedPage { return page }
 type doublePageReader struct {
 	page   *doublePage
 	offset int
+}
+
+func (r *doublePageReader) Read(b []byte) (n int, err error) {
+	n, err = r.ReadDoubles(bits.BytesToFloat64(b))
+	return 8 * n, err
+}
+
+func (r *doublePageReader) ReadDoubles(values []float64) (n int, err error) {
+	n = copy(values, r.page.values[r.offset:])
+	r.offset += n
+	if r.offset == len(r.page.values) {
+		err = io.EOF
+	}
+	return n, err
 }
 
 func (r *doublePageReader) ReadValues(values []Value) (n int, err error) {
@@ -1126,6 +1210,37 @@ type byteArrayPageReader struct {
 	offset int
 }
 
+func (r *byteArrayPageReader) Read(b []byte) (int, error) {
+	_, n, err := r.readByteArrays(b)
+	return n, err
+}
+
+func (r *byteArrayPageReader) ReadByteArrays(values []byte) (int, error) {
+	n, _, err := r.readByteArrays(values)
+	return n, err
+}
+
+func (r *byteArrayPageReader) readByteArrays(values []byte) (c, n int, err error) {
+	for r.offset < r.page.values.Len() {
+		b := r.page.values.Index(r.offset)
+		k := plain.ByteArrayLengthSize + len(b)
+		if k > (len(values) - n) {
+			break
+		}
+		plain.PutByteArrayLength(values[n:], len(b))
+		n += plain.ByteArrayLengthSize
+		n += copy(values[n:], b)
+		r.offset++
+		c++
+	}
+	if r.offset == r.page.values.Len() {
+		err = io.EOF
+	} else if n == 0 && len(values) > 0 {
+		err = io.ErrShortBuffer
+	}
+	return c, n, err
+}
+
 func (r *byteArrayPageReader) ReadValues(values []Value) (n int, err error) {
 	for n < len(values) && r.offset < r.page.values.Len() {
 		values[n] = makeValueBytes(ByteArray, r.page.values.Index(r.offset))
@@ -1211,6 +1326,22 @@ func (page *fixedLenByteArrayPage) Buffer() BufferedPage { return page }
 type fixedLenByteArrayPageReader struct {
 	page   *fixedLenByteArrayPage
 	offset int
+}
+
+func (r *fixedLenByteArrayPageReader) Read(b []byte) (n int, err error) {
+	n, err = r.ReadFixedLenByteArrays(b)
+	return n * r.page.size, err
+}
+
+func (r *fixedLenByteArrayPageReader) ReadFixedLenByteArrays(values []byte) (n int, err error) {
+	n = copy(values, r.page.data[r.offset:]) / r.page.size
+	r.offset += n * r.page.size
+	if r.offset == len(r.page.data) {
+		err = io.EOF
+	} else if n == 0 && len(values) > 0 {
+		err = io.ErrShortBuffer
+	}
+	return n, err
 }
 
 func (r *fixedLenByteArrayPageReader) ReadValues(values []Value) (n int, err error) {
@@ -1357,4 +1488,22 @@ var (
 
 	_ io.ReaderFrom = (*errorBuffer)(nil)
 	_ io.WriterTo   = (*errorBuffer)(nil)
+
+	_ io.Reader = (*booleanPageReader)(nil)
+	_ io.Reader = (*int32PageReader)(nil)
+	_ io.Reader = (*int64PageReader)(nil)
+	_ io.Reader = (*int96PageReader)(nil)
+	_ io.Reader = (*floatPageReader)(nil)
+	_ io.Reader = (*doublePageReader)(nil)
+	_ io.Reader = (*byteArrayPageReader)(nil)
+	_ io.Reader = (*fixedLenByteArrayPageReader)(nil)
+
+	_ BooleanReader           = (*booleanPageReader)(nil)
+	_ Int32Reader             = (*int32PageReader)(nil)
+	_ Int64Reader             = (*int64PageReader)(nil)
+	_ Int96Reader             = (*int96PageReader)(nil)
+	_ FloatReader             = (*floatPageReader)(nil)
+	_ DoubleReader            = (*doublePageReader)(nil)
+	_ ByteArrayReader         = (*byteArrayPageReader)(nil)
+	_ FixedLenByteArrayReader = (*fixedLenByteArrayPageReader)(nil)
 )
