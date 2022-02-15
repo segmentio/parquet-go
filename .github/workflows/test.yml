@@ -26,4 +26,4 @@ jobs:
       run: test -z $(find . -name '*.go' | xargs gofmt -l)
 
     - name: Run Tests
-      run: go test ./...
+      run: go test -v ./internal/bits
