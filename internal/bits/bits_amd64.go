@@ -1,6 +1,8 @@
 package bits
 
-import "golang.org/x/sys/cpu"
+import (
+	"golang.org/x/sys/cpu"
+)
 
 // All functions require at least the F and VL instruction sets (Foundation and
 // Vector Length extensions). Note that Foundation is a requirement of AVX-512,
