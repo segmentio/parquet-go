@@ -54,7 +54,7 @@ type RowReader interface {
 
 // RowReaderAt reads parquet rows at specific indexes.
 type RowReaderAt interface {
-	ReadRowAt(Row, int) (Row, error)
+	ReadRowAt(Row, int64) (Row, error)
 }
 
 // RowReaderFrom reads parquet rows from reader.
@@ -83,7 +83,7 @@ type RowWriter interface {
 
 // RowWriterAt writes parquet rows at specific indexes.
 type RowWriterAt interface {
-	WriteRowAt(Row, int) error
+	WriteRowAt(Row, int64) error
 }
 
 // RowWriterTo writes parquet rows to a writer.
@@ -214,15 +214,15 @@ func targetSchemaOf(w RowWriter) *Schema {
 	return nil
 }
 
-func errRowIndexOutOfBounds(rowIndex, rowCount int) error {
+func errRowIndexOutOfBounds(rowIndex, rowCount int64) error {
 	return fmt.Errorf("row index out of bounds: %d/%d", rowIndex, rowCount)
 }
 
-func errRowHasTooFewValues(numValues int) error {
+func errRowHasTooFewValues(numValues int64) error {
 	return fmt.Errorf("row has too few values to be written to the column: %d", numValues)
 }
 
-func errRowHasTooManyValues(numValues int) error {
+func errRowHasTooManyValues(numValues int64) error {
 	return fmt.Errorf("row has too many values to be written to the column: %d", numValues)
 }
 
