@@ -1,14 +1,8 @@
 package bits
 
 import (
-	"fmt"
-
 	"golang.org/x/sys/cpu"
 )
-
-func init() {
-	fmt.Printf("%#v\n", cpu.X86)
-}
 
 // All functions require at least the F and VL instruction sets (Foundation and
 // Vector Length extensions). Note that Foundation is a requirement of AVX-512,
