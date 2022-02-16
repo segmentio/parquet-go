@@ -296,10 +296,10 @@ func (col *optionalColumnBuffer) WriteValues(values []Value) (n int, err error) 
 
 func (col *optionalColumnBuffer) WriteRow(row Row) error {
 	if len(row) == 0 {
-		return errRowHasTooFewValues(len(row))
+		return errRowHasTooFewValues(int64(len(row)))
 	}
 	if len(row) > 1 {
-		return errRowHasTooManyValues(len(row))
+		return errRowHasTooManyValues(int64(len(row)))
 	}
 	var idx = -1
 	var err error
@@ -314,11 +314,11 @@ func (col *optionalColumnBuffer) WriteRow(row Row) error {
 	return err
 }
 
-func (col *optionalColumnBuffer) ReadRowAt(row Row, index int) (Row, error) {
+func (col *optionalColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {
 	if index < 0 {
-		return row, errRowIndexOutOfBounds(index, len(col.definitionLevels))
+		return row, errRowIndexOutOfBounds(index, int64(len(col.definitionLevels)))
 	}
-	if index >= len(col.definitionLevels) {
+	if index >= int64(len(col.definitionLevels)) {
 		return row, io.EOF
 	}
 
@@ -328,7 +328,7 @@ func (col *optionalColumnBuffer) ReadRowAt(row Row, index int) (Row, error) {
 		var err error
 		var n = len(row)
 
-		if row, err = col.base.ReadRowAt(row, int(col.rows[index])); err != nil {
+		if row, err = col.base.ReadRowAt(row, int64(col.rows[index])); err != nil {
 			return row, err
 		}
 
@@ -450,11 +450,11 @@ func (col *repeatedColumnBuffer) Page() BufferedPage {
 
 		for _, row := range col.rows {
 			numNulls := countLevelsNotEqual(col.definitionLevels[row.offset:row.offset+row.length], col.maxDefinitionLevel)
-			numValues := int(row.length) - numNulls
+			numValues := int64(row.length) - int64(numNulls)
 
-			for i := 0; i < numValues; i++ {
+			for i := int64(0); i < numValues; i++ {
 				var err error
-				if buffer, err = col.base.ReadRowAt(buffer[:0], int(row.offset)+i); err != nil {
+				if buffer, err = col.base.ReadRowAt(buffer[:0], int64(row.offset)+i); err != nil {
 					return newErrorPage(col.Column(), "reordering rows of repeated column: %w", err)
 				}
 				if err = column.base.WriteRow(buffer); err != nil {
@@ -573,7 +573,7 @@ func (col *repeatedColumnBuffer) WriteValues(values []Value) (numValues int, err
 
 func (col *repeatedColumnBuffer) WriteRow(row Row) error {
 	if len(row) == 0 {
-		return errRowHasTooFewValues(len(row))
+		return errRowHasTooFewValues(int64(len(row)))
 	}
 
 	col.rows = append(col.rows, region{
@@ -599,11 +599,11 @@ func (col *repeatedColumnBuffer) WriteRow(row Row) error {
 	return nil
 }
 
-func (col *repeatedColumnBuffer) ReadRowAt(row Row, index int) (Row, error) {
+func (col *repeatedColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {
 	if index < 0 {
-		return row, errRowIndexOutOfBounds(index, len(col.rows))
+		return row, errRowIndexOutOfBounds(index, int64(len(col.rows)))
 	}
-	if index >= len(col.rows) {
+	if index >= int64(len(col.rows)) {
 		return row, io.EOF
 	}
 
@@ -612,7 +612,7 @@ func (col *repeatedColumnBuffer) ReadRowAt(row Row, index int) (Row, error) {
 	maxDefinitionLevel := col.maxDefinitionLevel
 	repetitionLevels := col.repetitionLevels[region.offset : region.offset+region.length]
 	definitionLevels := col.definitionLevels[region.offset : region.offset+region.length]
-	baseIndex := 0
+	baseIndex := int64(0)
 
 	for i := range definitionLevels {
 		if definitionLevels[i] != maxDefinitionLevel {
@@ -622,14 +622,14 @@ func (col *repeatedColumnBuffer) ReadRowAt(row Row, index int) (Row, error) {
 			})
 		} else {
 			var err error
-			var n = len(row)
+			var n = int64(len(row))
 
-			if row, err = col.base.ReadRowAt(row, int(region.offset)+baseIndex); err != nil {
+			if row, err = col.base.ReadRowAt(row, int64(region.offset)+baseIndex); err != nil {
 				return row[:reset], err
 			}
 
 			baseIndex += n
-			for n < len(row) {
+			for n < int64(len(row)) {
 				row[n].repetitionLevel = repetitionLevels[i]
 				row[n].definitionLevel = definitionLevels[i]
 				n++
@@ -747,20 +747,20 @@ func (col *booleanColumnBuffer) WriteValues(values []Value) (int, error) {
 
 func (col *booleanColumnBuffer) WriteRow(row Row) error {
 	if len(row) == 0 {
-		return errRowHasTooFewValues(len(row))
+		return errRowHasTooFewValues(int64(len(row)))
 	}
 	if len(row) > 1 {
-		return errRowHasTooManyValues(len(row))
+		return errRowHasTooManyValues(int64(len(row)))
 	}
 	col.values = append(col.values, row[0].Boolean())
 	return nil
 }
 
-func (col *booleanColumnBuffer) ReadRowAt(row Row, index int) (Row, error) {
+func (col *booleanColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {
 	switch {
 	case index < 0:
-		return row, errRowIndexOutOfBounds(index, len(col.values))
-	case index >= len(col.values):
+		return row, errRowIndexOutOfBounds(index, int64(len(col.values)))
+	case index >= int64(len(col.values)):
 		return row, io.EOF
 	default:
 		v := makeValueBoolean(col.values[index])
@@ -842,20 +842,20 @@ func (col *int32ColumnBuffer) WriteValues(values []Value) (int, error) {
 
 func (col *int32ColumnBuffer) WriteRow(row Row) error {
 	if len(row) == 0 {
-		return errRowHasTooFewValues(len(row))
+		return errRowHasTooFewValues(int64(len(row)))
 	}
 	if len(row) > 1 {
-		return errRowHasTooManyValues(len(row))
+		return errRowHasTooManyValues(int64(len(row)))
 	}
 	col.values = append(col.values, row[0].Int32())
 	return nil
 }
 
-func (col *int32ColumnBuffer) ReadRowAt(row Row, index int) (Row, error) {
+func (col *int32ColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {
 	switch {
 	case index < 0:
-		return row, errRowIndexOutOfBounds(index, len(col.values))
-	case index >= len(col.values):
+		return row, errRowIndexOutOfBounds(index, int64(len(col.values)))
+	case index >= int64(len(col.values)):
 		return row, io.EOF
 	default:
 		v := makeValueInt32(col.values[index])
@@ -937,20 +937,20 @@ func (col *int64ColumnBuffer) WriteValues(values []Value) (int, error) {
 
 func (col *int64ColumnBuffer) WriteRow(row Row) error {
 	if len(row) == 0 {
-		return errRowHasTooFewValues(len(row))
+		return errRowHasTooFewValues(int64(len(row)))
 	}
 	if len(row) > 1 {
-		return errRowHasTooManyValues(len(row))
+		return errRowHasTooManyValues(int64(len(row)))
 	}
 	col.values = append(col.values, row[0].Int64())
 	return nil
 }
 
-func (col *int64ColumnBuffer) ReadRowAt(row Row, index int) (Row, error) {
+func (col *int64ColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {
 	switch {
 	case index < 0:
-		return row, errRowIndexOutOfBounds(index, len(col.values))
-	case index >= len(col.values):
+		return row, errRowIndexOutOfBounds(index, int64(len(col.values)))
+	case index >= int64(len(col.values)):
 		return row, io.EOF
 	default:
 		v := makeValueInt64(col.values[index])
@@ -1032,20 +1032,20 @@ func (col *int96ColumnBuffer) WriteValues(values []Value) (int, error) {
 
 func (col *int96ColumnBuffer) WriteRow(row Row) error {
 	if len(row) == 0 {
-		return errRowHasTooFewValues(len(row))
+		return errRowHasTooFewValues(int64(len(row)))
 	}
 	if len(row) > 1 {
-		return errRowHasTooManyValues(len(row))
+		return errRowHasTooManyValues(int64(len(row)))
 	}
 	col.values = append(col.values, row[0].Int96())
 	return nil
 }
 
-func (col *int96ColumnBuffer) ReadRowAt(row Row, index int) (Row, error) {
+func (col *int96ColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {
 	switch {
 	case index < 0:
-		return row, errRowIndexOutOfBounds(index, len(col.values))
-	case index >= len(col.values):
+		return row, errRowIndexOutOfBounds(index, int64(len(col.values)))
+	case index >= int64(len(col.values)):
 		return row, io.EOF
 	default:
 		v := makeValueInt96(col.values[index])
@@ -1127,20 +1127,20 @@ func (col *floatColumnBuffer) WriteValues(values []Value) (int, error) {
 
 func (col *floatColumnBuffer) WriteRow(row Row) error {
 	if len(row) == 0 {
-		return errRowHasTooFewValues(len(row))
+		return errRowHasTooFewValues(int64(len(row)))
 	}
 	if len(row) > 1 {
-		return errRowHasTooManyValues(len(row))
+		return errRowHasTooManyValues(int64(len(row)))
 	}
 	col.values = append(col.values, row[0].Float())
 	return nil
 }
 
-func (col *floatColumnBuffer) ReadRowAt(row Row, index int) (Row, error) {
+func (col *floatColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {
 	switch {
 	case index < 0:
-		return row, errRowIndexOutOfBounds(index, len(col.values))
-	case index >= len(col.values):
+		return row, errRowIndexOutOfBounds(index, int64(len(col.values)))
+	case index >= int64(len(col.values)):
 		return row, io.EOF
 	default:
 		v := makeValueFloat(col.values[index])
@@ -1222,20 +1222,20 @@ func (col *doubleColumnBuffer) WriteValues(values []Value) (int, error) {
 
 func (col *doubleColumnBuffer) WriteRow(row Row) error {
 	if len(row) == 0 {
-		return errRowHasTooFewValues(len(row))
+		return errRowHasTooFewValues(int64(len(row)))
 	}
 	if len(row) > 1 {
-		return errRowHasTooManyValues(len(row))
+		return errRowHasTooManyValues(int64(len(row)))
 	}
 	col.values = append(col.values, row[0].Double())
 	return nil
 }
 
-func (col *doubleColumnBuffer) ReadRowAt(row Row, index int) (Row, error) {
+func (col *doubleColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {
 	switch {
 	case index < 0:
-		return row, errRowIndexOutOfBounds(index, len(col.values))
-	case index >= len(col.values):
+		return row, errRowIndexOutOfBounds(index, int64(len(col.values)))
+	case index >= int64(len(col.values)):
 		return row, io.EOF
 	default:
 		v := makeValueDouble(col.values[index])
@@ -1326,23 +1326,23 @@ func (col *byteArrayColumnBuffer) WriteValues(values []Value) (int, error) {
 
 func (col *byteArrayColumnBuffer) WriteRow(row Row) error {
 	if len(row) == 0 {
-		return errRowHasTooFewValues(len(row))
+		return errRowHasTooFewValues(int64(len(row)))
 	}
 	if len(row) > 1 {
-		return errRowHasTooManyValues(len(row))
+		return errRowHasTooManyValues(int64(len(row)))
 	}
 	col.values.Push(row[0].ByteArray())
 	return nil
 }
 
-func (col *byteArrayColumnBuffer) ReadRowAt(row Row, index int) (Row, error) {
+func (col *byteArrayColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {
 	switch {
 	case index < 0:
-		return row, errRowIndexOutOfBounds(index, col.values.Len())
-	case index >= col.values.Len():
+		return row, errRowIndexOutOfBounds(index, int64(col.values.Len()))
+	case index >= int64(col.values.Len()):
 		return row, io.EOF
 	default:
-		v := makeValueBytes(ByteArray, col.values.Index(index))
+		v := makeValueBytes(ByteArray, col.values.Index(int(index)))
 		v.columnIndex = col.columnIndex
 		return append(row, v), nil
 	}
@@ -1443,22 +1443,22 @@ func (col *fixedLenByteArrayColumnBuffer) WriteValues(values []Value) (int, erro
 
 func (col *fixedLenByteArrayColumnBuffer) WriteRow(row Row) error {
 	if len(row) == 0 {
-		return errRowHasTooFewValues(len(row))
+		return errRowHasTooFewValues(int64(len(row)))
 	}
 	if len(row) > 1 {
-		return errRowHasTooManyValues(len(row))
+		return errRowHasTooManyValues(int64(len(row)))
 	}
 	col.data = append(col.data, row[0].ByteArray()...)
 	return nil
 }
 
-func (col *fixedLenByteArrayColumnBuffer) ReadRowAt(row Row, index int) (Row, error) {
-	i := (index + 0) * col.size
-	j := (index + 1) * col.size
+func (col *fixedLenByteArrayColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {
+	i := (index + 0) * int64(col.size)
+	j := (index + 1) * int64(col.size)
 	switch {
 	case i < 0:
-		return row, errRowIndexOutOfBounds(index, col.Len())
-	case j > len(col.data):
+		return row, errRowIndexOutOfBounds(index, int64(col.Len()))
+	case j > int64(len(col.data)):
 		return row, io.EOF
 	default:
 		v := makeValueBytes(FixedLenByteArray, col.data[i:j])
