@@ -380,7 +380,7 @@ func TestReaderReadSubset(t *testing.T) {
 
 func TestReaderSeekToRow(t *testing.T) {
 	type rowType struct {
-		Name utf8string
+		Name utf8string `parquet:",dict"`
 	}
 
 	rows := rowsOf(10, rowType{})
