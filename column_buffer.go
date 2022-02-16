@@ -455,10 +455,10 @@ func (col *repeatedColumnBuffer) Page() BufferedPage {
 			for i := int64(0); i < numValues; i++ {
 				var err error
 				if buffer, err = col.base.ReadRowAt(buffer[:0], int64(row.offset)+i); err != nil {
-					return newErrorPage(col.Column(), "reordering rows of repeated column: %w", err)
+					return newErrorPage(int16(col.Column()), "reordering rows of repeated column: %w", err)
 				}
 				if err = column.base.WriteRow(buffer); err != nil {
-					return newErrorPage(col.Column(), "reordering rows of repeated column: %w", err)
+					return newErrorPage(int16(col.Column()), "reordering rows of repeated column: %w", err)
 				}
 			}
 		}
@@ -681,11 +681,11 @@ type booleanColumnBuffer struct {
 	typ Type
 }
 
-func newBooleanColumnBuffer(typ Type, columnIndex, bufferSize int) *booleanColumnBuffer {
+func newBooleanColumnBuffer(typ Type, columnIndex int16, bufferSize int) *booleanColumnBuffer {
 	return &booleanColumnBuffer{
 		booleanPage: booleanPage{
 			values:      make([]bool, 0, bufferSize),
-			columnIndex: ^int8(columnIndex),
+			columnIndex: ^columnIndex,
 		},
 		typ: typ,
 	}
@@ -774,11 +774,11 @@ type int32ColumnBuffer struct {
 	typ Type
 }
 
-func newInt32ColumnBuffer(typ Type, columnIndex, bufferSize int) *int32ColumnBuffer {
+func newInt32ColumnBuffer(typ Type, columnIndex int16, bufferSize int) *int32ColumnBuffer {
 	return &int32ColumnBuffer{
 		int32Page: int32Page{
 			values:      make([]int32, 0, bufferSize/4),
-			columnIndex: ^int8(columnIndex),
+			columnIndex: ^columnIndex,
 		},
 		typ: typ,
 	}
@@ -869,11 +869,11 @@ type int64ColumnBuffer struct {
 	typ Type
 }
 
-func newInt64ColumnBuffer(typ Type, columnIndex, bufferSize int) *int64ColumnBuffer {
+func newInt64ColumnBuffer(typ Type, columnIndex int16, bufferSize int) *int64ColumnBuffer {
 	return &int64ColumnBuffer{
 		int64Page: int64Page{
 			values:      make([]int64, 0, bufferSize/8),
-			columnIndex: ^int8(columnIndex),
+			columnIndex: ^columnIndex,
 		},
 		typ: typ,
 	}
@@ -964,11 +964,11 @@ type int96ColumnBuffer struct {
 	typ Type
 }
 
-func newInt96ColumnBuffer(typ Type, columnIndex, bufferSize int) *int96ColumnBuffer {
+func newInt96ColumnBuffer(typ Type, columnIndex int16, bufferSize int) *int96ColumnBuffer {
 	return &int96ColumnBuffer{
 		int96Page: int96Page{
 			values:      make([]deprecated.Int96, 0, bufferSize/12),
-			columnIndex: ^int8(columnIndex),
+			columnIndex: ^columnIndex,
 		},
 		typ: typ,
 	}
@@ -1059,11 +1059,11 @@ type floatColumnBuffer struct {
 	typ Type
 }
 
-func newFloatColumnBuffer(typ Type, columnIndex, bufferSize int) *floatColumnBuffer {
+func newFloatColumnBuffer(typ Type, columnIndex int16, bufferSize int) *floatColumnBuffer {
 	return &floatColumnBuffer{
 		floatPage: floatPage{
 			values:      make([]float32, 0, bufferSize/4),
-			columnIndex: ^int8(columnIndex),
+			columnIndex: ^columnIndex,
 		},
 		typ: typ,
 	}
@@ -1154,11 +1154,11 @@ type doubleColumnBuffer struct {
 	typ Type
 }
 
-func newDoubleColumnBuffer(typ Type, columnIndex, bufferSize int) *doubleColumnBuffer {
+func newDoubleColumnBuffer(typ Type, columnIndex int16, bufferSize int) *doubleColumnBuffer {
 	return &doubleColumnBuffer{
 		doublePage: doublePage{
 			values:      make([]float64, 0, bufferSize/8),
-			columnIndex: ^int8(columnIndex),
+			columnIndex: ^columnIndex,
 		},
 		typ: typ,
 	}
@@ -1249,11 +1249,11 @@ type byteArrayColumnBuffer struct {
 	typ Type
 }
 
-func newByteArrayColumnBuffer(typ Type, columnIndex, bufferSize int) *byteArrayColumnBuffer {
+func newByteArrayColumnBuffer(typ Type, columnIndex int16, bufferSize int) *byteArrayColumnBuffer {
 	return &byteArrayColumnBuffer{
 		byteArrayPage: byteArrayPage{
 			values:      encoding.MakeByteArrayList(bufferSize / 16),
-			columnIndex: ^int8(columnIndex),
+			columnIndex: ^columnIndex,
 		},
 		typ: typ,
 	}
@@ -1354,13 +1354,13 @@ type fixedLenByteArrayColumnBuffer struct {
 	tmp []byte
 }
 
-func newFixedLenByteArrayColumnBuffer(typ Type, columnIndex, bufferSize int) *fixedLenByteArrayColumnBuffer {
+func newFixedLenByteArrayColumnBuffer(typ Type, columnIndex int16, bufferSize int) *fixedLenByteArrayColumnBuffer {
 	size := typ.Length()
 	return &fixedLenByteArrayColumnBuffer{
 		fixedLenByteArrayPage: fixedLenByteArrayPage{
 			size:        size,
 			data:        make([]byte, 0, bufferSize),
-			columnIndex: ^int8(columnIndex),
+			columnIndex: ^columnIndex,
 		},
 		typ: typ,
 		tmp: make([]byte, size),
@@ -1469,7 +1469,7 @@ func (col *fixedLenByteArrayColumnBuffer) ReadRowAt(row Row, index int64) (Row, 
 
 type uint32ColumnBuffer struct{ *int32ColumnBuffer }
 
-func newUint32ColumnBuffer(typ Type, columnIndex, bufferSize int) uint32ColumnBuffer {
+func newUint32ColumnBuffer(typ Type, columnIndex int16, bufferSize int) uint32ColumnBuffer {
 	return uint32ColumnBuffer{newInt32ColumnBuffer(typ, columnIndex, bufferSize)}
 }
 
@@ -1493,7 +1493,7 @@ func (col uint32ColumnBuffer) Less(i, j int) bool {
 
 type uint64ColumnBuffer struct{ *int64ColumnBuffer }
 
-func newUint64ColumnBuffer(typ Type, columnIndex, bufferSize int) uint64ColumnBuffer {
+func newUint64ColumnBuffer(typ Type, columnIndex int16, bufferSize int) uint64ColumnBuffer {
 	return uint64ColumnBuffer{newInt64ColumnBuffer(typ, columnIndex, bufferSize)}
 }
 

@@ -88,7 +88,11 @@ func schemaOf(model reflect.Type) *Schema {
 }
 
 // NewSchema constructs a new Schema object with the given name and root node.
+//
+// The function panics if Node contains more leaf columns than supported by the
+// package (see parquet.MaxColumnIndex).
 func NewSchema(name string, root Node) *Schema {
+	_ = numLeafColumnsOf(root)
 	return &Schema{
 		name:        name,
 		root:        root,

@@ -813,7 +813,7 @@ func (p *filePage) Buffer() BufferedPage {
 	bufferedPage := p.column.Type().NewColumnBuffer(p.Column(), int(p.Size()))
 	_, err := CopyValues(bufferedPage, p.Values())
 	if err != nil {
-		return &errorPage{err: err, columnIndex: p.Column()}
+		return &errorPage{err: err, columnIndex: int16(p.Column())}
 	}
 	return bufferedPage.Page()
 }
@@ -926,9 +926,9 @@ func (s *filePageValueReaderState) init(columnType Type, column *Column, codec f
 	if s.reader == nil {
 		s.reader = newDataPageReader(
 			columnType,
-			column.MaxRepetitionLevel(),
-			column.MaxDefinitionLevel(),
-			column.Index(),
+			column.maxRepetitionLevel,
+			column.maxDefinitionLevel,
+			column.index,
 			defaultReadBufferSize,
 		)
 	}

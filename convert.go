@@ -38,7 +38,7 @@ type Conversion interface {
 
 type conversion struct {
 	convert convertFunc
-	columns []int
+	columns []int16
 	schema  *Schema
 }
 
@@ -50,7 +50,7 @@ func (c *conversion) Convert(dst, src Row) (Row, error) {
 	return dst, err
 }
 
-func (c *conversion) Column(i int) int { return c.columns[i] }
+func (c *conversion) Column(i int) int { return int(c.columns[i]) }
 
 func (c *conversion) Schema() *Schema { return c.schema }
 
@@ -74,7 +74,7 @@ func Convert(to, from Node) (conv Conversion, err error) {
 		}
 	}()
 
-	columns := make([]int, numColumnsOf(to))
+	columns := make([]int16, numLeafColumnsOf(to))
 	for i := range columns {
 		columns[i] = -1
 	}
@@ -94,7 +94,7 @@ func Convert(to, from Node) (conv Conversion, err error) {
 type convertFunc func(Row, Row, levels) (Row, Row, error)
 
 type convertNode struct {
-	columnIndex int
+	columnIndex int16
 	node        Node
 	path        columnPath
 }
@@ -105,7 +105,7 @@ func (c convertNode) child(name string) convertNode {
 	return c
 }
 
-func convert(to, from convertNode, columns []int) (int, int, convertFunc) {
+func convert(to, from convertNode, columns []int16) (int16, int16, convertFunc) {
 	switch {
 	case from.node.Optional():
 		if to.node.Optional() {
@@ -144,7 +144,7 @@ func convertError(to, from convertNode, reason string) *ConvertError {
 }
 
 //go:noinline
-func convertFuncOfOptional(to, from convertNode, columns []int) (int, int, convertFunc) {
+func convertFuncOfOptional(to, from convertNode, columns []int16) (int16, int16, convertFunc) {
 	to.node = Required(to.node)
 	from.node = Required(from.node)
 
@@ -156,10 +156,10 @@ func convertFuncOfOptional(to, from convertNode, columns []int) (int, int, conve
 }
 
 //go:noinline
-func convertFuncOfRepeated(to, from convertNode, columns []int) (int, int, convertFunc) {
+func convertFuncOfRepeated(to, from convertNode, columns []int16) (int16, int16, convertFunc) {
 	to.node = Required(to.node)
 	from.node = Required(from.node)
-	srcColumnIndex := ^int8(from.columnIndex)
+	srcColumnIndex := ^from.columnIndex
 
 	toColumnIndex, fromColumnIndex, conv := convert(to, from, columns)
 	return toColumnIndex, fromColumnIndex, func(dst, src Row, levels levels) (Row, Row, error) {
@@ -180,13 +180,13 @@ func convertFuncOfRepeated(to, from convertNode, columns []int) (int, int, conve
 }
 
 //go:noinline
-func convertFuncOfLeaf(to, from convertNode, columns []int) (int, int, convertFunc) {
+func convertFuncOfLeaf(to, from convertNode, columns []int16) (int16, int16, convertFunc) {
 	if !typesAreEqual(to.node, from.node) {
 		panic(convertError(to, from, fmt.Sprintf("unsupported type conversion from %s to %s for parquet column", from.node.Type(), to.node.Type())))
 	}
 
-	srcColumnIndex := ^int8(from.columnIndex)
-	dstColumnIndex := ^int8(to.columnIndex)
+	srcColumnIndex := ^from.columnIndex
+	dstColumnIndex := ^to.columnIndex
 	columns[to.columnIndex] = from.columnIndex
 
 	return to.columnIndex + 1, from.columnIndex + 1, func(dst, src Row, levels levels) (Row, Row, error) {
@@ -202,7 +202,7 @@ func convertFuncOfLeaf(to, from convertNode, columns []int) (int, int, convertFu
 }
 
 //go:noinline
-func convertFuncOfGroup(to, from convertNode, columns []int) (int, int, convertFunc) {
+func convertFuncOfGroup(to, from convertNode, columns []int16) (int16, int16, convertFunc) {
 	extra, missing, names := comm(to.node.ChildNames(), from.node.ChildNames())
 	funcs := make([]convertFunc, 0, len(extra)+len(missing)+len(names))
 
@@ -236,7 +236,7 @@ func makeGroupConvertFunc(funcs []convertFunc) convertFunc {
 	}
 }
 
-func convertFuncOfExtraColumn(to convertNode) (int, convertFunc) {
+func convertFuncOfExtraColumn(to convertNode) (int16, convertFunc) {
 	switch {
 	case isLeaf(to.node):
 		return convertFuncOfExtraLeaf(to)
@@ -246,12 +246,12 @@ func convertFuncOfExtraColumn(to convertNode) (int, convertFunc) {
 }
 
 //go:noinline
-func convertFuncOfExtraLeaf(to convertNode) (int, convertFunc) {
-	kind := ^int8(to.node.Type().Kind())
-	columnIndex := ^int8(to.columnIndex)
+func convertFuncOfExtraLeaf(to convertNode) (int16, convertFunc) {
+	kind := ^to.node.Type().Kind()
+	columnIndex := ^to.columnIndex
 	return to.columnIndex + 1, func(dst, src Row, levels levels) (Row, Row, error) {
 		dst = append(dst, Value{
-			kind:            kind,
+			kind:            int8(kind),
 			repetitionLevel: levels.repetitionLevel,
 			definitionLevel: levels.definitionLevel,
 			columnIndex:     columnIndex,
@@ -261,7 +261,7 @@ func convertFuncOfExtraLeaf(to convertNode) (int, convertFunc) {
 }
 
 //go:noinline
-func convertFuncOfExtraGroup(to convertNode) (int, convertFunc) {
+func convertFuncOfExtraGroup(to convertNode) (int16, convertFunc) {
 	names := to.node.ChildNames()
 	funcs := make([]convertFunc, len(names))
 	for i := range funcs {
@@ -271,12 +271,12 @@ func convertFuncOfExtraGroup(to convertNode) (int, convertFunc) {
 }
 
 //go:noinline
-func convertFuncOfMissingColumn(from convertNode) (int, convertFunc) {
-	rowLength := numColumnsOf(from.node)
-	columnIndex := ^int8(from.columnIndex)
+func convertFuncOfMissingColumn(from convertNode) (int16, convertFunc) {
+	rowLength := numLeafColumnsOf(from.node)
+	columnIndex := ^from.columnIndex
 	return from.columnIndex + rowLength, func(dst, src Row, levels levels) (Row, Row, error) {
 		for len(src) > 0 && src[0].columnIndex == columnIndex {
-			if len(src) < rowLength {
+			if len(src) < int(rowLength) {
 				break
 			}
 			src = src[rowLength:]
@@ -368,10 +368,10 @@ func ConvertRowGroup(rowGroup RowGroup, conv Conversion) RowGroup {
 	schema := conv.Schema()
 	numRows := rowGroup.NumRows()
 
-	columns := make([]ColumnChunk, numColumnsOf(schema))
+	columns := make([]ColumnChunk, numLeafColumnsOf(schema))
 	forEachLeafColumnOf(schema, func(leaf leafColumn) {
 		i := leaf.columnIndex
-		j := conv.Column(leaf.columnIndex)
+		j := conv.Column(int(leaf.columnIndex))
 		if j < 0 {
 			columns[i] = &missingColumnChunk{
 				typ:    leaf.node.Type(),
@@ -426,14 +426,14 @@ func ConvertRowGroup(rowGroup RowGroup, conv Conversion) RowGroup {
 
 type missingColumnChunk struct {
 	typ       Type
-	column    int
+	column    int16
 	numRows   int64
 	numValues int64
 	numNulls  int64
 }
 
 func (c *missingColumnChunk) Type() Type               { return c.typ }
-func (c *missingColumnChunk) Column() int              { return c.column }
+func (c *missingColumnChunk) Column() int              { return int(c.column) }
 func (c *missingColumnChunk) Pages() Pages             { return onePage(missingPage{c}) }
 func (c *missingColumnChunk) ColumnIndex() ColumnIndex { return missingColumnIndex{c} }
 func (c *missingColumnChunk) OffsetIndex() OffsetIndex { return missingOffsetIndex{} }
@@ -465,7 +465,7 @@ func (missingBloomFilter) Check([]byte) (bool, error)        { return false, nil
 
 type missingPage struct{ *missingColumnChunk }
 
-func (p missingPage) Column() int              { return p.column }
+func (p missingPage) Column() int              { return int(p.column) }
 func (p missingPage) Dictionary() Dictionary   { return nil }
 func (p missingPage) NumRows() int64           { return p.numRows }
 func (p missingPage) NumValues() int64         { return p.numValues }
@@ -489,7 +489,7 @@ func (r *missingValues) ReadValues(values []Value) (int, error) {
 	}
 	for i := range values {
 		// TODO: how do we set the repetition and definition levels here?
-		values[i] = Value{columnIndex: ^int8(r.page.column)}
+		values[i] = Value{columnIndex: ^r.page.column}
 	}
 	if r.read += int64(len(values)); r.read == r.page.numValues {
 		return len(values), io.EOF

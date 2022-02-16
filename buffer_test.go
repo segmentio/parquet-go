@@ -238,8 +238,8 @@ func descending(typ parquet.Type, values []parquet.Value) {
 }
 
 func testBuffer(t *testing.T, node parquet.Node, reader parquet.ValueReader, buffer *parquet.Buffer, encoder encoding.Encoder, values []interface{}, sortFunc sortFunc) {
-	repetitionLevel := int8(0)
-	definitionLevel := int8(0)
+	repetitionLevel := 0
+	definitionLevel := 0
 	if !node.Required() {
 		definitionLevel = 1
 	}
