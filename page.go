@@ -199,17 +199,17 @@ func forEachPageSlice(page BufferedPage, wantSize int64, do func(BufferedPage) e
 
 type errorPage struct {
 	err         error
-	columnIndex int
+	columnIndex int16
 }
 
-func newErrorPage(columnIndex int, msg string, args ...interface{}) *errorPage {
+func newErrorPage(columnIndex int16, msg string, args ...interface{}) *errorPage {
 	return &errorPage{
 		err:         fmt.Errorf(msg, args...),
 		columnIndex: columnIndex,
 	}
 }
 
-func (page *errorPage) Column() int                    { return page.columnIndex }
+func (page *errorPage) Column() int                    { return int(page.columnIndex) }
 func (page *errorPage) Dictionary() Dictionary         { return nil }
 func (page *errorPage) NumRows() int64                 { return 0 }
 func (page *errorPage) NumValues() int64               { return 0 }
@@ -549,7 +549,7 @@ func (r *repeatedPageReader) ReadValues(values []Value) (n int, err error) {
 
 type booleanPage struct {
 	values      []bool
-	columnIndex int8
+	columnIndex int16
 }
 
 func (page *booleanPage) Column() int { return int(^page.columnIndex) }
@@ -671,7 +671,7 @@ func (r *booleanPageReader) ReadValues(values []Value) (n int, err error) {
 
 type int32Page struct {
 	values      []int32
-	columnIndex int8
+	columnIndex int16
 }
 
 func (page *int32Page) Column() int { return int(^page.columnIndex) }
@@ -759,7 +759,7 @@ func (r *int32PageReader) ReadValues(values []Value) (n int, err error) {
 
 type int64Page struct {
 	values      []int64
-	columnIndex int8
+	columnIndex int16
 }
 
 func (page *int64Page) Column() int { return int(^page.columnIndex) }
@@ -847,7 +847,7 @@ func (r *int64PageReader) ReadValues(values []Value) (n int, err error) {
 
 type int96Page struct {
 	values      []deprecated.Int96
-	columnIndex int8
+	columnIndex int16
 }
 
 func (page *int96Page) Column() int { return int(^page.columnIndex) }
@@ -937,7 +937,7 @@ func (r *int96PageReader) ReadValues(values []Value) (n int, err error) {
 
 type floatPage struct {
 	values      []float32
-	columnIndex int8
+	columnIndex int16
 }
 
 func (page *floatPage) Column() int { return int(^page.columnIndex) }
@@ -1025,7 +1025,7 @@ func (r *floatPageReader) ReadValues(values []Value) (n int, err error) {
 
 type doublePage struct {
 	values      []float64
-	columnIndex int8
+	columnIndex int16
 }
 
 func (page *doublePage) Column() int { return int(^page.columnIndex) }
@@ -1113,7 +1113,7 @@ func (r *doublePageReader) ReadValues(values []Value) (n int, err error) {
 
 type byteArrayPage struct {
 	values      encoding.ByteArrayList
-	columnIndex int8
+	columnIndex int16
 }
 
 func (page *byteArrayPage) Column() int { return int(^page.columnIndex) }
@@ -1257,7 +1257,7 @@ func (r *byteArrayPageReader) ReadValues(values []Value) (n int, err error) {
 type fixedLenByteArrayPage struct {
 	size        int
 	data        []byte
-	columnIndex int8
+	columnIndex int16
 }
 
 func (page *fixedLenByteArrayPage) Column() int { return int(^page.columnIndex) }

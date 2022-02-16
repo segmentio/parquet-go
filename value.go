@@ -36,7 +36,7 @@ type Value struct {
 	// levels
 	definitionLevel int8
 	repetitionLevel int8
-	columnIndex     int8 // XOR so the zero-value is -1
+	columnIndex     int16 // XOR so the zero-value is -1
 }
 
 // ValueReader is an interface implemented by types that support reading
@@ -541,15 +541,15 @@ func (v Value) Double() float64 { return math.Float64frombits(v.u64) }
 func (v Value) ByteArray() []byte { return unsafe.Slice(v.ptr, int(v.u64)) }
 
 // RepetitionLevel returns the repetition level of v.
-func (v Value) RepetitionLevel() int8 { return v.repetitionLevel }
+func (v Value) RepetitionLevel() int { return int(v.repetitionLevel) }
 
 // DefinitionLevel returns the definition level of v.
-func (v Value) DefinitionLevel() int8 { return v.definitionLevel }
+func (v Value) DefinitionLevel() int { return int(v.definitionLevel) }
 
 // Column returns the column index within the row that v was created from.
 //
 // Returns -1 if the value does not carry a column index.
-func (v Value) Column() int8 { return ^v.columnIndex }
+func (v Value) Column() int { return int(^v.columnIndex) }
 
 // Bytes returns the binary representation of v.
 //
@@ -700,16 +700,10 @@ func (v Value) GoString() string {
 // set to the values passed as arguments.
 //
 // The method panics if either argument is negative.
-func (v Value) Level(repetitionLevel, definitionLevel, columnIndex int8) Value {
-	if repetitionLevel < 0 {
-		panic("cannot create a value with a negative repetition level")
-	}
-	if definitionLevel < 0 {
-		panic("cannot create a value with a negative definition level")
-	}
-	v.repetitionLevel = repetitionLevel
-	v.definitionLevel = definitionLevel
-	v.columnIndex = ^columnIndex
+func (v Value) Level(repetitionLevel, definitionLevel, columnIndex int) Value {
+	v.repetitionLevel = makeRepetitionLevel(repetitionLevel)
+	v.definitionLevel = makeDefinitionLevel(definitionLevel)
+	v.columnIndex = ^makeColumnIndex(columnIndex)
 	return v
 }
 

@@ -19,13 +19,13 @@ type dataPageReader struct {
 	numValues          int
 	maxRepetitionLevel int8
 	maxDefinitionLevel int8
-	columnIndex        int8
+	columnIndex        int16
 	repetitions        levelReader
 	definitions        levelReader
 	values             ValueDecoder
 }
 
-func newDataPageReader(typ Type, maxRepetitionLevel, maxDefinitionLevel, columnIndex int8, bufferSize int) *dataPageReader {
+func newDataPageReader(typ Type, maxRepetitionLevel, maxDefinitionLevel int8, columnIndex int16, bufferSize int) *dataPageReader {
 	bufferSize /= 2
 	repetitionBufferSize := 0
 	definitionBufferSize := 0

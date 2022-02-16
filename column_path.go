@@ -53,16 +53,16 @@ func stringsAreOrdered(strings1, strings2 []string) bool {
 type leafColumn struct {
 	node               Node
 	path               columnPath
-	columnIndex        int
 	maxRepetitionLevel int8
 	maxDefinitionLevel int8
+	columnIndex        int16
 }
 
 func forEachLeafColumnOf(node Node, do func(leafColumn)) {
 	forEachLeafColumn(node, nil, 0, 0, 0, do)
 }
 
-func forEachLeafColumn(node Node, path columnPath, columnIndex int, maxRepetitionLevel, maxDefinitionLevel int8, do func(leafColumn)) int {
+func forEachLeafColumn(node Node, path columnPath, columnIndex, maxRepetitionLevel, maxDefinitionLevel int, do func(leafColumn)) int {
 	switch {
 	case node.Optional():
 		maxDefinitionLevel++
@@ -75,9 +75,9 @@ func forEachLeafColumn(node Node, path columnPath, columnIndex int, maxRepetitio
 		do(leafColumn{
 			node:               node,
 			path:               path,
-			columnIndex:        columnIndex,
-			maxRepetitionLevel: maxRepetitionLevel,
-			maxDefinitionLevel: maxDefinitionLevel,
+			maxRepetitionLevel: makeRepetitionLevel(maxRepetitionLevel),
+			maxDefinitionLevel: makeDefinitionLevel(maxDefinitionLevel),
+			columnIndex:        makeColumnIndex(columnIndex),
 		})
 		return columnIndex + 1
 	}

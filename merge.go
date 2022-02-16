@@ -36,9 +36,9 @@ type mergedRowGroupRowReader struct {
 
 func (r *mergedRowGroupRowReader) init(m *mergedRowGroup) {
 	if r.schema != nil {
-		numColumns := numColumnsOf(r.schema)
+		numColumns := numLeafColumnsOf(r.schema)
 		cursors := make([]bufferedRowGroupCursor, len(m.rowGroups))
-		buffers := make([][]Value, numColumns*len(m.rowGroups))
+		buffers := make([][]Value, int(numColumns)*len(m.rowGroups))
 
 		for i, rowGroup := range m.rowGroups {
 			cursors[i].reader = rowGroup.Rows()
@@ -197,11 +197,11 @@ func (r *mergedRowGroupRowReader) Pop() interface{} {
 type rowGroupCursor interface {
 	readRow(Row) (Row, error)
 	readNext() error
-	nextRowValuesOf([]Value, int) []Value
+	nextRowValuesOf([]Value, int16) []Value
 }
 
 type columnSortFunc struct {
-	columnIndex int
+	columnIndex int16
 	compare     sortFunc
 }
 
@@ -230,7 +230,7 @@ func (cur *bufferedRowGroupCursor) readNext() (err error) {
 	return nil
 }
 
-func (cur *bufferedRowGroupCursor) nextRowValuesOf(values []Value, columnIndex int) []Value {
+func (cur *bufferedRowGroupCursor) nextRowValuesOf(values []Value, columnIndex int16) []Value {
 	return append(values, cur.columns[columnIndex]...)
 }
 
@@ -250,7 +250,7 @@ func (cur optimizedRowGroupCursor) readNext() error {
 	return nil
 }
 
-func (cur optimizedRowGroupCursor) nextRowValuesOf(values []Value, columnIndex int) []Value {
+func (cur optimizedRowGroupCursor) nextRowValuesOf(values []Value, columnIndex int16) []Value {
 	col := &cur.columns[columnIndex]
 	err := col.readValues()
 	if err != nil {

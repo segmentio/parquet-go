@@ -391,7 +391,7 @@ type emptyRowGroup struct {
 func newEmptyRowGroup(schema *Schema) *emptyRowGroup {
 	g := &emptyRowGroup{
 		schema:  schema,
-		columns: make([]emptyColumnChunk, numColumnsOf(schema)),
+		columns: make([]emptyColumnChunk, numLeafColumnsOf(schema)),
 	}
 	forEachLeafColumnOf(schema, func(leaf leafColumn) {
 		g.columns[leaf.columnIndex].typ = leaf.node.Type()
@@ -409,11 +409,11 @@ func (g *emptyRowGroup) Rows() Rows                      { return emptyRowReader
 
 type emptyColumnChunk struct {
 	typ    Type
-	column int
+	column int16
 }
 
 func (c *emptyColumnChunk) Type() Type               { return c.typ }
-func (c *emptyColumnChunk) Column() int              { return c.column }
+func (c *emptyColumnChunk) Column() int              { return int(c.column) }
 func (c *emptyColumnChunk) Pages() Pages             { return emptyPages{} }
 func (c *emptyColumnChunk) ColumnIndex() ColumnIndex { return &emptyColumnIndex }
 func (c *emptyColumnChunk) OffsetIndex() OffsetIndex { return &emptyOffsetIndex }

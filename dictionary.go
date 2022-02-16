@@ -684,7 +684,7 @@ func newIndexedType(typ Type, dict Dictionary) *indexedType {
 }
 
 func (t *indexedType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
-	return newIndexedColumnBuffer(t.dict, t, columnIndex, bufferSize)
+	return newIndexedColumnBuffer(t.dict, t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t *indexedType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -694,7 +694,7 @@ func (t *indexedType) NewValueDecoder(bufferSize int) ValueDecoder {
 type indexedPage struct {
 	dict        Dictionary
 	values      []int32
-	columnIndex int8
+	columnIndex int16
 }
 
 func (page *indexedPage) Column() int { return int(^page.columnIndex) }
@@ -778,12 +778,12 @@ type indexedColumnBuffer struct {
 	typ Type
 }
 
-func newIndexedColumnBuffer(dict Dictionary, typ Type, columnIndex, bufferSize int) *indexedColumnBuffer {
+func newIndexedColumnBuffer(dict Dictionary, typ Type, columnIndex int16, bufferSize int) *indexedColumnBuffer {
 	return &indexedColumnBuffer{
 		indexedPage: indexedPage{
 			dict:        dict,
 			values:      make([]int32, 0, bufferSize/4),
-			columnIndex: ^int8(columnIndex),
+			columnIndex: ^columnIndex,
 		},
 		typ: typ,
 	}

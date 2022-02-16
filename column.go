@@ -35,7 +35,7 @@ type Column struct {
 	depth              int8
 	maxRepetitionLevel int8
 	maxDefinitionLevel int8
-	index              int8
+	index              int16
 }
 
 // Type returns the type of the column.
@@ -174,19 +174,19 @@ func (r *columnPages) SeekToRow(rowIndex int64) error {
 }
 
 // Depth returns the position of the column relative to the root.
-func (c *Column) Depth() int8 { return c.depth }
+func (c *Column) Depth() int { return int(c.depth) }
 
 // MaxRepetitionLevel returns the maximum value of repetition levels on this
 // column.
-func (c *Column) MaxRepetitionLevel() int8 { return c.maxRepetitionLevel }
+func (c *Column) MaxRepetitionLevel() int { return int(c.maxRepetitionLevel) }
 
 // MaxDefinitionLevel returns the maximum value of definition levels on this
 // column.
-func (c *Column) MaxDefinitionLevel() int8 { return c.maxDefinitionLevel }
+func (c *Column) MaxDefinitionLevel() int { return int(c.maxDefinitionLevel) }
 
 // Index returns the position of the column in a row. Only leaf columns have a
 // column index, the method returns -1 when called on non-leaf columns.
-func (c *Column) Index() int8 { return c.index }
+func (c *Column) Index() int { return int(c.index) }
 
 // ValueByName returns the sub-value with the given name in base.
 func (c *Column) ValueByName(base reflect.Value, name string) reflect.Value {
@@ -270,7 +270,7 @@ func (c *Column) setLevels(depth, repetition, definition, index int) (int, error
 	if len(c.columns) > 0 {
 		c.index = -1
 	} else {
-		c.index = int8(index)
+		c.index = int16(index)
 		index++
 	}
 

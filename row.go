@@ -37,8 +37,8 @@ func (row Row) Equal(other Row) bool {
 	return true
 }
 
-func (row Row) startsWith(columnIndex int) bool {
-	return len(row) > 0 && int(row[0].Column()) == columnIndex
+func (row Row) startsWith(columnIndex int16) bool {
+	return len(row) > 0 && row[0].Column() == int(columnIndex)
 }
 
 // RowSeeker is an interface implemented by readers of parquet rows which can be
@@ -311,7 +311,7 @@ type levels struct {
 
 type deconstructFunc func(Row, levels, reflect.Value) Row
 
-func deconstructFuncOf(columnIndex int, node Node) (int, deconstructFunc) {
+func deconstructFuncOf(columnIndex int16, node Node) (int16, deconstructFunc) {
 	switch {
 	case node.Optional():
 		return deconstructFuncOfOptional(columnIndex, node)
@@ -327,7 +327,7 @@ func deconstructFuncOf(columnIndex int, node Node) (int, deconstructFunc) {
 }
 
 //go:noinline
-func deconstructFuncOfOptional(columnIndex int, node Node) (int, deconstructFunc) {
+func deconstructFuncOfOptional(columnIndex int16, node Node) (int16, deconstructFunc) {
 	columnIndex, deconstruct := deconstructFuncOf(columnIndex, Required(node))
 	return columnIndex, func(row Row, levels levels, value reflect.Value) Row {
 		if value.IsValid() {
@@ -345,7 +345,7 @@ func deconstructFuncOfOptional(columnIndex int, node Node) (int, deconstructFunc
 }
 
 //go:noinline
-func deconstructFuncOfRepeated(columnIndex int, node Node) (int, deconstructFunc) {
+func deconstructFuncOfRepeated(columnIndex int16, node Node) (int16, deconstructFunc) {
 	columnIndex, deconstruct := deconstructFuncOf(columnIndex, Required(node))
 	return columnIndex, func(row Row, levels levels, value reflect.Value) Row {
 		if !value.IsValid() || value.Len() == 0 {
@@ -364,7 +364,7 @@ func deconstructFuncOfRepeated(columnIndex int, node Node) (int, deconstructFunc
 	}
 }
 
-func deconstructFuncOfRequired(columnIndex int, node Node) (int, deconstructFunc) {
+func deconstructFuncOfRequired(columnIndex int16, node Node) (int16, deconstructFunc) {
 	switch {
 	case isLeaf(node):
 		return deconstructFuncOfLeaf(columnIndex, node)
@@ -373,12 +373,12 @@ func deconstructFuncOfRequired(columnIndex int, node Node) (int, deconstructFunc
 	}
 }
 
-func deconstructFuncOfList(columnIndex int, node Node) (int, deconstructFunc) {
+func deconstructFuncOfList(columnIndex int16, node Node) (int16, deconstructFunc) {
 	return deconstructFuncOf(columnIndex, Repeated(listElementOf(node)))
 }
 
 //go:noinline
-func deconstructFuncOfMap(columnIndex int, node Node) (int, deconstructFunc) {
+func deconstructFuncOfMap(columnIndex int16, node Node) (int16, deconstructFunc) {
 	keyValue := mapKeyValueOf(node)
 	keyValueType := keyValue.GoType()
 	keyValueElem := keyValueType.Elem()
@@ -409,7 +409,7 @@ func deconstructFuncOfMap(columnIndex int, node Node) (int, deconstructFunc) {
 }
 
 //go:noinline
-func deconstructFuncOfGroup(columnIndex int, node Node) (int, deconstructFunc) {
+func deconstructFuncOfGroup(columnIndex int16, node Node) (int16, deconstructFunc) {
 	names := node.ChildNames()
 	funcs := make([]deconstructFunc, len(names))
 
@@ -444,12 +444,12 @@ func deconstructFuncOfGroup(columnIndex int, node Node) (int, deconstructFunc) {
 }
 
 //go:noinline
-func deconstructFuncOfLeaf(columnIndex int, node Node) (int, deconstructFunc) {
+func deconstructFuncOfLeaf(columnIndex int16, node Node) (int16, deconstructFunc) {
 	if columnIndex > MaxColumnIndex {
 		panic("row cannot be deconstructed because it has more than 127 columns")
 	}
 	kind := node.Type().Kind()
-	valueColumnIndex := ^int8(columnIndex)
+	valueColumnIndex := ^columnIndex
 	return columnIndex + 1, func(row Row, levels levels, value reflect.Value) Row {
 		v := Value{}
 
@@ -466,7 +466,7 @@ func deconstructFuncOfLeaf(columnIndex int, node Node) (int, deconstructFunc) {
 
 type reconstructFunc func(reflect.Value, levels, Row) (Row, error)
 
-func reconstructFuncOf(columnIndex int, node Node) (int, reconstructFunc) {
+func reconstructFuncOf(columnIndex int16, node Node) (int16, reconstructFunc) {
 	switch {
 	case node.Optional():
 		return reconstructFuncOfOptional(columnIndex, node)
@@ -482,14 +482,14 @@ func reconstructFuncOf(columnIndex int, node Node) (int, reconstructFunc) {
 }
 
 //go:noinline
-func reconstructFuncOfOptional(columnIndex int, node Node) (int, reconstructFunc) {
+func reconstructFuncOfOptional(columnIndex int16, node Node) (int16, reconstructFunc) {
 	nextColumnIndex, reconstruct := reconstructFuncOf(columnIndex, Required(node))
 	rowLength := nextColumnIndex - columnIndex
 	return nextColumnIndex, func(value reflect.Value, levels levels, row Row) (Row, error) {
 		if !row.startsWith(columnIndex) {
 			return row, fmt.Errorf("row is missing optional column %d", columnIndex)
 		}
-		if len(row) < rowLength {
+		if len(row) < int(rowLength) {
 			return row, fmt.Errorf("expected optional column %d to have at least %d values but got %d", columnIndex, rowLength, len(row))
 		}
 
@@ -512,7 +512,7 @@ func reconstructFuncOfOptional(columnIndex int, node Node) (int, reconstructFunc
 }
 
 //go:noinline
-func reconstructFuncOfRepeated(columnIndex int, node Node) (int, reconstructFunc) {
+func reconstructFuncOfRepeated(columnIndex int16, node Node) (int16, reconstructFunc) {
 	nextColumnIndex, reconstruct := reconstructFuncOf(columnIndex, Required(node))
 	rowLength := nextColumnIndex - columnIndex
 	return nextColumnIndex, func(value reflect.Value, lvls levels, row Row) (Row, error) {
@@ -544,11 +544,11 @@ func reconstructFuncOfRepeated(columnIndex int, node Node) (int, reconstructFunc
 	}
 }
 
-func reconstructRepeated(columnIndex, rowLength int, levels levels, row Row, do func(levels, Row) (Row, error)) (Row, error) {
+func reconstructRepeated(columnIndex, rowLength int16, levels levels, row Row, do func(levels, Row) (Row, error)) (Row, error) {
 	if !row.startsWith(columnIndex) {
 		return row, fmt.Errorf("row is missing repeated column %d", columnIndex)
 	}
-	if len(row) < rowLength {
+	if len(row) < int(rowLength) {
 		return row, fmt.Errorf("expected repeated column %d to have at least %d values but got %d", columnIndex, rowLength, len(row))
 	}
 
@@ -569,7 +569,7 @@ func reconstructRepeated(columnIndex, rowLength int, levels levels, row Row, do 
 	return row, err
 }
 
-func reconstructFuncOfRequired(columnIndex int, node Node) (int, reconstructFunc) {
+func reconstructFuncOfRequired(columnIndex int16, node Node) (int16, reconstructFunc) {
 	switch {
 	case isLeaf(node):
 		return reconstructFuncOfLeaf(columnIndex, node)
@@ -578,12 +578,12 @@ func reconstructFuncOfRequired(columnIndex int, node Node) (int, reconstructFunc
 	}
 }
 
-func reconstructFuncOfList(columnIndex int, node Node) (int, reconstructFunc) {
+func reconstructFuncOfList(columnIndex int16, node Node) (int16, reconstructFunc) {
 	return reconstructFuncOf(columnIndex, Repeated(listElementOf(node)))
 }
 
 //go:noinline
-func reconstructFuncOfMap(columnIndex int, node Node) (int, reconstructFunc) {
+func reconstructFuncOfMap(columnIndex int16, node Node) (int16, reconstructFunc) {
 	keyValue := mapKeyValueOf(node)
 	keyValueType := keyValue.GoType()
 	keyValueElem := keyValueType.Elem()
@@ -612,10 +612,10 @@ func reconstructFuncOfMap(columnIndex int, node Node) (int, reconstructFunc) {
 }
 
 //go:noinline
-func reconstructFuncOfGroup(columnIndex int, node Node) (int, reconstructFunc) {
+func reconstructFuncOfGroup(columnIndex int16, node Node) (int16, reconstructFunc) {
 	names := node.ChildNames()
 	funcs := make([]reconstructFunc, len(names))
-	columnIndexes := make([]int, len(names))
+	columnIndexes := make([]int16, len(names))
 
 	for i, name := range names {
 		columnIndex, funcs[i] = reconstructFuncOf(columnIndex, node.ChildByName(name))
@@ -647,7 +647,7 @@ func reconstructFuncOfGroup(columnIndex int, node Node) (int, reconstructFunc) {
 }
 
 //go:noinline
-func reconstructFuncOfLeaf(columnIndex int, node Node) (int, reconstructFunc) {
+func reconstructFuncOfLeaf(columnIndex int16, node Node) (int16, reconstructFunc) {
 	return columnIndex + 1, func(value reflect.Value, _ levels, row Row) (Row, error) {
 		if !row.startsWith(columnIndex) {
 			return row, fmt.Errorf("no values found in parquet row for column %d", columnIndex)

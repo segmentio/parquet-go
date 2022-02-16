@@ -443,22 +443,22 @@ func isMap(node Node) bool {
 	return logicalType != nil && logicalType.Map != nil
 }
 
-func numColumnsOf(node Node) int {
-	return maxColumnIndexOf(node, 0)
+func numLeafColumnsOf(node Node) int16 {
+	return makeColumnIndex(numLeafColumns(node, 0))
 }
 
-func maxColumnIndexOf(node Node, columnIndex int) int {
+func numLeafColumns(node Node, columnIndex int) int {
 	if isLeaf(node) {
 		return columnIndex + 1
 	}
 
 	if indexedNode, ok := unwrap(node).(IndexedNode); ok {
 		for i, n := 0, indexedNode.NumChildren(); i < n; i++ {
-			columnIndex = maxColumnIndexOf(indexedNode.ChildByIndex(i), columnIndex)
+			columnIndex = numLeafColumns(indexedNode.ChildByIndex(i), columnIndex)
 		}
 	} else {
 		for _, name := range node.ChildNames() {
-			columnIndex = maxColumnIndexOf(node.ChildByName(name), columnIndex)
+			columnIndex = numLeafColumns(node.ChildByName(name), columnIndex)
 		}
 	}
 

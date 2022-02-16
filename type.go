@@ -14,7 +14,7 @@ import (
 
 // Kind is an enumeration type representing the physical types supported by the
 // parquet type system.
-type Kind int16
+type Kind int8
 
 const (
 	Boolean           Kind = Kind(format.Boolean)
@@ -209,7 +209,7 @@ func (t booleanType) NewDictionary(bufferSize int) Dictionary {
 }
 
 func (t booleanType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
-	return newBooleanColumnBuffer(t, columnIndex, bufferSize)
+	return newBooleanColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t booleanType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -241,7 +241,7 @@ func (t int32Type) NewDictionary(bufferSize int) Dictionary {
 }
 
 func (t int32Type) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
-	return newInt32ColumnBuffer(t, columnIndex, bufferSize)
+	return newInt32ColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t int32Type) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -273,7 +273,7 @@ func (t int64Type) NewDictionary(bufferSize int) Dictionary {
 }
 
 func (t int64Type) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
-	return newInt64ColumnBuffer(t, columnIndex, bufferSize)
+	return newInt64ColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t int64Type) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -305,7 +305,7 @@ func (t int96Type) NewDictionary(bufferSize int) Dictionary {
 }
 
 func (t int96Type) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
-	return newInt96ColumnBuffer(t, columnIndex, bufferSize)
+	return newInt96ColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t int96Type) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -337,7 +337,7 @@ func (t floatType) NewDictionary(bufferSize int) Dictionary {
 }
 
 func (t floatType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
-	return newFloatColumnBuffer(t, columnIndex, bufferSize)
+	return newFloatColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t floatType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -367,7 +367,7 @@ func (t doubleType) NewDictionary(bufferSize int) Dictionary {
 }
 
 func (t doubleType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
-	return newDoubleColumnBuffer(t, columnIndex, bufferSize)
+	return newDoubleColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t doubleType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -399,7 +399,7 @@ func (t byteArrayType) NewDictionary(bufferSize int) Dictionary {
 }
 
 func (t byteArrayType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
-	return newByteArrayColumnBuffer(t, columnIndex, bufferSize)
+	return newByteArrayColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t byteArrayType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -436,7 +436,7 @@ func (t *fixedLenByteArrayType) NewDictionary(bufferSize int) Dictionary {
 }
 
 func (t *fixedLenByteArrayType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
-	return newFixedLenByteArrayColumnBuffer(t, columnIndex, bufferSize)
+	return newFixedLenByteArrayColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t *fixedLenByteArrayType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -591,15 +591,15 @@ func (t *intType) NewDictionary(bufferSize int) Dictionary {
 func (t *intType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 	if t.IsSigned {
 		if t.BitWidth == 64 {
-			return newInt64ColumnBuffer(t, columnIndex, bufferSize)
+			return newInt64ColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 		} else {
-			return newInt32ColumnBuffer(t, columnIndex, bufferSize)
+			return newInt32ColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 		}
 	} else {
 		if t.BitWidth == 64 {
-			return newUint64ColumnBuffer(t, columnIndex, bufferSize)
+			return newUint64ColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 		} else {
-			return newUint32ColumnBuffer(t, columnIndex, bufferSize)
+			return newUint32ColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 		}
 	}
 }
@@ -688,7 +688,7 @@ func (t *stringType) NewDictionary(bufferSize int) Dictionary {
 }
 
 func (t *stringType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
-	return newByteArrayColumnBuffer(t, columnIndex, bufferSize)
+	return newByteArrayColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t *stringType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -739,7 +739,7 @@ func (t *uuidType) NewDictionary(bufferSize int) Dictionary {
 }
 
 func (t *uuidType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
-	return newFixedLenByteArrayColumnBuffer(t, columnIndex, bufferSize)
+	return newFixedLenByteArrayColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t *uuidType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -792,7 +792,7 @@ func (t *enumType) NewDictionary(bufferSize int) Dictionary {
 }
 
 func (t *enumType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
-	return newByteArrayColumnBuffer(t, columnIndex, bufferSize)
+	return newByteArrayColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t *enumType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -845,7 +845,7 @@ func (t *jsonType) NewDictionary(bufferSize int) Dictionary {
 }
 
 func (t *jsonType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
-	return newByteArrayColumnBuffer(t, columnIndex, bufferSize)
+	return newByteArrayColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t *jsonType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -894,7 +894,7 @@ func (t *bsonType) NewDictionary(bufferSize int) Dictionary {
 }
 
 func (t *bsonType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
-	return newByteArrayColumnBuffer(t, columnIndex, bufferSize)
+	return newByteArrayColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t *bsonType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -939,7 +939,7 @@ func (t *dateType) NewDictionary(bufferSize int) Dictionary {
 }
 
 func (t *dateType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
-	return newInt32ColumnBuffer(t, columnIndex, bufferSize)
+	return newInt32ColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t *dateType) NewValueDecoder(bufferSize int) ValueDecoder {
@@ -1064,9 +1064,9 @@ func (t *timeType) NewDictionary(bufferSize int) Dictionary {
 
 func (t *timeType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 	if t.Unit.Millis != nil {
-		return newInt32ColumnBuffer(t, columnIndex, bufferSize)
+		return newInt32ColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 	} else {
-		return newInt64ColumnBuffer(t, columnIndex, bufferSize)
+		return newInt64ColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 	}
 }
 
@@ -1123,7 +1123,7 @@ func (t *timestampType) NewDictionary(bufferSize int) Dictionary {
 }
 
 func (t *timestampType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
-	return newInt64ColumnBuffer(t, columnIndex, bufferSize)
+	return newInt64ColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t *timestampType) NewValueDecoder(bufferSize int) ValueDecoder {

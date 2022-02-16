@@ -13,7 +13,7 @@ func concat(schema *Schema, rowGroups []RowGroup) *concatenatedRowGroup {
 func (c *concatenatedRowGroup) init(schema *Schema, rowGroups []RowGroup) {
 	c.schema = schema
 	c.rowGroups = rowGroups
-	c.columns = make([]concatenatedColumnChunk, numColumnsOf(schema))
+	c.columns = make([]concatenatedColumnChunk, numLeafColumnsOf(schema))
 
 	for i := range c.columns {
 		c.columns[i].rowGroup = c
