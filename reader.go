@@ -72,7 +72,7 @@ func NewReader(input io.ReaderAt, options ...ReaderOption) *Reader {
 		}
 	}
 
-	_, err := NewReaderConfig(options...)
+	c, err := NewReaderConfig(options...)
 	if err != nil {
 		panic(err)
 	}
@@ -83,7 +83,7 @@ func NewReader(input io.ReaderAt, options ...ReaderOption) *Reader {
 	r := &Reader{
 		file:       f,
 		fileSchema: schema,
-		readSchema: schema,
+		readSchema: coalesceSchema(c.Schema, schema),
 	}
 
 	switch n := f.NumRowGroups(); n {
