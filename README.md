@@ -236,7 +236,7 @@ buffer.Write(&Character{FirstName: "Anakin", LastName: "Skywalker"})
 sort.Sort(buffer)
 
 writer := parquet.NewWriter(output)
-_, err := parquet.CopyRows(writer, buffer)
+_, err := parquet.CopyRows(writer, buffer.Rows())
 if err != nil {
     ...
 }
