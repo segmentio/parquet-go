@@ -80,7 +80,9 @@ func (c *FileConfig) Validate() error {
 //		// ...
 //	})
 //
-type ReaderConfig struct{}
+type ReaderConfig struct {
+	Schema *Schema
+}
 
 // DefaultReaderConfig returns a new ReaderConfig value initialized with the
 // default reader configuration.
@@ -108,7 +110,9 @@ func (c *ReaderConfig) Apply(options ...ReaderOption) {
 
 // ConfigureReader applies configuration options from c to config.
 func (c *ReaderConfig) ConfigureReader(config *ReaderConfig) {
-	*config = ReaderConfig{}
+	*config = ReaderConfig{
+		Schema: coalesceSchema(c.Schema, config.Schema),
+	}
 }
 
 // Validate returns a non-nil error if the configuration of c is invalid.

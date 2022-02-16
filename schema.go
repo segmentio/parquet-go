@@ -139,6 +139,11 @@ func makeColumnReadRowFunc(node Node) columnReadRowFunc {
 // the output parquet file.
 func (s *Schema) ConfigureRowGroup(config *RowGroupConfig) { config.Schema = s }
 
+// ConfigureReader satisfies the ReaderOption interface, allowing Schema
+// instances to be passed to NewReader to pre-declare the schema of rows
+// read from the reader.
+func (s *Schema) ConfigureReader(config *ReaderConfig) { config.Schema = s }
+
 // ConfigureWriter satisfies the WriterOption interface, allowing Schema
 // instances to be passed to NewWriter to pre-declare the schema of the
 // output parquet file.
@@ -686,6 +691,7 @@ func (n *goNode) GoType() reflect.Type { return n.gotype }
 
 var (
 	_ RowGroupOption = (*Schema)(nil)
+	_ ReaderOption   = (*Schema)(nil)
 	_ WriterOption   = (*Schema)(nil)
 	_ IndexedNode    = (*structNode)(nil)
 )

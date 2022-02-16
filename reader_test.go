@@ -273,7 +273,7 @@ func TestReader(t *testing.T) {
 					}
 
 					file.Reset(buf.Bytes())
-					r := parquet.NewReader(file)
+					r := parquet.NewReader(file, parquet.SchemaOf(test.model))
 
 					for i, v := range rows {
 						if err := r.Read(rowPtr.Interface()); err != nil {
@@ -375,5 +375,35 @@ func TestReaderReadSubset(t *testing.T) {
 	}
 	if err := quick.Check(f, nil); err != nil {
 		t.Error(err)
+	}
+}
+
+func TestReaderSeekToRow(t *testing.T) {
+	type rowType struct {
+		Name utf8string `parquet:",dict"`
+	}
+
+	rows := rowsOf(10, rowType{})
+	buf := new(bytes.Buffer)
+	err := writeParquetFile(buf, rows)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	reader := parquet.NewReader(bytes.NewReader(buf.Bytes()))
+	for i := 0; i < 10; i++ {
+		if err := reader.SeekToRow(int64(i)); err != nil {
+			t.Fatalf("seek to row %d: %v", i, err)
+		}
+
+		row := new(rowType)
+		err := reader.Read(row)
+		if err != nil {
+			t.Fatalf("reading row %d: %v", i, err)
+		}
+
+		if *row != rows[i] {
+			t.Fatalf("row %d mismatch: got=%+v want=%+v", i, *row, rows[i])
+		}
 	}
 }

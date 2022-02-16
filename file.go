@@ -407,15 +407,15 @@ func (c *fileColumnChunk) setPagesOn(r *filePages) {
 		columnType: c.column.Type(),
 		codec:      c.chunk.MetaData.Codec,
 	}
-	baseOffset := c.chunk.MetaData.DataPageOffset
-	r.dataOffset = baseOffset
+	r.baseOffset = c.chunk.MetaData.DataPageOffset
+	r.dataOffset = r.baseOffset
 	if c.chunk.MetaData.DictionaryPageOffset != 0 {
-		baseOffset = c.chunk.MetaData.DictionaryPageOffset
-		r.dictOffset = baseOffset
+		r.baseOffset = c.chunk.MetaData.DictionaryPageOffset
+		r.dictOffset = r.baseOffset
 	}
-	r.section = io.NewSectionReader(c.file, baseOffset, c.chunk.MetaData.TotalCompressedSize)
+	r.section = io.NewSectionReader(c.file, r.baseOffset, c.chunk.MetaData.TotalCompressedSize)
 	r.rbuf = bufio.NewReaderSize(r.section, defaultReadBufferSize)
-	r.section.Seek(r.dataOffset-baseOffset, io.SeekStart)
+	r.section.Seek(r.dataOffset-r.baseOffset, io.SeekStart)
 	r.decoder.Reset(r.protocol.NewReader(r.rbuf))
 }
 
@@ -448,6 +448,7 @@ type filePages struct {
 	column     *fileColumnChunk
 	protocol   thrift.CompactProtocol
 	decoder    thrift.Decoder
+	baseOffset int64
 	dictOffset int64
 	dataOffset int64
 
@@ -483,7 +484,7 @@ func (r *filePages) readPage() (*filePage, error) {
 		*h.DataPageHeaderV2 = format.DataPageHeaderV2{}
 	}
 
-	if err := r.decoder.Decode(&r.page.header); err != nil {
+	if err := r.decoder.Decode(h); err != nil {
 		if err != io.EOF {
 			err = fmt.Errorf("decoding page header: %w", err)
 		}
@@ -604,7 +605,7 @@ func (r *filePages) ReadPage() (Page, error) {
 
 func (r *filePages) SeekToRow(rowIndex int64) (err error) {
 	if r.column.offsetIndex == nil {
-		_, err = r.section.Seek(r.dataOffset, io.SeekStart)
+		_, err = r.section.Seek(r.dataOffset-r.baseOffset, io.SeekStart)
 		r.skip = rowIndex
 		r.page.index = 0
 	} else {
@@ -615,7 +616,7 @@ func (r *filePages) SeekToRow(rowIndex int64) (err error) {
 		if index < 0 {
 			return ErrSeekOutOfRange
 		}
-		_, err = r.section.Seek(pages[index].Offset-r.dataOffset, io.SeekStart)
+		_, err = r.section.Seek(pages[index].Offset-r.baseOffset, io.SeekStart)
 		r.skip = rowIndex - pages[index].FirstRowIndex
 		r.page.index = index
 	}
