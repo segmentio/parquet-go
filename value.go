@@ -31,7 +31,6 @@ type Value struct {
 	// data
 	ptr *byte
 	u64 uint64
-	u32 uint32
 	// type
 	kind int8 // XOR(Kind) so the zero-value is <null>
 	// levels
@@ -428,7 +427,7 @@ func makeValue(k Kind, v reflect.Value) Value {
 func makeValueBoolean(value bool) Value {
 	v := Value{kind: ^int8(Boolean)}
 	if value {
-		v.u32 = 1
+		v.u64 = 1
 	}
 	return v
 }
@@ -436,7 +435,7 @@ func makeValueBoolean(value bool) Value {
 func makeValueInt32(value int32) Value {
 	return Value{
 		kind: ^int8(Int32),
-		u32:  uint32(value),
+		u64:  uint64(value),
 	}
 }
 
@@ -448,17 +447,25 @@ func makeValueInt64(value int64) Value {
 }
 
 func makeValueInt96(value deprecated.Int96) Value {
+	// TODO: this is highly inefficient because we need a heap allocation to
+	// store the value; we don't expect INT96 to be used frequently since it
+	// is a deprecated feature of parquet, and it helps keep the Value type
+	// compact for all the other more common cases.
+	bits := [12]byte{}
+	binary.LittleEndian.PutUint32(bits[0:4], value[0])
+	binary.LittleEndian.PutUint32(bits[4:8], value[1])
+	binary.LittleEndian.PutUint32(bits[8:12], value[2])
 	return Value{
 		kind: ^int8(Int96),
-		u64:  uint64(value[0]) | (uint64(value[1]) << 32),
-		u32:  value[2],
+		ptr:  &bits[0],
+		u64:  12, // set the length so we can use the ByteArray method
 	}
 }
 
 func makeValueFloat(value float32) Value {
 	return Value{
 		kind: ^int8(Float),
-		u32:  math.Float32bits(value),
+		u64:  uint64(math.Float32bits(value)),
 	}
 }
 
@@ -509,19 +516,19 @@ func (v Value) Kind() Kind { return ^Kind(v.kind) }
 func (v Value) IsNull() bool { return v.kind == 0 }
 
 // Boolean returns v as a bool, assuming the underlying type is BOOLEAN.
-func (v Value) Boolean() bool { return v.u32 != 0 }
+func (v Value) Boolean() bool { return v.u64 != 0 }
 
 // Int32 returns v as a int32, assuming the underlying type is INT32.
-func (v Value) Int32() int32 { return int32(v.u32) }
+func (v Value) Int32() int32 { return int32(v.u64) }
 
 // Int64 returns v as a int64, assuming the underlying type is INT64.
 func (v Value) Int64() int64 { return int64(v.u64) }
 
 // Int96 returns v as a int96, assuming the underlying type is INT96.
-func (v Value) Int96() deprecated.Int96 { return makeInt96(v.u64, v.u32) }
+func (v Value) Int96() deprecated.Int96 { return makeInt96(v.ByteArray()) }
 
 // Float returns v as a float32, assuming the underlying type is FLOAT.
-func (v Value) Float() float32 { return math.Float32frombits(v.u32) }
+func (v Value) Float() float32 { return math.Float32frombits(uint32(v.u64)) }
 
 // Double returns v as a float64, assuming the underlying type is DOUBLE.
 func (v Value) Double() float64 { return math.Float64frombits(v.u64) }
@@ -553,22 +560,18 @@ func (v Value) Bytes() []byte { return v.AppendBytes(nil) }
 //
 // If v is the null value, b is returned unchanged.
 func (v Value) AppendBytes(b []byte) []byte {
-	buf := [12]byte{}
+	buf := [8]byte{}
 	switch v.Kind() {
 	case Boolean:
-		binary.LittleEndian.PutUint32(buf[:4], v.u32)
+		binary.LittleEndian.PutUint32(buf[:4], uint32(v.u64))
 		return append(b, buf[0])
 	case Int32, Float:
-		binary.LittleEndian.PutUint32(buf[:4], v.u32)
+		binary.LittleEndian.PutUint32(buf[:4], uint32(v.u64))
 		return append(b, buf[:4]...)
 	case Int64, Double:
 		binary.LittleEndian.PutUint64(buf[:8], v.u64)
 		return append(b, buf[:8]...)
-	case Int96:
-		binary.LittleEndian.PutUint64(buf[:8], v.u64)
-		binary.LittleEndian.PutUint32(buf[8:], v.u32)
-		return append(b, buf[:12]...)
-	case ByteArray, FixedLenByteArray:
+	case ByteArray, FixedLenByteArray, Int96:
 		return append(b, v.ByteArray()...)
 	default:
 		return b
@@ -720,11 +723,11 @@ func (v Value) Clone() Value {
 	return v
 }
 
-func makeInt96(lo uint64, hi uint32) (i96 deprecated.Int96) {
+func makeInt96(bits []byte) (i96 deprecated.Int96) {
 	return deprecated.Int96{
-		0: uint32(lo),
-		1: uint32(lo >> 32),
-		2: hi,
+		2: binary.LittleEndian.Uint32(bits[8:12]),
+		1: binary.LittleEndian.Uint32(bits[4:8]),
+		0: binary.LittleEndian.Uint32(bits[0:4]),
 	}
 }
 
@@ -861,9 +864,7 @@ func parseValue(kind Kind, data []byte) (val Value, err error) {
 		}
 	case Int96:
 		if len(data) == 12 {
-			lo := binary.LittleEndian.Uint64(data[0:8])
-			hi := binary.LittleEndian.Uint32(data[8:12])
-			val = makeValueInt96(makeInt96(lo, hi))
+			val = makeValueInt96(makeInt96(data))
 		}
 	case Float:
 		if len(data) == 4 {
