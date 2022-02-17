@@ -508,8 +508,48 @@ func (c *convertedRowGroup) NumRows() int64                  { return c.rowGroup
 func (c *convertedRowGroup) NumColumns() int                 { return len(c.columns) }
 func (c *convertedRowGroup) Column(i int) ColumnChunk        { return c.columns[i] }
 func (c *convertedRowGroup) SortingColumns() []SortingColumn { return c.sorting }
-func (c *convertedRowGroup) Rows() Rows                      { return &convertedRows{rows: c.rowGroup.Rows(), conv: c.conv} }
 func (c *convertedRowGroup) Schema() *Schema                 { return c.conv.Schema() }
+
+func (c *convertedRowGroup) Rows() Rows {
+	// The logic in this method is a replacement for the default row iterator
+	// accessed by calling RowGroup.Rows; the only difference is that we mask
+	// columns that are missing in the target schema to prevent them from being
+	// read (since the values would be discarded anyways).
+	columns := make([]ColumnChunk, c.rowGroup.NumColumns())
+	missing := make([]missingColumnChunk, len(columns))
+	numRows := c.rowGroup.NumRows()
+
+	for i := range missing {
+		missing[i] = missingColumnChunk{
+			typ:       c.rowGroup.Column(i).Type(),
+			column:    int16(i),
+			numRows:   numRows,
+			numValues: numRows,
+			numNulls:  numRows,
+		}
+	}
+
+	for i := range columns {
+		columns[i] = &missing[i]
+	}
+
+	for i := range c.columns {
+		j := c.conv.Column(i)
+		if j >= 0 && j < len(columns) {
+			columns[j] = c.rowGroup.Column(j)
+		}
+	}
+
+	rows := &rowGroupRowReader{
+		rowGroup: &rowGroup{
+			schema:  c.rowGroup.Schema(),
+			numRows: numRows,
+			columns: columns,
+		},
+	}
+
+	return &convertedRows{rows: rows, conv: c.conv}
+}
 
 // ConvertRowReader constructs a wrapper of the given row reader which applies
 // the given schema conversion to the rows.
