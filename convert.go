@@ -417,10 +417,46 @@ func ConvertRowGroup(rowGroup RowGroup, conv Conversion) RowGroup {
 		// * We may be able to assume the repetition and definition levels at
 		//   the call site (e.g. in the functions reading rows from columns).
 		//
-		rowGroup: rowGroup,
+		// Columns of the source row group which do not exist in the target are
+		// masked to prevent loading unneeded pages when reading rows from the
+		// converted row group.
+		rowGroup: maskMissingRowGroupColumns(rowGroup, len(columns), conv),
 		columns:  columns,
 		sorting:  sorting,
 		conv:     conv,
+	}
+}
+
+func maskMissingRowGroupColumns(r RowGroup, numColumns int, conv Conversion) RowGroup {
+	columns := make([]ColumnChunk, r.NumColumns())
+	missing := make([]missingColumnChunk, len(columns))
+	numRows := r.NumRows()
+
+	for i := range missing {
+		missing[i] = missingColumnChunk{
+			typ:       r.Column(i).Type(),
+			column:    int16(i),
+			numRows:   numRows,
+			numValues: numRows,
+			numNulls:  numRows,
+		}
+	}
+
+	for i := range columns {
+		columns[i] = &missing[i]
+	}
+
+	for i := 0; i < numColumns; i++ {
+		j := conv.Column(i)
+		if j >= 0 && j < len(columns) {
+			columns[j] = r.Column(j)
+		}
+	}
+
+	return &rowGroup{
+		schema:  r.Schema(),
+		numRows: numRows,
+		columns: columns,
 	}
 }
 
@@ -508,8 +544,8 @@ func (c *convertedRowGroup) NumRows() int64                  { return c.rowGroup
 func (c *convertedRowGroup) NumColumns() int                 { return len(c.columns) }
 func (c *convertedRowGroup) Column(i int) ColumnChunk        { return c.columns[i] }
 func (c *convertedRowGroup) SortingColumns() []SortingColumn { return c.sorting }
-func (c *convertedRowGroup) Rows() Rows                      { return &convertedRows{rows: c.rowGroup.Rows(), conv: c.conv} }
 func (c *convertedRowGroup) Schema() *Schema                 { return c.conv.Schema() }
+func (c *convertedRowGroup) Rows() Rows                      { return &convertedRows{rows: c.rowGroup.Rows(), conv: c.conv} }
 
 // ConvertRowReader constructs a wrapper of the given row reader which applies
 // the given schema conversion to the rows.
