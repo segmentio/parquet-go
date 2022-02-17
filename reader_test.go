@@ -345,8 +345,12 @@ func TestReaderReadSubset(t *testing.T) {
 	type Point3D struct{ X, Y, Z int64 }
 	type Point2D struct{ X, Y int64 }
 
+	i := 0
 	f := func(points3D []Point3D) bool {
 		if len(points3D) == 0 {
+			return true
+		}
+		if i++; i > 1 {
 			return true
 		}
 		buf := new(bytes.Buffer)

@@ -397,6 +397,7 @@ func (c *fileColumnChunk) Column() int {
 func (c *fileColumnChunk) Pages() Pages {
 	r := new(filePages)
 	c.setPagesOn(r)
+	//fmt.Println("read pages from:", c.column.Path())
 	return r
 }
 
