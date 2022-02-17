@@ -6,3 +6,14 @@
 //
 // Or see the Parquet documentation: https://parquet.apache.org/documentation/latest/
 package parquet
+
+func atLeastOne(size int) int {
+	return atLeast(size, 1)
+}
+
+func atLeast(size, least int) int {
+	if size < least {
+		return least
+	}
+	return size
+}

@@ -839,7 +839,7 @@ func (p *filePage) PageSize() int64 { return int64(p.header.CompressedPageSize) 
 func (p *filePage) CRC() uint32 { return uint32(p.header.CRC) }
 
 type filePageValueReaderState struct {
-	reader *dataPageReader
+	reader ColumnReader
 
 	v1 struct {
 		repetitions dataPageLevelV1
@@ -925,17 +925,29 @@ func (s *filePageValueReaderState) init(columnType Type, column *Column, codec f
 	s.page.encoding = pageEncoding
 
 	if s.reader == nil {
-		s.reader = newDataPageReader(
-			columnType,
-			column.maxRepetitionLevel,
-			column.maxDefinitionLevel,
-			column.index,
-			defaultReadBufferSize,
-		)
+		bufferSize := defaultReadBufferSize
+		hasLevels := column.maxRepetitionLevel > 0 || column.maxDefinitionLevel > 0
+		if hasLevels {
+			bufferSize /= 2
+		}
+		s.reader = columnType.NewColumnReader(int(column.index), bufferSize)
+		if hasLevels {
+			s.reader = newColumnReader(s.reader,
+				column.maxRepetitionLevel,
+				column.maxDefinitionLevel,
+				bufferSize,
+			)
+		}
 	}
 
-	// TODO: revisit the data page reader APIs
-	s.reader.Reset(int(header.NumValues()), s.repetitions.decoder, s.definitions.decoder, s.page.decoder)
+	numValues := int(header.NumValues())
+	switch r := s.reader.(type) {
+	case *columnReader:
+		r.reset(numValues, s.repetitions.decoder, s.definitions.decoder, s.page.decoder)
+	default:
+		r.Reset(numValues, s.page.decoder)
+	}
+
 	return nil
 }
 

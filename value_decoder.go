@@ -400,14 +400,3 @@ func (r *fixedLenByteArrayValueDecoder) Reset(decoder encoding.Decoder) {
 func (r *fixedLenByteArrayValueDecoder) Decoder() encoding.Decoder {
 	return r.decoder
 }
-
-func atLeastOne(size int) int {
-	return atLeast(size, 1)
-}
-
-func atLeast(size, least int) int {
-	if size < least {
-		return least
-	}
-	return size
-}
