@@ -26,15 +26,11 @@ import (
 //
 //
 type Reader struct {
-	file       *File
-	fileSchema *Schema
-	readSchema *Schema
-	seen       reflect.Type
-	rowGroup   RowGroup
-	rows       Rows
-	buffer     []Value
-	values     []Value
-	conv       Conversion
+	seen     reflect.Type
+	file     reader
+	read     reader
+	rowIndex int64
+	values   []Value
 }
 
 // NewReader constructs a parquet reader reading rows from the given
@@ -81,25 +77,36 @@ func NewReader(input io.ReaderAt, options ...ReaderOption) *Reader {
 	schema := NewSchema(column.Name(), column)
 
 	r := &Reader{
-		file:       f,
-		fileSchema: schema,
-		readSchema: coalesceSchema(c.Schema, schema),
+		file: reader{schema: schema},
 	}
 
 	switch n := f.NumRowGroups(); n {
 	case 0:
-		r.rowGroup = newEmptyRowGroup(schema)
+		r.file.rowGroup = newEmptyRowGroup(schema)
 	case 1:
-		r.rowGroup = f.RowGroup(0)
+		r.file.rowGroup = f.RowGroup(0)
 	default:
 		rowGroups := make([]RowGroup, n)
 		for i := range rowGroups {
 			rowGroups[i] = f.RowGroup(i)
 		}
-		// TODO: should we attempt to merge the row groups via MergeRowGroups to
-		// preserve the global order of sorting columns within the file?
-		r.rowGroup = concat(schema, rowGroups)
+		// TODO: should we attempt to merge the row groups via MergeRowGroups
+		// to preserve the global order of sorting columns within the file?
+		r.file.rowGroup = concat(schema, rowGroups)
 	}
+
+	if c.Schema != nil && !nodesAreEqual(c.Schema, r.file.schema) {
+		conv, err := Convert(c.Schema, r.file.schema)
+		if err != nil {
+			// TODO: this looks like something we should not be panicking on,
+			// but the current NewReader API does not offer a mechanism to
+			// report errors.
+			panic(err)
+		}
+		r.file.rowGroup = ConvertRowGroup(r.file.rowGroup, conv)
+	}
+
+	r.read.init(r.file.schema, r.file.rowGroup)
 	return r
 }
 
@@ -125,8 +132,9 @@ func sizeOf(r io.ReaderAt) (int64, error) {
 
 // Reset repositions the reader at the beginning of the underlying parquet file.
 func (r *Reader) Reset() {
-	r.rows = nil // TODO: can we make the RowReader reusable?
-	clearValues(r.buffer)
+	r.file.Reset()
+	r.read.Reset()
+	r.rowIndex = 0
 	clearValues(r.values)
 }
 
@@ -136,42 +144,41 @@ func (r *Reader) Reset() {
 // The method returns io.EOF when no more rows can be read from r.
 func (r *Reader) Read(row interface{}) (err error) {
 	if rowType := dereference(reflect.TypeOf(row)); rowType.Kind() == reflect.Struct {
-		if r.seen == nil || r.seen != rowType {
-			schema := schemaOf(rowType)
-			if nodesAreEqual(schema, r.readSchema) {
-				r.conv = nil
-			} else {
-				conv, err := Convert(schema, r.readSchema)
-				if err != nil {
-					return fmt.Errorf("cannot read parquet row into go value of type %T: %w", row, err)
-				}
-				if r.buffer == nil {
-					r.buffer = make([]Value, 0, cap(r.values))
-				}
-				r.conv = conv
+		if r.seen != rowType {
+			if err := r.updateReadSchema(rowType); err != nil {
+				return fmt.Errorf("cannot read parquet row into go value of type %T: %w", row, err)
 			}
-			// Replace the schema because the one created from the go type will be
-			// optimized to decode into struct values.
-			r.readSchema = schema
-			r.seen = rowType
 		}
 	}
 
-	r.values, err = r.ReadRow(r.values[:0])
+	if err := r.read.SeekToRow(r.rowIndex); err != nil {
+		return err
+	}
+
+	r.values, err = r.read.ReadRow(r.values[:0])
 	if err != nil {
 		return err
 	}
 
-	values := r.values
-	if r.conv != nil {
-		r.buffer, err = r.conv.Convert(r.buffer[:0], values)
+	r.rowIndex++
+	return r.read.schema.Reconstruct(row, r.values)
+}
+
+func (r *Reader) updateReadSchema(rowType reflect.Type) error {
+	schema := schemaOf(rowType)
+
+	if nodesAreEqual(schema, r.file.schema) {
+		r.read.init(schema, r.file.rowGroup)
+	} else {
+		conv, err := Convert(schema, r.file.schema)
 		if err != nil {
-			return fmt.Errorf("cannot convert parquet row to go value of type %T: %w", row, err)
+			return err
 		}
-		values = r.buffer
+		r.read.init(schema, ConvertRowGroup(r.file.rowGroup, conv))
 	}
 
-	return r.readSchema.Reconstruct(row, values)
+	r.seen = rowType
+	return nil
 }
 
 // ReadRow reads the next row from r and appends in to the given Row buffer.
@@ -181,31 +188,87 @@ func (r *Reader) Read(row interface{}) (err error) {
 //
 // The method returns io.EOF when no more rows can be read from r.
 func (r *Reader) ReadRow(row Row) (Row, error) {
-	if r.rows == nil {
-		r.rows = r.rowGroup.Rows()
+	if err := r.file.SeekToRow(r.rowIndex); err != nil {
+		return row, err
 	}
-	n := len(row)
-	row, err := r.rows.ReadRow(row)
-	if err == nil && len(row) == n {
-		err = io.EOF
+	row, err := r.file.ReadRow(row)
+	if err == nil {
+		r.rowIndex++
 	}
 	return row, err
 }
 
 // Schema returns the schema of rows read by r.
-func (r *Reader) Schema() *Schema { return r.fileSchema }
+func (r *Reader) Schema() *Schema { return r.file.schema }
 
 // NumRows returns the number of rows that can be read from r.
-func (r *Reader) NumRows() int64 { return r.rowGroup.NumRows() }
+func (r *Reader) NumRows() int64 { return r.file.rowGroup.NumRows() }
 
 // SeekToRow positions r at the given row index.
 func (r *Reader) SeekToRow(rowIndex int64) error {
+	if err := r.file.SeekToRow(rowIndex); err != nil {
+		return err
+	}
+	r.rowIndex = rowIndex
+	return nil
+}
+
+// reader is a subtype used in the implementation of Reader to support the two
+// use cases of either reading rows calling the ReadRow method (where full rows
+// are read from the underlying parquet file), or calling the Read method to
+// read rows into Go values, potentially doing partial reads on a subset of the
+// columns due to using a converted row group view.
+type reader struct {
+	schema   *Schema
+	rowGroup RowGroup
+	rows     Rows
+	rowIndex int64
+}
+
+func (r *reader) init(schema *Schema, rowGroup RowGroup) {
+	r.schema = schema
+	r.rowGroup = rowGroup
+	r.Reset()
+}
+
+func (r *reader) Reset() {
+	r.rows = nil // TODO: can we make the RowReader reusable?
+	r.rowIndex = 0
+}
+
+func (r *reader) ReadRow(row Row) (Row, error) {
 	if r.rows == nil {
 		r.rows = r.rowGroup.Rows()
+		if r.rowIndex > 0 {
+			if err := r.rows.SeekToRow(r.rowIndex); err != nil {
+				return row, err
+			}
+		}
 	}
-	return r.rows.SeekToRow(rowIndex)
+	n := len(row)
+	row, err := r.rows.ReadRow(row)
+	if err == nil && len(row) == n {
+		err = io.EOF
+	} else {
+		r.rowIndex++
+	}
+	return row, err
+}
+
+func (r *reader) SeekToRow(rowIndex int64) error {
+	if rowIndex != r.rowIndex {
+		if r.rows != nil {
+			if err := r.rows.SeekToRow(rowIndex); err != nil {
+				return err
+			}
+		}
+		r.rowIndex = rowIndex
+	}
+	return nil
 }
 
 var (
-	_ Rows = (*Reader)(nil)
+	_ Rows      = (*Reader)(nil)
+	_ RowReader = (*reader)(nil)
+	_ RowSeeker = (*reader)(nil)
 )

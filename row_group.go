@@ -208,6 +208,20 @@ func MergeRowGroups(rowGroups []RowGroup, options ...RowGroupOption) (RowGroup, 
 	return m, nil
 }
 
+type rowGroup struct {
+	schema  *Schema
+	numRows int64
+	columns []ColumnChunk
+	sorting []SortingColumn
+}
+
+func (r *rowGroup) NumRows() int64                  { return r.numRows }
+func (r *rowGroup) NumColumns() int                 { return len(r.columns) }
+func (r *rowGroup) Column(i int) ColumnChunk        { return r.columns[i] }
+func (r *rowGroup) SortingColumns() []SortingColumn { return r.sorting }
+func (r *rowGroup) Schema() *Schema                 { return r.schema }
+func (r *rowGroup) Rows() Rows                      { return &rowGroupRowReader{rowGroup: r} }
+
 type rowGroupRowReader struct {
 	rowGroup RowGroup
 	schema   *Schema
