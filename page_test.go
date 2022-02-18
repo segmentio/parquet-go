@@ -339,3 +339,44 @@ func testPage(t *testing.T, schema *parquet.Schema, test pageTest) {
 	}
 
 }
+
+type testStruct struct {
+	Value *string
+}
+
+func TestOptionalPageTrailingNulls(t *testing.T) {
+	schema := parquet.SchemaOf(&testStruct{})
+	buffer := parquet.NewBuffer(schema)
+
+	str := "test"
+	rows := []testStruct{{
+		Value: nil,
+	}, {
+		Value: &str,
+	}, {
+		Value: nil,
+	}}
+
+	for _, row := range rows {
+		if err := buffer.WriteRow(schema.Deconstruct(nil, row)); err != nil {
+			t.Fatal("writing row:", err)
+		}
+	}
+
+	resultRows := []parquet.Row{}
+	reader := buffer.Rows()
+	for {
+		row, err := reader.ReadRow(nil)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			t.Fatal("reading rows:", err)
+		}
+		resultRows = append(resultRows, row)
+	}
+
+	if len(resultRows) != len(rows) {
+		t.Errorf("wrong number of rows read: got=%d want=%d", len(resultRows), len(rows))
+	}
+}

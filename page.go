@@ -368,7 +368,8 @@ func (r *optionalPageReader) ReadValues(values []Value) (n int, err error) {
 				r.offset++
 				n++
 			}
-			if err != nil {
+			// Do not return on an io.EOF here as we may still have null values to read.
+			if err != nil && err != io.EOF {
 				return n, err
 			}
 		}
