@@ -198,7 +198,7 @@ func TestBuffer(t *testing.T) {
 									content := new(bytes.Buffer)
 									decoder := parquet.Plain.NewDecoder(content)
 									encoder := parquet.Plain.NewEncoder(content)
-									reader := config.typ.NewValueDecoder(32)
+									reader := config.typ.NewColumnReader(0, 32)
 									buffer := parquet.NewBuffer(options...)
 
 									reset := func() {

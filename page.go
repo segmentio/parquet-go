@@ -199,17 +199,17 @@ func forEachPageSlice(page BufferedPage, wantSize int64, do func(BufferedPage) e
 
 type errorPage struct {
 	err         error
-	columnIndex int16
+	columnIndex int
 }
 
-func newErrorPage(columnIndex int16, msg string, args ...interface{}) *errorPage {
+func newErrorPage(columnIndex int, msg string, args ...interface{}) *errorPage {
 	return &errorPage{
 		err:         fmt.Errorf(msg, args...),
 		columnIndex: columnIndex,
 	}
 }
 
-func (page *errorPage) Column() int                    { return int(page.columnIndex) }
+func (page *errorPage) Column() int                    { return page.columnIndex }
 func (page *errorPage) Dictionary() Dictionary         { return nil }
 func (page *errorPage) NumRows() int64                 { return 0 }
 func (page *errorPage) NumValues() int64               { return 0 }

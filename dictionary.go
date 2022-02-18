@@ -691,10 +691,6 @@ func (t *indexedType) NewColumnReader(columnIndex, bufferSize int) ColumnReader 
 	return newIndexedColumnReader(t.dict, t, makeColumnIndex(columnIndex), bufferSize)
 }
 
-func (t *indexedType) NewValueDecoder(bufferSize int) ValueDecoder {
-	return newIndexedValueDecoder(t.dict, bufferSize)
-}
-
 type indexedPage struct {
 	dict        Dictionary
 	values      []int32
@@ -921,17 +917,18 @@ func (r *indexedColumnReader) ReadValues(values []Value) (int, error) {
 			return i, nil
 		}
 
-		n, err := r.decoder.DecodeInt32(r.buffer[:cap(r.buffer)])
+		buffer := r.buffer[:cap(r.buffer)]
+		n, err := r.decoder.DecodeInt32(buffer)
 		if n == 0 {
 			return i, err
 		}
 
-		r.buffer = r.buffer[:n]
+		r.buffer = buffer[:n]
 		r.offset = 0
 	}
 }
 
-func (r *indexedColumnReader) Reset(numValues int, decoder encoding.Decoder) {
+func (r *indexedColumnReader) Reset(decoder encoding.Decoder) {
 	r.decoder = decoder
 	r.buffer = r.buffer[:0]
 	r.offset = 0
@@ -963,65 +960,3 @@ func (index indexedOffsetIndex) NumPages() int                { return 1 }
 func (index indexedOffsetIndex) Offset(int) int64             { return 0 }
 func (index indexedOffsetIndex) CompressedPageSize(int) int64 { return index.col.Size() }
 func (index indexedOffsetIndex) FirstRowIndex(int) int64      { return 0 }
-
-type indexedValueDecoder struct {
-	decoder encoding.Decoder
-	dict    Dictionary
-	values  []int32
-	offset  uint
-}
-
-func newIndexedValueDecoder(dict Dictionary, bufferSize int) *indexedValueDecoder {
-	return &indexedValueDecoder{
-		dict:   dict,
-		values: make([]int32, 0, atLeastOne(bufferSize/4)),
-	}
-}
-
-func (r *indexedValueDecoder) ReadValues(values []Value) (int, error) {
-	i := 0
-	for {
-		for r.offset < uint(len(r.values)) && i < len(values) {
-			count := uint(len(r.values)) - r.offset
-			limit := uint(len(values) - i)
-
-			if count > limit {
-				count = limit
-			}
-
-			indexes := r.values[r.offset : r.offset+count]
-			dictLen := r.dict.Len()
-			for _, index := range indexes {
-				if index < 0 || int(index) >= dictLen {
-					return i, fmt.Errorf("reading value from indexed page: index out of bounds: %d/%d", index, dictLen)
-				}
-			}
-
-			r.dict.Lookup(indexes, values[i:])
-			r.offset += count
-			i += int(count)
-		}
-
-		if i == len(values) {
-			return i, nil
-		}
-
-		n, err := r.decoder.DecodeInt32(r.values[:cap(r.values)])
-		if n == 0 {
-			return i, err
-		}
-
-		r.values = r.values[:n]
-		r.offset = 0
-	}
-}
-
-func (r *indexedValueDecoder) Reset(decoder encoding.Decoder) {
-	r.decoder = decoder
-	r.values = r.values[:0]
-	r.offset = 0
-}
-
-func (r *indexedValueDecoder) Decoder() encoding.Decoder {
-	return r.decoder
-}

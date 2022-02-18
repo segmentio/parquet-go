@@ -33,10 +33,7 @@ type ColumnReader interface {
 	// Column readers created from parquet types are initialized to an empty
 	// state and will return io.EOF on every read until a decoder is installed
 	// via a call to Reset.
-	//
-	// The number of values sets the limit of how many values will be returned
-	// from the reader.
-	Reset(numValues int, decoder encoding.Decoder)
+	Reset(decoder encoding.Decoder)
 }
 
 type columnReader struct {
@@ -83,6 +80,7 @@ func (r *columnReader) ReadValues(values []Value) (int, error) {
 		return 0, io.EOF
 	}
 	read := 0
+	columnIndex := ^int16(r.Column())
 
 	for r.remain > 0 && len(values) > 0 {
 		var err error
@@ -134,7 +132,7 @@ func (r *columnReader) ReadValues(values []Value) (int, error) {
 
 		for i, j := n-1, len(definitionLevels)-1; j >= 0; j-- {
 			if definitionLevels[j] != r.maxDefinitionLevel {
-				values[j] = Value{}
+				values[j] = Value{columnIndex: columnIndex}
 			} else {
 				values[j] = values[i]
 				i--
@@ -174,18 +172,18 @@ func (r *columnReader) reset(numValues int, repetitions, definitions, values enc
 	r.numValues = numValues
 	r.repetitions.reset(repetitions)
 	r.definitions.reset(definitions)
-	r.values.Reset(numValues, values)
+	r.values.Reset(values)
 }
 
-func (r *columnReader) Reset(numValues int, decoder encoding.Decoder) {
-	r.reset(numValues, r.repetitions.decoder, r.definitions.decoder, decoder)
+func (r *columnReader) Reset(encoding.Decoder) {
+	panic("BUG: parquet.columnReader.Reset must not be called")
 }
 
 type levelReader struct {
 	decoder encoding.Decoder
 	levels  []int8
-	offset  uint
-	count   uint
+	offset  int
+	count   int
 }
 
 func makeLevelReader(bufferSize int) levelReader {
@@ -196,7 +194,7 @@ func makeLevelReader(bufferSize int) levelReader {
 
 func (r *levelReader) readLevel() (int8, error) {
 	for {
-		if r.offset < uint(len(r.levels)) {
+		if r.offset < len(r.levels) {
 			lvl := r.levels[r.offset]
 			r.offset++
 			return lvl, nil
@@ -208,7 +206,7 @@ func (r *levelReader) readLevel() (int8, error) {
 }
 
 func (r *levelReader) peekLevels() ([]int8, error) {
-	if r.offset == uint(len(r.levels)) {
+	if r.offset == len(r.levels) {
 		if err := r.decodeLevels(); err != nil {
 			return nil, err
 		}
@@ -217,15 +215,15 @@ func (r *levelReader) peekLevels() ([]int8, error) {
 }
 
 func (r *levelReader) discardLevels(n int) {
-	remain := uint(len(r.levels)) - r.offset
+	remain := len(r.levels) - r.offset
 	switch {
-	case uint(n) > remain:
+	case n > remain:
 		panic("BUG: cannot discard more levels than buffered")
-	case uint(n) == remain:
+	case n == remain:
 		r.levels = r.levels[:0]
 		r.offset = 0
 	default:
-		r.offset += uint(n)
+		r.offset += n
 	}
 }
 
@@ -236,7 +234,7 @@ func (r *levelReader) decodeLevels() error {
 	}
 	r.levels = r.levels[:n]
 	r.offset = 0
-	r.count += uint(n)
+	r.count += n
 	return nil
 }
 
@@ -263,7 +261,6 @@ type booleanColumnReader struct {
 	decoder     encoding.Decoder
 	buffer      []bool
 	offset      int
-	remain      int
 	bufferSize  int
 	columnIndex int16
 }
@@ -284,16 +281,14 @@ func (r *booleanColumnReader) ReadBooleans(values []bool) (n int, err error) {
 	if r.offset < len(r.buffer) {
 		n = copy(values, r.buffer[r.offset:])
 		r.offset += n
-		r.remain -= n
 		values = values[n:]
 	}
-	if r.decoder == nil || r.remain == 0 {
+	if r.decoder == nil {
 		err = io.EOF
 	} else {
 		var d int
-		d, err = r.decoder.DecodeBoolean(values[:min(r.remain, len(values))])
+		d, err = r.decoder.DecodeBoolean(values)
 		n += d
-		r.remain -= d
 	}
 	return n, err
 }
@@ -308,18 +303,17 @@ func (r *booleanColumnReader) ReadValues(values []Value) (n int, err error) {
 			values[n] = makeValueBoolean(r.buffer[r.offset])
 			values[n].columnIndex = r.columnIndex
 			r.offset++
-			r.remain--
 			n++
 		}
 
 		if n == len(values) {
 			return n, nil
 		}
-		if r.decoder == nil || r.remain == 0 {
+		if r.decoder == nil {
 			return n, io.EOF
 		}
 
-		buffer := r.buffer[:min(r.remain, cap(r.buffer))]
+		buffer := r.buffer[:cap(r.buffer)]
 		d, err := r.decoder.DecodeBoolean(buffer)
 		if d == 0 {
 			return n, err
@@ -330,11 +324,10 @@ func (r *booleanColumnReader) ReadValues(values []Value) (n int, err error) {
 	}
 }
 
-func (r *booleanColumnReader) Reset(numValues int, decoder encoding.Decoder) {
+func (r *booleanColumnReader) Reset(decoder encoding.Decoder) {
 	r.decoder = decoder
 	r.buffer = r.buffer[:0]
 	r.offset = 0
-	r.remain = numValues
 }
 
 type int32ColumnReader struct {
@@ -342,7 +335,6 @@ type int32ColumnReader struct {
 	decoder     encoding.Decoder
 	buffer      []int32
 	offset      int
-	remain      int
 	bufferSize  int
 	columnIndex int16
 }
@@ -363,16 +355,14 @@ func (r *int32ColumnReader) ReadInt32s(values []int32) (n int, err error) {
 	if r.offset < len(r.buffer) {
 		n = copy(values, r.buffer[r.offset:])
 		r.offset += n
-		r.remain -= n
 		values = values[n:]
 	}
-	if r.decoder == nil || r.remain == 0 {
+	if r.decoder == nil {
 		err = io.EOF
 	} else {
 		var d int
 		d, err = r.decoder.DecodeInt32(values)
 		n += d
-		r.remain -= d
 	}
 	return n, err
 }
@@ -387,18 +377,17 @@ func (r *int32ColumnReader) ReadValues(values []Value) (n int, err error) {
 			values[n] = makeValueInt32(r.buffer[r.offset])
 			values[n].columnIndex = r.columnIndex
 			r.offset++
-			r.remain--
 			n++
 		}
 
 		if n == len(values) {
 			return n, nil
 		}
-		if r.decoder == nil || r.remain == 0 {
+		if r.decoder == nil {
 			return n, io.EOF
 		}
 
-		buffer := r.buffer[:min(r.remain, cap(r.buffer))]
+		buffer := r.buffer[:cap(r.buffer)]
 		d, err := r.decoder.DecodeInt32(buffer)
 		if d == 0 {
 			return n, err
@@ -409,11 +398,10 @@ func (r *int32ColumnReader) ReadValues(values []Value) (n int, err error) {
 	}
 }
 
-func (r *int32ColumnReader) Reset(numValues int, decoder encoding.Decoder) {
+func (r *int32ColumnReader) Reset(decoder encoding.Decoder) {
 	r.decoder = decoder
 	r.buffer = r.buffer[:0]
 	r.offset = 0
-	r.remain = numValues
 }
 
 type int64ColumnReader struct {
@@ -421,7 +409,6 @@ type int64ColumnReader struct {
 	decoder     encoding.Decoder
 	buffer      []int64
 	offset      int
-	remain      int
 	bufferSize  int
 	columnIndex int16
 }
@@ -442,16 +429,14 @@ func (r *int64ColumnReader) ReadInt64s(values []int64) (n int, err error) {
 	if r.offset < len(r.buffer) {
 		n = copy(values, r.buffer[r.offset:])
 		r.offset += n
-		r.remain -= n
 		values = values[n:]
 	}
-	if r.decoder == nil || r.remain == 0 {
+	if r.decoder == nil {
 		err = io.EOF
 	} else {
 		var d int
 		d, err = r.decoder.DecodeInt64(values)
 		n += d
-		r.remain -= d
 	}
 	return n, err
 }
@@ -466,18 +451,17 @@ func (r *int64ColumnReader) ReadValues(values []Value) (n int, err error) {
 			values[n] = makeValueInt64(r.buffer[r.offset])
 			values[n].columnIndex = r.columnIndex
 			r.offset++
-			r.remain--
 			n++
 		}
 
 		if n == len(values) {
 			return n, nil
 		}
-		if r.decoder == nil || r.remain == 0 {
+		if r.decoder == nil {
 			return n, io.EOF
 		}
 
-		buffer := r.buffer[:min(r.remain, cap(r.buffer))]
+		buffer := r.buffer[:cap(r.buffer)]
 		d, err := r.decoder.DecodeInt64(buffer)
 		if d == 0 {
 			return n, err
@@ -488,11 +472,10 @@ func (r *int64ColumnReader) ReadValues(values []Value) (n int, err error) {
 	}
 }
 
-func (r *int64ColumnReader) Reset(numValues int, decoder encoding.Decoder) {
+func (r *int64ColumnReader) Reset(decoder encoding.Decoder) {
 	r.decoder = decoder
 	r.buffer = r.buffer[:0]
 	r.offset = 0
-	r.remain = numValues
 }
 
 type int96ColumnReader struct {
@@ -500,7 +483,6 @@ type int96ColumnReader struct {
 	decoder     encoding.Decoder
 	buffer      []deprecated.Int96
 	offset      int
-	remain      int
 	bufferSize  int
 	columnIndex int16
 }
@@ -521,16 +503,14 @@ func (r *int96ColumnReader) ReadInt96s(values []deprecated.Int96) (n int, err er
 	if r.offset < len(r.buffer) {
 		n = copy(values, r.buffer[r.offset:])
 		r.offset += n
-		r.remain -= n
 		values = values[n:]
 	}
-	if r.decoder == nil || r.remain == 0 {
+	if r.decoder == nil {
 		err = io.EOF
 	} else {
 		var d int
 		d, err = r.decoder.DecodeInt96(values)
 		n += d
-		r.remain -= d
 	}
 	return n, err
 }
@@ -545,18 +525,17 @@ func (r *int96ColumnReader) ReadValues(values []Value) (n int, err error) {
 			values[n] = makeValueInt96(r.buffer[r.offset])
 			values[n].columnIndex = r.columnIndex
 			r.offset++
-			r.remain--
 			n++
 		}
 
 		if n == len(values) {
 			return n, nil
 		}
-		if r.decoder == nil || r.remain == 0 {
+		if r.decoder == nil {
 			return n, io.EOF
 		}
 
-		buffer := r.buffer[:min(r.remain, cap(r.buffer))]
+		buffer := r.buffer[:cap(r.buffer)]
 		d, err := r.decoder.DecodeInt96(buffer)
 		if d == 0 {
 			return n, err
@@ -567,11 +546,10 @@ func (r *int96ColumnReader) ReadValues(values []Value) (n int, err error) {
 	}
 }
 
-func (r *int96ColumnReader) Reset(numValues int, decoder encoding.Decoder) {
+func (r *int96ColumnReader) Reset(decoder encoding.Decoder) {
 	r.decoder = decoder
 	r.buffer = r.buffer[:0]
 	r.offset = 0
-	r.remain = numValues
 }
 
 type floatColumnReader struct {
@@ -579,7 +557,6 @@ type floatColumnReader struct {
 	decoder     encoding.Decoder
 	buffer      []float32
 	offset      int
-	remain      int
 	bufferSize  int
 	columnIndex int16
 }
@@ -600,16 +577,14 @@ func (r *floatColumnReader) ReadFloats(values []float32) (n int, err error) {
 	if r.offset < len(r.buffer) {
 		n = copy(values, r.buffer[r.offset:])
 		r.offset += n
-		r.remain -= n
 		values = values[n:]
 	}
-	if r.decoder == nil || r.remain == 0 {
+	if r.decoder == nil {
 		err = io.EOF
 	} else {
 		var d int
 		d, err = r.decoder.DecodeFloat(values)
 		n += d
-		r.remain -= d
 	}
 	return n, err
 }
@@ -624,18 +599,17 @@ func (r *floatColumnReader) ReadValues(values []Value) (n int, err error) {
 			values[n] = makeValueFloat(r.buffer[r.offset])
 			values[n].columnIndex = r.columnIndex
 			r.offset++
-			r.remain--
 			n++
 		}
 
 		if n == len(values) {
 			return n, nil
 		}
-		if r.decoder == nil || r.remain == 0 {
+		if r.decoder == nil {
 			return n, io.EOF
 		}
 
-		buffer := r.buffer[:min(r.remain, cap(r.buffer))]
+		buffer := r.buffer[:cap(r.buffer)]
 		d, err := r.decoder.DecodeFloat(buffer)
 		if d == 0 {
 			return n, err
@@ -646,11 +620,10 @@ func (r *floatColumnReader) ReadValues(values []Value) (n int, err error) {
 	}
 }
 
-func (r *floatColumnReader) Reset(numValues int, decoder encoding.Decoder) {
+func (r *floatColumnReader) Reset(decoder encoding.Decoder) {
 	r.decoder = decoder
 	r.buffer = r.buffer[:0]
 	r.offset = 0
-	r.remain = numValues
 }
 
 type doubleColumnReader struct {
@@ -658,7 +631,6 @@ type doubleColumnReader struct {
 	decoder     encoding.Decoder
 	buffer      []float64
 	offset      int
-	remain      int
 	bufferSize  int
 	columnIndex int16
 }
@@ -679,16 +651,14 @@ func (r *doubleColumnReader) ReadDoubles(values []float64) (n int, err error) {
 	if r.offset < len(r.buffer) {
 		n = copy(values, r.buffer[r.offset:])
 		r.offset += n
-		r.remain -= n
 		values = values[n:]
 	}
-	if r.decoder == nil || r.remain == 0 {
+	if r.decoder == nil {
 		err = io.EOF
 	} else {
 		var d int
 		d, err = r.decoder.DecodeDouble(values)
 		n += d
-		r.remain -= d
 	}
 	return n, err
 }
@@ -703,18 +673,17 @@ func (r *doubleColumnReader) ReadValues(values []Value) (n int, err error) {
 			values[n] = makeValueDouble(r.buffer[r.offset])
 			values[n].columnIndex = r.columnIndex
 			r.offset++
-			r.remain--
 			n++
 		}
 
 		if n == len(values) {
 			return n, nil
 		}
-		if r.decoder == nil || r.remain == 0 {
+		if r.decoder == nil {
 			return n, io.EOF
 		}
 
-		buffer := r.buffer[:min(r.remain, cap(r.buffer))]
+		buffer := r.buffer[:cap(r.buffer)]
 		d, err := r.decoder.DecodeDouble(buffer)
 		if d == 0 {
 			return n, err
@@ -725,11 +694,10 @@ func (r *doubleColumnReader) ReadValues(values []Value) (n int, err error) {
 	}
 }
 
-func (r *doubleColumnReader) Reset(numValues int, decoder encoding.Decoder) {
+func (r *doubleColumnReader) Reset(decoder encoding.Decoder) {
 	r.decoder = decoder
 	r.buffer = r.buffer[:0]
 	r.offset = 0
-	r.remain = numValues
 }
 
 type byteArrayColumnReader struct {
@@ -737,7 +705,6 @@ type byteArrayColumnReader struct {
 	decoder     encoding.Decoder
 	buffer      encoding.ByteArrayList
 	offset      int
-	remain      int
 	columnIndex int16
 }
 
@@ -760,11 +727,10 @@ func (r *byteArrayColumnReader) readByteArrays(do func([]byte) bool) (n int, err
 				return n, nil
 			}
 			r.offset++
-			r.remain--
 			n++
 		}
 
-		if r.decoder == nil || r.remain == 0 {
+		if r.decoder == nil {
 			return n, io.EOF
 		}
 
@@ -782,11 +748,11 @@ func (r *byteArrayColumnReader) ReadByteArrays(values []byte) (int, error) {
 	i := 0
 	n, err := r.readByteArrays(func(b []byte) bool {
 		k := plain.ByteArrayLengthSize + len(b)
-		if k > (len(b) - i) {
+		if k > (len(values) - i) {
 			return false
 		}
-		plain.PutByteArrayLength(b[i:], len(b))
-		copy(b[i+plain.ByteArrayLengthSize:], b)
+		plain.PutByteArrayLength(values[i:], len(b))
+		copy(values[i+plain.ByteArrayLengthSize:], b)
 		i += k
 		return true
 	})
@@ -808,11 +774,10 @@ func (r *byteArrayColumnReader) ReadValues(values []Value) (int, error) {
 	})
 }
 
-func (r *byteArrayColumnReader) Reset(numValues int, decoder encoding.Decoder) {
+func (r *byteArrayColumnReader) Reset(decoder encoding.Decoder) {
 	r.decoder = decoder
 	r.buffer.Reset()
 	r.offset = 0
-	r.remain = numValues
 }
 
 type fixedLenByteArrayColumnReader struct {
@@ -820,7 +785,6 @@ type fixedLenByteArrayColumnReader struct {
 	decoder     encoding.Decoder
 	buffer      []byte
 	offset      int
-	remain      int
 	size        int
 	bufferSize  int
 	columnIndex int16
@@ -847,16 +811,14 @@ func (r *fixedLenByteArrayColumnReader) ReadFixedLenByteArrays(values []byte) (n
 		i := copy(values, r.buffer[r.offset:])
 		n += i / r.size
 		r.offset += n
-		r.remain -= n
 		values = values[i:]
 	}
-	if r.decoder == nil || r.remain == 0 {
+	if r.decoder == nil {
 		err = io.EOF
 	} else {
 		var d int
 		d, err = r.decoder.DecodeFixedLenByteArray(r.size, values)
 		n += d
-		r.remain -= d
 	}
 	return n, err
 }
@@ -871,18 +833,17 @@ func (r *fixedLenByteArrayColumnReader) ReadValues(values []Value) (n int, err e
 			values[n] = makeValueBytes(FixedLenByteArray, copyBytes(r.buffer[r.offset:r.offset+r.size]))
 			values[n].columnIndex = r.columnIndex
 			r.offset += r.size
-			r.remain -= 1
 			n++
 		}
 
 		if n == len(values) {
 			return n, nil
 		}
-		if r.decoder == nil || r.remain == 0 {
+		if r.decoder == nil {
 			return n, io.EOF
 		}
 
-		buffer := r.buffer[:min(r.remain*r.size, cap(r.buffer))]
+		buffer := r.buffer[:cap(r.buffer)]
 		d, err := r.decoder.DecodeFixedLenByteArray(r.size, buffer)
 		if d == 0 {
 			return n, err
@@ -893,18 +854,10 @@ func (r *fixedLenByteArrayColumnReader) ReadValues(values []Value) (n int, err e
 	}
 }
 
-func (r *fixedLenByteArrayColumnReader) Reset(numValues int, decoder encoding.Decoder) {
+func (r *fixedLenByteArrayColumnReader) Reset(decoder encoding.Decoder) {
 	r.decoder = decoder
 	r.buffer = r.buffer[:0]
 	r.offset = 0
-	r.remain = numValues
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 var (

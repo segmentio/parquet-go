@@ -474,7 +474,7 @@ func (p missingPage) Bounds() (min, max Value) { return }
 func (p missingPage) Size() int64              { return 0 }
 func (p missingPage) Values() ValueReader      { return &missingValues{page: p} }
 func (p missingPage) Buffer() BufferedPage {
-	return newErrorPage(p.column, "cannot buffer missing page")
+	return newErrorPage(p.Column(), "cannot buffer missing page")
 }
 
 type missingValues struct {

@@ -143,11 +143,6 @@ type Type interface {
 	// parquet.Int32Reader interface to allow programs to more efficiently read
 	// columns of INT32 values.
 	NewColumnReader(columnIndex, bufferSize int) ColumnReader
-
-	// Creates a decoder for values of this type.
-	//
-	// The method panics if it is called on a group type.
-	NewValueDecoder(bufferSize int) ValueDecoder
 }
 
 // In the current parquet version supported by this library, only type-defined
@@ -232,10 +227,6 @@ func (t booleanType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newBooleanColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
-func (t booleanType) NewValueDecoder(bufferSize int) ValueDecoder {
-	return newBooleanValueDecoder(bufferSize)
-}
-
 type int32Type struct{ primitiveType }
 
 func (t int32Type) String() string { return "INT32" }
@@ -266,10 +257,6 @@ func (t int32Type) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 
 func (t int32Type) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newInt32ColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
-}
-
-func (t int32Type) NewValueDecoder(bufferSize int) ValueDecoder {
-	return newInt32ValueDecoder(bufferSize)
 }
 
 type int64Type struct{ primitiveType }
@@ -304,10 +291,6 @@ func (t int64Type) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newInt64ColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
-func (t int64Type) NewValueDecoder(bufferSize int) ValueDecoder {
-	return newInt64ValueDecoder(bufferSize)
-}
-
 type int96Type struct{ primitiveType }
 
 func (t int96Type) String() string { return "INT96" }
@@ -338,10 +321,6 @@ func (t int96Type) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 
 func (t int96Type) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newInt96ColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
-}
-
-func (t int96Type) NewValueDecoder(bufferSize int) ValueDecoder {
-	return newInt96ValueDecoder(bufferSize)
 }
 
 type floatType struct{ primitiveType }
@@ -376,10 +355,6 @@ func (t floatType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newFloatColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
-func (t floatType) NewValueDecoder(bufferSize int) ValueDecoder {
-	return newFloatValueDecoder(bufferSize)
-}
-
 type doubleType struct{ primitiveType }
 
 func (t doubleType) String() string { return "DOUBLE" }
@@ -408,10 +383,6 @@ func (t doubleType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 
 func (t doubleType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newDoubleColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
-}
-
-func (t doubleType) NewValueDecoder(bufferSize int) ValueDecoder {
-	return newDoubleValueDecoder(bufferSize)
 }
 
 type byteArrayType struct{ primitiveType }
@@ -444,10 +415,6 @@ func (t byteArrayType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer
 
 func (t byteArrayType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
-}
-
-func (t byteArrayType) NewValueDecoder(bufferSize int) ValueDecoder {
-	return newByteArrayValueDecoder(bufferSize)
 }
 
 type fixedLenByteArrayType struct {
@@ -485,10 +452,6 @@ func (t *fixedLenByteArrayType) NewColumnBuffer(columnIndex, bufferSize int) Col
 
 func (t *fixedLenByteArrayType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newFixedLenByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
-}
-
-func (t *fixedLenByteArrayType) NewValueDecoder(bufferSize int) ValueDecoder {
-	return newFixedLenByteArrayValueDecoder(t.length, bufferSize)
 }
 
 var (
@@ -660,14 +623,6 @@ func (t *intType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	}
 }
 
-func (t *intType) NewValueDecoder(bufferSize int) ValueDecoder {
-	if t.BitWidth == 64 {
-		return newInt64ValueDecoder(bufferSize)
-	} else {
-		return newInt32ValueDecoder(bufferSize)
-	}
-}
-
 // Decimal constructs a leaf node of decimal logical type with the given
 // scale, precision, and underlying type.
 //
@@ -751,10 +706,6 @@ func (t *stringType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
-func (t *stringType) NewValueDecoder(bufferSize int) ValueDecoder {
-	return newByteArrayValueDecoder(bufferSize)
-}
-
 func (t *stringType) GoType() reflect.Type {
 	return reflect.TypeOf("")
 }
@@ -804,10 +755,6 @@ func (t *uuidType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 
 func (t *uuidType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newFixedLenByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
-}
-
-func (t *uuidType) NewValueDecoder(bufferSize int) ValueDecoder {
-	return newFixedLenByteArrayValueDecoder(16, bufferSize)
 }
 
 func (t *uuidType) GoType() reflect.Type {
@@ -863,10 +810,6 @@ func (t *enumType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
-func (t *enumType) NewValueDecoder(bufferSize int) ValueDecoder {
-	return newByteArrayValueDecoder(bufferSize)
-}
-
 func (t *enumType) GoType() reflect.Type {
 	return reflect.TypeOf("")
 }
@@ -920,10 +863,6 @@ func (t *jsonType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
-func (t *jsonType) NewValueDecoder(bufferSize int) ValueDecoder {
-	return newByteArrayValueDecoder(bufferSize)
-}
-
 // BSON constructs a leaf node of BSON logical type.
 //
 // https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#bson
@@ -973,10 +912,6 @@ func (t *bsonType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
-func (t *bsonType) NewValueDecoder(bufferSize int) ValueDecoder {
-	return newByteArrayValueDecoder(bufferSize)
-}
-
 // Date constructs a leaf node of DATE logical type.
 //
 // https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#date
@@ -1020,10 +955,6 @@ func (t *dateType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 
 func (t *dateType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newInt32ColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
-}
-
-func (t *dateType) NewValueDecoder(bufferSize int) ValueDecoder {
-	return newInt32ValueDecoder(bufferSize)
 }
 
 // TimeUnit represents units of time in the parquet type system.
@@ -1158,14 +1089,6 @@ func (t *timeType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	}
 }
 
-func (t *timeType) NewValueDecoder(bufferSize int) ValueDecoder {
-	if t.Unit.Millis != nil {
-		return newInt32ValueDecoder(bufferSize)
-	} else {
-		return newInt64ValueDecoder(bufferSize)
-	}
-}
-
 // Timestamp constructs of leaf node of TIMESTAMP logical type.
 //
 // https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#timestamp
@@ -1218,10 +1141,6 @@ func (t *timestampType) NewColumnReader(columnIndex, bufferSize int) ColumnReade
 	return newInt64ColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
-func (t *timestampType) NewValueDecoder(bufferSize int) ValueDecoder {
-	return newInt64ValueDecoder(bufferSize)
-}
-
 // List constructs a node of LIST logical type.
 //
 // https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#lists
@@ -1269,10 +1188,6 @@ func (t *listType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 
 func (t *listType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	panic("cannot create row group column from parquet LIST type")
-}
-
-func (t *listType) NewValueDecoder(bufferSize int) ValueDecoder {
-	panic("cannot create page reader from parquet LIST type")
 }
 
 // Map constructs a node of MAP logical type.
@@ -1329,10 +1244,6 @@ func (t *mapType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	panic("cannot create row group column from parquet MAP type")
 }
 
-func (t *mapType) NewValueDecoder(bufferSize int) ValueDecoder {
-	panic("cannot create page reader from parquet MAP type")
-}
-
 type nullType format.NullType
 
 func (t *nullType) String() string { return (*format.NullType)(t).String() }
@@ -1369,10 +1280,6 @@ func (t *nullType) NewColumnReader(int, int) ColumnReader {
 	panic("cannot create row group column from parquet NULL type")
 }
 
-func (t *nullType) NewValueDecoder(int) ValueDecoder {
-	panic("cannot create page reader from parquet NULL type")
-}
-
 type groupType struct{}
 
 func (groupType) String() string { return "group" }
@@ -1399,10 +1306,6 @@ func (t groupType) NewColumnBuffer(int, int) ColumnBuffer {
 
 func (t groupType) NewColumnReader(int, int) ColumnReader {
 	panic("cannot create row group column from parquet group")
-}
-
-func (groupType) NewValueDecoder(int) ValueDecoder {
-	panic("cannot create value decoder from parquet group")
 }
 
 func (groupType) Length() int { return 0 }
