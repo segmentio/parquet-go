@@ -357,7 +357,12 @@ for i, n := 0, file.NumRowGroups(); i < n; i++ {
 }
 ```
 
-## Optimizing Reads
+## Optimizations
+
+The following sections describe common optimizations techniques supported by the
+library.
+
+### Optimizing Reads
 
 Lower level APIs used to read parquet files offer more efficient ways to access
 column values. Consecutive sequences of values are grouped into pages which are
@@ -399,7 +404,7 @@ Reading arrays of typed values is often preferrable when performing aggregations
 on the values as this model offers a more compact representation of the values
 in memory, and pairs well with the use of optimizations like SIMD vectorization.
 
-## Optimizing Writes
+### Optimizing Writes
 
 Applications that deal with columnar storage are sometimes designed to work with
 columnar data throughput the abstraction layers; it then becomes possible to
