@@ -145,10 +145,10 @@ func (f concatenatedBloomFilter) Size() int64 {
 	return size
 }
 
-func (f concatenatedBloomFilter) Check(key []byte) (bool, error) {
+func (f concatenatedBloomFilter) Check(v Value) (bool, error) {
 	for _, c := range f.chunks {
 		if b := c.BloomFilter(); b != nil {
-			if ok, err := b.Check(key); ok || err != nil {
+			if ok, err := b.Check(v); ok || err != nil {
 				return ok, err
 			}
 		}

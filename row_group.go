@@ -438,7 +438,7 @@ type emptyBloomFilter struct{}
 
 func (emptyBloomFilter) ReadAt([]byte, int64) (int, error) { return 0, io.EOF }
 func (emptyBloomFilter) Size() int64                       { return 0 }
-func (emptyBloomFilter) Check([]byte) (bool, error)        { return false, nil }
+func (emptyBloomFilter) Check(Value) (bool, error)         { return false, nil }
 
 type emptyRowReader struct{ schema *Schema }
 

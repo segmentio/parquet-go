@@ -511,7 +511,7 @@ func TestWriterGenerateBloomFilters(t *testing.T) {
 		}
 
 		for i, row := range rows {
-			if ok, err := bloomFilter.Check([]byte(row.LastName)); err != nil {
+			if ok, err := bloomFilter.Check(parquet.ValueOf(row.LastName)); err != nil {
 				t.Errorf("unexpected error checking bloom filter: %v", err)
 				return false
 			} else if !ok {

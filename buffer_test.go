@@ -2,7 +2,6 @@ package parquet_test
 
 import (
 	"bytes"
-	"encoding/binary"
 	"io"
 	"math"
 	"sort"
@@ -399,9 +398,7 @@ func TestBufferGenerateBloomFilters(t *testing.T) {
 		fz := z.BloomFilter()
 
 		test := func(f parquet.BloomFilter, v float64) bool {
-			b := [8]byte{}
-			binary.LittleEndian.PutUint64(b[:], math.Float64bits(v))
-			if ok, err := f.Check(b[:]); err != nil {
+			if ok, err := f.Check(parquet.ValueOf(v)); err != nil {
 				t.Errorf("unexpected error checking bloom filter: %v", err)
 				return false
 			} else if !ok {
