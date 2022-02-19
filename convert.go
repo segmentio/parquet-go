@@ -62,7 +62,7 @@ func (c *conversion) Schema() *Schema { return c.schema }
 // null or zero values.
 //
 // The returned function is intended to be used to append the converted source
-// row to the destinatination buffer.
+// row to the destination buffer.
 func Convert(to, from Node) (conv Conversion, err error) {
 	defer func() {
 		switch e := recover().(type) {

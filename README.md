@@ -39,6 +39,10 @@ Go 1.17 or later is required to use the package.
 
 ## Usage
 
+The following sections describe how to use APIs exposed by the library,
+highlighting the use cases with code examples to demonstrate how they are used
+in practice.
+
 ### Writing Parquet Files: [parquet.Writer](https://pkg.go.dev/github.com/segmentio/parquet-go#Writer)
 
 A parquet file is a collection of rows sharing the same schema, arranged in
@@ -77,6 +81,81 @@ schema := parquet.SchemaOf(rows[0])
 writer := parquet.NewWriter(file, schema)
 ...
 ```
+
+Applications that deal with columnar storage are sometimes designed to work with
+columnar data throughput the abstraction layers, in which cases it can be useful
+to write columns of values directly instead of working with rows. The package
+offers two main mechanisms to satisfy those use cases:
+
+#### Writing Columns of Typed Arrays
+
+The first solution assumes that the program works with in-memory arrays of typed
+values, for example slices of primitive Go types like `[]float32`; this would be
+the case if the application is built on top of a framework like
+[Apache Arrow](https://pkg.go.dev/github.com/apache/arrow/go/arrow).
+
+`parquet.Buffer` is an implementation of the `parquet.RowGroup` interface which
+maintains in-memory buffers of column values. Rows can be written by either
+boxing primitive values into arrays of `parquet.Value`, or type asserting the
+columns to a access specialized versions of the write methods accepting arrays
+of Go primitive types.
+
+When using either of these models, the application is responsible for ensuring
+that the same number of rows are written to each column or the resulting parquet
+file will be malformed.
+
+The following examples demonstrate how to use these two models to write columns
+of Go values:
+
+```go
+func writeColumns(buffer *parquet.Buffer, columns [3][]interface{}) error {
+    values := make([]parquet.Value, len(columns[0]))
+    for i := range columns {
+        c := buffer.Column(i).(parquet.ColumnBuffer)
+        for j, v := range columns[i] {
+            values[j] = parquet.ValueOf(v)
+        }
+        if _, err := c.WriteValues(values); err != nil {
+            return err
+        }
+    }
+    return nil
+}
+```
+
+```go
+func writeColumns(buffer *parquet.Buffer, ids []int64, values []float32) error {
+    if len(ids) != len(values) {
+        return fmt.Errorf("number of ids and values mismatch: ids=%d values=%d", len(ids), len(values))
+    }
+    if err := buffer.(parquet.Int64Writer).WriteInt64s(ids); err != nil {
+        return err
+    }
+    if err := buffer.(parquet.FloatWriter).WriteFloats(values); err != nil {
+        return err
+    }
+    return nil
+}
+```
+
+The latter is more efficient as it does not require boxing the input into an
+intermediary array of `parquet.Value`. However, it may not always be the right
+model depending on the situation, sometimes the generic abstraction can be a
+more expressive model.
+
+#### Implementing parquet.RowGroup
+
+Programs that need full control over the construction of row groups can choose
+to provide their own implementation of the `parquet.RowGroup` interface, which
+includes defining implementations of `parquet.ColumnChunk` and `parquet.Page`
+to expose column values of the row group.
+
+This model can be preferrable when the underlying storage or in-memory
+representation of the data needs to be optimized further than what can be
+achieved by using an intermediary buffering layer with `parquet.Buffer`.
+
+See [parquet.RowGroup](https://pkg.go.dev/github.com/segmentio/parquet-go#RowGroup)
+for the full interface documentation.
 
 ### Reading Parquet Files: [parquet.Reader](https://pkg.go.dev/github.com/segmentio/parquet-go#Reader)
 
@@ -145,6 +224,46 @@ for i := 0; i < numRowGroups; i++ {
     }
 }
 ```
+
+Lower level APIs used to read parquet files offer more efficient ways to access
+column values. Consecutive sequences of values are grouped into pages which are
+represented by the `parquet.Page` interface.
+
+A column chunk may contain multiple pages, each holding a section of the column
+values. Applications can retrieve the column values either by reading them into
+buffers of `parquet.Value`, or type asserting the pages to read arrays of
+primitive Go values. The following example demonstrates how to use both
+mechanisms to read column values:
+
+```go
+pages := column.Pages()
+
+for {
+    p, err := pages.ReadPage()
+    if err != nil {
+        ... // io.EOF when there are no more pages
+    }
+
+    switch page := p.Values().(type) {
+    case parquet.Int32Page:
+        values := make([]int32, page.NumValues())
+        _, err := page.ReadInt32s(values)
+        ...
+    case parquet.Int64Page:
+        values := make([]int64, page.NumValues())
+        _, err := page.ReadInt64s(values)
+        ...
+    default:
+        values := make([]parquet.Value, page.NumValues())
+        _, err := page.ReadValues(values)
+        ...
+    }
+}
+```
+
+Reading arrays of typed values is often preferrable when performing aggregations
+on the values as this model offers a more compact representation of the values
+in memory, and pairs well with the use of optimizations like SIMD vectorization.
 
 ### Evolving Parquet Schemas: [parquet.Convert](https://pkg.go.dev/github.com/segmentio/parquet-go#Convert)
 

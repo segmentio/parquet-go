@@ -19,6 +19,12 @@ type RowGroup interface {
 	NumColumns() int
 
 	// Returns the leaf column at the given index in the group.
+	//
+	// If the underlying implementation is not read-only, the returned
+	// parquet.ColumnChunk may implement other interfaces: for example,
+	// parquet.ColumnBuffer if the chunk is backed by an in-memory buffer,
+	// or typed writer interfaces like parquet.Int32Writer depending on the
+	// underlying type of values that can be written to the chunk.
 	Column(int) ColumnChunk
 
 	// Returns the schema of rows in the group.
@@ -31,6 +37,14 @@ type RowGroup interface {
 	SortingColumns() []SortingColumn
 
 	// Returns a reader exposing the rows of the row group.
+	//
+	// As an optimization, the returned parquet.Rows object may implement
+	// parquet.RowWriterTo, and test the RowWriter it receives for an
+	// implementation of the parquet.RowGroupWriter interface.
+	//
+	// This optimization mechanism is leveraged by the parquet.CopyRows function
+	// to skip the generic row-by-row copy algorithm and delegate the copy logic
+	// to the parquet.Rows object.
 	Rows() Rows
 }
 
@@ -178,7 +192,7 @@ func MergeRowGroups(rowGroups []RowGroup, options ...RowGroupOption) (RowGroup, 
 	if len(m.sorting) == 0 {
 		// When the row group has no ordering, use a simpler version of the
 		// merger which simply concatenates rows from each of the row groups.
-		// This is preferrable because it makes the output deterministic, the
+		// This is preferable because it makes the output deterministic, the
 		// heap merge may otherwise reorder rows across groups.
 		return &m.concatenatedRowGroup, nil
 	}

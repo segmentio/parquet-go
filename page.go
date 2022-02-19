@@ -45,6 +45,12 @@ type Page interface {
 	Size() int64
 
 	// Returns a reader exposing the values contained in the page.
+	//
+	// Depending on the underlying implementation, the returned reader may
+	// support reading array of typed Go values by implementing interfaces
+	// like parquet.Int32Reader. Applications should use type assertions on
+	// the returned reader to determine whether those optimizations are
+	// available.
 	Values() ValueReader
 
 	// Buffer returns the page as a BufferedPage, which may be the page itself
