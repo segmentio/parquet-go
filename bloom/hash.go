@@ -8,6 +8,14 @@ import "github.com/segmentio/parquet-go/bloom/xxhash"
 type Hash interface {
 	// Returns the 64 bit hash of the value passed as argument.
 	Sum64(value []byte) uint64
+
+	// Compute hashes of individual values of primitive types.
+	Sum64Uint8(value uint8) uint64
+	Sum64Uint16(value uint16) uint64
+	Sum64Uint32(value uint32) uint64
+	Sum64Uint64(value uint64) uint64
+	Sum64Uint128(value [16]byte) uint64
+
 	// Compute hashes of the array of fixed size values passed as arguments,
 	// returning the number of hashes written to the destination buffer.
 	MultiSum64Uint8(dst []uint64, src []uint8) int
@@ -22,6 +30,26 @@ type XXH64 struct{}
 
 func (XXH64) Sum64(b []byte) uint64 {
 	return xxhash.Sum64(b)
+}
+
+func (XXH64) Sum64Uint8(v uint8) uint64 {
+	return xxhash.Sum64Uint8(v)
+}
+
+func (XXH64) Sum64Uint16(v uint16) uint64 {
+	return xxhash.Sum64Uint16(v)
+}
+
+func (XXH64) Sum64Uint32(v uint32) uint64 {
+	return xxhash.Sum64Uint32(v)
+}
+
+func (XXH64) Sum64Uint64(v uint64) uint64 {
+	return xxhash.Sum64Uint64(v)
+}
+
+func (XXH64) Sum64Uint128(v [16]byte) uint64 {
+	return xxhash.Sum64Uint128(v)
 }
 
 func (XXH64) MultiSum64Uint8(h []uint64, v []uint8) int {

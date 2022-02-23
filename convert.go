@@ -497,7 +497,7 @@ type missingBloomFilter struct{}
 
 func (missingBloomFilter) ReadAt([]byte, int64) (int, error) { return 0, io.EOF }
 func (missingBloomFilter) Size() int64                       { return 0 }
-func (missingBloomFilter) Check([]byte) (bool, error)        { return false, nil }
+func (missingBloomFilter) Check(Value) (bool, error)         { return false, nil }
 
 type missingPage struct{ *missingColumnChunk }
 

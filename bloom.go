@@ -22,15 +22,12 @@ type BloomFilter interface {
 
 	// Tests whether the given value is present in the filter.
 	//
-	// The parquet value is expected to be PLAIN-encoded, as it would be by
-	// calling the parquet.Value.Bytes method.
-	//
 	// A non-nil error may be returned if reading the filter failed. This may
 	// happen if the filter was lazily loaded from a storage medium during the
 	// call to Check for example. Applications that can guarantee that the
 	// filter was in memory at the time Check was called can safely ignore the
 	// error, which would always be nil in this case.
-	Check(value []byte) (bool, error)
+	Check(value Value) (bool, error)
 }
 
 type bloomFilter struct {
@@ -39,8 +36,23 @@ type bloomFilter struct {
 	check func(io.ReaderAt, int64, uint64) (bool, error)
 }
 
-func (f *bloomFilter) Check(value []byte) (bool, error) {
-	return f.check(&f.SectionReader, f.Size(), f.hash.Sum64(value))
+func (f *bloomFilter) Check(v Value) (bool, error) {
+	return f.check(&f.SectionReader, f.Size(), v.hash(f.hash))
+}
+
+func (v Value) hash(h bloom.Hash) uint64 {
+	switch v.Kind() {
+	case Boolean:
+		return h.Sum64Uint8(uint8(v.u64))
+	case Int32, Float:
+		return h.Sum64Uint32(uint32(v.u64))
+	case Int64, Double:
+		return h.Sum64Uint64(v.u64)
+	case Int96:
+		return h.Sum64(v.Bytes())
+	default:
+		return h.Sum64(v.ByteArray())
+	}
 }
 
 func newBloomFilter(file io.ReaderAt, offset int64, header *format.BloomFilterHeader) *bloomFilter {
@@ -122,10 +134,6 @@ type bloomFilterEncoder struct {
 
 func newBloomFilterEncoder(filter bloom.MutableFilter, hash bloom.Hash) *bloomFilterEncoder {
 	return &bloomFilterEncoder{filter: filter, hash: hash}
-}
-
-func (e *bloomFilterEncoder) Check(value []byte) bool {
-	return e.filter.Check(e.hash.Sum64(value))
 }
 
 func (e *bloomFilterEncoder) Bytes() []byte {

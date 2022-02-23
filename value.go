@@ -326,6 +326,8 @@ func ValueOf(v interface{}) Value {
 		return Value{}
 	case uuid.UUID:
 		return makeValueBytes(FixedLenByteArray, value[:])
+	case deprecated.Int96:
+		return makeValueInt96(value)
 	}
 
 	k := Kind(-1)
