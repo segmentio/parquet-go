@@ -258,26 +258,33 @@ func (col *optionalColumnBuffer) WriteValues(values []Value) (n int, err error) 
 	rowIndex := int32(col.base.Len())
 
 	for n < len(values) {
+		// Collect index range of contiguous null values, from i to n. If this
+		// for loop exhausts the values, all remaining if statements and for
+		// loops will be no-ops and the loop will terminate.
 		i := n
 		for n < len(values) && values[n].definitionLevel != col.maxDefinitionLevel {
 			n++
 		}
 
+		// Write the contiguous null values up until the first non-null value
+		// obtained in the for loop above.
 		for _, v := range values[i:n] {
-			col.rows = append(col.rows, rowIndex)
+			col.rows = append(col.rows, -1)
 			col.definitionLevels = append(col.definitionLevels, v.definitionLevel)
-			rowIndex++
 		}
 
+		// Collect index range of contiguous non-null values, from i to n.
 		i = n
 		for n < len(values) && values[n].definitionLevel == col.maxDefinitionLevel {
 			n++
 		}
 
+		// As long as i < n we have non-null values still to write. It is
+		// possible that we just exhausted the input values in which case i == n
+		// and the outer for loop will terminate.
 		if i < n {
 			count, err := col.base.WriteValues(values[i:n])
 			col.definitionLevels = appendLevel(col.definitionLevels, col.maxDefinitionLevel, count)
-			n += count
 
 			for count > 0 {
 				col.rows = append(col.rows, rowIndex)
