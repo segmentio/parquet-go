@@ -762,14 +762,18 @@ type indexedPageReader struct {
 }
 
 func (r *indexedPageReader) ReadValues(values []Value) (n int, err error) {
+	var v Value
 	for n < len(values) && r.offset < len(r.page.values) {
-		values[n] = r.page.dict.Index(int(r.page.values[r.offset]))
+		v = r.page.dict.Index(int(r.page.values[r.offset]))
+		v.columnIndex = r.page.columnIndex
+		values[n] = v
 		r.offset++
 		n++
 	}
 	if r.offset == len(r.page.values) {
 		err = io.EOF
 	}
+
 	return n, err
 }
 
