@@ -222,6 +222,10 @@ func (r *rowGroup) SortingColumns() []SortingColumn { return r.sorting }
 func (r *rowGroup) Schema() *Schema                 { return r.schema }
 func (r *rowGroup) Rows() Rows                      { return &rowGroupRowReader{rowGroup: r} }
 
+func NewRowGroupRowReader(rowGroup RowGroup) Rows {
+	return &rowGroupRowReader{rowGroup: rowGroup}
+}
+
 type rowGroupRowReader struct {
 	rowGroup RowGroup
 	schema   *Schema
