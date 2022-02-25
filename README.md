@@ -359,7 +359,7 @@ for i, n := 0, file.NumRowGroups(); i < n; i++ {
 
 ## Optimizations
 
-The following sections describe common optimizations techniques supported by the
+The following sections describe common optimization techniques supported by the
 library.
 
 ### Optimizing Reads
