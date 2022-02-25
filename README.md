@@ -400,7 +400,7 @@ for {
 }
 ```
 
-Reading arrays of typed values is often preferrable when performing aggregations
+Reading arrays of typed values is often preferable when performing aggregations
 on the values as this model offers a more compact representation of the values
 in memory, and pairs well with the use of optimizations like SIMD vectorization.
 
