@@ -411,7 +411,7 @@ columnar data throughout the abstraction layers; it then becomes possible to
 write columns of values directly instead of reconstructing rows from the column
 values. The package offers two main mechanisms to satisfy those use cases:
 
-#### Writing Columns of Typed Arrays
+#### A. Writing Columns of Typed Arrays
 
 The first solution assumes that the program works with in-memory arrays of typed
 values, for example slices of primitive Go types like `[]float32`; this would be
