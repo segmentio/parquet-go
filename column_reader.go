@@ -252,7 +252,7 @@ func (r *levelReader) reset(decoder encoding.Decoder) {
 // of values from the underlying decoder, which are then boxed into the []Value
 // buffer passed to ReadValues. When the program converts type checks the
 // readers for more specific interfaces (e.g. parquet.Int32Reader), the values
-// can be decoded directly from the underlying decoder, there is no need for
+// can be decoded directly from the underlying decoder. There is no need for
 // the intermediary buffers so they are lazily allocated only if the ReadValues
 // methods are called.
 
