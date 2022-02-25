@@ -407,7 +407,7 @@ in memory, and pairs well with the use of optimizations like SIMD vectorization.
 ### Optimizing Writes
 
 Applications that deal with columnar storage are sometimes designed to work with
-columnar data throughput the abstraction layers; it then becomes possible to
+columnar data throughout the abstraction layers; it then becomes possible to
 write columns of values directly instead of reconstructing rows from the column
 values. The package offers two main mechanisms to satisfy those use cases:
 
