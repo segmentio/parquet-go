@@ -721,7 +721,7 @@ func (t *uuidType) ColumnOrder() *format.ColumnOrder {
 }
 
 func (t *uuidType) PhyiscalType() *format.Type {
-	return &physicalTypes[ByteArray]
+	return &physicalTypes[FixedLenByteArray]
 }
 
 func (t *uuidType) LogicalType() *format.LogicalType {
