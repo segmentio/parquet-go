@@ -474,7 +474,7 @@ to provide their own implementation of the `parquet.RowGroup` interface, which
 includes defining implementations of `parquet.ColumnChunk` and `parquet.Page`
 to expose column values of the row group.
 
-This model can be preferrable when the underlying storage or in-memory
+This model can be preferable when the underlying storage or in-memory
 representation of the data needs to be optimized further than what can be
 achieved by using an intermediary buffering layer with `parquet.Buffer`.
 
