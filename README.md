@@ -467,7 +467,7 @@ intermediary array of `parquet.Value`. However, it may not always be the right
 model depending on the situation, sometimes the generic abstraction can be a
 more expressive model.
 
-#### Implementing parquet.RowGroup
+#### B. Implementing parquet.RowGroup
 
 Programs that need full control over the construction of row groups can choose
 to provide their own implementation of the `parquet.RowGroup` interface, which
