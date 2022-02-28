@@ -284,13 +284,10 @@ func (r *booleanColumnReader) ReadBooleans(values []bool) (n int, err error) {
 		values = values[n:]
 	}
 	if r.decoder == nil {
-		err = io.EOF
-	} else {
-		var d int
-		d, err = r.decoder.DecodeBoolean(values)
-		n += d
+		return n, io.EOF
 	}
-	return n, err
+	d, err := r.decoder.DecodeBoolean(values)
+	return n + d, err
 }
 
 func (r *booleanColumnReader) ReadValues(values []Value) (n int, err error) {
