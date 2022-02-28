@@ -455,10 +455,10 @@ func (col *repeatedColumnBuffer) Page() BufferedPage {
 			for i := int64(0); i < numValues; i++ {
 				var err error
 				if buffer, err = col.base.ReadRowAt(buffer[:0], int64(row.offset)+i); err != nil {
-					return newErrorPage(int16(col.Column()), "reordering rows of repeated column: %w", err)
+					return newErrorPage(col.Column(), "reordering rows of repeated column: %w", err)
 				}
 				if err = column.base.WriteRow(buffer); err != nil {
-					return newErrorPage(int16(col.Column()), "reordering rows of repeated column: %w", err)
+					return newErrorPage(col.Column(), "reordering rows of repeated column: %w", err)
 				}
 			}
 		}

@@ -45,6 +45,12 @@ type Page interface {
 	Size() int64
 
 	// Returns a reader exposing the values contained in the page.
+	//
+	// Depending on the underlying implementation, the returned reader may
+	// support reading an array of typed Go values by implementing interfaces
+	// like parquet.Int32Reader. Applications should use type assertions on
+	// the returned reader to determine whether those optimizations are
+	// available.
 	Values() ValueReader
 
 	// Buffer returns the page as a BufferedPage, which may be the page itself
@@ -199,17 +205,17 @@ func forEachPageSlice(page BufferedPage, wantSize int64, do func(BufferedPage) e
 
 type errorPage struct {
 	err         error
-	columnIndex int16
+	columnIndex int
 }
 
-func newErrorPage(columnIndex int16, msg string, args ...interface{}) *errorPage {
+func newErrorPage(columnIndex int, msg string, args ...interface{}) *errorPage {
 	return &errorPage{
 		err:         fmt.Errorf(msg, args...),
 		columnIndex: columnIndex,
 	}
 }
 
-func (page *errorPage) Column() int                    { return int(page.columnIndex) }
+func (page *errorPage) Column() int                    { return page.columnIndex }
 func (page *errorPage) Dictionary() Dictionary         { return nil }
 func (page *errorPage) NumRows() int64                 { return 0 }
 func (page *errorPage) NumValues() int64               { return 0 }

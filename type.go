@@ -128,10 +128,21 @@ type Type interface {
 	// The method panics if it is called on a group type.
 	NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer
 
-	// Creates a decoder for values of this type.
+	// Creates a reader for columns of this type.
 	//
-	// The method panics if it is called on a group type.
-	NewValueDecoder(bufferSize int) ValueDecoder
+	// Column readers are created using the index of the column they are reading
+	// values from (relative to the parent schema). The column index will be set
+	// on values read from the reader.
+	//
+	// The buffer size is given in bytes, because we want to control memory
+	// consumption of the application, which is simpler to achieve with buffer
+	// size expressed in bytes rather than number of elements.
+	//
+	// The returned reader may implement extensions that can be tested via type
+	// assertions. For example, on a INT32 type, the reader could implement the
+	// parquet.Int32Reader interface to allow programs to more efficiently read
+	// columns of INT32 values.
+	NewColumnReader(columnIndex, bufferSize int) ColumnReader
 }
 
 // In the current parquet version supported by this library, only type-defined
@@ -212,8 +223,8 @@ func (t booleanType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 	return newBooleanColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
-func (t booleanType) NewValueDecoder(bufferSize int) ValueDecoder {
-	return newBooleanValueDecoder(bufferSize)
+func (t booleanType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
+	return newBooleanColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 type int32Type struct{ primitiveType }
@@ -244,8 +255,8 @@ func (t int32Type) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 	return newInt32ColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
-func (t int32Type) NewValueDecoder(bufferSize int) ValueDecoder {
-	return newInt32ValueDecoder(bufferSize)
+func (t int32Type) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
+	return newInt32ColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 type int64Type struct{ primitiveType }
@@ -276,8 +287,8 @@ func (t int64Type) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 	return newInt64ColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
-func (t int64Type) NewValueDecoder(bufferSize int) ValueDecoder {
-	return newInt64ValueDecoder(bufferSize)
+func (t int64Type) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
+	return newInt64ColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 type int96Type struct{ primitiveType }
@@ -308,8 +319,8 @@ func (t int96Type) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 	return newInt96ColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
-func (t int96Type) NewValueDecoder(bufferSize int) ValueDecoder {
-	return newInt96ValueDecoder(bufferSize)
+func (t int96Type) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
+	return newInt96ColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 type floatType struct{ primitiveType }
@@ -340,8 +351,8 @@ func (t floatType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 	return newFloatColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
-func (t floatType) NewValueDecoder(bufferSize int) ValueDecoder {
-	return newFloatValueDecoder(bufferSize)
+func (t floatType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
+	return newFloatColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 type doubleType struct{ primitiveType }
@@ -370,8 +381,8 @@ func (t doubleType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 	return newDoubleColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
-func (t doubleType) NewValueDecoder(bufferSize int) ValueDecoder {
-	return newDoubleValueDecoder(bufferSize)
+func (t doubleType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
+	return newDoubleColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 type byteArrayType struct{ primitiveType }
@@ -402,8 +413,8 @@ func (t byteArrayType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer
 	return newByteArrayColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
-func (t byteArrayType) NewValueDecoder(bufferSize int) ValueDecoder {
-	return newByteArrayValueDecoder(bufferSize)
+func (t byteArrayType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
+	return newByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 type fixedLenByteArrayType struct {
@@ -439,8 +450,8 @@ func (t *fixedLenByteArrayType) NewColumnBuffer(columnIndex, bufferSize int) Col
 	return newFixedLenByteArrayColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
-func (t *fixedLenByteArrayType) NewValueDecoder(bufferSize int) ValueDecoder {
-	return newFixedLenByteArrayValueDecoder(t.length, bufferSize)
+func (t *fixedLenByteArrayType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
+	return newFixedLenByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 var (
@@ -604,11 +615,11 @@ func (t *intType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 	}
 }
 
-func (t *intType) NewValueDecoder(bufferSize int) ValueDecoder {
+func (t *intType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	if t.BitWidth == 64 {
-		return newInt64ValueDecoder(bufferSize)
+		return newInt64ColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 	} else {
-		return newInt32ValueDecoder(bufferSize)
+		return newInt32ColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 	}
 }
 
@@ -691,8 +702,8 @@ func (t *stringType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 	return newByteArrayColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
-func (t *stringType) NewValueDecoder(bufferSize int) ValueDecoder {
-	return newByteArrayValueDecoder(bufferSize)
+func (t *stringType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
+	return newByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t *stringType) GoType() reflect.Type {
@@ -742,8 +753,8 @@ func (t *uuidType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 	return newFixedLenByteArrayColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
-func (t *uuidType) NewValueDecoder(bufferSize int) ValueDecoder {
-	return newFixedLenByteArrayValueDecoder(16, bufferSize)
+func (t *uuidType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
+	return newFixedLenByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t *uuidType) GoType() reflect.Type {
@@ -795,8 +806,8 @@ func (t *enumType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 	return newByteArrayColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
-func (t *enumType) NewValueDecoder(bufferSize int) ValueDecoder {
-	return newByteArrayValueDecoder(bufferSize)
+func (t *enumType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
+	return newByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t *enumType) GoType() reflect.Type {
@@ -848,8 +859,8 @@ func (t *jsonType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 	return newByteArrayColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
-func (t *jsonType) NewValueDecoder(bufferSize int) ValueDecoder {
-	return newByteArrayValueDecoder(bufferSize)
+func (t *jsonType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
+	return newByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 // BSON constructs a leaf node of BSON logical type.
@@ -897,8 +908,8 @@ func (t *bsonType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 	return newByteArrayColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
-func (t *bsonType) NewValueDecoder(bufferSize int) ValueDecoder {
-	return newByteArrayValueDecoder(bufferSize)
+func (t *bsonType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
+	return newByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 // Date constructs a leaf node of DATE logical type.
@@ -942,8 +953,8 @@ func (t *dateType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 	return newInt32ColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
-func (t *dateType) NewValueDecoder(bufferSize int) ValueDecoder {
-	return newInt32ValueDecoder(bufferSize)
+func (t *dateType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
+	return newInt32ColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 // TimeUnit represents units of time in the parquet type system.
@@ -1070,11 +1081,11 @@ func (t *timeType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 	}
 }
 
-func (t *timeType) NewValueDecoder(bufferSize int) ValueDecoder {
+func (t *timeType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	if t.Unit.Millis != nil {
-		return newInt32ValueDecoder(bufferSize)
+		return newInt32ColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 	} else {
-		return newInt64ValueDecoder(bufferSize)
+		return newInt64ColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 	}
 }
 
@@ -1126,8 +1137,8 @@ func (t *timestampType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffe
 	return newInt64ColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
-func (t *timestampType) NewValueDecoder(bufferSize int) ValueDecoder {
-	return newInt64ValueDecoder(bufferSize)
+func (t *timestampType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
+	return newInt64ColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 // List constructs a node of LIST logical type.
@@ -1175,8 +1186,8 @@ func (t *listType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 	panic("cannot create row group column from parquet LIST type")
 }
 
-func (t *listType) NewValueDecoder(bufferSize int) ValueDecoder {
-	panic("cannot create page reader from parquet LIST type")
+func (t *listType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
+	panic("cannot create row group column from parquet LIST type")
 }
 
 // Map constructs a node of MAP logical type.
@@ -1229,8 +1240,8 @@ func (t *mapType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 	panic("cannot create row group column from parquet MAP type")
 }
 
-func (t *mapType) NewValueDecoder(bufferSize int) ValueDecoder {
-	panic("cannot create page reader from parquet MAP type")
+func (t *mapType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
+	panic("cannot create row group column from parquet MAP type")
 }
 
 type nullType format.NullType
@@ -1265,8 +1276,8 @@ func (t *nullType) NewColumnBuffer(int, int) ColumnBuffer {
 	panic("cannot create row group column from parquet NULL type")
 }
 
-func (t *nullType) NewValueDecoder(int) ValueDecoder {
-	panic("cannot create page reader from parquet NULL type")
+func (t *nullType) NewColumnReader(int, int) ColumnReader {
+	panic("cannot create row group column from parquet NULL type")
 }
 
 type groupType struct{}
@@ -1293,8 +1304,8 @@ func (t groupType) NewColumnBuffer(int, int) ColumnBuffer {
 	panic("cannot create row group column from parquet group")
 }
 
-func (groupType) NewValueDecoder(int) ValueDecoder {
-	panic("cannot create value decoder from parquet group")
+func (t groupType) NewColumnReader(int, int) ColumnReader {
+	panic("cannot create row group column from parquet group")
 }
 
 func (groupType) Length() int { return 0 }

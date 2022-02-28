@@ -814,7 +814,7 @@ func (p *filePage) Buffer() BufferedPage {
 	bufferedPage := p.column.Type().NewColumnBuffer(p.Column(), int(p.Size()))
 	_, err := CopyValues(bufferedPage, p.Values())
 	if err != nil {
-		return &errorPage{err: err, columnIndex: int16(p.Column())}
+		return &errorPage{err: err, columnIndex: p.Column()}
 	}
 	return bufferedPage.Page()
 }
@@ -839,7 +839,7 @@ func (p *filePage) PageSize() int64 { return int64(p.header.CompressedPageSize) 
 func (p *filePage) CRC() uint32 { return uint32(p.header.CRC) }
 
 type filePageValueReaderState struct {
-	reader *dataPageReader
+	reader ColumnReader
 
 	v1 struct {
 		repetitions dataPageLevelV1
@@ -912,30 +912,40 @@ func (s *filePageValueReaderState) init(columnType Type, column *Column, codec f
 		return fmt.Errorf("cannot read values from page of type %s", h.PageType())
 	}
 
-	repetitionLevelEncoding := pageHeader.RepetitionLevelEncoding()
-	definitionLevelEncoding := pageHeader.DefinitionLevelEncoding()
 	pageEncoding := pageHeader.Encoding()
-
-	s.repetitions.decoder = makeDecoder(s.repetitions.decoder, s.repetitions.encoding, repetitionLevelEncoding, repetitionLevels)
-	s.definitions.decoder = makeDecoder(s.definitions.decoder, s.definitions.encoding, definitionLevelEncoding, definitionLevels)
 	s.page.decoder = makeDecoder(s.page.decoder, s.page.encoding, pageEncoding, pageData)
-
-	s.repetitions.encoding = repetitionLevelEncoding
-	s.definitions.encoding = definitionLevelEncoding
 	s.page.encoding = pageEncoding
 
-	if s.reader == nil {
-		s.reader = newDataPageReader(
-			columnType,
-			column.maxRepetitionLevel,
-			column.maxDefinitionLevel,
-			column.index,
-			defaultReadBufferSize,
-		)
+	maxRepetitionLevel := column.maxRepetitionLevel
+	maxDefinitionLevel := column.maxDefinitionLevel
+	hasLevels := maxRepetitionLevel > 0 || maxDefinitionLevel > 0
+	if hasLevels {
+		repetitionLevelEncoding := pageHeader.RepetitionLevelEncoding()
+		definitionLevelEncoding := pageHeader.DefinitionLevelEncoding()
+		s.repetitions.decoder = makeDecoder(s.repetitions.decoder, s.repetitions.encoding, repetitionLevelEncoding, repetitionLevels)
+		s.definitions.decoder = makeDecoder(s.definitions.decoder, s.definitions.encoding, definitionLevelEncoding, definitionLevels)
+		s.repetitions.encoding = repetitionLevelEncoding
+		s.definitions.encoding = definitionLevelEncoding
 	}
 
-	// TODO: revisit the data page reader APIs
-	s.reader.Reset(int(header.NumValues()), s.repetitions.decoder, s.definitions.decoder, s.page.decoder)
+	if s.reader == nil {
+		bufferSize := defaultReadBufferSize
+		if hasLevels {
+			bufferSize /= 2
+		}
+		s.reader = columnType.NewColumnReader(int(column.index), bufferSize)
+		if hasLevels {
+			s.reader = newColumnReader(s.reader, maxRepetitionLevel, maxDefinitionLevel, bufferSize)
+		}
+	}
+
+	switch r := s.reader.(type) {
+	case *columnReader:
+		r.reset(int(header.NumValues()), s.repetitions.decoder, s.definitions.decoder, s.page.decoder)
+	default:
+		r.Reset(s.page.decoder)
+	}
+
 	return nil
 }
 

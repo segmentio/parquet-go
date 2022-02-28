@@ -1,6 +1,7 @@
 package parquet_test
 
 import (
+	"bytes"
 	"io"
 	"reflect"
 	"testing"
@@ -26,7 +27,7 @@ func testPageBoolean(t *testing.T) {
 	schema := parquet.SchemaOf(struct{ Value bool }{})
 
 	t.Run("io", func(t *testing.T) {
-		testPage(t, schema, pageTest{
+		testBufferPage(t, schema, pageTest{
 			write: func(w parquet.ValueWriter) (interface{}, error) {
 				values := []bool{false, true}
 				n, err := w.(io.Writer).Write(bits.BoolToBytes(values))
@@ -62,7 +63,7 @@ func testPageInt32(t *testing.T) {
 	schema := parquet.SchemaOf(struct{ Value int32 }{})
 
 	t.Run("io", func(t *testing.T) {
-		testPage(t, schema, pageTest{
+		testBufferPage(t, schema, pageTest{
 			write: func(w parquet.ValueWriter) (interface{}, error) {
 				values := []int32{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
 				n, err := w.(io.Writer).Write(bits.Int32ToBytes(values))
@@ -98,7 +99,7 @@ func testPageInt64(t *testing.T) {
 	schema := parquet.SchemaOf(struct{ Value int64 }{})
 
 	t.Run("io", func(t *testing.T) {
-		testPage(t, schema, pageTest{
+		testBufferPage(t, schema, pageTest{
 			write: func(w parquet.ValueWriter) (interface{}, error) {
 				values := []int64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
 				n, err := w.(io.Writer).Write(bits.Int64ToBytes(values))
@@ -134,7 +135,7 @@ func testPageInt96(t *testing.T) {
 	schema := parquet.SchemaOf(struct{ Value deprecated.Int96 }{})
 
 	t.Run("io", func(t *testing.T) {
-		testPage(t, schema, pageTest{
+		testBufferPage(t, schema, pageTest{
 			write: func(w parquet.ValueWriter) (interface{}, error) {
 				values := []deprecated.Int96{{0: 0}, {0: 1}, {0: 2}}
 				n, err := w.(io.Writer).Write(deprecated.Int96ToBytes(values))
@@ -170,7 +171,7 @@ func testPageFloat(t *testing.T) {
 	schema := parquet.SchemaOf(struct{ Value float32 }{})
 
 	t.Run("io", func(t *testing.T) {
-		testPage(t, schema, pageTest{
+		testBufferPage(t, schema, pageTest{
 			write: func(w parquet.ValueWriter) (interface{}, error) {
 				values := []float32{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
 				n, err := w.(io.Writer).Write(bits.Float32ToBytes(values))
@@ -206,7 +207,7 @@ func testPageDouble(t *testing.T) {
 	schema := parquet.SchemaOf(struct{ Value float64 }{})
 
 	t.Run("io", func(t *testing.T) {
-		testPage(t, schema, pageTest{
+		testBufferPage(t, schema, pageTest{
 			write: func(w parquet.ValueWriter) (interface{}, error) {
 				values := []float64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
 				n, err := w.(io.Writer).Write(bits.Float64ToBytes(values))
@@ -242,7 +243,7 @@ func testPageByteArray(t *testing.T) {
 	schema := parquet.SchemaOf(struct{ Value []byte }{})
 
 	t.Run("io", func(t *testing.T) {
-		testPage(t, schema, pageTest{
+		testBufferPage(t, schema, pageTest{
 			write: func(w parquet.ValueWriter) (interface{}, error) {
 				values := []byte{}
 				values = plain.AppendByteArray(values, []byte("A"))
@@ -273,8 +274,8 @@ func testPageByteArray(t *testing.T) {
 
 			read: func(r parquet.ValueReader) (interface{}, error) {
 				values := make([]byte, 3+3*plain.ByteArrayLengthSize)
-				_, err := r.(parquet.ByteArrayReader).ReadByteArrays(values)
-				return values, err
+				n, err := r.(parquet.ByteArrayReader).ReadByteArrays(values)
+				return values[:n+n*plain.ByteArrayLengthSize], err
 			},
 		})
 	})
@@ -284,7 +285,7 @@ func testPageFixedLenByteArray(t *testing.T) {
 	schema := parquet.SchemaOf(struct{ Value [3]byte }{})
 
 	t.Run("io", func(t *testing.T) {
-		testPage(t, schema, pageTest{
+		testBufferPage(t, schema, pageTest{
 			write: func(w parquet.ValueWriter) (interface{}, error) {
 				values := []byte("123456789")
 				n, err := w.(io.Writer).Write(values)
@@ -322,6 +323,11 @@ type pageTest struct {
 }
 
 func testPage(t *testing.T, schema *parquet.Schema, test pageTest) {
+	t.Run("buffer", func(t *testing.T) { testBufferPage(t, schema, test) })
+	t.Run("file", func(t *testing.T) { testFilePage(t, schema, test) })
+}
+
+func testBufferPage(t *testing.T, schema *parquet.Schema, test pageTest) {
 	buffer := parquet.NewBuffer(schema)
 	column := buffer.Column(0).(parquet.ColumnBuffer)
 
@@ -337,7 +343,52 @@ func testPage(t *testing.T, schema *parquet.Schema, test pageTest) {
 	if !reflect.DeepEqual(w, r) {
 		t.Errorf("wrong values read from the page: got=%+v want=%+v", r, w)
 	}
+}
 
+func testFilePage(t *testing.T, schema *parquet.Schema, test pageTest) {
+	buffer := parquet.NewBuffer(schema)
+	column := buffer.Column(0).(parquet.ColumnBuffer)
+
+	w, err := test.write(column)
+	if err != nil {
+		t.Fatal("writing page values:", err)
+	}
+
+	output := new(bytes.Buffer)
+	writer := parquet.NewWriter(output)
+	n, err := writer.WriteRowGroup(buffer)
+	if err != nil {
+		t.Fatal("writing parquet file:", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal("writing parquet file:", err)
+	}
+	if n != buffer.NumRows() {
+		t.Fatalf("number of rows written mismatch: got=%d want=%d", n, buffer.NumRows())
+	}
+
+	reader := bytes.NewReader(output.Bytes())
+	f, err := parquet.OpenFile(reader, reader.Size())
+	if err != nil {
+		t.Fatal("opening parquet file:", err)
+	}
+
+	p, err := f.RowGroup(0).Column(0).Pages().ReadPage()
+	if err != nil {
+		t.Fatal("reading parquet page:", err)
+	}
+
+	values := p.Values()
+	r, err := test.read(values)
+	if err != io.EOF && err != nil {
+		t.Errorf("expected io.EOF after reading all values but got %v", err)
+	}
+	if !reflect.DeepEqual(w, r) {
+		t.Errorf("wrong values read from the page: got=%+v want=%+v", r, w)
+	}
+	if r, err := test.read(values); reflect.ValueOf(r).Len() != 0 || err != io.EOF {
+		t.Errorf("expected no data and io.EOF after reading all values but got %d and %v", r, err)
+	}
 }
 
 type testStruct struct {

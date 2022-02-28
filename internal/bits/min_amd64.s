@@ -460,7 +460,7 @@ TEXT ·minBE128(SB), NOSPLIT, $-48
     JB loop
 
     CMPB ·hasAVX512MinMaxBE128(SB), $0
-    JB loop
+    JE loop
 
     // Z19 holds a vector of the count by which we increment the vectors of
     // swap at each loop iteration.
