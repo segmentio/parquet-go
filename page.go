@@ -353,10 +353,14 @@ func (r *optionalPageReader) ReadValues(values []Value) (n int, err error) {
 		r.values = r.page.base.Values()
 	}
 	maxDefinitionLevel := r.page.maxDefinitionLevel
+	columnIndex := ^int16(r.page.Column())
 
 	for n < len(values) && r.offset < len(r.page.definitionLevels) {
 		for n < len(values) && r.offset < len(r.page.definitionLevels) && r.page.definitionLevels[r.offset] != maxDefinitionLevel {
-			values[n] = Value{definitionLevel: r.page.definitionLevels[r.offset]}
+			values[n] = Value{
+				definitionLevel: r.page.definitionLevels[r.offset],
+				columnIndex:     columnIndex,
+			}
 			r.offset++
 			n++
 		}
