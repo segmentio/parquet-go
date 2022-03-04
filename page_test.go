@@ -431,3 +431,21 @@ func TestOptionalPageTrailingNulls(t *testing.T) {
 		t.Errorf("wrong number of rows read: got=%d want=%d", len(resultRows), len(rows))
 	}
 }
+
+func TestOptionalPagePreserveIndex(t *testing.T) {
+	schema := parquet.SchemaOf(&testStruct{})
+	buffer := parquet.NewBuffer(schema)
+
+	if err := buffer.WriteRow(schema.Deconstruct(nil, &testStruct{Value: nil})); err != nil {
+		t.Fatal("writing row:", err)
+	}
+
+	row, err := buffer.Rows().ReadRow(nil)
+	if err != nil {
+		t.Fatal("reading rows:", err)
+	}
+
+	if row[0].Column() != 0 {
+		t.Errorf("wrong index: got=%d want=%d", row[0].Column(), 0)
+	}
+}
