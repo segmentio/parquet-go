@@ -208,7 +208,7 @@ func MergeRowGroups(rowGroups []RowGroup, options ...RowGroupOption) (RowGroup, 
 		if sortingIndex := searchSortingColumn(m.sorting, leaf.path); sortingIndex < len(m.sorting) {
 			m.sortFuncs[sortingIndex] = columnSortFunc{
 				columnIndex: leaf.columnIndex,
-				compare: sortFuncOf(
+				compare: SortFuncOf(
 					leaf.node.Type(),
 					leaf.maxRepetitionLevel,
 					leaf.maxDefinitionLevel,

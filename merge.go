@@ -202,7 +202,7 @@ type rowGroupCursor interface {
 
 type columnSortFunc struct {
 	columnIndex int16
-	compare     sortFunc
+	compare     SortFunc
 }
 
 type bufferedRowGroupCursor struct {
@@ -266,9 +266,9 @@ var (
 	//_ RowWriterTo         = (*mergedRowGroupRowReader)(nil)
 )
 
-type sortFunc func(a, b []Value) int
+type SortFunc func(a, b []Value) int
 
-func sortFuncOf(t Type, maxDefinitionLevel, maxRepetitionLevel int8, descending, nullsFirst bool) (sort sortFunc) {
+func SortFuncOf(t Type, maxDefinitionLevel, maxRepetitionLevel int8, descending, nullsFirst bool) (sort SortFunc) {
 	switch {
 	case maxRepetitionLevel > 0:
 		sort = sortFuncOfRepeated(t, nullsFirst)
@@ -284,11 +284,11 @@ func sortFuncOf(t Type, maxDefinitionLevel, maxRepetitionLevel int8, descending,
 }
 
 //go:noinline
-func sortFuncOfDescending(sort sortFunc) sortFunc {
+func sortFuncOfDescending(sort SortFunc) SortFunc {
 	return func(a, b []Value) int { return -sort(a, b) }
 }
 
-func sortFuncOfOptional(t Type, nullsFirst bool) sortFunc {
+func sortFuncOfOptional(t Type, nullsFirst bool) SortFunc {
 	if nullsFirst {
 		return sortFuncOfOptionalNullsFirst(t)
 	} else {
@@ -297,7 +297,7 @@ func sortFuncOfOptional(t Type, nullsFirst bool) sortFunc {
 }
 
 //go:noinline
-func sortFuncOfOptionalNullsFirst(t Type) sortFunc {
+func sortFuncOfOptionalNullsFirst(t Type) SortFunc {
 	compare := sortFuncOfRequired(t)
 	return func(a, b []Value) int {
 		switch {
@@ -315,7 +315,7 @@ func sortFuncOfOptionalNullsFirst(t Type) sortFunc {
 }
 
 //go:noinline
-func sortFuncOfOptionalNullsLast(t Type) sortFunc {
+func sortFuncOfOptionalNullsLast(t Type) SortFunc {
 	compare := sortFuncOfRequired(t)
 	return func(a, b []Value) int {
 		switch {
@@ -333,7 +333,7 @@ func sortFuncOfOptionalNullsLast(t Type) sortFunc {
 }
 
 //go:noinline
-func sortFuncOfRepeated(t Type, nullsFirst bool) sortFunc {
+func sortFuncOfRepeated(t Type, nullsFirst bool) SortFunc {
 	compare := sortFuncOfOptional(t, nullsFirst)
 	return func(a, b []Value) int {
 		n := len(a)
@@ -353,6 +353,6 @@ func sortFuncOfRepeated(t Type, nullsFirst bool) sortFunc {
 }
 
 //go:noinline
-func sortFuncOfRequired(t Type) sortFunc {
+func sortFuncOfRequired(t Type) SortFunc {
 	return func(a, b []Value) int { return t.Compare(a[0], b[0]) }
 }
