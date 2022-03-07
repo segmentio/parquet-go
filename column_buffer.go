@@ -184,6 +184,13 @@ func (col *optionalColumnBuffer) Pages() Pages {
 }
 
 func (col *optionalColumnBuffer) Page() BufferedPage {
+	if !optionalRowsHaveBeenReordered(col.rows) {
+		// No need for any cyclic sorting if the rows have not been reordered.
+		// This case is also important because the cyclic sorting modifies the
+		// buffer which makes it unsafe to read the buffer concurrently.
+		return newOptionalPage(col.base.Page(), col.maxDefinitionLevel, col.definitionLevels)
+	}
+
 	numNulls := countLevelsNotEqual(col.definitionLevels, col.maxDefinitionLevel)
 	numValues := len(col.rows) - numNulls
 
@@ -434,7 +441,7 @@ func (col *repeatedColumnBuffer) Pages() Pages {
 }
 
 func (col *repeatedColumnBuffer) Page() BufferedPage {
-	if rowsHaveBeenReordered(col.rows) {
+	if repeatedRowsHaveBeenReordered(col.rows) {
 		if col.reordering == nil {
 			col.reordering = col.Clone().(*repeatedColumnBuffer)
 		}
@@ -644,7 +651,27 @@ func (col *repeatedColumnBuffer) Values() ValueReader {
 	return &repeatedPageReader{page: col.Page().(*repeatedPage)}
 }
 
-func rowsHaveBeenReordered(rows []region) bool {
+func optionalRowsHaveBeenReordered(rows []int32) bool {
+	i := int32(0)
+	for _, row := range rows {
+		if row < 0 {
+			// Skip any row that is null.
+			continue
+		}
+
+		// If rows have been reordered the indices are not increasing exactly
+		// one by one.
+		if row != i {
+			return true
+		}
+
+		// Only increment the index if the row is not null.
+		i++
+	}
+	return false
+}
+
+func repeatedRowsHaveBeenReordered(rows []region) bool {
 	offset := uint32(0)
 	for _, row := range rows {
 		if row.offset != offset {
