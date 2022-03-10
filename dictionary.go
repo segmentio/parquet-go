@@ -181,7 +181,7 @@ func newFixedLenByteArrayDictionary(typ Type, bufferSize int) *fixedLenByteArray
 	return &fixedLenByteArrayDictionary{
 		typ:    typ,
 		size:   size,
-		values: make([]byte, 0, dictCap(bufferSize, size)),
+		values: make([]byte, 0, dictCap(bufferSize, size)*size),
 	}
 }
 
@@ -349,7 +349,9 @@ func (page *indexedPage) RepetitionLevels() []int8 { return nil }
 
 func (page *indexedPage) DefinitionLevels() []int8 { return nil }
 
-func (page *indexedPage) WriteTo(e encoding.Encoder) error { return e.EncodeInt32(page.values) }
+func (page *indexedPage) WriteTo(e encoding.Encoder) error {
+	return e.EncodeInt32(page.values)
+}
 
 func (page *indexedPage) Values() ValueReader { return &indexedPageReader{page: page} }
 

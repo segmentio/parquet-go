@@ -70,19 +70,19 @@ type Encoder interface {
 	// knows that all values can fit in 16 bits.
 	EncodeInt16(data []int16) error
 
-	// Encodes an array of 32 bits integer values using this encoder.
+	// Encodes an array of 32 bit integer values using this encoder.
 	EncodeInt32(data []int32) error
 
-	// Encodes an array of 64 bits integer values using this encoder.
+	// Encodes an array of 64 bit integer values using this encoder.
 	EncodeInt64(data []int64) error
 
-	// Encodes an array of 96 bits integer values using this encoder.
+	// Encodes an array of 96 bit integer values using this encoder.
 	EncodeInt96(data []deprecated.Int96) error
 
-	// Encodes an array of 32 bits floating point values using this encoder.
+	// Encodes an array of 32 bit floating point values using this encoder.
 	EncodeFloat(data []float32) error
 
-	// Encodes an array of 64 bits floating point values using this encoder.
+	// Encodes an array of 64 bit floating point values using this encoder.
 	EncodeDouble(data []float64) error
 
 	// Encodes an array of variable length byte array values using this encoder.

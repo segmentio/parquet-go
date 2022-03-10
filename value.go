@@ -489,7 +489,7 @@ func (v Value) Format(w fmt.State, r rune) {
 		case w.Flag('+'):
 			fmt.Fprintf(w, "%+[1]c %+[1]d %+[1]r %+[1]s", v)
 		case w.Flag('#'):
-			fmt.Fprintf(w, "parquet.Value{%+[1]c,%+[1]d,%+[1]r,%+[1]s}", v)
+			fmt.Fprintf(w, "parquet.Value{%+[1]c, %+[1]d, %+[1]r, %+[1]s}", v)
 		default:
 			v.Format(w, 's')
 		}

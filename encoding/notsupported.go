@@ -21,9 +21,9 @@ var (
 	// ErrInvalidArguments is an error returned when arguments passed to the
 	// encoding functions are incorrect and will lead to an expected failure.
 	//
-	// As with ErrNotSupported, this error may be wrapped with specific information
-	// about the problem and application are expected to use errors.Is for
-	// comparisons
+	// As with ErrNotSupported, this error may be wrapped with specific
+	// information about the problem and applications are expected to use
+	// errors.Is for comparisons.
 	ErrInvalidArguments = errors.New("invalid encoding arguments")
 )
 

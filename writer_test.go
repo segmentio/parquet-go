@@ -9,6 +9,7 @@ import (
 	"testing"
 	"testing/quick"
 
+	"github.com/google/uuid"
 	"github.com/hexops/gotextdiff"
 	"github.com/hexops/gotextdiff/myers"
 	"github.com/hexops/gotextdiff/span"
@@ -563,5 +564,42 @@ func TestBloomFilterForDict(t *testing.T) {
 	}
 	if !ok {
 		t.Error("bloom filter should have contained 'test'")
+	}
+}
+
+func TestWriterRepeatedUUIDDict(t *testing.T) {
+	inputID := uuid.MustParse("123456ab-0000-0000-0000-000000000000")
+	records := []struct {
+		List []uuid.UUID `parquet:"list,dict"`
+	}{{
+		[]uuid.UUID{inputID},
+	}}
+	schema := parquet.SchemaOf(&records[0])
+	b := bytes.NewBuffer(nil)
+	w := parquet.NewWriter(b, schema)
+	err := w.Write(records[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	f, err := parquet.OpenFile(bytes.NewReader(b.Bytes()), int64(b.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows := f.RowGroup(0).Rows()
+	row, err := rows.ReadRow(nil)
+	if err != nil {
+		t.Fatalf("reading row from parquet file: %v", err)
+	}
+	if len(row) != 1 {
+		t.Errorf("expected 1 value in row, got %d", len(row))
+	}
+	if !bytes.Equal(inputID[:], row[0].Bytes()) {
+		t.Errorf("expected to get UUID %q back out, got %q", inputID, row[0].Bytes())
 	}
 }
