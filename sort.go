@@ -93,17 +93,19 @@ func SortFuncOf(t Type, options ...SortOption) SortFunc {
 }
 
 func sortFuncOf(t Type, config *SortConfig) (sort SortFunc) {
-	switch {
-	case makeRepetitionLevel(config.MaxRepetitionLevel) > 0:
-		sort = sortFuncOfRepeated(t, config.NullsFirst)
-	case makeDefinitionLevel(config.MaxDefinitionLevel) > 0:
-		sort = sortFuncOfOptional(t, config.NullsFirst)
-	default:
-		sort = sortFuncOfRequired(t)
-	}
+	sort = sortFuncOfRequired(t)
+
 	if config.Descending {
 		sort = sortFuncOfDescending(sort)
 	}
+
+	switch {
+	case makeRepetitionLevel(config.MaxRepetitionLevel) > 0:
+		sort = sortFuncOfRepeated(sort, config)
+	case makeDefinitionLevel(config.MaxDefinitionLevel) > 0:
+		sort = sortFuncOfOptional(sort, config)
+	}
+
 	return sort
 }
 
@@ -112,17 +114,16 @@ func sortFuncOfDescending(sort SortFunc) SortFunc {
 	return func(a, b []Value) int { return -sort(a, b) }
 }
 
-func sortFuncOfOptional(t Type, nullsFirst bool) SortFunc {
-	if nullsFirst {
-		return sortFuncOfOptionalNullsFirst(t)
+func sortFuncOfOptional(sort SortFunc, config *SortConfig) SortFunc {
+	if config.NullsFirst {
+		return sortFuncOfOptionalNullsFirst(sort)
 	} else {
-		return sortFuncOfOptionalNullsLast(t)
+		return sortFuncOfOptionalNullsLast(sort)
 	}
 }
 
 //go:noinline
-func sortFuncOfOptionalNullsFirst(t Type) SortFunc {
-	compare := sortFuncOfRequired(t)
+func sortFuncOfOptionalNullsFirst(sort SortFunc) SortFunc {
 	return func(a, b []Value) int {
 		switch {
 		case a[0].IsNull():
@@ -133,14 +134,13 @@ func sortFuncOfOptionalNullsFirst(t Type) SortFunc {
 		case b[0].IsNull():
 			return +1
 		default:
-			return compare(a, b)
+			return sort(a, b)
 		}
 	}
 }
 
 //go:noinline
-func sortFuncOfOptionalNullsLast(t Type) SortFunc {
-	compare := sortFuncOfRequired(t)
+func sortFuncOfOptionalNullsLast(sort SortFunc) SortFunc {
 	return func(a, b []Value) int {
 		switch {
 		case a[0].IsNull():
@@ -151,14 +151,14 @@ func sortFuncOfOptionalNullsLast(t Type) SortFunc {
 		case b[0].IsNull():
 			return -1
 		default:
-			return compare(a, b)
+			return sort(a, b)
 		}
 	}
 }
 
 //go:noinline
-func sortFuncOfRepeated(t Type, nullsFirst bool) SortFunc {
-	compare := sortFuncOfOptional(t, nullsFirst)
+func sortFuncOfRepeated(sort SortFunc, config *SortConfig) SortFunc {
+	sort = sortFuncOfOptional(sort, config)
 	return func(a, b []Value) int {
 		n := len(a)
 		if n < len(b) {
@@ -166,7 +166,7 @@ func sortFuncOfRepeated(t Type, nullsFirst bool) SortFunc {
 		}
 
 		for i := 0; i < n; i++ {
-			k := compare(a[i:i+1], b[i:i+1])
+			k := sort(a[i:i+1], b[i:i+1])
 			if k != 0 {
 				return k
 			}
