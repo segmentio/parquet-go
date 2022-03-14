@@ -89,24 +89,19 @@ type SortFunc func(a, b []Value) int
 func SortFuncOf(t Type, options ...SortOption) SortFunc {
 	config := new(SortConfig)
 	config.Apply(options...)
-	return sortFuncOf(t,
-		makeRepetitionLevel(config.MaxRepetitionLevel),
-		makeDefinitionLevel(config.MaxDefinitionLevel),
-		config.Descending,
-		config.NullsFirst,
-	)
+	return sortFuncOf(t, config)
 }
 
-func sortFuncOf(t Type, maxRepetitionLevel, maxDefinitionLevel int8, descending, nullsFirst bool) (sort SortFunc) {
+func sortFuncOf(t Type, config *SortConfig) (sort SortFunc) {
 	switch {
-	case maxRepetitionLevel > 0:
-		sort = sortFuncOfRepeated(t, nullsFirst)
-	case maxDefinitionLevel > 0:
-		sort = sortFuncOfOptional(t, nullsFirst)
+	case makeRepetitionLevel(config.MaxRepetitionLevel) > 0:
+		sort = sortFuncOfRepeated(t, config.NullsFirst)
+	case makeDefinitionLevel(config.MaxDefinitionLevel) > 0:
+		sort = sortFuncOfOptional(t, config.NullsFirst)
 	default:
 		sort = sortFuncOfRequired(t)
 	}
-	if descending {
+	if config.Descending {
 		sort = sortFuncOfDescending(sort)
 	}
 	return sort
