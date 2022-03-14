@@ -6,7 +6,7 @@ package parquet
 // SortConfig implements the SortOption interface so it can be used directly as
 // argument to the SortFuncOf function, for example:
 //
-//	sortFunc := parquet.SortFuncOf(typ, &parquet.SortConfig{
+//	sortFunc := parquet.SortFuncOf(columnType, &parquet.SortConfig{
 //		Descending: true,
 //		NullsFirst: true,
 //	})
