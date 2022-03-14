@@ -210,10 +210,12 @@ func MergeRowGroups(rowGroups []RowGroup, options ...RowGroupOption) (RowGroup, 
 				columnIndex: leaf.columnIndex,
 				compare: sortFuncOf(
 					leaf.node.Type(),
-					leaf.maxRepetitionLevel,
-					leaf.maxDefinitionLevel,
-					m.sorting[sortingIndex].Descending(),
-					m.sorting[sortingIndex].NullsFirst(),
+					&SortConfig{
+						MaxRepetitionLevel: int(leaf.maxRepetitionLevel),
+						MaxDefinitionLevel: int(leaf.maxDefinitionLevel),
+						Descending:         m.sorting[sortingIndex].Descending(),
+						NullsFirst:         m.sorting[sortingIndex].NullsFirst(),
+					},
 				),
 			}
 		}

@@ -202,7 +202,7 @@ type rowGroupCursor interface {
 
 type columnSortFunc struct {
 	columnIndex int16
-	compare     sortFunc
+	compare     SortFunc
 }
 
 type bufferedRowGroupCursor struct {
@@ -265,94 +265,3 @@ var (
 	_ RowReaderWithSchema = (*mergedRowGroupRowReader)(nil)
 	//_ RowWriterTo         = (*mergedRowGroupRowReader)(nil)
 )
-
-type sortFunc func(a, b []Value) int
-
-func sortFuncOf(t Type, maxDefinitionLevel, maxRepetitionLevel int8, descending, nullsFirst bool) (sort sortFunc) {
-	switch {
-	case maxRepetitionLevel > 0:
-		sort = sortFuncOfRepeated(t, nullsFirst)
-	case maxDefinitionLevel > 0:
-		sort = sortFuncOfOptional(t, nullsFirst)
-	default:
-		sort = sortFuncOfRequired(t)
-	}
-	if descending {
-		sort = sortFuncOfDescending(sort)
-	}
-	return sort
-}
-
-//go:noinline
-func sortFuncOfDescending(sort sortFunc) sortFunc {
-	return func(a, b []Value) int { return -sort(a, b) }
-}
-
-func sortFuncOfOptional(t Type, nullsFirst bool) sortFunc {
-	if nullsFirst {
-		return sortFuncOfOptionalNullsFirst(t)
-	} else {
-		return sortFuncOfOptionalNullsLast(t)
-	}
-}
-
-//go:noinline
-func sortFuncOfOptionalNullsFirst(t Type) sortFunc {
-	compare := sortFuncOfRequired(t)
-	return func(a, b []Value) int {
-		switch {
-		case a[0].IsNull():
-			if b[0].IsNull() {
-				return 0
-			}
-			return -1
-		case b[0].IsNull():
-			return +1
-		default:
-			return compare(a, b)
-		}
-	}
-}
-
-//go:noinline
-func sortFuncOfOptionalNullsLast(t Type) sortFunc {
-	compare := sortFuncOfRequired(t)
-	return func(a, b []Value) int {
-		switch {
-		case a[0].IsNull():
-			if b[0].IsNull() {
-				return 0
-			}
-			return +1
-		case b[0].IsNull():
-			return -1
-		default:
-			return compare(a, b)
-		}
-	}
-}
-
-//go:noinline
-func sortFuncOfRepeated(t Type, nullsFirst bool) sortFunc {
-	compare := sortFuncOfOptional(t, nullsFirst)
-	return func(a, b []Value) int {
-		n := len(a)
-		if n < len(b) {
-			n = len(b)
-		}
-
-		for i := 0; i < n; i++ {
-			k := compare(a[i:i+1], b[i:i+1])
-			if k != 0 {
-				return k
-			}
-		}
-
-		return len(a) - len(b)
-	}
-}
-
-//go:noinline
-func sortFuncOfRequired(t Type) sortFunc {
-	return func(a, b []Value) int { return t.Compare(a[0], b[0]) }
-}
