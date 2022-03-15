@@ -2,7 +2,6 @@ package bits
 
 import (
 	"bytes"
-	"unsafe"
 )
 
 func OrderOfBool(data []bool) int {
@@ -37,21 +36,17 @@ func OrderOfBool(data []bool) int {
 }
 
 func streakOfTrue(data []bool) int {
-	if i := bytes.IndexByte(boolToBytes(data), 0); i >= 0 {
+	if i := bytes.IndexByte(BoolToBytes(data), 0); i >= 0 {
 		return i
 	}
 	return len(data)
 }
 
 func streakOfFalse(data []bool) int {
-	if i := bytes.IndexByte(boolToBytes(data), 1); i >= 0 {
+	if i := bytes.IndexByte(BoolToBytes(data), 1); i >= 0 {
 		return i
 	}
 	return len(data)
-}
-
-func boolToBytes(data []bool) []byte {
-	return *(*[]byte)(unsafe.Pointer(&data))
 }
 
 func OrderOfInt32(data []int32) int {
