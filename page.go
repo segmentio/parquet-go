@@ -546,7 +546,7 @@ func (r *repeatedPageReader) ReadValues(values []Value) (n int, err error) {
 				r.offset++
 				n++
 			}
-			if err != nil {
+			if err != nil && err != io.EOF {
 				return n, err
 			}
 		}
