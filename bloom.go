@@ -2,12 +2,12 @@ package parquet
 
 import (
 	"io"
-	"unsafe"
 
 	"github.com/segmentio/parquet-go/bloom"
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/format"
+	"github.com/segmentio/parquet-go/internal/bits"
 )
 
 // BloomFilter is an interface allowing applications to test whether a key
@@ -148,23 +148,23 @@ func (e *bloomFilterEncoder) SetBitWidth(int) {
 }
 
 func (e *bloomFilterEncoder) EncodeBoolean(data []bool) error {
-	return e.insert8(*(*[]uint8)(unsafe.Pointer(&data)))
+	return e.insert8(bits.BoolToBytes(data))
 }
 
 func (e *bloomFilterEncoder) EncodeInt8(data []int8) error {
-	return e.insert8(*(*[]uint8)(unsafe.Pointer(&data)))
+	return e.insert8(bits.Int8ToBytes(data))
 }
 
 func (e *bloomFilterEncoder) EncodeInt16(data []int16) error {
-	return e.insert16(*(*[]uint16)(unsafe.Pointer(&data)))
+	return e.insert16(bits.Int16ToUint16(data))
 }
 
 func (e *bloomFilterEncoder) EncodeInt32(data []int32) error {
-	return e.insert32(*(*[]uint32)(unsafe.Pointer(&data)))
+	return e.insert32(bits.Int32ToUint32(data))
 }
 
 func (e *bloomFilterEncoder) EncodeInt64(data []int64) error {
-	return e.insert64(*(*[]uint64)(unsafe.Pointer(&data)))
+	return e.insert64(bits.Int64ToUint64(data))
 }
 
 func (e *bloomFilterEncoder) EncodeInt96(data []deprecated.Int96) error {
@@ -172,11 +172,11 @@ func (e *bloomFilterEncoder) EncodeInt96(data []deprecated.Int96) error {
 }
 
 func (e *bloomFilterEncoder) EncodeFloat(data []float32) error {
-	return e.insert32(*(*[]uint32)(unsafe.Pointer(&data)))
+	return e.insert32(bits.Float32ToUint32(data))
 }
 
 func (e *bloomFilterEncoder) EncodeDouble(data []float64) error {
-	return e.insert64(*(*[]uint64)(unsafe.Pointer(&data)))
+	return e.insert64(bits.Float64ToUint64(data))
 }
 
 func (e *bloomFilterEncoder) EncodeByteArray(data encoding.ByteArrayList) error {
@@ -186,7 +186,7 @@ func (e *bloomFilterEncoder) EncodeByteArray(data encoding.ByteArrayList) error 
 
 func (e *bloomFilterEncoder) EncodeFixedLenByteArray(size int, data []byte) error {
 	if size == 16 {
-		return e.insert128(*(*[][16]byte)(unsafe.Pointer(&data)))
+		return e.insert128(bits.BytesToUint128(data))
 	}
 	for i, j := 0, size; j <= len(data); {
 		e.insert(data[i:j])
