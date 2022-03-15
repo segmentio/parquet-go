@@ -1,8 +1,13 @@
-//go:build !go1.18 && (purego || !amd64)
+//go:build go1.18 && (purego || !amd64)
 
 package bits
 
-import "encoding/binary"
+import (
+	"constraints"
+	"encoding/binary"
+
+	"github.com/segmentio/parquet-go/internal/cast"
+)
 
 func boolEqualAll(data []bool, value bool) bool {
 	for _, v := range data {
@@ -27,97 +32,24 @@ func minMaxBool(data []bool) (min, max bool) {
 	return min, max
 }
 
-func minMaxInt32(data []int32) (min, max int32) {
+func minMaxInt32(data []int32) (min, max int32) { return minmax(data) }
+
+func minMaxInt64(data []int64) (min, max int64) { return minmax(data) }
+
+func minMaxUint32(data []uint32) (min, max uint32) { return minmax(data) }
+
+func minMaxUint64(data []uint64) (min, max uint64) { return minmax(data) }
+
+func minMaxFloat32(data []float32) (min, max float32) { return minmax(data) }
+
+func minMaxFloat64(data []float64) (min, max float64) { return minmax(data) }
+
+func minmax[T constraints.Ordered](data []T) (min, max T) {
 	if len(data) > 0 {
 		min = data[0]
 		max = data[0]
 
-		for _, v := range data[1:] {
-			if v < min {
-				min = v
-			}
-			if v > max {
-				max = v
-			}
-		}
-	}
-	return min, max
-}
-
-func minMaxInt64(data []int64) (min, max int64) {
-	if len(data) > 0 {
-		min = data[0]
-		max = data[0]
-
-		for _, v := range data[1:] {
-			if v < min {
-				min = v
-			}
-			if v > max {
-				max = v
-			}
-		}
-	}
-	return min, max
-}
-
-func minMaxUint32(data []uint32) (min, max uint32) {
-	if len(data) > 0 {
-		min = data[0]
-		max = data[0]
-
-		for _, v := range data[1:] {
-			if v < min {
-				min = v
-			}
-			if v > max {
-				max = v
-			}
-		}
-	}
-	return min, max
-}
-
-func minMaxUint64(data []uint64) (min, max uint64) {
-	if len(data) > 0 {
-		min = data[0]
-		max = data[0]
-
-		for _, v := range data[1:] {
-			if v < min {
-				min = v
-			}
-			if v > max {
-				max = v
-			}
-		}
-	}
-	return min, max
-}
-
-func minMaxFloat32(data []float32) (min, max float32) {
-	if len(data) > 0 {
-		min = data[0]
-		max = data[0]
-
-		for _, v := range data[1:] {
-			if v < min {
-				min = v
-			}
-			if v > max {
-				max = v
-			}
-		}
-	}
-	return min, max
-}
-
-func minMaxFloat64(data []float64) (min, max float64) {
-	if len(data) > 0 {
-		min = data[0]
-		max = data[0]
-
-		for _, v := range data[1:] {
+		for _, v := range data[1:len(data):len(data)] {
 			if v < min {
 				min = v
 			}
@@ -131,7 +63,7 @@ func minMaxFloat64(data []float64) (min, max float64) {
 
 func minMaxBE128(data []byte) (min, max []byte) {
 	if len(data) > 0 {
-		be128 := BytesToUint128(data)
+		be128 := cast.BytesToSlice[uint128](data)
 		minHi := binary.BigEndian.Uint64(be128[0][:8])
 		maxHi := minHi
 		minIndex := 0

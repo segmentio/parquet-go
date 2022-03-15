@@ -1,4 +1,4 @@
-//go:build purego || !amd64
+//go:build !go1.18 && (purego || !amd64)
 
 package bits
 
