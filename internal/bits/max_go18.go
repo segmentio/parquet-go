@@ -3,7 +3,6 @@
 package bits
 
 import (
-	"constraints"
 	"encoding/binary"
 
 	"github.com/segmentio/parquet-go/internal/cast"
@@ -25,7 +24,7 @@ func maxFloat32(data []float32) float32 { return max(data) }
 
 func maxFloat64(data []float64) float64 { return max(data) }
 
-func max[T constraints.Ordered](data []T) (max T) {
+func max[T ordered](data []T) (max T) {
 	if len(data) > 0 {
 		max = data[0]
 

@@ -3,7 +3,6 @@
 package bits
 
 import (
-	"constraints"
 	"encoding/binary"
 
 	"github.com/segmentio/parquet-go/internal/cast"
@@ -23,7 +22,7 @@ func minFloat32(data []float32) float32 { return min(data) }
 
 func minFloat64(data []float64) float64 { return min(data) }
 
-func min[T constraints.Ordered](data []T) (min T) {
+func min[T ordered](data []T) (min T) {
 	if len(data) > 0 {
 		min = data[0]
 

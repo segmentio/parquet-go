@@ -2,8 +2,6 @@
 
 package bits
 
-import "constraints"
-
 func orderOfInt32(data []int32) int { return orderOfValues(data) }
 
 func orderOfInt64(data []int64) int { return orderOfValues(data) }
@@ -16,7 +14,7 @@ func orderOfFloat32(data []float32) int { return orderOfValues(data) }
 
 func orderOfFloat64(data []float64) int { return orderOfValues(data) }
 
-func orderOfValues[T constraints.Ordered](data []T) int {
+func orderOfValues[T ordered](data []T) int {
 	if valuesAreInAscendingOrder(data) {
 		return +1
 	}
@@ -26,7 +24,7 @@ func orderOfValues[T constraints.Ordered](data []T) int {
 	return 0
 }
 
-func valuesAreInAscendingOrder[T constraints.Ordered](data []T) bool {
+func valuesAreInAscendingOrder[T ordered](data []T) bool {
 	for i := len(data) - 1; i > 0; i-- {
 		if data[i-1] > data[i] {
 			return false
@@ -35,7 +33,7 @@ func valuesAreInAscendingOrder[T constraints.Ordered](data []T) bool {
 	return true
 }
 
-func valuesAreInDescendingOrder[T constraints.Ordered](data []T) bool {
+func valuesAreInDescendingOrder[T ordered](data []T) bool {
 	for i := len(data) - 1; i > 0; i-- {
 		if data[i-1] < data[i] {
 			return false
