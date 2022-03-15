@@ -935,12 +935,12 @@ func (s *filePageValueReaderState) init(columnType Type, column *Column, codec f
 		}
 		s.reader = columnType.NewColumnReader(int(column.index), bufferSize)
 		if hasLevels {
-			s.reader = newColumnReader(s.reader, maxRepetitionLevel, maxDefinitionLevel, bufferSize)
+			s.reader = newFileColumnReader(s.reader, maxRepetitionLevel, maxDefinitionLevel, bufferSize)
 		}
 	}
 
 	switch r := s.reader.(type) {
-	case *columnReader:
+	case *fileColumnReader:
 		r.reset(int(header.NumValues()), s.repetitions.decoder, s.definitions.decoder, s.page.decoder)
 	default:
 		r.Reset(s.page.decoder)
