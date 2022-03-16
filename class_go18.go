@@ -47,6 +47,7 @@ type class[T primitive] struct {
 	plain     func(T) []byte
 	compare   func(T, T) int
 	less      func(T, T) bool
+	order     func([]T) int
 	min       func([]T) T
 	max       func([]T) T
 	bounds    func([]T) (T, T)
@@ -61,6 +62,7 @@ var boolClass = class[bool]{
 	plain:     plain.Boolean,
 	compare:   compareBool,
 	less:      func(a, b bool) bool { return a != b && !a },
+	order:     bits.OrderOfBool,
 	min:       bits.MinBool,
 	max:       bits.MaxBool,
 	bounds:    bits.MinMaxBool,
@@ -69,11 +71,13 @@ var boolClass = class[bool]{
 }
 
 var int32Class = class[int32]{
+	name:      "INT32",
 	makeValue: makeValueInt32,
 	valueOf:   Value.Int32,
 	plain:     plain.Int32,
 	compare:   compare[int32],
 	less:      less[int32],
+	order:     bits.OrderOfInt32,
 	min:       bits.MinInt32,
 	max:       bits.MaxInt32,
 	bounds:    bits.MinMaxInt32,
@@ -82,11 +86,13 @@ var int32Class = class[int32]{
 }
 
 var int64Class = class[int64]{
+	name:      "INT64",
 	makeValue: makeValueInt64,
 	valueOf:   Value.Int64,
 	plain:     plain.Int64,
 	compare:   compare[int64],
 	less:      less[int64],
+	order:     bits.OrderOfInt64,
 	min:       bits.MinInt64,
 	max:       bits.MaxInt64,
 	bounds:    bits.MinMaxInt64,
@@ -95,11 +101,13 @@ var int64Class = class[int64]{
 }
 
 var int96Class = class[deprecated.Int96]{
+	name:      "INT96",
 	makeValue: makeValueInt96,
 	valueOf:   Value.Int96,
 	plain:     plain.Int96,
 	compare:   compareInt96,
 	less:      deprecated.Int96.Less,
+	order:     deprecated.OrderOfInt96,
 	min:       deprecated.MinInt96,
 	max:       deprecated.MaxInt96,
 	bounds:    deprecated.MinMaxInt96,
@@ -108,11 +116,13 @@ var int96Class = class[deprecated.Int96]{
 }
 
 var float32Class = class[float32]{
+	name:      "FLOAT",
 	makeValue: makeValueFloat,
 	valueOf:   Value.Float,
 	plain:     plain.Float,
 	compare:   compare[float32],
 	less:      less[float32],
+	order:     bits.OrderOfFloat32,
 	min:       bits.MinFloat32,
 	max:       bits.MaxFloat32,
 	bounds:    bits.MinMaxFloat32,
@@ -121,11 +131,13 @@ var float32Class = class[float32]{
 }
 
 var float64Class = class[float64]{
+	name:      "DOUBLE",
 	makeValue: makeValueDouble,
 	valueOf:   Value.Double,
 	plain:     plain.Double,
 	compare:   compare[float64],
 	less:      less[float64],
+	order:     bits.OrderOfFloat64,
 	min:       bits.MinFloat64,
 	max:       bits.MaxFloat64,
 	bounds:    bits.MinMaxFloat64,
@@ -134,11 +146,13 @@ var float64Class = class[float64]{
 }
 
 var uint32Class = class[uint32]{
+	name:      "INT32",
 	makeValue: func(v uint32) Value { return makeValueInt32(int32(v)) },
 	valueOf:   func(v Value) uint32 { return uint32(v.Int32()) },
 	plain:     func(v uint32) []byte { return plain.Int32(int32(v)) },
 	compare:   compare[uint32],
 	less:      less[uint32],
+	order:     bits.OrderOfUint32,
 	min:       bits.MinUint32,
 	max:       bits.MaxUint32,
 	bounds:    bits.MinMaxUint32,
@@ -151,11 +165,13 @@ var uint32Class = class[uint32]{
 }
 
 var uint64Class = class[uint64]{
+	name:      "INT64",
 	makeValue: func(v uint64) Value { return makeValueInt64(int64(v)) },
 	valueOf:   func(v Value) uint64 { return uint64(v.Int64()) },
 	plain:     func(v uint64) []byte { return plain.Int64(int64(v)) },
 	compare:   compare[uint64],
 	less:      less[uint64],
+	order:     bits.OrderOfUint64,
 	min:       bits.MinUint64,
 	max:       bits.MaxUint64,
 	bounds:    bits.MinMaxUint64,
