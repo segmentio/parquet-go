@@ -9,6 +9,9 @@ jobs:
         go:
         - 1.17
         - 1.18
+        tags:
+        - ''
+        - purego
 
     runs-on: ubuntu-latest
 
@@ -27,7 +30,4 @@ jobs:
       run: test -z $(find . -name '*.go' | xargs gofmt -l)
 
     - name: Run Tests
-      run: go test -race ./...
-
-    - name: Run Tests (purego)
-      run: go test -race -tags=purego ./...
+      run: go test -race -tags=${{ matrix.tags }} ./...
