@@ -288,6 +288,10 @@ func (r *byteArrayColumnReader) readByteArrays(do func([]byte) bool) (n int, err
 	}
 }
 
+func (r *byteArrayColumnReader) ReadRequired(values []byte) (int, error) {
+	return r.ReadByteArrays(values)
+}
+
 func (r *byteArrayColumnReader) ReadByteArrays(values []byte) (int, error) {
 	i := 0
 	n, err := r.readByteArrays(func(b []byte) bool {
@@ -346,6 +350,10 @@ func newFixedLenByteArrayColumnReader(typ Type, columnIndex int16, bufferSize in
 func (r *fixedLenByteArrayColumnReader) Type() Type { return r.typ }
 
 func (r *fixedLenByteArrayColumnReader) Column() int { return int(^r.columnIndex) }
+
+func (r *fixedLenByteArrayColumnReader) ReadRequired(values []byte) (int, error) {
+	return r.ReadFixedLenByteArrays(values)
+}
 
 func (r *fixedLenByteArrayColumnReader) ReadFixedLenByteArrays(values []byte) (n int, err error) {
 	if (len(values) % r.size) != 0 {
