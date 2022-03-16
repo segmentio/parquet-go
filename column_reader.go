@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/encoding/plain"
 	"github.com/segmentio/parquet-go/internal/bits"
@@ -36,7 +35,7 @@ type ColumnReader interface {
 	Reset(decoder encoding.Decoder)
 }
 
-type columnReader struct {
+type fileColumnReader struct {
 	remain             int
 	numValues          int
 	maxRepetitionLevel int8
@@ -46,7 +45,7 @@ type columnReader struct {
 	values             ColumnReader
 }
 
-func newColumnReader(values ColumnReader, maxRepetitionLevel, maxDefinitionLevel int8, bufferSize int) *columnReader {
+func newFileColumnReader(values ColumnReader, maxRepetitionLevel, maxDefinitionLevel int8, bufferSize int) *fileColumnReader {
 	repetitionBufferSize := 0
 	definitionBufferSize := 0
 
@@ -62,7 +61,7 @@ func newColumnReader(values ColumnReader, maxRepetitionLevel, maxDefinitionLevel
 		definitionBufferSize = bufferSize
 	}
 
-	return &columnReader{
+	return &fileColumnReader{
 		maxRepetitionLevel: maxRepetitionLevel,
 		maxDefinitionLevel: maxDefinitionLevel,
 		repetitions:        makeLevelReader(repetitionBufferSize),
@@ -71,11 +70,11 @@ func newColumnReader(values ColumnReader, maxRepetitionLevel, maxDefinitionLevel
 	}
 }
 
-func (r *columnReader) Type() Type { return r.values.Type() }
+func (r *fileColumnReader) Type() Type { return r.values.Type() }
 
-func (r *columnReader) Column() int { return r.values.Column() }
+func (r *fileColumnReader) Column() int { return r.values.Column() }
 
-func (r *columnReader) ReadValues(values []Value) (int, error) {
+func (r *fileColumnReader) ReadValues(values []Value) (int, error) {
 	if r.values == nil {
 		return 0, io.EOF
 	}
@@ -161,7 +160,7 @@ func (r *columnReader) ReadValues(values []Value) (int, error) {
 	return read, nil
 }
 
-func (r *columnReader) reset(numValues int, repetitions, definitions, values encoding.Decoder) {
+func (r *fileColumnReader) reset(numValues int, repetitions, definitions, values encoding.Decoder) {
 	if repetitions != nil {
 		repetitions.SetBitWidth(bits.Len8(r.maxRepetitionLevel))
 	}
@@ -175,8 +174,8 @@ func (r *columnReader) reset(numValues int, repetitions, definitions, values enc
 	r.values.Reset(values)
 }
 
-func (r *columnReader) Reset(encoding.Decoder) {
-	panic("BUG: parquet.columnReader.Reset must not be called")
+func (r *fileColumnReader) Reset(encoding.Decoder) {
+	panic("BUG: parquet.fileColumnReader.Reset must not be called")
 }
 
 type levelReader struct {
@@ -245,458 +244,6 @@ func (r *levelReader) reset(decoder encoding.Decoder) {
 	r.count = 0
 }
 
-// The types below are implementations of the ColumnReader interface for each
-// primitive type supported by parquet.
-//
-// The readers use an in-memory intermediary buffer to support decoding arrays
-// of values from the underlying decoder, which are then boxed into the []Value
-// buffer passed to ReadValues. When the program converts type checks the
-// readers for more specific interfaces (e.g. parquet.Int32Reader), the values
-// can be decoded directly from the underlying decoder. There is no need for
-// the intermediary buffers so they are lazily allocated only if the ReadValues
-// methods are called.
-
-type booleanColumnReader struct {
-	typ         Type
-	decoder     encoding.Decoder
-	buffer      []bool
-	offset      int
-	bufferSize  int
-	columnIndex int16
-}
-
-func newBooleanColumnReader(typ Type, columnIndex int16, bufferSize int) *booleanColumnReader {
-	return &booleanColumnReader{
-		typ:         typ,
-		bufferSize:  bufferSize,
-		columnIndex: ^columnIndex,
-	}
-}
-
-func (r *booleanColumnReader) Type() Type { return r.typ }
-
-func (r *booleanColumnReader) Column() int { return int(^r.columnIndex) }
-
-func (r *booleanColumnReader) ReadBooleans(values []bool) (n int, err error) {
-	if r.offset < len(r.buffer) {
-		n = copy(values, r.buffer[r.offset:])
-		r.offset += n
-		values = values[n:]
-	}
-	if r.decoder == nil {
-		return n, io.EOF
-	}
-	d, err := r.decoder.DecodeBoolean(values)
-	return n + d, err
-}
-
-func (r *booleanColumnReader) ReadValues(values []Value) (n int, err error) {
-	if cap(r.buffer) == 0 {
-		r.buffer = make([]bool, 0, atLeastOne(r.bufferSize))
-	}
-
-	for {
-		for r.offset < len(r.buffer) && n < len(values) {
-			values[n] = makeValueBoolean(r.buffer[r.offset])
-			values[n].columnIndex = r.columnIndex
-			r.offset++
-			n++
-		}
-
-		if n == len(values) {
-			return n, nil
-		}
-		if r.decoder == nil {
-			return n, io.EOF
-		}
-
-		buffer := r.buffer[:cap(r.buffer)]
-		d, err := r.decoder.DecodeBoolean(buffer)
-		if d == 0 {
-			return n, err
-		}
-
-		r.buffer = buffer[:d]
-		r.offset = 0
-	}
-}
-
-func (r *booleanColumnReader) Reset(decoder encoding.Decoder) {
-	r.decoder = decoder
-	r.buffer = r.buffer[:0]
-	r.offset = 0
-}
-
-type int32ColumnReader struct {
-	typ         Type
-	decoder     encoding.Decoder
-	buffer      []int32
-	offset      int
-	bufferSize  int
-	columnIndex int16
-}
-
-func newInt32ColumnReader(typ Type, columnIndex int16, bufferSize int) *int32ColumnReader {
-	return &int32ColumnReader{
-		typ:         typ,
-		bufferSize:  bufferSize,
-		columnIndex: ^columnIndex,
-	}
-}
-
-func (r *int32ColumnReader) Type() Type { return r.typ }
-
-func (r *int32ColumnReader) Column() int { return int(^r.columnIndex) }
-
-func (r *int32ColumnReader) ReadInt32s(values []int32) (n int, err error) {
-	if r.offset < len(r.buffer) {
-		n = copy(values, r.buffer[r.offset:])
-		r.offset += n
-		values = values[n:]
-	}
-	if r.decoder == nil {
-		err = io.EOF
-	} else {
-		var d int
-		d, err = r.decoder.DecodeInt32(values)
-		n += d
-	}
-	return n, err
-}
-
-func (r *int32ColumnReader) ReadValues(values []Value) (n int, err error) {
-	if cap(r.buffer) == 0 {
-		r.buffer = make([]int32, 0, atLeastOne(r.bufferSize))
-	}
-
-	for {
-		for r.offset < len(r.buffer) && n < len(values) {
-			values[n] = makeValueInt32(r.buffer[r.offset])
-			values[n].columnIndex = r.columnIndex
-			r.offset++
-			n++
-		}
-
-		if n == len(values) {
-			return n, nil
-		}
-		if r.decoder == nil {
-			return n, io.EOF
-		}
-
-		buffer := r.buffer[:cap(r.buffer)]
-		d, err := r.decoder.DecodeInt32(buffer)
-		if d == 0 {
-			return n, err
-		}
-
-		r.buffer = buffer[:d]
-		r.offset = 0
-	}
-}
-
-func (r *int32ColumnReader) Reset(decoder encoding.Decoder) {
-	r.decoder = decoder
-	r.buffer = r.buffer[:0]
-	r.offset = 0
-}
-
-type int64ColumnReader struct {
-	typ         Type
-	decoder     encoding.Decoder
-	buffer      []int64
-	offset      int
-	bufferSize  int
-	columnIndex int16
-}
-
-func newInt64ColumnReader(typ Type, columnIndex int16, bufferSize int) *int64ColumnReader {
-	return &int64ColumnReader{
-		typ:         typ,
-		bufferSize:  bufferSize,
-		columnIndex: ^columnIndex,
-	}
-}
-
-func (r *int64ColumnReader) Type() Type { return r.typ }
-
-func (r *int64ColumnReader) Column() int { return int(^r.columnIndex) }
-
-func (r *int64ColumnReader) ReadInt64s(values []int64) (n int, err error) {
-	if r.offset < len(r.buffer) {
-		n = copy(values, r.buffer[r.offset:])
-		r.offset += n
-		values = values[n:]
-	}
-	if r.decoder == nil {
-		err = io.EOF
-	} else {
-		var d int
-		d, err = r.decoder.DecodeInt64(values)
-		n += d
-	}
-	return n, err
-}
-
-func (r *int64ColumnReader) ReadValues(values []Value) (n int, err error) {
-	if cap(r.buffer) == 0 {
-		r.buffer = make([]int64, 0, atLeastOne(r.bufferSize))
-	}
-
-	for {
-		for r.offset < len(r.buffer) && n < len(values) {
-			values[n] = makeValueInt64(r.buffer[r.offset])
-			values[n].columnIndex = r.columnIndex
-			r.offset++
-			n++
-		}
-
-		if n == len(values) {
-			return n, nil
-		}
-		if r.decoder == nil {
-			return n, io.EOF
-		}
-
-		buffer := r.buffer[:cap(r.buffer)]
-		d, err := r.decoder.DecodeInt64(buffer)
-		if d == 0 {
-			return n, err
-		}
-
-		r.buffer = buffer[:d]
-		r.offset = 0
-	}
-}
-
-func (r *int64ColumnReader) Reset(decoder encoding.Decoder) {
-	r.decoder = decoder
-	r.buffer = r.buffer[:0]
-	r.offset = 0
-}
-
-type int96ColumnReader struct {
-	typ         Type
-	decoder     encoding.Decoder
-	buffer      []deprecated.Int96
-	offset      int
-	bufferSize  int
-	columnIndex int16
-}
-
-func newInt96ColumnReader(typ Type, columnIndex int16, bufferSize int) *int96ColumnReader {
-	return &int96ColumnReader{
-		typ:         typ,
-		bufferSize:  bufferSize,
-		columnIndex: ^columnIndex,
-	}
-}
-
-func (r *int96ColumnReader) Type() Type { return r.typ }
-
-func (r *int96ColumnReader) Column() int { return int(^r.columnIndex) }
-
-func (r *int96ColumnReader) ReadInt96s(values []deprecated.Int96) (n int, err error) {
-	if r.offset < len(r.buffer) {
-		n = copy(values, r.buffer[r.offset:])
-		r.offset += n
-		values = values[n:]
-	}
-	if r.decoder == nil {
-		err = io.EOF
-	} else {
-		var d int
-		d, err = r.decoder.DecodeInt96(values)
-		n += d
-	}
-	return n, err
-}
-
-func (r *int96ColumnReader) ReadValues(values []Value) (n int, err error) {
-	if cap(r.buffer) == 0 {
-		r.buffer = make([]deprecated.Int96, 0, atLeastOne(r.bufferSize))
-	}
-
-	for {
-		for r.offset < len(r.buffer) && n < len(values) {
-			values[n] = makeValueInt96(r.buffer[r.offset])
-			values[n].columnIndex = r.columnIndex
-			r.offset++
-			n++
-		}
-
-		if n == len(values) {
-			return n, nil
-		}
-		if r.decoder == nil {
-			return n, io.EOF
-		}
-
-		buffer := r.buffer[:cap(r.buffer)]
-		d, err := r.decoder.DecodeInt96(buffer)
-		if d == 0 {
-			return n, err
-		}
-
-		r.buffer = buffer[:d]
-		r.offset = 0
-	}
-}
-
-func (r *int96ColumnReader) Reset(decoder encoding.Decoder) {
-	r.decoder = decoder
-	r.buffer = r.buffer[:0]
-	r.offset = 0
-}
-
-type floatColumnReader struct {
-	typ         Type
-	decoder     encoding.Decoder
-	buffer      []float32
-	offset      int
-	bufferSize  int
-	columnIndex int16
-}
-
-func newFloatColumnReader(typ Type, columnIndex int16, bufferSize int) *floatColumnReader {
-	return &floatColumnReader{
-		typ:         typ,
-		bufferSize:  bufferSize,
-		columnIndex: ^columnIndex,
-	}
-}
-
-func (r *floatColumnReader) Type() Type { return r.typ }
-
-func (r *floatColumnReader) Column() int { return int(^r.columnIndex) }
-
-func (r *floatColumnReader) ReadFloats(values []float32) (n int, err error) {
-	if r.offset < len(r.buffer) {
-		n = copy(values, r.buffer[r.offset:])
-		r.offset += n
-		values = values[n:]
-	}
-	if r.decoder == nil {
-		err = io.EOF
-	} else {
-		var d int
-		d, err = r.decoder.DecodeFloat(values)
-		n += d
-	}
-	return n, err
-}
-
-func (r *floatColumnReader) ReadValues(values []Value) (n int, err error) {
-	if cap(r.buffer) == 0 {
-		r.buffer = make([]float32, 0, atLeastOne(r.bufferSize))
-	}
-
-	for {
-		for r.offset < len(r.buffer) && n < len(values) {
-			values[n] = makeValueFloat(r.buffer[r.offset])
-			values[n].columnIndex = r.columnIndex
-			r.offset++
-			n++
-		}
-
-		if n == len(values) {
-			return n, nil
-		}
-		if r.decoder == nil {
-			return n, io.EOF
-		}
-
-		buffer := r.buffer[:cap(r.buffer)]
-		d, err := r.decoder.DecodeFloat(buffer)
-		if d == 0 {
-			return n, err
-		}
-
-		r.buffer = buffer[:d]
-		r.offset = 0
-	}
-}
-
-func (r *floatColumnReader) Reset(decoder encoding.Decoder) {
-	r.decoder = decoder
-	r.buffer = r.buffer[:0]
-	r.offset = 0
-}
-
-type doubleColumnReader struct {
-	typ         Type
-	decoder     encoding.Decoder
-	buffer      []float64
-	offset      int
-	bufferSize  int
-	columnIndex int16
-}
-
-func newDoubleColumnReader(typ Type, columnIndex int16, bufferSize int) *doubleColumnReader {
-	return &doubleColumnReader{
-		typ:         typ,
-		bufferSize:  bufferSize,
-		columnIndex: ^columnIndex,
-	}
-}
-
-func (r *doubleColumnReader) Type() Type { return r.typ }
-
-func (r *doubleColumnReader) Column() int { return int(^r.columnIndex) }
-
-func (r *doubleColumnReader) ReadDoubles(values []float64) (n int, err error) {
-	if r.offset < len(r.buffer) {
-		n = copy(values, r.buffer[r.offset:])
-		r.offset += n
-		values = values[n:]
-	}
-	if r.decoder == nil {
-		err = io.EOF
-	} else {
-		var d int
-		d, err = r.decoder.DecodeDouble(values)
-		n += d
-	}
-	return n, err
-}
-
-func (r *doubleColumnReader) ReadValues(values []Value) (n int, err error) {
-	if cap(r.buffer) == 0 {
-		r.buffer = make([]float64, 0, atLeastOne(r.bufferSize))
-	}
-
-	for {
-		for r.offset < len(r.buffer) && n < len(values) {
-			values[n] = makeValueDouble(r.buffer[r.offset])
-			values[n].columnIndex = r.columnIndex
-			r.offset++
-			n++
-		}
-
-		if n == len(values) {
-			return n, nil
-		}
-		if r.decoder == nil {
-			return n, io.EOF
-		}
-
-		buffer := r.buffer[:cap(r.buffer)]
-		d, err := r.decoder.DecodeDouble(buffer)
-		if d == 0 {
-			return n, err
-		}
-
-		r.buffer = buffer[:d]
-		r.offset = 0
-	}
-}
-
-func (r *doubleColumnReader) Reset(decoder encoding.Decoder) {
-	r.decoder = decoder
-	r.buffer = r.buffer[:0]
-	r.offset = 0
-}
-
 type byteArrayColumnReader struct {
 	typ         Type
 	decoder     encoding.Decoder
@@ -739,6 +286,10 @@ func (r *byteArrayColumnReader) readByteArrays(do func([]byte) bool) (n int, err
 			return n, err
 		}
 	}
+}
+
+func (r *byteArrayColumnReader) ReadRequired(values []byte) (int, error) {
+	return r.ReadByteArrays(values)
 }
 
 func (r *byteArrayColumnReader) ReadByteArrays(values []byte) (int, error) {
@@ -800,6 +351,10 @@ func (r *fixedLenByteArrayColumnReader) Type() Type { return r.typ }
 
 func (r *fixedLenByteArrayColumnReader) Column() int { return int(^r.columnIndex) }
 
+func (r *fixedLenByteArrayColumnReader) ReadRequired(values []byte) (int, error) {
+	return r.ReadFixedLenByteArrays(values)
+}
+
 func (r *fixedLenByteArrayColumnReader) ReadFixedLenByteArrays(values []byte) (n int, err error) {
 	if (len(values) % r.size) != 0 {
 		return 0, fmt.Errorf("cannot read FIXED_LEN_BYTE_ARRAY values of size %d into buffer of size %d", r.size, len(values))
@@ -856,14 +411,3 @@ func (r *fixedLenByteArrayColumnReader) Reset(decoder encoding.Decoder) {
 	r.buffer = r.buffer[:0]
 	r.offset = 0
 }
-
-var (
-	_ BooleanReader           = (*booleanColumnReader)(nil)
-	_ Int32Reader             = (*int32ColumnReader)(nil)
-	_ Int64Reader             = (*int64ColumnReader)(nil)
-	_ Int96Reader             = (*int96ColumnReader)(nil)
-	_ FloatReader             = (*floatColumnReader)(nil)
-	_ DoubleReader            = (*doubleColumnReader)(nil)
-	_ ByteArrayReader         = (*byteArrayColumnReader)(nil)
-	_ FixedLenByteArrayReader = (*fixedLenByteArrayColumnReader)(nil)
-)

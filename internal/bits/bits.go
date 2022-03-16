@@ -4,6 +4,8 @@ import (
 	"math/bits"
 )
 
+type uint128 = [16]byte
+
 func BitCount(count int) uint {
 	return 8 * uint(count)
 }

@@ -1,6 +1,8 @@
 package bits
 
-import "bytes"
+import (
+	"bytes"
+)
 
 func OrderOfBool(data []bool) int {
 	switch len(data) {
