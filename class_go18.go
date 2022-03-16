@@ -43,7 +43,7 @@ func less[T comparable](a, b T) bool {
 type class[T primitive] struct {
 	name      string
 	makeValue func(T) Value
-	valueOf   func(Value) T
+	value     func(Value) T
 	plain     func(T) []byte
 	compare   func(T, T) int
 	less      func(T, T) bool
@@ -58,7 +58,7 @@ type class[T primitive] struct {
 var boolClass = class[bool]{
 	name:      "BOOLEAN",
 	makeValue: makeValueBoolean,
-	valueOf:   Value.Boolean,
+	value:     Value.Boolean,
 	plain:     plain.Boolean,
 	compare:   compareBool,
 	less:      func(a, b bool) bool { return a != b && !a },
@@ -73,7 +73,7 @@ var boolClass = class[bool]{
 var int32Class = class[int32]{
 	name:      "INT32",
 	makeValue: makeValueInt32,
-	valueOf:   Value.Int32,
+	value:     Value.Int32,
 	plain:     plain.Int32,
 	compare:   compare[int32],
 	less:      less[int32],
@@ -88,7 +88,7 @@ var int32Class = class[int32]{
 var int64Class = class[int64]{
 	name:      "INT64",
 	makeValue: makeValueInt64,
-	valueOf:   Value.Int64,
+	value:     Value.Int64,
 	plain:     plain.Int64,
 	compare:   compare[int64],
 	less:      less[int64],
@@ -103,7 +103,7 @@ var int64Class = class[int64]{
 var int96Class = class[deprecated.Int96]{
 	name:      "INT96",
 	makeValue: makeValueInt96,
-	valueOf:   Value.Int96,
+	value:     Value.Int96,
 	plain:     plain.Int96,
 	compare:   compareInt96,
 	less:      deprecated.Int96.Less,
@@ -118,7 +118,7 @@ var int96Class = class[deprecated.Int96]{
 var float32Class = class[float32]{
 	name:      "FLOAT",
 	makeValue: makeValueFloat,
-	valueOf:   Value.Float,
+	value:     Value.Float,
 	plain:     plain.Float,
 	compare:   compare[float32],
 	less:      less[float32],
@@ -133,7 +133,7 @@ var float32Class = class[float32]{
 var float64Class = class[float64]{
 	name:      "DOUBLE",
 	makeValue: makeValueDouble,
-	valueOf:   Value.Double,
+	value:     Value.Double,
 	plain:     plain.Double,
 	compare:   compare[float64],
 	less:      less[float64],
@@ -148,7 +148,7 @@ var float64Class = class[float64]{
 var uint32Class = class[uint32]{
 	name:      "INT32",
 	makeValue: func(v uint32) Value { return makeValueInt32(int32(v)) },
-	valueOf:   func(v Value) uint32 { return uint32(v.Int32()) },
+	value:     func(v Value) uint32 { return uint32(v.Int32()) },
 	plain:     func(v uint32) []byte { return plain.Int32(int32(v)) },
 	compare:   compare[uint32],
 	less:      less[uint32],
@@ -167,7 +167,7 @@ var uint32Class = class[uint32]{
 var uint64Class = class[uint64]{
 	name:      "INT64",
 	makeValue: func(v uint64) Value { return makeValueInt64(int64(v)) },
-	valueOf:   func(v Value) uint64 { return uint64(v.Int64()) },
+	value:     func(v Value) uint64 { return uint64(v.Int64()) },
 	plain:     func(v uint64) []byte { return plain.Int64(int64(v)) },
 	compare:   compare[uint64],
 	less:      less[uint64],

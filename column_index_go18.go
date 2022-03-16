@@ -44,8 +44,8 @@ func (i *columnIndexer[T]) Reset() {
 func (i *columnIndexer[T]) IndexPage(numValues, numNulls int64, min, max Value) {
 	i.nullPages = append(i.nullPages, numValues == numNulls)
 	i.nullCounts = append(i.nullCounts, numNulls)
-	i.minValues = append(i.minValues, i.class.valueOf(min))
-	i.maxValues = append(i.maxValues, i.class.valueOf(max))
+	i.minValues = append(i.minValues, i.class.value(min))
+	i.maxValues = append(i.maxValues, i.class.value(max))
 }
 
 func (i *columnIndexer[T]) ColumnIndex() format.ColumnIndex {

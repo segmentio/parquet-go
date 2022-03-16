@@ -110,9 +110,9 @@ func (col *columnBuffer[T]) WriteRequired(values []T) (int, error) {
 }
 
 func (col *columnBuffer[T]) WriteValues(values []Value) (int, error) {
-	valueOf := col.class.valueOf
+	value := col.class.value
 	for _, v := range values {
-		col.values = append(col.values, valueOf(v))
+		col.values = append(col.values, value(v))
 	}
 	return len(values), nil
 }
@@ -124,7 +124,7 @@ func (col *columnBuffer[T]) WriteRow(row Row) error {
 	if len(row) > 1 {
 		return errRowHasTooManyValues(int64(len(row)))
 	}
-	col.values = append(col.values, col.class.valueOf(row[0]))
+	col.values = append(col.values, col.class.value(row[0]))
 	return nil
 }
 
