@@ -23,29 +23,41 @@ type OffsetIndex interface {
 	FirstRowIndex(int) int64
 }
 
-// OffsetIndex is the data structure representing offset indexes.
-type offsetIndex format.OffsetIndex
+type emptyOffsetIndex struct{}
 
-func (index *offsetIndex) NumPages() int {
-	return len(index.PageLocations)
+func (emptyOffsetIndex) NumPages() int                { return 0 }
+func (emptyOffsetIndex) Offset(int) int64             { return 0 }
+func (emptyOffsetIndex) CompressedPageSize(int) int64 { return 0 }
+func (emptyOffsetIndex) FirstRowIndex(int) int64      { return 0 }
+
+type fileOffsetIndex format.OffsetIndex
+
+func (i *fileOffsetIndex) NumPages() int {
+	return len(i.PageLocations)
 }
 
-func (index *offsetIndex) Offset(i int) int64 {
-	return index.PageLocations[i].Offset
+func (i *fileOffsetIndex) Offset(j int) int64 {
+	return i.PageLocations[j].Offset
 }
 
-func (index *offsetIndex) CompressedPageSize(i int) int64 {
-	return int64(index.PageLocations[i].CompressedPageSize)
+func (i *fileOffsetIndex) CompressedPageSize(j int) int64 {
+	return int64(i.PageLocations[j].CompressedPageSize)
 }
 
-func (index *offsetIndex) FirstRowIndex(i int) int64 {
-	return index.PageLocations[i].FirstRowIndex
+func (i *fileOffsetIndex) FirstRowIndex(j int) int64 {
+	return i.PageLocations[j].FirstRowIndex
 }
 
-func (index byteArrayPageIndex) Offset(int) int64             { return 0 }
-func (index byteArrayPageIndex) CompressedPageSize(int) int64 { return index.page.Size() }
-func (index byteArrayPageIndex) FirstRowIndex(int) int64      { return 0 }
+type byteArrayOffsetIndex struct{ page *byteArrayPage }
 
-func (index fixedLenByteArrayPageIndex) Offset(int) int64             { return 0 }
-func (index fixedLenByteArrayPageIndex) CompressedPageSize(int) int64 { return index.page.Size() }
-func (index fixedLenByteArrayPageIndex) FirstRowIndex(int) int64      { return 0 }
+func (i byteArrayOffsetIndex) NumPages() int                { return 1 }
+func (i byteArrayOffsetIndex) Offset(int) int64             { return 0 }
+func (i byteArrayOffsetIndex) CompressedPageSize(int) int64 { return i.page.Size() }
+func (i byteArrayOffsetIndex) FirstRowIndex(int) int64      { return 0 }
+
+type fixedLenByteArrayOffsetIndex struct{ page *fixedLenByteArrayPage }
+
+func (i fixedLenByteArrayOffsetIndex) NumPages() int                { return 1 }
+func (i fixedLenByteArrayOffsetIndex) Offset(int) int64             { return 0 }
+func (i fixedLenByteArrayOffsetIndex) CompressedPageSize(int) int64 { return i.page.Size() }
+func (i fixedLenByteArrayOffsetIndex) FirstRowIndex(int) int64      { return 0 }

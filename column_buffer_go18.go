@@ -71,9 +71,9 @@ func (col *columnBuffer[T]) Clone() ColumnBuffer {
 
 func (col *columnBuffer[T]) Type() Type { return col.typ }
 
-func (col *columnBuffer[T]) ColumnIndex() ColumnIndex { return pageIndex[T]{&col.page} }
+func (col *columnBuffer[T]) ColumnIndex() ColumnIndex { return columnIndex[T]{&col.page} }
 
-func (col *columnBuffer[T]) OffsetIndex() OffsetIndex { return pageIndex[T]{&col.page} }
+func (col *columnBuffer[T]) OffsetIndex() OffsetIndex { return offsetIndex[T]{&col.page} }
 
 func (col *columnBuffer[T]) BloomFilter() BloomFilter { return nil }
 
