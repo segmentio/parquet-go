@@ -403,8 +403,3 @@ func (r *fixedLenByteArrayColumnReader) Reset(decoder encoding.Decoder) {
 	r.buffer = r.buffer[:0]
 	r.offset = 0
 }
-
-var (
-	_ ByteArrayReader         = (*byteArrayColumnReader)(nil)
-	_ FixedLenByteArrayReader = (*fixedLenByteArrayColumnReader)(nil)
-)

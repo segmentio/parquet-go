@@ -462,10 +462,12 @@ func (r *doubleColumnReader) Reset(decoder encoding.Decoder) {
 }
 
 var (
-	_ BooleanReader = (*booleanColumnReader)(nil)
-	_ Int32Reader   = (*int32ColumnReader)(nil)
-	_ Int64Reader   = (*int64ColumnReader)(nil)
-	_ Int96Reader   = (*int96ColumnReader)(nil)
-	_ FloatReader   = (*floatColumnReader)(nil)
-	_ DoubleReader  = (*doubleColumnReader)(nil)
+	_ BooleanReader           = (*booleanColumnReader)(nil)
+	_ Int32Reader             = (*int32ColumnReader)(nil)
+	_ Int64Reader             = (*int64ColumnReader)(nil)
+	_ Int96Reader             = (*int96ColumnReader)(nil)
+	_ FloatReader             = (*floatColumnReader)(nil)
+	_ DoubleReader            = (*doubleColumnReader)(nil)
+	_ ByteArrayReader         = (*byteArrayColumnReader)(nil)
+	_ FixedLenByteArrayReader = (*fixedLenByteArrayColumnReader)(nil)
 )

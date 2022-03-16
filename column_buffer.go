@@ -720,6 +720,10 @@ func (col *byteArrayColumnBuffer) Write(b []byte) (int, error) {
 	return n, err
 }
 
+func (col *byteArrayColumnBuffer) WriteRequired(values []byte) (int, error) {
+	return col.WriteByteArrays(values)
+}
+
 func (col *byteArrayColumnBuffer) WriteByteArrays(values []byte) (int, error) {
 	n, _, err := col.writeByteArrays(values)
 	return n, err
@@ -843,6 +847,10 @@ func (col *fixedLenByteArrayColumnBuffer) Write(b []byte) (int, error) {
 	return n * col.size, err
 }
 
+func (col *fixedLenByteArrayColumnBuffer) WriteRequired(values []byte) (int, error) {
+	return col.WriteFixedLenByteArrays(values)
+}
+
 func (col *fixedLenByteArrayColumnBuffer) WriteFixedLenByteArrays(values []byte) (int, error) {
 	d, m := len(values)/col.size, len(values)%col.size
 	if m != 0 {
@@ -887,10 +895,6 @@ func (col *fixedLenByteArrayColumnBuffer) ReadRowAt(row Row, index int64) (Row, 
 
 var (
 	_ sort.Interface = (ColumnBuffer)(nil)
-
-	_ io.Writer = (*byteArrayColumnBuffer)(nil)
-	_ io.Writer = (*fixedLenByteArrayColumnBuffer)(nil)
-
-	_ ByteArrayWriter         = (*byteArrayColumnBuffer)(nil)
-	_ FixedLenByteArrayWriter = (*fixedLenByteArrayColumnBuffer)(nil)
+	_ io.Writer      = (*byteArrayColumnBuffer)(nil)
+	_ io.Writer      = (*fixedLenByteArrayColumnBuffer)(nil)
 )

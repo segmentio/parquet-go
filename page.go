@@ -662,6 +662,10 @@ func (r *byteArrayPageReader) Read(b []byte) (int, error) {
 	return n, err
 }
 
+func (r *byteArrayPageReader) ReadRequired(values []byte) (int, error) {
+	return r.ReadByteArrays(values)
+}
+
 func (r *byteArrayPageReader) ReadByteArrays(values []byte) (int, error) {
 	n, _, err := r.readByteArrays(values)
 	return n, err
@@ -780,6 +784,10 @@ func (r *fixedLenByteArrayPageReader) Read(b []byte) (n int, err error) {
 	return n * r.page.size, err
 }
 
+func (r *fixedLenByteArrayPageReader) ReadRequired(values []byte) (int, error) {
+	return r.ReadFixedLenByteArrays(values)
+}
+
 func (r *fixedLenByteArrayPageReader) ReadFixedLenByteArrays(values []byte) (n int, err error) {
 	n = copy(values, r.page.data[r.offset:]) / r.page.size
 	r.offset += n * r.page.size
@@ -874,22 +882,4 @@ var (
 
 	_ io.ReaderFrom = (*errorBuffer)(nil)
 	_ io.WriterTo   = (*errorBuffer)(nil)
-
-	_ io.Reader = (*booleanPageReader)(nil)
-	_ io.Reader = (*int32PageReader)(nil)
-	_ io.Reader = (*int64PageReader)(nil)
-	_ io.Reader = (*int96PageReader)(nil)
-	_ io.Reader = (*floatPageReader)(nil)
-	_ io.Reader = (*doublePageReader)(nil)
-	_ io.Reader = (*byteArrayPageReader)(nil)
-	_ io.Reader = (*fixedLenByteArrayPageReader)(nil)
-
-	_ BooleanReader           = (*booleanPageReader)(nil)
-	_ Int32Reader             = (*int32PageReader)(nil)
-	_ Int64Reader             = (*int64PageReader)(nil)
-	_ Int96Reader             = (*int96PageReader)(nil)
-	_ FloatReader             = (*floatPageReader)(nil)
-	_ DoubleReader            = (*doublePageReader)(nil)
-	_ ByteArrayReader         = (*byteArrayPageReader)(nil)
-	_ FixedLenByteArrayReader = (*fixedLenByteArrayPageReader)(nil)
 )

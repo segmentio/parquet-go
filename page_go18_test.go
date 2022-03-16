@@ -26,7 +26,7 @@ func TestPage(t *testing.T) {
 	t.Run("FIXED_LEN_BYTE_ARRAY", testPageFixedLenByteArray)
 }
 
-func randValue[T any](r *rand.Rand) (v T) {
+func randValue[T plain.Type](r *rand.Rand) (v T) {
 	switch (any)(v).(type) {
 	case bool:
 		return (any)(r.Float64() < 0.5).(T)
@@ -49,7 +49,7 @@ func randValue[T any](r *rand.Rand) (v T) {
 	}
 }
 
-func testPageOf[T any](t *testing.T) {
+func testPageOf[T plain.Type](t *testing.T) {
 	schema := parquet.SchemaOf(struct{ Value T }{})
 	r := rand.New(rand.NewSource(0))
 
@@ -119,13 +119,13 @@ func testPageByteArray(t *testing.T) {
 				values = plain.AppendByteArray(values, []byte("A"))
 				values = plain.AppendByteArray(values, []byte("B"))
 				values = plain.AppendByteArray(values, []byte("C"))
-				_, err := w.(parquet.ByteArrayWriter).WriteByteArrays(values)
+				_, err := w.(parquet.RequiredWriter[byte]).WriteRequired(values)
 				return values, err
 			},
 
 			read: func(r parquet.ValueReader) ([]byte, error) {
 				values := make([]byte, 3+3*plain.ByteArrayLengthSize)
-				n, err := r.(parquet.ByteArrayReader).ReadByteArrays(values)
+				n, err := r.(parquet.RequiredReader[byte]).ReadRequired(values)
 				return values[:n+n*plain.ByteArrayLengthSize], err
 			},
 		})
@@ -155,13 +155,13 @@ func testPageFixedLenByteArray(t *testing.T) {
 		testPage(t, schema, pageTest[byte]{
 			write: func(w parquet.ValueWriter) ([]byte, error) {
 				values := []byte("123456789")
-				n, err := w.(parquet.FixedLenByteArrayWriter).WriteFixedLenByteArrays(values)
+				n, err := w.(parquet.RequiredWriter[byte]).WriteRequired(values)
 				return values[:3*n], err
 			},
 
 			read: func(r parquet.ValueReader) ([]byte, error) {
 				values := make([]byte, 3*3)
-				n, err := r.(parquet.FixedLenByteArrayReader).ReadFixedLenByteArrays(values)
+				n, err := r.(parquet.RequiredReader[byte]).ReadRequired(values)
 				return values[:3*n], err
 			},
 		})

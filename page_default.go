@@ -1,3 +1,5 @@
+//go:build !go1.18
+
 package parquet
 
 import (
@@ -632,3 +634,23 @@ func (page uint64Page) Slice(i, j int64) BufferedPage {
 }
 
 func (page uint64Page) Buffer() BufferedPage { return page }
+
+var (
+	_ io.Reader = (*booleanPageReader)(nil)
+	_ io.Reader = (*int32PageReader)(nil)
+	_ io.Reader = (*int64PageReader)(nil)
+	_ io.Reader = (*int96PageReader)(nil)
+	_ io.Reader = (*floatPageReader)(nil)
+	_ io.Reader = (*doublePageReader)(nil)
+	_ io.Reader = (*byteArrayPageReader)(nil)
+	_ io.Reader = (*fixedLenByteArrayPageReader)(nil)
+
+	_ BooleanReader           = (*booleanPageReader)(nil)
+	_ Int32Reader             = (*int32PageReader)(nil)
+	_ Int64Reader             = (*int64PageReader)(nil)
+	_ Int96Reader             = (*int96PageReader)(nil)
+	_ FloatReader             = (*floatPageReader)(nil)
+	_ DoubleReader            = (*doublePageReader)(nil)
+	_ ByteArrayReader         = (*byteArrayPageReader)(nil)
+	_ FixedLenByteArrayReader = (*fixedLenByteArrayPageReader)(nil)
+)

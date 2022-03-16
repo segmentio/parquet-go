@@ -9,14 +9,6 @@ import (
 	"github.com/segmentio/parquet-go/internal/cast"
 )
 
-type RequiredReader[T any] interface {
-	ReadRequired(data []T) (int, error)
-}
-
-type RequiredWriter[T any] interface {
-	WriteRequired(data []T) (int, error)
-}
-
 type page[T primitive] struct {
 	class       *class[T]
 	values      []T
@@ -109,3 +101,7 @@ func (r *pageReader[T]) ReadValues(values []Value) (n int, err error) {
 	}
 	return n, err
 }
+
+var (
+	_ RequiredReader[bool] = (*pageReader[bool])(nil)
+)
