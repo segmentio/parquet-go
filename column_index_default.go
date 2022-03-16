@@ -4,7 +4,6 @@ package parquet
 
 import (
 	"github.com/segmentio/parquet-go/deprecated"
-	"github.com/segmentio/parquet-go/encoding/plain"
 	"github.com/segmentio/parquet-go/format"
 	"github.com/segmentio/parquet-go/internal/bits"
 )
@@ -44,8 +43,8 @@ type int96ColumnIndex struct{ page *int96Page }
 func (i int96ColumnIndex) NumPages() int       { return 1 }
 func (i int96ColumnIndex) NullCount(int) int64 { return 0 }
 func (i int96ColumnIndex) NullPage(int) bool   { return false }
-func (i int96ColumnIndex) MinValue(int) Value  { return plain.Int96(i.page.min()) }
-func (i int96ColumnIndex) MaxValue(int) Value  { return plain.Int96(i.page.max()) }
+func (i int96ColumnIndex) MinValue(int) Value  { return makeValueInt96(i.page.min()) }
+func (i int96ColumnIndex) MaxValue(int) Value  { return makeValueInt96(i.page.max()) }
 func (i int96ColumnIndex) IsAscending() bool   { return compareInt96(i.page.bounds()) < 0 }
 func (i int96ColumnIndex) IsDescending() bool  { return compareInt96(i.page.bounds()) > 0 }
 
