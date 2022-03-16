@@ -11,83 +11,83 @@ import (
 
 type booleanColumnIndex struct{ page *booleanPage }
 
-func (index booleanColumnIndex) NumPages() int       { return 1 }
-func (index booleanColumnIndex) NullCount(int) int64 { return 0 }
-func (index booleanColumnIndex) NullPage(int) bool   { return false }
-func (index booleanColumnIndex) MinValue(int) []byte { return plain.Boolean(index.page.min()) }
-func (index booleanColumnIndex) MaxValue(int) []byte { return plain.Boolean(index.page.max()) }
-func (index booleanColumnIndex) IsAscending() bool   { return compareBool(index.page.bounds()) < 0 }
-func (index booleanColumnIndex) IsDescending() bool  { return compareBool(index.page.bounds()) > 0 }
+func (i booleanColumnIndex) NumPages() int       { return 1 }
+func (i booleanColumnIndex) NullCount(int) int64 { return 0 }
+func (i booleanColumnIndex) NullPage(int) bool   { return false }
+func (i booleanColumnIndex) MinValue(int) []byte { return plain.Boolean(i.page.min()) }
+func (i booleanColumnIndex) MaxValue(int) []byte { return plain.Boolean(i.page.max()) }
+func (i booleanColumnIndex) IsAscending() bool   { return compareBool(i.page.bounds()) < 0 }
+func (i booleanColumnIndex) IsDescending() bool  { return compareBool(i.page.bounds()) > 0 }
 
 type int32ColumnIndex struct{ page *int32Page }
 
-func (index int32ColumnIndex) NumPages() int       { return 1 }
-func (index int32ColumnIndex) NullCount(int) int64 { return 0 }
-func (index int32ColumnIndex) NullPage(int) bool   { return false }
-func (index int32ColumnIndex) MinValue(int) []byte { return plain.Int32(index.page.min()) }
-func (index int32ColumnIndex) MaxValue(int) []byte { return plain.Int32(index.page.max()) }
-func (index int32ColumnIndex) IsAscending() bool   { return compareInt32(index.page.bounds()) < 0 }
-func (index int32ColumnIndex) IsDescending() bool  { return compareInt32(index.page.bounds()) > 0 }
+func (i int32ColumnIndex) NumPages() int       { return 1 }
+func (i int32ColumnIndex) NullCount(int) int64 { return 0 }
+func (i int32ColumnIndex) NullPage(int) bool   { return false }
+func (i int32ColumnIndex) MinValue(int) []byte { return plain.Int32(i.page.min()) }
+func (i int32ColumnIndex) MaxValue(int) []byte { return plain.Int32(i.page.max()) }
+func (i int32ColumnIndex) IsAscending() bool   { return compareInt32(i.page.bounds()) < 0 }
+func (i int32ColumnIndex) IsDescending() bool  { return compareInt32(i.page.bounds()) > 0 }
 
 type int64ColumnIndex struct{ page *int64Page }
 
-func (index int64ColumnIndex) NumPages() int       { return 1 }
-func (index int64ColumnIndex) NullCount(int) int64 { return 0 }
-func (index int64ColumnIndex) NullPage(int) bool   { return false }
-func (index int64ColumnIndex) MinValue(int) []byte { return plain.Int64(index.page.min()) }
-func (index int64ColumnIndex) MaxValue(int) []byte { return plain.Int64(index.page.max()) }
-func (index int64ColumnIndex) IsAscending() bool   { return compareInt64(index.page.bounds()) < 0 }
-func (index int64ColumnIndex) IsDescending() bool  { return compareInt64(index.page.bounds()) > 0 }
+func (i int64ColumnIndex) NumPages() int       { return 1 }
+func (i int64ColumnIndex) NullCount(int) int64 { return 0 }
+func (i int64ColumnIndex) NullPage(int) bool   { return false }
+func (i int64ColumnIndex) MinValue(int) []byte { return plain.Int64(i.page.min()) }
+func (i int64ColumnIndex) MaxValue(int) []byte { return plain.Int64(i.page.max()) }
+func (i int64ColumnIndex) IsAscending() bool   { return compareInt64(i.page.bounds()) < 0 }
+func (i int64ColumnIndex) IsDescending() bool  { return compareInt64(i.page.bounds()) > 0 }
 
 type int96ColumnIndex struct{ page *int96Page }
 
-func (index int96ColumnIndex) NumPages() int       { return 1 }
-func (index int96ColumnIndex) NullCount(int) int64 { return 0 }
-func (index int96ColumnIndex) NullPage(int) bool   { return false }
-func (index int96ColumnIndex) MinValue(int) []byte { return plain.Int96(index.page.min()) }
-func (index int96ColumnIndex) MaxValue(int) []byte { return plain.Int96(index.page.max()) }
-func (index int96ColumnIndex) IsAscending() bool   { return compareInt96(index.page.bounds()) < 0 }
-func (index int96ColumnIndex) IsDescending() bool  { return compareInt96(index.page.bounds()) > 0 }
+func (i int96ColumnIndex) NumPages() int       { return 1 }
+func (i int96ColumnIndex) NullCount(int) int64 { return 0 }
+func (i int96ColumnIndex) NullPage(int) bool   { return false }
+func (i int96ColumnIndex) MinValue(int) []byte { return plain.Int96(i.page.min()) }
+func (i int96ColumnIndex) MaxValue(int) []byte { return plain.Int96(i.page.max()) }
+func (i int96ColumnIndex) IsAscending() bool   { return compareInt96(i.page.bounds()) < 0 }
+func (i int96ColumnIndex) IsDescending() bool  { return compareInt96(i.page.bounds()) > 0 }
 
 type floatColumnIndex struct{ page *floatPage }
 
-func (index floatColumnIndex) NumPages() int       { return 1 }
-func (index floatColumnIndex) NullCount(int) int64 { return 0 }
-func (index floatColumnIndex) NullPage(int) bool   { return false }
-func (index floatColumnIndex) MinValue(int) []byte { return plain.Float(index.page.min()) }
-func (index floatColumnIndex) MaxValue(int) []byte { return plain.Float(index.page.max()) }
-func (index floatColumnIndex) IsAscending() bool   { return compareFloat32(index.page.bounds()) < 0 }
-func (index floatColumnIndex) IsDescending() bool  { return compareFloat32(index.page.bounds()) > 0 }
+func (i floatColumnIndex) NumPages() int       { return 1 }
+func (i floatColumnIndex) NullCount(int) int64 { return 0 }
+func (i floatColumnIndex) NullPage(int) bool   { return false }
+func (i floatColumnIndex) MinValue(int) []byte { return plain.Float(i.page.min()) }
+func (i floatColumnIndex) MaxValue(int) []byte { return plain.Float(i.page.max()) }
+func (i floatColumnIndex) IsAscending() bool   { return compareFloat32(i.page.bounds()) < 0 }
+func (i floatColumnIndex) IsDescending() bool  { return compareFloat32(i.page.bounds()) > 0 }
 
 type doubleColumnIndex struct{ page *doublePage }
 
-func (index doubleColumnIndex) NumPages() int       { return 1 }
-func (index doubleColumnIndex) NullCount(int) int64 { return 0 }
-func (index doubleColumnIndex) NullPage(int) bool   { return false }
-func (index doubleColumnIndex) MinValue(int) []byte { return plain.Double(index.page.min()) }
-func (index doubleColumnIndex) MaxValue(int) []byte { return plain.Double(index.page.max()) }
-func (index doubleColumnIndex) IsAscending() bool   { return compareFloat64(index.page.bounds()) < 0 }
-func (index doubleColumnIndex) IsDescending() bool  { return compareFloat64(index.page.bounds()) > 0 }
+func (i doubleColumnIndex) NumPages() int       { return 1 }
+func (i doubleColumnIndex) NullCount(int) int64 { return 0 }
+func (i doubleColumnIndex) NullPage(int) bool   { return false }
+func (i doubleColumnIndex) MinValue(int) []byte { return plain.Double(i.page.min()) }
+func (i doubleColumnIndex) MaxValue(int) []byte { return plain.Double(i.page.max()) }
+func (i doubleColumnIndex) IsAscending() bool   { return compareFloat64(i.page.bounds()) < 0 }
+func (i doubleColumnIndex) IsDescending() bool  { return compareFloat64(i.page.bounds()) > 0 }
 
 type uint32ColumnIndex struct{ page uint32Page }
 
-func (index uint32ColumnIndex) NumPages() int       { return 1 }
-func (index uint32ColumnIndex) NullCount(int) int64 { return 0 }
-func (index uint32ColumnIndex) NullPage(int) bool   { return false }
-func (index uint32ColumnIndex) MinValue(int) []byte { return plain.Int32(int32(index.page.min())) }
-func (index uint32ColumnIndex) MaxValue(int) []byte { return plain.Int32(int32(index.page.max())) }
-func (index uint32ColumnIndex) IsAscending() bool   { return compareUint32(index.page.bounds()) < 0 }
-func (index uint32ColumnIndex) IsDescending() bool  { return compareUint32(index.page.bounds()) > 0 }
+func (i uint32ColumnIndex) NumPages() int       { return 1 }
+func (i uint32ColumnIndex) NullCount(int) int64 { return 0 }
+func (i uint32ColumnIndex) NullPage(int) bool   { return false }
+func (i uint32ColumnIndex) MinValue(int) []byte { return plain.Int32(int32(i.page.min())) }
+func (i uint32ColumnIndex) MaxValue(int) []byte { return plain.Int32(int32(i.page.max())) }
+func (i uint32ColumnIndex) IsAscending() bool   { return compareUint32(i.page.bounds()) < 0 }
+func (i uint32ColumnIndex) IsDescending() bool  { return compareUint32(i.page.bounds()) > 0 }
 
 type uint64ColumnIndex struct{ page uint64Page }
 
-func (index uint64ColumnIndex) NumPages() int       { return 1 }
-func (index uint64ColumnIndex) NullCount(int) int64 { return 0 }
-func (index uint64ColumnIndex) NullPage(int) bool   { return false }
-func (index uint64ColumnIndex) MinValue(int) []byte { return plain.Int64(int64(index.page.min())) }
-func (index uint64ColumnIndex) MaxValue(int) []byte { return plain.Int64(int64(index.page.max())) }
-func (index uint64ColumnIndex) IsAscending() bool   { return compareUint64(index.page.bounds()) < 0 }
-func (index uint64ColumnIndex) IsDescending() bool  { return compareUint64(index.page.bounds()) > 0 }
+func (i uint64ColumnIndex) NumPages() int       { return 1 }
+func (i uint64ColumnIndex) NullCount(int) int64 { return 0 }
+func (i uint64ColumnIndex) NullPage(int) bool   { return false }
+func (i uint64ColumnIndex) MinValue(int) []byte { return plain.Int64(int64(i.page.min())) }
+func (i uint64ColumnIndex) MaxValue(int) []byte { return plain.Int64(int64(i.page.max())) }
+func (i uint64ColumnIndex) IsAscending() bool   { return compareUint64(i.page.bounds()) < 0 }
+func (i uint64ColumnIndex) IsDescending() bool  { return compareUint64(i.page.bounds()) > 0 }
 
 type booleanColumnIndexer struct {
 	baseColumnIndexer
