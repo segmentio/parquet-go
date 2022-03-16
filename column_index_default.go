@@ -14,8 +14,8 @@ type booleanColumnIndex struct{ page *booleanPage }
 func (i booleanColumnIndex) NumPages() int       { return 1 }
 func (i booleanColumnIndex) NullCount(int) int64 { return 0 }
 func (i booleanColumnIndex) NullPage(int) bool   { return false }
-func (i booleanColumnIndex) MinValue(int) []byte { return plain.Boolean(i.page.min()) }
-func (i booleanColumnIndex) MaxValue(int) []byte { return plain.Boolean(i.page.max()) }
+func (i booleanColumnIndex) MinValue(int) Value  { return makeValueBoolean(i.page.min()) }
+func (i booleanColumnIndex) MaxValue(int) Value  { return makeValueBoolean(i.page.max()) }
 func (i booleanColumnIndex) IsAscending() bool   { return compareBool(i.page.bounds()) < 0 }
 func (i booleanColumnIndex) IsDescending() bool  { return compareBool(i.page.bounds()) > 0 }
 
@@ -24,8 +24,8 @@ type int32ColumnIndex struct{ page *int32Page }
 func (i int32ColumnIndex) NumPages() int       { return 1 }
 func (i int32ColumnIndex) NullCount(int) int64 { return 0 }
 func (i int32ColumnIndex) NullPage(int) bool   { return false }
-func (i int32ColumnIndex) MinValue(int) []byte { return plain.Int32(i.page.min()) }
-func (i int32ColumnIndex) MaxValue(int) []byte { return plain.Int32(i.page.max()) }
+func (i int32ColumnIndex) MinValue(int) Value  { return makeValueInt32(i.page.min()) }
+func (i int32ColumnIndex) MaxValue(int) Value  { return makeValueInt32(i.page.max()) }
 func (i int32ColumnIndex) IsAscending() bool   { return compareInt32(i.page.bounds()) < 0 }
 func (i int32ColumnIndex) IsDescending() bool  { return compareInt32(i.page.bounds()) > 0 }
 
@@ -34,8 +34,8 @@ type int64ColumnIndex struct{ page *int64Page }
 func (i int64ColumnIndex) NumPages() int       { return 1 }
 func (i int64ColumnIndex) NullCount(int) int64 { return 0 }
 func (i int64ColumnIndex) NullPage(int) bool   { return false }
-func (i int64ColumnIndex) MinValue(int) []byte { return plain.Int64(i.page.min()) }
-func (i int64ColumnIndex) MaxValue(int) []byte { return plain.Int64(i.page.max()) }
+func (i int64ColumnIndex) MinValue(int) Value  { return makeValueInt64(i.page.min()) }
+func (i int64ColumnIndex) MaxValue(int) Value  { return makeValueInt64(i.page.max()) }
 func (i int64ColumnIndex) IsAscending() bool   { return compareInt64(i.page.bounds()) < 0 }
 func (i int64ColumnIndex) IsDescending() bool  { return compareInt64(i.page.bounds()) > 0 }
 
@@ -44,8 +44,8 @@ type int96ColumnIndex struct{ page *int96Page }
 func (i int96ColumnIndex) NumPages() int       { return 1 }
 func (i int96ColumnIndex) NullCount(int) int64 { return 0 }
 func (i int96ColumnIndex) NullPage(int) bool   { return false }
-func (i int96ColumnIndex) MinValue(int) []byte { return plain.Int96(i.page.min()) }
-func (i int96ColumnIndex) MaxValue(int) []byte { return plain.Int96(i.page.max()) }
+func (i int96ColumnIndex) MinValue(int) Value  { return plain.Int96(i.page.min()) }
+func (i int96ColumnIndex) MaxValue(int) Value  { return plain.Int96(i.page.max()) }
 func (i int96ColumnIndex) IsAscending() bool   { return compareInt96(i.page.bounds()) < 0 }
 func (i int96ColumnIndex) IsDescending() bool  { return compareInt96(i.page.bounds()) > 0 }
 
@@ -54,8 +54,8 @@ type floatColumnIndex struct{ page *floatPage }
 func (i floatColumnIndex) NumPages() int       { return 1 }
 func (i floatColumnIndex) NullCount(int) int64 { return 0 }
 func (i floatColumnIndex) NullPage(int) bool   { return false }
-func (i floatColumnIndex) MinValue(int) []byte { return plain.Float(i.page.min()) }
-func (i floatColumnIndex) MaxValue(int) []byte { return plain.Float(i.page.max()) }
+func (i floatColumnIndex) MinValue(int) Value  { return makeValueFloat(i.page.min()) }
+func (i floatColumnIndex) MaxValue(int) Value  { return makeValueFloat(i.page.max()) }
 func (i floatColumnIndex) IsAscending() bool   { return compareFloat32(i.page.bounds()) < 0 }
 func (i floatColumnIndex) IsDescending() bool  { return compareFloat32(i.page.bounds()) > 0 }
 
@@ -64,8 +64,8 @@ type doubleColumnIndex struct{ page *doublePage }
 func (i doubleColumnIndex) NumPages() int       { return 1 }
 func (i doubleColumnIndex) NullCount(int) int64 { return 0 }
 func (i doubleColumnIndex) NullPage(int) bool   { return false }
-func (i doubleColumnIndex) MinValue(int) []byte { return plain.Double(i.page.min()) }
-func (i doubleColumnIndex) MaxValue(int) []byte { return plain.Double(i.page.max()) }
+func (i doubleColumnIndex) MinValue(int) Value  { return makeValueDouble(i.page.min()) }
+func (i doubleColumnIndex) MaxValue(int) Value  { return makeValueDouble(i.page.max()) }
 func (i doubleColumnIndex) IsAscending() bool   { return compareFloat64(i.page.bounds()) < 0 }
 func (i doubleColumnIndex) IsDescending() bool  { return compareFloat64(i.page.bounds()) > 0 }
 
@@ -74,8 +74,8 @@ type uint32ColumnIndex struct{ page uint32Page }
 func (i uint32ColumnIndex) NumPages() int       { return 1 }
 func (i uint32ColumnIndex) NullCount(int) int64 { return 0 }
 func (i uint32ColumnIndex) NullPage(int) bool   { return false }
-func (i uint32ColumnIndex) MinValue(int) []byte { return plain.Int32(int32(i.page.min())) }
-func (i uint32ColumnIndex) MaxValue(int) []byte { return plain.Int32(int32(i.page.max())) }
+func (i uint32ColumnIndex) MinValue(int) Value  { return makeValueInt32(int32(i.page.min())) }
+func (i uint32ColumnIndex) MaxValue(int) Value  { return makeValueInt32(int32(i.page.max())) }
 func (i uint32ColumnIndex) IsAscending() bool   { return compareUint32(i.page.bounds()) < 0 }
 func (i uint32ColumnIndex) IsDescending() bool  { return compareUint32(i.page.bounds()) > 0 }
 
@@ -84,8 +84,8 @@ type uint64ColumnIndex struct{ page uint64Page }
 func (i uint64ColumnIndex) NumPages() int       { return 1 }
 func (i uint64ColumnIndex) NullCount(int) int64 { return 0 }
 func (i uint64ColumnIndex) NullPage(int) bool   { return false }
-func (i uint64ColumnIndex) MinValue(int) []byte { return plain.Int64(int64(i.page.min())) }
-func (i uint64ColumnIndex) MaxValue(int) []byte { return plain.Int64(int64(i.page.max())) }
+func (i uint64ColumnIndex) MinValue(int) Value  { return makeValueInt64(int64(i.page.min())) }
+func (i uint64ColumnIndex) MaxValue(int) Value  { return makeValueInt64(int64(i.page.max())) }
 func (i uint64ColumnIndex) IsAscending() bool   { return compareUint64(i.page.bounds()) < 0 }
 func (i uint64ColumnIndex) IsDescending() bool  { return compareUint64(i.page.bounds()) > 0 }
 
