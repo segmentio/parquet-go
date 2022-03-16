@@ -161,7 +161,7 @@ func sortFuncOfRepeated(sort SortFunc, config *SortConfig) SortFunc {
 	sort = sortFuncOfOptional(sort, config)
 	return func(a, b []Value) int {
 		n := len(a)
-		if n < len(b) {
+		if n > len(b) {
 			n = len(b)
 		}
 
