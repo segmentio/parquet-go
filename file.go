@@ -209,7 +209,13 @@ func (f *File) readPageIndex(section *bufferedSectionReader, decoder *thrift.Dec
 func (f *File) NumRowGroups() int { return len(f.rowGroups) }
 
 // RowGroup returns the row group at the given index in f.
-func (f *File) RowGroup(i int) RowGroup { return &f.rowGroups[i] }
+// Returns nil is the file is empty.
+func (f *File) RowGroup(i int) RowGroup {
+	if len(f.rowGroups) == 0 {
+		return nil
+	}
+	return &f.rowGroups[i]
+}
 
 // Root returns the root column of f.
 func (f *File) Root() *Column { return f.root }

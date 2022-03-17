@@ -2,6 +2,7 @@ package parquet_test
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"math"
 	"sort"
@@ -349,10 +350,6 @@ func TestBufferGenerateBloomFilters(t *testing.T) {
 	}
 
 	f := func(rows []Point3D) bool {
-		if len(rows) == 0 { // TODO: support writing files with no rows
-			return true
-		}
-
 		output := new(bytes.Buffer)
 		buffer := parquet.NewBuffer()
 		writer := parquet.NewWriter(output,
@@ -378,10 +375,16 @@ func TestBufferGenerateBloomFilters(t *testing.T) {
 		reader := bytes.NewReader(output.Bytes())
 		f, err := parquet.OpenFile(reader, reader.Size())
 		if err != nil {
+			if len(rows) == 0 && errors.Is(err, parquet.ErrMissingRootColumn) {
+				return true
+			}
 			t.Error(err)
 			return false
 		}
 		rowGroup := f.RowGroup(0)
+		if rowGroup == nil {
+			return true
+		}
 		x := rowGroup.Column(0)
 		y := rowGroup.Column(1)
 		z := rowGroup.Column(2)

@@ -73,9 +73,7 @@ func NewWriter(output io.Writer, options ...WriterOption) *Writer {
 		output: output,
 		config: config,
 	}
-	if config.Schema != nil {
-		w.configure(config.Schema)
-	}
+	w.configure(config.Schema)
 	return w
 }
 
@@ -83,8 +81,8 @@ func (w *Writer) configure(schema *Schema) {
 	if schema != nil {
 		w.config.Schema = schema
 		w.schema = schema
-		w.writer = newWriter(w.output, w.config)
 	}
+	w.writer = newWriter(w.output, w.config)
 }
 
 // Close must be called after all values were produced to the writer in order to
@@ -153,6 +151,10 @@ func (w *Writer) WriteRow(row Row) error { return w.writer.WriteRow(row) }
 // The content of the row group is flushed to the writer; after the method
 // returns successfully, the row group will be empty and in ready to be reused.
 func (w *Writer) WriteRowGroup(rowGroup RowGroup) (int64, error) {
+	if rowGroup.NumRows() == 0 {
+		return 0, nil
+	}
+
 	rowGroupSchema := rowGroup.Schema()
 	switch {
 	case rowGroupSchema == nil:
@@ -226,6 +228,10 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 		w.metadata = append(w.metadata, format.KeyValue{Key: k, Value: v})
 	}
 	sortKeyValueMetadata(w.metadata)
+
+	if config.Schema == nil {
+		return w
+	}
 
 	config.Schema.forEachNode(func(name string, node Node) {
 		nodeType := node.Type()
@@ -485,6 +491,11 @@ func (w *writer) writeFileFooter() error {
 }
 
 func (w *writer) writeRowGroup(rowGroupSchema *Schema, rowGroupSortingColumns []SortingColumn) (int64, error) {
+	if len(w.columns) == 0 {
+		// Nothing to write.
+		return 0, nil
+	}
+
 	numRows := w.columns[0].totalRowCount()
 	if numRows == 0 {
 		return 0, nil

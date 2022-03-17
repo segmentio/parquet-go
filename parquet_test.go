@@ -13,7 +13,7 @@ import (
 
 type Contact struct {
 	Name        string `parquet:"name"`
-	PhoneNumber string `parquet:"phoneNumber,optional,snappy"`
+	PhoneNumber string `parquet:"phoneNumber,optional,zstd"`
 }
 
 type AddressBook struct {

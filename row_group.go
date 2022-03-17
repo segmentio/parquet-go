@@ -424,9 +424,14 @@ type emptyRowGroup struct {
 
 func newEmptyRowGroup(schema *Schema) *emptyRowGroup {
 	g := &emptyRowGroup{
-		schema:  schema,
-		columns: make([]emptyColumnChunk, numLeafColumnsOf(schema)),
+		schema: schema,
 	}
+	if schema == nil {
+		return g
+	}
+
+	g.columns = make([]emptyColumnChunk, numLeafColumnsOf(schema))
+
 	forEachLeafColumnOf(schema, func(leaf leafColumn) {
 		g.columns[leaf.columnIndex].typ = leaf.node.Type()
 		g.columns[leaf.columnIndex].column = leaf.columnIndex

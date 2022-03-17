@@ -2,6 +2,7 @@ package parquet_test
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -273,9 +274,9 @@ value 10: R:0 D:0 V:10.0
 --------------------------------------------------------------------------------
 contacts:
 .name:              BINARY UNCOMPRESSED DO:0 FPO:4 SZ:120/120/1.00 VC:3 [more]...
-.phoneNumber:       BINARY SNAPPY DO:0 FPO:124 SZ:100/96/0.96 VC:3 ENC [more]...
-owner:              BINARY ZSTD DO:0 FPO:224 SZ:98/80/0.82 VC:2 ENC:DE [more]...
-ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:322 SZ:166/116/0.70 VC:3 ENC: [more]...
+.phoneNumber:       BINARY ZSTD DO:0 FPO:124 SZ:114/96/0.84 VC:3 ENC:R [more]...
+owner:              BINARY ZSTD DO:0 FPO:238 SZ:98/80/0.82 VC:2 ENC:DE [more]...
+ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:336 SZ:166/116/0.70 VC:3 ENC: [more]...
 
     contacts.name TV=3 RL=1 DL=1
     ----------------------------------------------------------------------------
@@ -356,9 +357,9 @@ value 3: R:0 D:0 V:<null>
 --------------------------------------------------------------------------------
 contacts:
 .name:              BINARY UNCOMPRESSED DO:0 FPO:4 SZ:114/114/1.00 VC:3 [more]...
-.phoneNumber:       BINARY SNAPPY DO:0 FPO:118 SZ:94/90/0.96 VC:3 ENC: [more]...
-owner:              BINARY ZSTD DO:0 FPO:212 SZ:108/90/0.83 VC:2 ENC:D [more]...
-ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:320 SZ:159/109/0.69 VC:3 ENC: [more]...
+.phoneNumber:       BINARY ZSTD DO:0 FPO:118 SZ:108/90/0.83 VC:3 ENC:R [more]...
+owner:              BINARY ZSTD DO:0 FPO:226 SZ:108/90/0.83 VC:2 ENC:D [more]...
+ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:334 SZ:159/109/0.69 VC:3 ENC: [more]...
 
     contacts.name TV=3 RL=1 DL=1
     ----------------------------------------------------------------------------
@@ -468,10 +469,6 @@ func TestWriterGenerateBloomFilters(t *testing.T) {
 	}
 
 	f := func(rows []Person) bool {
-		if len(rows) == 0 { // TODO: support writing files with no rows
-			return true
-		}
-
 		buffer := new(bytes.Buffer)
 		writer := parquet.NewWriter(buffer,
 			parquet.BloomFilters(
@@ -492,10 +489,18 @@ func TestWriterGenerateBloomFilters(t *testing.T) {
 		reader := bytes.NewReader(buffer.Bytes())
 		f, err := parquet.OpenFile(reader, reader.Size())
 		if err != nil {
+			if len(rows) == 0 && errors.Is(err, parquet.ErrMissingRootColumn) {
+				return true
+			}
 			t.Error(err)
 			return false
 		}
+
 		rowGroup := f.RowGroup(0)
+		if rowGroup == nil {
+			return true
+		}
+
 		firstName := rowGroup.Column(0)
 		lastName := rowGroup.Column(1)
 
@@ -563,5 +568,30 @@ func TestBloomFilterForDict(t *testing.T) {
 	}
 	if !ok {
 		t.Error("bloom filter should have contained 'test'")
+	}
+}
+
+func TestEmptyFile(t *testing.T) {
+	tmp, err := os.CreateTemp("/tmp", "*.parquet")
+	if err != nil {
+		t.Error(err)
+	}
+	defer tmp.Close()
+	path := tmp.Name()
+	defer os.Remove(path)
+
+	writer := parquet.NewWriter(tmp)
+	if err := writer.Close(); err != nil {
+		t.Error(err)
+	}
+
+	fs, err := tmp.Stat()
+	if err != nil {
+		t.Error(err)
+	}
+
+	_, err = parquet.OpenFile(tmp, fs.Size())
+	if !errors.Is(err, parquet.ErrMissingRootColumn) {
+		t.Errorf("expected error %s, got %s", parquet.ErrMissingRootColumn, err)
 	}
 }

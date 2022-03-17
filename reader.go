@@ -73,11 +73,21 @@ func NewReader(input io.ReaderAt, options ...ReaderOption) *Reader {
 		panic(err)
 	}
 
-	column := f.Root()
-	schema := NewSchema(column.Name(), column)
+	isEmpty := f.Size() == 0
+
+	var schema *Schema
+	if !isEmpty {
+		column := f.Root()
+		schema = NewSchema(column.Name(), column)
+	}
 
 	r := &Reader{
 		file: reader{schema: schema},
+	}
+
+	if isEmpty {
+		r.file.rowGroup = newEmptyRowGroup(nil)
+		return r
 	}
 
 	switch n := f.NumRowGroups(); n {
