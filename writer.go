@@ -251,7 +251,7 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 		}
 
 		w.schemaElements = append(w.schemaElements, format.SchemaElement{
-			Type:           nodeType.PhyiscalType(),
+			Type:           nodeType.PhysicalType(),
 			TypeLength:     typeLength,
 			RepetitionType: repetitionType,
 			Name:           name,

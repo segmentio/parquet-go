@@ -5,7 +5,6 @@ package parquet
 import (
 	"io"
 
-	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
 )
 
@@ -17,38 +16,6 @@ type columnReader[T primitive] struct {
 	offset      int
 	bufferSize  int
 	columnIndex int16
-}
-
-func newBooleanColumnReader(typ Type, columnIndex int16, bufferSize int) *columnReader[bool] {
-	return newColumnReader(typ, columnIndex, bufferSize, &boolClass)
-}
-
-func newInt32ColumnReader(typ Type, columnIndex int16, bufferSize int) *columnReader[int32] {
-	return newColumnReader(typ, columnIndex, bufferSize, &int32Class)
-}
-
-func newInt64ColumnReader(typ Type, columnIndex int16, bufferSize int) *columnReader[int64] {
-	return newColumnReader(typ, columnIndex, bufferSize, &int64Class)
-}
-
-func newInt96ColumnReader(typ Type, columnIndex int16, bufferSize int) *columnReader[deprecated.Int96] {
-	return newColumnReader(typ, columnIndex, bufferSize, &int96Class)
-}
-
-func newFloatColumnReader(typ Type, columnIndex int16, bufferSize int) *columnReader[float32] {
-	return newColumnReader(typ, columnIndex, bufferSize, &float32Class)
-}
-
-func newDoubleColumnReader(typ Type, columnIndex int16, bufferSize int) *columnReader[float64] {
-	return newColumnReader(typ, columnIndex, bufferSize, &float64Class)
-}
-
-func newUint32ColumnReader(typ Type, columnIndex int16, bufferSize int) *columnReader[uint32] {
-	return newColumnReader(typ, columnIndex, bufferSize, &uint32Class)
-}
-
-func newUint64ColumnReader(typ Type, columnIndex int16, bufferSize int) *columnReader[uint64] {
-	return newColumnReader(typ, columnIndex, bufferSize, &uint64Class)
 }
 
 func newColumnReader[T primitive](typ Type, columnIndex int16, bufferSize int, class *class[T]) *columnReader[T] {

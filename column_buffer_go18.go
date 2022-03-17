@@ -6,37 +6,12 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/internal/cast"
 )
 
 type columnBuffer[T primitive] struct {
 	page[T]
 	typ Type
-}
-
-func newBooleanColumnBuffer(typ Type, columnIndex int16, bufferSize int) *columnBuffer[bool] {
-	return newColumnBuffer(typ, columnIndex, bufferSize, &boolClass)
-}
-
-func newInt32ColumnBuffer(typ Type, columnIndex int16, bufferSize int) *columnBuffer[int32] {
-	return newColumnBuffer(typ, columnIndex, bufferSize, &int32Class)
-}
-
-func newInt64ColumnBuffer(typ Type, columnIndex int16, bufferSize int) *columnBuffer[int64] {
-	return newColumnBuffer(typ, columnIndex, bufferSize, &int64Class)
-}
-
-func newInt96ColumnBuffer(typ Type, columnIndex int16, bufferSize int) *columnBuffer[deprecated.Int96] {
-	return newColumnBuffer(typ, columnIndex, bufferSize, &int96Class)
-}
-
-func newFloatColumnBuffer(typ Type, columnIndex int16, bufferSize int) *columnBuffer[float32] {
-	return newColumnBuffer(typ, columnIndex, bufferSize, &float32Class)
-}
-
-func newDoubleColumnBuffer(typ Type, columnIndex int16, bufferSize int) *columnBuffer[float64] {
-	return newColumnBuffer(typ, columnIndex, bufferSize, &float64Class)
 }
 
 func newUint32ColumnBuffer(typ Type, columnIndex int16, bufferSize int) *columnBuffer[uint32] {

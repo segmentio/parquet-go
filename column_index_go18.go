@@ -3,7 +3,6 @@
 package parquet
 
 import (
-	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/format"
 	"github.com/segmentio/parquet-go/internal/cast"
 )
@@ -34,6 +33,10 @@ type columnIndexer[T primitive] struct {
 	maxValues  []T
 }
 
+func newColumnIndexer[T primitive](class *class[T]) *columnIndexer[T] {
+	return &columnIndexer[T]{class: class}
+}
+
 func (i *columnIndexer[T]) Reset() {
 	i.nullPages = i.nullPages[:0]
 	i.nullCounts = i.nullCounts[:0]
@@ -60,36 +63,4 @@ func (i *columnIndexer[T]) ColumnIndex() format.ColumnIndex {
 		MaxValues:     maxValues,
 		BoundaryOrder: boundaryOrderOf(minOrder, maxOrder),
 	}
-}
-
-func newBooleanColumnIndexer() *columnIndexer[bool] {
-	return &columnIndexer[bool]{class: &boolClass}
-}
-
-func newInt32ColumnIndexer() *columnIndexer[int32] {
-	return &columnIndexer[int32]{class: &int32Class}
-}
-
-func newInt64ColumnIndexer() *columnIndexer[int64] {
-	return &columnIndexer[int64]{class: &int64Class}
-}
-
-func newInt96ColumnIndexer() *columnIndexer[deprecated.Int96] {
-	return &columnIndexer[deprecated.Int96]{class: &int96Class}
-}
-
-func newFloatColumnIndexer() *columnIndexer[float32] {
-	return &columnIndexer[float32]{class: &float32Class}
-}
-
-func newDoubleColumnIndexer() *columnIndexer[float64] {
-	return &columnIndexer[float64]{class: &float64Class}
-}
-
-func newUint32ColumnIndexer() *columnIndexer[uint32] {
-	return &columnIndexer[uint32]{class: &uint32Class}
-}
-
-func newUint64ColumnIndexer() *columnIndexer[uint64] {
-	return &columnIndexer[uint64]{class: &uint64Class}
 }

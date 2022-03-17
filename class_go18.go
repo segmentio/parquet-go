@@ -42,6 +42,8 @@ func less[T comparable](a, b T) bool {
 
 type class[T primitive] struct {
 	name      string
+	bits      int8
+	kind      Kind
 	makeValue func(T) Value
 	value     func(Value) T
 	plain     func(T) []byte
@@ -57,6 +59,8 @@ type class[T primitive] struct {
 
 var boolClass = class[bool]{
 	name:      "BOOLEAN",
+	bits:      1,
+	kind:      Boolean,
 	makeValue: makeValueBoolean,
 	value:     Value.Boolean,
 	plain:     plain.Boolean,
@@ -72,6 +76,8 @@ var boolClass = class[bool]{
 
 var int32Class = class[int32]{
 	name:      "INT32",
+	bits:      32,
+	kind:      Int32,
 	makeValue: makeValueInt32,
 	value:     Value.Int32,
 	plain:     plain.Int32,
@@ -87,6 +93,8 @@ var int32Class = class[int32]{
 
 var int64Class = class[int64]{
 	name:      "INT64",
+	bits:      64,
+	kind:      Int64,
 	makeValue: makeValueInt64,
 	value:     Value.Int64,
 	plain:     plain.Int64,
@@ -102,6 +110,8 @@ var int64Class = class[int64]{
 
 var int96Class = class[deprecated.Int96]{
 	name:      "INT96",
+	bits:      96,
+	kind:      Int96,
 	makeValue: makeValueInt96,
 	value:     Value.Int96,
 	plain:     plain.Int96,
@@ -117,6 +127,8 @@ var int96Class = class[deprecated.Int96]{
 
 var float32Class = class[float32]{
 	name:      "FLOAT",
+	bits:      32,
+	kind:      Float,
 	makeValue: makeValueFloat,
 	value:     Value.Float,
 	plain:     plain.Float,
@@ -132,6 +144,8 @@ var float32Class = class[float32]{
 
 var float64Class = class[float64]{
 	name:      "DOUBLE",
+	bits:      64,
+	kind:      Double,
 	makeValue: makeValueDouble,
 	value:     Value.Double,
 	plain:     plain.Double,
@@ -147,6 +161,8 @@ var float64Class = class[float64]{
 
 var uint32Class = class[uint32]{
 	name:      "INT32",
+	bits:      32,
+	kind:      Int32,
 	makeValue: func(v uint32) Value { return makeValueInt32(int32(v)) },
 	value:     func(v Value) uint32 { return uint32(v.Int32()) },
 	plain:     func(v uint32) []byte { return plain.Int32(int32(v)) },
@@ -166,6 +182,8 @@ var uint32Class = class[uint32]{
 
 var uint64Class = class[uint64]{
 	name:      "INT64",
+	bits:      64,
+	kind:      Int64,
 	makeValue: func(v uint64) Value { return makeValueInt64(int64(v)) },
 	value:     func(v Value) uint64 { return uint64(v.Int64()) },
 	plain:     func(v uint64) []byte { return plain.Int64(int64(v)) },
