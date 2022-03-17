@@ -527,3 +527,41 @@ func TestWriterGenerateBloomFilters(t *testing.T) {
 		t.Error(err)
 	}
 }
+
+func TestBloomFilterForDict(t *testing.T) {
+	type testStruct struct {
+		A string `parquet:"a,dict"`
+	}
+
+	schema := parquet.SchemaOf(&testStruct{})
+
+	b := bytes.NewBuffer(nil)
+	w := parquet.NewWriter(
+		b,
+		schema,
+		parquet.BloomFilters(parquet.SplitBlockFilter("a")),
+	)
+
+	err := w.Write(&testStruct{A: "test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = w.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	f, err := parquet.OpenFile(bytes.NewReader(b.Bytes()), int64(b.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ok, err := f.RowGroup(0).Column(0).BloomFilter().Check(parquet.ValueOf("test"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Error("bloom filter should have contained 'test'")
+	}
+}
