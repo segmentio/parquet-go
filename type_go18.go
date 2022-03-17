@@ -45,7 +45,7 @@ func (t primitiveType[T]) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 }
 
 func (t primitiveType[T]) NewDictionary(bufferSize int) Dictionary {
-	panic("NOT IMPLEMENTED")
+	return newDictionary(t, bufferSize, t.class)
 }
 
 func (t primitiveType[T]) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
@@ -153,10 +153,18 @@ func (t *intType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 }
 
 func (t *intType) NewDictionary(bufferSize int) Dictionary {
-	if t.BitWidth == 64 {
-		return nil //newInt64Dictionary(t, bufferSize)
+	if t.IsSigned {
+		if t.BitWidth == 64 {
+			return newDictionary(t, bufferSize, &int64Class)
+		} else {
+			return newDictionary(t, bufferSize, &int32Class)
+		}
 	} else {
-		return nil //newInt32Dictionary(t, bufferSize)
+		if t.BitWidth == 64 {
+			return newDictionary(t, bufferSize, &uint64Class)
+		} else {
+			return newDictionary(t, bufferSize, &uint32Class)
+		}
 	}
 }
 
@@ -177,10 +185,18 @@ func (t *intType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 }
 
 func (t *intType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
-	if t.BitWidth == 64 {
-		return newColumnReader(t, makeColumnIndex(columnIndex), bufferSize, &int64Class)
+	if t.IsSigned {
+		if t.BitWidth == 64 {
+			return newColumnReader(t, makeColumnIndex(columnIndex), bufferSize, &int64Class)
+		} else {
+			return newColumnReader(t, makeColumnIndex(columnIndex), bufferSize, &int32Class)
+		}
 	} else {
-		return newColumnReader(t, makeColumnIndex(columnIndex), bufferSize, &int32Class)
+		if t.BitWidth == 64 {
+			return newColumnReader(t, makeColumnIndex(columnIndex), bufferSize, &uint64Class)
+		} else {
+			return newColumnReader(t, makeColumnIndex(columnIndex), bufferSize, &uint32Class)
+		}
 	}
 }
 
@@ -189,7 +205,7 @@ func (t *dateType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 }
 
 func (t *dateType) NewDictionary(bufferSize int) Dictionary {
-	return nil //
+	return newDictionary(t, bufferSize, &int32Class)
 }
 
 func (t *dateType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
@@ -210,9 +226,9 @@ func (t *timeType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 
 func (t *timeType) NewDictionary(bufferSize int) Dictionary {
 	if t.Unit.Millis != nil {
-		return nil // newInt32Dictionary(t, bufferSize)
+		return newDictionary(t, bufferSize, &int32Class)
 	} else {
-		return nil // newInt64Dictionary(t, bufferSize)
+		return newDictionary(t, bufferSize, &int64Class)
 	}
 }
 
@@ -237,7 +253,7 @@ func (t *timestampType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 }
 
 func (t *timestampType) NewDictionary(bufferSize int) Dictionary {
-	return nil // newInt64Dictionary(t, bufferSize)
+	return newDictionary(t, bufferSize, &int64Class)
 }
 
 func (t *timestampType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
