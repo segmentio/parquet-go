@@ -72,7 +72,7 @@ func (d *dictionary[T]) ReadFrom(decoder encoding.Decoder) error {
 			if err == io.EOF {
 				err = nil
 			} else {
-				err = fmt.Errorf("reading parquet dictionary of int64 values: %w", err)
+				err = fmt.Errorf("reading parquet dictionary of %s values: %w", d.class.name, err)
 			}
 			return err
 		}
@@ -81,7 +81,7 @@ func (d *dictionary[T]) ReadFrom(decoder encoding.Decoder) error {
 
 func (d *dictionary[T]) WriteTo(encoder encoding.Encoder) error {
 	if err := d.class.encode(encoder, d.values); err != nil {
-		return fmt.Errorf("writing parquet dictionary of %d int64 values: %w", d.Len(), err)
+		return fmt.Errorf("writing parquet dictionary of %d %s values: %w", d.Len(), d.class.name, err)
 	}
 	return nil
 }
