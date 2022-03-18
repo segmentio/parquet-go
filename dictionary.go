@@ -31,9 +31,8 @@ type Dictionary interface {
 	Index(index int32) Value
 
 	// Inserts a value to the dictionary and writes the indexes at which values
-	// were inserted. Returns the number of values inserted in the dictionary.
-	//Insert(indexes []int32, values []Value) int
-	Insert(Value) int32
+	// were inserted.
+	Insert(indexes []int32, values []Value)
 
 	// Given an array of dictionary indexes, lookup the values into the array
 	// of values passed as second argument.
@@ -84,19 +83,32 @@ func (d *byteArrayDictionary) Index(i int32) Value {
 	return makeValueBytes(ByteArray, d.values.Index(int(i)))
 }
 
-func (d *byteArrayDictionary) Insert(v Value) int32 {
-	value := v.ByteArray()
-	if index, exists := d.index[string(value)]; exists {
-		return index
-	}
-	d.values.Push(value)
-	index := int32(d.values.Len() - 1)
-	stringValue := bits.BytesToString(d.values.Index(int(index)))
+func (d *byteArrayDictionary) Insert(indexes []int32, values []Value) {
+	_ = indexes[:len(values)]
+
 	if d.index == nil {
+		index := int32(0)
 		d.index = make(map[string]int32, d.values.Cap())
+		d.values.Range(func(v []byte) bool {
+			d.index[bits.BytesToString(v)] = index
+			index++
+			return true
+		})
 	}
-	d.index[stringValue] = index
-	return index
+
+	for i, v := range values {
+		value := v.ByteArray()
+
+		index, exists := d.index[string(value)]
+		if !exists {
+			d.values.Push(value)
+			index = int32(d.values.Len() - 1)
+			stringValue := bits.BytesToString(d.values.Index(int(index)))
+			d.index[stringValue] = index
+		}
+
+		indexes[i] = index
+	}
 }
 
 func (d *byteArrayDictionary) Lookup(indexes []int32, values []Value) {
@@ -182,19 +194,30 @@ func (d *fixedLenByteArrayDictionary) value(i int32) []byte {
 	return d.values[int(i)*d.size : int(i+1)*d.size]
 }
 
-func (d *fixedLenByteArrayDictionary) Insert(v Value) int32 {
-	value := v.ByteArray()
-	if index, exists := d.index[string(value)]; exists {
-		return index
-	}
+func (d *fixedLenByteArrayDictionary) Insert(indexes []int32, values []Value) {
+	_ = indexes[:len(values)]
+
 	if d.index == nil {
 		d.index = make(map[string]int32, cap(d.values)/d.size)
+		for i, j := 0, int32(0); i < len(d.values); i += d.size {
+			d.index[bits.BytesToString(d.values[i:i+d.size])] = j
+			j++
+		}
 	}
-	i := int32(d.Len())
-	n := len(d.values)
-	d.values = append(d.values, value...)
-	d.index[bits.BytesToString(d.values[n:])] = i
-	return i
+
+	for i, v := range values {
+		value := v.ByteArray()
+
+		index, exists := d.index[string(value)]
+		if !exists {
+			index = int32(d.Len())
+			start := len(d.values)
+			d.values = append(d.values, value...)
+			d.index[bits.BytesToString(d.values[start:])] = index
+		}
+
+		indexes[i] = index
+	}
 }
 
 func (d *fixedLenByteArrayDictionary) Lookup(indexes []int32, values []Value) {
@@ -408,9 +431,18 @@ func (col *indexedColumnBuffer) Swap(i, j int) {
 }
 
 func (col *indexedColumnBuffer) WriteValues(values []Value) (int, error) {
-	for _, v := range values {
-		col.values = append(col.values, col.dict.Insert(v))
+	i := len(col.values)
+	j := len(col.values) + len(values)
+
+	if j <= cap(col.values) {
+		col.values = col.values[:j]
+	} else {
+		colValues := make([]int32, j)
+		copy(colValues, col.values)
+		col.values = colValues
 	}
+
+	col.dict.Insert(col.values[i:], values)
 	return len(values), nil
 }
 
@@ -421,8 +453,8 @@ func (col *indexedColumnBuffer) WriteRow(row Row) error {
 	if len(row) > 1 {
 		return errRowHasTooManyValues(int64(len(row)))
 	}
-	col.values = append(col.values, col.dict.Insert(row[0]))
-	return nil
+	_, err := col.WriteValues(row[:1])
+	return err
 }
 
 func (col *indexedColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {

@@ -28,23 +28,32 @@ func (d *dictionary[T]) Type() Type { return newIndexedType(d.typ, d) }
 
 func (d *dictionary[T]) Len() int { return len(d.values) }
 
-func (d *dictionary[T]) Index(i int32) Value { return d.class.makeValue(d.values[i]) }
+func (d *dictionary[T]) Index(index int32) Value {
+	return d.class.makeValue(d.values[index])
+}
 
-func (d *dictionary[T]) Insert(v Value) int32 {
-	value := d.class.value(v)
-	if index, exists := d.index[value]; exists {
-		return index
-	}
+func (d *dictionary[T]) Insert(indexes []int32, values []Value) {
+	_ = indexes[:len(values)]
+
 	if d.index == nil {
 		d.index = make(map[T]int32, cap(d.values))
 		for i, v := range d.values {
 			d.index[v] = int32(i)
 		}
 	}
-	index := int32(len(d.values))
-	d.index[value] = index
-	d.values = append(d.values, value)
-	return index
+
+	for i, v := range values {
+		value := d.class.value(v)
+
+		index, exists := d.index[value]
+		if !exists {
+			index = int32(len(d.values))
+			d.values = append(d.values, value)
+			d.index[value] = index
+		}
+
+		indexes[i] = index
+	}
 }
 
 func (d *dictionary[T]) Lookup(indexes []int32, values []Value) {
