@@ -30,9 +30,8 @@ func (d *dictionary[T]) Len() int { return len(d.values) }
 
 func (d *dictionary[T]) Index(i int32) Value { return d.class.makeValue(d.values[i]) }
 
-func (d *dictionary[T]) Insert(v Value) int32 { return d.insert(d.class.value(v)) }
-
-func (d *dictionary[T]) insert(value T) int32 {
+func (d *dictionary[T]) Insert(v Value) int32 {
+	value := d.class.value(v)
 	if index, exists := d.index[value]; exists {
 		return index
 	}
