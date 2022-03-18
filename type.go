@@ -30,6 +30,18 @@ const (
 // String returns a human-readable representation of the physical type.
 func (k Kind) String() string { return format.Type(k).String() }
 
+// Value constructs a value form k and v.
+//
+// The method panics if the data is not a valid representation of the value
+// kind; for example, if the kind is Int32 but the data is not 4 bytes long.
+func (k Kind) Value(v []byte) Value {
+	x, err := parseValue(k, v)
+	if err != nil {
+		panic(err)
+	}
+	return x
+}
+
 // The Type interface represents logical types of the parquet type system.
 //
 // Types are immutable and therefore safe to access from multiple goroutines.

@@ -1,9 +1,7 @@
 package parquet_test
 
 import (
-	"bytes"
 	"fmt"
-	"reflect"
 	"testing"
 	"testing/quick"
 
@@ -145,16 +143,14 @@ func checkColumnChunkColumnIndex(columnChunk parquet.ColumnChunk) error {
 	numPages := columnIndex.NumPages()
 	pagesRead := 0
 	err := forEachPage(columnChunk.Pages(), func(page parquet.Page) error {
-		min, max := page.Bounds()
-		pageMin := min.Bytes()
-		pageMax := max.Bytes()
+		pageMin, pageMax := page.Bounds()
 		indexMin := columnIndex.MinValue(pagesRead)
 		indexMax := columnIndex.MaxValue(pagesRead)
 
-		if !bytes.Equal(pageMin, indexMin) {
+		if !parquet.Equal(pageMin, indexMin) {
 			return fmt.Errorf("max page value mismatch: index=%x page=%x", indexMin, pageMin)
 		}
-		if !bytes.Equal(pageMax, indexMax) {
+		if !parquet.Equal(pageMax, indexMax) {
 			return fmt.Errorf("max page value mismatch: index=%x page=%x", indexMax, pageMax)
 		}
 
@@ -183,12 +179,12 @@ func checkColumnChunkColumnIndex(columnChunk parquet.ColumnChunk) error {
 
 		switch {
 		case columnIndex.IsAscending():
-			if columnType.Compare(min, max) > 0 {
-				return fmt.Errorf("column index is declared to be in ascending order but %v > %v", min, max)
+			if columnType.Compare(pageMin, pageMax) > 0 {
+				return fmt.Errorf("column index is declared to be in ascending order but %v > %v", pageMin, pageMax)
 			}
 		case columnIndex.IsDescending():
-			if columnType.Compare(min, max) < 0 {
-				return fmt.Errorf("column index is declared to be in desending order but %v < %v", min, max)
+			if columnType.Compare(pageMin, pageMax) < 0 {
+				return fmt.Errorf("column index is declared to be in desending order but %v < %v", pageMin, pageMax)
 			}
 		}
 
@@ -278,9 +274,57 @@ func checkFileColumnIndex(f *parquet.File) error {
 		if i >= len(columnIndexes) {
 			return fmt.Errorf("more column indexes were read when iterating over column chunks than when reading from the file (i=%d,n=%d)", i, len(columnIndexes))
 		}
-		if !reflect.DeepEqual(&columnIndexes[i], newColumnIndex(columnIndex)) {
-			return fmt.Errorf("column index at index %d mismatch:\nfile  = %#v\nchunk = %#v", i, &columnIndexes[i], columnIndex)
+
+		index1 := columnIndex
+		index2 := &fileColumnIndex{
+			kind:        col.Type().Kind(),
+			ColumnIndex: columnIndexes[i],
 		}
+
+		numPages1 := index1.NumPages()
+		numPages2 := index2.NumPages()
+		if numPages1 != numPages2 {
+			return fmt.Errorf("number of pages mismatch: got=%d want=%d", numPages1, numPages2)
+		}
+
+		for j := 0; j < numPages1; j++ {
+			nullCount1 := index1.NullCount(j)
+			nullCount2 := index2.NullCount(j)
+			if nullCount1 != nullCount2 {
+				return fmt.Errorf("null count of page %d/%d mismatch: got=%d want=%d", i, numPages1, nullCount1, nullCount2)
+			}
+
+			nullPage1 := index1.NullPage(j)
+			nullPage2 := index2.NullPage(j)
+			if nullPage1 != nullPage2 {
+				return fmt.Errorf("null page of page %d/%d mismatch: got=%t want=%t", i, numPages1, nullPage1, nullPage2)
+			}
+
+			minValue1 := index1.MinValue(j)
+			minValue2 := index2.MinValue(j)
+			if !parquet.Equal(minValue1, minValue2) {
+				return fmt.Errorf("min value of page %d/%d mismatch: got=%v want=%v", i, numPages1, minValue1, minValue2)
+			}
+
+			maxValue1 := index1.MaxValue(j)
+			maxValue2 := index2.MaxValue(j)
+			if !parquet.Equal(maxValue1, maxValue2) {
+				return fmt.Errorf("max value of page %d/%d mismatch: got=%v want=%v", i, numPages1, maxValue1, maxValue2)
+			}
+
+			isAscending1 := index1.IsAscending()
+			isAscending2 := index2.IsAscending()
+			if isAscending1 != isAscending2 {
+				return fmt.Errorf("ascending state of page %d/%d mismatch: got=%t want=%t", i, numPages1, isAscending1, isAscending2)
+			}
+
+			isDescending1 := index1.IsDescending()
+			isDescending2 := index2.IsDescending()
+			if isDescending1 != isDescending2 {
+				return fmt.Errorf("descending state of page %d/%d mismatch: got=%t want=%t", i, numPages1, isDescending1, isDescending2)
+			}
+		}
+
 		i++
 		return nil
 	})
@@ -297,53 +341,59 @@ func checkFileOffsetIndex(f *parquet.File) error {
 		if i >= len(offsetIndexes) {
 			return fmt.Errorf("more offset indexes were read when iterating over column chunks than when reading from the file (i=%d,n=%d)", i, len(offsetIndexes))
 		}
-		if !reflect.DeepEqual(&offsetIndexes[i], newOffsetIndex(offsetIndex)) {
-			return fmt.Errorf("offset index at index %d mismatch:\nfile  = %#v\nchunk = %#v", i, &offsetIndexes[i], offsetIndex)
+
+		index1 := offsetIndex
+		index2 := (*fileOffsetIndex)(&offsetIndexes[i])
+
+		numPages1 := index1.NumPages()
+		numPages2 := index2.NumPages()
+		if numPages1 != numPages2 {
+			return fmt.Errorf("number of pages mismatch: got=%d want=%d", numPages1, numPages2)
 		}
+
+		for j := 0; j < numPages1; j++ {
+			offset1 := index1.Offset(j)
+			offset2 := index2.Offset(j)
+			if offset1 != offset2 {
+				return fmt.Errorf("offsets of page %d/%d mismatch: got=%d want=%d", i, numPages1, offset1, offset2)
+			}
+
+			compressedPageSize1 := index1.CompressedPageSize(j)
+			compressedPageSize2 := index2.CompressedPageSize(j)
+			if compressedPageSize1 != compressedPageSize2 {
+				return fmt.Errorf("compressed page size of page %d/%d mismatch: got=%d want=%d", i, numPages1, compressedPageSize1, compressedPageSize2)
+			}
+
+			firstRowIndex1 := index1.FirstRowIndex(j)
+			firstRowIndex2 := index2.FirstRowIndex(j)
+			if firstRowIndex1 != firstRowIndex2 {
+				return fmt.Errorf("first row index of page %d/%d mismatch: got=%d want=%d", i, numPages1, firstRowIndex1, firstRowIndex2)
+			}
+		}
+
 		i++
 		return nil
 	})
 }
 
-func newColumnIndex(columnIndex parquet.ColumnIndex) *format.ColumnIndex {
-	numPages := columnIndex.NumPages()
-
-	index := &format.ColumnIndex{
-		NullPages:  make([]bool, numPages),
-		MinValues:  make([][]byte, numPages),
-		MaxValues:  make([][]byte, numPages),
-		NullCounts: make([]int64, numPages),
-	}
-
-	for i := 0; i < numPages; i++ {
-		index.NullPages[i] = columnIndex.NullPage(i)
-		index.MinValues[i] = columnIndex.MinValue(i)
-		index.MaxValues[i] = columnIndex.MaxValue(i)
-		index.NullCounts[i] = columnIndex.NullCount(i)
-	}
-
-	switch {
-	case columnIndex.IsAscending():
-		index.BoundaryOrder = format.Ascending
-	case columnIndex.IsDescending():
-		index.BoundaryOrder = format.Descending
-	}
-
-	return index
+type fileColumnIndex struct {
+	kind parquet.Kind
+	format.ColumnIndex
 }
 
-func newOffsetIndex(offsetIndex parquet.OffsetIndex) *format.OffsetIndex {
-	index := &format.OffsetIndex{
-		PageLocations: make([]format.PageLocation, offsetIndex.NumPages()),
-	}
+func (i *fileColumnIndex) NumPages() int                { return len(i.NullPages) }
+func (i *fileColumnIndex) NullCount(j int) int64        { return i.NullCounts[j] }
+func (i *fileColumnIndex) NullPage(j int) bool          { return i.NullPages[j] }
+func (i *fileColumnIndex) MinValue(j int) parquet.Value { return i.kind.Value(i.MinValues[j]) }
+func (i *fileColumnIndex) MaxValue(j int) parquet.Value { return i.kind.Value(i.MaxValues[j]) }
+func (i *fileColumnIndex) IsAscending() bool            { return i.BoundaryOrder == format.Ascending }
+func (i *fileColumnIndex) IsDescending() bool           { return i.BoundaryOrder == format.Descending }
 
-	for i := range index.PageLocations {
-		index.PageLocations[i] = format.PageLocation{
-			Offset:             offsetIndex.Offset(i),
-			CompressedPageSize: int32(offsetIndex.CompressedPageSize(i)),
-			FirstRowIndex:      offsetIndex.FirstRowIndex(i),
-		}
-	}
+type fileOffsetIndex format.OffsetIndex
 
-	return index
+func (i *fileOffsetIndex) NumPages() int      { return len(i.PageLocations) }
+func (i *fileOffsetIndex) Offset(j int) int64 { return i.PageLocations[j].Offset }
+func (i *fileOffsetIndex) CompressedPageSize(j int) int64 {
+	return int64(i.PageLocations[j].CompressedPageSize)
 }
+func (i *fileOffsetIndex) FirstRowIndex(j int) int64 { return i.PageLocations[j].FirstRowIndex }

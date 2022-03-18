@@ -423,7 +423,7 @@ func (c *fileColumnChunk) ColumnIndex() ColumnIndex {
 	if c.columnIndex == nil {
 		return nil
 	}
-	return (*fileColumnIndex)(c.columnIndex)
+	return fileColumnIndex{c}
 }
 
 func (c *fileColumnChunk) OffsetIndex() OffsetIndex {

@@ -20,8 +20,8 @@ type ColumnIndex interface {
 
 	// PageIndex return min/max bounds for the page at the given index in the
 	// column.
-	MinValue(int) []byte
-	MaxValue(int) []byte
+	MinValue(int) Value
+	MaxValue(int) Value
 
 	// IsAscending returns true if the column index min/max values are sorted
 	// in ascending order (based on the ordering rules of the column's logical
@@ -39,28 +39,35 @@ type emptyColumnIndex struct{}
 func (emptyColumnIndex) NumPages() int       { return 0 }
 func (emptyColumnIndex) NullCount(int) int64 { return 0 }
 func (emptyColumnIndex) NullPage(int) bool   { return false }
-func (emptyColumnIndex) MinValue(int) []byte { return nil }
-func (emptyColumnIndex) MaxValue(int) []byte { return nil }
+func (emptyColumnIndex) MinValue(int) Value  { return Value{} }
+func (emptyColumnIndex) MaxValue(int) Value  { return Value{} }
 func (emptyColumnIndex) IsAscending() bool   { return false }
 func (emptyColumnIndex) IsDescending() bool  { return false }
 
-type fileColumnIndex format.ColumnIndex
+type fileColumnIndex struct{ chunk *fileColumnChunk }
 
-func (i *fileColumnIndex) NumPages() int         { return len(i.NullPages) }
-func (i *fileColumnIndex) NullCount(j int) int64 { return i.NullCounts[j] }
-func (i *fileColumnIndex) NullPage(j int) bool   { return i.NullPages[j] }
-func (i *fileColumnIndex) MinValue(j int) []byte { return i.MinValues[j] }
-func (i *fileColumnIndex) MaxValue(j int) []byte { return i.MaxValues[j] }
-func (i *fileColumnIndex) IsAscending() bool     { return i.BoundaryOrder == format.Ascending }
-func (i *fileColumnIndex) IsDescending() bool    { return i.BoundaryOrder == format.Descending }
+func (i fileColumnIndex) NumPages() int         { return len(i.chunk.columnIndex.NullPages) }
+func (i fileColumnIndex) NullCount(j int) int64 { return i.chunk.columnIndex.NullCounts[j] }
+func (i fileColumnIndex) NullPage(j int) bool   { return i.chunk.columnIndex.NullPages[j] }
+func (i fileColumnIndex) MinValue(j int) Value  { return i.makeValue(i.chunk.columnIndex.MinValues[j]) }
+func (i fileColumnIndex) MaxValue(j int) Value  { return i.makeValue(i.chunk.columnIndex.MaxValues[j]) }
+func (i fileColumnIndex) IsAscending() bool {
+	return i.chunk.columnIndex.BoundaryOrder == format.Ascending
+}
+func (i fileColumnIndex) IsDescending() bool {
+	return i.chunk.columnIndex.BoundaryOrder == format.Descending
+}
+func (i *fileColumnIndex) makeValue(b []byte) Value {
+	return i.chunk.column.typ.Kind().Value(b)
+}
 
 type byteArrayColumnIndex struct{ page *byteArrayPage }
 
 func (i byteArrayColumnIndex) NumPages() int       { return 1 }
 func (i byteArrayColumnIndex) NullCount(int) int64 { return 0 }
 func (i byteArrayColumnIndex) NullPage(int) bool   { return false }
-func (i byteArrayColumnIndex) MinValue(int) []byte { return copyBytes(i.page.min()) }
-func (i byteArrayColumnIndex) MaxValue(int) []byte { return copyBytes(i.page.max()) }
+func (i byteArrayColumnIndex) MinValue(int) Value  { return makeValueBytes(ByteArray, i.page.min()) }
+func (i byteArrayColumnIndex) MaxValue(int) Value  { return makeValueBytes(ByteArray, i.page.max()) }
 func (i byteArrayColumnIndex) IsAscending() bool   { return bytes.Compare(i.page.bounds()) < 0 }
 func (i byteArrayColumnIndex) IsDescending() bool  { return bytes.Compare(i.page.bounds()) > 0 }
 
@@ -69,10 +76,14 @@ type fixedLenByteArrayColumnIndex struct{ page *fixedLenByteArrayPage }
 func (i fixedLenByteArrayColumnIndex) NumPages() int       { return 1 }
 func (i fixedLenByteArrayColumnIndex) NullCount(int) int64 { return 0 }
 func (i fixedLenByteArrayColumnIndex) NullPage(int) bool   { return false }
-func (i fixedLenByteArrayColumnIndex) MinValue(int) []byte { return copyBytes(i.page.min()) }
-func (i fixedLenByteArrayColumnIndex) MaxValue(int) []byte { return copyBytes(i.page.max()) }
-func (i fixedLenByteArrayColumnIndex) IsAscending() bool   { return bytes.Compare(i.page.bounds()) < 0 }
-func (i fixedLenByteArrayColumnIndex) IsDescending() bool  { return bytes.Compare(i.page.bounds()) > 0 }
+func (i fixedLenByteArrayColumnIndex) MinValue(int) Value {
+	return makeValueBytes(FixedLenByteArray, i.page.min())
+}
+func (i fixedLenByteArrayColumnIndex) MaxValue(int) Value {
+	return makeValueBytes(FixedLenByteArray, i.page.max())
+}
+func (i fixedLenByteArrayColumnIndex) IsAscending() bool  { return bytes.Compare(i.page.bounds()) < 0 }
+func (i fixedLenByteArrayColumnIndex) IsDescending() bool { return bytes.Compare(i.page.bounds()) > 0 }
 
 // The ColumnIndexer interface is implemented by types that support generating
 // parquet column indexes.

@@ -943,13 +943,13 @@ type indexedColumnIndex struct{ col *indexedColumnBuffer }
 func (index indexedColumnIndex) NumPages() int       { return 1 }
 func (index indexedColumnIndex) NullCount(int) int64 { return 0 }
 func (index indexedColumnIndex) NullPage(int) bool   { return false }
-func (index indexedColumnIndex) MinValue(int) []byte {
+func (index indexedColumnIndex) MinValue(int) Value {
 	min, _ := index.col.Bounds()
-	return min.Bytes()
+	return min
 }
-func (index indexedColumnIndex) MaxValue(int) []byte {
+func (index indexedColumnIndex) MaxValue(int) Value {
 	_, max := index.col.Bounds()
-	return max.Bytes()
+	return max
 }
 func (index indexedColumnIndex) IsAscending() bool {
 	return index.col.typ.Compare(index.col.Bounds()) < 0

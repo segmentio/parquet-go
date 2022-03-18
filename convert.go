@@ -481,8 +481,8 @@ type missingColumnIndex struct{ *missingColumnChunk }
 func (i missingColumnIndex) NumPages() int       { return 1 }
 func (i missingColumnIndex) NullCount(int) int64 { return i.numNulls }
 func (i missingColumnIndex) NullPage(int) bool   { return true }
-func (i missingColumnIndex) MinValue(int) []byte { return nil }
-func (i missingColumnIndex) MaxValue(int) []byte { return nil }
+func (i missingColumnIndex) MinValue(int) Value  { return Value{} }
+func (i missingColumnIndex) MaxValue(int) Value  { return Value{} }
 func (i missingColumnIndex) IsAscending() bool   { return true }
 func (i missingColumnIndex) IsDescending() bool  { return false }
 
