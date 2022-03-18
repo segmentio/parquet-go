@@ -423,14 +423,14 @@ func (c *fileColumnChunk) ColumnIndex() ColumnIndex {
 	if c.columnIndex == nil {
 		return nil
 	}
-	return (*columnIndex)(c.columnIndex)
+	return fileColumnIndex{c}
 }
 
 func (c *fileColumnChunk) OffsetIndex() OffsetIndex {
 	if c.offsetIndex == nil {
 		return nil
 	}
-	return (*offsetIndex)(c.offsetIndex)
+	return (*fileOffsetIndex)(c.offsetIndex)
 }
 
 func (c *fileColumnChunk) BloomFilter() BloomFilter {

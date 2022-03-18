@@ -2,34 +2,58 @@
 
 package parquet
 
-func (index booleanPageIndex) Offset(int) int64             { return 0 }
-func (index booleanPageIndex) CompressedPageSize(int) int64 { return index.page.Size() }
-func (index booleanPageIndex) FirstRowIndex(int) int64      { return 0 }
+type booleanOffsetIndex struct{ page *booleanPage }
 
-func (index int32PageIndex) Offset(int) int64             { return 0 }
-func (index int32PageIndex) CompressedPageSize(int) int64 { return index.page.Size() }
-func (index int32PageIndex) FirstRowIndex(int) int64      { return 0 }
+func (i booleanOffsetIndex) NumPages() int                { return 1 }
+func (i booleanOffsetIndex) Offset(int) int64             { return 0 }
+func (i booleanOffsetIndex) CompressedPageSize(int) int64 { return i.page.Size() }
+func (i booleanOffsetIndex) FirstRowIndex(int) int64      { return 0 }
 
-func (index int64PageIndex) Offset(int) int64             { return 0 }
-func (index int64PageIndex) CompressedPageSize(int) int64 { return index.page.Size() }
-func (index int64PageIndex) FirstRowIndex(int) int64      { return 0 }
+type int32OffsetIndex struct{ page *int32Page }
 
-func (index int96PageIndex) Offset(int) int64             { return 0 }
-func (index int96PageIndex) CompressedPageSize(int) int64 { return index.page.Size() }
-func (index int96PageIndex) FirstRowIndex(int) int64      { return 0 }
+func (i int32OffsetIndex) NumPages() int                { return 1 }
+func (i int32OffsetIndex) Offset(int) int64             { return 0 }
+func (i int32OffsetIndex) CompressedPageSize(int) int64 { return i.page.Size() }
+func (i int32OffsetIndex) FirstRowIndex(int) int64      { return 0 }
 
-func (index floatPageIndex) Offset(int) int64             { return 0 }
-func (index floatPageIndex) CompressedPageSize(int) int64 { return index.page.Size() }
-func (index floatPageIndex) FirstRowIndex(int) int64      { return 0 }
+type int64OffsetIndex struct{ page *int64Page }
 
-func (index doublePageIndex) Offset(int) int64             { return 0 }
-func (index doublePageIndex) CompressedPageSize(int) int64 { return index.page.Size() }
-func (index doublePageIndex) FirstRowIndex(int) int64      { return 0 }
+func (i int64OffsetIndex) NumPages() int                { return 1 }
+func (i int64OffsetIndex) Offset(int) int64             { return 0 }
+func (i int64OffsetIndex) CompressedPageSize(int) int64 { return i.page.Size() }
+func (i int64OffsetIndex) FirstRowIndex(int) int64      { return 0 }
 
-func (index uint32PageIndex) Offset(int) int64             { return 0 }
-func (index uint32PageIndex) CompressedPageSize(int) int64 { return index.page.Size() }
-func (index uint32PageIndex) FirstRowIndex(int) int64      { return 0 }
+type int96OffsetIndex struct{ page *int96Page }
 
-func (index uint64PageIndex) Offset(int) int64             { return 0 }
-func (index uint64PageIndex) CompressedPageSize(int) int64 { return index.page.Size() }
-func (index uint64PageIndex) FirstRowIndex(int) int64      { return 0 }
+func (i int96OffsetIndex) NumPages() int                { return 1 }
+func (i int96OffsetIndex) Offset(int) int64             { return 0 }
+func (i int96OffsetIndex) CompressedPageSize(int) int64 { return i.page.Size() }
+func (i int96OffsetIndex) FirstRowIndex(int) int64      { return 0 }
+
+type floatOffsetIndex struct{ page *floatPage }
+
+func (i floatOffsetIndex) NumPages() int                { return 1 }
+func (i floatOffsetIndex) Offset(int) int64             { return 0 }
+func (i floatOffsetIndex) CompressedPageSize(int) int64 { return i.page.Size() }
+func (i floatOffsetIndex) FirstRowIndex(int) int64      { return 0 }
+
+type doubleOffsetIndex struct{ page *doublePage }
+
+func (i doubleOffsetIndex) NumPages() int                { return 1 }
+func (i doubleOffsetIndex) Offset(int) int64             { return 0 }
+func (i doubleOffsetIndex) CompressedPageSize(int) int64 { return i.page.Size() }
+func (i doubleOffsetIndex) FirstRowIndex(int) int64      { return 0 }
+
+type uint32OffsetIndex struct{ page uint32Page }
+
+func (i uint32OffsetIndex) NumPages() int                { return 1 }
+func (i uint32OffsetIndex) Offset(int) int64             { return 0 }
+func (i uint32OffsetIndex) CompressedPageSize(int) int64 { return i.page.Size() }
+func (i uint32OffsetIndex) FirstRowIndex(int) int64      { return 0 }
+
+type uint64OffsetIndex struct{ page uint64Page }
+
+func (i uint64OffsetIndex) NumPages() int                { return 1 }
+func (i uint64OffsetIndex) Offset(int) int64             { return 0 }
+func (i uint64OffsetIndex) CompressedPageSize(int) int64 { return i.page.Size() }
+func (i uint64OffsetIndex) FirstRowIndex(int) int64      { return 0 }

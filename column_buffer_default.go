@@ -49,9 +49,13 @@ func (col *booleanColumnBuffer) Clone() ColumnBuffer {
 
 func (col *booleanColumnBuffer) Type() Type { return col.typ }
 
-func (col *booleanColumnBuffer) ColumnIndex() ColumnIndex { return booleanPageIndex{&col.booleanPage} }
+func (col *booleanColumnBuffer) ColumnIndex() ColumnIndex {
+	return booleanColumnIndex{&col.booleanPage}
+}
 
-func (col *booleanColumnBuffer) OffsetIndex() OffsetIndex { return booleanPageIndex{&col.booleanPage} }
+func (col *booleanColumnBuffer) OffsetIndex() OffsetIndex {
+	return booleanOffsetIndex{&col.booleanPage}
+}
 
 func (col *booleanColumnBuffer) BloomFilter() BloomFilter { return nil }
 
@@ -142,9 +146,9 @@ func (col *int32ColumnBuffer) Clone() ColumnBuffer {
 
 func (col *int32ColumnBuffer) Type() Type { return col.typ }
 
-func (col *int32ColumnBuffer) ColumnIndex() ColumnIndex { return int32PageIndex{&col.int32Page} }
+func (col *int32ColumnBuffer) ColumnIndex() ColumnIndex { return int32ColumnIndex{&col.int32Page} }
 
-func (col *int32ColumnBuffer) OffsetIndex() OffsetIndex { return int32PageIndex{&col.int32Page} }
+func (col *int32ColumnBuffer) OffsetIndex() OffsetIndex { return int32OffsetIndex{&col.int32Page} }
 
 func (col *int32ColumnBuffer) BloomFilter() BloomFilter { return nil }
 
@@ -237,9 +241,9 @@ func (col *int64ColumnBuffer) Clone() ColumnBuffer {
 
 func (col *int64ColumnBuffer) Type() Type { return col.typ }
 
-func (col *int64ColumnBuffer) ColumnIndex() ColumnIndex { return int64PageIndex{&col.int64Page} }
+func (col *int64ColumnBuffer) ColumnIndex() ColumnIndex { return int64ColumnIndex{&col.int64Page} }
 
-func (col *int64ColumnBuffer) OffsetIndex() OffsetIndex { return int64PageIndex{&col.int64Page} }
+func (col *int64ColumnBuffer) OffsetIndex() OffsetIndex { return int64OffsetIndex{&col.int64Page} }
 
 func (col *int64ColumnBuffer) BloomFilter() BloomFilter { return nil }
 
@@ -332,9 +336,9 @@ func (col *int96ColumnBuffer) Clone() ColumnBuffer {
 
 func (col *int96ColumnBuffer) Type() Type { return col.typ }
 
-func (col *int96ColumnBuffer) ColumnIndex() ColumnIndex { return int96PageIndex{&col.int96Page} }
+func (col *int96ColumnBuffer) ColumnIndex() ColumnIndex { return int96ColumnIndex{&col.int96Page} }
 
-func (col *int96ColumnBuffer) OffsetIndex() OffsetIndex { return int96PageIndex{&col.int96Page} }
+func (col *int96ColumnBuffer) OffsetIndex() OffsetIndex { return int96OffsetIndex{&col.int96Page} }
 
 func (col *int96ColumnBuffer) BloomFilter() BloomFilter { return nil }
 
@@ -427,9 +431,9 @@ func (col *floatColumnBuffer) Clone() ColumnBuffer {
 
 func (col *floatColumnBuffer) Type() Type { return col.typ }
 
-func (col *floatColumnBuffer) ColumnIndex() ColumnIndex { return floatPageIndex{&col.floatPage} }
+func (col *floatColumnBuffer) ColumnIndex() ColumnIndex { return floatColumnIndex{&col.floatPage} }
 
-func (col *floatColumnBuffer) OffsetIndex() OffsetIndex { return floatPageIndex{&col.floatPage} }
+func (col *floatColumnBuffer) OffsetIndex() OffsetIndex { return floatOffsetIndex{&col.floatPage} }
 
 func (col *floatColumnBuffer) BloomFilter() BloomFilter { return nil }
 
@@ -522,9 +526,9 @@ func (col *doubleColumnBuffer) Clone() ColumnBuffer {
 
 func (col *doubleColumnBuffer) Type() Type { return col.typ }
 
-func (col *doubleColumnBuffer) ColumnIndex() ColumnIndex { return doublePageIndex{&col.doublePage} }
+func (col *doubleColumnBuffer) ColumnIndex() ColumnIndex { return doubleColumnIndex{&col.doublePage} }
 
-func (col *doubleColumnBuffer) OffsetIndex() OffsetIndex { return doublePageIndex{&col.doublePage} }
+func (col *doubleColumnBuffer) OffsetIndex() OffsetIndex { return doubleOffsetIndex{&col.doublePage} }
 
 func (col *doubleColumnBuffer) BloomFilter() BloomFilter { return nil }
 
@@ -596,9 +600,9 @@ func newUint32ColumnBuffer(typ Type, columnIndex int16, bufferSize int) uint32Co
 	return uint32ColumnBuffer{newInt32ColumnBuffer(typ, columnIndex, bufferSize)}
 }
 
-func (col uint32ColumnBuffer) ColumnIndex() ColumnIndex { return uint32PageIndex{col.page()} }
+func (col uint32ColumnBuffer) ColumnIndex() ColumnIndex { return uint32ColumnIndex{col.page()} }
 
-func (col uint32ColumnBuffer) OffsetIndex() OffsetIndex { return uint32PageIndex{col.page()} }
+func (col uint32ColumnBuffer) OffsetIndex() OffsetIndex { return uint32OffsetIndex{col.page()} }
 
 func (col uint32ColumnBuffer) page() uint32Page { return uint32Page{&col.int32Page} }
 
@@ -620,9 +624,9 @@ func newUint64ColumnBuffer(typ Type, columnIndex int16, bufferSize int) uint64Co
 	return uint64ColumnBuffer{newInt64ColumnBuffer(typ, columnIndex, bufferSize)}
 }
 
-func (col uint64ColumnBuffer) ColumnIndex() ColumnIndex { return uint64PageIndex{col.page()} }
+func (col uint64ColumnBuffer) ColumnIndex() ColumnIndex { return uint64ColumnIndex{col.page()} }
 
-func (col uint64ColumnBuffer) OffsetIndex() OffsetIndex { return uint64PageIndex{col.page()} }
+func (col uint64ColumnBuffer) OffsetIndex() OffsetIndex { return uint64OffsetIndex{col.page()} }
 
 func (col uint64ColumnBuffer) page() uint64Page { return uint64Page{&col.int64Page} }
 

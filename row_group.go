@@ -449,8 +449,8 @@ type emptyColumnChunk struct {
 func (c *emptyColumnChunk) Type() Type               { return c.typ }
 func (c *emptyColumnChunk) Column() int              { return int(c.column) }
 func (c *emptyColumnChunk) Pages() Pages             { return emptyPages{} }
-func (c *emptyColumnChunk) ColumnIndex() ColumnIndex { return &emptyColumnIndex }
-func (c *emptyColumnChunk) OffsetIndex() OffsetIndex { return &emptyOffsetIndex }
+func (c *emptyColumnChunk) ColumnIndex() ColumnIndex { return emptyColumnIndex{} }
+func (c *emptyColumnChunk) OffsetIndex() OffsetIndex { return emptyOffsetIndex{} }
 func (c *emptyColumnChunk) BloomFilter() BloomFilter { return emptyBloomFilter{} }
 func (c *emptyColumnChunk) NumValues() int64         { return 0 }
 
@@ -473,9 +473,6 @@ func (emptyPages) ReadPage() (Page, error) { return nil, io.EOF }
 func (emptyPages) SeekToRow(int64) error   { return nil }
 
 var (
-	emptyColumnIndex = columnIndex{}
-	emptyOffsetIndex = offsetIndex{}
-
 	_ RowReaderWithSchema = (*rowGroupRowReader)(nil)
 	_ RowWriterTo         = (*rowGroupRowReader)(nil)
 

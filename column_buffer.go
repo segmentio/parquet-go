@@ -690,11 +690,11 @@ func (col *byteArrayColumnBuffer) Clone() ColumnBuffer {
 func (col *byteArrayColumnBuffer) Type() Type { return col.typ }
 
 func (col *byteArrayColumnBuffer) ColumnIndex() ColumnIndex {
-	return byteArrayPageIndex{&col.byteArrayPage}
+	return byteArrayColumnIndex{&col.byteArrayPage}
 }
 
 func (col *byteArrayColumnBuffer) OffsetIndex() OffsetIndex {
-	return byteArrayPageIndex{&col.byteArrayPage}
+	return byteArrayOffsetIndex{&col.byteArrayPage}
 }
 
 func (col *byteArrayColumnBuffer) BloomFilter() BloomFilter { return nil }
@@ -804,11 +804,11 @@ func (col *fixedLenByteArrayColumnBuffer) Clone() ColumnBuffer {
 func (col *fixedLenByteArrayColumnBuffer) Type() Type { return col.typ }
 
 func (col *fixedLenByteArrayColumnBuffer) ColumnIndex() ColumnIndex {
-	return fixedLenByteArrayPageIndex{&col.fixedLenByteArrayPage}
+	return fixedLenByteArrayColumnIndex{&col.fixedLenByteArrayPage}
 }
 
 func (col *fixedLenByteArrayColumnBuffer) OffsetIndex() OffsetIndex {
-	return fixedLenByteArrayPageIndex{&col.fixedLenByteArrayPage}
+	return fixedLenByteArrayOffsetIndex{&col.fixedLenByteArrayPage}
 }
 
 func (col *fixedLenByteArrayColumnBuffer) BloomFilter() BloomFilter { return nil }
