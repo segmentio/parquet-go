@@ -762,6 +762,12 @@ func (c *writerColumn) flushFilterPages() error {
 		if c.page.filter == nil {
 			c.page.filter = c.newBloomFilterEncoder(numValues)
 		}
+
+		// If there is a dictionary, we need to only write the dictionary.
+		if dict := c.dictionary; dict != nil {
+			return dict.WriteTo(c.page.filter)
+		}
+
 		for _, page := range c.filter {
 			if err := page.WriteTo(c.page.filter); err != nil {
 				return err
