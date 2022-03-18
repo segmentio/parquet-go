@@ -341,9 +341,9 @@ func (d *int96Dictionary) Bounds(indexes []int32) (min, max Value) {
 		for _, i := range indexes[1:] {
 			value := d.values[i]
 			switch {
-			case value < minValue:
+			case value.Less(minValue):
 				minValue = value
-			case value > maxValue:
+			case maxValue.Less(value):
 				maxValue = value
 			}
 		}
