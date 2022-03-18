@@ -599,6 +599,8 @@ func newUint32Dictionary(typ Type, bufferSize int) uint32Dictionary {
 	return uint32Dictionary{newInt32Dictionary(typ, bufferSize)}
 }
 
+func (d uint32Dictionary) Type() Type { return newIndexedType(d.typ, d) }
+
 func (d uint32Dictionary) Bounds(indexes []int32) (min, max Value) {
 	if len(indexes) > 0 {
 		minValue := uint32(d.values[indexes[0]])
@@ -625,6 +627,8 @@ type uint64Dictionary struct{ *int64Dictionary }
 func newUint64Dictionary(typ Type, bufferSize int) uint64Dictionary {
 	return uint64Dictionary{newInt64Dictionary(typ, bufferSize)}
 }
+
+func (d uint64Dictionary) Type() Type { return newIndexedType(d.typ, d) }
 
 func (d uint64Dictionary) Bounds(indexes []int32) (min, max Value) {
 	if len(indexes) > 0 {
