@@ -28,10 +28,11 @@ type Dictionary interface {
 	Len() int
 
 	// Returns the dictionary value at the given index.
-	Index(int32) Value
+	Index(index int32) Value
 
-	// Inserts a value to the dictionary, returning the index at which the first
-	// value was recorded.
+	// Inserts a value to the dictionary and writes the indexes at which values
+	// were inserted. Returns the number of values inserted in the dictionary.
+	//Insert(indexes []int32, values []Value) int
 	Insert(Value) int32
 
 	// Given an array of dictionary indexes, lookup the values into the array
@@ -83,9 +84,8 @@ func (d *byteArrayDictionary) Index(i int32) Value {
 	return makeValueBytes(ByteArray, d.values.Index(int(i)))
 }
 
-func (d *byteArrayDictionary) Insert(v Value) int32 { return d.insert(v.ByteArray()) }
-
-func (d *byteArrayDictionary) insert(value []byte) int32 {
+func (d *byteArrayDictionary) Insert(v Value) int32 {
+	value := v.ByteArray()
 	if index, exists := d.index[string(value)]; exists {
 		return index
 	}
@@ -183,10 +183,7 @@ func (d *fixedLenByteArrayDictionary) value(i int32) []byte {
 }
 
 func (d *fixedLenByteArrayDictionary) Insert(v Value) int32 {
-	return d.insert(v.ByteArray())
-}
-
-func (d *fixedLenByteArrayDictionary) insert(value []byte) int32 {
+	value := v.ByteArray()
 	if index, exists := d.index[string(value)]; exists {
 		return index
 	}
