@@ -7,8 +7,8 @@ jobs:
     strategy:
       matrix:
         go:
-        - 1.17
-        - 1.18
+        - '1.17.x'
+        - '1.18.x'
         tags:
         - ''
         - purego
@@ -26,8 +26,19 @@ jobs:
     - name: Download Dependencies
       run: go mod download
 
-    - name: Validate Formatting
-      run: test -z $(find . -name '*.go' | xargs gofmt -l)
-
     - name: Run Tests
       run: go test -race -tags=${{ matrix.tags }} ./...
+
+  format:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Setup Go ${{ matrix.go }}
+      uses: actions/setup-go@v2
+      with:
+        go-version: '1.18.x'
+
+    - name: Validate formatting
+      run: make format
