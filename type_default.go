@@ -310,10 +310,18 @@ func (t *intType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 }
 
 func (t *intType) NewDictionary(bufferSize int) Dictionary {
-	if t.BitWidth == 64 {
-		return newInt64Dictionary(t, bufferSize)
+	if t.IsSigned {
+		if t.BitWidth == 64 {
+			return newInt64Dictionary(t, bufferSize)
+		} else {
+			return newInt32Dictionary(t, bufferSize)
+		}
 	} else {
-		return newInt32Dictionary(t, bufferSize)
+		if t.BitWidth == 64 {
+			return newUint64Dictionary(t, bufferSize)
+		} else {
+			return newUint32Dictionary(t, bufferSize)
+		}
 	}
 }
 

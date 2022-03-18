@@ -43,6 +43,27 @@ func (d *booleanDictionary) Lookup(indexes []int32, values []Value) {
 	}
 }
 
+func (d *booleanDictionary) Bounds(indexes []int32) (min, max Value) {
+	if len(indexes) > 0 {
+		minValue := d.values[indexes[0]]
+		maxValue := minValue
+
+		for _, i := range indexes[1:] {
+			value := d.values[i]
+			switch {
+			case compareBool(value, minValue) < 0:
+				minValue = value
+			case compareBool(value, maxValue) > 0:
+				maxValue = value
+			}
+		}
+
+		min = makeValueBoolean(minValue)
+		max = makeValueBoolean(maxValue)
+	}
+	return min, max
+}
+
 func (d *booleanDictionary) ReadFrom(decoder encoding.Decoder) error {
 	_, err := decoder.DecodeBoolean(d.values[:])
 	d.Reset()
@@ -108,6 +129,27 @@ func (d *int32Dictionary) Lookup(indexes []int32, values []Value) {
 	for i, j := range indexes {
 		values[i] = d.Index(int(j))
 	}
+}
+
+func (d *int32Dictionary) Bounds(indexes []int32) (min, max Value) {
+	if len(indexes) > 0 {
+		minValue := d.values[indexes[0]]
+		maxValue := minValue
+
+		for _, i := range indexes[1:] {
+			value := d.values[i]
+			switch {
+			case value < minValue:
+				minValue = value
+			case value > maxValue:
+				maxValue = value
+			}
+		}
+
+		min = makeValueInt32(minValue)
+		max = makeValueInt32(maxValue)
+	}
+	return min, max
 }
 
 func (d *int32Dictionary) ReadFrom(decoder encoding.Decoder) error {
@@ -190,6 +232,27 @@ func (d *int64Dictionary) Lookup(indexes []int32, values []Value) {
 	}
 }
 
+func (d *int64Dictionary) Bounds(indexes []int32) (min, max Value) {
+	if len(indexes) > 0 {
+		minValue := d.values[indexes[0]]
+		maxValue := minValue
+
+		for _, i := range indexes[1:] {
+			value := d.values[i]
+			switch {
+			case value < minValue:
+				minValue = value
+			case value > maxValue:
+				maxValue = value
+			}
+		}
+
+		min = makeValueInt64(minValue)
+		max = makeValueInt64(maxValue)
+	}
+	return min, max
+}
+
 func (d *int64Dictionary) ReadFrom(decoder encoding.Decoder) error {
 	d.Reset()
 	for {
@@ -268,6 +331,27 @@ func (d *int96Dictionary) Lookup(indexes []int32, values []Value) {
 	for i, j := range indexes {
 		values[i] = d.Index(int(j))
 	}
+}
+
+func (d *int96Dictionary) Bounds(indexes []int32) (min, max Value) {
+	if len(indexes) > 0 {
+		minValue := d.values[indexes[0]]
+		maxValue := minValue
+
+		for _, i := range indexes[1:] {
+			value := d.values[i]
+			switch {
+			case value < minValue:
+				minValue = value
+			case value > maxValue:
+				maxValue = value
+			}
+		}
+
+		min = makeValueInt96(minValue)
+		max = makeValueInt96(maxValue)
+	}
+	return min, max
 }
 
 func (d *int96Dictionary) ReadFrom(decoder encoding.Decoder) error {
@@ -350,6 +434,27 @@ func (d *floatDictionary) Lookup(indexes []int32, values []Value) {
 	}
 }
 
+func (d *floatDictionary) Bounds(indexes []int32) (min, max Value) {
+	if len(indexes) > 0 {
+		minValue := d.values[indexes[0]]
+		maxValue := minValue
+
+		for _, i := range indexes[1:] {
+			value := d.values[i]
+			switch {
+			case value < minValue:
+				minValue = value
+			case value > maxValue:
+				maxValue = value
+			}
+		}
+
+		min = makeValueFloat(minValue)
+		max = makeValueFloat(maxValue)
+	}
+	return min, max
+}
+
 func (d *floatDictionary) ReadFrom(decoder encoding.Decoder) error {
 	d.Reset()
 	for {
@@ -430,6 +535,27 @@ func (d *doubleDictionary) Lookup(indexes []int32, values []Value) {
 	}
 }
 
+func (d *doubleDictionary) Bounds(indexes []int32) (min, max Value) {
+	if len(indexes) > 0 {
+		minValue := d.values[indexes[0]]
+		maxValue := minValue
+
+		for _, i := range indexes[1:] {
+			value := d.values[i]
+			switch {
+			case value < minValue:
+				minValue = value
+			case value > maxValue:
+				maxValue = value
+			}
+		}
+
+		min = makeValueDouble(minValue)
+		max = makeValueDouble(maxValue)
+	}
+	return min, max
+}
+
 func (d *doubleDictionary) ReadFrom(decoder encoding.Decoder) error {
 	d.Reset()
 	for {
@@ -465,4 +591,58 @@ func (d *doubleDictionary) WriteTo(encoder encoding.Encoder) error {
 func (d *doubleDictionary) Reset() {
 	d.values = d.values[:0]
 	d.index = nil
+}
+
+type uint32Dictionary struct{ *int32Dictionary }
+
+func newUint32Dictionary(typ Type, bufferSize int) uint32Dictionary {
+	return uint32Dictionary{newInt32Dictionary(typ, bufferSize)}
+}
+
+func (d uint32Dictionary) Bounds(indexes []int32) (min, max Value) {
+	if len(indexes) > 0 {
+		minValue := uint32(d.values[indexes[0]])
+		maxValue := minValue
+
+		for _, i := range indexes[1:] {
+			value := uint32(d.values[i])
+			switch {
+			case value < minValue:
+				minValue = value
+			case value > maxValue:
+				maxValue = value
+			}
+		}
+
+		min = makeValueInt32(int32(minValue))
+		max = makeValueInt32(int32(maxValue))
+	}
+	return min, max
+}
+
+type uint64Dictionary struct{ *int64Dictionary }
+
+func newUint64Dictionary(typ Type, bufferSize int) uint64Dictionary {
+	return uint64Dictionary{newInt64Dictionary(typ, bufferSize)}
+}
+
+func (d uint64Dictionary) Bounds(indexes []int32) (min, max Value) {
+	if len(indexes) > 0 {
+		minValue := uint64(d.values[indexes[0]])
+		maxValue := minValue
+
+		for _, i := range indexes[1:] {
+			value := uint64(d.values[i])
+			switch {
+			case value < minValue:
+				minValue = value
+			case value > maxValue:
+				maxValue = value
+			}
+		}
+
+		min = makeValueInt64(int64(minValue))
+		max = makeValueInt64(int64(maxValue))
+	}
+	return min, max
 }

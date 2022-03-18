@@ -54,6 +54,29 @@ func (d *dictionary[T]) Lookup(indexes []int32, values []Value) {
 	}
 }
 
+func (d *dictionary[T]) Bounds(indexes []int32) (min, max Value) {
+	if len(indexes) > 0 {
+		minValue := d.values[indexes[0]]
+		maxValue := minValue
+		less := d.class.less
+
+		for _, i := range indexes[1:] {
+			value := d.values[i]
+			switch {
+			case less(value, minValue):
+				minValue = value
+			case less(maxValue, value):
+				maxValue = value
+			}
+		}
+
+		makeValue := d.class.makeValue
+		min = makeValue(minValue)
+		max = makeValue(maxValue)
+	}
+	return min, max
+}
+
 func (d *dictionary[T]) ReadFrom(decoder encoding.Decoder) error {
 	d.Reset()
 	for {

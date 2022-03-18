@@ -1,6 +1,7 @@
 package parquet
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 
@@ -39,6 +40,9 @@ type Dictionary interface {
 	// The method panics if len(indexes) > len(values), or one of the indexes
 	// is negative or greater than the highest index in the dictionary.
 	Lookup(indexes []int32, values []Value)
+
+	// Returns the min and max values found in the given indexes.
+	Bounds(indexed []int32) (min, max Value)
 
 	// Reads the dictionary from the decoder passed as argument.
 	//
@@ -97,6 +101,27 @@ func (d *byteArrayDictionary) Lookup(indexes []int32, values []Value) {
 	for i, j := range indexes {
 		values[i] = d.Index(int(j))
 	}
+}
+
+func (d *byteArrayDictionary) Bounds(indexes []int32) (min, max Value) {
+	if len(indexes) > 0 {
+		minValue := d.values.Index(int(indexes[0]))
+		maxValue := minValue
+
+		for _, i := range indexes[1:] {
+			value := d.values.Index(int(i))
+			switch {
+			case bytes.Compare(value, minValue) < 0:
+				minValue = value
+			case bytes.Compare(value, maxValue) > 0:
+				maxValue = value
+			}
+		}
+
+		min = makeValueBytes(ByteArray, minValue)
+		max = makeValueBytes(ByteArray, maxValue)
+	}
+	return min, max
 }
 
 func (d *byteArrayDictionary) ReadFrom(decoder encoding.Decoder) error {
@@ -179,6 +204,27 @@ func (d *fixedLenByteArrayDictionary) Lookup(indexes []int32, values []Value) {
 	}
 }
 
+func (d *fixedLenByteArrayDictionary) Bounds(indexes []int32) (min, max Value) {
+	if len(indexes) > 0 {
+		minValue := d.value(int(indexes[0]))
+		maxValue := minValue
+
+		for _, i := range indexes[1:] {
+			value := d.value(int(i))
+			switch {
+			case bytes.Compare(value, minValue) < 0:
+				minValue = value
+			case bytes.Compare(value, maxValue) > 0:
+				maxValue = value
+			}
+		}
+
+		min = makeValueBytes(FixedLenByteArray, minValue)
+		max = makeValueBytes(FixedLenByteArray, maxValue)
+	}
+	return min, max
+}
+
 func (d *fixedLenByteArrayDictionary) ReadFrom(decoder encoding.Decoder) error {
 	d.Reset()
 	for {
@@ -250,21 +296,7 @@ func (page *indexedPage) NumValues() int64 { return int64(len(page.values)) }
 func (page *indexedPage) NumNulls() int64 { return 0 }
 
 func (page *indexedPage) Bounds() (min, max Value) {
-	if len(page.values) > 0 {
-		min = page.dict.Index(int(page.values[0]))
-		max = min
-		typ := page.dict.Type()
-
-		for _, i := range page.values[1:] {
-			value := page.dict.Index(int(i))
-			switch {
-			case typ.Compare(value, min) < 0:
-				min = value
-			case typ.Compare(value, max) > 0:
-				max = value
-			}
-		}
-	}
+	min, max = page.dict.Bounds(page.values)
 	min.columnIndex = page.columnIndex
 	max.columnIndex = page.columnIndex
 	return min, max
