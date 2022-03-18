@@ -572,26 +572,48 @@ func TestBloomFilterForDict(t *testing.T) {
 }
 
 func TestEmptyFile(t *testing.T) {
-	tmp, err := os.CreateTemp("/tmp", "*.parquet")
-	if err != nil {
-		t.Error(err)
-	}
-	defer tmp.Close()
-	path := tmp.Name()
-	defer os.Remove(path)
+	f := func(t *testing.T, schema *parquet.Schema) {
+		tmp, err := os.CreateTemp("/tmp", "*.parquet")
+		if err != nil {
+			t.Error(err)
+		}
+		defer tmp.Close()
+		path := tmp.Name()
+		defer os.Remove(path)
 
-	writer := parquet.NewWriter(tmp)
-	if err := writer.Close(); err != nil {
-		t.Error(err)
+		writer := parquet.NewWriter(tmp, schema)
+		if err := writer.Close(); err != nil {
+			t.Error(err)
+		}
+
+		fs, err := tmp.Stat()
+		if err != nil {
+			t.Error(err)
+		}
+
+		_, err = parquet.OpenFile(tmp, fs.Size())
+		if err != nil && !errors.Is(err, parquet.ErrMissingRootColumn) {
+			t.Errorf("expected error %s, got %s", parquet.ErrMissingRootColumn, err)
+		}
 	}
 
-	fs, err := tmp.Stat()
-	if err != nil {
-		t.Error(err)
+	tests := []struct {
+		scenario string
+		schema   *parquet.Schema
+	}{
+		{
+			scenario: "empty file with no schema",
+			schema:   nil,
+		},
+		{
+			scenario: "empty file with schema",
+			schema:   parquet.SchemaOf(new(firstAndLastName)),
+		},
 	}
 
-	_, err = parquet.OpenFile(tmp, fs.Size())
-	if !errors.Is(err, parquet.ErrMissingRootColumn) {
-		t.Errorf("expected error %s, got %s", parquet.ErrMissingRootColumn, err)
+	for _, test := range tests {
+		t.Run(test.scenario, func(t *testing.T) {
+			f(t, test.schema)
+		})
 	}
 }
