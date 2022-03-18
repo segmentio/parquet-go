@@ -141,7 +141,12 @@ func (w *Writer) Write(row interface{}) error {
 //
 // The row is expected to contain values for each column of the writer's schema,
 // in the order produced by the parquet.(*Schema).Deconstruct method.
-func (w *Writer) WriteRow(row Row) error { return w.writer.WriteRow(row) }
+func (w *Writer) WriteRow(row Row) error {
+	if w.schema == nil {
+		return ErrRowGroupSchemaMissing
+	}
+	return w.writer.WriteRow(row)
+}
 
 // WriteRowGroup writes a row group to the parquet file.
 //
@@ -151,10 +156,6 @@ func (w *Writer) WriteRow(row Row) error { return w.writer.WriteRow(row) }
 // The content of the row group is flushed to the writer; after the method
 // returns successfully, the row group will be empty and in ready to be reused.
 func (w *Writer) WriteRowGroup(rowGroup RowGroup) (int64, error) {
-	if rowGroup.NumRows() == 0 {
-		return 0, nil
-	}
-
 	rowGroupSchema := rowGroup.Schema()
 	switch {
 	case rowGroupSchema == nil:

@@ -364,8 +364,11 @@ func TestBufferGenerateBloomFilters(t *testing.T) {
 		}
 		_, err := parquet.CopyRows(writer, buffer.Rows())
 		if err != nil {
-			t.Error(err)
-			return false
+			if len(rows) == 0 && !errors.Is(err, parquet.ErrRowGroupSchemaMissing) {
+				t.Error(err)
+				return false
+			}
+			return true
 		}
 		if err := writer.Close(); err != nil {
 			t.Error(err)

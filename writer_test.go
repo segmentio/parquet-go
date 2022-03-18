@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -50,7 +51,6 @@ func generateParquetFile(dataPageVersion int, rows rows) ([]byte, error) {
 	defer tmp.Close()
 	path := tmp.Name()
 	defer os.Remove(path)
-	//fmt.Println(path)
 
 	if err := writeParquetFile(tmp, rows, parquet.DataPageVersion(dataPageVersion), parquet.PageBufferSize(20)); err != nil {
 		return nil, err
@@ -616,4 +616,35 @@ func TestEmptyFile(t *testing.T) {
 			f(t, test.schema)
 		})
 	}
+}
+
+func TestFileWithNoSchema(t *testing.T) {
+	tmp, err := os.CreateTemp("/tmp", "*.parquet")
+	if err != nil {
+		t.Error(err)
+	}
+	defer tmp.Close()
+	path := tmp.Name()
+	defer os.Remove(path)
+
+	if err := writeToFileWithNoSchema(tmp); err != parquet.ErrRowGroupSchemaMissing {
+		t.Error(err)
+	}
+}
+
+func writeToFileWithNoSchema(w io.Writer) error {
+	writer := parquet.NewWriter(w)
+	if err := writer.Close(); err != nil {
+		return err
+	}
+
+	row := &firstAndLastName{FirstName: "Han", LastName: "Solo"}
+	schema := parquet.SchemaOf(row)
+	values := schema.Deconstruct(nil, row)
+
+	if err := writer.WriteRow(values); err != nil {
+		return err
+	}
+
+	return nil
 }

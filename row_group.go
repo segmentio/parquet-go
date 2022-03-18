@@ -427,7 +427,6 @@ func newEmptyRowGroup(schema *Schema) *emptyRowGroup {
 		schema:  schema,
 		columns: make([]emptyColumnChunk, numLeafColumnsOf(schema)),
 	}
-
 	forEachLeafColumnOf(schema, func(leaf leafColumn) {
 		g.columns[leaf.columnIndex].typ = leaf.node.Type()
 		g.columns[leaf.columnIndex].column = leaf.columnIndex

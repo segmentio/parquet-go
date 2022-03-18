@@ -193,7 +193,6 @@ func copyRows(dst RowWriter, src RowReader, buf []Value) (written int64, ret []V
 			}
 			return written, buf, err
 		}
-
 		if err = dst.WriteRow(buf); err != nil {
 			return written, buf, err
 		}
