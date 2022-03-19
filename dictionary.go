@@ -30,8 +30,11 @@ type Dictionary interface {
 	// Returns the dictionary value at the given index.
 	Index(index int32) Value
 
-	// Inserts a value to the dictionary and writes the indexes at which values
-	// were inserted.
+	// Inserts values from the second slice to the dictionary and writes the
+	// indexes at which each value was inserted to the first slice.
+	//
+	// The method panics if the length of the indexes slice is smaller than the
+	// length of the values slice.
 	Insert(indexes []int32, values []Value)
 
 	// Given an array of dictionary indexes, lookup the values into the array
