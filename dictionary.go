@@ -28,11 +28,14 @@ type Dictionary interface {
 	Len() int
 
 	// Returns the dictionary value at the given index.
-	Index(int) Value
+	Index(index int32) Value
 
-	// Inserts a value to the dictionary, returning the index at which it was
-	// recorded.
-	Insert(Value) int
+	// Inserts values from the second slice to the dictionary and writes the
+	// indexes at which each value was inserted to the first slice.
+	//
+	// The method panics if the length of the indexes slice is smaller than the
+	// length of the values slice.
+	Insert(indexes []int32, values []Value)
 
 	// Given an array of dictionary indexes, lookup the values into the array
 	// of values passed as second argument.
@@ -79,27 +82,41 @@ func (d *byteArrayDictionary) Type() Type { return newIndexedType(d.typ, d) }
 
 func (d *byteArrayDictionary) Len() int { return d.values.Len() }
 
-func (d *byteArrayDictionary) Index(i int) Value { return makeValueBytes(ByteArray, d.values.Index(i)) }
+func (d *byteArrayDictionary) Index(i int32) Value {
+	return makeValueBytes(ByteArray, d.values.Index(int(i)))
+}
 
-func (d *byteArrayDictionary) Insert(v Value) int { return d.insert(v.ByteArray()) }
+func (d *byteArrayDictionary) Insert(indexes []int32, values []Value) {
+	_ = indexes[:len(values)]
 
-func (d *byteArrayDictionary) insert(value []byte) int {
-	if index, exists := d.index[string(value)]; exists {
-		return int(index)
-	}
-	d.values.Push(value)
-	index := d.values.Len() - 1
-	stringValue := bits.BytesToString(d.values.Index(index))
 	if d.index == nil {
+		index := int32(0)
 		d.index = make(map[string]int32, d.values.Cap())
+		d.values.Range(func(v []byte) bool {
+			d.index[bits.BytesToString(v)] = index
+			index++
+			return true
+		})
 	}
-	d.index[stringValue] = int32(index)
-	return index
+
+	for i, v := range values {
+		value := v.ByteArray()
+
+		index, exists := d.index[string(value)]
+		if !exists {
+			d.values.Push(value)
+			index = int32(d.values.Len() - 1)
+			stringValue := bits.BytesToString(d.values.Index(int(index)))
+			d.index[stringValue] = index
+		}
+
+		indexes[i] = index
+	}
 }
 
 func (d *byteArrayDictionary) Lookup(indexes []int32, values []Value) {
 	for i, j := range indexes {
-		values[i] = d.Index(int(j))
+		values[i] = d.Index(j)
 	}
 }
 
@@ -172,45 +189,53 @@ func (d *fixedLenByteArrayDictionary) Type() Type { return newIndexedType(d.typ,
 
 func (d *fixedLenByteArrayDictionary) Len() int { return len(d.values) / d.size }
 
-func (d *fixedLenByteArrayDictionary) Index(i int) Value {
+func (d *fixedLenByteArrayDictionary) Index(i int32) Value {
 	return makeValueBytes(FixedLenByteArray, d.value(i))
 }
 
-func (d *fixedLenByteArrayDictionary) value(i int) []byte {
-	return d.values[i*d.size : (i+1)*d.size]
+func (d *fixedLenByteArrayDictionary) value(i int32) []byte {
+	return d.values[int(i)*d.size : int(i+1)*d.size]
 }
 
-func (d *fixedLenByteArrayDictionary) Insert(v Value) int {
-	return d.insert(v.ByteArray())
-}
+func (d *fixedLenByteArrayDictionary) Insert(indexes []int32, values []Value) {
+	_ = indexes[:len(values)]
 
-func (d *fixedLenByteArrayDictionary) insert(value []byte) int {
-	if index, exists := d.index[string(value)]; exists {
-		return int(index)
-	}
 	if d.index == nil {
 		d.index = make(map[string]int32, cap(d.values)/d.size)
+		for i, j := 0, int32(0); i < len(d.values); i += d.size {
+			d.index[bits.BytesToString(d.values[i:i+d.size])] = j
+			j++
+		}
 	}
-	i := d.Len()
-	n := len(d.values)
-	d.values = append(d.values, value...)
-	d.index[bits.BytesToString(d.values[n:])] = int32(i)
-	return i
+
+	for i, v := range values {
+		value := v.ByteArray()
+
+		index, exists := d.index[string(value)]
+		if !exists {
+			index = int32(d.Len())
+			start := len(d.values)
+			d.values = append(d.values, value...)
+			d.index[bits.BytesToString(d.values[start:])] = index
+		}
+
+		indexes[i] = index
+	}
 }
 
 func (d *fixedLenByteArrayDictionary) Lookup(indexes []int32, values []Value) {
 	for i, j := range indexes {
-		values[i] = d.Index(int(j))
+		values[i] = d.Index(j)
 	}
 }
 
 func (d *fixedLenByteArrayDictionary) Bounds(indexes []int32) (min, max Value) {
 	if len(indexes) > 0 {
-		minValue := d.value(int(indexes[0]))
+		minValue := d.value(indexes[0])
 		maxValue := minValue
 
 		for _, i := range indexes[1:] {
-			value := d.value(int(i))
+			value := d.value(i)
 			switch {
 			case bytes.Compare(value, minValue) < 0:
 				minValue = value
@@ -338,7 +363,7 @@ type indexedPageReader struct {
 func (r *indexedPageReader) ReadValues(values []Value) (n int, err error) {
 	var v Value
 	for n < len(values) && r.offset < len(r.page.values) {
-		v = r.page.dict.Index(int(r.page.values[r.offset]))
+		v = r.page.dict.Index(r.page.values[r.offset])
 		v.columnIndex = r.page.columnIndex
 		values[n] = v
 		r.offset++
@@ -399,8 +424,8 @@ func (col *indexedColumnBuffer) Cap() int { return cap(col.values) }
 func (col *indexedColumnBuffer) Len() int { return len(col.values) }
 
 func (col *indexedColumnBuffer) Less(i, j int) bool {
-	u := col.dict.Index(int(col.values[i]))
-	v := col.dict.Index(int(col.values[j]))
+	u := col.dict.Index(col.values[i])
+	v := col.dict.Index(col.values[j])
 	return col.typ.Compare(u, v) < 0
 }
 
@@ -409,9 +434,18 @@ func (col *indexedColumnBuffer) Swap(i, j int) {
 }
 
 func (col *indexedColumnBuffer) WriteValues(values []Value) (int, error) {
-	for _, v := range values {
-		col.values = append(col.values, int32(col.dict.Insert(v)))
+	i := len(col.values)
+	j := len(col.values) + len(values)
+
+	if j <= cap(col.values) {
+		col.values = col.values[:j]
+	} else {
+		colValues := make([]int32, j)
+		copy(colValues, col.values)
+		col.values = colValues
 	}
+
+	col.dict.Insert(col.values[i:], values)
 	return len(values), nil
 }
 
@@ -422,8 +456,8 @@ func (col *indexedColumnBuffer) WriteRow(row Row) error {
 	if len(row) > 1 {
 		return errRowHasTooManyValues(int64(len(row)))
 	}
-	col.values = append(col.values, int32(col.dict.Insert(row[0])))
-	return nil
+	_, err := col.WriteValues(row[:1])
+	return err
 }
 
 func (col *indexedColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {
@@ -433,7 +467,7 @@ func (col *indexedColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {
 	case index >= int64(len(col.values)):
 		return row, io.EOF
 	default:
-		v := col.dict.Index(int(col.values[index]))
+		v := col.dict.Index(col.values[index])
 		v.columnIndex = col.columnIndex
 		return append(row, v), nil
 	}
