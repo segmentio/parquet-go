@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"math/rand"
 	"reflect"
 
 	"github.com/segmentio/parquet-go"
+	"github.com/segmentio/parquet-go/deprecated"
 )
 
 type Contact struct {
@@ -146,4 +148,52 @@ func makeRows(any interface{}) rows {
 		slice[i] = value.Index(i).Interface()
 	}
 	return rows(slice)
+}
+
+func randValueFuncOf(t parquet.Type) func(*rand.Rand) parquet.Value {
+	switch k := t.Kind(); k {
+	case parquet.Boolean:
+		return func(r *rand.Rand) parquet.Value {
+			return parquet.ValueOf(r.Float64() < 0.5)
+		}
+
+	case parquet.Int32:
+		return func(r *rand.Rand) parquet.Value {
+			return parquet.ValueOf(r.Int31())
+		}
+
+	case parquet.Int64:
+		return func(r *rand.Rand) parquet.Value {
+			return parquet.ValueOf(r.Int63())
+		}
+
+	case parquet.Int96:
+		return func(r *rand.Rand) parquet.Value {
+			return parquet.ValueOf(deprecated.Int96{
+				0: r.Uint32(),
+				1: r.Uint32(),
+				2: r.Uint32(),
+			})
+		}
+
+	case parquet.Float:
+		return func(r *rand.Rand) parquet.Value {
+			return parquet.ValueOf(r.Float32())
+		}
+
+	case parquet.Double:
+		return func(r *rand.Rand) parquet.Value {
+			return parquet.ValueOf(r.Float64())
+		}
+
+	case parquet.ByteArray:
+		return func(r *rand.Rand) parquet.Value {
+			n := r.Intn(49) + 1
+			b := make([]byte, n)
+			return parquet.ValueOf(b)
+		}
+
+	default:
+		panic("NOT IMPLEMENTED")
+	}
 }

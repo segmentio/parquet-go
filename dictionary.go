@@ -1,10 +1,10 @@
 package parquet
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 
-	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/internal/bits"
 )
@@ -28,11 +28,14 @@ type Dictionary interface {
 	Len() int
 
 	// Returns the dictionary value at the given index.
-	Index(int) Value
+	Index(index int32) Value
 
-	// Inserts a value to the dictionary, returning the index at which it was
-	// recorded.
-	Insert(Value) int
+	// Inserts values from the second slice to the dictionary and writes the
+	// indexes at which each value was inserted to the first slice.
+	//
+	// The method panics if the length of the indexes slice is smaller than the
+	// length of the values slice.
+	Insert(indexes []int32, values []Value)
 
 	// Given an array of dictionary indexes, lookup the values into the array
 	// of values passed as second argument.
@@ -40,6 +43,9 @@ type Dictionary interface {
 	// The method panics if len(indexes) > len(values), or one of the indexes
 	// is negative or greater than the highest index in the dictionary.
 	Lookup(indexes []int32, values []Value)
+
+	// Returns the min and max values found in the given indexes.
+	Bounds(indexed []int32) (min, max Value)
 
 	// Reads the dictionary from the decoder passed as argument.
 	//
@@ -59,463 +65,6 @@ func dictCap(bufferSize, valueItemSize int) int {
 	return atLeastOne(bufferSize / (valueItemSize + indexItemSize))
 }
 
-// The boolean dictionary always contains two values for true and false.
-type booleanDictionary struct {
-	typ    Type
-	values [2]bool
-}
-
-func newBooleanDictionary(typ Type) *booleanDictionary {
-	return &booleanDictionary{
-		typ:    typ,
-		values: [2]bool{false, true},
-	}
-}
-
-func (d *booleanDictionary) Type() Type { return newIndexedType(d.typ, d) }
-
-func (d *booleanDictionary) Len() int { return 2 }
-
-func (d *booleanDictionary) Index(i int) Value { return makeValueBoolean(d.values[i]) }
-
-func (d *booleanDictionary) Insert(v Value) int {
-	if v.Boolean() {
-		return 1
-	} else {
-		return 0
-	}
-}
-
-func (d *booleanDictionary) Lookup(indexes []int32, values []Value) {
-	for i, j := range indexes {
-		values[i] = d.Index(int(j))
-	}
-}
-
-func (d *booleanDictionary) ReadFrom(decoder encoding.Decoder) error {
-	_, err := decoder.DecodeBoolean(d.values[:])
-	d.Reset()
-	if err != nil {
-		if err == io.EOF {
-			err = nil
-		} else {
-			err = fmt.Errorf("reading parquet dictionary of boolean values: %w", err)
-		}
-	}
-	return err
-}
-
-func (d *booleanDictionary) WriteTo(encoder encoding.Encoder) error {
-	if err := encoder.EncodeBoolean(d.values[:]); err != nil {
-		return fmt.Errorf("writing parquet dictionary of %d boolean values: %w", d.Len(), err)
-	}
-	return nil
-}
-
-func (d *booleanDictionary) Reset() {
-	d.values = [2]bool{false, true}
-}
-
-type int32Dictionary struct {
-	typ    Type
-	values []int32
-	index  map[int32]int32
-}
-
-func newInt32Dictionary(typ Type, bufferSize int) *int32Dictionary {
-	return &int32Dictionary{
-		typ:    typ,
-		values: make([]int32, 0, dictCap(bufferSize, 4)),
-	}
-}
-
-func (d *int32Dictionary) Type() Type { return newIndexedType(d.typ, d) }
-
-func (d *int32Dictionary) Len() int { return len(d.values) }
-
-func (d *int32Dictionary) Index(i int) Value { return makeValueInt32(d.values[i]) }
-
-func (d *int32Dictionary) Insert(v Value) int { return d.insert(v.Int32()) }
-
-func (d *int32Dictionary) insert(value int32) int {
-	if index, exists := d.index[value]; exists {
-		return int(index)
-	}
-	if d.index == nil {
-		d.index = make(map[int32]int32, cap(d.values))
-		for i, v := range d.values {
-			d.index[v] = int32(i)
-		}
-	}
-	index := len(d.values)
-	d.index[value] = int32(index)
-	d.values = append(d.values, value)
-	return index
-}
-
-func (d *int32Dictionary) Lookup(indexes []int32, values []Value) {
-	for i, j := range indexes {
-		values[i] = d.Index(int(j))
-	}
-}
-
-func (d *int32Dictionary) ReadFrom(decoder encoding.Decoder) error {
-	d.Reset()
-	for {
-		if len(d.values) == cap(d.values) {
-			newValues := make([]int32, len(d.values), 2*cap(d.values))
-			copy(newValues, d.values)
-			d.values = newValues
-		}
-
-		n, err := decoder.DecodeInt32(d.values[len(d.values):cap(d.values)])
-		if n > 0 {
-			d.values = d.values[:len(d.values)+n]
-		}
-
-		if err != nil {
-			if err == io.EOF {
-				err = nil
-			} else {
-				err = fmt.Errorf("reading parquet dictionary of int32 values: %w", err)
-			}
-			return err
-		}
-	}
-}
-
-func (d *int32Dictionary) WriteTo(encoder encoding.Encoder) error {
-	if err := encoder.EncodeInt32(d.values); err != nil {
-		return fmt.Errorf("writing parquet dictionary of %d int32 values: %w", d.Len(), err)
-	}
-	return nil
-}
-
-func (d *int32Dictionary) Reset() {
-	d.values = d.values[:0]
-	d.index = nil
-}
-
-type int64Dictionary struct {
-	typ    Type
-	values []int64
-	index  map[int64]int32
-}
-
-func newInt64Dictionary(typ Type, bufferSize int) *int64Dictionary {
-	return &int64Dictionary{
-		typ:    typ,
-		values: make([]int64, 0, dictCap(bufferSize, 8)),
-	}
-}
-
-func (d *int64Dictionary) Type() Type { return newIndexedType(d.typ, d) }
-
-func (d *int64Dictionary) Len() int { return len(d.values) }
-
-func (d *int64Dictionary) Index(i int) Value { return makeValueInt64(d.values[i]) }
-
-func (d *int64Dictionary) Insert(v Value) int { return d.insert(v.Int64()) }
-
-func (d *int64Dictionary) insert(value int64) int {
-	if index, exists := d.index[value]; exists {
-		return int(index)
-	}
-	if d.index == nil {
-		d.index = make(map[int64]int32, cap(d.values))
-		for i, v := range d.values {
-			d.index[v] = int32(i)
-		}
-	}
-	index := len(d.values)
-	d.index[value] = int32(index)
-	d.values = append(d.values, value)
-	return index
-}
-
-func (d *int64Dictionary) Lookup(indexes []int32, values []Value) {
-	for i, j := range indexes {
-		values[i] = d.Index(int(j))
-	}
-}
-
-func (d *int64Dictionary) ReadFrom(decoder encoding.Decoder) error {
-	d.Reset()
-	for {
-		if len(d.values) == cap(d.values) {
-			newValues := make([]int64, len(d.values), 2*cap(d.values))
-			copy(newValues, d.values)
-			d.values = newValues
-		}
-
-		n, err := decoder.DecodeInt64(d.values[len(d.values):cap(d.values)])
-		if n > 0 {
-			d.values = d.values[:len(d.values)+n]
-		}
-
-		if err != nil {
-			if err == io.EOF {
-				err = nil
-			} else {
-				err = fmt.Errorf("reading parquet dictionary of int64 values: %w", err)
-			}
-			return err
-		}
-	}
-}
-
-func (d *int64Dictionary) WriteTo(encoder encoding.Encoder) error {
-	if err := encoder.EncodeInt64(d.values); err != nil {
-		return fmt.Errorf("writing parquet dictionary of %d int64 values: %w", d.Len(), err)
-	}
-	return nil
-}
-
-func (d *int64Dictionary) Reset() {
-	d.values = d.values[:0]
-	d.index = nil
-}
-
-type int96Dictionary struct {
-	typ    Type
-	values []deprecated.Int96
-	index  map[deprecated.Int96]int32
-}
-
-func newInt96Dictionary(typ Type, bufferSize int) *int96Dictionary {
-	return &int96Dictionary{
-		typ:    typ,
-		values: make([]deprecated.Int96, 0, dictCap(bufferSize, 12)),
-	}
-}
-
-func (d *int96Dictionary) Type() Type { return newIndexedType(d.typ, d) }
-
-func (d *int96Dictionary) Len() int { return len(d.values) }
-
-func (d *int96Dictionary) Index(i int) Value { return makeValueInt96(d.values[i]) }
-
-func (d *int96Dictionary) Insert(v Value) int { return d.insert(v.Int96()) }
-
-func (d *int96Dictionary) insert(value deprecated.Int96) int {
-	if index, exists := d.index[value]; exists {
-		return int(index)
-	}
-	if d.index == nil {
-		d.index = make(map[deprecated.Int96]int32, cap(d.values))
-		for i, v := range d.values {
-			d.index[v] = int32(i)
-		}
-	}
-	index := len(d.values)
-	d.index[value] = int32(index)
-	d.values = append(d.values, value)
-	return index
-}
-
-func (d *int96Dictionary) Lookup(indexes []int32, values []Value) {
-	for i, j := range indexes {
-		values[i] = d.Index(int(j))
-	}
-}
-
-func (d *int96Dictionary) ReadFrom(decoder encoding.Decoder) error {
-	d.Reset()
-	for {
-		if len(d.values) == cap(d.values) {
-			newValues := make([]deprecated.Int96, len(d.values), 2*cap(d.values))
-			copy(newValues, d.values)
-			d.values = newValues
-		}
-
-		n, err := decoder.DecodeInt96(d.values[len(d.values):cap(d.values)])
-		if n > 0 {
-			d.values = d.values[:len(d.values)+n]
-		}
-
-		if err != nil {
-			if err == io.EOF {
-				err = nil
-			} else {
-				err = fmt.Errorf("reading parquet dictionary of int96 values: %w", err)
-			}
-			return err
-		}
-	}
-}
-
-func (d *int96Dictionary) WriteTo(encoder encoding.Encoder) error {
-	if err := encoder.EncodeInt96(d.values); err != nil {
-		return fmt.Errorf("writing parquet dictionary of %d int96 values: %w", d.Len(), err)
-	}
-	return nil
-}
-
-func (d *int96Dictionary) Reset() {
-	d.values = d.values[:0]
-	d.index = nil
-}
-
-type floatDictionary struct {
-	typ    Type
-	values []float32
-	index  map[float32]int32
-}
-
-func newFloatDictionary(typ Type, bufferSize int) *floatDictionary {
-	return &floatDictionary{
-		typ:    typ,
-		values: make([]float32, 0, dictCap(bufferSize, 4)),
-	}
-}
-
-func (d *floatDictionary) Type() Type { return newIndexedType(d.typ, d) }
-
-func (d *floatDictionary) Len() int { return len(d.values) }
-
-func (d *floatDictionary) Index(i int) Value { return makeValueFloat(d.values[i]) }
-
-func (d *floatDictionary) Insert(v Value) int { return d.insert(v.Float()) }
-
-func (d *floatDictionary) insert(value float32) int {
-	if index, exists := d.index[value]; exists {
-		return int(index)
-	}
-	if d.index == nil {
-		d.index = make(map[float32]int32, cap(d.values))
-		for i, v := range d.values {
-			d.index[v] = int32(i)
-		}
-	}
-	index := len(d.values)
-	d.index[value] = int32(index)
-	d.values = append(d.values, value)
-	return index
-}
-
-func (d *floatDictionary) Lookup(indexes []int32, values []Value) {
-	for i, j := range indexes {
-		values[i] = d.Index(int(j))
-	}
-}
-
-func (d *floatDictionary) ReadFrom(decoder encoding.Decoder) error {
-	d.Reset()
-	for {
-		if len(d.values) == cap(d.values) {
-			newValues := make([]float32, len(d.values), 2*cap(d.values))
-			copy(newValues, d.values)
-			d.values = newValues
-		}
-
-		n, err := decoder.DecodeFloat(d.values[len(d.values):cap(d.values)])
-		if n > 0 {
-			d.values = d.values[:len(d.values)+n]
-		}
-
-		if err != nil {
-			if err == io.EOF {
-				err = nil
-			} else {
-				err = fmt.Errorf("reading parquet dictionary of float values: %w", err)
-			}
-			return err
-		}
-	}
-}
-
-func (d *floatDictionary) WriteTo(encoder encoding.Encoder) error {
-	if err := encoder.EncodeFloat(d.values); err != nil {
-		return fmt.Errorf("writing parquet dictionary of %d float values: %w", d.Len(), err)
-	}
-	return nil
-}
-
-func (d *floatDictionary) Reset() {
-	d.values = d.values[:0]
-	d.index = nil
-}
-
-type doubleDictionary struct {
-	typ    Type
-	values []float64
-	index  map[float64]int32
-}
-
-func newDoubleDictionary(typ Type, bufferSize int) *doubleDictionary {
-	return &doubleDictionary{
-		typ:    typ,
-		values: make([]float64, 0, dictCap(bufferSize, 8)),
-	}
-}
-
-func (d *doubleDictionary) Type() Type { return newIndexedType(d.typ, d) }
-
-func (d *doubleDictionary) Len() int { return len(d.values) }
-
-func (d *doubleDictionary) Index(i int) Value { return makeValueDouble(d.values[i]) }
-
-func (d *doubleDictionary) Insert(v Value) int { return d.insert(v.Double()) }
-
-func (d *doubleDictionary) insert(value float64) int {
-	if index, exists := d.index[value]; exists {
-		return int(index)
-	}
-	if d.index == nil {
-		d.index = make(map[float64]int32, cap(d.values))
-		for i, v := range d.values {
-			d.index[v] = int32(i)
-		}
-	}
-	index := len(d.values)
-	d.index[value] = int32(index)
-	d.values = append(d.values, value)
-	return index
-}
-
-func (d *doubleDictionary) Lookup(indexes []int32, values []Value) {
-	for i, j := range indexes {
-		values[i] = d.Index(int(j))
-	}
-}
-
-func (d *doubleDictionary) ReadFrom(decoder encoding.Decoder) error {
-	d.Reset()
-	for {
-		if len(d.values) == cap(d.values) {
-			newValues := make([]float64, len(d.values), 2*cap(d.values))
-			copy(newValues, d.values)
-			d.values = newValues
-		}
-
-		n, err := decoder.DecodeDouble(d.values[len(d.values):cap(d.values)])
-		if n > 0 {
-			d.values = d.values[:len(d.values)+n]
-		}
-
-		if err != nil {
-			if err == io.EOF {
-				err = nil
-			} else {
-				err = fmt.Errorf("reading parquet dictionary of double values: %w", err)
-			}
-			return err
-		}
-	}
-}
-
-func (d *doubleDictionary) WriteTo(encoder encoding.Encoder) error {
-	if err := encoder.EncodeDouble(d.values); err != nil {
-		return fmt.Errorf("writing parquet dictionary of %d double values: %w", d.Len(), err)
-	}
-	return nil
-}
-
-func (d *doubleDictionary) Reset() {
-	d.values = d.values[:0]
-	d.index = nil
-}
-
 type byteArrayDictionary struct {
 	typ    Type
 	values encoding.ByteArrayList
@@ -533,28 +82,63 @@ func (d *byteArrayDictionary) Type() Type { return newIndexedType(d.typ, d) }
 
 func (d *byteArrayDictionary) Len() int { return d.values.Len() }
 
-func (d *byteArrayDictionary) Index(i int) Value { return makeValueBytes(ByteArray, d.values.Index(i)) }
+func (d *byteArrayDictionary) Index(i int32) Value {
+	return makeValueBytes(ByteArray, d.values.Index(int(i)))
+}
 
-func (d *byteArrayDictionary) Insert(v Value) int { return d.insert(v.ByteArray()) }
+func (d *byteArrayDictionary) Insert(indexes []int32, values []Value) {
+	_ = indexes[:len(values)]
 
-func (d *byteArrayDictionary) insert(value []byte) int {
-	if index, exists := d.index[string(value)]; exists {
-		return int(index)
-	}
-	d.values.Push(value)
-	index := d.values.Len() - 1
-	stringValue := bits.BytesToString(d.values.Index(index))
 	if d.index == nil {
+		index := int32(0)
 		d.index = make(map[string]int32, d.values.Cap())
+		d.values.Range(func(v []byte) bool {
+			d.index[bits.BytesToString(v)] = index
+			index++
+			return true
+		})
 	}
-	d.index[stringValue] = int32(index)
-	return index
+
+	for i, v := range values {
+		value := v.ByteArray()
+
+		index, exists := d.index[string(value)]
+		if !exists {
+			d.values.Push(value)
+			index = int32(d.values.Len() - 1)
+			stringValue := bits.BytesToString(d.values.Index(int(index)))
+			d.index[stringValue] = index
+		}
+
+		indexes[i] = index
+	}
 }
 
 func (d *byteArrayDictionary) Lookup(indexes []int32, values []Value) {
 	for i, j := range indexes {
-		values[i] = d.Index(int(j))
+		values[i] = d.Index(j)
 	}
+}
+
+func (d *byteArrayDictionary) Bounds(indexes []int32) (min, max Value) {
+	if len(indexes) > 0 {
+		minValue := d.values.Index(int(indexes[0]))
+		maxValue := minValue
+
+		for _, i := range indexes[1:] {
+			value := d.values.Index(int(i))
+			switch {
+			case bytes.Compare(value, minValue) < 0:
+				minValue = value
+			case bytes.Compare(value, maxValue) > 0:
+				maxValue = value
+			}
+		}
+
+		min = makeValueBytes(ByteArray, minValue)
+		max = makeValueBytes(ByteArray, maxValue)
+	}
+	return min, max
 }
 
 func (d *byteArrayDictionary) ReadFrom(decoder encoding.Decoder) error {
@@ -605,36 +189,65 @@ func (d *fixedLenByteArrayDictionary) Type() Type { return newIndexedType(d.typ,
 
 func (d *fixedLenByteArrayDictionary) Len() int { return len(d.values) / d.size }
 
-func (d *fixedLenByteArrayDictionary) Index(i int) Value {
+func (d *fixedLenByteArrayDictionary) Index(i int32) Value {
 	return makeValueBytes(FixedLenByteArray, d.value(i))
 }
 
-func (d *fixedLenByteArrayDictionary) value(i int) []byte {
-	return d.values[i*d.size : (i+1)*d.size]
+func (d *fixedLenByteArrayDictionary) value(i int32) []byte {
+	return d.values[int(i)*d.size : int(i+1)*d.size]
 }
 
-func (d *fixedLenByteArrayDictionary) Insert(v Value) int {
-	return d.insert(v.ByteArray())
-}
+func (d *fixedLenByteArrayDictionary) Insert(indexes []int32, values []Value) {
+	_ = indexes[:len(values)]
 
-func (d *fixedLenByteArrayDictionary) insert(value []byte) int {
-	if index, exists := d.index[string(value)]; exists {
-		return int(index)
-	}
 	if d.index == nil {
 		d.index = make(map[string]int32, cap(d.values)/d.size)
+		for i, j := 0, int32(0); i < len(d.values); i += d.size {
+			d.index[bits.BytesToString(d.values[i:i+d.size])] = j
+			j++
+		}
 	}
-	i := d.Len()
-	n := len(d.values)
-	d.values = append(d.values, value...)
-	d.index[bits.BytesToString(d.values[n:])] = int32(i)
-	return i
+
+	for i, v := range values {
+		value := v.ByteArray()
+
+		index, exists := d.index[string(value)]
+		if !exists {
+			index = int32(d.Len())
+			start := len(d.values)
+			d.values = append(d.values, value...)
+			d.index[bits.BytesToString(d.values[start:])] = index
+		}
+
+		indexes[i] = index
+	}
 }
 
 func (d *fixedLenByteArrayDictionary) Lookup(indexes []int32, values []Value) {
 	for i, j := range indexes {
-		values[i] = d.Index(int(j))
+		values[i] = d.Index(j)
 	}
+}
+
+func (d *fixedLenByteArrayDictionary) Bounds(indexes []int32) (min, max Value) {
+	if len(indexes) > 0 {
+		minValue := d.value(indexes[0])
+		maxValue := minValue
+
+		for _, i := range indexes[1:] {
+			value := d.value(i)
+			switch {
+			case bytes.Compare(value, minValue) < 0:
+				minValue = value
+			case bytes.Compare(value, maxValue) > 0:
+				maxValue = value
+			}
+		}
+
+		min = makeValueBytes(FixedLenByteArray, minValue)
+		max = makeValueBytes(FixedLenByteArray, maxValue)
+	}
+	return min, max
 }
 
 func (d *fixedLenByteArrayDictionary) ReadFrom(decoder encoding.Decoder) error {
@@ -708,21 +321,7 @@ func (page *indexedPage) NumValues() int64 { return int64(len(page.values)) }
 func (page *indexedPage) NumNulls() int64 { return 0 }
 
 func (page *indexedPage) Bounds() (min, max Value) {
-	if len(page.values) > 0 {
-		min = page.dict.Index(int(page.values[0]))
-		max = min
-		typ := page.dict.Type()
-
-		for _, i := range page.values[1:] {
-			value := page.dict.Index(int(i))
-			switch {
-			case typ.Compare(value, min) < 0:
-				min = value
-			case typ.Compare(value, max) > 0:
-				max = value
-			}
-		}
-	}
+	min, max = page.dict.Bounds(page.values)
 	min.columnIndex = page.columnIndex
 	max.columnIndex = page.columnIndex
 	return min, max
@@ -764,7 +363,7 @@ type indexedPageReader struct {
 func (r *indexedPageReader) ReadValues(values []Value) (n int, err error) {
 	var v Value
 	for n < len(values) && r.offset < len(r.page.values) {
-		v = r.page.dict.Index(int(r.page.values[r.offset]))
+		v = r.page.dict.Index(r.page.values[r.offset])
 		v.columnIndex = r.page.columnIndex
 		values[n] = v
 		r.offset++
@@ -825,8 +424,8 @@ func (col *indexedColumnBuffer) Cap() int { return cap(col.values) }
 func (col *indexedColumnBuffer) Len() int { return len(col.values) }
 
 func (col *indexedColumnBuffer) Less(i, j int) bool {
-	u := col.dict.Index(int(col.values[i]))
-	v := col.dict.Index(int(col.values[j]))
+	u := col.dict.Index(col.values[i])
+	v := col.dict.Index(col.values[j])
 	return col.typ.Compare(u, v) < 0
 }
 
@@ -835,9 +434,18 @@ func (col *indexedColumnBuffer) Swap(i, j int) {
 }
 
 func (col *indexedColumnBuffer) WriteValues(values []Value) (int, error) {
-	for _, v := range values {
-		col.values = append(col.values, int32(col.dict.Insert(v)))
+	i := len(col.values)
+	j := len(col.values) + len(values)
+
+	if j <= cap(col.values) {
+		col.values = col.values[:j]
+	} else {
+		colValues := make([]int32, j)
+		copy(colValues, col.values)
+		col.values = colValues
 	}
+
+	col.dict.Insert(col.values[i:], values)
 	return len(values), nil
 }
 
@@ -848,8 +456,8 @@ func (col *indexedColumnBuffer) WriteRow(row Row) error {
 	if len(row) > 1 {
 		return errRowHasTooManyValues(int64(len(row)))
 	}
-	col.values = append(col.values, int32(col.dict.Insert(row[0])))
-	return nil
+	_, err := col.WriteValues(row[:1])
+	return err
 }
 
 func (col *indexedColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {
@@ -859,7 +467,7 @@ func (col *indexedColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {
 	case index >= int64(len(col.values)):
 		return row, io.EOF
 	default:
-		v := col.dict.Index(int(col.values[index]))
+		v := col.dict.Index(col.values[index])
 		v.columnIndex = col.columnIndex
 		return append(row, v), nil
 	}
