@@ -187,7 +187,9 @@ func (d *BinaryPackedDecoder) decodeHeader() (blockSize, numMiniBlock, totalValu
 		return
 	}
 
-	if (blockSize <= 0) || (blockSize%128) != 0 {
+	if numMiniBlock == 0 {
+		err = fmt.Errorf("DELTA_BINARY_PACKED: invalid number of mini block (%d)", numMiniBlock)
+	} else if (blockSize <= 0) || (blockSize%128) != 0 {
 		err = fmt.Errorf("DELTA_BINARY_PACKED: invalid block size is not a multiple of 128 (%d)", blockSize)
 	} else if miniBlockSize := blockSize / numMiniBlock; (numMiniBlock <= 0) || (miniBlockSize%32) != 0 {
 		err = fmt.Errorf("DELTA_BINARY_PACKED: invalid mini block size is not a multiple of 32 (%d)", miniBlockSize)
