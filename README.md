@@ -32,10 +32,25 @@ The package is distributed as a standard Go module that programs can take a
 dependency on and install with the following command:
 
 ```
-$ go get github.com/segmentio/parquet-go
+go get github.com/segmentio/parquet-go
 ```
 
 Go 1.17 or later is required to use the package.
+
+### Compatibility Guarantees
+
+The package is currently released as a pre-v1 version, which gives maintainers
+the freedom to break backward compatibility to help improve the APIs as we learn
+which initial design decisions would need to be revisited to better support the
+use cases that the library solves for. These occurences are expected to be rare
+in frequency and documentation will be produce to guide users on how to adapt
+their programs to breaking changes.
+
+One anticipated change at this time is the exploration of introducing greater
+type safety by leveraging the generics feature released in Go 1.18.
+The targetted timeline for this change is end of 2022; programs depending on
+parquet-go will be expected to compile with Go 1.18 by then, at which point
+compatibility with Go 1.17 will be dropped.
 
 ## Usage
 
