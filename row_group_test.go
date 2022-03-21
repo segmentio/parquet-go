@@ -106,210 +106,216 @@ func testSeekToRow(t *testing.T, newRowGroup func([]Person) parquet.RowGroup) {
 	}
 }
 
-var mergeRowGroupsTests = [...]struct {
+type mergeRowGroupTestCase struct {
 	scenario string
 	options  []parquet.RowGroupOption
 	input    []parquet.RowGroup
 	output   parquet.RowGroup
-}{
-	{
-		scenario: "no row groups",
-		options: []parquet.RowGroupOption{
-			parquet.SchemaOf(Person{}),
-		},
-		output: sortedRowGroup(
-			[]parquet.RowGroupOption{
+}
+
+// Use a function instead of an array because otherwise the sortedRowGroup()
+// calls will exercise the code even if you're not running these test cases.
+func mergeRowGroupsTests() []mergeRowGroupTestCase {
+	return []mergeRowGroupTestCase{
+		{
+			scenario: "no row groups",
+			options: []parquet.RowGroupOption{
 				parquet.SchemaOf(Person{}),
 			},
-		),
-	},
+			output: sortedRowGroup(
+				[]parquet.RowGroupOption{
+					parquet.SchemaOf(Person{}),
+				},
+			),
+		},
 
-	{
-		scenario: "a single row group",
-		input: []parquet.RowGroup{
-			sortedRowGroup(nil,
+		{
+			scenario: "a single row group",
+			input: []parquet.RowGroup{
+				sortedRowGroup(nil,
+					Person{FirstName: "some", LastName: "one", Age: 30},
+					Person{FirstName: "some", LastName: "one else", Age: 31},
+					Person{FirstName: "and", LastName: "you", Age: 32},
+				),
+			},
+			output: sortedRowGroup(nil,
 				Person{FirstName: "some", LastName: "one", Age: 30},
 				Person{FirstName: "some", LastName: "one else", Age: 31},
 				Person{FirstName: "and", LastName: "you", Age: 32},
 			),
 		},
-		output: sortedRowGroup(nil,
-			Person{FirstName: "some", LastName: "one", Age: 30},
-			Person{FirstName: "some", LastName: "one else", Age: 31},
-			Person{FirstName: "and", LastName: "you", Age: 32},
-		),
-	},
 
-	{
-		scenario: "two row groups without ordering",
-		input: []parquet.RowGroup{
-			sortedRowGroup(nil, Person{FirstName: "some", LastName: "one", Age: 30}),
-			sortedRowGroup(nil, Person{FirstName: "some", LastName: "one else", Age: 31}),
+		{
+			scenario: "two row groups without ordering",
+			input: []parquet.RowGroup{
+				sortedRowGroup(nil, Person{FirstName: "some", LastName: "one", Age: 30}),
+				sortedRowGroup(nil, Person{FirstName: "some", LastName: "one else", Age: 31}),
+			},
+			output: sortedRowGroup(nil,
+				Person{FirstName: "some", LastName: "one", Age: 30},
+				Person{FirstName: "some", LastName: "one else", Age: 31},
+			),
 		},
-		output: sortedRowGroup(nil,
-			Person{FirstName: "some", LastName: "one", Age: 30},
-			Person{FirstName: "some", LastName: "one else", Age: 31},
-		),
-	},
 
-	{
-		scenario: "three row groups without ordering",
-		input: []parquet.RowGroup{
-			sortedRowGroup(nil, Person{FirstName: "some", LastName: "one", Age: 30}),
-			sortedRowGroup(nil, Person{FirstName: "some", LastName: "one else", Age: 31}),
-			sortedRowGroup(nil, Person{FirstName: "question", LastName: "answer", Age: 42}),
+		{
+			scenario: "three row groups without ordering",
+			input: []parquet.RowGroup{
+				sortedRowGroup(nil, Person{FirstName: "some", LastName: "one", Age: 30}),
+				sortedRowGroup(nil, Person{FirstName: "some", LastName: "one else", Age: 31}),
+				sortedRowGroup(nil, Person{FirstName: "question", LastName: "answer", Age: 42}),
+			},
+			output: sortedRowGroup(nil,
+				Person{FirstName: "some", LastName: "one", Age: 30},
+				Person{FirstName: "some", LastName: "one else", Age: 31},
+				Person{FirstName: "question", LastName: "answer", Age: 42},
+			),
 		},
-		output: sortedRowGroup(nil,
-			Person{FirstName: "some", LastName: "one", Age: 30},
-			Person{FirstName: "some", LastName: "one else", Age: 31},
-			Person{FirstName: "question", LastName: "answer", Age: 42},
-		),
-	},
 
-	{
-		scenario: "row groups sorted by ascending last name",
-		options: []parquet.RowGroupOption{
-			parquet.SortingColumns(
-				parquet.Ascending("LastName"),
-			),
-		},
-		input: []parquet.RowGroup{
-			sortedRowGroup(
-				[]parquet.RowGroupOption{
-					parquet.SortingColumns(
-						parquet.Ascending("LastName"),
-					),
-				},
-				Person{FirstName: "Han", LastName: "Solo"},
-				Person{FirstName: "Luke", LastName: "Skywalker"},
-			),
-			sortedRowGroup(
-				[]parquet.RowGroupOption{
-					parquet.SortingColumns(
-						parquet.Ascending("LastName"),
-					),
-				},
-				Person{FirstName: "Obiwan", LastName: "Kenobi"},
-			),
-		},
-		output: sortedRowGroup(nil,
-			Person{FirstName: "Obiwan", LastName: "Kenobi"},
-			Person{FirstName: "Luke", LastName: "Skywalker"},
-			Person{FirstName: "Han", LastName: "Solo"},
-		),
-	},
-
-	{
-		scenario: "row groups sorted by descending last name",
-		options: []parquet.RowGroupOption{
-			parquet.SortingColumns(
-				parquet.Descending("LastName"),
-			),
-		},
-		input: []parquet.RowGroup{
-			sortedRowGroup(
-				[]parquet.RowGroupOption{
-					parquet.SortingColumns(
-						parquet.Descending("LastName"),
-					),
-				},
-				Person{FirstName: "Han", LastName: "Solo"},
-				Person{FirstName: "Luke", LastName: "Skywalker"},
-			),
-			sortedRowGroup(
-				[]parquet.RowGroupOption{
-					parquet.SortingColumns(
-						parquet.Descending("LastName"),
-					),
-				},
-				Person{FirstName: "Obiwan", LastName: "Kenobi"},
-			),
-		},
-		output: sortedRowGroup(nil,
-			Person{FirstName: "Han", LastName: "Solo"},
-			Person{FirstName: "Luke", LastName: "Skywalker"},
-			Person{FirstName: "Obiwan", LastName: "Kenobi"},
-		),
-	},
-
-	{
-		scenario: "row groups sorted by ascending last and first name",
-		options: []parquet.RowGroupOption{
-			parquet.SortingColumns(
-				parquet.Ascending("LastName"),
-				parquet.Ascending("FirstName"),
-			),
-		},
-		input: []parquet.RowGroup{
-			sortedRowGroup(
-				[]parquet.RowGroupOption{
-					parquet.SortingColumns(
-						parquet.Ascending("LastName"),
-						parquet.Ascending("FirstName"),
-					),
-				},
-				Person{FirstName: "Luke", LastName: "Skywalker"},
-				Person{FirstName: "Han", LastName: "Solo"},
-			),
-			sortedRowGroup(
-				[]parquet.RowGroupOption{
-					parquet.SortingColumns(
-						parquet.Ascending("LastName"),
-						parquet.Ascending("FirstName"),
-					),
-				},
-				Person{FirstName: "Obiwan", LastName: "Kenobi"},
-				Person{FirstName: "Anakin", LastName: "Skywalker"},
-			),
-		},
-		output: sortedRowGroup(nil,
-			Person{FirstName: "Obiwan", LastName: "Kenobi"},
-			Person{FirstName: "Anakin", LastName: "Skywalker"},
-			Person{FirstName: "Luke", LastName: "Skywalker"},
-			Person{FirstName: "Han", LastName: "Solo"},
-		),
-	},
-
-	{
-		scenario: "row groups with conversion to a different schema",
-		options: []parquet.RowGroupOption{
-			parquet.SchemaOf(LastNameOnly{}),
-			parquet.SortingColumns(
-				parquet.Ascending("LastName"),
-			),
-		},
-		input: []parquet.RowGroup{
-			sortedRowGroup(
-				[]parquet.RowGroupOption{
-					parquet.SortingColumns(
-						parquet.Ascending("LastName"),
-					),
-				},
-				Person{FirstName: "Han", LastName: "Solo"},
-				Person{FirstName: "Luke", LastName: "Skywalker"},
-			),
-			sortedRowGroup(
-				[]parquet.RowGroupOption{
-					parquet.SortingColumns(
-						parquet.Ascending("LastName"),
-					),
-				},
-				Person{FirstName: "Obiwan", LastName: "Kenobi"},
-				Person{FirstName: "Anakin", LastName: "Skywalker"},
-			),
-		},
-		output: sortedRowGroup(
-			[]parquet.RowGroupOption{
+		{
+			scenario: "row groups sorted by ascending last name",
+			options: []parquet.RowGroupOption{
 				parquet.SortingColumns(
 					parquet.Ascending("LastName"),
 				),
 			},
-			LastNameOnly{LastName: "Solo"},
-			LastNameOnly{LastName: "Skywalker"},
-			LastNameOnly{LastName: "Skywalker"},
-			LastNameOnly{LastName: "Kenobi"},
-		),
-	},
+			input: []parquet.RowGroup{
+				sortedRowGroup(
+					[]parquet.RowGroupOption{
+						parquet.SortingColumns(
+							parquet.Ascending("LastName"),
+						),
+					},
+					Person{FirstName: "Han", LastName: "Solo"},
+					Person{FirstName: "Luke", LastName: "Skywalker"},
+				),
+				sortedRowGroup(
+					[]parquet.RowGroupOption{
+						parquet.SortingColumns(
+							parquet.Ascending("LastName"),
+						),
+					},
+					Person{FirstName: "Obiwan", LastName: "Kenobi"},
+				),
+			},
+			output: sortedRowGroup(nil,
+				Person{FirstName: "Obiwan", LastName: "Kenobi"},
+				Person{FirstName: "Luke", LastName: "Skywalker"},
+				Person{FirstName: "Han", LastName: "Solo"},
+			),
+		},
+
+		{
+			scenario: "row groups sorted by descending last name",
+			options: []parquet.RowGroupOption{
+				parquet.SortingColumns(
+					parquet.Descending("LastName"),
+				),
+			},
+			input: []parquet.RowGroup{
+				sortedRowGroup(
+					[]parquet.RowGroupOption{
+						parquet.SortingColumns(
+							parquet.Descending("LastName"),
+						),
+					},
+					Person{FirstName: "Han", LastName: "Solo"},
+					Person{FirstName: "Luke", LastName: "Skywalker"},
+				),
+				sortedRowGroup(
+					[]parquet.RowGroupOption{
+						parquet.SortingColumns(
+							parquet.Descending("LastName"),
+						),
+					},
+					Person{FirstName: "Obiwan", LastName: "Kenobi"},
+				),
+			},
+			output: sortedRowGroup(nil,
+				Person{FirstName: "Han", LastName: "Solo"},
+				Person{FirstName: "Luke", LastName: "Skywalker"},
+				Person{FirstName: "Obiwan", LastName: "Kenobi"},
+			),
+		},
+
+		{
+			scenario: "row groups sorted by ascending last and first name",
+			options: []parquet.RowGroupOption{
+				parquet.SortingColumns(
+					parquet.Ascending("LastName"),
+					parquet.Ascending("FirstName"),
+				),
+			},
+			input: []parquet.RowGroup{
+				sortedRowGroup(
+					[]parquet.RowGroupOption{
+						parquet.SortingColumns(
+							parquet.Ascending("LastName"),
+							parquet.Ascending("FirstName"),
+						),
+					},
+					Person{FirstName: "Luke", LastName: "Skywalker"},
+					Person{FirstName: "Han", LastName: "Solo"},
+				),
+				sortedRowGroup(
+					[]parquet.RowGroupOption{
+						parquet.SortingColumns(
+							parquet.Ascending("LastName"),
+							parquet.Ascending("FirstName"),
+						),
+					},
+					Person{FirstName: "Obiwan", LastName: "Kenobi"},
+					Person{FirstName: "Anakin", LastName: "Skywalker"},
+				),
+			},
+			output: sortedRowGroup(nil,
+				Person{FirstName: "Obiwan", LastName: "Kenobi"},
+				Person{FirstName: "Anakin", LastName: "Skywalker"},
+				Person{FirstName: "Luke", LastName: "Skywalker"},
+				Person{FirstName: "Han", LastName: "Solo"},
+			),
+		},
+
+		{
+			scenario: "row groups with conversion to a different schema",
+			options: []parquet.RowGroupOption{
+				parquet.SchemaOf(LastNameOnly{}),
+				parquet.SortingColumns(
+					parquet.Ascending("LastName"),
+				),
+			},
+			input: []parquet.RowGroup{
+				sortedRowGroup(
+					[]parquet.RowGroupOption{
+						parquet.SortingColumns(
+							parquet.Ascending("LastName"),
+						),
+					},
+					Person{FirstName: "Han", LastName: "Solo"},
+					Person{FirstName: "Luke", LastName: "Skywalker"},
+				),
+				sortedRowGroup(
+					[]parquet.RowGroupOption{
+						parquet.SortingColumns(
+							parquet.Ascending("LastName"),
+						),
+					},
+					Person{FirstName: "Obiwan", LastName: "Kenobi"},
+					Person{FirstName: "Anakin", LastName: "Skywalker"},
+				),
+			},
+			output: sortedRowGroup(
+				[]parquet.RowGroupOption{
+					parquet.SortingColumns(
+						parquet.Ascending("LastName"),
+					),
+				},
+				LastNameOnly{LastName: "Solo"},
+				LastNameOnly{LastName: "Skywalker"},
+				LastNameOnly{LastName: "Skywalker"},
+				LastNameOnly{LastName: "Kenobi"},
+			),
+		},
+	}
 }
 
 func selfRowGroup(rowGroup parquet.RowGroup) parquet.RowGroup {
@@ -342,7 +348,7 @@ func TestMergeRowGroups(t *testing.T) {
 		{scenario: "file", function: fileRowGroup},
 	} {
 		t.Run(adapter.scenario, func(t *testing.T) {
-			for _, test := range mergeRowGroupsTests {
+			for _, test := range mergeRowGroupsTests() {
 				t.Run(test.scenario, func(t *testing.T) {
 					input := make([]parquet.RowGroup, len(test.input))
 					for i := range test.input {
