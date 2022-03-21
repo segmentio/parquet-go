@@ -42,15 +42,15 @@ Go 1.17 or later is required to use the package.
 The package is currently released as a pre-v1 version, which gives maintainers
 the freedom to break backward compatibility to help improve the APIs as we learn
 which initial design decisions would need to be revisited to better support the
-use cases that the library solves for. These occurences are expected to be rare
+use cases that the library solves for. These occurrences are expected to be rare
 in frequency and documentation will be produce to guide users on how to adapt
 their programs to breaking changes.
 
-One anticipated change at this time is the exploration of introducing greater
-type safety by leveraging the generics feature released in Go 1.18.
+One planned breaking change will be to support generics, which were released in
+Go 1.18 and will simplify the code and provide better type safety.
 The targetted timeline for this change is end of 2022; programs depending on
 parquet-go will be expected to compile with Go 1.18 by then, at which point
-compatibility with Go 1.17 will be dropped.
+we will drop compatibility with Go 1.17.
 
 ## Usage
 
