@@ -184,7 +184,7 @@ func (r *Reader) updateReadSchema(rowType reflect.Type) error {
 // ReadRow reads the next row from r and appends in to the given Row buffer.
 //
 // The returned values are laid out in the order expected by the
-// parquet.(*Schema).Reconstrct method.
+// parquet.(*Schema).Reconstruct method.
 //
 // The method returns io.EOF when no more rows can be read from r.
 func (r *Reader) ReadRow(row Row) (Row, error) {
