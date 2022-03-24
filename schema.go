@@ -2,6 +2,7 @@ package parquet
 
 import (
 	"fmt"
+	"math"
 	"reflect"
 	"sort"
 	"strconv"
@@ -40,19 +41,23 @@ type Schema struct {
 //
 // The following options are also supported in the "parquet" struct tag:
 //
-//	optional | make the parquet column optional
-//	snappy   | sets the parquet column compression codec to snappy
-//	gzip     | sets the parquet column compression codec to gzip
-//	brotli   | sets the parquet column compression codec to brotli
-//	lz4      | sets the parquet column compression codec to lz4
-//	zstd     | sets the parquet column compression codec to zstd
-//	plain    | enables the plain encoding (no-op default)
-//	dict     | enables dictionary encoding on the parquet column
-//	delta    | enables delta encoding on the parquet column
-//	list     | for slice types, use the parquet LIST logical type
-//	enum     | for string types, use the parquet ENUM logical type
-//	uuid     | for string and [16]byte types, use the parquet UUID logical type
-//	decimal  | for int32 and int64 types, use the parquet DECIMAL logical type
+//	optional  | make the parquet column optional
+//	snappy    | sets the parquet column compression codec to snappy
+//	gzip      | sets the parquet column compression codec to gzip
+//	brotli    | sets the parquet column compression codec to brotli
+//	lz4       | sets the parquet column compression codec to lz4
+//	zstd      | sets the parquet column compression codec to zstd
+//	plain     | enables the plain encoding (no-op default)
+//	dict      | enables dictionary encoding on the parquet column
+//	delta     | enables delta encoding on the parquet column
+//	list      | for slice types, use the parquet LIST logical type
+//	enum      | for string types, use the parquet ENUM logical type
+//	uuid      | for string and [16]byte types, use the parquet UUID logical type
+//	decimal   | for int32, int64 and [n]byte types, use the parquet DECIMAL logical type
+//	date      | for int32 types use the DATE logical type
+//	timestamp | for int64 types use the TIMESTAMP logical type with millisecond precision
+//
+// The date logical type is an int32 value of the number of days since the unix epoch
 //
 // The decimal tag must be followed by two integer parameters, the first integer
 // representing the scale and the second the precision; for example:
@@ -552,11 +557,28 @@ func makeStructField(f reflect.StructField) structField {
 					baseType = Int32Type
 				case reflect.Int64:
 					baseType = Int64Type
+				case reflect.Array:
+					length := int(math.Ceil((math.Log10(2) + float64(precision)) / math.Log10(256)))
+					baseType = FixedLenByteArrayType(length)
 				default:
 					throwInvalidFieldTag(f, option)
 				}
-				setNode(Decimal(scale, precision, baseType))
 
+				setNode(Decimal(scale, precision, baseType))
+			case "date":
+				switch f.Type.Kind() {
+				case reflect.Int32:
+					setNode(Date())
+				default:
+					throwInvalidFieldTag(f, option)
+				}
+			case "timestamp":
+				switch f.Type.Kind() {
+				case reflect.Int64:
+					setNode(Timestamp(Millisecond))
+				default:
+					throwInvalidFieldTag(f, option)
+				}
 			default:
 				throwUnknownFieldTag(f, option)
 			}

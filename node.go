@@ -504,7 +504,7 @@ func encodingAndCompressionOf(node Node) (encoding.Encoding, compress.Codec) {
 	// the opportunity to override this behavior if needed.
 	//
 	// https://github.com/apache/parquet-format/blob/master/Encodings.md#delta-length-byte-array-delta_length_byte_array--6
-	if node.Type().Kind() == ByteArray {
+	if node.Type().Kind() == ByteArray && len(node.Encoding()) == 0 {
 		encoding = &DeltaLengthByteArray
 	}
 
