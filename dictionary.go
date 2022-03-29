@@ -197,8 +197,9 @@ func readFixedLenByteArrayDictionary(typ Type, columnIndex int16, numValues int,
 	d := &fixedLenByteArrayDictionary{
 		typ: typ,
 		fixedLenByteArrayPage: fixedLenByteArrayPage{
-			size: size,
-			data: make([]byte, 0, atLeastOne(numValues)*size),
+			size:        size,
+			data:        make([]byte, 0, atLeastOne(numValues)*size),
+			columnIndex: columnIndex,
 		},
 	}
 
