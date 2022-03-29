@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"reflect"
 	"testing"
+	"unsafe"
 
 	"github.com/segmentio/parquet-go"
 	"github.com/segmentio/parquet-go/deprecated"
@@ -50,6 +51,8 @@ func randValue[T plain.Type](r *rand.Rand) (v T) {
 }
 
 func testPageOf[T plain.Type](t *testing.T) {
+	var zero T
+	sizeof := int(unsafe.Sizeof(zero))
 	schema := parquet.SchemaOf(struct{ Value T }{})
 	r := rand.New(rand.NewSource(0))
 
@@ -61,12 +64,12 @@ func testPageOf[T plain.Type](t *testing.T) {
 					1: randValue[T](r),
 				}
 				n, err := w.(io.Writer).Write(cast.SliceToBytes(values))
-				return values[:n], err
+				return values[:n/sizeof], err
 			},
 			read: func(r parquet.ValueReader) ([]T, error) {
 				values := make([]T, 2)
 				n, err := r.(io.Reader).Read(cast.SliceToBytes(values))
-				return values[:n], err
+				return values[:n/sizeof], err
 			},
 		})
 	})

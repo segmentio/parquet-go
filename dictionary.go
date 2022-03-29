@@ -58,6 +58,9 @@ type Dictionary interface {
 
 	// Resets the dictionary to its initial state, removing all values.
 	Reset()
+
+	// Returns a reader exposing the values held in the dictionary.
+	//Values() ValueReader
 }
 
 func dictCap(bufferSize, valueItemSize int) int {

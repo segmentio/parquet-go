@@ -12,6 +12,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/segmentio/parquet-go/deprecated"
+	"github.com/segmentio/parquet-go/encoding"
+	"github.com/segmentio/parquet-go/encoding/plain"
 )
 
 const (
@@ -772,6 +774,104 @@ func clearValues(values []Value) {
 	}
 }
 
-type errorValueReader struct{ err error }
+type errorValueReader struct {
+	err error
+}
 
-func (r *errorValueReader) ReadValues([]Value) (int, error) { return 0, r.err }
+func (r *errorValueReader) ReadValues([]Value) (int, error) {
+	return 0, r.err
+}
+
+type byteArrayValueReader struct {
+	values      encoding.ByteArrayList
+	offset      int
+	columnIndex int16
+}
+
+func (r *byteArrayValueReader) Read(b []byte) (int, error) {
+	_, n, err := r.readByteArrays(b)
+	return n, err
+}
+
+func (r *byteArrayValueReader) ReadRequired(values []byte) (int, error) {
+	return r.ReadByteArrays(values)
+}
+
+func (r *byteArrayValueReader) ReadByteArrays(values []byte) (int, error) {
+	n, _, err := r.readByteArrays(values)
+	return n, err
+}
+
+func (r *byteArrayValueReader) readByteArrays(values []byte) (c, n int, err error) {
+	for r.offset < r.values.Len() {
+		b := r.values.Index(r.offset)
+		k := plain.ByteArrayLengthSize + len(b)
+		if k > (len(values) - n) {
+			break
+		}
+		plain.PutByteArrayLength(values[n:], len(b))
+		n += plain.ByteArrayLengthSize
+		n += copy(values[n:], b)
+		r.offset++
+		c++
+	}
+	if r.offset == r.values.Len() {
+		err = io.EOF
+	} else if n == 0 && len(values) > 0 {
+		err = io.ErrShortBuffer
+	}
+	return c, n, err
+}
+
+func (r *byteArrayValueReader) ReadValues(values []Value) (n int, err error) {
+	for n < len(values) && r.offset < r.values.Len() {
+		values[n] = makeValueBytes(ByteArray, r.values.Index(r.offset))
+		values[n].columnIndex = r.columnIndex
+		r.offset++
+		n++
+	}
+	if r.offset == r.values.Len() {
+		err = io.EOF
+	}
+	return n, err
+}
+
+type fixedLenByteArrayValueReader struct {
+	size        int
+	data        []byte
+	offset      int
+	columnIndex int16
+}
+
+func (r *fixedLenByteArrayValueReader) Read(b []byte) (n int, err error) {
+	n, err = r.ReadFixedLenByteArrays(b)
+	return n * r.size, err
+}
+
+func (r *fixedLenByteArrayValueReader) ReadRequired(values []byte) (int, error) {
+	return r.ReadFixedLenByteArrays(values)
+}
+
+func (r *fixedLenByteArrayValueReader) ReadFixedLenByteArrays(values []byte) (n int, err error) {
+	n = copy(values, r.data[r.offset:]) / r.size
+	r.offset += n * r.size
+	if r.offset == len(r.data) {
+		err = io.EOF
+	} else if n == 0 && len(values) > 0 {
+		err = io.ErrShortBuffer
+	}
+	return n, err
+}
+
+func (r *fixedLenByteArrayValueReader) ReadValues(values []Value) (n int, err error) {
+	for n < len(values) && r.offset < len(r.data) {
+		values[n] = makeValueBytes(FixedLenByteArray, r.data[r.offset:r.offset+r.size])
+		values[n].columnIndex = r.columnIndex
+		r.offset += r.size
+		n++
+	}
+	if r.offset == len(r.data) {
+		err = io.EOF
+	}
+	return n, err
+}

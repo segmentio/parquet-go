@@ -3,8 +3,6 @@
 package parquet
 
 import (
-	"io"
-
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/internal/bits"
@@ -97,39 +95,13 @@ func (page *booleanPage) DefinitionLevels() []int8 { return nil }
 
 func (page *booleanPage) WriteTo(e encoding.Encoder) error { return e.EncodeBoolean(page.values) }
 
-func (page *booleanPage) Values() ValueReader { return &booleanPageReader{page: page} }
-
 func (page *booleanPage) Buffer() BufferedPage { return page }
 
-type booleanPageReader struct {
-	page   *booleanPage
-	offset int
-}
-
-func (r *booleanPageReader) Read(b []byte) (n int, err error) {
-	return r.ReadBooleans(bits.BytesToBool(b))
-}
-
-func (r *booleanPageReader) ReadBooleans(values []bool) (n int, err error) {
-	n = copy(values, r.page.values[r.offset:])
-	r.offset += n
-	if r.offset == len(r.page.values) {
-		err = io.EOF
+func (page *booleanPage) Values() ValueReader {
+	return &booleanValueReader{
+		values:      page.values,
+		columnIndex: page.columnIndex,
 	}
-	return n, err
-}
-
-func (r *booleanPageReader) ReadValues(values []Value) (n int, err error) {
-	for n < len(values) && r.offset < len(r.page.values) {
-		values[n] = makeValueBoolean(r.page.values[r.offset])
-		values[n].columnIndex = r.page.columnIndex
-		r.offset++
-		n++
-	}
-	if r.offset == len(r.page.values) {
-		err = io.EOF
-	}
-	return n, err
 }
 
 type int32Page struct {
@@ -184,40 +156,13 @@ func (page *int32Page) DefinitionLevels() []int8 { return nil }
 
 func (page *int32Page) WriteTo(e encoding.Encoder) error { return e.EncodeInt32(page.values) }
 
-func (page *int32Page) Values() ValueReader { return &int32PageReader{page: page} }
-
 func (page *int32Page) Buffer() BufferedPage { return page }
 
-type int32PageReader struct {
-	page   *int32Page
-	offset int
-}
-
-func (r *int32PageReader) Read(b []byte) (n int, err error) {
-	n, err = r.ReadInt32s(bits.BytesToInt32(b))
-	return 4 * n, err
-}
-
-func (r *int32PageReader) ReadInt32s(values []int32) (n int, err error) {
-	n = copy(values, r.page.values[r.offset:])
-	r.offset += n
-	if r.offset == len(r.page.values) {
-		err = io.EOF
+func (page *int32Page) Values() ValueReader {
+	return &int32ValueReader{
+		values:      page.values,
+		columnIndex: page.columnIndex,
 	}
-	return n, err
-}
-
-func (r *int32PageReader) ReadValues(values []Value) (n int, err error) {
-	for n < len(values) && r.offset < len(r.page.values) {
-		values[n] = makeValueInt32(r.page.values[r.offset])
-		values[n].columnIndex = r.page.columnIndex
-		r.offset++
-		n++
-	}
-	if r.offset == len(r.page.values) {
-		err = io.EOF
-	}
-	return n, err
 }
 
 type int64Page struct {
@@ -272,40 +217,13 @@ func (page *int64Page) DefinitionLevels() []int8 { return nil }
 
 func (page *int64Page) WriteTo(e encoding.Encoder) error { return e.EncodeInt64(page.values) }
 
-func (page *int64Page) Values() ValueReader { return &int64PageReader{page: page} }
-
 func (page *int64Page) Buffer() BufferedPage { return page }
 
-type int64PageReader struct {
-	page   *int64Page
-	offset int
-}
-
-func (r *int64PageReader) Read(b []byte) (n int, err error) {
-	n, err = r.ReadInt64s(bits.BytesToInt64(b))
-	return 8 * n, err
-}
-
-func (r *int64PageReader) ReadInt64s(values []int64) (n int, err error) {
-	n = copy(values, r.page.values[r.offset:])
-	r.offset += n
-	if r.offset == len(r.page.values) {
-		err = io.EOF
+func (page *int64Page) Values() ValueReader {
+	return &int64ValueReader{
+		values:      page.values,
+		columnIndex: page.columnIndex,
 	}
-	return n, err
-}
-
-func (r *int64PageReader) ReadValues(values []Value) (n int, err error) {
-	for n < len(values) && r.offset < len(r.page.values) {
-		values[n] = makeValueInt64(r.page.values[r.offset])
-		values[n].columnIndex = r.page.columnIndex
-		r.offset++
-		n++
-	}
-	if r.offset == len(r.page.values) {
-		err = io.EOF
-	}
-	return n, err
 }
 
 type int96Page struct {
@@ -362,40 +280,13 @@ func (page *int96Page) DefinitionLevels() []int8 { return nil }
 
 func (page *int96Page) WriteTo(e encoding.Encoder) error { return e.EncodeInt96(page.values) }
 
-func (page *int96Page) Values() ValueReader { return &int96PageReader{page: page} }
-
 func (page *int96Page) Buffer() BufferedPage { return page }
 
-type int96PageReader struct {
-	page   *int96Page
-	offset int
-}
-
-func (r *int96PageReader) Read(b []byte) (n int, err error) {
-	n, err = r.ReadInt96s(deprecated.BytesToInt96(b))
-	return 12 * n, err
-}
-
-func (r *int96PageReader) ReadInt96s(values []deprecated.Int96) (n int, err error) {
-	n = copy(values, r.page.values[r.offset:])
-	r.offset += n
-	if r.offset == len(r.page.values) {
-		err = io.EOF
+func (page *int96Page) Values() ValueReader {
+	return &int96ValueReader{
+		values:      page.values,
+		columnIndex: page.columnIndex,
 	}
-	return n, err
-}
-
-func (r *int96PageReader) ReadValues(values []Value) (n int, err error) {
-	for n < len(values) && r.offset < len(r.page.values) {
-		values[n] = makeValueInt96(r.page.values[r.offset])
-		values[n].columnIndex = r.page.columnIndex
-		r.offset++
-		n++
-	}
-	if r.offset == len(r.page.values) {
-		err = io.EOF
-	}
-	return n, err
 }
 
 type floatPage struct {
@@ -450,40 +341,13 @@ func (page *floatPage) DefinitionLevels() []int8 { return nil }
 
 func (page *floatPage) WriteTo(e encoding.Encoder) error { return e.EncodeFloat(page.values) }
 
-func (page *floatPage) Values() ValueReader { return &floatPageReader{page: page} }
-
 func (page *floatPage) Buffer() BufferedPage { return page }
 
-type floatPageReader struct {
-	page   *floatPage
-	offset int
-}
-
-func (r *floatPageReader) Read(b []byte) (n int, err error) {
-	n, err = r.ReadFloats(bits.BytesToFloat32(b))
-	return 4 * n, err
-}
-
-func (r *floatPageReader) ReadFloats(values []float32) (n int, err error) {
-	n = copy(values, r.page.values[r.offset:])
-	r.offset += n
-	if r.offset == len(r.page.values) {
-		err = io.EOF
+func (page *floatPage) Values() ValueReader {
+	return &floatValueReader{
+		values:      page.values,
+		columnIndex: page.columnIndex,
 	}
-	return n, err
-}
-
-func (r *floatPageReader) ReadValues(values []Value) (n int, err error) {
-	for n < len(values) && r.offset < len(r.page.values) {
-		values[n] = makeValueFloat(r.page.values[r.offset])
-		values[n].columnIndex = r.page.columnIndex
-		r.offset++
-		n++
-	}
-	if r.offset == len(r.page.values) {
-		err = io.EOF
-	}
-	return n, err
 }
 
 type doublePage struct {
@@ -538,40 +402,13 @@ func (page *doublePage) DefinitionLevels() []int8 { return nil }
 
 func (page *doublePage) WriteTo(e encoding.Encoder) error { return e.EncodeDouble(page.values) }
 
-func (page *doublePage) Values() ValueReader { return &doublePageReader{page: page} }
-
 func (page *doublePage) Buffer() BufferedPage { return page }
 
-type doublePageReader struct {
-	page   *doublePage
-	offset int
-}
-
-func (r *doublePageReader) Read(b []byte) (n int, err error) {
-	n, err = r.ReadDoubles(bits.BytesToFloat64(b))
-	return 8 * n, err
-}
-
-func (r *doublePageReader) ReadDoubles(values []float64) (n int, err error) {
-	n = copy(values, r.page.values[r.offset:])
-	r.offset += n
-	if r.offset == len(r.page.values) {
-		err = io.EOF
+func (page *doublePage) Values() ValueReader {
+	return &doubleValueReader{
+		values:      page.values,
+		columnIndex: page.columnIndex,
 	}
-	return n, err
-}
-
-func (r *doublePageReader) ReadValues(values []Value) (n int, err error) {
-	for n < len(values) && r.offset < len(r.page.values) {
-		values[n] = makeValueDouble(r.page.values[r.offset])
-		values[n].columnIndex = r.page.columnIndex
-		r.offset++
-		n++
-	}
-	if r.offset == len(r.page.values) {
-		err = io.EOF
-	}
-	return n, err
 }
 
 // The following two specializations for unsigned integer types are needed to
@@ -634,23 +471,3 @@ func (page uint64Page) Slice(i, j int64) BufferedPage {
 }
 
 func (page uint64Page) Buffer() BufferedPage { return page }
-
-var (
-	_ io.Reader = (*booleanPageReader)(nil)
-	_ io.Reader = (*int32PageReader)(nil)
-	_ io.Reader = (*int64PageReader)(nil)
-	_ io.Reader = (*int96PageReader)(nil)
-	_ io.Reader = (*floatPageReader)(nil)
-	_ io.Reader = (*doublePageReader)(nil)
-	_ io.Reader = (*byteArrayPageReader)(nil)
-	_ io.Reader = (*fixedLenByteArrayPageReader)(nil)
-
-	_ BooleanReader           = (*booleanPageReader)(nil)
-	_ Int32Reader             = (*int32PageReader)(nil)
-	_ Int64Reader             = (*int64PageReader)(nil)
-	_ Int96Reader             = (*int96PageReader)(nil)
-	_ FloatReader             = (*floatPageReader)(nil)
-	_ DoubleReader            = (*doublePageReader)(nil)
-	_ ByteArrayReader         = (*byteArrayPageReader)(nil)
-	_ FixedLenByteArrayReader = (*fixedLenByteArrayPageReader)(nil)
-)

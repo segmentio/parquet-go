@@ -3,10 +3,7 @@
 package parquet
 
 import (
-	"io"
-
 	"github.com/segmentio/parquet-go/encoding"
-	"github.com/segmentio/parquet-go/internal/cast"
 )
 
 type page[T primitive] struct {
@@ -64,44 +61,12 @@ func (p *page[T]) DefinitionLevels() []int8 { return nil }
 
 func (p *page[T]) WriteTo(e encoding.Encoder) error { return p.class.encode(e, p.values) }
 
-func (p *page[T]) Values() ValueReader { return &pageReader[T]{page: p} }
-
 func (p *page[T]) Buffer() BufferedPage { return p }
 
-type pageReader[T primitive] struct {
-	page   *page[T]
-	offset int
-}
-
-func (r *pageReader[T]) Read(b []byte) (n int, err error) {
-	return r.ReadRequired(cast.BytesToSlice[T](b))
-}
-
-func (r *pageReader[T]) ReadRequired(values []T) (n int, err error) {
-	n = copy(values, r.page.values[r.offset:])
-	r.offset += n
-	if r.offset == len(r.page.values) {
-		err = io.EOF
+func (p *page[T]) Values() ValueReader {
+	return &valueReader[T]{
+		class:       p.class,
+		values:      p.values,
+		columnIndex: p.columnIndex,
 	}
-	return n, err
 }
-
-func (r *pageReader[T]) ReadValues(values []Value) (n int, err error) {
-	makeValue := r.page.class.makeValue
-	pageValues := r.page.values
-	columnIndex := r.page.columnIndex
-	for n < len(values) && r.offset < len(pageValues) {
-		values[n] = makeValue(pageValues[r.offset])
-		values[n].columnIndex = columnIndex
-		r.offset++
-		n++
-	}
-	if r.offset == len(pageValues) {
-		err = io.EOF
-	}
-	return n, err
-}
-
-var (
-	_ RequiredReader[bool] = (*pageReader[bool])(nil)
-)
