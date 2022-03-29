@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/segmentio/parquet-go/deprecated"
+	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/format"
 	"github.com/segmentio/parquet-go/internal/bits"
 )
@@ -155,6 +156,14 @@ type Type interface {
 	// parquet.Int32Reader interface to allow programs to more efficiently read
 	// columns of INT32 values.
 	NewColumnReader(columnIndex, bufferSize int) ColumnReader
+
+	// Reads a dictionary with values of this type from the decoder passed as
+	// argument.
+	//
+	// The number of values is a hint to optimize the allocation of memory
+	// buffers for the dictionary. Applications must pass zero for the number of
+	// values when they do not know how many values will be decoded.
+	ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error)
 }
 
 // In the current parquet version supported by this library, only type-defined
@@ -387,6 +396,10 @@ func (t *stringType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
+func (t *stringType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
+	return readByteArrayDictionary(t, makeColumnIndex(columnIndex), numValues, decoder)
+}
+
 func (t *stringType) GoType() reflect.Type {
 	return reflect.TypeOf("")
 }
@@ -436,6 +449,10 @@ func (t *uuidType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 
 func (t *uuidType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newFixedLenByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
+}
+
+func (t *uuidType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
+	return readFixedLenByteArrayDictionary(t, makeColumnIndex(columnIndex), numValues, decoder)
 }
 
 func (t *uuidType) GoType() reflect.Type {
@@ -491,6 +508,10 @@ func (t *enumType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
+func (t *enumType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
+	return readByteArrayDictionary(t, makeColumnIndex(columnIndex), numValues, decoder)
+}
+
 func (t *enumType) GoType() reflect.Type {
 	return reflect.TypeOf("")
 }
@@ -544,6 +565,10 @@ func (t *jsonType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
+func (t *jsonType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
+	return readByteArrayDictionary(t, makeColumnIndex(columnIndex), numValues, decoder)
+}
+
 // BSON constructs a leaf node of BSON logical type.
 //
 // https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#bson
@@ -591,6 +616,10 @@ func (t *bsonType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 
 func (t *bsonType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
+}
+
+func (t *bsonType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
+	return readByteArrayDictionary(t, makeColumnIndex(columnIndex), numValues, decoder)
 }
 
 // Date constructs a leaf node of DATE logical type.
@@ -791,20 +820,24 @@ func (t *listType) ConvertedType() *deprecated.ConvertedType {
 	return &convertedTypes[deprecated.List]
 }
 
-func (t *listType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
-	panic("create create a column indexer from parquet LIST type")
+func (t *listType) NewColumnIndexer(int) ColumnIndexer {
+	panic("create create column indexer from parquet LIST type")
 }
 
-func (t *listType) NewDictionary(bufferSize int) Dictionary {
+func (t *listType) NewDictionary(int) Dictionary {
 	panic("cannot create dictionary from parquet LIST type")
 }
 
-func (t *listType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
-	panic("cannot create row group column from parquet LIST type")
+func (t *listType) NewColumnBuffer(int, int) ColumnBuffer {
+	panic("cannot create column buffer from parquet LIST type")
 }
 
-func (t *listType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
-	panic("cannot create row group column from parquet LIST type")
+func (t *listType) NewColumnReader(int, int) ColumnReader {
+	panic("cannot create column reader from parquet LIST type")
+}
+
+func (t *listType) ReadDictionary(int, int, encoding.Decoder) (Dictionary, error) {
+	panic("cannot read dictionary from parquet LIST type")
 }
 
 // Map constructs a node of MAP logical type.
@@ -845,20 +878,24 @@ func (t *mapType) ConvertedType() *deprecated.ConvertedType {
 	return &convertedTypes[deprecated.Map]
 }
 
-func (t *mapType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
-	panic("create create a column indexer from parquet MAP type")
+func (t *mapType) NewColumnIndexer(int) ColumnIndexer {
+	panic("create create column indexer from parquet MAP type")
 }
 
-func (t *mapType) NewDictionary(bufferSize int) Dictionary {
+func (t *mapType) NewDictionary(int) Dictionary {
 	panic("cannot create dictionary from parquet MAP type")
 }
 
-func (t *mapType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
-	panic("cannot create row group column from parquet MAP type")
+func (t *mapType) NewColumnBuffer(int, int) ColumnBuffer {
+	panic("cannot create column buffer from parquet MAP type")
 }
 
-func (t *mapType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
-	panic("cannot create row group column from parquet MAP type")
+func (t *mapType) NewColumnReader(int, int) ColumnReader {
+	panic("cannot create column reader from parquet MAP type")
+}
+
+func (t *mapType) ReadDictionary(int, int, encoding.Decoder) (Dictionary, error) {
+	panic("cannot read dictionary from parquet MAP type")
 }
 
 type nullType format.NullType
@@ -882,7 +919,7 @@ func (t *nullType) LogicalType() *format.LogicalType {
 func (t *nullType) ConvertedType() *deprecated.ConvertedType { return nil }
 
 func (t *nullType) NewColumnIndexer(int) ColumnIndexer {
-	panic("create create a column indexer from parquet NULL type")
+	panic("create create column indexer from parquet NULL type")
 }
 
 func (t *nullType) NewDictionary(int) Dictionary {
@@ -890,11 +927,15 @@ func (t *nullType) NewDictionary(int) Dictionary {
 }
 
 func (t *nullType) NewColumnBuffer(int, int) ColumnBuffer {
-	panic("cannot create row group column from parquet NULL type")
+	panic("cannot create column buffer from parquet NULL type")
 }
 
 func (t *nullType) NewColumnReader(int, int) ColumnReader {
-	panic("cannot create row group column from parquet NULL type")
+	panic("cannot create column reader from parquet NULL type")
+}
+
+func (t *nullType) ReadDictionary(int, int, encoding.Decoder) (Dictionary, error) {
+	panic("cannot read dictionary from parquet NULL type")
 }
 
 type groupType struct{}
@@ -918,11 +959,15 @@ func (groupType) NewDictionary(int) Dictionary {
 }
 
 func (t groupType) NewColumnBuffer(int, int) ColumnBuffer {
-	panic("cannot create row group column from parquet group")
+	panic("cannot create column buffer from parquet group")
 }
 
 func (t groupType) NewColumnReader(int, int) ColumnReader {
-	panic("cannot create row group column from parquet group")
+	panic("cannot create column reader from parquet group")
+}
+
+func (t groupType) ReadDictionary(int, int, encoding.Decoder) (Dictionary, error) {
+	panic("cannot read dictionary from parquet group")
 }
 
 func (groupType) Length() int { return 0 }

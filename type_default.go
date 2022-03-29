@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/segmentio/parquet-go/deprecated"
+	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/format"
 )
 
@@ -60,6 +61,10 @@ func (t booleanType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newBooleanColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
+func (t booleanType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
+	return readBooleanDictionary(t, makeColumnIndex(columnIndex), numValues, decoder)
+}
+
 type int32Type struct{ primitiveType }
 
 func (t int32Type) String() string { return "INT32" }
@@ -90,6 +95,10 @@ func (t int32Type) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 
 func (t int32Type) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newInt32ColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
+}
+
+func (t int32Type) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
+	return readInt32Dictionary(t, makeColumnIndex(columnIndex), numValues, decoder)
 }
 
 type int64Type struct{ primitiveType }
@@ -124,6 +133,10 @@ func (t int64Type) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newInt64ColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
+func (t int64Type) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
+	return readInt64Dictionary(t, makeColumnIndex(columnIndex), numValues, decoder)
+}
+
 type int96Type struct{ primitiveType }
 
 func (t int96Type) String() string { return "INT96" }
@@ -154,6 +167,10 @@ func (t int96Type) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 
 func (t int96Type) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newInt96ColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
+}
+
+func (t int96Type) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
+	return readInt96Dictionary(t, makeColumnIndex(columnIndex), numValues, decoder)
 }
 
 type floatType struct{ primitiveType }
@@ -188,6 +205,10 @@ func (t floatType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newFloatColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
+func (t floatType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
+	return readFloatDictionary(t, makeColumnIndex(columnIndex), numValues, decoder)
+}
+
 type doubleType struct{ primitiveType }
 
 func (t doubleType) String() string { return "DOUBLE" }
@@ -216,6 +237,10 @@ func (t doubleType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 
 func (t doubleType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newDoubleColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
+}
+
+func (t doubleType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
+	return readDoubleDictionary(t, makeColumnIndex(columnIndex), numValues, decoder)
 }
 
 type byteArrayType struct{ primitiveType }
@@ -248,6 +273,10 @@ func (t byteArrayType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer
 
 func (t byteArrayType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
+}
+
+func (t byteArrayType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
+	return readByteArrayDictionary(t, makeColumnIndex(columnIndex), numValues, decoder)
 }
 
 type fixedLenByteArrayType struct {
@@ -285,6 +314,10 @@ func (t *fixedLenByteArrayType) NewColumnBuffer(columnIndex, bufferSize int) Col
 
 func (t *fixedLenByteArrayType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newFixedLenByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
+}
+
+func (t *fixedLenByteArrayType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
+	return readFixedLenByteArrayDictionary(t, makeColumnIndex(columnIndex), numValues, decoder)
 }
 
 // FixedLenByteArrayType constructs a type for fixed-length values of the given
@@ -349,6 +382,22 @@ func (t *intType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	}
 }
 
+func (t *intType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
+	if t.IsSigned {
+		if t.BitWidth == 64 {
+			return readInt64Dictionary(t, makeColumnIndex(columnIndex), numValues, decoder)
+		} else {
+			return readInt32Dictionary(t, makeColumnIndex(columnIndex), numValues, decoder)
+		}
+	} else {
+		if t.BitWidth == 64 {
+			return readUint64Dictionary(t, makeColumnIndex(columnIndex), numValues, decoder)
+		} else {
+			return readUint32Dictionary(t, makeColumnIndex(columnIndex), numValues, decoder)
+		}
+	}
+}
+
 func (t *dateType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	return newInt32ColumnIndexer()
 }
@@ -363,6 +412,10 @@ func (t *dateType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 
 func (t *dateType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newInt32ColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
+}
+
+func (t *dateType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
+	return readInt32Dictionary(t, makeColumnIndex(columnIndex), numValues, decoder)
 }
 
 func (t *timeType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
@@ -397,6 +450,14 @@ func (t *timeType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	}
 }
 
+func (t *timeType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
+	if t.Unit.Millis != nil {
+		return readInt32Dictionary(t, makeColumnIndex(columnIndex), numValues, decoder)
+	} else {
+		return readInt64Dictionary(t, makeColumnIndex(columnIndex), numValues, decoder)
+	}
+}
+
 func (t *timestampType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	return newInt64ColumnIndexer()
 }
@@ -411,4 +472,8 @@ func (t *timestampType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffe
 
 func (t *timestampType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newInt64ColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
+}
+
+func (t *dateType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
+	return readInt64Dictionary(t, makeColumnIndex(columnIndex), numValues, decoder)
 }

@@ -24,6 +24,36 @@ func newDictionary[T primitive](typ Type, bufferSize int, class *class[T]) *dict
 	}
 }
 
+func readDictionary[T primitive](typ Type, columnIndex int16, numValues int, decoder encoding.Decoder, class *class[T]) (*dictionary[T], error) {
+	d := &dictionary[T]{
+		class:  class,
+		typ:    typ,
+		values: make([]T, 0, atLeastOne(numValues)),
+	}
+
+	for {
+		if len(d.values) == cap(d.values) {
+			newValues := make([]T, len(d.values), 2*cap(d.values))
+			copy(newValues, d.values)
+			d.values = newValues
+		}
+
+		n, err := d.class.decode(decoder, d.values[len(d.values):cap(d.values)])
+		if n > 0 {
+			d.values = d.values[:len(d.values)+n]
+		}
+
+		if err != nil {
+			if err == io.EOF {
+				err = nil
+			} else {
+				err = fmt.Errorf("reading parquet dictionary of %s values: %w", d.class.name, err)
+			}
+			return d, err
+		}
+	}
+}
+
 func (d *dictionary[T]) Type() Type { return newIndexedType(d.typ, d) }
 
 func (d *dictionary[T]) Len() int { return len(d.values) }
@@ -83,31 +113,6 @@ func (d *dictionary[T]) Bounds(indexes []int32) (min, max Value) {
 		max = makeValue(maxValue)
 	}
 	return min, max
-}
-
-func (d *dictionary[T]) ReadFrom(decoder encoding.Decoder) error {
-	d.Reset()
-	for {
-		if len(d.values) == cap(d.values) {
-			newValues := make([]T, len(d.values), 2*cap(d.values))
-			copy(newValues, d.values)
-			d.values = newValues
-		}
-
-		n, err := d.class.decode(decoder, d.values[len(d.values):cap(d.values)])
-		if n > 0 {
-			d.values = d.values[:len(d.values)+n]
-		}
-
-		if err != nil {
-			if err == io.EOF {
-				err = nil
-			} else {
-				err = fmt.Errorf("reading parquet dictionary of %s values: %w", d.class.name, err)
-			}
-			return err
-		}
-	}
 }
 
 func (d *dictionary[T]) WriteTo(encoder encoding.Encoder) error {

@@ -47,12 +47,6 @@ type Dictionary interface {
 	// Returns the min and max values found in the given indexes.
 	Bounds(indexed []int32) (min, max Value)
 
-	// Reads the dictionary from the decoder passed as argument.
-	//
-	// The dictionary is cleared prior to loading the values so that its final
-	// content contains only the entries read from the decoder.
-	ReadFrom(encoding.Decoder) error
-
 	// Writes the dictionary to the encoder passed as argument.
 	WriteTo(encoding.Encoder) error
 
@@ -82,6 +76,25 @@ func newByteArrayDictionary(typ Type, bufferSize int) *byteArrayDictionary {
 	return &byteArrayDictionary{
 		typ:    typ,
 		values: encoding.MakeByteArrayList(dictCap(bufferSize, 16)),
+	}
+}
+
+func readByteArrayDictionary(typ Type, columnIndex int16, numValues int, decoder encoding.Decoder) (Dictionary, error) {
+	d := &byteArrayDictionary{
+		typ:    typ,
+		values: encoding.MakeByteArrayList(atLeastOne(numValues)),
+	}
+	for {
+		if d.values.Len() == d.values.Cap() {
+			d.values.Grow(d.values.Len())
+		}
+		_, err := decoder.DecodeByteArray(&d.values)
+		if err != nil {
+			if err == io.EOF {
+				err = nil
+			}
+			return d, err
+		}
 	}
 }
 
@@ -148,22 +161,6 @@ func (d *byteArrayDictionary) Bounds(indexes []int32) (min, max Value) {
 	return min, max
 }
 
-func (d *byteArrayDictionary) ReadFrom(decoder encoding.Decoder) error {
-	d.Reset()
-	for {
-		if d.values.Len() == d.values.Cap() {
-			d.values.Grow(d.values.Len())
-		}
-		_, err := decoder.DecodeByteArray(&d.values)
-		if err != nil {
-			if err == io.EOF {
-				err = nil
-			}
-			return err
-		}
-	}
-}
-
 func (d *byteArrayDictionary) WriteTo(encoder encoding.Encoder) error {
 	if err := encoder.EncodeByteArray(d.values); err != nil {
 		return fmt.Errorf("writing parquet dictionary of %d binary values: %w", d.Len(), err)
@@ -194,6 +191,39 @@ func newFixedLenByteArrayDictionary(typ Type, bufferSize int) *fixedLenByteArray
 		size:   size,
 		values: make([]byte, 0, dictCap(bufferSize, size)*size),
 	}
+}
+
+func readFixedLenByteArrayDictionary(typ Type, columnIndex int16, numValues int, decoder encoding.Decoder) (Dictionary, error) {
+	size := typ.Length()
+
+	d := &fixedLenByteArrayDictionary{
+		typ:    typ,
+		size:   size,
+		values: make([]byte, 0, atLeastOne(numValues)*size),
+	}
+
+	for {
+		if len(d.values) == cap(d.values) {
+			newValues := make([]byte, len(d.values), 2*cap(d.values))
+			copy(newValues, d.values)
+			d.values = newValues
+		}
+
+		n, err := decoder.DecodeFixedLenByteArray(d.size, d.values[len(d.values):cap(d.values)])
+		if n > 0 {
+			d.values = d.values[:len(d.values)+(n*d.size)]
+		}
+
+		if err != nil {
+			if err == io.EOF {
+				err = nil
+			} else {
+				err = fmt.Errorf("reading parquet dictionary of fixed-length binary values of size %d: %w", d.size, err)
+			}
+			return d, err
+		}
+	}
+
 }
 
 func (d *fixedLenByteArrayDictionary) Type() Type { return newIndexedType(d.typ, d) }
@@ -259,31 +289,6 @@ func (d *fixedLenByteArrayDictionary) Bounds(indexes []int32) (min, max Value) {
 		max = makeValueBytes(FixedLenByteArray, maxValue)
 	}
 	return min, max
-}
-
-func (d *fixedLenByteArrayDictionary) ReadFrom(decoder encoding.Decoder) error {
-	d.Reset()
-	for {
-		if len(d.values) == cap(d.values) {
-			newValues := make([]byte, len(d.values), 2*cap(d.values))
-			copy(newValues, d.values)
-			d.values = newValues
-		}
-
-		n, err := decoder.DecodeFixedLenByteArray(d.size, d.values[len(d.values):cap(d.values)])
-		if n > 0 {
-			d.values = d.values[:len(d.values)+(n*d.size)]
-		}
-
-		if err != nil {
-			if err == io.EOF {
-				err = nil
-			} else {
-				err = fmt.Errorf("reading parquet dictionary of fixed-length binary values of size %d: %w", d.size, err)
-			}
-			return err
-		}
-	}
 }
 
 func (d *fixedLenByteArrayDictionary) WriteTo(encoder encoding.Encoder) error {

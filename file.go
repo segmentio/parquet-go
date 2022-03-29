@@ -541,8 +541,6 @@ func (r *filePages) readPage() (*filePage, error) {
 }
 
 func (r *filePages) readDictionary() error {
-	r.page.dictionary = r.page.columnType.NewDictionary(0) // TODO: configure buffer size
-	r.page.columnType = r.page.dictionary.Type()
 	currentOffset, _ := r.section.Seek(0, io.SeekCurrent)
 	defer func() {
 		r.section.Seek(currentOffset, io.SeekStart)
@@ -559,19 +557,20 @@ func (r *filePages) readDictionary() error {
 		return err
 	}
 
-	dict := r.page.dictionary
 	page := acquireCompressedPageReader(p.codec, &p.data)
-
 	enc := r.page.header.DictionaryPageHeader.Encoding
 	dec := LookupEncoding(enc).NewDecoder(page)
 
-	dict.Reset()
-	err = dict.ReadFrom(dec)
+	columnIndex := r.column.Column()
+	numValues := int(p.NumValues())
+	dict, err := r.page.columnType.ReadDictionary(columnIndex, numValues, dec)
 	releaseCompressedPageReader(page)
 
 	if err != nil {
 		return fmt.Errorf("reading dictionary of column %q: %w", p.columnPath(), err)
 	}
+	r.page.dictionary = dict
+	r.page.columnType = dict.Type()
 	return nil
 }
 
