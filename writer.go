@@ -765,7 +765,7 @@ func (c *writerColumn) flushFilterPages() error {
 
 		// If there is a dictionary, we need to only write the dictionary.
 		if dict := c.dictionary; dict != nil {
-			return dict.WriteTo(c.page.filter)
+			return dict.Page().WriteTo(c.page.filter)
 		}
 
 		for _, page := range c.filter {
@@ -1125,7 +1125,7 @@ func (c *writerColumn) writeDictionaryPage(output io.Writer, dict Dictionary) er
 	c.page.uncompressed.Reset(p)
 	c.dict.encoder.Reset(&c.page.uncompressed)
 
-	if err := dict.WriteTo(&c.dict.encoder); err != nil {
+	if err := dict.Page().WriteTo(&c.dict.encoder); err != nil {
 		return fmt.Errorf("writing parquet dictionary page: %w", err)
 	}
 	if err := p.Close(); err != nil {

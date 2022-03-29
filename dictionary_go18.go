@@ -10,25 +10,29 @@ import (
 )
 
 type dictionary[T primitive] struct {
-	class  *class[T]
-	typ    Type
-	values []T
-	index  map[T]int32
+	page[T]
+	typ   Type
+	index map[T]int32
 }
 
 func newDictionary[T primitive](typ Type, bufferSize int, class *class[T]) *dictionary[T] {
 	return &dictionary[T]{
-		class:  class,
-		typ:    typ,
-		values: make([]T, 0, dictCap(bufferSize, sizeof[T]())),
+		typ: typ,
+		page: page[T]{
+			class:  class,
+			values: make([]T, 0, dictCap(bufferSize, sizeof[T]())),
+		},
 	}
 }
 
 func readDictionary[T primitive](typ Type, columnIndex int16, numValues int, decoder encoding.Decoder, class *class[T]) (*dictionary[T], error) {
 	d := &dictionary[T]{
-		class:  class,
-		typ:    typ,
-		values: make([]T, 0, atLeastOne(numValues)),
+		typ: typ,
+		page: page[T]{
+			class:       class,
+			values:      make([]T, 0, atLeastOne(numValues)),
+			columnIndex: columnIndex,
+		},
 	}
 
 	for {
@@ -115,18 +119,11 @@ func (d *dictionary[T]) Bounds(indexes []int32) (min, max Value) {
 	return min, max
 }
 
-func (d *dictionary[T]) WriteTo(encoder encoding.Encoder) error {
-	if err := d.class.encode(encoder, d.values); err != nil {
-		return fmt.Errorf("writing parquet dictionary of %d %s values: %w", d.Len(), d.class.name, err)
-	}
-	return nil
-}
-
 func (d *dictionary[T]) Reset() {
 	d.values = d.values[:0]
 	d.index = nil
 }
 
-func (d *dictionary[T]) Values() ValueReader {
-	return &valueReader[T]{values: d.values}
+func (d *dictionary[T]) Page() BufferedPage {
+	return &d.page
 }
