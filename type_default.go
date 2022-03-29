@@ -474,6 +474,6 @@ func (t *timestampType) NewColumnReader(columnIndex, bufferSize int) ColumnReade
 	return newInt64ColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
-func (t *dateType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
+func (t *timestampType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
 	return readInt64Dictionary(t, makeColumnIndex(columnIndex), numValues, decoder)
 }

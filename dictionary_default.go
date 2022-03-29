@@ -36,7 +36,7 @@ func readBooleanDictionary(typ Type, columnIndex int16, numValues int, decoder e
 
 	for {
 		if len(d.values) == cap(d.values) {
-			newValues := make([]int32, len(d.values), 2*cap(d.values))
+			newValues := make([]bool, len(d.values), 2*cap(d.values))
 			copy(newValues, d.values)
 			d.values = newValues
 		}
@@ -481,7 +481,7 @@ func readFloatDictionary(typ Type, columnIndex int16, numValues int, decoder enc
 	d := &floatDictionary{
 		typ: typ,
 		floatPage: floatPage{
-			values:      make([]deprecated.Int96, 0, atLeastOne(numValues)),
+			values:      make([]float32, 0, atLeastOne(numValues)),
 			columnIndex: columnIndex,
 		},
 	}
