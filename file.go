@@ -17,6 +17,7 @@ import (
 )
 
 const (
+	defaultDictBufferSize  = 8192
 	defaultReadBufferSize  = 4096
 	defaultLevelBufferSize = 1024
 )

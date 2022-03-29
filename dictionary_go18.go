@@ -15,12 +15,13 @@ type dictionary[T primitive] struct {
 	index map[T]int32
 }
 
-func newDictionary[T primitive](typ Type, bufferSize int, class *class[T]) *dictionary[T] {
+func newDictionary[T primitive](typ Type, columnIndex int16, bufferSize int, class *class[T]) *dictionary[T] {
 	return &dictionary[T]{
 		typ: typ,
 		page: page[T]{
-			class:  class,
-			values: make([]T, 0, dictCap(bufferSize, sizeof[T]())),
+			class:       class,
+			values:      make([]T, 0, dictCap(bufferSize, sizeof[T]())),
+			columnIndex: columnIndex,
 		},
 	}
 }

@@ -68,11 +68,12 @@ type byteArrayDictionary struct {
 	index map[string]int32
 }
 
-func newByteArrayDictionary(typ Type, bufferSize int) *byteArrayDictionary {
+func newByteArrayDictionary(typ Type, columnIndex int16, bufferSize int) *byteArrayDictionary {
 	return &byteArrayDictionary{
 		typ: typ,
 		byteArrayPage: byteArrayPage{
-			values: encoding.MakeByteArrayList(dictCap(bufferSize, 16)),
+			values:      encoding.MakeByteArrayList(dictCap(bufferSize, 16)),
+			columnIndex: columnIndex,
 		},
 	}
 }
@@ -178,13 +179,14 @@ type fixedLenByteArrayDictionary struct {
 	index map[string]int32
 }
 
-func newFixedLenByteArrayDictionary(typ Type, bufferSize int) *fixedLenByteArrayDictionary {
+func newFixedLenByteArrayDictionary(typ Type, columnIndex int16, bufferSize int) *fixedLenByteArrayDictionary {
 	size := typ.Length()
 	return &fixedLenByteArrayDictionary{
 		typ: typ,
 		fixedLenByteArrayPage: fixedLenByteArrayPage{
-			size: size,
-			data: make([]byte, 0, dictCap(bufferSize, size)*size),
+			size:        size,
+			data:        make([]byte, 0, dictCap(bufferSize, size)*size),
+			columnIndex: columnIndex,
 		},
 	}
 }

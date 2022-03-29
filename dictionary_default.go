@@ -17,11 +17,12 @@ type booleanDictionary struct {
 	index map[bool]int32
 }
 
-func newBooleanDictionary(typ Type) *booleanDictionary {
+func newBooleanDictionary(typ Type, columnIndex int16, bufferSize int) *booleanDictionary {
 	return &booleanDictionary{
 		typ: typ,
 		booleanPage: booleanPage{
-			values: make([]bool, 0, 2),
+			values:      make([]bool, 0, atLeastOne(bufferSize)),
+			columnIndex: columnIndex,
 		},
 	}
 }
@@ -129,11 +130,12 @@ type int32Dictionary struct {
 	index map[int32]int32
 }
 
-func newInt32Dictionary(typ Type, bufferSize int) *int32Dictionary {
+func newInt32Dictionary(typ Type, columnIndex int16, bufferSize int) *int32Dictionary {
 	return &int32Dictionary{
 		typ: typ,
 		int32Page: int32Page{
-			values: make([]int32, 0, dictCap(bufferSize, 4)),
+			values:      make([]int32, 0, dictCap(bufferSize, 4)),
+			columnIndex: columnIndex,
 		},
 	}
 }
@@ -242,11 +244,12 @@ type int64Dictionary struct {
 	index map[int64]int32
 }
 
-func newInt64Dictionary(typ Type, bufferSize int) *int64Dictionary {
+func newInt64Dictionary(typ Type, columnIndex int16, bufferSize int) *int64Dictionary {
 	return &int64Dictionary{
 		typ: typ,
 		int64Page: int64Page{
-			values: make([]int64, 0, dictCap(bufferSize, 8)),
+			values:      make([]int64, 0, dictCap(bufferSize, 8)),
+			columnIndex: columnIndex,
 		},
 	}
 }
@@ -355,11 +358,12 @@ type int96Dictionary struct {
 	index map[deprecated.Int96]int32
 }
 
-func newInt96Dictionary(typ Type, bufferSize int) *int96Dictionary {
+func newInt96Dictionary(typ Type, columnIndex int16, bufferSize int) *int96Dictionary {
 	return &int96Dictionary{
 		typ: typ,
 		int96Page: int96Page{
-			values: make([]deprecated.Int96, 0, dictCap(bufferSize, 12)),
+			values:      make([]deprecated.Int96, 0, dictCap(bufferSize, 12)),
+			columnIndex: columnIndex,
 		},
 	}
 }
@@ -468,11 +472,12 @@ type floatDictionary struct {
 	index map[float32]int32
 }
 
-func newFloatDictionary(typ Type, bufferSize int) *floatDictionary {
+func newFloatDictionary(typ Type, columnIndex int16, bufferSize int) *floatDictionary {
 	return &floatDictionary{
 		typ: typ,
 		floatPage: floatPage{
-			values: make([]float32, 0, dictCap(bufferSize, 4)),
+			values:      make([]float32, 0, dictCap(bufferSize, 4)),
+			columnIndex: columnIndex,
 		},
 	}
 }
@@ -581,11 +586,12 @@ type doubleDictionary struct {
 	index map[float64]int32
 }
 
-func newDoubleDictionary(typ Type, bufferSize int) *doubleDictionary {
+func newDoubleDictionary(typ Type, columnIndex int16, bufferSize int) *doubleDictionary {
 	return &doubleDictionary{
 		typ: typ,
 		doublePage: doublePage{
-			values: make([]float64, 0, dictCap(bufferSize, 8)),
+			values:      make([]float64, 0, dictCap(bufferSize, 8)),
+			columnIndex: columnIndex,
 		},
 	}
 }
@@ -690,8 +696,8 @@ func (d *doubleDictionary) Page() BufferedPage {
 
 type uint32Dictionary struct{ *int32Dictionary }
 
-func newUint32Dictionary(typ Type, bufferSize int) uint32Dictionary {
-	return uint32Dictionary{newInt32Dictionary(typ, bufferSize)}
+func newUint32Dictionary(typ Type, columnIndex int16, bufferSize int) uint32Dictionary {
+	return uint32Dictionary{newInt32Dictionary(typ, columnIndex, bufferSize)}
 }
 
 func readUint32Dictionary(typ Type, columnIndex int16, numValues int, decoder encoding.Decoder) (uint32Dictionary, error) {
@@ -728,8 +734,8 @@ func (d uint32Dictionary) Page() BufferedPage {
 
 type uint64Dictionary struct{ *int64Dictionary }
 
-func newUint64Dictionary(typ Type, bufferSize int) uint64Dictionary {
-	return uint64Dictionary{newInt64Dictionary(typ, bufferSize)}
+func newUint64Dictionary(typ Type, columnIndex int16, bufferSize int) uint64Dictionary {
+	return uint64Dictionary{newInt64Dictionary(typ, columnIndex, bufferSize)}
 }
 
 func readUint64Dictionary(typ Type, columnIndex int16, numValues int, decoder encoding.Decoder) (uint64Dictionary, error) {

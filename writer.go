@@ -272,9 +272,10 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 		encoding, compression := encodingAndCompressionOf(leaf.node)
 		dictionary := Dictionary(nil)
 		columnType := leaf.node.Type()
+		columnIndex := int(leaf.columnIndex)
 
 		if isDictionaryEncoding(encoding) {
-			dictionary = columnType.NewDictionary(0)
+			dictionary = columnType.NewDictionary(columnIndex, defaultDictBufferSize)
 			columnType = dictionary.Type()
 		}
 

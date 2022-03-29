@@ -45,8 +45,8 @@ func (t primitiveType[T]) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	return newColumnIndexer(t.class)
 }
 
-func (t primitiveType[T]) NewDictionary(bufferSize int) Dictionary {
-	return newDictionary(t, bufferSize, t.class)
+func (t primitiveType[T]) NewDictionary(columnIndex, bufferSize int) Dictionary {
+	return newDictionary(t, makeColumnIndex(columnIndex), bufferSize, t.class)
 }
 
 func (t primitiveType[T]) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
@@ -87,8 +87,8 @@ func (t byteArrayType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	return newByteArrayColumnIndexer(sizeLimit)
 }
 
-func (t byteArrayType) NewDictionary(bufferSize int) Dictionary {
-	return newByteArrayDictionary(t, bufferSize)
+func (t byteArrayType) NewDictionary(columnIndex, bufferSize int) Dictionary {
+	return newByteArrayDictionary(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t byteArrayType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
@@ -129,8 +129,8 @@ func (t *fixedLenByteArrayType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	return newFixedLenByteArrayColumnIndexer(t.length, sizeLimit)
 }
 
-func (t *fixedLenByteArrayType) NewDictionary(bufferSize int) Dictionary {
-	return newFixedLenByteArrayDictionary(t, bufferSize)
+func (t *fixedLenByteArrayType) NewDictionary(columnIndex, bufferSize int) Dictionary {
+	return newFixedLenByteArrayDictionary(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t *fixedLenByteArrayType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
@@ -165,18 +165,18 @@ func (t *intType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	}
 }
 
-func (t *intType) NewDictionary(bufferSize int) Dictionary {
+func (t *intType) NewDictionary(columnIndex, bufferSize int) Dictionary {
 	if t.IsSigned {
 		if t.BitWidth == 64 {
-			return newDictionary(t, bufferSize, &int64Class)
+			return newDictionary(t, makeColumnIndex(columnIndex), bufferSize, &int64Class)
 		} else {
-			return newDictionary(t, bufferSize, &int32Class)
+			return newDictionary(t, makeColumnIndex(columnIndex), bufferSize, &int32Class)
 		}
 	} else {
 		if t.BitWidth == 64 {
-			return newDictionary(t, bufferSize, &uint64Class)
+			return newDictionary(t, makeColumnIndex(columnIndex), bufferSize, &uint64Class)
 		} else {
-			return newDictionary(t, bufferSize, &uint32Class)
+			return newDictionary(t, makeColumnIndex(columnIndex), bufferSize, &uint32Class)
 		}
 	}
 }
@@ -233,8 +233,8 @@ func (t *dateType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	return newColumnIndexer(&int32Class)
 }
 
-func (t *dateType) NewDictionary(bufferSize int) Dictionary {
-	return newDictionary(t, bufferSize, &int32Class)
+func (t *dateType) NewDictionary(columnIndex, bufferSize int) Dictionary {
+	return newDictionary(t, makeColumnIndex(columnIndex), bufferSize, &int32Class)
 }
 
 func (t *dateType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
@@ -257,11 +257,11 @@ func (t *timeType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	}
 }
 
-func (t *timeType) NewDictionary(bufferSize int) Dictionary {
+func (t *timeType) NewDictionary(columnIndex, bufferSize int) Dictionary {
 	if t.Unit.Millis != nil {
-		return newDictionary(t, bufferSize, &int32Class)
+		return newDictionary(t, makeColumnIndex(columnIndex), bufferSize, &int32Class)
 	} else {
-		return newDictionary(t, bufferSize, &int64Class)
+		return newDictionary(t, makeColumnIndex(columnIndex), bufferSize, &int64Class)
 	}
 }
 
@@ -293,8 +293,8 @@ func (t *timestampType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	return newColumnIndexer(&int64Class)
 }
 
-func (t *timestampType) NewDictionary(bufferSize int) Dictionary {
-	return newDictionary(t, bufferSize, &int64Class)
+func (t *timestampType) NewDictionary(columnIndex, bufferSize int) Dictionary {
+	return newDictionary(t, makeColumnIndex(columnIndex), bufferSize, &int64Class)
 }
 
 func (t *timestampType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {

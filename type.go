@@ -120,7 +120,7 @@ type Type interface {
 	// Creates a dictionary holding values of this type.
 	//
 	// The method panics if it is called on a group type.
-	NewDictionary(bufferSize int) Dictionary
+	NewDictionary(columnIndex, bufferSize int) Dictionary
 
 	// Creates a row group buffer column for values of this type.
 	//
@@ -384,8 +384,8 @@ func (t *stringType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	return newByteArrayColumnIndexer(sizeLimit)
 }
 
-func (t *stringType) NewDictionary(bufferSize int) Dictionary {
-	return newByteArrayDictionary(t, bufferSize)
+func (t *stringType) NewDictionary(columnIndex, bufferSize int) Dictionary {
+	return newByteArrayDictionary(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t *stringType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
@@ -439,8 +439,8 @@ func (t *uuidType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	return newFixedLenByteArrayColumnIndexer(16, sizeLimit)
 }
 
-func (t *uuidType) NewDictionary(bufferSize int) Dictionary {
-	return newFixedLenByteArrayDictionary(t, bufferSize)
+func (t *uuidType) NewDictionary(columnIndex, bufferSize int) Dictionary {
+	return newFixedLenByteArrayDictionary(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t *uuidType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
@@ -496,8 +496,8 @@ func (t *enumType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	return newByteArrayColumnIndexer(sizeLimit)
 }
 
-func (t *enumType) NewDictionary(bufferSize int) Dictionary {
-	return newByteArrayDictionary(t, bufferSize)
+func (t *enumType) NewDictionary(columnIndex, bufferSize int) Dictionary {
+	return newByteArrayDictionary(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t *enumType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
@@ -553,8 +553,8 @@ func (t *jsonType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	return newByteArrayColumnIndexer(sizeLimit)
 }
 
-func (t *jsonType) NewDictionary(bufferSize int) Dictionary {
-	return newByteArrayDictionary(t, bufferSize)
+func (t *jsonType) NewDictionary(columnIndex, bufferSize int) Dictionary {
+	return newByteArrayDictionary(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t *jsonType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
@@ -606,8 +606,8 @@ func (t *bsonType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	return newByteArrayColumnIndexer(sizeLimit)
 }
 
-func (t *bsonType) NewDictionary(bufferSize int) Dictionary {
-	return newByteArrayDictionary(t, bufferSize)
+func (t *bsonType) NewDictionary(columnIndex, bufferSize int) Dictionary {
+	return newByteArrayDictionary(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t *bsonType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
@@ -824,7 +824,7 @@ func (t *listType) NewColumnIndexer(int) ColumnIndexer {
 	panic("create create column indexer from parquet LIST type")
 }
 
-func (t *listType) NewDictionary(int) Dictionary {
+func (t *listType) NewDictionary(int, int) Dictionary {
 	panic("cannot create dictionary from parquet LIST type")
 }
 
@@ -882,7 +882,7 @@ func (t *mapType) NewColumnIndexer(int) ColumnIndexer {
 	panic("create create column indexer from parquet MAP type")
 }
 
-func (t *mapType) NewDictionary(int) Dictionary {
+func (t *mapType) NewDictionary(int, int) Dictionary {
 	panic("cannot create dictionary from parquet MAP type")
 }
 
@@ -922,7 +922,7 @@ func (t *nullType) NewColumnIndexer(int) ColumnIndexer {
 	panic("create create column indexer from parquet NULL type")
 }
 
-func (t *nullType) NewDictionary(int) Dictionary {
+func (t *nullType) NewDictionary(int, int) Dictionary {
 	panic("cannot create dictionary from parquet NULL type")
 }
 
@@ -954,7 +954,7 @@ func (groupType) NewColumnIndexer(int) ColumnIndexer {
 	panic("cannot create column indexer from parquet group")
 }
 
-func (groupType) NewDictionary(int) Dictionary {
+func (groupType) NewDictionary(int, int) Dictionary {
 	panic("cannot create dictionary from parquet group")
 }
 

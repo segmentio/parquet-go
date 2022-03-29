@@ -49,8 +49,8 @@ func (t booleanType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	return newBooleanColumnIndexer()
 }
 
-func (t booleanType) NewDictionary(bufferSize int) Dictionary {
-	return newBooleanDictionary(t)
+func (t booleanType) NewDictionary(columnIndex, bufferSize int) Dictionary {
+	return newBooleanDictionary(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t booleanType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
@@ -85,8 +85,8 @@ func (t int32Type) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	return newInt32ColumnIndexer()
 }
 
-func (t int32Type) NewDictionary(bufferSize int) Dictionary {
-	return newInt32Dictionary(t, bufferSize)
+func (t int32Type) NewDictionary(columnIndex, bufferSize int) Dictionary {
+	return newInt32Dictionary(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t int32Type) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
@@ -121,8 +121,8 @@ func (t int64Type) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	return newInt64ColumnIndexer()
 }
 
-func (t int64Type) NewDictionary(bufferSize int) Dictionary {
-	return newInt64Dictionary(t, bufferSize)
+func (t int64Type) NewDictionary(columnIndex, bufferSize int) Dictionary {
+	return newInt64Dictionary(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t int64Type) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
@@ -157,8 +157,8 @@ func (t int96Type) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	return newInt96ColumnIndexer()
 }
 
-func (t int96Type) NewDictionary(bufferSize int) Dictionary {
-	return newInt96Dictionary(t, bufferSize)
+func (t int96Type) NewDictionary(columnIndex, bufferSize int) Dictionary {
+	return newInt96Dictionary(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t int96Type) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
@@ -193,8 +193,8 @@ func (t floatType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	return newFloatColumnIndexer()
 }
 
-func (t floatType) NewDictionary(bufferSize int) Dictionary {
-	return newFloatDictionary(t, bufferSize)
+func (t floatType) NewDictionary(columnIndex, bufferSize int) Dictionary {
+	return newFloatDictionary(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t floatType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
@@ -227,8 +227,8 @@ func (t doubleType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	return newDoubleColumnIndexer()
 }
 
-func (t doubleType) NewDictionary(bufferSize int) Dictionary {
-	return newDoubleDictionary(t, bufferSize)
+func (t doubleType) NewDictionary(columnIndex, bufferSize int) Dictionary {
+	return newDoubleDictionary(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t doubleType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
@@ -263,8 +263,8 @@ func (t byteArrayType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	return newByteArrayColumnIndexer(sizeLimit)
 }
 
-func (t byteArrayType) NewDictionary(bufferSize int) Dictionary {
-	return newByteArrayDictionary(t, bufferSize)
+func (t byteArrayType) NewDictionary(columnIndex, bufferSize int) Dictionary {
+	return newByteArrayDictionary(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t byteArrayType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
@@ -304,8 +304,8 @@ func (t *fixedLenByteArrayType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	return newFixedLenByteArrayColumnIndexer(t.length, sizeLimit)
 }
 
-func (t *fixedLenByteArrayType) NewDictionary(bufferSize int) Dictionary {
-	return newFixedLenByteArrayDictionary(t, bufferSize)
+func (t *fixedLenByteArrayType) NewDictionary(columnIndex, bufferSize int) Dictionary {
+	return newFixedLenByteArrayDictionary(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t *fixedLenByteArrayType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
@@ -342,18 +342,18 @@ func (t *intType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	}
 }
 
-func (t *intType) NewDictionary(bufferSize int) Dictionary {
+func (t *intType) NewDictionary(columnIndex, bufferSize int) Dictionary {
 	if t.IsSigned {
 		if t.BitWidth == 64 {
-			return newInt64Dictionary(t, bufferSize)
+			return newInt64Dictionary(t, makeColumnIndex(columnIndex), bufferSize)
 		} else {
-			return newInt32Dictionary(t, bufferSize)
+			return newInt32Dictionary(t, makeColumnIndex(columnIndex), bufferSize)
 		}
 	} else {
 		if t.BitWidth == 64 {
-			return newUint64Dictionary(t, bufferSize)
+			return newUint64Dictionary(t, makeColumnIndex(columnIndex), bufferSize)
 		} else {
-			return newUint32Dictionary(t, bufferSize)
+			return newUint32Dictionary(t, makeColumnIndex(columnIndex), bufferSize)
 		}
 	}
 }
@@ -402,8 +402,8 @@ func (t *dateType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	return newInt32ColumnIndexer()
 }
 
-func (t *dateType) NewDictionary(bufferSize int) Dictionary {
-	return newInt32Dictionary(t, bufferSize)
+func (t *dateType) NewDictionary(columnIndex, bufferSize int) Dictionary {
+	return newInt32Dictionary(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t *dateType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
@@ -426,11 +426,11 @@ func (t *timeType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	}
 }
 
-func (t *timeType) NewDictionary(bufferSize int) Dictionary {
+func (t *timeType) NewDictionary(columnIndex, bufferSize int) Dictionary {
 	if t.Unit.Millis != nil {
-		return newInt32Dictionary(t, bufferSize)
+		return newInt32Dictionary(t, makeColumnIndex(columnIndex), bufferSize)
 	} else {
-		return newInt64Dictionary(t, bufferSize)
+		return newInt64Dictionary(t, makeColumnIndex(columnIndex), bufferSize)
 	}
 }
 
@@ -462,8 +462,8 @@ func (t *timestampType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	return newInt64ColumnIndexer()
 }
 
-func (t *timestampType) NewDictionary(bufferSize int) Dictionary {
-	return newInt64Dictionary(t, bufferSize)
+func (t *timestampType) NewDictionary(columnIndex, bufferSize int) Dictionary {
+	return newInt64Dictionary(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t *timestampType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
