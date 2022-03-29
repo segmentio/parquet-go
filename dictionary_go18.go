@@ -121,3 +121,7 @@ func (d *dictionary[T]) Reset() {
 	d.values = d.values[:0]
 	d.index = nil
 }
+
+func (d *dictionary[T]) Values() ValueReader {
+	return &valueReader[T]{values: d.values}
+}

@@ -60,7 +60,11 @@ type Dictionary interface {
 	Reset()
 
 	// Returns a reader exposing the values held in the dictionary.
-	//Values() ValueReader
+	//
+	// Values are read in the same order than they are held in the dictionary,
+	// allowing applications to assume the indexes of values exposed by the
+	// reader to be the indexes of values in the dictionary.
+	Values() ValueReader
 }
 
 func dictCap(bufferSize, valueItemSize int) int {
@@ -170,6 +174,10 @@ func (d *byteArrayDictionary) WriteTo(encoder encoding.Encoder) error {
 func (d *byteArrayDictionary) Reset() {
 	d.values.Reset()
 	d.index = nil
+}
+
+func (d *byteArrayDictionary) Values() ValueReader {
+	return &byteArrayValueReader{values: d.values}
 }
 
 type fixedLenByteArrayDictionary struct {
@@ -288,6 +296,10 @@ func (d *fixedLenByteArrayDictionary) WriteTo(encoder encoding.Encoder) error {
 func (d *fixedLenByteArrayDictionary) Reset() {
 	d.values = d.values[:0]
 	d.index = nil
+}
+
+func (d *fixedLenByteArrayDictionary) Values() ValueReader {
+	return &fixedLenByteArrayValueReader{size: d.size, data: d.values}
 }
 
 type indexedType struct {

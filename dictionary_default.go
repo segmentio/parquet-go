@@ -92,6 +92,10 @@ func (d *booleanDictionary) Reset() {
 	d.values = [2]bool{false, true}
 }
 
+func (d *booleanDictionary) Values() ValueReader {
+	return &booleanValueReader{values: d.values[:]}
+}
+
 type int32Dictionary struct {
 	typ    Type
 	values []int32
@@ -197,6 +201,10 @@ func (d *int32Dictionary) WriteTo(encoder encoding.Encoder) error {
 func (d *int32Dictionary) Reset() {
 	d.values = d.values[:0]
 	d.index = nil
+}
+
+func (d *int32Dictionary) Values() ValueReader {
+	return &int32ValueReader{values: d.values}
 }
 
 type int64Dictionary struct {
@@ -306,6 +314,10 @@ func (d *int64Dictionary) Reset() {
 	d.index = nil
 }
 
+func (d *int64Dictionary) Values() ValueReader {
+	return &int64ValueReader{values: d.values}
+}
+
 type int96Dictionary struct {
 	typ    Type
 	values []deprecated.Int96
@@ -411,6 +423,10 @@ func (d *int96Dictionary) WriteTo(encoder encoding.Encoder) error {
 func (d *int96Dictionary) Reset() {
 	d.values = d.values[:0]
 	d.index = nil
+}
+
+func (d *int96Dictionary) Values() ValueReader {
+	return &int96ValueReader{values: d.values}
 }
 
 type floatDictionary struct {
@@ -520,6 +536,10 @@ func (d *floatDictionary) Reset() {
 	d.index = nil
 }
 
+func (d *floatDictionary) Values() ValueReader {
+	return &floatValueReader{values: d.values}
+}
+
 type doubleDictionary struct {
 	typ    Type
 	values []float64
@@ -625,6 +645,10 @@ func (d *doubleDictionary) WriteTo(encoder encoding.Encoder) error {
 func (d *doubleDictionary) Reset() {
 	d.values = d.values[:0]
 	d.index = nil
+}
+
+func (d *doubleDictionary) Values() ValueReader {
+	return &doubleValueReader{values: d.values}
 }
 
 type uint32Dictionary struct{ *int32Dictionary }
