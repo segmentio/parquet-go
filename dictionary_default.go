@@ -31,7 +31,8 @@ func readBooleanDictionary(typ Type, columnIndex int16, numValues int, decoder e
 	d := &booleanDictionary{
 		typ: typ,
 		booleanPage: booleanPage{
-			values: make([]bool, 0, atLeastOne(numValues)),
+			values:      make([]bool, 0, atLeastOne(numValues)),
+			columnIndex: columnIndex,
 		},
 	}
 
