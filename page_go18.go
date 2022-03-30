@@ -74,7 +74,8 @@ type pageReader[T primitive] struct {
 }
 
 func (r *pageReader[T]) Read(b []byte) (n int, err error) {
-	return r.ReadRequired(cast.BytesToSlice[T](b))
+	n, err = r.ReadRequired(cast.BytesToSlice[T](b))
+	return sizeof[T]() * n, err
 }
 
 func (r *pageReader[T]) ReadRequired(values []T) (n int, err error) {

@@ -59,6 +59,7 @@ func (buf *Buffer) configure(schema *Schema) {
 
 	forEachLeafColumnOf(schema, func(leaf leafColumn) {
 		nullOrdering := nullsGoLast
+		columnIndex := int(leaf.columnIndex)
 		columnType := leaf.node.Type()
 		bufferSize := buf.config.ColumnBufferSize
 		dictionary := (Dictionary)(nil)
@@ -66,11 +67,11 @@ func (buf *Buffer) configure(schema *Schema) {
 
 		if isDictionaryEncoding(encoding) {
 			bufferSize /= 2
-			dictionary = columnType.NewDictionary(bufferSize)
+			dictionary = columnType.NewDictionary(columnIndex, bufferSize)
 			columnType = dictionary.Type()
 		}
 
-		column := columnType.NewColumnBuffer(int(leaf.columnIndex), bufferSize)
+		column := columnType.NewColumnBuffer(columnIndex, bufferSize)
 		switch {
 		case leaf.maxRepetitionLevel > 0:
 			column = newRepeatedColumnBuffer(column, leaf.maxRepetitionLevel, leaf.maxDefinitionLevel, nullOrdering)

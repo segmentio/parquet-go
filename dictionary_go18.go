@@ -10,17 +10,52 @@ import (
 )
 
 type dictionary[T primitive] struct {
-	class  *class[T]
-	typ    Type
-	values []T
-	index  map[T]int32
+	page[T]
+	typ   Type
+	index map[T]int32
 }
 
-func newDictionary[T primitive](typ Type, bufferSize int, class *class[T]) *dictionary[T] {
+func newDictionary[T primitive](typ Type, columnIndex int16, bufferSize int, class *class[T]) *dictionary[T] {
 	return &dictionary[T]{
-		class:  class,
-		typ:    typ,
-		values: make([]T, 0, dictCap(bufferSize, sizeof[T]())),
+		typ: typ,
+		page: page[T]{
+			class:       class,
+			values:      make([]T, 0, dictCap(bufferSize, sizeof[T]())),
+			columnIndex: columnIndex,
+		},
+	}
+}
+
+func readDictionary[T primitive](typ Type, columnIndex int16, numValues int, decoder encoding.Decoder, class *class[T]) (*dictionary[T], error) {
+	d := &dictionary[T]{
+		typ: typ,
+		page: page[T]{
+			class:       class,
+			values:      make([]T, 0, atLeastOne(numValues)),
+			columnIndex: columnIndex,
+		},
+	}
+
+	for {
+		if len(d.values) == cap(d.values) {
+			newValues := make([]T, len(d.values), 2*cap(d.values))
+			copy(newValues, d.values)
+			d.values = newValues
+		}
+
+		n, err := d.class.decode(decoder, d.values[len(d.values):cap(d.values)])
+		if n > 0 {
+			d.values = d.values[:len(d.values)+n]
+		}
+
+		if err != nil {
+			if err == io.EOF {
+				err = nil
+			} else {
+				err = fmt.Errorf("reading parquet dictionary of %s values: %w", d.class.name, err)
+			}
+			return d, err
+		}
 	}
 }
 
@@ -85,39 +120,11 @@ func (d *dictionary[T]) Bounds(indexes []int32) (min, max Value) {
 	return min, max
 }
 
-func (d *dictionary[T]) ReadFrom(decoder encoding.Decoder) error {
-	d.Reset()
-	for {
-		if len(d.values) == cap(d.values) {
-			newValues := make([]T, len(d.values), 2*cap(d.values))
-			copy(newValues, d.values)
-			d.values = newValues
-		}
-
-		n, err := d.class.decode(decoder, d.values[len(d.values):cap(d.values)])
-		if n > 0 {
-			d.values = d.values[:len(d.values)+n]
-		}
-
-		if err != nil {
-			if err == io.EOF {
-				err = nil
-			} else {
-				err = fmt.Errorf("reading parquet dictionary of %s values: %w", d.class.name, err)
-			}
-			return err
-		}
-	}
-}
-
-func (d *dictionary[T]) WriteTo(encoder encoding.Encoder) error {
-	if err := d.class.encode(encoder, d.values); err != nil {
-		return fmt.Errorf("writing parquet dictionary of %d %s values: %w", d.Len(), d.class.name, err)
-	}
-	return nil
-}
-
 func (d *dictionary[T]) Reset() {
 	d.values = d.values[:0]
 	d.index = nil
+}
+
+func (d *dictionary[T]) Page() BufferedPage {
+	return &d.page
 }
