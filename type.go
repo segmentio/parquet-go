@@ -161,8 +161,8 @@ type Type interface {
 	// argument.
 	//
 	// The number of values is a hint to optimize the allocation of memory
-	// buffers for the dictionary. Applications must pass zero for the number of
-	// values when they do not know how many values will be decoded.
+	// buffers for the dictionary. Callers that don't know how many values will
+	// be decoded should pass zero for numValues.
 	ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error)
 }
 
@@ -696,12 +696,20 @@ func Time(unit TimeUnit) Node {
 
 type timeType format.TimeType
 
+func (t *timeType) useInt32() bool {
+	return t.Unit.Millis != nil
+}
+
+func (t *timeType) useInt64() bool {
+	return t.Unit.Micros != nil
+}
+
 func (t *timeType) String() string {
 	return (*format.TimeType)(t).String()
 }
 
 func (t *timeType) Kind() Kind {
-	if t.Unit.Millis != nil {
+	if t.useInt32() {
 		return Int32
 	} else {
 		return Int64
@@ -709,7 +717,7 @@ func (t *timeType) Kind() Kind {
 }
 
 func (t *timeType) Length() int {
-	if t.Unit.Millis != nil {
+	if t.useInt32() {
 		return 32
 	} else {
 		return 64
@@ -717,7 +725,7 @@ func (t *timeType) Length() int {
 }
 
 func (t *timeType) Compare(a, b Value) int {
-	if t.Unit.Millis != nil {
+	if t.useInt32() {
 		return compareInt32(a.Int32(), b.Int32())
 	} else {
 		return compareInt64(a.Int64(), b.Int64())
@@ -729,7 +737,7 @@ func (t *timeType) ColumnOrder() *format.ColumnOrder {
 }
 
 func (t *timeType) PhysicalType() *format.Type {
-	if t.Unit.Millis != nil {
+	if t.useInt32() {
 		return &physicalTypes[Int32]
 	} else {
 		return &physicalTypes[Int64]
@@ -742,9 +750,9 @@ func (t *timeType) LogicalType() *format.LogicalType {
 
 func (t *timeType) ConvertedType() *deprecated.ConvertedType {
 	switch {
-	case t.Unit.Millis != nil:
+	case t.useInt32():
 		return &convertedTypes[deprecated.TimeMillis]
-	case t.Unit.Micros != nil:
+	case t.useInt64():
 		return &convertedTypes[deprecated.TimeMicros]
 	default:
 		return nil

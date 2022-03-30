@@ -215,13 +215,11 @@ func readFixedLenByteArrayDictionary(typ Type, columnIndex int16, numValues int,
 			d.data = d.data[:len(d.data)+(n*d.size)]
 		}
 
+		if err == io.EOF {
+			return d, nil
+		}
 		if err != nil {
-			if err == io.EOF {
-				err = nil
-			} else {
-				err = fmt.Errorf("reading parquet dictionary of fixed-length binary values of size %d: %w", d.size, err)
-			}
-			return d, err
+			return nil, fmt.Errorf("reading parquet dictionary of fixed-length binary values of size %d: %w", d.size, err)
 		}
 	}
 
