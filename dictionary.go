@@ -454,7 +454,7 @@ func (col *indexedColumnBuffer) WriteValues(values []Value) (int, error) {
 	if j <= cap(col.values) {
 		col.values = col.values[:j]
 	} else {
-		colValues := make([]int32, j)
+		colValues := make([]int32, j, 2*j)
 		copy(colValues, col.values)
 		col.values = colValues
 	}
