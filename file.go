@@ -206,6 +206,9 @@ func (f *File) readPageIndex(section *bufferedSectionReader, decoder *thrift.Dec
 	return columnIndexes, offsetIndexes, nil
 }
 
+// NumRows returns the number of rows in the file.
+func (f *File) NumRows() int64 { return f.metadata.numRows }
+
 // NumRowGroups returns the number of row groups in f.
 func (f *File) NumRowGroups() int { return len(f.rowGroups) }
 
