@@ -305,16 +305,21 @@ func (t *intType) ConvertedType() *deprecated.ConvertedType {
 	return &convertedTypes[convertedType]
 }
 
+// FixedLenByteArray decimals are sized based on precision
+// this function calculates the necessary byte array size
+func CalcDecimalFixedLenByteArraySize(precision int) int {
+	return int(math.Ceil((math.Log10(2) + float64(precision)) / math.Log10(256)))
+}
+
 // Decimal constructs a leaf node of decimal logical type with the given
 // scale, precision, and underlying type.
 //
 // https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#decimal
 func Decimal(scale, precision int, typ Type) Node {
-	length := int(math.Ceil((math.Log10(2) + float64(precision)) / math.Log10(256)))
 	switch typ.Kind() {
-	case Int32Type.Kind(), Int64Type.Kind(), FixedLenByteArrayType(length).Kind():
+	case Int32, Int64, FixedLenByteArray:
 	default:
-		panic("DECIMAL node must annotate the INT32, INT64 or FixedLenByteArrayType kinds but got " + typ.String())
+		panic("DECIMAL node must annotate Int32, Int64 or FixedLenByteArray but got " + typ.String())
 	}
 	return Leaf(&decimalType{
 		decimal: format.DecimalType{

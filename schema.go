@@ -2,7 +2,6 @@ package parquet
 
 import (
 	"fmt"
-	"math"
 	"reflect"
 	"sort"
 	"strconv"
@@ -558,8 +557,7 @@ func makeStructField(f reflect.StructField) structField {
 				case reflect.Int64:
 					baseType = Int64Type
 				case reflect.Array:
-					length := int(math.Ceil((math.Log10(2) + float64(precision)) / math.Log10(256)))
-					baseType = FixedLenByteArrayType(length)
+					baseType = FixedLenByteArrayType(CalcDecimalFixedLenByteArraySize(precision))
 				default:
 					throwInvalidFieldTag(f, option)
 				}
