@@ -16,10 +16,12 @@ type ColumnMapping struct {
 }
 
 // ColumnIndex returns the column index of the column at the given path.
+// The path is the sequence of column names identifying a leaf column, starting
+// from the root column of the schema.
 //
 // If the path was not found in the mapping, or if it did not represent a
 // leaf column of the parquet schema, the method returns a negative value.
-func (m *ColumnMapping) ColumnIndex(path []string) (columnIndex int) {
+func (m *ColumnMapping) ColumnIndex(path ...string) (columnIndex int) {
 	return int(m.mapping.lookup(path))
 }
 
@@ -31,19 +33,19 @@ func (m *ColumnMapping) ColumnPaths() [][]string {
 	return m.columns
 }
 
-// String returns a string representation of the column mapping.
+// String returns a human-readable representation of the column mapping.
 func (m *ColumnMapping) String() string {
 	s := new(strings.Builder)
-	s.WriteString("{")
+	s.WriteByte('{')
 
 	if len(m.columns) > 0 {
 		for _, path := range m.columns {
-			fmt.Fprintf(s, "\n  % 2d => %q", m.ColumnIndex(path), columnPath(path))
+			fmt.Fprintf(s, "\n  % 2d => %q", m.ColumnIndex(path...), columnPath(path))
 		}
 		s.WriteByte('\n')
 	}
 
-	s.WriteString("}")
+	s.WriteByte('}')
 	return s.String()
 }
 
