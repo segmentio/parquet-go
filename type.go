@@ -307,7 +307,7 @@ func (t *intType) ConvertedType() *deprecated.ConvertedType {
 
 // FixedLenByteArray decimals are sized based on precision
 // this function calculates the necessary byte array size
-func CalcDecimalFixedLenByteArraySize(precision int) int {
+func calcDecimalFixedLenByteArraySize(precision int) int {
 	return int(math.Ceil((math.Log10(2) + float64(precision)) / math.Log10(256)))
 }
 

@@ -557,7 +557,7 @@ func makeStructField(f reflect.StructField) structField {
 				case reflect.Int64:
 					baseType = Int64Type
 				case reflect.Array:
-					baseType = FixedLenByteArrayType(CalcDecimalFixedLenByteArraySize(precision))
+					baseType = FixedLenByteArrayType(calcDecimalFixedLenByteArraySize(precision))
 				default:
 					throwInvalidFieldTag(f, option)
 				}
