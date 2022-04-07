@@ -36,7 +36,12 @@ func CompareNullsLast(cmp func(Value, Value) int) func(Value, Value) int {
 	}
 }
 
-// Search uses the column index passed as argument to find the page that the
+// Search is like Find, but uses the default ordering of the given type.
+func Search(index ColumnIndex, value Value, typ Type) int {
+	return Find(index, value, CompareNullsLast(typ.Compare))
+}
+
+// Find uses the column index passed as argument to find the page that the
 // given value is expected to be found in.
 //
 // The function returns the index of the first page that might contain the
@@ -45,8 +50,14 @@ func CompareNullsLast(cmp func(Value, Value) int) func(Value, Value) int {
 //
 // The comparison function passed as last argument is used to determine the
 // relative order of values. This should generally be the Compare method of
-// the column type.
-func Search(index ColumnIndex, value Value, cmp func(Value, Value) int) int {
+// the column type, but can sometimes be customized to modify how null values
+// are interpreted, for example:
+//
+//	pageIndex := parquet.Find(columnIndex, value,
+//		parquet.CompareNullsFirst(typ.Compare),
+//	)
+//
+func Find(index ColumnIndex, value Value, cmp func(Value, Value) int) int {
 	switch {
 	case index.IsAscending():
 		return binarySearch(index, value, cmp)

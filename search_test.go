@@ -81,7 +81,7 @@ func testSearch(t *testing.T, pages [][]int32) {
 		t.Run(fmt.Sprintf("page#%02d", i), func(t *testing.T) {
 			for _, value := range values {
 				v := parquet.ValueOf(value)
-				j := parquet.Search(columnIndex, v, parquet.Int32Type.Compare)
+				j := parquet.Search(columnIndex, v, parquet.Int32Type)
 
 				if i != j {
 					t.Errorf("searching for value %v: got=%d want=%d", v, j, i)
@@ -89,7 +89,7 @@ func testSearch(t *testing.T, pages [][]int32) {
 			}
 
 			for _, test := range []int32{math.MinInt32, math.MaxInt32} {
-				if page := parquet.Search(columnIndex, parquet.ValueOf(test), parquet.Int32Type.Compare); page != len(pages) {
+				if page := parquet.Search(columnIndex, parquet.ValueOf(test), parquet.Int32Type); page != len(pages) {
 					t.Errorf("search for non-existing value %v: got=%d want=%d", test, page, len(pages))
 				}
 			}
