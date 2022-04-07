@@ -1,5 +1,41 @@
 package parquet
 
+// CompareNullsFirst constructs a comparison function which assumes that null
+// values are smaller than all other values.
+func CompareNullsFirst(cmp func(Value, Value) int) func(Value, Value) int {
+	return func(a, b Value) int {
+		switch {
+		case a.IsNull():
+			if b.IsNull() {
+				return 0
+			}
+			return -1
+		case b.IsNull():
+			return +1
+		default:
+			return cmp(a, b)
+		}
+	}
+}
+
+// CompareNullsLast constructs a comparison function which assumes that null
+// values are greater than all other values.
+func CompareNullsLast(cmp func(Value, Value) int) func(Value, Value) int {
+	return func(a, b Value) int {
+		switch {
+		case a.IsNull():
+			if b.IsNull() {
+				return 0
+			}
+			return +1
+		case b.IsNull():
+			return -1
+		default:
+			return cmp(a, b)
+		}
+	}
+}
+
 // Search uses the column index passed as argument to find the page that the
 // given value is expected to be found in.
 //
