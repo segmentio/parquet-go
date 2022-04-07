@@ -215,6 +215,8 @@ type writer struct {
 	rowGroups      []format.RowGroup
 	columnIndexes  [][]format.ColumnIndex
 	offsetIndexes  [][]format.OffsetIndex
+
+	sortingColumns []format.SortingColumn
 }
 
 func newWriter(output io.Writer, config *WriterConfig) *writer {
@@ -266,6 +268,10 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 	dataPageType := format.DataPage
 	if config.DataPageVersion == 2 {
 		dataPageType = format.DataPageV2
+	}
+
+	if len(config.SortingColumns) > 0 {
+		w.sortingColumns = make([]format.SortingColumn, len(config.SortingColumns))
 	}
 
 	forEachLeafColumnOf(config.Schema, func(leaf leafColumn) {
@@ -333,6 +339,16 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 		sortPageEncodings(c.encodings)
 
 		w.columns = append(w.columns, c)
+
+		if len(config.SortingColumns) > 0 {
+			if sortingIndex := searchSortingColumn(config.SortingColumns, leaf.path); sortingIndex < len(w.sortingColumns) {
+				w.sortingColumns[sortingIndex] = format.SortingColumn{
+					ColumnIdx:  int32(leaf.columnIndex),
+					Descending: config.SortingColumns[sortingIndex].Descending(),
+					NullsFirst: config.SortingColumns[sortingIndex].NullsFirst(),
+				}
+			}
+		}
 	})
 
 	w.columnChunk = make([]format.ColumnChunk, len(w.columns))
@@ -556,8 +572,8 @@ func (w *writer) writeRowGroup(rowGroupSchema *Schema, rowGroupSortingColumns []
 		totalCompressedSize += int64(c.TotalCompressedSize)
 	}
 
-	sortingColumns := ([]format.SortingColumn)(nil)
-	if len(rowGroupSortingColumns) > 0 {
+	sortingColumns := w.sortingColumns
+	if len(sortingColumns) == 0 && len(rowGroupSortingColumns) > 0 {
 		sortingColumns = make([]format.SortingColumn, 0, len(rowGroupSortingColumns))
 		forEachLeafColumnOf(rowGroupSchema, func(leaf leafColumn) {
 			if sortingIndex := searchSortingColumn(rowGroupSortingColumns, leaf.path); sortingIndex < len(sortingColumns) {
