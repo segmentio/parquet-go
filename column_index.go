@@ -34,6 +34,51 @@ type ColumnIndex interface {
 	IsDescending() bool
 }
 
+// NewColumnIndex constructs a ColumnIndex instance from the given parquet
+// format column index. The kind argument configures the type of values
+func NewColumnIndex(kind Kind, index *format.ColumnIndex) ColumnIndex {
+	return &formatColumnIndex{
+		kind:  kind,
+		index: index,
+	}
+}
+
+type formatColumnIndex struct {
+	kind  Kind
+	index *format.ColumnIndex
+}
+
+func (f *formatColumnIndex) NumPages() int {
+	return len(f.index.MinValues)
+}
+
+func (f *formatColumnIndex) NullCount(i int) int64 {
+	if len(f.index.NullCounts) > 0 {
+		return f.index.NullCounts[0]
+	}
+	return 0
+}
+
+func (f *formatColumnIndex) NullPage(i int) bool {
+	return len(f.index.NullPages) > 0 && f.index.NullPages[i]
+}
+
+func (f *formatColumnIndex) MinValue(i int) Value {
+	return f.kind.Value(f.index.MinValues[i])
+}
+
+func (f *formatColumnIndex) MaxValue(i int) Value {
+	return f.kind.Value(f.index.MaxValues[i])
+}
+
+func (f *formatColumnIndex) IsAscending() bool {
+	return f.index.BoundaryOrder == format.Ascending
+}
+
+func (f *formatColumnIndex) IsDescending() bool {
+	return f.index.BoundaryOrder == format.Descending
+}
+
 type emptyColumnIndex struct{}
 
 func (emptyColumnIndex) NumPages() int       { return 0 }
