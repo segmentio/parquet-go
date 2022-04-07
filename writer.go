@@ -215,7 +215,6 @@ type writer struct {
 	rowGroups      []format.RowGroup
 	columnIndexes  [][]format.ColumnIndex
 	offsetIndexes  [][]format.OffsetIndex
-
 	sortingColumns []format.SortingColumn
 }
 
@@ -228,6 +227,7 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 		w.metadata = append(w.metadata, format.KeyValue{Key: k, Value: v})
 	}
 	sortKeyValueMetadata(w.metadata)
+	w.sortingColumns = make([]format.SortingColumn, len(config.SortingColumns))
 
 	config.Schema.forEachNode(func(name string, node Node) {
 		nodeType := node.Type()
@@ -268,10 +268,6 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 	dataPageType := format.DataPage
 	if config.DataPageVersion == 2 {
 		dataPageType = format.DataPageV2
-	}
-
-	if len(config.SortingColumns) > 0 {
-		w.sortingColumns = make([]format.SortingColumn, len(config.SortingColumns))
 	}
 
 	forEachLeafColumnOf(config.Schema, func(leaf leafColumn) {
@@ -340,13 +336,11 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 
 		w.columns = append(w.columns, c)
 
-		if len(config.SortingColumns) > 0 {
-			if sortingIndex := searchSortingColumn(config.SortingColumns, leaf.path); sortingIndex < len(w.sortingColumns) {
-				w.sortingColumns[sortingIndex] = format.SortingColumn{
-					ColumnIdx:  int32(leaf.columnIndex),
-					Descending: config.SortingColumns[sortingIndex].Descending(),
-					NullsFirst: config.SortingColumns[sortingIndex].NullsFirst(),
-				}
+		if sortingIndex := searchSortingColumn(config.SortingColumns, leaf.path); sortingIndex < len(w.sortingColumns) {
+			w.sortingColumns[sortingIndex] = format.SortingColumn{
+				ColumnIdx:  int32(leaf.columnIndex),
+				Descending: config.SortingColumns[sortingIndex].Descending(),
+				NullsFirst: config.SortingColumns[sortingIndex].NullsFirst(),
 			}
 		}
 	})
