@@ -95,19 +95,50 @@ func NewReader(input io.ReaderAt, options ...ReaderOption) *Reader {
 		r.file.rowGroup = concat(schema, rowGroups)
 	}
 
-	if c.Schema != nil && !nodesAreEqual(c.Schema, r.file.schema) {
-		conv, err := Convert(c.Schema, r.file.schema)
+	if c.Schema != nil {
+		r.file.schema = c.Schema
+		r.file.rowGroup = convertRowGroupTo(r.file.rowGroup, c.Schema)
+	}
+
+	r.read.init(r.file.schema, r.file.rowGroup)
+	return r
+}
+
+// NewRowGroupReader constructs a new Reader which reads rows from the RowGroup
+// passed as argument.
+func NewRowGroupReader(rowGroup RowGroup, options ...ReaderOption) *Reader {
+	c, err := NewReaderConfig(options...)
+	if err != nil {
+		panic(err)
+	}
+
+	if c.Schema != nil {
+		rowGroup = convertRowGroupTo(rowGroup, c.Schema)
+	}
+
+	r := &Reader{
+		file: reader{
+			schema:   rowGroup.Schema(),
+			rowGroup: rowGroup,
+		},
+	}
+
+	r.read.init(r.file.schema, r.file.rowGroup)
+	return r
+}
+
+func convertRowGroupTo(rowGroup RowGroup, schema *Schema) RowGroup {
+	if rowGroupSchema := rowGroup.Schema(); !nodesAreEqual(schema, rowGroupSchema) {
+		conv, err := Convert(schema, rowGroupSchema)
 		if err != nil {
 			// TODO: this looks like something we should not be panicking on,
 			// but the current NewReader API does not offer a mechanism to
 			// report errors.
 			panic(err)
 		}
-		r.file.rowGroup = ConvertRowGroup(r.file.rowGroup, conv)
+		rowGroup = ConvertRowGroup(rowGroup, conv)
 	}
-
-	r.read.init(r.file.schema, r.file.rowGroup)
-	return r
+	return rowGroup
 }
 
 func sizeOf(r io.ReaderAt) (int64, error) {
