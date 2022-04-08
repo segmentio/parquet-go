@@ -1,12 +1,8 @@
 package parquet
 
 import (
-	"bytes"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
-	"sync"
 
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
@@ -811,75 +807,3 @@ func (r *fixedLenByteArrayPageReader) ReadValues(values []Value) (n int, err err
 	}
 	return n, err
 }
-
-type PageBufferPool interface {
-	GetPageBuffer() io.ReadWriter
-	PutPageBuffer(io.ReadWriter)
-}
-
-func NewPageBufferPool() PageBufferPool { return new(pageBufferPool) }
-
-type pageBufferPool struct{ sync.Pool }
-
-func (pool *pageBufferPool) GetPageBuffer() io.ReadWriter {
-	b, _ := pool.Get().(*bytes.Buffer)
-	if b == nil {
-		b = new(bytes.Buffer)
-	} else {
-		b.Reset()
-	}
-	return b
-}
-
-func (pool *pageBufferPool) PutPageBuffer(buf io.ReadWriter) {
-	if b, _ := buf.(*bytes.Buffer); b != nil {
-		pool.Put(b)
-	}
-}
-
-type fileBufferPool struct {
-	err     error
-	tempdir string
-	pattern string
-}
-
-func NewFileBufferPool(tempdir, pattern string) PageBufferPool {
-	pool := &fileBufferPool{
-		tempdir: tempdir,
-		pattern: pattern,
-	}
-	pool.tempdir, pool.err = filepath.Abs(pool.tempdir)
-	return pool
-}
-
-func (pool *fileBufferPool) GetPageBuffer() io.ReadWriter {
-	if pool.err != nil {
-		return &errorBuffer{err: pool.err}
-	}
-	f, err := os.CreateTemp(pool.tempdir, pool.pattern)
-	if err != nil {
-		return &errorBuffer{err: err}
-	}
-	return f
-}
-
-func (pool *fileBufferPool) PutPageBuffer(buf io.ReadWriter) {
-	if f, _ := buf.(*os.File); f != nil {
-		defer f.Close()
-		os.Remove(f.Name())
-	}
-}
-
-type errorBuffer struct{ err error }
-
-func (errbuf *errorBuffer) Read([]byte) (int, error)          { return 0, errbuf.err }
-func (errbuf *errorBuffer) Write([]byte) (int, error)         { return 0, errbuf.err }
-func (errbuf *errorBuffer) ReadFrom(io.Reader) (int64, error) { return 0, errbuf.err }
-func (errbuf *errorBuffer) WriteTo(io.Writer) (int64, error)  { return 0, errbuf.err }
-
-var (
-	defaultPageBufferPool pageBufferPool
-
-	_ io.ReaderFrom = (*errorBuffer)(nil)
-	_ io.WriterTo   = (*errorBuffer)(nil)
-)
