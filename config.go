@@ -139,6 +139,7 @@ type WriterConfig struct {
 	DataPageStatistics   bool
 	KeyValueMetadata     map[string]string
 	Schema               *Schema
+	SortingColumns       []SortingColumn
 	BloomFilters         []BloomFilterColumn
 }
 
@@ -193,6 +194,7 @@ func (c *WriterConfig) ConfigureWriter(config *WriterConfig) {
 		DataPageStatistics:   config.DataPageStatistics,
 		KeyValueMetadata:     keyValueMetadata,
 		Schema:               coalesceSchema(c.Schema, config.Schema),
+		SortingColumns:       coalesceSortingColumns(c.SortingColumns, config.SortingColumns),
 		BloomFilters:         coalesceBloomFilters(c.BloomFilters, config.BloomFilters),
 	}
 }
@@ -404,13 +406,26 @@ func ColumnBufferSize(size int) RowGroupOption {
 // The order of sorting columns passed as argument defines the ordering
 // hierarchy; when elements are equal in the first column, the second column is
 // used to order rows, etc...
-func SortingColumns(sortingColumns ...SortingColumn) RowGroupOption {
+func SortingColumns(columns ...SortingColumn) interface {
+	RowGroupOption
+	WriterOption
+} {
 	// Make a copy so that we do not retain the input slice generated implicitly
 	// for the variable argument list, and also avoid having a nil slice when
 	// the option is passed with no sorting columns, so we can differentiate it
 	// from it not being passed.
-	sortingColumns = append([]SortingColumn{}, sortingColumns...)
-	return rowGroupOption(func(config *RowGroupConfig) { config.SortingColumns = sortingColumns })
+	columns = append([]SortingColumn{}, columns...)
+	return sortingColumns(columns)
+}
+
+type sortingColumns []SortingColumn
+
+func (columns sortingColumns) ConfigureRowGroup(config *RowGroupConfig) {
+	config.SortingColumns = columns
+}
+
+func (columns sortingColumns) ConfigureWriter(config *WriterConfig) {
+	config.SortingColumns = columns
 }
 
 type fileOption func(*FileConfig)
