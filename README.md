@@ -503,7 +503,7 @@ can create the row group. This may require significant amounts of memory as the
 entire file content must be buffered prior to generating it. In some cases, the
 files might even be larger than the amount of memory available to the program.
 
-The `paruqet.Writer` can be configured to use disk storage instead as a scratch
+The `parquet.Writer` can be configured to use disk storage instead as a scratch
 buffer when generating files, by configuring a different page buffer pool using
 the `parquet.ColumnPageBuffers` option and `parquet.PageBufferPool` interface.
 
