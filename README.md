@@ -496,6 +496,41 @@ achieved by using an intermediary buffering layer with `parquet.Buffer`.
 See [parquet.RowGroup](https://pkg.go.dev/github.com/segmentio/parquet-go#RowGroup)
 for the full interface documentation.
 
+### C. Using on-disk page buffers
+
+When generating parquet files, the writer needs to buffer all pages before it
+can create the row group. This may require significant amounts of memory as the
+entire file content must be buffered prior to generating it. In some cases, the
+files might even be larger than the amount of memory available to the program.
+
+The `paruqet.Writer` can be configured to use disk storage instead as a scratch
+buffer when generating files, by configuring a different page buffer pool using
+the `parquet.ColumnPageBuffers` option and `parquet.PageBufferPool` interface.
+
+The parquet-go package provides an implementation of the interface which uses
+temporary files to store pages while a file is generated, allowing programs to
+use local storage as swap space to hold pages and keep memory utilization to a
+minimum. The following example demonstrates how to configure a parquet writer
+to use on-disk page buffers:
+
+```go
+writer := parquet.NewWriter(output,
+    parquet.ColumnPageBuffers(
+        parquet.NewFileBufferPool("", "buffers.*"),
+    ),
+)
+```
+
+When a row group is complete, pages buffered to disk need to be copied back to
+the output file. This results in doubling I/O operations and storage space
+requirements (the system needs to have enough free disk space to hold two copies
+of the file). The resulting write amplification can often be optimized away by
+the kernel if the file system supports copy-on-write of disk pages since copies
+between `os.File` instances are optimized using `copy_file_range(2)` (on linux).
+
+See [parquet.PageBufferPool](https://pkg.go.dev/github.com/segmentio/parquet-go#PageBufferPool)
+for the full interface documentation.
+
 ## Maintenance
 
 The project is hosted and maintained by Twilio; we welcome external contributors
