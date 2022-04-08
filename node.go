@@ -496,6 +496,7 @@ func encodingAndCompressionOf(node Node) (encoding.Encoding, compress.Codec) {
 	// representations of the pages, picking the one with the smallest space
 	// footprint; keep it simple for now.
 	encoding := encoding.Encoding(&Plain)
+	nodeEncoding := node.Encoding()
 	compression := compress.Codec(&Uncompressed)
 	// The parquet-format documentation states that the
 	// DELTA_LENGTH_BYTE_ARRAY is always preferred to PLAIN when
@@ -504,11 +505,11 @@ func encodingAndCompressionOf(node Node) (encoding.Encoding, compress.Codec) {
 	// the opportunity to override this behavior if needed.
 	//
 	// https://github.com/apache/parquet-format/blob/master/Encodings.md#delta-length-byte-array-delta_length_byte_array--6
-	if node.Type().Kind() == ByteArray {
+	if node.Type().Kind() == ByteArray && len(nodeEncoding) == 0 {
 		encoding = &DeltaLengthByteArray
 	}
 
-	for _, e := range node.Encoding() {
+	for _, e := range nodeEncoding {
 		encoding = e
 		break
 	}
