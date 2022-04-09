@@ -124,7 +124,8 @@ func (buf *Buffer) Column(i int) ColumnChunk { return buf.columns[i] }
 // a Column type (the latter being read-only); calling ColumnBuffer or Column
 // with the same index returns the same underlying object, but with different
 // types, which removes the need for making a type assertion if the program
-// needed to write directly to the column buffers.
+// needed to write directly to the column buffers. The presence of the Column
+// method is still required to satisfy the RowGroup interface.
 func (buf *Buffer) ColumnBuffer(i int) ColumnBuffer { return buf.columns[i] }
 
 // Schema returns the schema of the buffer.
