@@ -118,6 +118,15 @@ func (buf *Buffer) NumColumns() int { return len(buf.columns) }
 // The method panics if i is negative or beyond the last column index in buf.
 func (buf *Buffer) Column(i int) ColumnChunk { return buf.columns[i] }
 
+// ColumnBuffer returns the buffer column at index i.
+//
+// This method is similar to Column, but returns a ColumnBuffer type instead of
+// a Column type (the latter being read-only); calling ColumnBuffer or Column
+// with the same index returns the same underlying object, but with different
+// types, which removes the need for making a type assertion if the program
+// needed to write directly to the column buffers.
+func (buf *Buffer) ColumnBuffer(i int) ColumnBuffer { return buf.columns[i] }
+
 // Schema returns the schema of the buffer.
 //
 // The schema is either configured by passing a Schema in the option list when

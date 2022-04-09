@@ -183,7 +183,7 @@ func testPage[T any](t *testing.T, schema *parquet.Schema, test pageTest[T]) {
 
 func testBufferPage[T any](t *testing.T, schema *parquet.Schema, test pageTest[T]) {
 	buffer := parquet.NewBuffer(schema)
-	column := buffer.Column(0).(parquet.ColumnBuffer)
+	column := buffer.ColumnBuffer(0)
 
 	w, err := test.write(column)
 	if err != nil {
@@ -201,7 +201,7 @@ func testBufferPage[T any](t *testing.T, schema *parquet.Schema, test pageTest[T
 
 func testFilePage[T any](t *testing.T, schema *parquet.Schema, test pageTest[T]) {
 	buffer := parquet.NewBuffer(schema)
-	column := buffer.Column(0).(parquet.ColumnBuffer)
+	column := buffer.ColumnBuffer(0)
 
 	w, err := test.write(column)
 	if err != nil {
