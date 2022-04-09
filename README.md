@@ -496,7 +496,7 @@ achieved by using an intermediary buffering layer with `parquet.Buffer`.
 See [parquet.RowGroup](https://pkg.go.dev/github.com/segmentio/parquet-go#RowGroup)
 for the full interface documentation.
 
-### C. Using on-disk page buffers
+#### C. Using on-disk page buffers
 
 When generating parquet files, the writer needs to buffer all pages before it
 can create the row group. This may require significant amounts of memory as the
