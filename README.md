@@ -450,7 +450,7 @@ of Go values:
 func writeColumns(buffer *parquet.Buffer, columns [3][]interface{}) error {
     values := make([]parquet.Value, len(columns[0]))
     for i := range columns {
-        c := buffer.Column(i).(parquet.ColumnBuffer)
+        c := buffer.ColumnBuffer(i)
         for j, v := range columns[i] {
             values[j] = parquet.ValueOf(v)
         }
@@ -467,10 +467,12 @@ func writeColumns(buffer *parquet.Buffer, ids []int64, values []float32) error {
     if len(ids) != len(values) {
         return fmt.Errorf("number of ids and values mismatch: ids=%d values=%d", len(ids), len(values))
     }
-    if err := buffer.(parquet.Int64Writer).WriteInt64s(ids); err != nil {
+    col0 := buffer.ColumnBuffer(0)
+    col1 := buffer.ColumnBuffer(1)
+    if err := col0.(parquet.Int64Writer).WriteInt64s(ids); err != nil {
         return err
     }
-    if err := buffer.(parquet.FloatWriter).WriteFloats(values); err != nil {
+    if err := col1.(parquet.FloatWriter).WriteFloats(values); err != nil {
         return err
     }
     return nil
