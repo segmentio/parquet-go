@@ -194,7 +194,7 @@ func MergeRowGroups(rowGroups []RowGroup, options ...RowGroupOption) (RowGroup, 
 		// merger which simply concatenates rows from each of the row groups.
 		// This is preferable because it makes the output deterministic, the
 		// heap merge may otherwise reorder rows across groups.
-		return &m.concatenatedRowGroup, nil
+		return &m.multiRowGroup, nil
 	}
 
 	for _, rowGroup := range m.rowGroups {
