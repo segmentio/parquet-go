@@ -115,258 +115,304 @@ func TestOrderOfBool(t *testing.T) {
 	check := func(values []bool) bool {
 		return checkOrdering(t, boolOrder(values), bits.OrderOfBool(values))
 	}
-	err := quickCheck(func(values []bool) bool {
-		if !check(values) {
-			return false
+
+	t.Run("quick check", func(t *testing.T) {
+		err := quickCheck(func(values []bool) bool {
+			if !check(values) {
+				return false
+			}
+			sort.Sort(boolOrder(values))
+			if !check(values) {
+				return false
+			}
+			sort.Sort(sort.Reverse(boolOrder(values)))
+			if !check(values) {
+				return false
+			}
+			return true
+		})
+		if err != nil {
+			t.Error(err)
 		}
-		sort.Sort(boolOrder(values))
-		if !check(values) {
-			return false
-		}
-		sort.Sort(sort.Reverse(boolOrder(values)))
-		if !check(values) {
-			return false
-		}
-		return true
 	})
-	if err != nil {
-		t.Error(err)
-	}
 }
 
 func TestOrderOfInt32(t *testing.T) {
 	check := func(values []int32) bool {
 		return checkOrdering(t, int32Order(values), bits.OrderOfInt32(values))
 	}
-	err := quickCheck(func(values []int32) bool {
-		if !check(values) {
-			return false
+
+	// Tests corner case of the vectorized code path which works on 64 bytes per
+	// loop iteration.
+	t.Run("detects out-of-order values at 64 byte boundaries", func(t *testing.T) {
+		values := []int32{
+			0, 1, 2, 3, 4, 5, 6, 7,
+			8, 9, 10, 11, 12, 13, 14, 15,
+			// 15 > 14, the algorithm must detect that the values are not ordered.
+			14, 17, 18, 19, 20, 21, 22, 23,
+			24, 25, 26, 27, 28, 29, 30, 31,
 		}
-		sort.Sort(int32Order(values))
+
 		if !check(values) {
-			return false
+			t.Error("failed due to not checking the connection between sequences of 16 elements")
 		}
-		sort.Sort(sort.Reverse(int32Order(values)))
-		if !check(values) {
-			return false
-		}
-		return true
 	})
-	if err != nil {
-		t.Error(err)
-	}
 
-	// This extra test validates that out-of-order values at 64 byte boundaries
-	// are properly detected; it tests corner cases of the vectorized code path
-	// which works on 64 bytes per loop iteration.
-	values := []int32{
-		0, 1, 2, 3, 4, 5, 6, 7,
-		8, 9, 10, 11, 12, 13, 14, 15,
-		// 15 > 14, the algorithm must detect that the values are not ordered.
-		14, 17, 18, 19, 20, 21, 22, 23,
-		24, 25, 26, 27, 28, 29, 30, 31,
-	}
-
-	if !check(values) {
-		t.Error("failed due to not checking the connection between sequences of 16 elements")
-	}
+	t.Run("quick check", func(t *testing.T) {
+		err := quickCheck(func(values []int32) bool {
+			if !check(values) {
+				return false
+			}
+			sort.Sort(int32Order(values))
+			if !check(values) {
+				return false
+			}
+			sort.Sort(sort.Reverse(int32Order(values)))
+			if !check(values) {
+				return false
+			}
+			return true
+		})
+		if err != nil {
+			t.Error(err)
+		}
+	})
 }
 
 func TestOrderOfInt64(t *testing.T) {
 	check := func(values []int64) bool {
 		return checkOrdering(t, int64Order(values), bits.OrderOfInt64(values))
 	}
-	err := quickCheck(func(values []int64) bool {
-		if !check(values) {
-			return false
+
+	// Tests corner case of the vectorized code path which works on 64 bytes per
+	// loop iteration.
+	t.Run("detects out-of-order values at 64 byte boundaries", func(t *testing.T) {
+		values := []int64{
+			0, 1, 2, 3, 4, 5, 6, 7,
+			6, 9, 10, 11, 12, 13, 14, 15,
+			14, 17, 18, 19, 20, 21, 22, 23,
+			24, 25, 26, 27, 28, 29, 30, 31,
 		}
-		sort.Sort(int64Order(values))
+
 		if !check(values) {
-			return false
+			t.Error("failed due to not checking the connection between sequences of 8 elements")
 		}
-		sort.Sort(sort.Reverse(int64Order(values)))
-		if !check(values) {
-			return false
-		}
-		return true
 	})
-	if err != nil {
-		t.Error(err)
-	}
 
-	values := []int64{
-		0, 1, 2, 3, 4, 5, 6, 7,
-		6, 9, 10, 11, 12, 13, 14, 15,
-		14, 17, 18, 19, 20, 21, 22, 23,
-		24, 25, 26, 27, 28, 29, 30, 31,
-	}
-
-	if !check(values) {
-		t.Error("failed due to not checking the connection between sequences of 8 elements")
-	}
+	t.Run("quick check", func(t *testing.T) {
+		err := quickCheck(func(values []int64) bool {
+			if !check(values) {
+				return false
+			}
+			sort.Sort(int64Order(values))
+			if !check(values) {
+				return false
+			}
+			sort.Sort(sort.Reverse(int64Order(values)))
+			if !check(values) {
+				return false
+			}
+			return true
+		})
+		if err != nil {
+			t.Error(err)
+		}
+	})
 }
 
 func TestOrderOfUint32(t *testing.T) {
 	check := func(values []uint32) bool {
 		return checkOrdering(t, uint32Order(values), bits.OrderOfUint32(values))
 	}
-	err := quickCheck(func(values []uint32) bool {
-		if !check(values) {
-			return false
+
+	// Tests corner case of the vectorized code path which works on 64 bytes per
+	// loop iteration.
+	t.Run("detects out-of-order values at 64 byte boundaries", func(t *testing.T) {
+		values := []uint32{
+			0, 1, 2, 3, 4, 5, 6, 7,
+			8, 9, 10, 11, 12, 13, 14, 15,
+			14, 17, 18, 19, 20, 21, 22, 23,
+			24, 25, 26, 27, 28, 29, 30, 31,
 		}
-		sort.Sort(uint32Order(values))
+
 		if !check(values) {
-			return false
+			t.Error("failed due to not checking the connection between sequences of 16 elements")
 		}
-		sort.Sort(sort.Reverse(uint32Order(values)))
-		if !check(values) {
-			return false
-		}
-		return true
 	})
-	if err != nil {
-		t.Error(err)
-	}
 
-	values := []uint32{
-		0, 1, 2, 3, 4, 5, 6, 7,
-		8, 9, 10, 11, 12, 13, 14, 15,
-		14, 17, 18, 19, 20, 21, 22, 23,
-		24, 25, 26, 27, 28, 29, 30, 31,
-	}
-
-	if !check(values) {
-		t.Error("failed due to not checking the connection between sequences of 16 elements")
-	}
+	t.Run("quick check", func(t *testing.T) {
+		err := quickCheck(func(values []uint32) bool {
+			if !check(values) {
+				return false
+			}
+			sort.Sort(uint32Order(values))
+			if !check(values) {
+				return false
+			}
+			sort.Sort(sort.Reverse(uint32Order(values)))
+			if !check(values) {
+				return false
+			}
+			return true
+		})
+		if err != nil {
+			t.Error(err)
+		}
+	})
 }
 
 func TestOrderOfUint64(t *testing.T) {
 	check := func(values []uint64) bool {
 		return checkOrdering(t, uint64Order(values), bits.OrderOfUint64(values))
 	}
-	err := quickCheck(func(values []uint64) bool {
-		if !check(values) {
-			return false
+
+	// Tests corner case of the vectorized code path which works on 64 bytes per
+	// loop iteration.
+	t.Run("detects out-of-order values at 64 byte boundaries", func(t *testing.T) {
+		values := []uint64{
+			0, 1, 2, 3, 4, 5, 6, 7,
+			6, 9, 10, 11, 12, 13, 14, 15,
+			14, 17, 18, 19, 20, 21, 22, 23,
+			24, 25, 26, 27, 28, 29, 30, 31,
 		}
-		sort.Sort(uint64Order(values))
+
 		if !check(values) {
-			return false
+			t.Error("failed due to not checking the connection between sequences of 8 elements")
 		}
-		sort.Sort(sort.Reverse(uint64Order(values)))
-		if !check(values) {
-			return false
-		}
-		return true
 	})
-	if err != nil {
-		t.Error(err)
-	}
 
-	values := []uint64{
-		0, 1, 2, 3, 4, 5, 6, 7,
-		6, 9, 10, 11, 12, 13, 14, 15,
-		14, 17, 18, 19, 20, 21, 22, 23,
-		24, 25, 26, 27, 28, 29, 30, 31,
-	}
-
-	if !check(values) {
-		t.Error("failed due to not checking the connection between sequences of 8 elements")
-	}
+	t.Run("quick check", func(t *testing.T) {
+		err := quickCheck(func(values []uint64) bool {
+			if !check(values) {
+				return false
+			}
+			sort.Sort(uint64Order(values))
+			if !check(values) {
+				return false
+			}
+			sort.Sort(sort.Reverse(uint64Order(values)))
+			if !check(values) {
+				return false
+			}
+			return true
+		})
+		if err != nil {
+			t.Error(err)
+		}
+	})
 }
 
 func TestOrderOfFloat32(t *testing.T) {
 	check := func(values []float32) bool {
 		return checkOrdering(t, float32Order(values), bits.OrderOfFloat32(values))
 	}
-	err := quickCheck(func(values []float32) bool {
-		if !check(values) {
-			return false
+
+	// Tests corner case of the vectorized code path which works on 64 bytes per
+	// loop iteration.
+	t.Run("detects out-of-order values at 64 byte boundaries", func(t *testing.T) {
+		values := []float32{
+			0, 1, 2, 3, 4, 5, 6, 7,
+			8, 9, 10, 11, 12, 13, 14, 15,
+			14, 17, 18, 19, 20, 21, 22, 23,
+			24, 25, 26, 27, 28, 29, 30, 31,
 		}
-		sort.Sort(float32Order(values))
+
 		if !check(values) {
-			return false
+			t.Error("failed due to not checking the connection between sequences of 16 elements")
 		}
-		sort.Sort(sort.Reverse(float32Order(values)))
-		if !check(values) {
-			return false
-		}
-		return true
 	})
-	if err != nil {
-		t.Error(err)
-	}
 
-	values := []float32{
-		0, 1, 2, 3, 4, 5, 6, 7,
-		8, 9, 10, 11, 12, 13, 14, 15,
-		14, 17, 18, 19, 20, 21, 22, 23,
-		24, 25, 26, 27, 28, 29, 30, 31,
-	}
-
-	if !check(values) {
-		t.Error("failed due to not checking the connection between sequences of 16 elements")
-	}
+	t.Run("quick check", func(t *testing.T) {
+		err := quickCheck(func(values []float32) bool {
+			if !check(values) {
+				return false
+			}
+			sort.Sort(float32Order(values))
+			if !check(values) {
+				return false
+			}
+			sort.Sort(sort.Reverse(float32Order(values)))
+			if !check(values) {
+				return false
+			}
+			return true
+		})
+		if err != nil {
+			t.Error(err)
+		}
+	})
 }
 
 func TestOrderOfFloat64(t *testing.T) {
 	check := func(values []float64) bool {
 		return checkOrdering(t, float64Order(values), bits.OrderOfFloat64(values))
 	}
-	err := quickCheck(func(values []float64) bool {
-		if !check(values) {
-			return false
+
+	// Tests corner case of the vectorized code path which works on 64 bytes per
+	// loop iteration.
+	t.Run("detects out-of-order values at 64 byte boundaries", func(t *testing.T) {
+		values := []float64{
+			0, 1, 2, 3, 4, 5, 6, 7,
+			6, 9, 10, 11, 12, 13, 14, 15,
+			14, 17, 18, 19, 20, 21, 22, 23,
+			24, 25, 26, 27, 28, 29, 30, 31,
 		}
-		sort.Sort(float64Order(values))
+
 		if !check(values) {
-			return false
+			t.Error("failed due to not checking the connection between sequences of 8 elements")
 		}
-		sort.Sort(sort.Reverse(float64Order(values)))
-		if !check(values) {
-			return false
-		}
-		return true
 	})
-	if err != nil {
-		t.Error(err)
-	}
 
-	values := []float64{
-		0, 1, 2, 3, 4, 5, 6, 7,
-		6, 9, 10, 11, 12, 13, 14, 15,
-		14, 17, 18, 19, 20, 21, 22, 23,
-		24, 25, 26, 27, 28, 29, 30, 31,
-	}
-
-	if !check(values) {
-		t.Error("failed due to not checking the connection between sequences of 8 elements")
-	}
+	t.Run("quick check", func(t *testing.T) {
+		err := quickCheck(func(values []float64) bool {
+			if !check(values) {
+				return false
+			}
+			sort.Sort(float64Order(values))
+			if !check(values) {
+				return false
+			}
+			sort.Sort(sort.Reverse(float64Order(values)))
+			if !check(values) {
+				return false
+			}
+			return true
+		})
+		if err != nil {
+			t.Error(err)
+		}
+	})
 }
 
 func TestOrderOfBytes(t *testing.T) {
 	check := func(values [][]byte) bool {
 		return checkOrdering(t, bytesOrder(values), bits.OrderOfBytes(values))
 	}
-	err := quickCheck(func(values [][16]byte) bool {
-		slices := make([][]byte, len(values))
-		for i, v := range values {
-			slices[i] = v[:]
+
+	t.Run("quick check", func(t *testing.T) {
+		err := quickCheck(func(values [][16]byte) bool {
+			slices := make([][]byte, len(values))
+			for i, v := range values {
+				cpy := v
+				slices[i] = cpy[:]
+			}
+			if !check(slices) {
+				return false
+			}
+			sort.Sort(bytesOrder(slices))
+			if !check(slices) {
+				return false
+			}
+			sort.Sort(sort.Reverse(bytesOrder(slices)))
+			if !check(slices) {
+				return false
+			}
+			return true
+		})
+		if err != nil {
+			t.Error(err)
 		}
-		if !check(slices) {
-			return false
-		}
-		sort.Sort(bytesOrder(slices))
-		if !check(slices) {
-			return false
-		}
-		sort.Sort(sort.Reverse(bytesOrder(slices)))
-		if !check(slices) {
-			return false
-		}
-		return true
 	})
-	if err != nil {
-		t.Error(err)
-	}
 }
 
 func BenchmarkOrderOfBool(b *testing.B) {
