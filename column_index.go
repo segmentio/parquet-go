@@ -145,7 +145,7 @@ func (i byteArrayColumnIndex) NullCount(int) int64 { return 0 }
 func (i byteArrayColumnIndex) NullPage(int) bool   { return false }
 func (i byteArrayColumnIndex) MinValue(int) Value  { return makeValueBytes(ByteArray, i.page.min()) }
 func (i byteArrayColumnIndex) MaxValue(int) Value  { return makeValueBytes(ByteArray, i.page.max()) }
-func (i byteArrayColumnIndex) IsAscending() bool   { return bytes.Compare(i.page.bounds()) < 0 }
+func (i byteArrayColumnIndex) IsAscending() bool   { return bytes.Compare(i.page.bounds()) <= 0 }
 func (i byteArrayColumnIndex) IsDescending() bool  { return bytes.Compare(i.page.bounds()) > 0 }
 
 type fixedLenByteArrayColumnIndex struct{ page *fixedLenByteArrayPage }
@@ -159,7 +159,7 @@ func (i fixedLenByteArrayColumnIndex) MinValue(int) Value {
 func (i fixedLenByteArrayColumnIndex) MaxValue(int) Value {
 	return makeValueBytes(FixedLenByteArray, i.page.max())
 }
-func (i fixedLenByteArrayColumnIndex) IsAscending() bool  { return bytes.Compare(i.page.bounds()) < 0 }
+func (i fixedLenByteArrayColumnIndex) IsAscending() bool  { return bytes.Compare(i.page.bounds()) <= 0 }
 func (i fixedLenByteArrayColumnIndex) IsDescending() bool { return bytes.Compare(i.page.bounds()) > 0 }
 
 // The ColumnIndexer interface is implemented by types that support generating
@@ -364,6 +364,27 @@ func splitFixedLenByteArrayList(size int, data []byte) [][]byte {
 }
 
 func boundaryOrderOf(minOrder, maxOrder int) format.BoundaryOrder {
+	if minOrder == 2 || maxOrder == 2 {
+		if minOrder == maxOrder {
+			return format.Ascending
+		}
+		if minOrder == 2 {
+			switch {
+			case maxOrder > 0:
+				return format.Ascending
+			case maxOrder < 0:
+				return format.Descending
+			}
+		} else {
+			switch {
+			case minOrder > 0:
+				return format.Ascending
+			case minOrder < 0:
+				return format.Descending
+			}
+		}
+	}
+
 	if minOrder == maxOrder {
 		switch {
 		case minOrder > 0:
