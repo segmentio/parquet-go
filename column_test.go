@@ -2,8 +2,10 @@ package parquet_test
 
 import (
 	"fmt"
+	"math/rand"
 	"testing"
 	"testing/quick"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/segmentio/parquet-go"
@@ -236,7 +238,9 @@ func checkColumnChunkOffsetIndex(columnChunk parquet.ColumnChunk) error {
 
 func testColumnPageIndexWithFile(t *testing.T, rows rows) bool {
 	if len(rows) > 0 {
-		f, err := createParquetFile(rows)
+		r := rand.New(rand.NewSource(time.Now().UnixNano()))
+		size := parquet.PageBufferSize(r.Intn(49) + 1)
+		f, err := createParquetFile(rows, size)
 		if err != nil {
 			t.Error(err)
 			return false
