@@ -620,7 +620,7 @@ func (w *writer) WriteRow(row Row) error {
 }
 
 // The WriteValues method is intended to work in pair with WritePage to allow
-// programs to target writing values to specific columns of of the writer.
+// programs to target writing values to specific columns of the writer.
 func (w *writer) WriteValues(values []Value) (numValues int, err error) {
 	return w.columns[values[0].Column()].WriteValues(values)
 }
