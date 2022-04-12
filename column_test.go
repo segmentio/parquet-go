@@ -144,6 +144,7 @@ func checkColumnChunkColumnIndex(columnChunk parquet.ColumnChunk) error {
 	columnIndex := columnChunk.ColumnIndex()
 	numPages := columnIndex.NumPages()
 	pagesRead := 0
+	stats := newColumnStats(columnType)
 	err := forEachPage(columnChunk.Pages(), func(page parquet.Page) error {
 		pageMin, pageMax := page.Bounds()
 		indexMin := columnIndex.MinValue(pagesRead)
@@ -159,6 +160,7 @@ func checkColumnChunkColumnIndex(columnChunk parquet.ColumnChunk) error {
 		numNulls := int64(0)
 		numValues := int64(0)
 		err := forEachValue(page.Values(), func(value parquet.Value) error {
+			stats.observe(value)
 			if value.IsNull() {
 				numNulls++
 			}
@@ -179,17 +181,7 @@ func checkColumnChunkColumnIndex(columnChunk parquet.ColumnChunk) error {
 			return fmt.Errorf("page only contained null values but the index did not categorize it as a null page: nulls=%d", numNulls)
 		}
 
-		switch {
-		case columnIndex.IsAscending():
-			if columnType.Compare(pageMin, pageMax) > 0 {
-				return fmt.Errorf("column index is declared to be in ascending order but %v > %v", pageMin, pageMax)
-			}
-		case columnIndex.IsDescending():
-			if columnType.Compare(pageMin, pageMax) < 0 {
-				return fmt.Errorf("column index is declared to be in desending order but %v < %v", pageMin, pageMax)
-			}
-		}
-
+		stats.pageRead()
 		pagesRead++
 		return nil
 	})
@@ -199,6 +191,23 @@ func checkColumnChunkColumnIndex(columnChunk parquet.ColumnChunk) error {
 	if pagesRead != numPages {
 		return fmt.Errorf("number of pages found in column index differs from the number of pages read: index=%d read=%d", numPages, pagesRead)
 	}
+
+	actualOrder := columnIndexOrder(columnIndex)
+	observedOrder := observedIndexOrder(columnType, stats.minValues, stats.maxValues)
+	xorAscending := (columnIndex.IsAscending() || observedOrder == ascendingIndexOrder) &&
+		!(columnIndex.IsAscending() && observedOrder == ascendingIndexOrder)
+	xorDescending := (columnIndex.IsDescending() || observedOrder == descendingIndexOrder) &&
+		!(columnIndex.IsDescending() && observedOrder == descendingIndexOrder)
+
+	if xorAscending || xorDescending {
+		return fmt.Errorf("column index is declared to be %s while observed values %s (min values %s, max values %s)",
+			actualOrder,
+			observedOrder,
+			valueOrder(columnType, stats.minValues),
+			valueOrder(columnType, stats.maxValues),
+		)
+	}
+
 	return nil
 }
 
@@ -401,3 +410,110 @@ func (i *fileOffsetIndex) CompressedPageSize(j int) int64 {
 	return int64(i.PageLocations[j].CompressedPageSize)
 }
 func (i *fileOffsetIndex) FirstRowIndex(j int) int64 { return i.PageLocations[j].FirstRowIndex }
+
+type columnStats struct {
+	page       int
+	columnType parquet.Type
+	minValues  []parquet.Value
+	maxValues  []parquet.Value
+}
+
+func newColumnStats(columnType parquet.Type) *columnStats {
+	return &columnStats{columnType: columnType}
+}
+
+func (c *columnStats) observe(value parquet.Value) {
+	if c.page >= len(c.minValues) {
+		c.minValues = append(c.minValues, value)
+	} else if c.columnType.Compare(c.minValues[c.page], value) > 0 {
+		c.minValues[c.page] = value
+	}
+
+	if c.page >= len(c.maxValues) {
+		c.maxValues = append(c.maxValues, value)
+	} else if c.columnType.Compare(c.maxValues[c.page], value) < 0 {
+		c.maxValues[c.page] = value
+	}
+}
+
+func (c *columnStats) pageRead() {
+	c.page++
+}
+
+type indexOrder int
+
+const (
+	invalidIndexOrder indexOrder = iota
+	unorderedIndexOrder
+	ascendingIndexOrder
+	descendingIndexOrder
+)
+
+func (o indexOrder) String() string {
+	switch o {
+	case unorderedIndexOrder:
+		return "unordered"
+	case ascendingIndexOrder:
+		return "ascending"
+	case descendingIndexOrder:
+		return "descending"
+	default:
+		return "invalid"
+	}
+}
+
+func columnIndexOrder(index parquet.ColumnIndex) indexOrder {
+	switch {
+	case index.IsAscending() && index.IsDescending():
+		return invalidIndexOrder
+	case index.IsAscending():
+		return ascendingIndexOrder
+	case index.IsDescending():
+		return descendingIndexOrder
+	default:
+		return unorderedIndexOrder
+	}
+}
+
+func observedIndexOrder(columnType parquet.Type, minValues []parquet.Value, maxValues []parquet.Value) indexOrder {
+	a := valueOrder(columnType, minValues)
+	b := valueOrder(columnType, maxValues)
+
+	switch {
+	case a == ascendingIndexOrder && b == ascendingIndexOrder:
+		return ascendingIndexOrder
+	case a == descendingIndexOrder && b == descendingIndexOrder:
+		return descendingIndexOrder
+	default:
+		return unorderedIndexOrder
+	}
+}
+
+func valueOrder(columnType parquet.Type, values []parquet.Value) indexOrder {
+	switch len(values) {
+	case 0, 1:
+		return unorderedIndexOrder
+	}
+
+	var order int
+	for i := 1; i < len(values); i++ {
+		next := columnType.Compare(values[i], values[i-1])
+		if next == 0 {
+			continue
+		}
+		if order == 0 {
+			order = next
+			continue
+		}
+		if order != next {
+			return unorderedIndexOrder
+		}
+	}
+
+	switch order {
+	case -1:
+		return descendingIndexOrder
+	default:
+		return ascendingIndexOrder
+	}
+}
