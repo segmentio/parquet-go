@@ -18,13 +18,15 @@ func OrderOfBool(data []bool) int {
 			k = -1
 			i = streakOfTrue(data)
 			if i == len(data) {
-				k = +1
-			} else {
-				i += streakOfFalse(data[i:])
+				return 2
 			}
+			i += streakOfFalse(data[i:])
 		} else { // false => true: ascending
 			k = +1
 			i = streakOfFalse(data)
+			if i == len(data) {
+				return 2
+			}
 			i += streakOfTrue(data[i:])
 		}
 
@@ -122,17 +124,18 @@ func OrderOfBytes(data [][]byte) int {
 	if len(data) == 1 {
 		return 1
 	}
+
 	data = skipBytesStreak(data)
-	if len(data) < 2 {
-		return 1
+	if len(data) == 1 {
+		return 2
 	}
 	ordering := bytes.Compare(data[0], data[1])
 	switch {
-	case ordering > 0:
+	case ordering < 0:
 		if bytesAreInAscendingOrder(data[1:]) {
 			return +1
 		}
-	case ordering < 0:
+	case ordering > 0:
 		if bytesAreInDescendingOrder(data[1:]) {
 			return -1
 		}

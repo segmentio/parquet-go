@@ -15,8 +15,8 @@ func orderOfFloat32(data []float32) int { return orderOfValues(data) }
 func orderOfFloat64(data []float64) int { return orderOfValues(data) }
 
 func orderOfValues[T ordered](data []T) int {
-	if valuesAreInAscendingOrder(data) {
-		return +1
+	if order := valuesAreInAscendingOrder(data); order > 0 {
+		return order
 	}
 	if valuesAreInDescendingOrder(data) {
 		return -1
@@ -24,13 +24,20 @@ func orderOfValues[T ordered](data []T) int {
 	return 0
 }
 
-func valuesAreInAscendingOrder[T ordered](data []T) bool {
+func valuesAreInAscendingOrder[T ordered](data []T) int {
+	order := 2
 	for i := len(data) - 1; i > 0; i-- {
-		if data[i-1] > data[i] {
-			return false
+		next := data[i]
+		prev := data[i-1]
+		if prev > next {
+			return 0
+		}
+
+		if order == 2 && prev != next {
+			order = +1
 		}
 	}
-	return true
+	return order
 }
 
 func valuesAreInDescendingOrder[T ordered](data []T) bool {

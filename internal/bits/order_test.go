@@ -60,6 +60,7 @@ const (
 	ascending  = "ascending"
 	descending = "descending"
 	undefined  = "undefined"
+	equal      = "equal"
 )
 
 func orderingName(ordering int) string {
@@ -74,11 +75,15 @@ func orderingName(ordering int) string {
 }
 
 func isAscending(ordering int) bool {
-	return ordering > 0
+	return ordering == 1
 }
 
 func isDescending(ordering int) bool {
-	return ordering < 0
+	return ordering == -1
+}
+
+func isEqual(ordering int) bool {
+	return ordering == 2
 }
 
 func isUndefined(ordering int) bool {
@@ -89,13 +94,20 @@ func isSorted(set sort.Interface) bool {
 	return set.Len() > 0 && sort.IsSorted(set)
 }
 
-func checkOrdering(t *testing.T, set sort.Interface, ordering int) bool {
+func checkOrdering(t *testing.T, set sort.Interface, ordering int, firstLastEqual bool) bool {
 	t.Helper()
 	switch {
 	case isSorted(set):
-		if !isAscending(ordering) {
-			t.Errorf("got=%s want=%s", orderingName(ordering), ascending)
-			return false
+		if firstLastEqual {
+			if !isEqual(ordering) {
+				t.Errorf("got=%s want=%s", orderingName(ordering), equal)
+				return false
+			}
+		} else {
+			if !isAscending(ordering) {
+				t.Errorf("got=%s want=%s", orderingName(ordering), ascending)
+				return false
+			}
 		}
 	case isSorted(sort.Reverse(set)):
 		if !isDescending(ordering) {
@@ -113,8 +125,20 @@ func checkOrdering(t *testing.T, set sort.Interface, ordering int) bool {
 
 func TestOrderOfBool(t *testing.T) {
 	check := func(values []bool) bool {
-		return checkOrdering(t, boolOrder(values), bits.OrderOfBool(values))
+		var firstLastEqual bool
+		if len(values) > 1 {
+			firstLastEqual = values[0] == values[len(values)-1]
+		}
+		return checkOrdering(t, boolOrder(values), bits.OrderOfBool(values), firstLastEqual)
 	}
+
+	t.Run("detects set of equal values", func(t *testing.T) {
+		values := []bool{true, true}
+		order := bits.OrderOfBool(values)
+		if order != 2 {
+			t.Errorf("got=%s want=equal", orderingName(order))
+		}
+	})
 
 	t.Run("quick check", func(t *testing.T) {
 		err := quickCheck(func(values []bool) bool {
@@ -139,8 +163,20 @@ func TestOrderOfBool(t *testing.T) {
 
 func TestOrderOfInt32(t *testing.T) {
 	check := func(values []int32) bool {
-		return checkOrdering(t, int32Order(values), bits.OrderOfInt32(values))
+		var firstLastEqual bool
+		if len(values) > 1 {
+			firstLastEqual = values[0] == values[len(values)-1]
+		}
+		return checkOrdering(t, int32Order(values), bits.OrderOfInt32(values), firstLastEqual)
 	}
+
+	t.Run("detects set of equal values", func(t *testing.T) {
+		values := []int32{1, 1}
+		order := bits.OrderOfInt32(values)
+		if order != 2 {
+			t.Errorf("got=%s want=equal", orderingName(order))
+		}
+	})
 
 	// Tests corner case of the vectorized code path which works on 64 bytes per
 	// loop iteration.
@@ -181,8 +217,20 @@ func TestOrderOfInt32(t *testing.T) {
 
 func TestOrderOfInt64(t *testing.T) {
 	check := func(values []int64) bool {
-		return checkOrdering(t, int64Order(values), bits.OrderOfInt64(values))
+		var firstLastEqual bool
+		if len(values) > 1 {
+			firstLastEqual = values[0] == values[len(values)-1]
+		}
+		return checkOrdering(t, int64Order(values), bits.OrderOfInt64(values), firstLastEqual)
 	}
+
+	t.Run("detects set of equal values", func(t *testing.T) {
+		values := []int64{1, 1}
+		order := bits.OrderOfInt64(values)
+		if order != 2 {
+			t.Errorf("got=%s want=equal", orderingName(order))
+		}
+	})
 
 	// Tests corner case of the vectorized code path which works on 64 bytes per
 	// loop iteration.
@@ -222,8 +270,20 @@ func TestOrderOfInt64(t *testing.T) {
 
 func TestOrderOfUint32(t *testing.T) {
 	check := func(values []uint32) bool {
-		return checkOrdering(t, uint32Order(values), bits.OrderOfUint32(values))
+		var firstLastEqual bool
+		if len(values) > 1 {
+			firstLastEqual = values[0] == values[len(values)-1]
+		}
+		return checkOrdering(t, uint32Order(values), bits.OrderOfUint32(values), firstLastEqual)
 	}
+
+	t.Run("detects set of equal values", func(t *testing.T) {
+		values := []uint32{1, 1}
+		order := bits.OrderOfUint32(values)
+		if order != 2 {
+			t.Errorf("got=%s want=equal", orderingName(order))
+		}
+	})
 
 	// Tests corner case of the vectorized code path which works on 64 bytes per
 	// loop iteration.
@@ -263,8 +323,20 @@ func TestOrderOfUint32(t *testing.T) {
 
 func TestOrderOfUint64(t *testing.T) {
 	check := func(values []uint64) bool {
-		return checkOrdering(t, uint64Order(values), bits.OrderOfUint64(values))
+		var firstLastEqual bool
+		if len(values) > 1 {
+			firstLastEqual = values[0] == values[len(values)-1]
+		}
+		return checkOrdering(t, uint64Order(values), bits.OrderOfUint64(values), firstLastEqual)
 	}
+
+	t.Run("detects set of equal values", func(t *testing.T) {
+		values := []uint64{1, 1}
+		order := bits.OrderOfUint64(values)
+		if order != 2 {
+			t.Errorf("got=%s want=equal", orderingName(order))
+		}
+	})
 
 	// Tests corner case of the vectorized code path which works on 64 bytes per
 	// loop iteration.
@@ -304,8 +376,20 @@ func TestOrderOfUint64(t *testing.T) {
 
 func TestOrderOfFloat32(t *testing.T) {
 	check := func(values []float32) bool {
-		return checkOrdering(t, float32Order(values), bits.OrderOfFloat32(values))
+		var firstLastEqual bool
+		if len(values) > 1 {
+			firstLastEqual = values[0] == values[len(values)-1]
+		}
+		return checkOrdering(t, float32Order(values), bits.OrderOfFloat32(values), firstLastEqual)
 	}
+
+	t.Run("detects set of equal values", func(t *testing.T) {
+		values := []float32{1, 1}
+		order := bits.OrderOfFloat32(values)
+		if order != 2 {
+			t.Errorf("got=%s want=equal", orderingName(order))
+		}
+	})
 
 	// Tests corner case of the vectorized code path which works on 64 bytes per
 	// loop iteration.
@@ -345,8 +429,20 @@ func TestOrderOfFloat32(t *testing.T) {
 
 func TestOrderOfFloat64(t *testing.T) {
 	check := func(values []float64) bool {
-		return checkOrdering(t, float64Order(values), bits.OrderOfFloat64(values))
+		var firstLastEqual bool
+		if len(values) > 1 {
+			firstLastEqual = values[0] == values[len(values)-1]
+		}
+		return checkOrdering(t, float64Order(values), bits.OrderOfFloat64(values), firstLastEqual)
 	}
+
+	t.Run("detects set of equal values", func(t *testing.T) {
+		values := []float64{1, 1}
+		order := bits.OrderOfFloat64(values)
+		if order != 2 {
+			t.Errorf("got=%s want=equal", orderingName(order))
+		}
+	})
 
 	// Tests corner case of the vectorized code path which works on 64 bytes per
 	// loop iteration.
@@ -386,8 +482,20 @@ func TestOrderOfFloat64(t *testing.T) {
 
 func TestOrderOfBytes(t *testing.T) {
 	check := func(values [][]byte) bool {
-		return checkOrdering(t, bytesOrder(values), bits.OrderOfBytes(values))
+		var firstLastEqual bool
+		if len(values) > 1 {
+			firstLastEqual = bytes.Compare(values[0], values[len(values)-1]) == 0
+		}
+		return checkOrdering(t, bytesOrder(values), bits.OrderOfBytes(values), firstLastEqual)
 	}
+
+	t.Run("detects set of equal values", func(t *testing.T) {
+		values := [][]byte{{1}, {1}}
+		order := bits.OrderOfBytes(values)
+		if order != 2 {
+			t.Errorf("got=%s want=equal", orderingName(order))
+		}
+	})
 
 	t.Run("quick check", func(t *testing.T) {
 		err := quickCheck(func(values [][16]byte) bool {
