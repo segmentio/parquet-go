@@ -54,7 +54,7 @@ func (f *formatColumnIndex) NumPages() int {
 
 func (f *formatColumnIndex) NullCount(i int) int64 {
 	if len(f.index.NullCounts) > 0 {
-		return f.index.NullCounts[0]
+		return f.index.NullCounts[i]
 	}
 	return 0
 }
