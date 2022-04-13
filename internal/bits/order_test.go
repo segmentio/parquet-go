@@ -348,8 +348,8 @@ func TestOrderOfBytes(t *testing.T) {
 	}
 	err := quickCheck(func(values [][16]byte) bool {
 		slices := make([][]byte, len(values))
-		for i, v := range values {
-			slices[i] = v[:]
+		for i := range values {
+			slices[i] = values[i][:]
 		}
 		if !check(slices) {
 			return false

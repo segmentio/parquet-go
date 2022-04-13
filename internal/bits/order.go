@@ -128,11 +128,11 @@ func OrderOfBytes(data [][]byte) int {
 	}
 	ordering := bytes.Compare(data[0], data[1])
 	switch {
-	case ordering > 0:
+	case ordering < 0:
 		if bytesAreInAscendingOrder(data[1:]) {
 			return +1
 		}
-	case ordering < 0:
+	case ordering > 0:
 		if bytesAreInDescendingOrder(data[1:]) {
 			return -1
 		}
