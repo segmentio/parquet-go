@@ -497,7 +497,7 @@ func valueOrder(columnType parquet.Type, values []parquet.Value) indexOrder {
 
 	var order int
 	for i := 1; i < len(values); i++ {
-		next := columnType.Compare(values[i], values[i-1])
+		next := columnType.Compare(values[i-1], values[i])
 		if next == 0 {
 			continue
 		}
@@ -510,10 +510,9 @@ func valueOrder(columnType parquet.Type, values []parquet.Value) indexOrder {
 		}
 	}
 
-	switch order {
-	case -1:
+	if order > 0 {
 		return descendingIndexOrder
-	default:
-		return ascendingIndexOrder
 	}
+
+	return ascendingIndexOrder
 }
