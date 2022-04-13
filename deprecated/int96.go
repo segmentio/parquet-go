@@ -132,7 +132,7 @@ func MinMaxInt96(data []Int96) (min, max Int96) {
 }
 
 func OrderOfInt96(data []Int96) int {
-	if len(data) > 0 {
+	if len(data) > 1 {
 		if int96AreInAscendingOrder(data) {
 			return +1
 		}

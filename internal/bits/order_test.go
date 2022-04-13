@@ -86,7 +86,7 @@ func isUndefined(ordering int) bool {
 }
 
 func isSorted(set sort.Interface) bool {
-	return set.Len() > 0 && sort.IsSorted(set)
+	return set.Len() > 1 && sort.IsSorted(set)
 }
 
 func checkOrdering(t *testing.T, set sort.Interface, ordering int) bool {
