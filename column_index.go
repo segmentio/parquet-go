@@ -1,8 +1,6 @@
 package parquet
 
 import (
-	"bytes"
-
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/format"
 	"github.com/segmentio/parquet-go/internal/bits"
@@ -145,8 +143,8 @@ func (i byteArrayColumnIndex) NullCount(int) int64 { return 0 }
 func (i byteArrayColumnIndex) NullPage(int) bool   { return false }
 func (i byteArrayColumnIndex) MinValue(int) Value  { return makeValueBytes(ByteArray, i.page.min()) }
 func (i byteArrayColumnIndex) MaxValue(int) Value  { return makeValueBytes(ByteArray, i.page.max()) }
-func (i byteArrayColumnIndex) IsAscending() bool   { return bytes.Compare(i.page.bounds()) < 0 }
-func (i byteArrayColumnIndex) IsDescending() bool  { return bytes.Compare(i.page.bounds()) > 0 }
+func (i byteArrayColumnIndex) IsAscending() bool   { return false }
+func (i byteArrayColumnIndex) IsDescending() bool  { return false }
 
 type fixedLenByteArrayColumnIndex struct{ page *fixedLenByteArrayPage }
 
@@ -159,8 +157,8 @@ func (i fixedLenByteArrayColumnIndex) MinValue(int) Value {
 func (i fixedLenByteArrayColumnIndex) MaxValue(int) Value {
 	return makeValueBytes(FixedLenByteArray, i.page.max())
 }
-func (i fixedLenByteArrayColumnIndex) IsAscending() bool  { return bytes.Compare(i.page.bounds()) < 0 }
-func (i fixedLenByteArrayColumnIndex) IsDescending() bool { return bytes.Compare(i.page.bounds()) > 0 }
+func (i fixedLenByteArrayColumnIndex) IsAscending() bool  { return false }
+func (i fixedLenByteArrayColumnIndex) IsDescending() bool { return false }
 
 // The ColumnIndexer interface is implemented by types that support generating
 // parquet column indexes.

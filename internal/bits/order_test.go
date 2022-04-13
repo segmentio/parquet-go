@@ -85,19 +85,19 @@ func isUndefined(ordering int) bool {
 	return ordering == 0
 }
 
-func isSorted(set sort.Interface) bool {
-	return set.Len() > 0 && sort.IsSorted(set)
+func isOrdered(set sort.Interface) bool {
+	return set.Len() > 1 && sort.IsSorted(set)
 }
 
 func checkOrdering(t *testing.T, set sort.Interface, ordering int) bool {
 	t.Helper()
 	switch {
-	case isSorted(set):
+	case isOrdered(set):
 		if !isAscending(ordering) {
 			t.Errorf("got=%s want=%s", orderingName(ordering), ascending)
 			return false
 		}
-	case isSorted(sort.Reverse(set)):
+	case isOrdered(sort.Reverse(set)):
 		if !isDescending(ordering) {
 			t.Errorf("got=%s want=%s", orderingName(ordering), descending)
 			return false
@@ -348,8 +348,8 @@ func TestOrderOfBytes(t *testing.T) {
 	}
 	err := quickCheck(func(values [][16]byte) bool {
 		slices := make([][]byte, len(values))
-		for i, v := range values {
-			slices[i] = v[:]
+		for i := range values {
+			slices[i] = values[i][:]
 		}
 		if !check(slices) {
 			return false

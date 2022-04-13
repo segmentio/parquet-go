@@ -6,10 +6,8 @@ import (
 
 func OrderOfBool(data []bool) int {
 	switch len(data) {
-	case 0:
+	case 0, 1:
 		return 0
-	case 1:
-		return 1
 	default:
 		k := 0
 		i := 0
@@ -51,10 +49,8 @@ func streakOfFalse(data []bool) int {
 
 func OrderOfInt32(data []int32) int {
 	switch len(data) {
-	case 0:
+	case 0, 1:
 		return 0
-	case 1:
-		return 1
 	default:
 		return orderOfInt32(data)
 	}
@@ -62,10 +58,8 @@ func OrderOfInt32(data []int32) int {
 
 func OrderOfInt64(data []int64) int {
 	switch len(data) {
-	case 0:
+	case 0, 1:
 		return 0
-	case 1:
-		return 1
 	default:
 		return orderOfInt64(data)
 	}
@@ -73,10 +67,8 @@ func OrderOfInt64(data []int64) int {
 
 func OrderOfUint32(data []uint32) int {
 	switch len(data) {
-	case 0:
+	case 0, 1:
 		return 0
-	case 1:
-		return 1
 	default:
 		return orderOfUint32(data)
 	}
@@ -84,10 +76,8 @@ func OrderOfUint32(data []uint32) int {
 
 func OrderOfUint64(data []uint64) int {
 	switch len(data) {
-	case 0:
+	case 0, 1:
 		return 0
-	case 1:
-		return 1
 	default:
 		return orderOfUint64(data)
 	}
@@ -95,10 +85,8 @@ func OrderOfUint64(data []uint64) int {
 
 func OrderOfFloat32(data []float32) int {
 	switch len(data) {
-	case 0:
+	case 0, 1:
 		return 0
-	case 1:
-		return 1
 	default:
 		return orderOfFloat32(data)
 	}
@@ -106,21 +94,17 @@ func OrderOfFloat32(data []float32) int {
 
 func OrderOfFloat64(data []float64) int {
 	switch len(data) {
-	case 0:
+	case 0, 1:
 		return 0
-	case 1:
-		return 1
 	default:
 		return orderOfFloat64(data)
 	}
 }
 
 func OrderOfBytes(data [][]byte) int {
-	if len(data) == 0 {
+	switch len(data) {
+	case 0, 1:
 		return 0
-	}
-	if len(data) == 1 {
-		return 1
 	}
 	data = skipBytesStreak(data)
 	if len(data) < 2 {
@@ -128,11 +112,11 @@ func OrderOfBytes(data [][]byte) int {
 	}
 	ordering := bytes.Compare(data[0], data[1])
 	switch {
-	case ordering > 0:
+	case ordering < 0:
 		if bytesAreInAscendingOrder(data[1:]) {
 			return +1
 		}
-	case ordering < 0:
+	case ordering > 0:
 		if bytesAreInDescendingOrder(data[1:]) {
 			return -1
 		}

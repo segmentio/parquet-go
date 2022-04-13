@@ -14,8 +14,8 @@ func (i columnIndex[T]) NullCount(int) int64 { return 0 }
 func (i columnIndex[T]) NullPage(int) bool   { return false }
 func (i columnIndex[T]) MinValue(int) Value  { return i.page.class.makeValue(i.page.min()) }
 func (i columnIndex[T]) MaxValue(int) Value  { return i.page.class.makeValue(i.page.max()) }
-func (i columnIndex[T]) IsAscending() bool   { return i.page.class.compare(i.page.bounds()) < 0 }
-func (i columnIndex[T]) IsDescending() bool  { return i.page.class.compare(i.page.bounds()) > 0 }
+func (i columnIndex[T]) IsAscending() bool   { return false }
+func (i columnIndex[T]) IsDescending() bool  { return false }
 
 type columnIndexer[T primitive] struct {
 	class      *class[T]
