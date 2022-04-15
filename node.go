@@ -257,7 +257,7 @@ var repetitionTypes = [...]format.FieldRepetitionType{
 	2: format.Repeated,
 }
 
-func fieldRepetitionTypeOf(node Node) *format.FieldRepetitionType {
+func fieldRepetitionTypePtrOf(node Node) *format.FieldRepetitionType {
 	switch {
 	case node.Required():
 		return &repetitionTypes[format.Required]
@@ -267,6 +267,17 @@ func fieldRepetitionTypeOf(node Node) *format.FieldRepetitionType {
 		return &repetitionTypes[format.Repeated]
 	default:
 		return nil
+	}
+}
+
+func fieldRepetitionTypeOf(node Node) format.FieldRepetitionType {
+	switch {
+	case node.Optional():
+		return format.Optional
+	case node.Repeated():
+		return format.Repeated
+	default:
+		return format.Required
 	}
 }
 
@@ -530,34 +541,4 @@ func groupNodesAreEqual(node1, node2 Node) bool {
 	}
 
 	return true
-}
-
-type repetition int
-
-const (
-	required repetition = iota
-	optional
-	repeated
-)
-
-func (rep repetition) String() string {
-	switch rep {
-	case optional:
-		return "optional"
-	case repeated:
-		return "repeated"
-	default:
-		return "required"
-	}
-}
-
-func repetitionOf(node Node) repetition {
-	switch {
-	case node.Optional():
-		return optional
-	case node.Repeated():
-		return repeated
-	default:
-		return required
-	}
 }

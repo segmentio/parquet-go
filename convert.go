@@ -20,8 +20,8 @@ func (e *ConvertError) Error() string {
 	sourceType := e.From.Type()
 	targetType := e.To.Type()
 
-	sourceRepetition := repetitionOf(e.From)
-	targetRepetition := repetitionOf(e.To)
+	sourceRepetition := fieldRepetitionTypeOf(e.From)
+	targetRepetition := fieldRepetitionTypeOf(e.To)
 
 	return fmt.Sprintf("cannot convert parquet column %q from %s %s to %s %s",
 		columnPath(e.Path),
@@ -165,8 +165,8 @@ func Convert(to, from Node) (conv Conversion, err error) {
 				return nil, &ConvertError{Path: path, From: sourceNode, To: targetNode}
 			}
 
-			sourceRepetition := repetitionOf(sourceNode)
-			targetRepetition := repetitionOf(targetNode)
+			sourceRepetition := fieldRepetitionTypeOf(sourceNode)
+			targetRepetition := fieldRepetitionTypeOf(targetNode)
 			if sourceRepetition != targetRepetition {
 				return nil, &ConvertError{Path: path, From: sourceNode, To: targetNode}
 			}

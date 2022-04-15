@@ -234,7 +234,7 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 
 		repetitionType := (*format.FieldRepetitionType)(nil)
 		if node != config.Schema { // the root has no repetition type
-			repetitionType = fieldRepetitionTypeOf(node)
+			repetitionType = fieldRepetitionTypePtrOf(node)
 		}
 
 		// For backward compatibility with older readers, the parquet specification
