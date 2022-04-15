@@ -15,7 +15,7 @@ func TestPageBufferPool(t *testing.T) {
 }
 
 func TestFileBufferPool(t *testing.T) {
-	testPageBufferPool(t, parquet.NewFileBufferPool("", "buffers.*"))
+	testPageBufferPool(t, parquet.NewFileBufferPool("/tmp", "buffers.*"))
 }
 
 func testPageBufferPool(t *testing.T, pool parquet.PageBufferPool) {

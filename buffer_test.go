@@ -211,7 +211,8 @@ func TestBuffer(t *testing.T) {
 									for _, values := range test.values {
 										t.Run("", func(t *testing.T) {
 											reset()
-											testBuffer(t, schema.ChildByName("data"), reader, buffer, encoder, values, ordering.sortFunc)
+											fields := schema.Fields()
+											testBuffer(t, fields[0], reader, buffer, encoder, values, ordering.sortFunc)
 										})
 									}
 								})

@@ -15,21 +15,22 @@ type ColumnMapping struct {
 	columns [][]string
 }
 
-// ColumnIndex returns the column index of the column at the given path.
+// Lookup returns the column index and node of the column at the given path.
 // The path is the sequence of column names identifying a leaf column, starting
 // from the root column of the schema.
 //
 // If the path was not found in the mapping, or if it did not represent a
 // leaf column of the parquet schema, the method returns a negative value.
-func (m *ColumnMapping) ColumnIndex(path ...string) (columnIndex int) {
-	return int(m.mapping.lookup(path))
+func (m *ColumnMapping) Lookup(path ...string) (columnIndex int, columnNode Node) {
+	i, n := m.mapping.lookup(path)
+	return int(i), n
 }
 
-// ColumnPaths returns the list of column paths available in the mapping.
+// Columns returns the list of column paths available in the mapping.
 //
 // The method always returns the same slice value across calls to ColumnPaths,
 // applications should treat it as immutable.
-func (m *ColumnMapping) ColumnPaths() [][]string {
+func (m *ColumnMapping) Columns() [][]string {
 	return m.columns
 }
 
@@ -40,7 +41,8 @@ func (m *ColumnMapping) String() string {
 
 	if len(m.columns) > 0 {
 		for _, path := range m.columns {
-			fmt.Fprintf(s, "\n  % 2d => %q", m.ColumnIndex(path...), columnPath(path))
+			columnIndex, _ := m.Lookup(path...)
+			fmt.Fprintf(s, "\n  % 2d => %q", columnIndex, columnPath(path))
 		}
 		s.WriteByte('\n')
 	}
@@ -51,8 +53,13 @@ func (m *ColumnMapping) String() string {
 
 // ColumnMappingOf constructs the column mapping of the given schema.
 func ColumnMappingOf(schema Node) *ColumnMapping {
-	mapping := make(columnMappingGroup)
-	columns := make([][]string, 0, 16)
+	mapping, columns := columnMappingOf(schema)
+	return &ColumnMapping{mapping: mapping, columns: columns}
+}
+
+func columnMappingOf(schema Node) (mapping columnMappingGroup, columns [][]string) {
+	mapping = make(columnMappingGroup)
+	columns = make([][]string, 0, 16)
 
 	forEachLeafColumnOf(schema, func(leaf leafColumn) {
 		column := make([]string, len(leaf.path))
@@ -71,36 +78,39 @@ func ColumnMappingOf(schema Node) *ColumnMapping {
 			group, path = g, path[1:]
 		}
 
-		group[path[0]] = columnMappingLeaf(leaf.columnIndex)
+		group[path[0]] = &columnMappingLeaf{
+			columnIndex: leaf.columnIndex,
+			columnNode:  leaf.node,
+		}
 	})
 
-	return &ColumnMapping{
-		mapping: mapping,
-		columns: columns,
-	}
+	return mapping, columns
 }
 
 type columnMapping interface {
-	lookup(path columnPath) (columnIndex int16)
+	lookup(path columnPath) (columnIndex int16, columnNode Node)
 }
 
 type columnMappingGroup map[string]columnMapping
 
-func (group columnMappingGroup) lookup(path columnPath) int16 {
+func (group columnMappingGroup) lookup(path columnPath) (int16, Node) {
 	if len(path) > 0 {
 		c, ok := group[path[0]]
 		if ok {
 			return c.lookup(path[1:])
 		}
 	}
-	return -1
+	return -1, nil
 }
 
-type columnMappingLeaf int16
+type columnMappingLeaf struct {
+	columnIndex int16
+	columnNode  Node
+}
 
-func (leaf columnMappingLeaf) lookup(path columnPath) int16 {
+func (leaf *columnMappingLeaf) lookup(path columnPath) (int16, Node) {
 	if len(path) == 0 {
-		return int16(leaf)
+		return leaf.columnIndex, leaf.columnNode
 	}
-	return -1
+	return -1, nil
 }

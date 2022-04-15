@@ -106,17 +106,34 @@ func testSeekToRow(t *testing.T, newRowGroup func([]Person) parquet.RowGroup) {
 	}
 }
 
-type mergeRowGroupTestCase struct {
-	scenario string
-	options  []parquet.RowGroupOption
-	input    []parquet.RowGroup
-	output   parquet.RowGroup
+func selfRowGroup(rowGroup parquet.RowGroup) parquet.RowGroup {
+	return rowGroup
 }
 
-// Use a function instead of an array because otherwise the sortedRowGroup()
-// calls will exercise the code even if you're not running these test cases.
-func mergeRowGroupsTests() []mergeRowGroupTestCase {
-	return []mergeRowGroupTestCase{
+func fileRowGroup(rowGroup parquet.RowGroup) parquet.RowGroup {
+	buffer := new(bytes.Buffer)
+	writer := parquet.NewWriter(buffer)
+	if _, err := writer.WriteRowGroup(rowGroup); err != nil {
+		panic(err)
+	}
+	if err := writer.Close(); err != nil {
+		panic(err)
+	}
+	reader := bytes.NewReader(buffer.Bytes())
+	f, err := parquet.OpenFile(reader, reader.Size())
+	if err != nil {
+		panic(err)
+	}
+	return f.RowGroup(0)
+}
+
+func TestMergeRowGroups(t *testing.T) {
+	tests := []struct {
+		scenario string
+		options  []parquet.RowGroupOption
+		input    []parquet.RowGroup
+		output   parquet.RowGroup
+	}{
 		{
 			scenario: "no row groups",
 			options: []parquet.RowGroupOption{
@@ -316,30 +333,7 @@ func mergeRowGroupsTests() []mergeRowGroupTestCase {
 			),
 		},
 	}
-}
 
-func selfRowGroup(rowGroup parquet.RowGroup) parquet.RowGroup {
-	return rowGroup
-}
-
-func fileRowGroup(rowGroup parquet.RowGroup) parquet.RowGroup {
-	buffer := new(bytes.Buffer)
-	writer := parquet.NewWriter(buffer)
-	if _, err := writer.WriteRowGroup(rowGroup); err != nil {
-		panic(err)
-	}
-	if err := writer.Close(); err != nil {
-		panic(err)
-	}
-	reader := bytes.NewReader(buffer.Bytes())
-	f, err := parquet.OpenFile(reader, reader.Size())
-	if err != nil {
-		panic(err)
-	}
-	return f.RowGroup(0)
-}
-
-func TestMergeRowGroups(t *testing.T) {
 	for _, adapter := range []struct {
 		scenario string
 		function func(parquet.RowGroup) parquet.RowGroup
@@ -348,7 +342,7 @@ func TestMergeRowGroups(t *testing.T) {
 		{scenario: "file", function: fileRowGroup},
 	} {
 		t.Run(adapter.scenario, func(t *testing.T) {
-			for _, test := range mergeRowGroupsTests() {
+			for _, test := range tests {
 				t.Run(test.scenario, func(t *testing.T) {
 					input := make([]parquet.RowGroup, len(test.input))
 					for i := range test.input {

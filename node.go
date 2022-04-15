@@ -38,29 +38,18 @@ type Node interface {
 	// Returns whether the parquet column is required.
 	Required() bool
 
-	// Returns the number of child nodes.
-	//
-	// The method returns zero on leaf nodes.
-	NumChildren() int
+	// Returns true if this a leaf node.
+	Leaf() bool
 
-	// Returns the sorted list of child node names.
+	// Returns a mapping of the node's fields.
 	//
-	// The method returns an empty slice on leaf nodes.
+	// As an optimization, the same slices may be returned by multiple calls to
+	// this method, programs must treat the returned values as immutable.
 	//
-	// As an optimization, the returned slice may be the same across calls to
-	// this method. Applications should treat the return value as immutable.
-	ChildNames() []string
+	// This method returns an empty mapping when called on leaf nodes.
+	Fields() []Field
 
-	// Returns the child node associated with the given name, or nil if the
-	// name did not exist.
-	//
-	// The method panics if it is called on a leaf node.
-	ChildByName(name string) Node
-
-	// ValueByName is returns the sub-value with the given name in base.
-	ValueByName(base reflect.Value, name string) reflect.Value
-
-	// Returns the list of encodings used by the node and its children.
+	// Returns the list of encodings used by the node.
 	//
 	// The method may return an empty slice to indicate that only the plain
 	// encoding is used.
@@ -69,7 +58,7 @@ type Node interface {
 	// this method. Applications should treat the return value as immutable.
 	Encoding() []encoding.Encoding
 
-	// Returns the list of compression codecs used by the node and its children.
+	// Returns the list of compression codecs used by the node.
 	//
 	// The method may return an empty slice to indicate that no compression was
 	// configured on the node.
@@ -95,16 +84,17 @@ type Node interface {
 	GoType() reflect.Type
 }
 
-// IndexedNode is an extension of the Node interface implemented by types which
-// support indexing child nodes by their position.
-type IndexedNode interface {
+// Field instances represent fields of a parquet node, which associate a node to
+// their name in their parent node.
+type Field interface {
 	Node
 
-	// ChildByIndex returns the child node at the given index.
-	ChildByIndex(index int) Node
+	// Returns the name of this field in its parent node.
+	Name() string
 
-	// ValueByIndex returns the sub-value of base at the given index.
-	ValueByIndex(base reflect.Value, index int) reflect.Value
+	// Given a reference to the Go value matching the structure of the parent
+	// node, eturns the Go value of the field.
+	Value(base reflect.Value) reflect.Value
 }
 
 // WrappedNode is an extension of the Node interface implemented by types which
@@ -143,7 +133,7 @@ func Encoded(node Node, encodings ...encoding.Encoding) Node {
 	if len(encodings) == 0 {
 		return node
 	}
-	if !isLeaf(node) {
+	if !node.Leaf() {
 		panic("cannot add encodings to a non-leaf node")
 	}
 	kind := node.Type().Kind()
@@ -168,16 +158,7 @@ type encodedNode struct {
 }
 
 func (n *encodedNode) Encoding() []encoding.Encoding {
-	if isLeaf(n) {
-		return n.encodings
-	}
-	childNames := n.ChildNames()
-	encodings := make([]encoding.Encoding, 0, len(childNames))
-	for _, name := range childNames {
-		encodings = append(encodings, n.ChildByName(name).Encoding()...)
-	}
-	sortEncodings(encodings)
-	return dedupeSortedEncodings(encodings)
+	return n.encodings
 }
 
 // Compressed wraps the node passed as argument to add the given list of
@@ -188,7 +169,7 @@ func Compressed(node Node, codecs ...compress.Codec) Node {
 	if len(codecs) == 0 {
 		return node
 	}
-	if !isLeaf(node) {
+	if !node.Leaf() {
 		panic("cannot add compression codecs to a non-leaf node")
 	}
 	codecs = append([]compress.Codec{}, codecs...)
@@ -208,16 +189,7 @@ type compressedNode struct {
 }
 
 func (n *compressedNode) Compression() []compress.Codec {
-	if isLeaf(n) {
-		return n.codecs
-	}
-	childNames := n.ChildNames()
-	compression := make([]compress.Codec, 0, len(childNames))
-	for _, name := range childNames {
-		compression = append(compression, n.ChildByName(name).Compression()...)
-	}
-	sortCodecs(compression)
-	return dedupeSortedCodecs(compression)
+	return n.codecs
 }
 
 // Optional wraps the given node to make it optional.
@@ -269,21 +241,13 @@ func (n *leafNode) Repeated() bool { return false }
 
 func (n *leafNode) Required() bool { return true }
 
+func (n *leafNode) Leaf() bool { return true }
+
+func (n *leafNode) Fields() []Field { return nil }
+
 func (n *leafNode) Encoding() []encoding.Encoding { return nil }
 
 func (n *leafNode) Compression() []compress.Codec { return nil }
-
-func (n *leafNode) NumChildren() int { return 0 }
-
-func (n *leafNode) ChildNames() []string { return nil }
-
-func (n *leafNode) ChildByName(string) Node {
-	panic("cannot call ChildByName on leaf parquet node")
-}
-
-func (n *leafNode) ValueByName(reflect.Value, string) reflect.Value {
-	panic("cannot call ValueByName on leaf parquet node")
-}
 
 func (n *leafNode) GoType() reflect.Type { return goTypeOfLeaf(n) }
 
@@ -318,44 +282,48 @@ func (g Group) Repeated() bool { return false }
 
 func (g Group) Required() bool { return true }
 
-func (g Group) NumChildren() int { return len(g) }
+func (g Group) Leaf() bool { return false }
 
-func (g Group) ChildNames() []string {
-	names := make([]string, 0, len(g))
-	for name := range g {
-		names = append(names, name)
+func (g Group) Fields() []Field {
+	groupFields := make([]groupField, 0, len(g))
+	for name, node := range g {
+		groupFields = append(groupFields, groupField{
+			Node: node,
+			name: name,
+		})
 	}
-	sort.Strings(names)
-	return names
-}
-
-func (g Group) ChildByName(name string) Node {
-	return g[name]
-}
-
-func (g Group) ValueByName(base reflect.Value, name string) reflect.Value {
-	return base.MapIndex(reflect.ValueOf(name))
-}
-
-func (g Group) Encoding() []encoding.Encoding {
-	encodings := make([]encoding.Encoding, 0, len(g))
-	for _, node := range g {
-		encodings = append(encodings, node.Encoding()...)
+	sort.Slice(groupFields, func(i, j int) bool {
+		return groupFields[i].name < groupFields[j].name
+	})
+	fields := make([]Field, len(groupFields))
+	for i := range groupFields {
+		fields[i] = &groupFields[i]
 	}
-	sortEncodings(encodings)
-	return dedupeSortedEncodings(encodings)
+	return fields
 }
 
-func (g Group) Compression() []compress.Codec {
-	codecs := make([]compress.Codec, 0, len(g))
-	for _, node := range g {
-		codecs = append(codecs, node.Compression()...)
-	}
-	sortCodecs(codecs)
-	return dedupeSortedCodecs(codecs)
-}
+func (g Group) Encoding() []encoding.Encoding { return nil }
+
+func (g Group) Compression() []compress.Codec { return nil }
 
 func (g Group) GoType() reflect.Type { return goTypeOfGroup(g) }
+
+type groupField struct {
+	Node
+	name string
+}
+
+func (f *groupField) Unwrap() Node { return f.Node }
+
+func (f *groupField) Name() string { return f.name }
+
+func (f *groupField) Value(base reflect.Value) reflect.Value {
+	return base.MapIndex(reflect.ValueOf(&f.name).Elem())
+}
+
+var (
+	_ WrappedNode = (*groupField)(nil)
+)
 
 func goTypeOf(node Node) reflect.Type {
 	switch {
@@ -377,7 +345,7 @@ func goTypeOfRepeated(node Node) reflect.Type {
 }
 
 func goTypeOfRequired(node Node) reflect.Type {
-	if isLeaf(node) {
+	if node.Leaf() {
 		return goTypeOfLeaf(node)
 	} else {
 		return goTypeOfGroup(node)
@@ -412,25 +380,20 @@ func goTypeOfLeaf(node Node) reflect.Type {
 }
 
 func goTypeOfGroup(node Node) reflect.Type {
-	names := node.ChildNames()
-	fields := make([]reflect.StructField, len(names))
-	for i, name := range names {
-		child := node.ChildByName(name)
-		fields[i].Name = exportedStructFieldName(name)
-		fields[i].Type = child.GoType()
+	fields := node.Fields()
+	structFields := make([]reflect.StructField, len(fields))
+	for i, field := range fields {
+		structFields[i].Name = exportedStructFieldName(field.Name())
+		structFields[i].Type = field.GoType()
 		// TODO: can we reconstruct a struct tag that would be valid if a value
 		// of this type were passed to SchemaOf?
 	}
-	return reflect.StructOf(fields)
+	return reflect.StructOf(structFields)
 }
 
 func exportedStructFieldName(name string) string {
 	firstRune, size := utf8.DecodeRuneInString(name)
 	return string([]rune{unicode.ToUpper(firstRune)}) + name[size:]
-}
-
-func isLeaf(node Node) bool {
-	return node.NumChildren() == 0
 }
 
 func isList(node Node) bool {
@@ -448,27 +411,19 @@ func numLeafColumnsOf(node Node) int16 {
 }
 
 func numLeafColumns(node Node, columnIndex int) int {
-	if isLeaf(node) {
+	if node.Leaf() {
 		return columnIndex + 1
 	}
-
-	if indexedNode, ok := unwrap(node).(IndexedNode); ok {
-		for i, n := 0, indexedNode.NumChildren(); i < n; i++ {
-			columnIndex = numLeafColumns(indexedNode.ChildByIndex(i), columnIndex)
-		}
-	} else {
-		for _, name := range node.ChildNames() {
-			columnIndex = numLeafColumns(node.ChildByName(name), columnIndex)
-		}
+	for _, field := range node.Fields() {
+		columnIndex = numLeafColumns(field, columnIndex)
 	}
-
 	return columnIndex
 }
 
 func listElementOf(node Node) Node {
-	if !isLeaf(node) {
-		if list := node.ChildByName("list"); list != nil {
-			if elem := list.ChildByName("element"); elem != nil {
+	if !node.Leaf() {
+		if list := childByName(node, "list"); list != nil {
+			if elem := childByName(list, "element"); elem != nil {
 				return elem
 			}
 		}
@@ -477,10 +432,10 @@ func listElementOf(node Node) Node {
 }
 
 func mapKeyValueOf(node Node) Node {
-	if !isLeaf(node) && (node.Required() || node.Optional()) {
-		if keyValue := node.ChildByName("key_value"); keyValue != nil && !isLeaf(keyValue) && keyValue.Repeated() {
-			k := keyValue.ChildByName("key")
-			v := keyValue.ChildByName("value")
+	if !node.Leaf() && (node.Required() || node.Optional()) {
+		if keyValue := childByName(node, "key_value"); keyValue != nil && !keyValue.Leaf() && keyValue.Repeated() {
+			k := childByName(keyValue, "key")
+			v := childByName(keyValue, "value")
 			if k != nil && v != nil && k.Required() {
 				return keyValue
 			}
@@ -520,4 +475,95 @@ func encodingAndCompressionOf(node Node) (encoding.Encoding, compress.Codec) {
 	}
 
 	return encoding, compression
+}
+
+func forEachNodeOf(name string, node Node, do func(string, Node)) {
+	do(name, node)
+
+	for _, f := range node.Fields() {
+		forEachNodeOf(f.Name(), f, do)
+	}
+}
+
+func childByName(node Node, name string) Node {
+	for _, f := range node.Fields() {
+		if f.Name() == name {
+			return f
+		}
+	}
+	return nil
+}
+
+func nodesAreEqual(node1, node2 Node) bool {
+	if node1.Leaf() {
+		return node2.Leaf() && leafNodesAreEqual(node1, node2)
+	} else {
+		return !node2.Leaf() && groupNodesAreEqual(node1, node2)
+	}
+}
+
+func typesAreEqual(node1, node2 Node) bool {
+	return node1.Type().Kind() == node2.Type().Kind()
+}
+
+func repetitionsAreEqual(node1, node2 Node) bool {
+	return node1.Optional() == node2.Optional() && node1.Repeated() == node2.Repeated()
+}
+
+func leafNodesAreEqual(node1, node2 Node) bool {
+	return typesAreEqual(node1, node2) && repetitionsAreEqual(node1, node2)
+}
+
+func groupNodesAreEqual(node1, node2 Node) bool {
+	fields1 := node1.Fields()
+	fields2 := node2.Fields()
+
+	if len(fields1) != len(fields2) {
+		return false
+	}
+
+	for i := range fields1 {
+		f1 := fields1[i]
+		f2 := fields2[i]
+
+		if f1.Name() != f2.Name() {
+			return false
+		}
+
+		if !nodesAreEqual(f1, f2) {
+			return false
+		}
+	}
+
+	return true
+}
+
+type repetition int
+
+const (
+	required repetition = iota
+	optional
+	repeated
+)
+
+func (rep repetition) String() string {
+	switch rep {
+	case optional:
+		return "optional"
+	case repeated:
+		return "repeated"
+	default:
+		return "required"
+	}
+}
+
+func repetitionOf(node Node) repetition {
+	switch {
+	case node.Optional():
+		return optional
+	case node.Repeated():
+		return repeated
+	default:
+		return required
+	}
 }

@@ -3,22 +3,33 @@ package parquet
 import (
 	"fmt"
 	"io"
-	"sort"
+	"sync"
 )
 
 // ConvertError is an error type returned by calls to Convert when the conversion
 // of parquet schemas is impossible or the input row for the conversion is
 // malformed.
 type ConvertError struct {
-	Reason string
-	Path   []string
-	From   Node
-	To     Node
+	Path []string
+	From Node
+	To   Node
 }
 
 // Error satisfies the error interface.
 func (e *ConvertError) Error() string {
-	return fmt.Sprintf("parquet conversion error: %s %q", e.Reason, columnPath(e.Path))
+	sourceType := e.From.Type()
+	targetType := e.To.Type()
+
+	sourceRepetition := repetitionOf(e.From)
+	targetRepetition := repetitionOf(e.To)
+
+	return fmt.Sprintf("cannot convert parquet column %q from %s %s to %s %s",
+		columnPath(e.Path),
+		sourceRepetition,
+		sourceType,
+		targetRepetition,
+		targetType,
+	)
 }
 
 // Conversion is an interface implemented by types that provide conversion of
@@ -37,22 +48,78 @@ type Conversion interface {
 }
 
 type conversion struct {
-	convert convertFunc
-	columns []int16
-	schema  *Schema
+	targetColumnKinds   []Kind
+	targetToSourceIndex []int16
+	sourceToTargetIndex []int16
+	schema              *Schema
+	buffers             sync.Pool
 }
 
-func (c *conversion) Convert(dst, src Row) (Row, error) {
-	dst, src, err := c.convert(dst, src, levels{})
-	if len(src) != 0 && err == nil {
-		err = fmt.Errorf("%d values remain unused after converting parquet row", len(src))
+type conversionBuffer struct {
+	columns [][]Value
+}
+
+func (c *conversion) getBuffer() *conversionBuffer {
+	b, _ := c.buffers.Get().(*conversionBuffer)
+	if b == nil {
+		n := len(c.targetColumnKinds)
+		columns, values := make([][]Value, n), make([]Value, n)
+		for i := range columns {
+			columns[i] = values[i : i : i+1]
+		}
+		b = &conversionBuffer{columns: columns}
 	}
-	return dst, err
+	return b
 }
 
-func (c *conversion) Column(i int) int { return int(c.columns[i]) }
+func (c *conversion) putBuffer(b *conversionBuffer) {
+	for i, values := range b.columns {
+		clearValues(values)
+		b.columns[i] = values[:0]
+	}
+	c.buffers.Put(b)
+}
 
-func (c *conversion) Schema() *Schema { return c.schema }
+func (c *conversion) Convert(target, source Row) (Row, error) {
+	buffer := c.getBuffer()
+	defer c.putBuffer(buffer)
+
+	for _, value := range source {
+		sourceIndex := value.Column()
+		targetIndex := c.sourceToTargetIndex[sourceIndex]
+		if targetIndex >= 0 {
+			value.kind = ^int8(c.targetColumnKinds[targetIndex])
+			value.columnIndex = ^targetIndex
+			buffer.columns[targetIndex] = append(buffer.columns[targetIndex], value)
+		}
+	}
+
+	for i, values := range buffer.columns {
+		if len(values) == 0 {
+			values = append(values, Value{
+				kind:        ^int8(c.targetColumnKinds[i]),
+				columnIndex: ^int16(i),
+			})
+		}
+		target = append(target, values...)
+	}
+
+	return target, nil
+}
+
+func (c *conversion) Column(i int) int {
+	return int(c.targetToSourceIndex[i])
+}
+
+func (c *conversion) Schema() *Schema {
+	return c.schema
+}
+
+type identity struct{ schema *Schema }
+
+func (id identity) Convert(dst, src Row) (Row, error) { return append(dst, src...), nil }
+func (id identity) Column(i int) int                  { return i }
+func (id identity) Schema() *Schema                   { return id.schema }
 
 // Convert constructs a conversion function from one parquet schema to another.
 //
@@ -64,302 +131,57 @@ func (c *conversion) Schema() *Schema { return c.schema }
 // The returned function is intended to be used to append the converted source
 // row to the destination buffer.
 func Convert(to, from Node) (conv Conversion, err error) {
-	defer func() {
-		switch e := recover().(type) {
-		case nil:
-		case *ConvertError:
-			err = e
-		default:
-			panic(e)
-		}
-	}()
-
-	columns := make([]int16, numLeafColumnsOf(to))
-	for i := range columns {
-		columns[i] = -1
+	schema, _ := to.(*Schema)
+	if schema == nil {
+		schema = NewSchema("", to)
 	}
 
-	_, _, convertFunc := convert(convertNode{node: to}, convertNode{node: from}, columns)
-
-	c := &conversion{
-		convert: convertFunc,
-		columns: columns,
+	if nodesAreEqual(to, from) {
+		return identity{schema}, nil
 	}
-	if c.schema, _ = to.(*Schema); c.schema == nil {
-		c.schema = NewSchema("", to)
+
+	targetMapping, targetColumns := columnMappingOf(to)
+	sourceMapping, sourceColumns := columnMappingOf(from)
+
+	columnIndexBuffer := make([]int16, len(targetColumns)+len(sourceColumns))
+	targetColumnKinds := make([]Kind, len(targetColumns))
+	targetToSourceIndex := columnIndexBuffer[:len(targetColumns)]
+	sourceToTargetIndex := columnIndexBuffer[len(targetColumns):]
+
+	for i, path := range targetColumns {
+		targetToSourceIndex[i], _ = sourceMapping.lookup(path)
+		_, targetNode := targetMapping.lookup(path)
+		targetColumnKinds[i] = targetNode.Type().Kind()
 	}
-	return c, nil
-}
 
-type convertFunc func(Row, Row, levels) (Row, Row, error)
+	for i, path := range sourceColumns {
+		sourceIndex, sourceNode := sourceMapping.lookup(path)
+		targetIndex, targetNode := targetMapping.lookup(path)
 
-type convertNode struct {
-	columnIndex int16
-	node        Node
-	path        columnPath
-}
-
-func (c convertNode) child(name string) convertNode {
-	c.node = c.node.ChildByName(name)
-	c.path = c.path.append(name)
-	return c
-}
-
-func convert(to, from convertNode, columns []int16) (int16, int16, convertFunc) {
-	switch {
-	case from.node.Optional():
-		if to.node.Optional() {
-			return convertFuncOfOptional(to, from, columns)
-		}
-		panic(convertError(to, from, "cannot convert from optional to required column"))
-
-	case from.node.Repeated():
-		if to.node.Repeated() {
-			return convertFuncOfRepeated(to, from, columns)
-		}
-		panic(convertError(to, from, "cannot convert from repeated to required column"))
-
-	case to.node.Optional():
-		panic(convertError(to, from, "cannot convert from required to optional column"))
-
-	case to.node.Repeated():
-		panic(convertError(to, from, "cannot convert from required to repeated column"))
-
-	case isLeaf(from.node):
-		if isLeaf(to.node) {
-			return convertFuncOfLeaf(to, from, columns)
-		}
-		panic(convertError(to, from, "cannot convert from leaf to group column"))
-
-	case isLeaf(to.node):
-		panic(convertError(to, from, "cannot convert from group to leaf column"))
-
-	default:
-		return convertFuncOfGroup(to, from, columns)
-	}
-}
-
-func convertError(to, from convertNode, reason string) *ConvertError {
-	return &ConvertError{Reason: reason, Path: from.path, From: from.node, To: to.node}
-}
-
-//go:noinline
-func convertFuncOfOptional(to, from convertNode, columns []int16) (int16, int16, convertFunc) {
-	to.node = Required(to.node)
-	from.node = Required(from.node)
-
-	toColumnIndex, fromColumnIndex, conv := convert(to, from, columns)
-	return toColumnIndex, fromColumnIndex, func(dst, src Row, levels levels) (Row, Row, error) {
-		levels.definitionLevel++
-		return conv(dst, src, levels)
-	}
-}
-
-//go:noinline
-func convertFuncOfRepeated(to, from convertNode, columns []int16) (int16, int16, convertFunc) {
-	to.node = Required(to.node)
-	from.node = Required(from.node)
-	srcColumnIndex := ^from.columnIndex
-
-	toColumnIndex, fromColumnIndex, conv := convert(to, from, columns)
-	return toColumnIndex, fromColumnIndex, func(dst, src Row, levels levels) (Row, Row, error) {
-		var err error
-
-		levels.repetitionDepth++
-		levels.definitionLevel++
-
-		for len(src) > 0 && src[0].columnIndex == srcColumnIndex {
-			if dst, src, err = conv(dst, src, levels); err != nil {
-				break
+		if targetNode != nil {
+			sourceType := sourceNode.Type()
+			targetType := targetNode.Type()
+			if sourceType.Kind() != targetType.Kind() {
+				return nil, &ConvertError{Path: path, From: sourceNode, To: targetNode}
 			}
-			levels.repetitionLevel = levels.repetitionDepth
-		}
 
-		return dst, src, err
-	}
-}
-
-//go:noinline
-func convertFuncOfLeaf(to, from convertNode, columns []int16) (int16, int16, convertFunc) {
-	if !typesAreEqual(to.node, from.node) {
-		panic(convertError(to, from, fmt.Sprintf("unsupported type conversion from %s to %s for parquet column", from.node.Type(), to.node.Type())))
-	}
-
-	srcColumnIndex := ^from.columnIndex
-	dstColumnIndex := ^to.columnIndex
-	columns[to.columnIndex] = from.columnIndex
-
-	return to.columnIndex + 1, from.columnIndex + 1, func(dst, src Row, levels levels) (Row, Row, error) {
-		if len(src) == 0 || src[0].columnIndex != srcColumnIndex {
-			return dst, src, convertError(to, from, "no value found in row for parquet column")
-		}
-		v := src[0]
-		v.repetitionLevel = levels.repetitionLevel
-		v.definitionLevel = levels.definitionLevel
-		v.columnIndex = dstColumnIndex
-		return append(dst, v), src[1:], nil
-	}
-}
-
-//go:noinline
-func convertFuncOfGroup(to, from convertNode, columns []int16) (int16, int16, convertFunc) {
-	extra, missing, names := comm(to.node.ChildNames(), from.node.ChildNames())
-	funcs := make([]convertFunc, 0, len(extra)+len(missing)+len(names))
-
-	for _, name := range merge(extra, missing, names) {
-		var conv convertFunc
-		switch {
-		case contains(extra, name):
-			to.columnIndex, conv = convertFuncOfExtraColumn(to.child(name))
-		case contains(missing, name):
-			from.columnIndex, conv = convertFuncOfMissingColumn(from.child(name))
-		default:
-			to.columnIndex, from.columnIndex, conv = convert(to.child(name), from.child(name), columns)
-		}
-		funcs = append(funcs, conv)
-	}
-
-	return to.columnIndex, from.columnIndex, makeGroupConvertFunc(funcs)
-}
-
-func makeGroupConvertFunc(funcs []convertFunc) convertFunc {
-	return func(dst, src Row, levels levels) (Row, Row, error) {
-		var err error
-
-		for _, conv := range funcs {
-			if dst, src, err = conv(dst, src, levels); err != nil {
-				break
+			sourceRepetition := repetitionOf(sourceNode)
+			targetRepetition := repetitionOf(targetNode)
+			if sourceRepetition != targetRepetition {
+				return nil, &ConvertError{Path: path, From: sourceNode, To: targetNode}
 			}
 		}
 
-		return dst, src, err
-	}
-}
-
-func convertFuncOfExtraColumn(to convertNode) (int16, convertFunc) {
-	switch {
-	case isLeaf(to.node):
-		return convertFuncOfExtraLeaf(to)
-	default:
-		return convertFuncOfExtraGroup(to)
-	}
-}
-
-//go:noinline
-func convertFuncOfExtraLeaf(to convertNode) (int16, convertFunc) {
-	kind := ^to.node.Type().Kind()
-	columnIndex := ^to.columnIndex
-	return to.columnIndex + 1, func(dst, src Row, levels levels) (Row, Row, error) {
-		dst = append(dst, Value{
-			kind:            int8(kind),
-			repetitionLevel: levels.repetitionLevel,
-			definitionLevel: levels.definitionLevel,
-			columnIndex:     columnIndex,
-		})
-		return dst, src, nil
-	}
-}
-
-//go:noinline
-func convertFuncOfExtraGroup(to convertNode) (int16, convertFunc) {
-	names := to.node.ChildNames()
-	funcs := make([]convertFunc, len(names))
-	for i := range funcs {
-		to.columnIndex, funcs[i] = convertFuncOfExtraColumn(to.child(names[i]))
-	}
-	return to.columnIndex, makeGroupConvertFunc(funcs)
-}
-
-//go:noinline
-func convertFuncOfMissingColumn(from convertNode) (int16, convertFunc) {
-	rowLength := numLeafColumnsOf(from.node)
-	columnIndex := ^from.columnIndex
-	return from.columnIndex + rowLength, func(dst, src Row, levels levels) (Row, Row, error) {
-		for len(src) > 0 && src[0].columnIndex == columnIndex {
-			if len(src) < int(rowLength) {
-				break
-			}
-			src = src[rowLength:]
-		}
-		return dst, src, nil
-	}
-}
-
-func nodesAreEqual(node1, node2 Node) bool {
-	if isLeaf(node1) {
-		return isLeaf(node2) && leafNodesAreEqual(node1, node2)
-	} else {
-		return !isLeaf(node2) && groupNodesAreEqual(node1, node2)
-	}
-}
-
-func typesAreEqual(node1, node2 Node) bool {
-	return node1.Type().Kind() == node2.Type().Kind()
-}
-
-func repetitionsAreEqual(node1, node2 Node) bool {
-	return node1.Optional() == node2.Optional() && node1.Repeated() == node2.Repeated()
-}
-
-func leafNodesAreEqual(node1, node2 Node) bool {
-	return typesAreEqual(node1, node2) && repetitionsAreEqual(node1, node2)
-}
-
-func groupNodesAreEqual(node1, node2 Node) bool {
-	names1 := node1.ChildNames()
-	names2 := node2.ChildNames()
-
-	if !stringsAreEqual(names1, names2) {
-		return false
+		sourceToTargetIndex[i] = targetIndex
+		_ = sourceIndex
 	}
 
-	for _, name := range names1 {
-		if !nodesAreEqual(node1.ChildByName(name), node2.ChildByName(name)) {
-			return false
-		}
-	}
-
-	return true
-}
-
-func comm(sortedStrings1, sortedStrings2 []string) (only1, only2, both []string) {
-	i1 := 0
-	i2 := 0
-
-	for i1 < len(sortedStrings1) && i2 < len(sortedStrings2) {
-		switch {
-		case sortedStrings1[i1] < sortedStrings2[i2]:
-			only1 = append(only1, sortedStrings1[i1])
-			i1++
-		case sortedStrings1[i1] > sortedStrings2[i2]:
-			only2 = append(only2, sortedStrings2[i2])
-			i2++
-		default:
-			both = append(both, sortedStrings1[i1])
-			i1++
-			i2++
-		}
-	}
-
-	only1 = append(only1, sortedStrings1[i1:]...)
-	only2 = append(only2, sortedStrings2[i2:]...)
-	return only1, only2, both
-}
-
-func contains(sortedStrings []string, value string) bool {
-	i := sort.Search(len(sortedStrings), func(i int) bool {
-		return sortedStrings[i] >= value
-	})
-	return i < len(sortedStrings) && sortedStrings[i] == value
-}
-
-func merge(s1, s2, s3 []string) []string {
-	merged := make([]string, 0, len(s1)+len(s2)+len(s3))
-	merged = append(merged, s1...)
-	merged = append(merged, s2...)
-	merged = append(merged, s3...)
-	sort.Strings(merged)
-	return merged
+	return &conversion{
+		targetColumnKinds:   targetColumnKinds,
+		targetToSourceIndex: targetToSourceIndex,
+		sourceToTargetIndex: sourceToTargetIndex,
+		schema:              schema,
+	}, nil
 }
 
 // ConvertRowGroup constructs a wrapper of the given row group which applies

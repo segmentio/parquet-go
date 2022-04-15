@@ -257,7 +257,7 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 			TypeLength:     typeLength,
 			RepetitionType: repetitionType,
 			Name:           name,
-			NumChildren:    int32(node.NumChildren()),
+			NumChildren:    int32(len(node.Fields())),
 			ConvertedType:  nodeType.ConvertedType(),
 			Scale:          scale,
 			Precision:      precision,

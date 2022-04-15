@@ -14,7 +14,7 @@ func PrintIndent(w io.Writer, name string, node Node, pattern, newline string) e
 	pw := &printWriter{writer: w}
 	pi := &printIndent{}
 
-	if isLeaf(node) {
+	if node.Leaf() {
 		printWithIndent(pw, "", node, pi)
 	} else {
 		pw.WriteString("message ")
@@ -31,8 +31,8 @@ func PrintIndent(w io.Writer, name string, node Node, pattern, newline string) e
 		pi.repeat = 1
 		pi.writeNewLine(pw)
 
-		for _, child := range node.ChildNames() {
-			printWithIndent(pw, child, node.ChildByName(child), pi)
+		for _, field := range node.Fields() {
+			printWithIndent(pw, field.Name(), field, pi)
 			pi.writeNewLine(pw)
 		}
 
@@ -54,7 +54,7 @@ func printWithIndent(w io.StringWriter, name string, node Node, indent *printInd
 		w.WriteString("required ")
 	}
 
-	if isLeaf(node) {
+	if node.Leaf() {
 		t := node.Type()
 		switch t.Kind() {
 		case Boolean:
@@ -109,8 +109,8 @@ func printWithIndent(w io.StringWriter, name string, node Node, indent *printInd
 		indent.writeNewLine(w)
 		indent.push()
 
-		for _, child := range node.ChildNames() {
-			printWithIndent(w, child, node.ChildByName(child), indent)
+		for _, field := range node.Fields() {
+			printWithIndent(w, field.Name(), field, indent)
 			indent.writeNewLine(w)
 		}
 

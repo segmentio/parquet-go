@@ -75,9 +75,9 @@ func TestDeconstructionReconstruction(t *testing.T) {
 				Weight:    81.5,
 			},
 			values: [][]parquet.Value{
-				0: {parquet.ValueOf(42).Level(0, 1, 0)},
-				1: {parquet.ValueOf("Han")},
-				2: {parquet.ValueOf("Solo")},
+				0: {parquet.ValueOf("Han")},
+				1: {parquet.ValueOf("Solo")},
+				2: {parquet.ValueOf(42).Level(0, 1, 0)},
 				3: {parquet.ValueOf(81.5).Level(0, 1, 0)},
 			},
 		},
@@ -164,20 +164,20 @@ func TestDeconstructionReconstruction(t *testing.T) {
 			// Here there are four nil values because the Person type has four
 			// fields but it is nil.
 			values: [][]parquet.Value{
+				// User.ID
+				0: {parquet.ValueOf(uuid.MustParse("A65B576D-9299-4769-9D93-04BE0583F027"))},
 				// User.Details.Person
-				0: {parquet.ValueOf(nil).Level(0, 1, 0)},
 				1: {parquet.ValueOf(nil).Level(0, 1, 0)},
 				2: {parquet.ValueOf(nil).Level(0, 1, 0)},
 				3: {parquet.ValueOf(nil).Level(0, 1, 0)},
-				// User.Friends.Details.Person
-				4: {parquet.ValueOf(nil).Level(0, 0, 0)},
+				4: {parquet.ValueOf(nil).Level(0, 1, 0)},
+				// User.Friends.ID
 				5: {parquet.ValueOf(nil).Level(0, 0, 0)},
+				// User.Friends.Details.Person
 				6: {parquet.ValueOf(nil).Level(0, 0, 0)},
 				7: {parquet.ValueOf(nil).Level(0, 0, 0)},
-				// User.Friends.ID
 				8: {parquet.ValueOf(nil).Level(0, 0, 0)},
-				// User.ID
-				9: {parquet.ValueOf(uuid.MustParse("A65B576D-9299-4769-9D93-04BE0583F027"))},
+				9: {parquet.ValueOf(nil).Level(0, 0, 0)},
 			},
 		},
 
@@ -229,44 +229,44 @@ func TestDeconstructionReconstruction(t *testing.T) {
 			},
 
 			values: [][]parquet.Value{
+				// User.ID
+				0: {parquet.ValueOf(uuid.MustParse("A65B576D-9299-4769-9D93-04BE0583F027"))},
+
 				// User.Details
-				0: {parquet.ValueOf(nil).Level(0, 2, 0)},
 				1: {parquet.ValueOf("Luke").Level(0, 2, 0)},
 				2: {parquet.ValueOf("Skywalker").Level(0, 2, 0)},
 				3: {parquet.ValueOf(nil).Level(0, 2, 0)},
+				4: {parquet.ValueOf(nil).Level(0, 2, 0)},
 
-				4: { // User.Friends.Details.Person.Age
-					parquet.ValueOf(nil).Level(0, 4, 0),
-					parquet.ValueOf(nil).Level(1, 4, 0),
-					parquet.ValueOf(nil).Level(1, 4, 0),
-				},
-
-				5: { // User.Friends.Details.Person.FirstName
-					parquet.ValueOf("Han").Level(0, 4, 0),
-					parquet.ValueOf("Leia").Level(1, 4, 0),
-					parquet.ValueOf("C3PO").Level(1, 4, 0),
-				},
-
-				6: { // User.Friends.Details.Person.LastName
-					parquet.ValueOf("Solo").Level(0, 4, 0),
-					parquet.ValueOf("Skywalker").Level(1, 4, 0),
-					parquet.ValueOf("Droid").Level(1, 4, 0),
-				},
-
-				7: { // User.Friends.Details.Person.Weight
-					parquet.ValueOf(nil).Level(0, 4, 0),
-					parquet.ValueOf(nil).Level(1, 4, 0),
-					parquet.ValueOf(nil).Level(1, 4, 0),
-				},
-
-				8: { // User.Friends.ID
+				5: { // User.Friends.ID
 					parquet.ValueOf(uuid.MustParse("1B76F8D0-82C6-403F-A104-DCDA69207220")).Level(0, 2, 0),
 					parquet.ValueOf(uuid.MustParse("C43C8852-CCE5-40E6-B0DF-7212A5633346")).Level(1, 2, 0),
 					parquet.ValueOf(uuid.MustParse("E78642A8-0931-4D5F-918F-24DC8FF445B0")).Level(1, 2, 0),
 				},
 
-				// User.ID
-				9: {parquet.ValueOf(uuid.MustParse("A65B576D-9299-4769-9D93-04BE0583F027"))},
+				6: { // User.Friends.Details.Person.FirstName
+					parquet.ValueOf("Han").Level(0, 4, 0),
+					parquet.ValueOf("Leia").Level(1, 4, 0),
+					parquet.ValueOf("C3PO").Level(1, 4, 0),
+				},
+
+				7: { // User.Friends.Details.Person.LastName
+					parquet.ValueOf("Solo").Level(0, 4, 0),
+					parquet.ValueOf("Skywalker").Level(1, 4, 0),
+					parquet.ValueOf("Droid").Level(1, 4, 0),
+				},
+
+				8: { // User.Friends.Details.Person.Age
+					parquet.ValueOf(nil).Level(0, 4, 0),
+					parquet.ValueOf(nil).Level(1, 4, 0),
+					parquet.ValueOf(nil).Level(1, 4, 0),
+				},
+
+				9: { // User.Friends.Details.Person.Weight
+					parquet.ValueOf(nil).Level(0, 4, 0),
+					parquet.ValueOf(nil).Level(1, 4, 0),
+					parquet.ValueOf(nil).Level(1, 4, 0),
+				},
 			},
 		},
 
@@ -415,20 +415,20 @@ func TestDeconstructionReconstruction(t *testing.T) {
 				},
 			},
 			values: [][]parquet.Value{
-				0: { // AddressBook.contacts.name
+				0: { // AddressBook.owner
+					parquet.ValueOf("Julien Le Dem").Level(0, 0, 0),
+				},
+				1: { // AddressBook.ownerPhoneNumbers
+					parquet.ValueOf("555 123 4567").Level(0, 1, 0),
+					parquet.ValueOf("555 666 1337").Level(1, 1, 0),
+				},
+				2: { // AddressBook.contacts.name
 					parquet.ValueOf("Dmitriy Ryaboy").Level(0, 1, 0),
 					parquet.ValueOf("Chris Aniszczyk").Level(1, 1, 0),
 				},
-				1: { // AddressBook.contacts.phoneNumber
+				3: { // AddressBook.contacts.phoneNumber
 					parquet.ValueOf("555 987 6543").Level(0, 2, 0),
 					parquet.ValueOf(nil).Level(1, 1, 0),
-				},
-				2: { // AddressBook.owner
-					parquet.ValueOf("Julien Le Dem").Level(0, 0, 0),
-				},
-				3: { // AddressBook.ownerPhoneNumbers
-					parquet.ValueOf("555 123 4567").Level(0, 1, 0),
-					parquet.ValueOf("555 666 1337").Level(1, 1, 0),
 				},
 			},
 		},

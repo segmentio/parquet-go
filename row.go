@@ -366,7 +366,7 @@ func deconstructFuncOfRepeated(columnIndex int16, node Node) (int16, deconstruct
 
 func deconstructFuncOfRequired(columnIndex int16, node Node) (int16, deconstructFunc) {
 	switch {
-	case isLeaf(node):
+	case node.Leaf():
 		return deconstructFuncOfLeaf(columnIndex, node)
 	default:
 		return deconstructFuncOfGroup(columnIndex, node)
@@ -410,35 +410,21 @@ func deconstructFuncOfMap(columnIndex int16, node Node) (int16, deconstructFunc)
 
 //go:noinline
 func deconstructFuncOfGroup(columnIndex int16, node Node) (int16, deconstructFunc) {
-	names := node.ChildNames()
-	funcs := make([]deconstructFunc, len(names))
-
-	for i, name := range names {
-		columnIndex, funcs[i] = deconstructFuncOf(columnIndex, node.ChildByName(name))
+	fields := node.Fields()
+	funcs := make([]deconstructFunc, len(fields))
+	for i, field := range fields {
+		columnIndex, funcs[i] = deconstructFuncOf(columnIndex, field)
 	}
-
-	valueByIndex := func(value reflect.Value, index int) reflect.Value {
-		return node.ValueByName(value, names[index])
-	}
-
-	switch n := unwrap(node).(type) {
-	case IndexedNode:
-		valueByIndex = n.ValueByIndex
-	}
-
 	return columnIndex, func(row Row, levels levels, value reflect.Value) Row {
-		valueAt := valueByIndex
-
-		if !value.IsValid() {
-			valueAt = func(value reflect.Value, _ int) reflect.Value {
-				return value
+		if value.IsValid() {
+			for i, f := range funcs {
+				row = f(row, levels, fields[i].Value(value))
+			}
+		} else {
+			for _, f := range funcs {
+				row = f(row, levels, value)
 			}
 		}
-
-		for i, f := range funcs {
-			row = f(row, levels, valueAt(value, i))
-		}
-
 		return row
 	}
 }
@@ -571,7 +557,7 @@ func reconstructRepeated(columnIndex, rowLength int16, levels levels, row Row, d
 
 func reconstructFuncOfRequired(columnIndex int16, node Node) (int16, reconstructFunc) {
 	switch {
-	case isLeaf(node):
+	case node.Leaf():
 		return reconstructFuncOfLeaf(columnIndex, node)
 	default:
 		return reconstructFuncOfGroup(columnIndex, node)
@@ -613,31 +599,21 @@ func reconstructFuncOfMap(columnIndex int16, node Node) (int16, reconstructFunc)
 
 //go:noinline
 func reconstructFuncOfGroup(columnIndex int16, node Node) (int16, reconstructFunc) {
-	names := node.ChildNames()
-	funcs := make([]reconstructFunc, len(names))
-	columnIndexes := make([]int16, len(names))
+	fields := node.Fields()
+	funcs := make([]reconstructFunc, len(fields))
+	columnIndexes := make([]int16, len(fields))
 
-	for i, name := range names {
-		columnIndex, funcs[i] = reconstructFuncOf(columnIndex, node.ChildByName(name))
+	for i, field := range fields {
+		columnIndex, funcs[i] = reconstructFuncOf(columnIndex, field)
 		columnIndexes[i] = columnIndex
 	}
 
-	valueByIndex := func(value reflect.Value, index int) reflect.Value {
-		return node.ValueByName(value, names[index])
-	}
-
-	switch n := unwrap(node).(type) {
-	case IndexedNode:
-		valueByIndex = n.ValueByIndex
-	}
-
 	return columnIndex, func(value reflect.Value, levels levels, row Row) (Row, error) {
-		var valueAt = valueByIndex
 		var err error
 
 		for i, f := range funcs {
-			if row, err = f(valueAt(value, i), levels, row); err != nil {
-				err = fmt.Errorf("%s → %w", names[i], err)
+			if row, err = f(fields[i].Value(value), levels, row); err != nil {
+				err = fmt.Errorf("%s → %w", fields[i].Name(), err)
 				break
 			}
 		}
