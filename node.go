@@ -93,7 +93,7 @@ type Field interface {
 	Name() string
 
 	// Given a reference to the Go value matching the structure of the parent
-	// node, eturns the Go value of the field.
+	// node, returns the Go value of the field.
 	Value(base reflect.Value) reflect.Value
 }
 
