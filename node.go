@@ -288,8 +288,8 @@ func (g Group) Fields() []Field {
 	groupFields := make([]groupField, 0, len(g))
 	for name, node := range g {
 		groupFields = append(groupFields, groupField{
-			Node: node,
-			name: name,
+			wrappedNode: wrap(node),
+			name:        name,
 		})
 	}
 	sort.Slice(groupFields, func(i, j int) bool {
@@ -309,21 +309,15 @@ func (g Group) Compression() []compress.Codec { return nil }
 func (g Group) GoType() reflect.Type { return goTypeOfGroup(g) }
 
 type groupField struct {
-	Node
+	wrappedNode
 	name string
 }
-
-func (f *groupField) Unwrap() Node { return f.Node }
 
 func (f *groupField) Name() string { return f.name }
 
 func (f *groupField) Value(base reflect.Value) reflect.Value {
 	return base.MapIndex(reflect.ValueOf(&f.name).Elem())
 }
-
-var (
-	_ WrappedNode = (*groupField)(nil)
-)
 
 func goTypeOf(node Node) reflect.Type {
 	switch {
