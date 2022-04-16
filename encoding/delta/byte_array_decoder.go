@@ -41,7 +41,7 @@ func (d *ByteArrayDecoder) DecodeByteArray(data *encoding.ByteArrayList) (int, e
 
 func (d *ByteArrayDecoder) DecodeFixedLenByteArray(size int, data []byte) (int, error) {
 	if size <= 0 {
-		return 0, fmt.Errorf("%w: size can't be < 1", encoding.ErrInvalidArguments)
+		return 0, fmt.Errorf("DELTA_BYTE_ARRAY: %w: size of decoded FIXED_LEN_BYTE_ARRAY must be positive", encoding.ErrInvalidArgument)
 	}
 
 	i := 0

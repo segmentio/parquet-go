@@ -18,13 +18,13 @@ var (
 	// returned by encoders and decoders.
 	ErrNotSupported = errors.New("encoding not supported")
 
-	// ErrInvalidArguments is an error returned when arguments passed to the
-	// encoding functions are incorrect and will lead to an expected failure.
+	// ErrInvalidArgument is an error returned one or more arguments passed to
+	// the encoding functions are incorrect.
 	//
 	// As with ErrNotSupported, this error may be wrapped with specific
 	// information about the problem and applications are expected to use
 	// errors.Is for comparisons.
-	ErrInvalidArguments = errors.New("invalid encoding arguments")
+	ErrInvalidArgument = errors.New("invalid argument")
 )
 
 // NotSupported is a type satisfying the Encoding interface which does not
