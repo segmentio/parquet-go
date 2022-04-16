@@ -270,11 +270,21 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 		dataPageType = format.DataPageV2
 	}
 
+	defaultCompression := config.Compression
+	if defaultCompression == nil {
+		defaultCompression = &Uncompressed
+	}
+
 	forEachLeafColumnOf(config.Schema, func(leaf leafColumn) {
-		encoding, compression := encodingAndCompressionOf(leaf.node)
+		encoding := encodingOf(leaf.node)
 		dictionary := Dictionary(nil)
 		columnType := leaf.node.Type()
 		columnIndex := int(leaf.columnIndex)
+		compression := leaf.node.Compression()
+
+		if compression == nil {
+			compression = defaultCompression
+		}
 
 		if isDictionaryEncoding(encoding) {
 			dictionary = columnType.NewDictionary(columnIndex, defaultDictBufferSize)
