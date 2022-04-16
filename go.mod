@@ -11,3 +11,8 @@ require (
 	github.com/segmentio/encoding v0.3.3
 	golang.org/x/sys v0.0.0-20211110154304-99a53858aa08
 )
+
+require (
+	github.com/mattn/go-runewidth v0.0.9 // indirect
+	github.com/olekukonko/tablewriter v0.0.5 // indirect
+)

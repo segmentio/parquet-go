@@ -1,21 +1,25 @@
 package parquet
 
 import (
+	"errors"
+	"fmt"
 	"io"
 	"strconv"
 	"strings"
+
+	"github.com/olekukonko/tablewriter"
 )
 
-func Print(w io.Writer, name string, node Node) error {
-	return PrintIndent(w, name, node, "\t", "\n")
+func PrintSchema(w io.Writer, name string, node Node) error {
+	return PrintSchemaIndent(w, name, node, "\t", "\n")
 }
 
-func PrintIndent(w io.Writer, name string, node Node, pattern, newline string) error {
+func PrintSchemaIndent(w io.Writer, name string, node Node, pattern, newline string) error {
 	pw := &printWriter{writer: w}
 	pi := &printIndent{}
 
 	if node.Leaf() {
-		printWithIndent(pw, "", node, pi)
+		printSchemaWithIndent(pw, "", node, pi)
 	} else {
 		pw.WriteString("message ")
 
@@ -32,7 +36,7 @@ func PrintIndent(w io.Writer, name string, node Node, pattern, newline string) e
 		pi.writeNewLine(pw)
 
 		for _, field := range node.Fields() {
-			printWithIndent(pw, field.Name(), field, pi)
+			printSchemaWithIndent(pw, field.Name(), field, pi)
 			pi.writeNewLine(pw)
 		}
 
@@ -42,7 +46,7 @@ func PrintIndent(w io.Writer, name string, node Node, pattern, newline string) e
 	return pw.err
 }
 
-func printWithIndent(w io.StringWriter, name string, node Node, indent *printIndent) {
+func printSchemaWithIndent(w io.StringWriter, name string, node Node, indent *printIndent) {
 	indent.writeTo(w)
 
 	switch {
@@ -110,7 +114,7 @@ func printWithIndent(w io.StringWriter, name string, node Node, indent *printInd
 		indent.push()
 
 		for _, field := range node.Fields() {
-			printWithIndent(w, field.Name(), field, indent)
+			printSchemaWithIndent(w, field.Name(), field, indent)
 			indent.writeNewLine(w)
 		}
 
@@ -160,6 +164,17 @@ type printWriter struct {
 	err    error
 }
 
+func (w *printWriter) Write(b []byte) (int, error) {
+	if w.err != nil {
+		return 0, w.err
+	}
+	n, err := w.writer.Write(b)
+	if err != nil {
+		w.err = err
+	}
+	return n, err
+}
+
 func (w *printWriter) WriteString(s string) (int, error) {
 	if w.err != nil {
 		return 0, w.err
@@ -177,6 +192,142 @@ var (
 
 func sprint(name string, node Node) string {
 	s := new(strings.Builder)
-	Print(s, name, node)
+	PrintSchema(s, name, node)
 	return s.String()
+}
+
+func PrintRowGroup(w io.Writer, rowGroup RowGroup) error {
+	schema := rowGroup.Schema()
+	pw := &printWriter{writer: w}
+	tw := tablewriter.NewWriter(pw)
+
+	mapping := ColumnMappingOf(schema)
+	columns := mapping.Columns()
+	header := make([]string, len(columns))
+	footer := make([]string, len(columns))
+	alignment := make([]int, len(columns))
+
+	for i, column := range columns {
+		_, node := mapping.Lookup(column...)
+		columnType := node.Type()
+
+		header[i] = strings.Join(column, ".")
+		footer[i] = columnType.String()
+
+		switch columnType.Kind() {
+		case ByteArray:
+			alignment[i] = tablewriter.ALIGN_LEFT
+		default:
+			alignment[i] = tablewriter.ALIGN_RIGHT
+		}
+	}
+
+	var row = make(Row, 0, rowGroup.NumColumns())
+	var err error
+
+	cells := make([]string, 0, len(columns))
+	parts := make([]string, 0)
+	rows := rowGroup.Rows()
+	for {
+		if row, err = rows.ReadRow(row[:0]); err != nil {
+			if !errors.Is(err, io.EOF) {
+				return err
+			}
+			break
+		}
+
+		cells = cells[:0]
+		fmt.Printf("%#v\n", row)
+
+		for i := 0; i < len(row); {
+			j := i + 1
+
+			for j < len(row) && row[j].Column() == row[i].Column() {
+				j++
+			}
+
+			if (j - i) == 1 {
+				cells = append(cells, row[i].String())
+			} else {
+				parts = parts[:0]
+				for k := i; k < j; k++ {
+					parts = append(parts, row[k].String())
+				}
+				alignment[len(cells)] = tablewriter.ALIGN_LEFT
+				cells = append(cells, strings.Join(parts, ","))
+			}
+
+			i = j
+		}
+
+		tw.Append(cells)
+	}
+
+	tw.SetAutoFormatHeaders(false)
+	tw.SetColumnAlignment(alignment)
+	tw.SetHeaderAlignment(tablewriter.ALIGN_LEFT)
+	tw.SetFooterAlignment(tablewriter.ALIGN_LEFT)
+	tw.SetHeader(header)
+	tw.SetFooter(footer)
+	tw.Render()
+
+	fmt.Fprintf(pw, "%d rows\n\n", rowGroup.NumRows())
+	return pw.err
+}
+
+func PrintColumnChunk(w io.Writer, columnChunk ColumnChunk) error {
+	pw := &printWriter{writer: w}
+	pw.WriteString(columnChunk.Type().String())
+	pw.WriteString("\n--------------------------------------------------------------------------------\n")
+
+	values := [42]Value{}
+	pages := columnChunk.Pages()
+	numPages, numValues := int64(0), int64(0)
+
+	for {
+		p, err := pages.ReadPage()
+		if err != nil {
+			if !errors.Is(err, io.EOF) {
+				return err
+			}
+			break
+		}
+
+		numPages++
+		n := p.NumValues()
+		if n == 0 {
+			fmt.Fprintf(pw, "*** page %d, no values ***\n", numPages)
+		} else {
+			fmt.Fprintf(pw, "*** page %d, values %d to %d ***\n", numPages, numValues+1, numValues+n)
+			printPage(w, p, values[:], numValues+1)
+			numValues += n
+		}
+
+		pw.WriteString("\n")
+	}
+
+	return pw.err
+}
+
+func PrintPage(w io.Writer, page Page) error {
+	return printPage(w, page, make([]Value, 42), 0)
+}
+
+func printPage(w io.Writer, page Page, values []Value, numValues int64) error {
+	r := page.Values()
+	for {
+		n, err := r.ReadValues(values[:])
+		for i, v := range values[:n] {
+			_, err := fmt.Fprintf(w, "value %d: %+v\n", numValues+int64(i), v)
+			if err != nil {
+				return err
+			}
+		}
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				err = nil
+			}
+			return err
+		}
+	}
 }

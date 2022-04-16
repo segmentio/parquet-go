@@ -7,7 +7,7 @@ import (
 	"github.com/segmentio/parquet-go"
 )
 
-func TestPrint(t *testing.T) {
+func TestPrintSchema(t *testing.T) {
 	tests := []struct {
 		node  parquet.Node
 		print string
@@ -255,7 +255,7 @@ func TestPrint(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			buf := new(strings.Builder)
 
-			if err := parquet.Print(buf, "Test", test.node); err != nil {
+			if err := parquet.PrintSchema(buf, "Test", test.node); err != nil {
 				t.Fatal(err)
 			}
 

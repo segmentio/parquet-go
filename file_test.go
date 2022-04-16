@@ -39,7 +39,7 @@ func TestOpenFile(t *testing.T) {
 			}
 
 			b := new(strings.Builder)
-			parquet.Print(b, "File", p.Root())
+			parquet.PrintSchema(b, "File", p.Root())
 			t.Log(b)
 
 			printColumns(t, p.Root(), "")

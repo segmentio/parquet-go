@@ -470,8 +470,8 @@ func (page *repeatedPage) Slice(i, j int64) BufferedPage {
 	numNulls1 := int64(countLevelsNotEqual(page.definitionLevels[:rowIndex1], page.maxDefinitionLevel))
 	numNulls2 := int64(countLevelsNotEqual(page.definitionLevels[rowIndex1:rowIndex2], page.maxDefinitionLevel))
 
-	i -= numNulls1
-	j = i + (rowIndex2 - (rowIndex1 + numNulls2))
+	i = rowIndex1 - numNulls1
+	j = rowIndex2 - (numNulls1 + numNulls2)
 
 	return newRepeatedPage(
 		page.base.Slice(i, j),
@@ -517,12 +517,14 @@ func (r *repeatedPageReader) ReadValues(values []Value) (n int, err error) {
 		r.values = r.page.base.Values()
 	}
 	maxDefinitionLevel := r.page.maxDefinitionLevel
+	columnIndex := ^int16(r.page.Column())
 
 	for n < len(values) && r.offset < len(r.page.definitionLevels) {
 		for n < len(values) && r.offset < len(r.page.definitionLevels) && r.page.definitionLevels[r.offset] != maxDefinitionLevel {
 			values[n] = Value{
 				repetitionLevel: r.page.repetitionLevels[r.offset],
 				definitionLevel: r.page.definitionLevels[r.offset],
+				columnIndex:     columnIndex,
 			}
 			r.offset++
 			n++
