@@ -636,9 +636,10 @@ type filePage struct {
 	header format.PageHeader
 	data   bytes.Reader
 
-	index    int
-	minValue Value
-	maxValue Value
+	index     int
+	minValue  Value
+	maxValue  Value
+	hasBounds bool
 
 	// This field caches the state used when reading values from the page.
 	// We allocate it separately to avoid creating it if the Values method
@@ -652,7 +653,6 @@ var (
 	errPageIndexExceedsColumnIndexMinValues  = errors.New("page index exceeds column index min values")
 	errPageIndexExceedsColumnIndexMaxValues  = errors.New("page index exceeds column index max values")
 	errPageIndexExceedsColumnIndexNullCounts = errors.New("page index exceeds column index null counts")
-	errPageHasNoColumnIndexNorStatistics     = errors.New("column has no index and page has no statistics")
 )
 
 func (p *filePage) statistics() *format.Statistics {
@@ -698,6 +698,7 @@ func (p *filePage) parseColumnIndex(columnIndex *format.ColumnIndex) (err error)
 	if columnIndex.NullPages[p.index] {
 		p.minValue = Value{}
 		p.maxValue = Value{}
+		p.hasBounds = false
 	} else {
 		kind := p.columnType.Kind()
 		p.minValue, err = parseValue(kind, minValue)
@@ -708,6 +709,7 @@ func (p *filePage) parseColumnIndex(columnIndex *format.ColumnIndex) (err error)
 		if err != nil {
 			return p.errColumnIndex(err)
 		}
+		p.hasBounds = true
 	}
 
 	return nil
@@ -718,7 +720,12 @@ func (p *filePage) parseStatistics() (err error) {
 	stats := p.statistics()
 
 	if stats == nil {
-		return p.errStatistics(errPageHasNoColumnIndexNorStatistics)
+		// The column has no index and page has no statistics,
+		// default to reporting that the min and max are both null.
+		p.minValue = Value{}
+		p.maxValue = Value{}
+		p.hasBounds = false
+		return nil
 	}
 
 	if stats.MinValue == nil {
@@ -739,6 +746,7 @@ func (p *filePage) parseStatistics() (err error) {
 		}
 	}
 
+	p.hasBounds = true
 	return nil
 }
 
@@ -795,8 +803,8 @@ func (p *filePage) NumNulls() int64 {
 	}
 }
 
-func (p *filePage) Bounds() (min, max Value) {
-	return p.minValue, p.maxValue
+func (p *filePage) Bounds() (min, max Value, ok bool) {
+	return p.minValue, p.maxValue, p.hasBounds
 }
 
 func (p *filePage) Size() int64 {

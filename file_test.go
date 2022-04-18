@@ -3,16 +3,20 @@ package parquet_test
 import (
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/segmentio/parquet-go"
 )
 
-var fixtureFiles = [...]string{
-	"fixtures/file.parquet",
-	"fixtures/small.parquet",
-	"fixtures/trace.snappy.parquet",
+var fixtureFiles []string
+
+func init() {
+	entries, _ := os.ReadDir("fixtures")
+	for _, e := range entries {
+		fixtureFiles = append(fixtureFiles, filepath.Join("fixtures", e.Name()))
+	}
 }
 
 func TestOpenFile(t *testing.T) {

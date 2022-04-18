@@ -332,11 +332,13 @@ func (page *indexedPage) NumValues() int64 { return int64(len(page.values)) }
 
 func (page *indexedPage) NumNulls() int64 { return 0 }
 
-func (page *indexedPage) Bounds() (min, max Value) {
-	min, max = page.dict.Bounds(page.values)
-	min.columnIndex = page.columnIndex
-	max.columnIndex = page.columnIndex
-	return min, max
+func (page *indexedPage) Bounds() (min, max Value, ok bool) {
+	if ok = len(page.values) > 0; ok {
+		min, max = page.dict.Bounds(page.values)
+		min.columnIndex = page.columnIndex
+		max.columnIndex = page.columnIndex
+	}
+	return min, max, ok
 }
 
 func (page *indexedPage) Clone() BufferedPage {
@@ -566,18 +568,20 @@ func (index indexedColumnIndex) NumPages() int       { return 1 }
 func (index indexedColumnIndex) NullCount(int) int64 { return 0 }
 func (index indexedColumnIndex) NullPage(int) bool   { return false }
 func (index indexedColumnIndex) MinValue(int) Value {
-	min, _ := index.col.Bounds()
+	min, _, _ := index.col.Bounds()
 	return min
 }
 func (index indexedColumnIndex) MaxValue(int) Value {
-	_, max := index.col.Bounds()
+	_, max, _ := index.col.Bounds()
 	return max
 }
 func (index indexedColumnIndex) IsAscending() bool {
-	return index.col.typ.Compare(index.col.Bounds()) < 0
+	min, max, _ := index.col.Bounds()
+	return index.col.typ.Compare(min, max) <= 0
 }
 func (index indexedColumnIndex) IsDescending() bool {
-	return index.col.typ.Compare(index.col.Bounds()) > 0
+	min, max, _ := index.col.Bounds()
+	return index.col.typ.Compare(min, max) > 0
 }
 
 type indexedOffsetIndex struct{ col *indexedColumnBuffer }

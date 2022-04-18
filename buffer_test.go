@@ -258,7 +258,8 @@ func testBuffer(t *testing.T, node parquet.Node, reader parquet.ValueReader, buf
 		}
 	}
 
-	if numRows := buffer.NumRows(); numRows != int64(len(batch)) {
+	numRows := buffer.NumRows()
+	if numRows != int64(len(batch)) {
 		t.Fatalf("number of rows mismatch: want=%d got=%d", len(batch), numRows)
 	}
 
@@ -286,7 +287,10 @@ func testBuffer(t *testing.T, node parquet.Node, reader parquet.ValueReader, buf
 		t.Fatalf("number of nulls mismatch: want=0 got=%d", numNulls)
 	}
 
-	min, max := page.Bounds()
+	min, max, hasBounds := page.Bounds()
+	if !hasBounds && numRows > 0 {
+		t.Fatal("page bounds are missing")
+	}
 	if !parquet.Equal(min, minValue) {
 		t.Fatalf("min value mismatch: want=%v got=%v", minValue, min)
 	}
