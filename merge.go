@@ -7,7 +7,7 @@ import (
 )
 
 type mergedRowGroup struct {
-	concatenatedRowGroup
+	multiRowGroup
 	sorting   []SortingColumn
 	sortFuncs []columnSortFunc
 }

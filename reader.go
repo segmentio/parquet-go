@@ -92,7 +92,7 @@ func NewReader(input io.ReaderAt, options ...ReaderOption) *Reader {
 		}
 		// TODO: should we attempt to merge the row groups via MergeRowGroups
 		// to preserve the global order of sorting columns within the file?
-		r.file.rowGroup = concat(schema, rowGroups)
+		r.file.rowGroup = MultiRowGroup(rowGroups...)
 	}
 
 	if c.Schema != nil {
