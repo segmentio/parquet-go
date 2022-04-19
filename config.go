@@ -2,6 +2,7 @@ package parquet
 
 import (
 	"fmt"
+	"io"
 	"strings"
 )
 
@@ -27,8 +28,9 @@ const (
 //	})
 //
 type FileConfig struct {
-	SkipPageIndex    bool
-	SkipBloomFilters bool
+	SkipPageIndex       bool
+	SkipBloomFilters    bool
+	GetIOReaderFromPath func(filepath string) io.ReaderAt
 }
 
 // DefaultFileConfig returns a new FileConfig value initialized with the
@@ -131,6 +133,7 @@ func (c *ReaderConfig) Validate() error {
 //
 type WriterConfig struct {
 	CreatedBy            string
+	ColumnChunkFilePath  string
 	ColumnPageBuffers    PageBufferPool
 	ColumnIndexSizeLimit int
 	PageBufferPool       PageBufferPool

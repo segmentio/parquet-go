@@ -22,17 +22,23 @@ const (
 	defaultLevelBufferSize = 1024
 )
 
+type ReaderAtSeeker interface {
+	io.ReaderAt
+	io.Seeker
+}
+
 // File represents a parquet file. The layout of a Parquet file can be found
 // here: https://github.com/apache/parquet-format#file-format
 type File struct {
-	metadata      format.FileMetaData
-	protocol      thrift.CompactProtocol
-	reader        io.ReaderAt
-	size          int64
-	root          *Column
-	columnIndexes []format.ColumnIndex
-	offsetIndexes []format.OffsetIndex
-	rowGroups     []fileRowGroup
+	metadata            format.FileMetaData
+	protocol            thrift.CompactProtocol
+	reader              io.ReaderAt
+	size                int64
+	root                *Column
+	columnIndexes       []format.ColumnIndex
+	offsetIndexes       []format.OffsetIndex
+	rowGroups           []fileRowGroup
+	GetIOReaderFromPath func(filepath string) io.ReaderAt
 }
 
 // OpenFile opens a parquet file and reads the content between offset 0 and the given
@@ -47,6 +53,11 @@ func OpenFile(r io.ReaderAt, size int64, options ...FileOption) (*File, error) {
 	c, err := NewFileConfig(options...)
 	if err != nil {
 		return nil, err
+	}
+
+	// used to get secondary io.ReaderAt interfaces for columnChunk page reads
+	if c.GetIOReaderFromPath != nil {
+		f.GetIOReaderFromPath = c.GetIOReaderFromPath
 	}
 
 	if _, err := r.ReadAt(b[:4], 0); err != nil {
@@ -417,7 +428,12 @@ func (c *fileColumnChunk) setPagesOn(r *filePages) {
 		r.baseOffset = c.chunk.MetaData.DictionaryPageOffset
 		r.dictOffset = r.baseOffset
 	}
-	r.section = io.NewSectionReader(c.file, r.baseOffset, c.chunk.MetaData.TotalCompressedSize)
+	var columnChunkReader io.ReaderAt
+	columnChunkReader = c.file
+	if c.file.GetIOReaderFromPath != nil {
+		columnChunkReader = c.file.GetIOReaderFromPath(c.chunk.FilePath)
+	}
+	r.section = io.NewSectionReader(columnChunkReader, r.baseOffset, c.chunk.MetaData.TotalCompressedSize)
 	r.rbuf = bufio.NewReaderSize(r.section, defaultReadBufferSize)
 	r.section.Seek(r.dataOffset-r.baseOffset, io.SeekStart)
 	r.decoder.Reset(r.protocol.NewReader(r.rbuf))
