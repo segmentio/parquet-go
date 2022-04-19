@@ -95,17 +95,6 @@ func (col *booleanColumnBuffer) WriteValues(values []Value) (int, error) {
 	return len(values), nil
 }
 
-func (col *booleanColumnBuffer) WriteRow(row Row) error {
-	if len(row) == 0 {
-		return errRowHasTooFewValues(int64(len(row)))
-	}
-	if len(row) > 1 {
-		return errRowHasTooManyValues(int64(len(row)))
-	}
-	col.values = append(col.values, row[0].Boolean())
-	return nil
-}
-
 func (col *booleanColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {
 	switch {
 	case index < 0:
@@ -188,17 +177,6 @@ func (col *int32ColumnBuffer) WriteValues(values []Value) (int, error) {
 		col.values = append(col.values, v.Int32())
 	}
 	return len(values), nil
-}
-
-func (col *int32ColumnBuffer) WriteRow(row Row) error {
-	if len(row) == 0 {
-		return errRowHasTooFewValues(int64(len(row)))
-	}
-	if len(row) > 1 {
-		return errRowHasTooManyValues(int64(len(row)))
-	}
-	col.values = append(col.values, row[0].Int32())
-	return nil
 }
 
 func (col *int32ColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {
@@ -285,17 +263,6 @@ func (col *int64ColumnBuffer) WriteValues(values []Value) (int, error) {
 	return len(values), nil
 }
 
-func (col *int64ColumnBuffer) WriteRow(row Row) error {
-	if len(row) == 0 {
-		return errRowHasTooFewValues(int64(len(row)))
-	}
-	if len(row) > 1 {
-		return errRowHasTooManyValues(int64(len(row)))
-	}
-	col.values = append(col.values, row[0].Int64())
-	return nil
-}
-
 func (col *int64ColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {
 	switch {
 	case index < 0:
@@ -378,17 +345,6 @@ func (col *int96ColumnBuffer) WriteValues(values []Value) (int, error) {
 		col.values = append(col.values, v.Int96())
 	}
 	return len(values), nil
-}
-
-func (col *int96ColumnBuffer) WriteRow(row Row) error {
-	if len(row) == 0 {
-		return errRowHasTooFewValues(int64(len(row)))
-	}
-	if len(row) > 1 {
-		return errRowHasTooManyValues(int64(len(row)))
-	}
-	col.values = append(col.values, row[0].Int96())
-	return nil
 }
 
 func (col *int96ColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {
@@ -475,17 +431,6 @@ func (col *floatColumnBuffer) WriteValues(values []Value) (int, error) {
 	return len(values), nil
 }
 
-func (col *floatColumnBuffer) WriteRow(row Row) error {
-	if len(row) == 0 {
-		return errRowHasTooFewValues(int64(len(row)))
-	}
-	if len(row) > 1 {
-		return errRowHasTooManyValues(int64(len(row)))
-	}
-	col.values = append(col.values, row[0].Float())
-	return nil
-}
-
 func (col *floatColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {
 	switch {
 	case index < 0:
@@ -568,17 +513,6 @@ func (col *doubleColumnBuffer) WriteValues(values []Value) (int, error) {
 		col.values = append(col.values, v.Double())
 	}
 	return len(values), nil
-}
-
-func (col *doubleColumnBuffer) WriteRow(row Row) error {
-	if len(row) == 0 {
-		return errRowHasTooFewValues(int64(len(row)))
-	}
-	if len(row) > 1 {
-		return errRowHasTooManyValues(int64(len(row)))
-	}
-	col.values = append(col.values, row[0].Double())
-	return nil
 }
 
 func (col *doubleColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {

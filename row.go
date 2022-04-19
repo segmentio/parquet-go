@@ -218,14 +218,6 @@ func errRowIndexOutOfBounds(rowIndex, rowCount int64) error {
 	return fmt.Errorf("row index out of bounds: %d/%d", rowIndex, rowCount)
 }
 
-func errRowHasTooFewValues(numValues int64) error {
-	return fmt.Errorf("row has too few values to be written to the column: %d", numValues)
-}
-
-func errRowHasTooManyValues(numValues int64) error {
-	return fmt.Errorf("row has too many values to be written to the column: %d", numValues)
-}
-
 func hasRepeatedRowValues(values []Value) bool {
 	for _, v := range values {
 		if v.repetitionLevel != 0 {
@@ -279,17 +271,6 @@ func splitRowValues(values []Value) (head, tail []Value) {
 		}
 	}
 	return values, nil
-}
-
-func forEachRepeatedRowOf(values []Value, do func(Row) error) error {
-	var row Row
-	for len(values) > 0 {
-		row, values = splitRowValues(values)
-		if err := do(row); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // =============================================================================

@@ -209,7 +209,7 @@ func (buf *Buffer) WriteRow(row Row) error {
 	}
 
 	for columnIndex, values := range buf.colbuf {
-		if err := buf.columns[columnIndex].WriteRow(values); err != nil {
+		if _, err := buf.columns[columnIndex].WriteValues(values); err != nil {
 			return err
 		}
 	}
