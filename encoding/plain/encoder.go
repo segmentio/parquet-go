@@ -77,12 +77,12 @@ func (e *Encoder) EncodeByteArray(data encoding.ByteArrayList) (err error) {
 }
 
 func (e *Encoder) EncodeFixedLenByteArray(size int, data []byte) error {
-	if size == 0 {
-		return fmt.Errorf("%w: size can't be zero", encoding.ErrInvalidArguments)
+	if size <= 0 {
+		return fmt.Errorf("PLAIN: %w: size of encoded FIXED_LEN_BYTE_ARRAY must be positive", encoding.ErrInvalidArgument)
 	}
 
 	if (len(data) % size) != 0 {
-		return fmt.Errorf("%w: length of fixed byte array is not a multiple of its size: size=%d length=%d", encoding.ErrInvalidArguments, size, len(data))
+		return fmt.Errorf("PLAIN: %w: length of encoded FIXED_LEN_BYTE_ARRAY must be a multiple of its size: size=%d length=%d", encoding.ErrInvalidArgument, size, len(data))
 	}
 
 	_, err := e.writer.Write(data)

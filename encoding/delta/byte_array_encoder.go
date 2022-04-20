@@ -36,7 +36,7 @@ func (e *ByteArrayEncoder) EncodeByteArray(data encoding.ByteArrayList) error {
 
 func (e *ByteArrayEncoder) EncodeFixedLenByteArray(size int, data []byte) error {
 	if size <= 0 {
-		return fmt.Errorf("%w: size can't be zero", encoding.ErrInvalidArguments)
+		return fmt.Errorf("DELTA_BYTE_ARRAY: %w: size of encoded FIXED_LEN_BYTE_ARRAY must be positive", encoding.ErrInvalidArgument)
 	}
 	return e.encode(len(data)/size, func(i int) []byte { return data[i*size : (i+1)*size] })
 }
