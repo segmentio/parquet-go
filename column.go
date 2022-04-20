@@ -311,7 +311,7 @@ func (cl *columnLoader) open(file *File, path []string) (*Column, error) {
 			// encoding. Exposing these details does not provide a lot of value
 			// to the end user.
 			//
-			// Programs that which to determine the encoding and compression of
+			// Programs that wish to determine the encoding and compression of
 			// each page of the column should iterate through the pages and read
 			// the page headers to determine which compression and encodings are
 			// applied.
