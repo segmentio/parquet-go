@@ -43,7 +43,8 @@ func (r *columnReader[T]) ReadRequired(values []T) (n int, err error) {
 		return n, io.EOF
 	}
 	d, err := r.class.decode(r.decoder, values)
-	if r.remain -= d; r.remain == 0 && err == nil {
+	r.remain -= d
+	if r.remain == 0 && err == nil {
 		err = io.EOF
 	}
 	return n + d, err

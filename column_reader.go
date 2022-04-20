@@ -377,7 +377,8 @@ func (r *fixedLenByteArrayColumnReader) ReadFixedLenByteArrays(values []byte) (n
 		values = values[:min(r.remain, len(values))]
 		d, err = r.decoder.DecodeFixedLenByteArray(r.size, values)
 		n += d
-		if r.remain -= d; r.remain == 0 && err == nil {
+		r.remain -= d
+		if r.remain == 0 && err == nil {
 			err = io.EOF
 		}
 	}

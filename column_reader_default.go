@@ -54,7 +54,8 @@ func (r *booleanColumnReader) ReadBooleans(values []bool) (n int, err error) {
 	}
 	values = values[:min(r.remain, len(values))]
 	d, err := r.decoder.DecodeBoolean(values)
-	if r.remain -= d; r.remain == 0 && err == nil {
+	r.remain -= d
+	if r.remain == 0 && err == nil {
 		err = io.EOF
 	}
 	return n + d, err
@@ -136,7 +137,8 @@ func (r *int32ColumnReader) ReadInt32s(values []int32) (n int, err error) {
 		values = values[:min(r.remain, len(values))]
 		d, err = r.decoder.DecodeInt32(values)
 		n += d
-		if r.remain -= d; r.remain == 0 && err == nil {
+		r.remain -= d
+		if r.remain == 0 && err == nil {
 			err = io.EOF
 		}
 	}
@@ -219,7 +221,8 @@ func (r *int64ColumnReader) ReadInt64s(values []int64) (n int, err error) {
 		values = values[:min(r.remain, len(values))]
 		d, err = r.decoder.DecodeInt64(values)
 		n += d
-		if r.remain -= d; r.remain == 0 && err == nil {
+		r.remain -= d
+		if r.remain == 0 && err == nil {
 			err = io.EOF
 		}
 	}
@@ -302,7 +305,8 @@ func (r *int96ColumnReader) ReadInt96s(values []deprecated.Int96) (n int, err er
 		values = values[:min(r.remain, len(values))]
 		d, err = r.decoder.DecodeInt96(values)
 		n += d
-		if r.remain -= d; r.remain == 0 && err == nil {
+		r.remain -= d
+		if r.remain == 0 && err == nil {
 			err = io.EOF
 		}
 	}
@@ -385,7 +389,8 @@ func (r *floatColumnReader) ReadFloats(values []float32) (n int, err error) {
 		values = values[:min(r.remain, len(values))]
 		d, err = r.decoder.DecodeFloat(values)
 		n += d
-		if r.remain -= d; r.remain == 0 && err == nil {
+		r.remain -= d
+		if r.remain == 0 && err == nil {
 			err = io.EOF
 		}
 	}
@@ -468,7 +473,8 @@ func (r *doubleColumnReader) ReadDoubles(values []float64) (n int, err error) {
 		values = values[:min(r.remain, len(values))]
 		d, err = r.decoder.DecodeDouble(values)
 		n += d
-		if r.remain -= d; r.remain == 0 && err == nil {
+		r.remain -= d
+		if r.remain == 0 && err == nil {
 			err = io.EOF
 		}
 	}
