@@ -928,7 +928,7 @@ func (s *filePageValueReaderState) init(columnType Type, column *Column, codec f
 	}
 
 	pageEncoding := pageHeader.Encoding()
-	// In some legacy configuration, the PLAIN_DICTIONARY encoding is used on
+	// In some legacy configurations, the PLAIN_DICTIONARY encoding is used on
 	// data page headers to indicate that the page contains indexes into the
 	// dictionary page, tho it is still encoded using the RLE encoding in this
 	// case, so we convert the encoding to RLE_DICTIONARY to simplify.
