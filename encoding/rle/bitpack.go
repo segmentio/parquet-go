@@ -63,8 +63,6 @@ func (d *bitPackRunDecoder) decode(dst []byte, dstWidth uint) (n int, err error)
 		panic("BUG: unsupported destination bit-width")
 	}
 
-	//fmt.Println("bitPackRunDecoder:", n, err)
-
 	if d.remain != unlimited {
 		if d.remain -= uint(n); d.remain == 0 {
 			err = io.EOF
@@ -84,7 +82,6 @@ func (d *bitPackRunDecoder) decodeInt8(dst []int8, bitWidth uint) (n int, err er
 	}
 	for n < len(dst) {
 		b, _, err := d.reader.ReadBits(bitWidth)
-		//fmt.Println(". . read bits:", bitWidth, b, err)
 		if err != nil {
 			return n, err
 		}
