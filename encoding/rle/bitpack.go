@@ -8,6 +8,10 @@ import (
 	"github.com/segmentio/parquet-go/internal/bits"
 )
 
+const (
+	unlimited = ^uint(0)
+)
+
 type bitPackRunDecoder struct {
 	source   io.LimitedReader
 	reader   bits.Reader
@@ -18,9 +22,13 @@ type bitPackRunDecoder struct {
 func (d *bitPackRunDecoder) String() string { return "BIT_PACK" }
 
 func (d *bitPackRunDecoder) reset(r io.Reader, bitWidth, numValues uint) {
-	d.source.R = r
-	d.source.N = int64(bits.ByteCount(numValues * bitWidth))
-	d.reader.Reset(&d.source)
+	if numValues == unlimited {
+		d.reader.Reset(r)
+	} else {
+		d.source.R = r
+		d.source.N = int64(bits.ByteCount(numValues * bitWidth))
+		d.reader.Reset(&d.source)
+	}
 	d.remain = numValues
 	d.bitWidth = bitWidth
 }
@@ -55,11 +63,15 @@ func (d *bitPackRunDecoder) decode(dst []byte, dstWidth uint) (n int, err error)
 		panic("BUG: unsupported destination bit-width")
 	}
 
-	if d.remain -= uint(n); d.remain == 0 {
-		err = io.EOF
-	} else if err != nil {
-		if err == io.EOF {
-			err = io.ErrUnexpectedEOF
+	//fmt.Println("bitPackRunDecoder:", n, err)
+
+	if d.remain != unlimited {
+		if d.remain -= uint(n); d.remain == 0 {
+			err = io.EOF
+		} else if err != nil {
+			if err == io.EOF {
+				err = io.ErrUnexpectedEOF
+			}
 		}
 	}
 
@@ -67,19 +79,26 @@ func (d *bitPackRunDecoder) decode(dst []byte, dstWidth uint) (n int, err error)
 }
 
 func (d *bitPackRunDecoder) decodeInt8(dst []int8, bitWidth uint) (n int, err error) {
-	for uint(n) < d.remain && n < len(dst) {
+	if uint(len(dst)) > d.remain {
+		dst = dst[:d.remain]
+	}
+	for n < len(dst) {
 		b, _, err := d.reader.ReadBits(bitWidth)
+		//fmt.Println(". . read bits:", bitWidth, b, err)
 		if err != nil {
-			return int(n), err
+			return n, err
 		}
 		dst[n] = int8(b)
 		n++
 	}
-	return int(n), nil
+	return n, nil
 }
 
 func (d *bitPackRunDecoder) decodeInt16(dst []int16, bitWidth uint) (n int, err error) {
-	for uint(n) < d.remain && n < len(dst) {
+	if uint(len(dst)) > d.remain {
+		dst = dst[:d.remain]
+	}
+	for n < len(dst) {
 		b, _, err := d.reader.ReadBits(bitWidth)
 		if err != nil {
 			return n, err
@@ -91,7 +110,10 @@ func (d *bitPackRunDecoder) decodeInt16(dst []int16, bitWidth uint) (n int, err 
 }
 
 func (d *bitPackRunDecoder) decodeInt32(dst []int32, bitWidth uint) (n int, err error) {
-	for uint(n) < d.remain && n < len(dst) {
+	if uint(len(dst)) > d.remain {
+		dst = dst[:d.remain]
+	}
+	for n < len(dst) {
 		b, _, err := d.reader.ReadBits(bitWidth)
 		if err != nil {
 			return n, err
@@ -103,7 +125,10 @@ func (d *bitPackRunDecoder) decodeInt32(dst []int32, bitWidth uint) (n int, err 
 }
 
 func (d *bitPackRunDecoder) decodeInt64(dst []int64, bitWidth uint) (n int, err error) {
-	for uint(n) < d.remain && n < len(dst) {
+	if uint(len(dst)) > d.remain {
+		dst = dst[:d.remain]
+	}
+	for n < len(dst) {
 		b, _, err := d.reader.ReadBits(bitWidth)
 		if err != nil {
 			return n, err
@@ -122,6 +147,10 @@ type bitPackRunEncoder struct {
 func (e *bitPackRunEncoder) reset(w io.Writer, bitWidth uint) {
 	e.writer.Reset(w)
 	e.bitWidth = bitWidth
+}
+
+func (e *bitPackRunEncoder) flush() error {
+	return e.writer.Flush()
 }
 
 func (e *bitPackRunEncoder) encode(src []byte, srcWidth uint) error {
@@ -157,7 +186,7 @@ func (e *bitPackRunEncoder) encode(src []byte, srcWidth uint) error {
 		panic("BUG: unsupported source bit-width")
 	}
 
-	return e.writer.Flush()
+	return e.flush()
 }
 
 func (e *bitPackRunEncoder) encodeInt8(src []int8, bitWidth uint) {

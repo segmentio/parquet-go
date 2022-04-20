@@ -73,7 +73,7 @@ func newByteArrayDictionary(typ Type, columnIndex int16, bufferSize int) *byteAr
 		typ: typ,
 		byteArrayPage: byteArrayPage{
 			values:      encoding.MakeByteArrayList(dictCap(bufferSize, 16)),
-			columnIndex: columnIndex,
+			columnIndex: ^columnIndex,
 		},
 	}
 }
@@ -83,7 +83,7 @@ func readByteArrayDictionary(typ Type, columnIndex int16, numValues int, decoder
 		typ: typ,
 		byteArrayPage: byteArrayPage{
 			values:      encoding.MakeByteArrayList(atLeastOne(numValues)),
-			columnIndex: columnIndex,
+			columnIndex: ^columnIndex,
 		},
 	}
 
@@ -186,7 +186,7 @@ func newFixedLenByteArrayDictionary(typ Type, columnIndex int16, bufferSize int)
 		fixedLenByteArrayPage: fixedLenByteArrayPage{
 			size:        size,
 			data:        make([]byte, 0, dictCap(bufferSize, size)*size),
-			columnIndex: columnIndex,
+			columnIndex: ^columnIndex,
 		},
 	}
 }
@@ -199,7 +199,7 @@ func readFixedLenByteArrayDictionary(typ Type, columnIndex int16, numValues int,
 		fixedLenByteArrayPage: fixedLenByteArrayPage{
 			size:        size,
 			data:        make([]byte, 0, atLeastOne(numValues)*size),
-			columnIndex: columnIndex,
+			columnIndex: ^columnIndex,
 		},
 	}
 
@@ -495,6 +495,7 @@ type indexedColumnReader struct {
 	decoder     encoding.Decoder
 	buffer      []int32
 	offset      int
+	remain      int
 	columnIndex int16
 }
 
@@ -532,20 +533,24 @@ func (r *indexedColumnReader) ReadValues(values []Value) (int, error) {
 
 			r.dict.Lookup(indexes, values[i:])
 			r.offset += count
+			r.remain -= count
 
-			j := i
-			i += int(count)
-			for j < i {
-				values[j].columnIndex = r.columnIndex
-				j++
+			j := i + int(count)
+			for i < j {
+				values[i].columnIndex = r.columnIndex
+				i++
 			}
 		}
 
+		if r.remain == 0 {
+			return i, io.EOF
+		}
 		if i == len(values) {
 			return i, nil
 		}
 
-		buffer := r.buffer[:cap(r.buffer)]
+		length := min(r.remain, cap(r.buffer))
+		buffer := r.buffer[:length]
 		n, err := r.decoder.DecodeInt32(buffer)
 		if n == 0 {
 			return i, err
@@ -556,10 +561,11 @@ func (r *indexedColumnReader) ReadValues(values []Value) (int, error) {
 	}
 }
 
-func (r *indexedColumnReader) Reset(decoder encoding.Decoder) {
+func (r *indexedColumnReader) Reset(numValues int, decoder encoding.Decoder) {
 	r.decoder = decoder
 	r.buffer = r.buffer[:0]
 	r.offset = 0
+	r.remain = numValues
 }
 
 type indexedColumnIndex struct{ col *indexedColumnBuffer }

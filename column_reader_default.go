@@ -25,6 +25,7 @@ type booleanColumnReader struct {
 	decoder     encoding.Decoder
 	buffer      []bool
 	offset      int
+	remain      int
 	bufferSize  int
 	columnIndex int16
 }
@@ -45,12 +46,17 @@ func (r *booleanColumnReader) ReadBooleans(values []bool) (n int, err error) {
 	if r.offset < len(r.buffer) {
 		n = copy(values, r.buffer[r.offset:])
 		r.offset += n
+		r.remain -= n
 		values = values[n:]
 	}
-	if r.decoder == nil {
+	if r.remain == 0 || r.decoder == nil {
 		return n, io.EOF
 	}
+	values = values[:min(r.remain, len(values))]
 	d, err := r.decoder.DecodeBoolean(values)
+	if r.remain -= d; r.remain == 0 && err == nil {
+		err = io.EOF
+	}
 	return n + d, err
 }
 
@@ -64,17 +70,19 @@ func (r *booleanColumnReader) ReadValues(values []Value) (n int, err error) {
 			values[n] = makeValueBoolean(r.buffer[r.offset])
 			values[n].columnIndex = r.columnIndex
 			r.offset++
+			r.remain--
 			n++
 		}
 
+		if r.remain == 0 || r.decoder == nil {
+			return n, io.EOF
+		}
 		if n == len(values) {
 			return n, nil
 		}
-		if r.decoder == nil {
-			return n, io.EOF
-		}
 
-		buffer := r.buffer[:cap(r.buffer)]
+		length := min(r.remain, cap(r.buffer))
+		buffer := r.buffer[:length]
 		d, err := r.decoder.DecodeBoolean(buffer)
 		if d == 0 {
 			return n, err
@@ -85,10 +93,11 @@ func (r *booleanColumnReader) ReadValues(values []Value) (n int, err error) {
 	}
 }
 
-func (r *booleanColumnReader) Reset(decoder encoding.Decoder) {
+func (r *booleanColumnReader) Reset(numValues int, decoder encoding.Decoder) {
 	r.decoder = decoder
 	r.buffer = r.buffer[:0]
 	r.offset = 0
+	r.remain = numValues
 }
 
 type int32ColumnReader struct {
@@ -96,6 +105,7 @@ type int32ColumnReader struct {
 	decoder     encoding.Decoder
 	buffer      []int32
 	offset      int
+	remain      int
 	bufferSize  int
 	columnIndex int16
 }
@@ -116,14 +126,19 @@ func (r *int32ColumnReader) ReadInt32s(values []int32) (n int, err error) {
 	if r.offset < len(r.buffer) {
 		n = copy(values, r.buffer[r.offset:])
 		r.offset += n
+		r.remain -= n
 		values = values[n:]
 	}
-	if r.decoder == nil {
+	if r.remain == 0 || r.decoder == nil {
 		err = io.EOF
 	} else {
 		var d int
+		values = values[:min(r.remain, len(values))]
 		d, err = r.decoder.DecodeInt32(values)
 		n += d
+		if r.remain -= d; r.remain == 0 && err == nil {
+			err = io.EOF
+		}
 	}
 	return n, err
 }
@@ -138,17 +153,19 @@ func (r *int32ColumnReader) ReadValues(values []Value) (n int, err error) {
 			values[n] = makeValueInt32(r.buffer[r.offset])
 			values[n].columnIndex = r.columnIndex
 			r.offset++
+			r.remain--
 			n++
 		}
 
+		if r.remain == 0 || r.decoder == nil {
+			return n, io.EOF
+		}
 		if n == len(values) {
 			return n, nil
 		}
-		if r.decoder == nil {
-			return n, io.EOF
-		}
 
-		buffer := r.buffer[:cap(r.buffer)]
+		length := min(r.remain, cap(r.buffer))
+		buffer := r.buffer[:length]
 		d, err := r.decoder.DecodeInt32(buffer)
 		if d == 0 {
 			return n, err
@@ -159,10 +176,11 @@ func (r *int32ColumnReader) ReadValues(values []Value) (n int, err error) {
 	}
 }
 
-func (r *int32ColumnReader) Reset(decoder encoding.Decoder) {
+func (r *int32ColumnReader) Reset(numValues int, decoder encoding.Decoder) {
 	r.decoder = decoder
 	r.buffer = r.buffer[:0]
 	r.offset = 0
+	r.remain = numValues
 }
 
 type int64ColumnReader struct {
@@ -170,6 +188,7 @@ type int64ColumnReader struct {
 	decoder     encoding.Decoder
 	buffer      []int64
 	offset      int
+	remain      int
 	bufferSize  int
 	columnIndex int16
 }
@@ -190,14 +209,19 @@ func (r *int64ColumnReader) ReadInt64s(values []int64) (n int, err error) {
 	if r.offset < len(r.buffer) {
 		n = copy(values, r.buffer[r.offset:])
 		r.offset += n
+		r.remain -= n
 		values = values[n:]
 	}
-	if r.decoder == nil {
+	if r.remain == 0 || r.decoder == nil {
 		err = io.EOF
 	} else {
 		var d int
+		values = values[:min(r.remain, len(values))]
 		d, err = r.decoder.DecodeInt64(values)
 		n += d
+		if r.remain -= d; r.remain == 0 && err == nil {
+			err = io.EOF
+		}
 	}
 	return n, err
 }
@@ -212,17 +236,19 @@ func (r *int64ColumnReader) ReadValues(values []Value) (n int, err error) {
 			values[n] = makeValueInt64(r.buffer[r.offset])
 			values[n].columnIndex = r.columnIndex
 			r.offset++
+			r.remain--
 			n++
 		}
 
+		if r.remain == 0 || r.decoder == nil {
+			return n, io.EOF
+		}
 		if n == len(values) {
 			return n, nil
 		}
-		if r.decoder == nil {
-			return n, io.EOF
-		}
 
-		buffer := r.buffer[:cap(r.buffer)]
+		length := min(r.remain, cap(r.buffer))
+		buffer := r.buffer[:length]
 		d, err := r.decoder.DecodeInt64(buffer)
 		if d == 0 {
 			return n, err
@@ -233,10 +259,11 @@ func (r *int64ColumnReader) ReadValues(values []Value) (n int, err error) {
 	}
 }
 
-func (r *int64ColumnReader) Reset(decoder encoding.Decoder) {
+func (r *int64ColumnReader) Reset(numValues int, decoder encoding.Decoder) {
 	r.decoder = decoder
 	r.buffer = r.buffer[:0]
 	r.offset = 0
+	r.remain = numValues
 }
 
 type int96ColumnReader struct {
@@ -244,6 +271,7 @@ type int96ColumnReader struct {
 	decoder     encoding.Decoder
 	buffer      []deprecated.Int96
 	offset      int
+	remain      int
 	bufferSize  int
 	columnIndex int16
 }
@@ -264,14 +292,19 @@ func (r *int96ColumnReader) ReadInt96s(values []deprecated.Int96) (n int, err er
 	if r.offset < len(r.buffer) {
 		n = copy(values, r.buffer[r.offset:])
 		r.offset += n
+		r.remain -= n
 		values = values[n:]
 	}
-	if r.decoder == nil {
+	if r.remain == 0 || r.decoder == nil {
 		err = io.EOF
 	} else {
 		var d int
+		values = values[:min(r.remain, len(values))]
 		d, err = r.decoder.DecodeInt96(values)
 		n += d
+		if r.remain -= d; r.remain == 0 && err == nil {
+			err = io.EOF
+		}
 	}
 	return n, err
 }
@@ -286,17 +319,19 @@ func (r *int96ColumnReader) ReadValues(values []Value) (n int, err error) {
 			values[n] = makeValueInt96(r.buffer[r.offset])
 			values[n].columnIndex = r.columnIndex
 			r.offset++
+			r.remain--
 			n++
 		}
 
+		if r.remain == 0 || r.decoder == nil {
+			return n, io.EOF
+		}
 		if n == len(values) {
 			return n, nil
 		}
-		if r.decoder == nil {
-			return n, io.EOF
-		}
 
-		buffer := r.buffer[:cap(r.buffer)]
+		lenght := min(r.remain, cap(r.buffer))
+		buffer := r.buffer[:length]
 		d, err := r.decoder.DecodeInt96(buffer)
 		if d == 0 {
 			return n, err
@@ -307,10 +342,11 @@ func (r *int96ColumnReader) ReadValues(values []Value) (n int, err error) {
 	}
 }
 
-func (r *int96ColumnReader) Reset(decoder encoding.Decoder) {
+func (r *int96ColumnReader) Reset(numValues int, decoder encoding.Decoder) {
 	r.decoder = decoder
 	r.buffer = r.buffer[:0]
 	r.offset = 0
+	r.remain = numValues
 }
 
 type floatColumnReader struct {
@@ -318,6 +354,7 @@ type floatColumnReader struct {
 	decoder     encoding.Decoder
 	buffer      []float32
 	offset      int
+	remain      int
 	bufferSize  int
 	columnIndex int16
 }
@@ -338,14 +375,19 @@ func (r *floatColumnReader) ReadFloats(values []float32) (n int, err error) {
 	if r.offset < len(r.buffer) {
 		n = copy(values, r.buffer[r.offset:])
 		r.offset += n
+		r.remain -= n
 		values = values[n:]
 	}
-	if r.decoder == nil {
+	if r.remain == 0 || r.decoder == nil {
 		err = io.EOF
 	} else {
 		var d int
+		values = values[:min(r.remain, len(values))]
 		d, err = r.decoder.DecodeFloat(values)
 		n += d
+		if r.remain -= d; r.remain == 0 && err == nil {
+			err = io.EOF
+		}
 	}
 	return n, err
 }
@@ -360,17 +402,19 @@ func (r *floatColumnReader) ReadValues(values []Value) (n int, err error) {
 			values[n] = makeValueFloat(r.buffer[r.offset])
 			values[n].columnIndex = r.columnIndex
 			r.offset++
+			r.remain--
 			n++
 		}
 
+		if r.remain == 0 || r.decoder == nil {
+			return n, io.EOF
+		}
 		if n == len(values) {
 			return n, nil
 		}
-		if r.decoder == nil {
-			return n, io.EOF
-		}
 
-		buffer := r.buffer[:cap(r.buffer)]
+		length := min(r.remain, cap(r.buffer))
+		buffer := r.buffer[:length]
 		d, err := r.decoder.DecodeFloat(buffer)
 		if d == 0 {
 			return n, err
@@ -381,10 +425,11 @@ func (r *floatColumnReader) ReadValues(values []Value) (n int, err error) {
 	}
 }
 
-func (r *floatColumnReader) Reset(decoder encoding.Decoder) {
+func (r *floatColumnReader) Reset(numValues int, decoder encoding.Decoder) {
 	r.decoder = decoder
 	r.buffer = r.buffer[:0]
 	r.offset = 0
+	r.remain = numValues
 }
 
 type doubleColumnReader struct {
@@ -392,6 +437,7 @@ type doubleColumnReader struct {
 	decoder     encoding.Decoder
 	buffer      []float64
 	offset      int
+	remain      int
 	bufferSize  int
 	columnIndex int16
 }
@@ -412,14 +458,19 @@ func (r *doubleColumnReader) ReadDoubles(values []float64) (n int, err error) {
 	if r.offset < len(r.buffer) {
 		n = copy(values, r.buffer[r.offset:])
 		r.offset += n
+		r.remain -= n
 		values = values[n:]
 	}
-	if r.decoder == nil {
+	if r.remain == 0 || r.decoder == nil {
 		err = io.EOF
 	} else {
 		var d int
+		values = values[:min(r.remain, len(values))]
 		d, err = r.decoder.DecodeDouble(values)
 		n += d
+		if r.remain -= d; r.remain == 0 && err == nil {
+			err = io.EOF
+		}
 	}
 	return n, err
 }
@@ -434,17 +485,19 @@ func (r *doubleColumnReader) ReadValues(values []Value) (n int, err error) {
 			values[n] = makeValueDouble(r.buffer[r.offset])
 			values[n].columnIndex = r.columnIndex
 			r.offset++
+			r.remain--
 			n++
 		}
 
+		if r.remain == 0 || r.decoder == nil {
+			return n, io.EOF
+		}
 		if n == len(values) {
 			return n, nil
 		}
-		if r.decoder == nil {
-			return n, io.EOF
-		}
 
-		buffer := r.buffer[:cap(r.buffer)]
+		length := min(r.remain, cap(r.buffer))
+		buffer := r.buffer[:length]
 		d, err := r.decoder.DecodeDouble(buffer)
 		if d == 0 {
 			return n, err
@@ -455,10 +508,11 @@ func (r *doubleColumnReader) ReadValues(values []Value) (n int, err error) {
 	}
 }
 
-func (r *doubleColumnReader) Reset(decoder encoding.Decoder) {
+func (r *doubleColumnReader) Reset(numValues int, decoder encoding.Decoder) {
 	r.decoder = decoder
 	r.buffer = r.buffer[:0]
 	r.offset = 0
+	r.remain = numValues
 }
 
 var (

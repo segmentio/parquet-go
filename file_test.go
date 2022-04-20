@@ -42,9 +42,23 @@ func TestOpenFile(t *testing.T) {
 				t.Errorf("file size mismatch: want=%d got=%d", s.Size(), size)
 			}
 
+			// r := parquet.NewReader(p)
+			// row := make(parquet.Row, 0, 10)
+			// for {
+			// 	if row, err = r.ReadRow(row[:0]); err != nil {
+			// 		if !errors.Is(err, io.EOF) {
+			// 			t.Error(err)
+			// 		}
+			// 		break
+			// 	}
+			// }
+			root := p.Root()
+
 			b := new(strings.Builder)
-			parquet.PrintSchema(b, "File", p.Root())
+			parquet.PrintSchema(b, root.Name(), root)
 			t.Log(b)
+
+			//cm := parquet.ColumnMappingOf(root)
 
 			printColumns(t, p.Root(), "")
 		})
@@ -52,17 +66,34 @@ func TestOpenFile(t *testing.T) {
 }
 
 func printColumns(t *testing.T, col *parquet.Column, indent string) {
-	t.Logf("%s%s", indent, strings.Join(col.Path(), "."))
+	t.Logf("%s%s %s %s", indent, strings.Join(col.Path(), "."), col.Encoding(), col.Compression())
 	indent += ". "
 
+	buffer := make([]parquet.Value, 42)
 	pages := col.Pages()
 	for {
-		_, err := pages.ReadPage()
+		p, err := pages.ReadPage()
 		if err != nil {
 			if err != io.EOF {
 				t.Error(err)
 			}
 			break
+		}
+
+		values := p.Values()
+		for {
+			n, err := values.ReadValues(buffer)
+			for _, v := range buffer[:n] {
+				if v.Column() != col.Index() {
+					t.Errorf("value read from page of column %d says it belongs to column %d", col.Index(), v.Column())
+				}
+			}
+			if err != nil {
+				if err != io.EOF {
+					t.Error(err)
+				}
+				break
+			}
 		}
 	}
 

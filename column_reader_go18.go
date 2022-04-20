@@ -14,6 +14,7 @@ type columnReader[T primitive] struct {
 	decoder     encoding.Decoder
 	buffer      []T
 	offset      int
+	remain      int
 	bufferSize  int
 	columnIndex int16
 }
@@ -35,12 +36,16 @@ func (r *columnReader[T]) ReadRequired(values []T) (n int, err error) {
 	if r.offset < len(r.buffer) {
 		n = copy(values, r.buffer[r.offset:])
 		r.offset += n
+		r.remain -= n
 		values = values[n:]
 	}
-	if r.decoder == nil {
+	if r.remain == 0 || r.decoder == nil {
 		return n, io.EOF
 	}
 	d, err := r.class.decode(r.decoder, values)
+	if r.remain -= d; r.remain == 0 && err == nil {
+		err = io.EOF
+	}
 	return n + d, err
 }
 
@@ -56,17 +61,19 @@ func (r *columnReader[T]) ReadValues(values []Value) (n int, err error) {
 			values[n] = makeValue(r.buffer[r.offset])
 			values[n].columnIndex = columnIndex
 			r.offset++
+			r.remain--
 			n++
 		}
 
+		if r.remain == 0 || r.decoder == nil {
+			return n, io.EOF
+		}
 		if n == len(values) {
 			return n, nil
 		}
-		if r.decoder == nil {
-			return n, io.EOF
-		}
 
-		buffer := r.buffer[:cap(r.buffer)]
+		length := min(r.remain, cap(r.buffer))
+		buffer := r.buffer[:length]
 		d, err := r.class.decode(r.decoder, buffer)
 		if d == 0 {
 			return n, err
@@ -77,8 +84,9 @@ func (r *columnReader[T]) ReadValues(values []Value) (n int, err error) {
 	}
 }
 
-func (r *columnReader[T]) Reset(decoder encoding.Decoder) {
+func (r *columnReader[T]) Reset(numValues int, decoder encoding.Decoder) {
 	r.decoder = decoder
 	r.buffer = r.buffer[:0]
 	r.offset = 0
+	r.remain = numValues
 }

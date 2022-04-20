@@ -45,6 +45,15 @@ func (d *Decoder) ReadByte() (byte, error) {
 }
 
 func (d *Decoder) DecodeBoolean(data []bool) (int, error) {
+	//fmt.Println("decode boolean:", len(data), d.decoder)
+	// When decoding booleans with the RLE encoding, only the BIT_PACKED version
+	// is used, which skips encoding of the varint header, and consumes bits
+	// until EOF is reached.
+	if d.decoder == nil {
+		//fmt.Println("force decoder to bitpack")
+		d.bitPack.reset(d.reader, 1, unlimited)
+		d.decoder = &d.bitPack
+	}
 	return d.decode(bits.BoolToBytes(data), 8, 1)
 }
 
@@ -70,13 +79,20 @@ func (d *Decoder) decode(data []byte, dstWidth, srcWidth uint) (int, error) {
 	}
 	decoded := 0
 	wordSize := bits.ByteCount(dstWidth)
+	//fmt.Println("DECODE!")
 
 	for len(data) >= wordSize {
+		//fmt.Println(len(data), ">=", wordSize)
+
 		if d.decoder == nil {
+			//fmt.Printf("reader: %T\n", d.reader)
 			u, err := binary.ReadUvarint(d)
+			//fmt.Println("read uvarint >>>", u, err)
+			//debug.PrintStack()
 			switch err {
 			case nil:
 				count, bitpack := uint(u>>1), (u&1) != 0
+				//fmt.Println("?", count, bitpack)
 				if bitpack {
 					d.bitPack.reset(d.reader, srcWidth, count*8)
 					d.decoder = &d.bitPack
@@ -95,6 +111,7 @@ func (d *Decoder) decode(data []byte, dstWidth, srcWidth uint) (int, error) {
 		}
 
 		n, err := d.decoder.decode(data, dstWidth)
+		//fmt.Println("decoder:", len(data), dstWidth, "=>", n, err)
 		decoded += n
 
 		if err != nil {

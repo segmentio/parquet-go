@@ -205,7 +205,6 @@ func TestBuffer(t *testing.T) {
 										content.Reset()
 										decoder.Reset(content)
 										encoder.Reset(content)
-										reader.Reset(decoder)
 										buffer.Reset()
 									}
 
@@ -213,7 +212,7 @@ func TestBuffer(t *testing.T) {
 										t.Run("", func(t *testing.T) {
 											reset()
 											fields := schema.Fields()
-											testBuffer(t, fields[0], reader, buffer, encoder, values, ordering.sortFunc)
+											testBuffer(t, fields[0], reader, buffer, encoder, decoder, values, ordering.sortFunc)
 										})
 									}
 								})
@@ -238,7 +237,7 @@ func descending(typ parquet.Type, values []parquet.Value) {
 	sort.Slice(values, func(i, j int) bool { return typ.Compare(values[i], values[j]) > 0 })
 }
 
-func testBuffer(t *testing.T, node parquet.Node, reader parquet.ValueReader, buffer *parquet.Buffer, encoder encoding.Encoder, values []interface{}, sortFunc sortFunc) {
+func testBuffer(t *testing.T, node parquet.Node, reader parquet.ColumnReader, buffer *parquet.Buffer, encoder encoding.Encoder, decoder encoding.Decoder, values []interface{}, sortFunc sortFunc) {
 	repetitionLevel := 0
 	definitionLevel := 0
 	if !node.Required() {
@@ -302,6 +301,7 @@ func testBuffer(t *testing.T, node parquet.Node, reader parquet.ValueReader, buf
 		t.Fatalf("flushing page writer: %v", err)
 	}
 
+	reader.Reset(int(numValues), decoder)
 	// We write a single value per row, so num values = num rows for all pages
 	// including repeated ones, which makes it OK to slice the pages using the
 	// number of values as a proxy for the row indexes.
