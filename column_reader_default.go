@@ -330,7 +330,7 @@ func (r *int96ColumnReader) ReadValues(values []Value) (n int, err error) {
 			return n, nil
 		}
 
-		lenght := min(r.remain, cap(r.buffer))
+		length := min(r.remain, cap(r.buffer))
 		buffer := r.buffer[:length]
 		d, err := r.decoder.DecodeInt96(buffer)
 		if d == 0 {
