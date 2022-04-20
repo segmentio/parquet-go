@@ -29,6 +29,7 @@ type File struct {
 	protocol      thrift.CompactProtocol
 	reader        io.ReaderAt
 	size          int64
+	schema        *Schema
 	root          *Column
 	columnIndexes []format.ColumnIndex
 	offsetIndexes []format.OffsetIndex
@@ -87,6 +88,7 @@ func OpenFile(r io.ReaderAt, size int64, options ...FileOption) (*File, error) {
 
 	schema := NewSchema(f.root.Name(), f.root)
 	columns := make([]*Column, 0, MaxColumnIndex+1)
+	f.schema = schema
 	f.root.forEachLeaf(func(c *Column) { columns = append(columns, c) })
 
 	f.rowGroups = make([]fileRowGroup, len(f.metadata.RowGroups))
@@ -217,6 +219,9 @@ func (f *File) RowGroup(i int) RowGroup { return &f.rowGroups[i] }
 
 // Root returns the root column of f.
 func (f *File) Root() *Column { return f.root }
+
+// Schema returns the schema of f.
+func (f *File) Schema() *Schema { return f.schema }
 
 // Size returns the size of f (in bytes).
 func (f *File) Size() int64 { return f.size }
