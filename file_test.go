@@ -42,23 +42,10 @@ func TestOpenFile(t *testing.T) {
 				t.Errorf("file size mismatch: want=%d got=%d", s.Size(), size)
 			}
 
-			// r := parquet.NewReader(p)
-			// row := make(parquet.Row, 0, 10)
-			// for {
-			// 	if row, err = r.ReadRow(row[:0]); err != nil {
-			// 		if !errors.Is(err, io.EOF) {
-			// 			t.Error(err)
-			// 		}
-			// 		break
-			// 	}
-			// }
 			root := p.Root()
-
 			b := new(strings.Builder)
 			parquet.PrintSchema(b, root.Name(), root)
 			t.Log(b)
-
-			//cm := parquet.ColumnMappingOf(root)
 
 			printColumns(t, p.Root(), "")
 		})
