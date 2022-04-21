@@ -338,10 +338,21 @@ func testBooleanEncoding(t *testing.T, e encoding.Encoding) {
 				}
 			}
 
-			if n, err := dec.DecodeBoolean(tmp[:]); err != io.EOF {
-				t.Fatal("non-EOF error returned after decoding all the values:", err)
-			} else if n != 0 {
-				t.Fatal("non-zero number of values decoded at EOF:", n)
+			// Boolean encodings may pad their output with up to 7 bits, so we
+			// count the distance from the last decoded value to the EOF error,
+			// and ensure that it's always smaller than 8.
+			extra := 0
+			for {
+				if extra == 8 {
+					t.Fatal("nil error returned for more than 7 tailing bits")
+					break
+				}
+				if n, err := dec.DecodeBoolean(tmp[:]); err == io.EOF {
+					break
+				} else if n != 1 {
+					t.Fatal("non-zero number of values decoded at EOF:", n)
+				}
+				extra++
 			}
 		})
 	}
