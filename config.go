@@ -3,6 +3,8 @@ package parquet
 import (
 	"fmt"
 	"strings"
+
+	"github.com/segmentio/parquet-go/compress"
 )
 
 const (
@@ -141,6 +143,7 @@ type WriterConfig struct {
 	Schema               *Schema
 	SortingColumns       []SortingColumn
 	BloomFilters         []BloomFilterColumn
+	Compression          compress.Codec
 }
 
 // DefaultWriterConfig returns a new WriterConfig value initialized with the
@@ -196,6 +199,7 @@ func (c *WriterConfig) ConfigureWriter(config *WriterConfig) {
 		Schema:               coalesceSchema(c.Schema, config.Schema),
 		SortingColumns:       coalesceSortingColumns(c.SortingColumns, config.SortingColumns),
 		BloomFilters:         coalesceBloomFilters(c.BloomFilters, config.BloomFilters),
+		Compression:          coalesceCompression(c.Compression, config.Compression),
 	}
 }
 
@@ -392,6 +396,12 @@ func BloomFilters(filters ...BloomFilterColumn) WriterOption {
 	return writerOption(func(config *WriterConfig) { config.BloomFilters = filters })
 }
 
+// Compression creates a configuration option which sets the default compression
+// codec used by a writer for columns where none were defined.
+func Compression(codec compress.Codec) WriterOption {
+	return writerOption(func(config *WriterConfig) { config.Compression = codec })
+}
+
 // ColumnBufferSize creates a configuration option which defines the size of
 // row group column buffers.
 //
@@ -498,6 +508,13 @@ func coalesceBloomFilters(f1, f2 []BloomFilterColumn) []BloomFilterColumn {
 		return f1
 	}
 	return f2
+}
+
+func coalesceCompression(c1, c2 compress.Codec) compress.Codec {
+	if c1 != nil {
+		return c1
+	}
+	return c2
 }
 
 func validatePositiveInt(optionName string, optionValue int) error {

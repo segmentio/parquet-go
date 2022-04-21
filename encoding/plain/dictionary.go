@@ -27,5 +27,5 @@ func (e DictionaryEncoding) NewEncoder(w io.Writer) encoding.Encoder {
 }
 
 func (e DictionaryEncoding) String() string {
-	return "DICT_DICTIONARY"
+	return "PLAIN_DICTIONARY"
 }

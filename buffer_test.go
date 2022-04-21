@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"math"
+	"reflect"
 	"sort"
 	"testing"
 	"testing/quick"
@@ -204,14 +205,14 @@ func TestBuffer(t *testing.T) {
 										content.Reset()
 										decoder.Reset(content)
 										encoder.Reset(content)
-										reader.Reset(decoder)
 										buffer.Reset()
 									}
 
 									for _, values := range test.values {
 										t.Run("", func(t *testing.T) {
 											reset()
-											testBuffer(t, schema.ChildByName("data"), reader, buffer, encoder, values, ordering.sortFunc)
+											fields := schema.Fields()
+											testBuffer(t, fields[0], reader, buffer, encoder, decoder, values, ordering.sortFunc)
 										})
 									}
 								})
@@ -236,7 +237,7 @@ func descending(typ parquet.Type, values []parquet.Value) {
 	sort.Slice(values, func(i, j int) bool { return typ.Compare(values[i], values[j]) > 0 })
 }
 
-func testBuffer(t *testing.T, node parquet.Node, reader parquet.ValueReader, buffer *parquet.Buffer, encoder encoding.Encoder, values []interface{}, sortFunc sortFunc) {
+func testBuffer(t *testing.T, node parquet.Node, reader parquet.ColumnReader, buffer *parquet.Buffer, encoder encoding.Encoder, decoder encoding.Decoder, values []interface{}, sortFunc sortFunc) {
 	repetitionLevel := 0
 	definitionLevel := 0
 	if !node.Required() {
@@ -256,7 +257,8 @@ func testBuffer(t *testing.T, node parquet.Node, reader parquet.ValueReader, buf
 		}
 	}
 
-	if numRows := buffer.NumRows(); numRows != int64(len(batch)) {
+	numRows := buffer.NumRows()
+	if numRows != int64(len(batch)) {
 		t.Fatalf("number of rows mismatch: want=%d got=%d", len(batch), numRows)
 	}
 
@@ -284,7 +286,10 @@ func testBuffer(t *testing.T, node parquet.Node, reader parquet.ValueReader, buf
 		t.Fatalf("number of nulls mismatch: want=0 got=%d", numNulls)
 	}
 
-	min, max := page.Bounds()
+	min, max, hasBounds := page.Bounds()
+	if !hasBounds && numRows > 0 {
+		t.Fatal("page bounds are missing")
+	}
 	if !parquet.Equal(min, minValue) {
 		t.Fatalf("min value mismatch: want=%v got=%v", minValue, min)
 	}
@@ -296,6 +301,7 @@ func testBuffer(t *testing.T, node parquet.Node, reader parquet.ValueReader, buf
 		t.Fatalf("flushing page writer: %v", err)
 	}
 
+	reader.Reset(int(numValues), decoder)
 	// We write a single value per row, so num values = num rows for all pages
 	// including repeated ones, which makes it OK to slice the pages using the
 	// number of values as a proxy for the row indexes.
@@ -419,5 +425,92 @@ func TestBufferGenerateBloomFilters(t *testing.T) {
 
 	if err := quick.Check(f, nil); err != nil {
 		t.Error(err)
+	}
+}
+
+func TestBufferRoundtripNestedRepeated(t *testing.T) {
+	type C struct {
+		D int
+	}
+	type B struct {
+		C []C
+	}
+	type A struct {
+		B []B
+	}
+
+	// Write enough objects to exceed first page
+	buffer := parquet.NewBuffer()
+	var objs []A
+	for i := 0; i < 6; i++ {
+		o := A{[]B{{[]C{
+			{i},
+			{i},
+		}}}}
+		buffer.Write(&o)
+		objs = append(objs, o)
+	}
+
+	buf := new(bytes.Buffer)
+	w := parquet.NewWriter(buf, parquet.PageBufferSize(100))
+	w.WriteRowGroup(buffer)
+	w.Flush()
+	w.Close()
+
+	file := bytes.NewReader(buf.Bytes())
+	r := parquet.NewReader(file)
+	for i := 0; ; i++ {
+		o := new(A)
+		err := r.Read(o)
+		if err == io.EOF {
+			break
+		}
+		if !reflect.DeepEqual(*o, objs[i]) {
+			t.Errorf("points mismatch at row index %d: want=%v got=%v", i, objs[i], o)
+		}
+	}
+}
+
+func TestBufferRoundtripNestedRepeatedPointer(t *testing.T) {
+	type C struct {
+		D *int
+	}
+	type B struct {
+		C []C
+	}
+	type A struct {
+		B []B
+	}
+
+	// Write enough objects to exceed first page
+	buffer := parquet.NewBuffer()
+	var objs []A
+	for i := 0; i < 6; i++ {
+		j := i
+		o := A{[]B{{[]C{
+			{&j},
+			{nil},
+		}}}}
+		buffer.Write(&o)
+		objs = append(objs, o)
+	}
+
+	buf := new(bytes.Buffer)
+	w := parquet.NewWriter(buf, parquet.PageBufferSize(100))
+	w.WriteRowGroup(buffer)
+	w.Flush()
+	w.Close()
+
+	file := bytes.NewReader(buf.Bytes())
+	r := parquet.NewReader(file)
+	for i := 0; ; i++ {
+		o := new(A)
+		err := r.Read(o)
+		if err == io.EOF {
+			break
+		}
+		if !reflect.DeepEqual(*o, objs[i]) {
+			t.Errorf("points mismatch at row index %d: want=%v got=%v", i, objs[i], o)
+		}
 	}
 }

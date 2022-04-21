@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"reflect"
-	"sort"
 
 	"github.com/segmentio/parquet-go/compress"
 	"github.com/segmentio/parquet-go/deprecated"
@@ -24,13 +23,12 @@ type Column struct {
 	schema      *format.SchemaElement
 	order       *format.ColumnOrder
 	path        columnPath
-	names       []string
 	columns     []*Column
 	chunks      []*format.ColumnChunk
 	columnIndex []*format.ColumnIndex
 	offsetIndex []*format.OffsetIndex
-	encoding    []encoding.Encoding
-	compression []compress.Codec
+	encoding    encoding.Encoding
+	compression compress.Codec
 
 	depth              int8
 	maxRepetitionLevel int8
@@ -52,49 +50,23 @@ func (c *Column) Repeated() bool { return schemaRepetitionTypeOf(c.schema) == fo
 // Required returns true if the column is required.
 func (c *Column) Required() bool { return schemaRepetitionTypeOf(c.schema) == format.Required }
 
-// NumChildren returns the number of child columns.
-//
-// This method contributes to satisfying the Node interface.
-func (c *Column) NumChildren() int { return len(c.columns) }
+// Leaf returns true if c is a leaf column.
+func (c *Column) Leaf() bool { return c.index >= 0 }
 
-// ChildNames returns the names of child columns.
-//
-// This method contributes to satisfying the Node interface.
-func (c *Column) ChildNames() []string { return c.names }
-
-// Children returns the children of c.
-//
-// The method returns a reference to an internal field of c that the application
-// must treat as a read-only value.
-func (c *Column) Children() []*Column { return c.columns }
-
-// ChildByName returns a Node value representing the child column matching the
-// name passed as argument.
-//
-// This method contributes to satisfying the Node interface.
-func (c *Column) ChildByName(name string) Node {
-	if child := c.Column(name); child != nil {
-		return child
+// Fields returns the list of fields on the column.
+func (c *Column) Fields() []Field {
+	fields := make([]Field, len(c.columns))
+	for i, column := range c.columns {
+		fields[i] = column
 	}
-	return nil
-}
-
-// ChildByIndex returns a Node value representing the child column at the given
-// index.
-//
-// This method contributes to satisfying the IndexedNode interface.
-func (c *Column) ChildByIndex(index int) Node {
-	if index >= 0 && index < len(c.columns) {
-		return c.columns[index]
-	}
-	return nil
+	return fields
 }
 
 // Encoding returns the encodings used by this column.
-func (c *Column) Encoding() []encoding.Encoding { return c.encoding }
+func (c *Column) Encoding() encoding.Encoding { return c.encoding }
 
 // Compression returns the compression codecs used by this column.
-func (c *Column) Compression() []compress.Codec { return c.compression }
+func (c *Column) Compression() compress.Codec { return c.compression }
 
 // Path of the column in the parquet schema.
 func (c *Column) Path() []string { return c.path }
@@ -110,11 +82,10 @@ func (c *Column) Columns() []*Column { return c.columns }
 
 // Column returns the child column matching the given name.
 func (c *Column) Column(name string) *Column {
-	i := sort.Search(len(c.columns), func(i int) bool {
-		return c.columns[i].Name() >= name
-	})
-	if i < len(c.columns) && c.columns[i].Name() == name {
-		return c.columns[i]
+	for _, child := range c.columns {
+		if child.Name() == name {
+			return child
+		}
 	}
 	return nil
 }
@@ -188,22 +159,14 @@ func (c *Column) MaxDefinitionLevel() int { return int(c.maxDefinitionLevel) }
 // column index, the method returns -1 when called on non-leaf columns.
 func (c *Column) Index() int { return int(c.index) }
 
-// ValueByName returns the sub-value with the given name in base.
-func (c *Column) ValueByName(base reflect.Value, name string) reflect.Value {
-	if len(c.columns) == 0 { // leaf?
-		panic("cannot call ValueByName on leaf column")
-	}
-	return base.MapIndex(reflect.ValueOf(name))
-}
-
-// ValueByIndex returns the sub-value in base for the child column at the given
-// index.
-func (c *Column) ValueByIndex(base reflect.Value, index int) reflect.Value {
-	return c.ValueByName(base, c.columns[index].Name())
-}
-
 // GoType returns the Go type that best represents the parquet column.
 func (c *Column) GoType() reflect.Type { return goTypeOf(c) }
+
+// Value returns the sub-value in base for the child column at the given
+// index.
+func (c *Column) Value(base reflect.Value) reflect.Value {
+	return base.MapIndex(reflect.ValueOf(&c.schema.Name).Elem())
+}
 
 // String returns a human-readable string representation of the column.
 func (c *Column) String() string { return c.path.String() + ": " + sprint(c.Name(), c) }
@@ -340,26 +303,29 @@ func (cl *columnLoader) open(file *File, path []string) (*Column, error) {
 			}
 		}
 
-		c.encoding = make([]encoding.Encoding, 0, len(c.chunks))
-		for _, chunk := range c.chunks {
-			for _, encoding := range chunk.MetaData.Encoding {
-				c.encoding = append(c.encoding, LookupEncoding(encoding))
+		if len(c.chunks) > 0 {
+			// Pick the encoding and compression codec of the first chunk.
+			//
+			// Technically each column chunk may use a different compression
+			// codec, and each page of the columm chunk might have a different
+			// encoding. Exposing these details does not provide a lot of value
+			// to the end user.
+			//
+			// Programs that wish to determine the encoding and compression of
+			// each page of the column should iterate through the pages and read
+			// the page headers to determine which compression and encodings are
+			// applied.
+			for _, encoding := range c.chunks[0].MetaData.Encoding {
+				c.encoding = LookupEncoding(encoding)
+				break
 			}
+			c.compression = LookupCompressionCodec(c.chunks[0].MetaData.Codec)
 		}
-		sortEncodings(c.encoding)
-		c.encoding = dedupeSortedEncodings(c.encoding)
 
-		c.compression = make([]compress.Codec, len(c.chunks))
-		for i, chunk := range c.chunks {
-			c.compression[i] = LookupCompressionCodec(chunk.MetaData.Codec)
-		}
-		sortCodecs(c.compression)
-		c.compression = dedupeSortedCodecs(c.compression)
 		return c, nil
 	}
 
 	c.typ = &groupType{}
-	c.names = make([]string, numChildren)
 	c.columns = make([]*Column, numChildren)
 
 	for i := range c.columns {
@@ -375,55 +341,7 @@ func (cl *columnLoader) open(file *File, path []string) (*Column, error) {
 		}
 	}
 
-	for i, col := range c.columns {
-		c.names[i] = col.Name()
-	}
-
-	c.encoding = mergeColumnEncoding(c.columns)
-	c.compression = mergeColumnCompression(c.columns)
-	sort.Sort(columnsByName{c})
 	return c, nil
-}
-
-func mergeColumnEncoding(columns []*Column) []encoding.Encoding {
-	index := make(map[format.Encoding]encoding.Encoding)
-	for _, col := range columns {
-		for _, e := range col.encoding {
-			index[e.Encoding()] = e
-		}
-	}
-	merged := make([]encoding.Encoding, 0, len(index))
-	for _, encoding := range index {
-		merged = append(merged, encoding)
-	}
-	sortEncodings(merged)
-	return merged
-}
-
-func mergeColumnCompression(columns []*Column) []compress.Codec {
-	index := make(map[format.CompressionCodec]compress.Codec)
-	for _, col := range columns {
-		for _, c := range col.compression {
-			index[c.CompressionCodec()] = c
-		}
-	}
-	merged := make([]compress.Codec, 0, len(index))
-	for _, codec := range index {
-		merged = append(merged, codec)
-	}
-	sortCodecs(merged)
-	return merged
-}
-
-type columnsByName struct{ *Column }
-
-func (c columnsByName) Len() int { return len(c.names) }
-
-func (c columnsByName) Less(i, j int) bool { return c.names[i] < c.names[j] }
-
-func (c columnsByName) Swap(i, j int) {
-	c.names[i], c.names[j] = c.names[j], c.names[i]
-	c.columns[i], c.columns[j] = c.columns[j], c.columns[i]
 }
 
 func schemaElementTypeOf(s *format.SchemaElement) Type {
@@ -554,6 +472,5 @@ func schemaRepetitionTypeOf(s *format.SchemaElement) format.FieldRepetitionType 
 }
 
 var (
-	_ Node        = (*Column)(nil)
-	_ IndexedNode = (*Column)(nil)
+	_ Node = (*Column)(nil)
 )

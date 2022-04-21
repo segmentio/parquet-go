@@ -423,13 +423,12 @@ type emptyRowGroup struct {
 }
 
 func newEmptyRowGroup(schema *Schema) *emptyRowGroup {
-	g := &emptyRowGroup{
-		schema:  schema,
-		columns: make([]emptyColumnChunk, numLeafColumnsOf(schema)),
-	}
+	g := &emptyRowGroup{schema: schema}
 	forEachLeafColumnOf(schema, func(leaf leafColumn) {
-		g.columns[leaf.columnIndex].typ = leaf.node.Type()
-		g.columns[leaf.columnIndex].column = leaf.columnIndex
+		g.columns = append(g.columns, emptyColumnChunk{
+			typ:    leaf.node.Type(),
+			column: leaf.columnIndex,
+		})
 	})
 	return g
 }

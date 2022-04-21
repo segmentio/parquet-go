@@ -474,26 +474,30 @@ type filePages struct {
 }
 
 func (r *filePages) readPage() (*filePage, error) {
-	h := &r.page.header
-	h.Type = 0
-	h.UncompressedPageSize = 0
-	h.CompressedPageSize = 0
-	h.CRC = 0
+	r.page.header = format.PageHeader{}
 
-	if h.DataPageHeader != nil {
-		*h.DataPageHeader = format.DataPageHeader{}
-	}
-	if h.IndexPageHeader != nil {
-		h.IndexPageHeader = nil
-	}
-	if h.DictionaryPageHeader != nil {
-		*h.DictionaryPageHeader = format.DictionaryPageHeader{}
-	}
-	if h.DataPageHeaderV2 != nil {
-		*h.DataPageHeaderV2 = format.DataPageHeaderV2{}
-	}
+	/*
+		h := &r.page.header
+			h.Type = 0
+			h.UncompressedPageSize = 0
+			h.CompressedPageSize = 0
+			h.CRC = 0
 
-	if err := r.decoder.Decode(h); err != nil {
+			if h.DataPageHeader != nil {
+				*h.DataPageHeader = format.DataPageHeader{}
+			}
+			if h.IndexPageHeader != nil {
+				h.IndexPageHeader = nil
+			}
+			if h.DictionaryPageHeader != nil {
+				h.DictionaryPageHeader = nil
+			}
+			if h.DataPageHeaderV2 != nil {
+				*h.DataPageHeaderV2 = format.DataPageHeaderV2{}
+			}
+	*/
+
+	if err := r.decoder.Decode(&r.page.header); err != nil {
 		if err != io.EOF {
 			err = fmt.Errorf("decoding page header: %w", err)
 		}
@@ -641,9 +645,10 @@ type filePage struct {
 	header format.PageHeader
 	data   bytes.Reader
 
-	index    int
-	minValue Value
-	maxValue Value
+	index     int
+	minValue  Value
+	maxValue  Value
+	hasBounds bool
 
 	// This field caches the state used when reading values from the page.
 	// We allocate it separately to avoid creating it if the Values method
@@ -657,7 +662,6 @@ var (
 	errPageIndexExceedsColumnIndexMinValues  = errors.New("page index exceeds column index min values")
 	errPageIndexExceedsColumnIndexMaxValues  = errors.New("page index exceeds column index max values")
 	errPageIndexExceedsColumnIndexNullCounts = errors.New("page index exceeds column index null counts")
-	errPageHasNoColumnIndexNorStatistics     = errors.New("column has no index and page has no statistics")
 )
 
 func (p *filePage) statistics() *format.Statistics {
@@ -703,6 +707,7 @@ func (p *filePage) parseColumnIndex(columnIndex *format.ColumnIndex) (err error)
 	if columnIndex.NullPages[p.index] {
 		p.minValue = Value{}
 		p.maxValue = Value{}
+		p.hasBounds = false
 	} else {
 		kind := p.columnType.Kind()
 		p.minValue, err = parseValue(kind, minValue)
@@ -713,6 +718,7 @@ func (p *filePage) parseColumnIndex(columnIndex *format.ColumnIndex) (err error)
 		if err != nil {
 			return p.errColumnIndex(err)
 		}
+		p.hasBounds = true
 	}
 
 	return nil
@@ -723,7 +729,12 @@ func (p *filePage) parseStatistics() (err error) {
 	stats := p.statistics()
 
 	if stats == nil {
-		return p.errStatistics(errPageHasNoColumnIndexNorStatistics)
+		// The column has no index and page has no statistics,
+		// default to reporting that the min and max are both null.
+		p.minValue = Value{}
+		p.maxValue = Value{}
+		p.hasBounds = false
+		return nil
 	}
 
 	if stats.MinValue == nil {
@@ -744,6 +755,7 @@ func (p *filePage) parseStatistics() (err error) {
 		}
 	}
 
+	p.hasBounds = true
 	return nil
 }
 
@@ -800,8 +812,8 @@ func (p *filePage) NumNulls() int64 {
 	}
 }
 
-func (p *filePage) Bounds() (min, max Value) {
-	return p.minValue, p.maxValue
+func (p *filePage) Bounds() (min, max Value, ok bool) {
+	return p.minValue, p.maxValue, p.hasBounds
 }
 
 func (p *filePage) Size() int64 {
@@ -812,7 +824,7 @@ func (p *filePage) Values() ValueReader {
 	if p.values == nil {
 		p.values = new(filePageValueReaderState)
 	}
-	if err := p.values.init(p.columnType, p.column, p.codec, p.PageHeader(), &p.data); err != nil {
+	if err := p.values.init(p.columnType, p.column, p.codec, p.PageHeader(), &p.data, p.dictionary); err != nil {
 		return &errorValueReader{err: err}
 	}
 	return p.values.reader
@@ -883,7 +895,7 @@ func (s *filePageValueReaderState) release() {
 	}
 }
 
-func (s *filePageValueReaderState) init(columnType Type, column *Column, codec format.CompressionCodec, header PageHeader, data *bytes.Reader) (err error) {
+func (s *filePageValueReaderState) init(columnType Type, column *Column, codec format.CompressionCodec, header PageHeader, data *bytes.Reader, dict Dictionary) (err error) {
 	var repetitionLevels io.Reader
 	var definitionLevels io.Reader
 	var pageHeader DataPageHeader
@@ -921,6 +933,14 @@ func (s *filePageValueReaderState) init(columnType Type, column *Column, codec f
 	}
 
 	pageEncoding := pageHeader.Encoding()
+	// In some legacy configurations, the PLAIN_DICTIONARY encoding is used on
+	// data page headers to indicate that the page contains indexes into the
+	// dictionary page, tho it is still encoded using the RLE encoding in this
+	// case, so we convert the encoding to RLE_DICTIONARY to simplify.
+	switch pageEncoding {
+	case format.PlainDictionary:
+		pageEncoding = format.RLEDictionary
+	}
 	s.page.decoder = makeDecoder(s.page.decoder, s.page.encoding, pageEncoding, pageData)
 	s.page.encoding = pageEncoding
 
@@ -947,11 +967,12 @@ func (s *filePageValueReaderState) init(columnType Type, column *Column, codec f
 		}
 	}
 
+	numValues := int(header.NumValues())
 	switch r := s.reader.(type) {
 	case *fileColumnReader:
-		r.reset(int(header.NumValues()), s.repetitions.decoder, s.definitions.decoder, s.page.decoder)
+		r.reset(numValues, s.repetitions.decoder, s.definitions.decoder, s.page.decoder)
 	default:
-		r.Reset(s.page.decoder)
+		r.Reset(numValues, s.page.decoder)
 	}
 
 	return nil

@@ -3,7 +3,6 @@ package parquet
 import (
 	"fmt"
 	"reflect"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -117,7 +116,7 @@ func makeDeconstructFunc(node Node) (deconstruct deconstructFunc) {
 	if schema, _ := node.(*Schema); schema != nil {
 		return schema.deconstruct
 	}
-	if !isLeaf(node) {
+	if !node.Leaf() {
 		_, deconstruct = deconstructFuncOf(0, node)
 	}
 	return deconstruct
@@ -127,7 +126,7 @@ func makeReconstructFunc(node Node) (reconstruct reconstructFunc) {
 	if schema, _ := node.(*Schema); schema != nil {
 		return schema.reconstruct
 	}
-	if !isLeaf(node) {
+	if !node.Leaf() {
 		_, reconstruct = reconstructFuncOf(0, node)
 	}
 	return reconstruct
@@ -171,28 +170,21 @@ func (s *Schema) Repeated() bool { return s.root.Repeated() }
 // Required returns true since the root node of a parquet schema is always required.
 func (s *Schema) Required() bool { return s.root.Required() }
 
-// NumChildren returns the number of child nodes of s.
-func (s *Schema) NumChildren() int { return s.root.NumChildren() }
+// Leaf returns true if the root node of the parquet schema is a leaf column.
+func (s *Schema) Leaf() bool { return s.root.Leaf() }
 
-// ChildNames returns the list of child node names of s.
-func (s *Schema) ChildNames() []string { return s.root.ChildNames() }
+// Fields returns the list of fields on the root node of the parquet schema.
+func (s *Schema) Fields() []Field { return s.root.Fields() }
 
-// ChildByName returns the child node with the given name in s.
-func (s *Schema) ChildByName(name string) Node { return s.root.ChildByName(name) }
+// Encoding returns the encoding set on the root node of the parquet schema.
+func (s *Schema) Encoding() encoding.Encoding { return s.root.Encoding() }
 
-// Encoding returns the list of encodings in child nodes of s.
-func (s *Schema) Encoding() []encoding.Encoding { return s.root.Encoding() }
-
-// Compression returns the list of compression codecs in the child nodes of s.
-func (s *Schema) Compression() []compress.Codec { return s.root.Compression() }
+// Compression returns the compression codec set on the root node of the parquet
+// schema.
+func (s *Schema) Compression() compress.Codec { return s.root.Compression() }
 
 // GoType returns the Go type that best represents the schema.
 func (s *Schema) GoType() reflect.Type { return s.root.GoType() }
-
-// ValueByName is returns the sub-value with the given name in base.
-func (s *Schema) ValueByName(base reflect.Value, name string) reflect.Value {
-	return s.root.ValueByName(base, name)
-}
 
 // Deconstruct deconstructs a Go value and appends it to a row.
 //
@@ -245,20 +237,9 @@ func (s *Schema) forEachNode(do func(name string, node Node)) {
 	forEachNodeOf(s.Name(), s, do)
 }
 
-func forEachNodeOf(name string, node Node, do func(string, Node)) {
-	do(name, node)
-
-	if !isLeaf(node) {
-		for _, name := range node.ChildNames() {
-			forEachNodeOf(name, node.ChildByName(name), do)
-		}
-	}
-}
-
 type structNode struct {
 	gotype reflect.Type
 	fields []structField
-	names  []string
 }
 
 func structNodeOf(t reflect.Type) *structNode {
@@ -269,12 +250,10 @@ func structNodeOf(t reflect.Type) *structNode {
 	s := &structNode{
 		gotype: t,
 		fields: make([]structField, len(fields)),
-		names:  make([]string, len(fields)),
 	}
 
 	for i := range fields {
 		s.fields[i] = makeStructField(fields[i])
-		s.names[i] = fields[i].Name
 	}
 
 	return s
@@ -293,10 +272,6 @@ func structFieldsOf(t reflect.Type) []reflect.StructField {
 			}
 		}
 	}
-
-	sort.Slice(fields, func(i, j int) bool {
-		return fields[i].Name < fields[j].Name
-	})
 
 	return fields
 }
@@ -322,9 +297,11 @@ func (s *structNode) Repeated() bool { return false }
 
 func (s *structNode) Required() bool { return true }
 
-func (s *structNode) Encoding() []encoding.Encoding { return nil }
+func (s *structNode) Leaf() bool { return false }
 
-func (s *structNode) Compression() []compress.Codec { return nil }
+func (s *structNode) Encoding() encoding.Encoding { return nil }
+
+func (s *structNode) Compression() compress.Codec { return nil }
 
 func (s *structNode) GoType() reflect.Type { return s.gotype }
 
@@ -332,45 +309,12 @@ func (s *structNode) String() string { return sprint("", s) }
 
 func (s *structNode) Type() Type { return groupType{} }
 
-func (s *structNode) NumChildren() int { return len(s.fields) }
-
-func (s *structNode) ChildNames() []string { return s.names }
-
-func (s *structNode) ChildByName(name string) Node { return s.ChildByIndex(s.indexOf(name)) }
-
-func (s *structNode) ChildByIndex(index int) Node { return &s.fields[index] }
-
-func (s *structNode) ValueByName(base reflect.Value, name string) reflect.Value {
-	return s.ValueByIndex(base, s.indexOf(name))
-}
-
-func (s *structNode) ValueByIndex(base reflect.Value, index int) reflect.Value {
-	switch base.Kind() {
-	case reflect.Map:
-		if index >= 0 && index < len(s.names) {
-			return base.MapIndex(reflect.ValueOf(&s.names[index]).Elem())
-		}
-	default:
-		if index >= 0 && index < len(s.fields) {
-			f := &s.fields[index]
-			if len(f.index) == 1 {
-				return base.Field(f.index[0])
-			} else {
-				return fieldByIndex(base, f.index)
-			}
-		}
+func (s *structNode) Fields() []Field {
+	fields := make([]Field, len(s.fields))
+	for i := range s.fields {
+		fields[i] = &s.fields[i]
 	}
-	return reflect.Value{}
-}
-
-func (s *structNode) indexOf(name string) int {
-	i := sort.Search(len(s.names), func(i int) bool {
-		return s.names[i] >= name
-	})
-	if i == len(s.names) || s.names[i] != name {
-		i = -1
-	}
-	return i
+	return fields
 }
 
 // fieldByIndex is like reflect.Value.FieldByIndex but returns the zero-value of
@@ -390,8 +334,25 @@ func fieldByIndex(v reflect.Value, index []int) reflect.Value {
 }
 
 type structField struct {
-	wrappedNode
+	Node
+	name  string
 	index []int
+}
+
+func (f *structField) Name() string { return f.name }
+
+func (f *structField) Value(base reflect.Value) reflect.Value {
+	switch base.Kind() {
+	case reflect.Map:
+		return base.MapIndex(reflect.ValueOf(&f.name).Elem())
+	default:
+		if len(f.index) == 1 {
+			return base.Field(f.index[0])
+		} else {
+			return fieldByIndex(base, f.index)
+		}
+	}
+	return reflect.Value{}
 }
 
 func structFieldString(f reflect.StructField) string {
@@ -412,11 +373,11 @@ func throwInvalidStructField(msg string, field reflect.StructField) {
 
 func makeStructField(f reflect.StructField) structField {
 	var (
-		field     = structField{index: f.Index}
-		optional  bool
-		list      bool
-		encodings []encoding.Encoding
-		codecs    []compress.Codec
+		field      = structField{name: f.Name, index: f.Index}
+		optional   bool
+		list       bool
+		encoded    encoding.Encoding
+		compressed compress.Codec
 	)
 
 	setNode := func(node Node) {
@@ -440,22 +401,18 @@ func makeStructField(f reflect.StructField) structField {
 		list = true
 	}
 
-	setEncoding := func(enc encoding.Encoding) {
-		for _, e := range encodings {
-			if e.Encoding() == enc.Encoding() {
-				throwInvalidStructField("struct field has encoding declared multiple times", f)
-			}
+	setEncoding := func(e encoding.Encoding) {
+		if encoded != nil {
+			throwInvalidStructField("struct field has encoding declared multiple times", f)
 		}
-		encodings = append(encodings, enc)
+		encoded = e
 	}
 
-	setCompression := func(codec compress.Codec) {
-		for _, c := range codecs {
-			if c.CompressionCodec() == codec.CompressionCodec() {
-				throwInvalidStructField("struct field has compression codecs declared multiple times", f)
-			}
+	setCompression := func(c compress.Codec) {
+		if compressed != nil {
+			throwInvalidStructField("struct field has compression codecs declared multiple times", f)
 		}
-		codecs = append(codecs, codec)
+		compressed = c
 	}
 
 	if tag := f.Tag.Get("parquet"); tag != "" {
@@ -587,8 +544,13 @@ func makeStructField(f reflect.StructField) structField {
 		field.Node = nodeOf(f.Type)
 	}
 
-	field.Node = Compressed(field.Node, codecs...)
-	field.Node = Encoded(field.Node, encodings...)
+	if compressed != nil {
+		field.Node = Compressed(field.Node, compressed)
+	}
+
+	if encoded != nil {
+		field.Node = Encoded(field.Node, encoded)
+	}
 
 	if list {
 		field.Node = List(field.Node)
@@ -661,7 +623,7 @@ func nodeOf(t reflect.Type) Node {
 		panic("cannot create parquet node from go value of type " + t.String())
 	}
 
-	return &goNode{wrappedNode: wrap(n), gotype: t}
+	return &goNode{Node: n, gotype: t}
 }
 
 func split(s string) (head, tail string) {
@@ -703,7 +665,7 @@ func parseDecimalArgs(args string) (scale, precision int, err error) {
 }
 
 type goNode struct {
-	wrappedNode
+	Node
 	gotype reflect.Type
 }
 
@@ -713,5 +675,4 @@ var (
 	_ RowGroupOption = (*Schema)(nil)
 	_ ReaderOption   = (*Schema)(nil)
 	_ WriterOption   = (*Schema)(nil)
-	_ IndexedNode    = (*structNode)(nil)
 )

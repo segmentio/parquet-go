@@ -146,7 +146,10 @@ func checkColumnChunkColumnIndex(columnChunk parquet.ColumnChunk) error {
 	pagesRead := 0
 	stats := newColumnStats(columnType)
 	err := forEachPage(columnChunk.Pages(), func(page parquet.Page) error {
-		pageMin, pageMax := page.Bounds()
+		pageMin, pageMax, hasBounds := page.Bounds()
+		if !hasBounds {
+			return fmt.Errorf("page bounds are missing")
+		}
 		indexMin := columnIndex.MinValue(pagesRead)
 		indexMax := columnIndex.MaxValue(pagesRead)
 

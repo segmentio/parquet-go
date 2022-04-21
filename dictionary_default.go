@@ -22,7 +22,7 @@ func newBooleanDictionary(typ Type, columnIndex int16, bufferSize int) *booleanD
 		typ: typ,
 		booleanPage: booleanPage{
 			values:      make([]bool, 0, atLeastOne(bufferSize)),
-			columnIndex: columnIndex,
+			columnIndex: ^columnIndex,
 		},
 	}
 }
@@ -32,7 +32,7 @@ func readBooleanDictionary(typ Type, columnIndex int16, numValues int, decoder e
 		typ: typ,
 		booleanPage: booleanPage{
 			values:      make([]bool, 0, atLeastOne(numValues)),
-			columnIndex: columnIndex,
+			columnIndex: ^columnIndex,
 		},
 	}
 
@@ -136,7 +136,7 @@ func newInt32Dictionary(typ Type, columnIndex int16, bufferSize int) *int32Dicti
 		typ: typ,
 		int32Page: int32Page{
 			values:      make([]int32, 0, dictCap(bufferSize, 4)),
-			columnIndex: columnIndex,
+			columnIndex: ^columnIndex,
 		},
 	}
 }
@@ -146,7 +146,7 @@ func readInt32Dictionary(typ Type, columnIndex int16, numValues int, decoder enc
 		typ: typ,
 		int32Page: int32Page{
 			values:      make([]int32, 0, atLeastOne(numValues)),
-			columnIndex: columnIndex,
+			columnIndex: ^columnIndex,
 		},
 	}
 
@@ -250,7 +250,7 @@ func newInt64Dictionary(typ Type, columnIndex int16, bufferSize int) *int64Dicti
 		typ: typ,
 		int64Page: int64Page{
 			values:      make([]int64, 0, dictCap(bufferSize, 8)),
-			columnIndex: columnIndex,
+			columnIndex: ^columnIndex,
 		},
 	}
 }
@@ -260,7 +260,7 @@ func readInt64Dictionary(typ Type, columnIndex int16, numValues int, decoder enc
 		typ: typ,
 		int64Page: int64Page{
 			values:      make([]int64, 0, atLeastOne(numValues)),
-			columnIndex: columnIndex,
+			columnIndex: ^columnIndex,
 		},
 	}
 
@@ -364,7 +364,7 @@ func newInt96Dictionary(typ Type, columnIndex int16, bufferSize int) *int96Dicti
 		typ: typ,
 		int96Page: int96Page{
 			values:      make([]deprecated.Int96, 0, dictCap(bufferSize, 12)),
-			columnIndex: columnIndex,
+			columnIndex: ^columnIndex,
 		},
 	}
 }
@@ -374,7 +374,7 @@ func readInt96Dictionary(typ Type, columnIndex int16, numValues int, decoder enc
 		typ: typ,
 		int96Page: int96Page{
 			values:      make([]deprecated.Int96, 0, atLeastOne(numValues)),
-			columnIndex: columnIndex,
+			columnIndex: ^columnIndex,
 		},
 	}
 
@@ -478,7 +478,7 @@ func newFloatDictionary(typ Type, columnIndex int16, bufferSize int) *floatDicti
 		typ: typ,
 		floatPage: floatPage{
 			values:      make([]float32, 0, dictCap(bufferSize, 4)),
-			columnIndex: columnIndex,
+			columnIndex: ^columnIndex,
 		},
 	}
 }
@@ -488,7 +488,7 @@ func readFloatDictionary(typ Type, columnIndex int16, numValues int, decoder enc
 		typ: typ,
 		floatPage: floatPage{
 			values:      make([]float32, 0, atLeastOne(numValues)),
-			columnIndex: columnIndex,
+			columnIndex: ^columnIndex,
 		},
 	}
 
@@ -592,7 +592,7 @@ func newDoubleDictionary(typ Type, columnIndex int16, bufferSize int) *doubleDic
 		typ: typ,
 		doublePage: doublePage{
 			values:      make([]float64, 0, dictCap(bufferSize, 8)),
-			columnIndex: columnIndex,
+			columnIndex: ^columnIndex,
 		},
 	}
 }
@@ -602,7 +602,7 @@ func readDoubleDictionary(typ Type, columnIndex int16, numValues int, decoder en
 		typ: typ,
 		doublePage: doublePage{
 			values:      make([]float64, 0, atLeastOne(numValues)),
-			columnIndex: columnIndex,
+			columnIndex: ^columnIndex,
 		},
 	}
 

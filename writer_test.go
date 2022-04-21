@@ -14,6 +14,7 @@ import (
 	"github.com/hexops/gotextdiff/myers"
 	"github.com/hexops/gotextdiff/span"
 	"github.com/segmentio/parquet-go"
+	"github.com/segmentio/parquet-go/compress"
 )
 
 const (
@@ -42,7 +43,7 @@ func scanParquetValues(col *parquet.Column) error {
 	})
 }
 
-func generateParquetFile(dataPageVersion int, rows rows) ([]byte, error) {
+func generateParquetFile(rows rows, options ...parquet.WriterOption) ([]byte, error) {
 	tmp, err := os.CreateTemp("/tmp", "*.parquet")
 	if err != nil {
 		return nil, err
@@ -52,7 +53,10 @@ func generateParquetFile(dataPageVersion int, rows rows) ([]byte, error) {
 	defer os.Remove(path)
 	//fmt.Println(path)
 
-	if err := writeParquetFile(tmp, rows, parquet.DataPageVersion(dataPageVersion), parquet.PageBufferSize(20)); err != nil {
+	writerOptions := []parquet.WriterOption{parquet.PageBufferSize(20)}
+	writerOptions = append(writerOptions, options...)
+
+	if err := writeParquetFile(tmp, rows, writerOptions...); err != nil {
 		return nil, err
 	}
 
@@ -77,6 +81,7 @@ type timeseries struct {
 var writerTests = []struct {
 	scenario string
 	version  int
+	codec    compress.Codec
 	rows     []interface{}
 	dump     string
 }{
@@ -161,6 +166,7 @@ value 3: R:0 D:0 V:Skywalker
 	{
 		scenario: "timeseries with delta encoding",
 		version:  v2,
+		codec:    &parquet.Gzip,
 		rows: []interface{}{
 			timeseries{Name: "http_request_total", Timestamp: 1639444033, Value: 100},
 			timeseries{Name: "http_request_total", Timestamp: 1639444058, Value: 0},
@@ -175,9 +181,9 @@ value 3: R:0 D:0 V:Skywalker
 		},
 		dump: `row group 0
 --------------------------------------------------------------------------------
-name:       BINARY UNCOMPRESSED DO:4 FPO:45 SZ:101/101/1.00 VC:10 ENC: [more]...
-timestamp:  INT64 UNCOMPRESSED DO:0 FPO:105 SZ:278/278/1.00 VC:10 ENC: [more]...
-value:      DOUBLE UNCOMPRESSED DO:0 FPO:383 SZ:220/220/1.00 VC:10 ENC:PLAIN [more]...
+name:       BINARY GZIP DO:4 FPO:70 SZ:126/101/0.80 VC:10 ENC:PLAIN,RL [more]...
+timestamp:  INT64 GZIP DO:0 FPO:130 SZ:403/278/0.69 VC:10 ENC:DELTA_BI [more]...
+value:      DOUBLE GZIP DO:0 FPO:533 SZ:344/219/0.64 VC:10 ENC:PLAIN S [more]...
 
     name TV=10 RL=0 DL=0 DS: 1 DE:PLAIN
     ----------------------------------------------------------------------------
@@ -272,11 +278,21 @@ value 10: R:0 D:0 V:10.0
 
 		dump: `row group 0
 --------------------------------------------------------------------------------
+owner:              BINARY ZSTD DO:0 FPO:4 SZ:98/80/0.82 VC:2 ENC:DELT [more]...
+ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:102 SZ:166/116/0.70 VC:3 ENC: [more]...
 contacts:
-.name:              BINARY UNCOMPRESSED DO:0 FPO:4 SZ:120/120/1.00 VC:3 [more]...
-.phoneNumber:       BINARY ZSTD DO:0 FPO:124 SZ:114/96/0.84 VC:3 ENC:R [more]...
-owner:              BINARY ZSTD DO:0 FPO:238 SZ:98/80/0.82 VC:2 ENC:DE [more]...
-ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:336 SZ:166/116/0.70 VC:3 ENC: [more]...
+.name:              BINARY UNCOMPRESSED DO:0 FPO:268 SZ:120/120/1.00 VC:3 [more]...
+.phoneNumber:       BINARY ZSTD DO:0 FPO:388 SZ:114/96/0.84 VC:3 ENC:D [more]...
+
+    owner TV=2 RL=0 DL=0
+    ----------------------------------------------------------------------------
+    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:18
+    page 1:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:16
+
+    ownerPhoneNumbers TV=3 RL=1 DL=1
+    ----------------------------------------------------------------------------
+    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:52
+    page 1:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:17
 
     contacts.name TV=3 RL=1 DL=1
     ----------------------------------------------------------------------------
@@ -288,15 +304,18 @@ ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:336 SZ:166/116/0.70 VC:3 ENC: [more]...
     page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:33
     page 1:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:17
 
-    owner TV=2 RL=0 DL=0
-    ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:18
-    page 1:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:16
+BINARY owner
+--------------------------------------------------------------------------------
+*** row group 1 of 1, values 1 to 2 ***
+value 1: R:0 D:0 V:Julien Le Dem
+value 2: R:0 D:0 V:A. Nonymous
 
-    ownerPhoneNumbers TV=3 RL=1 DL=1
-    ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:52
-    page 1:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:17
+BINARY ownerPhoneNumbers
+--------------------------------------------------------------------------------
+*** row group 1 of 1, values 1 to 3 ***
+value 1: R:0 D:1 V:555 123 4567
+value 2: R:1 D:1 V:555 666 1337
+value 3: R:0 D:0 V:<null>
 
 BINARY contacts.name
 --------------------------------------------------------------------------------
@@ -310,19 +329,6 @@ BINARY contacts.phoneNumber
 *** row group 1 of 1, values 1 to 3 ***
 value 1: R:0 D:2 V:555 987 6543
 value 2: R:1 D:1 V:<null>
-value 3: R:0 D:0 V:<null>
-
-BINARY owner
---------------------------------------------------------------------------------
-*** row group 1 of 1, values 1 to 2 ***
-value 1: R:0 D:0 V:Julien Le Dem
-value 2: R:0 D:0 V:A. Nonymous
-
-BINARY ownerPhoneNumbers
---------------------------------------------------------------------------------
-*** row group 1 of 1, values 1 to 3 ***
-value 1: R:0 D:1 V:555 123 4567
-value 2: R:1 D:1 V:555 666 1337
 value 3: R:0 D:0 V:<null>
 `,
 	},
@@ -355,11 +361,21 @@ value 3: R:0 D:0 V:<null>
 
 		dump: `row group 0
 --------------------------------------------------------------------------------
+owner:              BINARY ZSTD DO:0 FPO:4 SZ:108/90/0.83 VC:2 ENC:DEL [more]...
+ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:112 SZ:159/109/0.69 VC:3 ENC: [more]...
 contacts:
-.name:              BINARY UNCOMPRESSED DO:0 FPO:4 SZ:114/114/1.00 VC:3 [more]...
-.phoneNumber:       BINARY ZSTD DO:0 FPO:118 SZ:108/90/0.83 VC:3 ENC:R [more]...
-owner:              BINARY ZSTD DO:0 FPO:226 SZ:108/90/0.83 VC:2 ENC:D [more]...
-ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:334 SZ:159/109/0.69 VC:3 ENC: [more]...
+.name:              BINARY UNCOMPRESSED DO:0 FPO:271 SZ:114/114/1.00 VC:3 [more]...
+.phoneNumber:       BINARY ZSTD DO:0 FPO:385 SZ:108/90/0.83 VC:3 ENC:D [more]...
+
+    owner TV=2 RL=0 DL=0
+    ----------------------------------------------------------------------------
+    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:1
+    page 1:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:1
+
+    ownerPhoneNumbers TV=3 RL=1 DL=1
+    ----------------------------------------------------------------------------
+    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:2
+    page 1:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:1
 
     contacts.name TV=3 RL=1 DL=1
     ----------------------------------------------------------------------------
@@ -371,15 +387,18 @@ ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:334 SZ:159/109/0.69 VC:3 ENC: [more]...
     page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:2
     page 1:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:1
 
-    owner TV=2 RL=0 DL=0
-    ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:1
-    page 1:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:1
+BINARY owner
+--------------------------------------------------------------------------------
+*** row group 1 of 1, values 1 to 2 ***
+value 1: R:0 D:0 V:Julien Le Dem
+value 2: R:0 D:0 V:A. Nonymous
 
-    ownerPhoneNumbers TV=3 RL=1 DL=1
-    ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:2
-    page 1:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:1
+BINARY ownerPhoneNumbers
+--------------------------------------------------------------------------------
+*** row group 1 of 1, values 1 to 3 ***
+value 1: R:0 D:1 V:555 123 4567
+value 2: R:1 D:1 V:555 666 1337
+value 3: R:0 D:0 V:<null>
 
 BINARY contacts.name
 --------------------------------------------------------------------------------
@@ -394,19 +413,6 @@ BINARY contacts.phoneNumber
 value 1: R:0 D:2 V:555 987 6543
 value 2: R:1 D:1 V:<null>
 value 3: R:0 D:0 V:<null>
-
-BINARY owner
---------------------------------------------------------------------------------
-*** row group 1 of 1, values 1 to 2 ***
-value 1: R:0 D:0 V:Julien Le Dem
-value 2: R:0 D:0 V:A. Nonymous
-
-BINARY ownerPhoneNumbers
---------------------------------------------------------------------------------
-*** row group 1 of 1, values 1 to 3 ***
-value 1: R:0 D:1 V:555 123 4567
-value 2: R:1 D:1 V:555 666 1337
-value 3: R:0 D:0 V:<null>
 `,
 	},
 }
@@ -418,13 +424,17 @@ func TestWriter(t *testing.T) {
 
 	for _, test := range writerTests {
 		dataPageVersion := test.version
+		codec := test.codec
 		rows := test.rows
 		dump := test.dump
 
 		t.Run(test.scenario, func(t *testing.T) {
 			t.Parallel()
 
-			b, err := generateParquetFile(dataPageVersion, makeRows(rows))
+			b, err := generateParquetFile(makeRows(rows),
+				parquet.DataPageVersion(dataPageVersion),
+				parquet.Compression(codec),
+			)
 			if err != nil {
 				t.Logf("\n%s", string(b))
 				t.Fatal(err)

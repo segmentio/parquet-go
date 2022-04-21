@@ -66,13 +66,13 @@ func (page *booleanPage) bounds() (min, max bool) {
 	return min, max
 }
 
-func (page *booleanPage) Bounds() (min, max Value) {
-	if len(page.values) > 0 {
+func (page *booleanPage) Bounds() (min, max Value, ok bool) {
+	if ok = len(page.values) > 0; ok {
 		minBool, maxBool := page.bounds()
 		min = makeValueBoolean(minBool)
 		max = makeValueBoolean(maxBool)
 	}
-	return min, max
+	return min, max, ok
 }
 
 func (page *booleanPage) Clone() BufferedPage {
@@ -153,13 +153,13 @@ func (page *int32Page) max() int32 { return bits.MaxInt32(page.values) }
 
 func (page *int32Page) bounds() (min, max int32) { return bits.MinMaxInt32(page.values) }
 
-func (page *int32Page) Bounds() (min, max Value) {
-	if len(page.values) > 0 {
+func (page *int32Page) Bounds() (min, max Value, ok bool) {
+	if ok = len(page.values) > 0; ok {
 		minInt32, maxInt32 := page.bounds()
 		min = makeValueInt32(minInt32)
 		max = makeValueInt32(maxInt32)
 	}
-	return min, max
+	return min, max, ok
 }
 
 func (page *int32Page) Clone() BufferedPage {
@@ -241,13 +241,13 @@ func (page *int64Page) max() int64 { return bits.MaxInt64(page.values) }
 
 func (page *int64Page) bounds() (min, max int64) { return bits.MinMaxInt64(page.values) }
 
-func (page *int64Page) Bounds() (min, max Value) {
-	if len(page.values) > 0 {
+func (page *int64Page) Bounds() (min, max Value, ok bool) {
+	if ok = len(page.values) > 0; ok {
 		minInt64, maxInt64 := page.bounds()
 		min = makeValueInt64(minInt64)
 		max = makeValueInt64(maxInt64)
 	}
-	return min, max
+	return min, max, ok
 }
 
 func (page *int64Page) Clone() BufferedPage {
@@ -331,13 +331,13 @@ func (page *int96Page) bounds() (min, max deprecated.Int96) {
 	return deprecated.MinMaxInt96(page.values)
 }
 
-func (page *int96Page) Bounds() (min, max Value) {
-	if len(page.values) > 0 {
+func (page *int96Page) Bounds() (min, max Value, ok bool) {
+	if ok = len(page.values) > 0; ok {
 		minInt96, maxInt96 := page.bounds()
 		min = makeValueInt96(minInt96)
 		max = makeValueInt96(maxInt96)
 	}
-	return min, max
+	return min, max, ok
 }
 
 func (page *int96Page) Clone() BufferedPage {
@@ -419,13 +419,13 @@ func (page *floatPage) max() float32 { return bits.MaxFloat32(page.values) }
 
 func (page *floatPage) bounds() (min, max float32) { return bits.MinMaxFloat32(page.values) }
 
-func (page *floatPage) Bounds() (min, max Value) {
-	if len(page.values) > 0 {
+func (page *floatPage) Bounds() (min, max Value, ok bool) {
+	if ok = len(page.values) > 0; ok {
 		minFloat32, maxFloat32 := page.bounds()
 		min = makeValueFloat(minFloat32)
 		max = makeValueFloat(maxFloat32)
 	}
-	return min, max
+	return min, max, ok
 }
 
 func (page *floatPage) Clone() BufferedPage {
@@ -507,13 +507,13 @@ func (page *doublePage) max() float64 { return bits.MaxFloat64(page.values) }
 
 func (page *doublePage) bounds() (min, max float64) { return bits.MinMaxFloat64(page.values) }
 
-func (page *doublePage) Bounds() (min, max Value) {
-	if len(page.values) > 0 {
+func (page *doublePage) Bounds() (min, max Value, ok bool) {
+	if ok = len(page.values) > 0; ok {
 		minFloat64, maxFloat64 := page.bounds()
 		min = makeValueDouble(minFloat64)
 		max = makeValueDouble(maxFloat64)
 	}
-	return min, max
+	return min, max, ok
 }
 
 func (page *doublePage) Clone() BufferedPage {
@@ -587,13 +587,13 @@ func (page uint32Page) bounds() (min, max uint32) {
 	return bits.MinMaxUint32(bits.Int32ToUint32(page.values))
 }
 
-func (page uint32Page) Bounds() (min, max Value) {
-	if len(page.values) > 0 {
+func (page uint32Page) Bounds() (min, max Value, ok bool) {
+	if ok = len(page.values) > 0; ok {
 		minUint32, maxUint32 := page.bounds()
 		min = makeValueInt32(int32(minUint32))
 		max = makeValueInt32(int32(maxUint32))
 	}
-	return min, max
+	return min, max, ok
 }
 
 func (page uint32Page) Clone() BufferedPage {
@@ -616,13 +616,13 @@ func (page uint64Page) bounds() (min, max uint64) {
 	return bits.MinMaxUint64(bits.Int64ToUint64(page.values))
 }
 
-func (page uint64Page) Bounds() (min, max Value) {
-	if len(page.values) > 0 {
+func (page uint64Page) Bounds() (min, max Value, ok bool) {
+	if ok = len(page.values) > 0; ok {
 		minUint64, maxUint64 := page.bounds()
 		min = makeValueInt64(int64(minUint64))
 		max = makeValueInt64(int64(maxUint64))
 	}
-	return min, max
+	return min, max, ok
 }
 
 func (page uint64Page) Clone() BufferedPage {

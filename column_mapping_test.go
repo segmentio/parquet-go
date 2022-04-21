@@ -21,9 +21,9 @@ func ExampleColumnMapping() {
 
 	// Output:
 	// {
-	//    0 => "attributes.name"
-	//    1 => "attributes.value"
-	//    2 => "first_name"
-	//    3 => "last_name"
+	//    0 => "first_name"
+	//    1 => "last_name"
+	//    2 => "attributes.name"
+	//    3 => "attributes.value"
 	// }
 }

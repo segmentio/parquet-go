@@ -71,7 +71,7 @@ func forEachLeafColumn(node Node, path columnPath, columnIndex, maxRepetitionLev
 		maxDefinitionLevel++
 	}
 
-	if isLeaf(node) {
+	if node.Leaf() {
 		do(leafColumn{
 			node:               node,
 			path:               path,
@@ -82,10 +82,10 @@ func forEachLeafColumn(node Node, path columnPath, columnIndex, maxRepetitionLev
 		return columnIndex + 1
 	}
 
-	for _, name := range node.ChildNames() {
+	for _, field := range node.Fields() {
 		columnIndex = forEachLeafColumn(
-			node.ChildByName(name),
-			path.append(name),
+			field,
+			path.append(field.Name()),
 			columnIndex,
 			maxRepetitionLevel,
 			maxDefinitionLevel,
@@ -98,7 +98,7 @@ func forEachLeafColumn(node Node, path columnPath, columnIndex, maxRepetitionLev
 
 func lookupColumnPath(node Node, path columnPath) Node {
 	for node != nil && len(path) > 0 {
-		node = node.ChildByName(path[0])
+		node = childByName(node, path[0])
 		path = path[1:]
 	}
 	return node
