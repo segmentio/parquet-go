@@ -14,6 +14,7 @@ import (
 	"github.com/hexops/gotextdiff/myers"
 	"github.com/hexops/gotextdiff/span"
 	"github.com/segmentio/parquet-go"
+	"github.com/segmentio/parquet-go/compress"
 )
 
 const (
@@ -42,7 +43,7 @@ func scanParquetValues(col *parquet.Column) error {
 	})
 }
 
-func generateParquetFile(dataPageVersion int, rows rows) ([]byte, error) {
+func generateParquetFile(rows rows, options ...parquet.WriterOption) ([]byte, error) {
 	tmp, err := os.CreateTemp("/tmp", "*.parquet")
 	if err != nil {
 		return nil, err
@@ -52,7 +53,10 @@ func generateParquetFile(dataPageVersion int, rows rows) ([]byte, error) {
 	defer os.Remove(path)
 	//fmt.Println(path)
 
-	if err := writeParquetFile(tmp, rows, parquet.DataPageVersion(dataPageVersion), parquet.PageBufferSize(20)); err != nil {
+	writerOptions := []parquet.WriterOption{parquet.PageBufferSize(20)}
+	writerOptions = append(writerOptions, options...)
+
+	if err := writeParquetFile(tmp, rows, writerOptions...); err != nil {
 		return nil, err
 	}
 
@@ -77,6 +81,7 @@ type timeseries struct {
 var writerTests = []struct {
 	scenario string
 	version  int
+	codec    compress.Codec
 	rows     []interface{}
 	dump     string
 }{
@@ -161,6 +166,7 @@ value 3: R:0 D:0 V:Skywalker
 	{
 		scenario: "timeseries with delta encoding",
 		version:  v2,
+		codec:    &parquet.Gzip,
 		rows: []interface{}{
 			timeseries{Name: "http_request_total", Timestamp: 1639444033, Value: 100},
 			timeseries{Name: "http_request_total", Timestamp: 1639444058, Value: 0},
@@ -175,9 +181,9 @@ value 3: R:0 D:0 V:Skywalker
 		},
 		dump: `row group 0
 --------------------------------------------------------------------------------
-name:       BINARY UNCOMPRESSED DO:4 FPO:45 SZ:101/101/1.00 VC:10 ENC: [more]...
-timestamp:  INT64 UNCOMPRESSED DO:0 FPO:105 SZ:278/278/1.00 VC:10 ENC: [more]...
-value:      DOUBLE UNCOMPRESSED DO:0 FPO:383 SZ:220/220/1.00 VC:10 ENC:PLAIN [more]...
+name:       BINARY GZIP DO:4 FPO:70 SZ:126/101/0.80 VC:10 ENC:PLAIN,RL [more]...
+timestamp:  INT64 GZIP DO:0 FPO:130 SZ:403/278/0.69 VC:10 ENC:DELTA_BI [more]...
+value:      DOUBLE GZIP DO:0 FPO:533 SZ:344/219/0.64 VC:10 ENC:PLAIN S [more]...
 
     name TV=10 RL=0 DL=0 DS: 1 DE:PLAIN
     ----------------------------------------------------------------------------
@@ -418,13 +424,17 @@ func TestWriter(t *testing.T) {
 
 	for _, test := range writerTests {
 		dataPageVersion := test.version
+		codec := test.codec
 		rows := test.rows
 		dump := test.dump
 
 		t.Run(test.scenario, func(t *testing.T) {
 			t.Parallel()
 
-			b, err := generateParquetFile(dataPageVersion, makeRows(rows))
+			b, err := generateParquetFile(makeRows(rows),
+				parquet.DataPageVersion(dataPageVersion),
+				parquet.Compression(codec),
+			)
 			if err != nil {
 				t.Logf("\n%s", string(b))
 				t.Fatal(err)

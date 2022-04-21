@@ -176,11 +176,12 @@ func (s *Schema) Leaf() bool { return s.root.Leaf() }
 // Fields returns the list of fields on the root node of the parquet schema.
 func (s *Schema) Fields() []Field { return s.root.Fields() }
 
-// Encoding returns the list of encodings in child nodes of s.
-func (s *Schema) Encoding() []encoding.Encoding { return s.root.Encoding() }
+// Encoding returns the encoding set on the root node of the parquet schema.
+func (s *Schema) Encoding() encoding.Encoding { return s.root.Encoding() }
 
-// Compression returns the list of compression codecs in the child nodes of s.
-func (s *Schema) Compression() []compress.Codec { return s.root.Compression() }
+// Compression returns the compression codec set on the root node of the parquet
+// schema.
+func (s *Schema) Compression() compress.Codec { return s.root.Compression() }
 
 // GoType returns the Go type that best represents the schema.
 func (s *Schema) GoType() reflect.Type { return s.root.GoType() }
@@ -298,9 +299,9 @@ func (s *structNode) Required() bool { return true }
 
 func (s *structNode) Leaf() bool { return false }
 
-func (s *structNode) Encoding() []encoding.Encoding { return nil }
+func (s *structNode) Encoding() encoding.Encoding { return nil }
 
-func (s *structNode) Compression() []compress.Codec { return nil }
+func (s *structNode) Compression() compress.Codec { return nil }
 
 func (s *structNode) GoType() reflect.Type { return s.gotype }
 
@@ -333,7 +334,7 @@ func fieldByIndex(v reflect.Value, index []int) reflect.Value {
 }
 
 type structField struct {
-	wrappedNode
+	Node
 	name  string
 	index []int
 }
@@ -372,11 +373,11 @@ func throwInvalidStructField(msg string, field reflect.StructField) {
 
 func makeStructField(f reflect.StructField) structField {
 	var (
-		field     = structField{name: f.Name, index: f.Index}
-		optional  bool
-		list      bool
-		encodings []encoding.Encoding
-		codecs    []compress.Codec
+		field      = structField{name: f.Name, index: f.Index}
+		optional   bool
+		list       bool
+		encoded    encoding.Encoding
+		compressed compress.Codec
 	)
 
 	setNode := func(node Node) {
@@ -400,22 +401,18 @@ func makeStructField(f reflect.StructField) structField {
 		list = true
 	}
 
-	setEncoding := func(enc encoding.Encoding) {
-		for _, e := range encodings {
-			if e.Encoding() == enc.Encoding() {
-				throwInvalidStructField("struct field has encoding declared multiple times", f)
-			}
+	setEncoding := func(e encoding.Encoding) {
+		if encoded != nil {
+			throwInvalidStructField("struct field has encoding declared multiple times", f)
 		}
-		encodings = append(encodings, enc)
+		encoded = e
 	}
 
-	setCompression := func(codec compress.Codec) {
-		for _, c := range codecs {
-			if c.CompressionCodec() == codec.CompressionCodec() {
-				throwInvalidStructField("struct field has compression codecs declared multiple times", f)
-			}
+	setCompression := func(c compress.Codec) {
+		if compressed != nil {
+			throwInvalidStructField("struct field has compression codecs declared multiple times", f)
 		}
-		codecs = append(codecs, codec)
+		compressed = c
 	}
 
 	if tag := f.Tag.Get("parquet"); tag != "" {
@@ -547,8 +544,13 @@ func makeStructField(f reflect.StructField) structField {
 		field.Node = nodeOf(f.Type)
 	}
 
-	field.Node = Compressed(field.Node, codecs...)
-	field.Node = Encoded(field.Node, encodings...)
+	if compressed != nil {
+		field.Node = Compressed(field.Node, compressed)
+	}
+
+	if encoded != nil {
+		field.Node = Encoded(field.Node, encoded)
+	}
 
 	if list {
 		field.Node = List(field.Node)
@@ -621,7 +623,7 @@ func nodeOf(t reflect.Type) Node {
 		panic("cannot create parquet node from go value of type " + t.String())
 	}
 
-	return &goNode{wrappedNode: wrap(n), gotype: t}
+	return &goNode{Node: n, gotype: t}
 }
 
 func split(s string) (head, tail string) {
@@ -663,7 +665,7 @@ func parseDecimalArgs(args string) (scale, precision int, err error) {
 }
 
 type goNode struct {
-	wrappedNode
+	Node
 	gotype reflect.Type
 }
 
