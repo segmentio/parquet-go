@@ -1196,7 +1196,7 @@ func (c *writerColumn) compressedPage(w io.Writer) (compress.Writer, error) {
 
 func (c *writerColumn) makePageStatistics(page Page) format.Statistics {
 	numNulls := page.NumNulls()
-	minValue, maxValue := page.Bounds()
+	minValue, maxValue, _ := page.Bounds()
 	minValueBytes := minValue.Bytes()
 	maxValueBytes := maxValue.Bytes()
 	return format.Statistics{
@@ -1215,7 +1215,7 @@ func (c *writerColumn) recordPageStats(headerSize int32, header *format.PageHead
 	if page != nil {
 		numNulls := page.NumNulls()
 		numValues := page.NumValues()
-		minValue, maxValue := page.Bounds()
+		minValue, maxValue, _ := page.Bounds()
 		c.columnIndex.IndexPage(numValues, numNulls, minValue, maxValue)
 		c.columnChunk.MetaData.NumValues += numValues
 

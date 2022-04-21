@@ -21,7 +21,7 @@ func newDictionary[T primitive](typ Type, columnIndex int16, bufferSize int, cla
 		page: page[T]{
 			class:       class,
 			values:      make([]T, 0, dictCap(bufferSize, sizeof[T]())),
-			columnIndex: columnIndex,
+			columnIndex: ^columnIndex,
 		},
 	}
 }
@@ -32,7 +32,7 @@ func readDictionary[T primitive](typ Type, columnIndex int16, numValues int, dec
 		page: page[T]{
 			class:       class,
 			values:      make([]T, 0, atLeastOne(numValues)),
-			columnIndex: columnIndex,
+			columnIndex: ^columnIndex,
 		},
 	}
 

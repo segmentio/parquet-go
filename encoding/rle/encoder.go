@@ -51,7 +51,13 @@ func (e *Encoder) Reset(w io.Writer) {
 }
 
 func (e *Encoder) EncodeBoolean(data []bool) error {
-	return e.encode(bits.BoolToBytes(data), 1, 8)
+	// When encoding booleans, the BIT_PACKED encoding is used without the
+	// varint header.
+	e.bitPack.reset(e.writer, 1)
+	bytes := bits.BoolToBytes(data)
+	int8s := bits.BytesToInt8(bytes)
+	e.bitPack.encodeInt8(int8s, 1)
+	return e.bitPack.flush()
 }
 
 func (e *Encoder) EncodeInt8(data []int8) error {

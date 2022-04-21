@@ -45,6 +45,13 @@ func (d *Decoder) ReadByte() (byte, error) {
 }
 
 func (d *Decoder) DecodeBoolean(data []bool) (int, error) {
+	// When decoding booleans with the RLE encoding, only the BIT_PACKED version
+	// is used, which skips encoding of the varint header, and consumes bits
+	// until EOF is reached.
+	if d.decoder == nil {
+		d.bitPack.reset(d.reader, 1, unlimited)
+		d.decoder = &d.bitPack
+	}
 	return d.decode(bits.BoolToBytes(data), 8, 1)
 }
 

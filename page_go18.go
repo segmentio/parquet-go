@@ -31,13 +31,13 @@ func (p *page[T]) max() T { return p.class.max(p.values) }
 
 func (p *page[T]) bounds() (T, T) { return p.class.bounds(p.values) }
 
-func (p *page[T]) Bounds() (min, max Value) {
-	if len(p.values) > 0 {
+func (p *page[T]) Bounds() (min, max Value, ok bool) {
+	if ok = len(p.values) > 0; ok {
 		minValue, maxValue := p.bounds()
 		min = p.class.makeValue(minValue)
 		max = p.class.makeValue(maxValue)
 	}
-	return min, max
+	return min, max, ok
 }
 
 func (p *page[T]) Clone() BufferedPage {
