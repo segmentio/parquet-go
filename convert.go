@@ -149,31 +149,31 @@ func Convert(to, from Node) (conv Conversion, err error) {
 	sourceToTargetIndex := columnIndexBuffer[len(targetColumns):]
 
 	for i, path := range targetColumns {
-		targetToSourceIndex[i], _ = sourceMapping.lookup(path)
-		_, targetNode := targetMapping.lookup(path)
-		targetColumnKinds[i] = targetNode.Type().Kind()
+		sourceColumn := sourceMapping.lookup(path)
+		targetColumn := targetMapping.lookup(path)
+		targetToSourceIndex[i] = sourceColumn.columnIndex
+		targetColumnKinds[i] = targetColumn.node.Type().Kind()
 	}
 
 	for i, path := range sourceColumns {
-		sourceIndex, sourceNode := sourceMapping.lookup(path)
-		targetIndex, targetNode := targetMapping.lookup(path)
+		sourceColumn := sourceMapping.lookup(path)
+		targetColumn := targetMapping.lookup(path)
 
-		if targetNode != nil {
-			sourceType := sourceNode.Type()
-			targetType := targetNode.Type()
+		if targetColumn.node != nil {
+			sourceType := sourceColumn.node.Type()
+			targetType := targetColumn.node.Type()
 			if sourceType.Kind() != targetType.Kind() {
-				return nil, &ConvertError{Path: path, From: sourceNode, To: targetNode}
+				return nil, &ConvertError{Path: path, From: sourceColumn.node, To: targetColumn.node}
 			}
 
-			sourceRepetition := fieldRepetitionTypeOf(sourceNode)
-			targetRepetition := fieldRepetitionTypeOf(targetNode)
+			sourceRepetition := fieldRepetitionTypeOf(sourceColumn.node)
+			targetRepetition := fieldRepetitionTypeOf(targetColumn.node)
 			if sourceRepetition != targetRepetition {
-				return nil, &ConvertError{Path: path, From: sourceNode, To: targetNode}
+				return nil, &ConvertError{Path: path, From: sourceColumn.node, To: targetColumn.node}
 			}
 		}
 
-		sourceToTargetIndex[i] = targetIndex
-		_ = sourceIndex
+		sourceToTargetIndex[i] = targetColumn.columnIndex
 	}
 
 	return &conversion{

@@ -237,16 +237,22 @@ func (s *Schema) Reconstruct(value interface{}, row Row) error {
 	return err
 }
 
-// Lookup returns the column index and node of the column at the given path.
+// Lookup returns the leaf column at the given path.
 //
-// The path is the sequence of column names identifying a leaf column, starting
-// from the root column of the schema.
+// The path is the sequence of column names identifying a leaf column (not
+// including the root).
 //
 // If the path was not found in the mapping, or if it did not represent a
-// leaf column of the parquet schema, the method returns a negative index.
-func (s *Schema) Lookup(path ...string) (columnIndex int, columnNode Node) {
-	i, n := s.mapping.lookup(path)
-	return int(i), n
+// leaf column of the parquet schema, the boolean will be false.
+func (s *Schema) Lookup(path ...string) (LeafColumn, bool) {
+	leaf := s.mapping.lookup(path)
+	return LeafColumn{
+		Node:               leaf.node,
+		Path:               leaf.path,
+		ColumnIndex:        int(leaf.columnIndex),
+		MaxRepetitionLevel: int(leaf.maxRepetitionLevel),
+		MaxDefinitionLevel: int(leaf.maxDefinitionLevel),
+	}, leaf.node != nil
 }
 
 // Columns returns the list of column paths available in the schema.

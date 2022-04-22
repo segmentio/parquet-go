@@ -1,16 +1,24 @@
 package parquet
 
+// LeafColumn is a struct type representing leaf columns of a parquet schema.
+type LeafColumn struct {
+	Node               Node
+	Path               []string
+	ColumnIndex        int
+	MaxRepetitionLevel int
+	MaxDefinitionLevel int
+}
+
 func columnMappingOf(schema Node) (mapping columnMappingGroup, columns [][]string) {
 	mapping = make(columnMappingGroup)
 	columns = make([][]string, 0, 16)
 
 	forEachLeafColumnOf(schema, func(leaf leafColumn) {
-		column := make([]string, len(leaf.path))
-		copy(column, leaf.path)
-		columns = append(columns, column)
+		path := make(columnPath, len(leaf.path))
+		copy(path, leaf.path)
+		columns = append(columns, path)
 
-		group, path := mapping, leaf.path
-
+		group := mapping
 		for len(path) > 1 {
 			columnName := path[0]
 			g, ok := group[columnName].(columnMappingGroup)
@@ -21,39 +29,36 @@ func columnMappingOf(schema Node) (mapping columnMappingGroup, columns [][]strin
 			group, path = g, path[1:]
 		}
 
-		group[path[0]] = &columnMappingLeaf{
-			columnIndex: leaf.columnIndex,
-			columnNode:  leaf.node,
-		}
+		leaf.path = path // use the copy
+		group[path[0]] = &columnMappingLeaf{column: leaf}
 	})
 
 	return mapping, columns
 }
 
 type columnMapping interface {
-	lookup(path columnPath) (columnIndex int16, columnNode Node)
+	lookup(path columnPath) leafColumn
 }
 
 type columnMappingGroup map[string]columnMapping
 
-func (group columnMappingGroup) lookup(path columnPath) (int16, Node) {
+func (group columnMappingGroup) lookup(path columnPath) leafColumn {
 	if len(path) > 0 {
 		c, ok := group[path[0]]
 		if ok {
 			return c.lookup(path[1:])
 		}
 	}
-	return -1, nil
+	return leafColumn{columnIndex: -1}
 }
 
 type columnMappingLeaf struct {
-	columnIndex int16
-	columnNode  Node
+	column leafColumn
 }
 
-func (leaf *columnMappingLeaf) lookup(path columnPath) (int16, Node) {
+func (leaf *columnMappingLeaf) lookup(path columnPath) leafColumn {
 	if len(path) == 0 {
-		return leaf.columnIndex, leaf.columnNode
+		return leaf.column
 	}
-	return -1, nil
+	return leafColumn{columnIndex: -1}
 }

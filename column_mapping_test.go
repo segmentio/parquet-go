@@ -17,9 +17,9 @@ func ExampleSchema_Lookup() {
 		} `parquet:"attributes"`
 	}{})
 
-	for _, columnPath := range schema.Columns() {
-		columnIndex, _ := schema.Lookup(columnPath...)
-		fmt.Printf("%d => %q\n", columnIndex, strings.Join(columnPath, "."))
+	for _, path := range schema.Columns() {
+		leaf, _ := schema.Lookup(path...)
+		fmt.Printf("%d => %q\n", leaf.ColumnIndex, strings.Join(path, "."))
 	}
 
 	// Output:

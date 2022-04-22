@@ -207,8 +207,8 @@ func PrintRowGroup(w io.Writer, rowGroup RowGroup) error {
 	alignment := make([]int, len(columns))
 
 	for i, column := range columns {
-		_, node := schema.Lookup(column...)
-		columnType := node.Type()
+		leaf, _ := schema.Lookup(column...)
+		columnType := leaf.Node.Type()
 
 		header[i] = strings.Join(column, ".")
 		footer[i] = columnType.String()
