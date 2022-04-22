@@ -23,6 +23,8 @@ type Schema struct {
 	deconstruct deconstructFunc
 	reconstruct reconstructFunc
 	readRow     columnReadRowFunc
+	mapping     columnMapping
+	columns     [][]string
 }
 
 // SchemaOf constructs a parquet schema from a Go value.
@@ -95,13 +97,15 @@ func schemaOf(model reflect.Type) *Schema {
 // The function panics if Node contains more leaf columns than supported by the
 // package (see parquet.MaxColumnIndex).
 func NewSchema(name string, root Node) *Schema {
-	_ = numLeafColumnsOf(root)
+	mapping, columns := columnMappingOf(root)
 	return &Schema{
 		name:        name,
 		root:        root,
 		deconstruct: makeDeconstructFunc(root),
 		reconstruct: makeReconstructFunc(root),
 		readRow:     makeColumnReadRowFunc(root),
+		mapping:     mapping,
+		columns:     columns,
 	}
 }
 
@@ -231,6 +235,26 @@ func (s *Schema) Reconstruct(value interface{}, row Row) error {
 		}
 	}
 	return err
+}
+
+// Lookup returns the column index and node of the column at the given path.
+//
+// The path is the sequence of column names identifying a leaf column, starting
+// from the root column of the schema.
+//
+// If the path was not found in the mapping, or if it did not represent a
+// leaf column of the parquet schema, the method returns a negative index.
+func (s *Schema) Lookup(path ...string) (columnIndex int, columnNode Node) {
+	i, n := s.mapping.lookup(path)
+	return int(i), n
+}
+
+// Columns returns the list of column paths available in the schema.
+//
+// The method always returns the same slice value across calls to ColumnPaths,
+// applications should treat it as immutable.
+func (s *Schema) Columns() [][]string {
+	return s.columns
 }
 
 func (s *Schema) forEachNode(do func(name string, node Node)) {
