@@ -96,8 +96,6 @@ func (c *multiRowGroup) NumRows() (numRows int64) {
 	return numRows
 }
 
-func (c *multiRowGroup) NumColumns() int { return len(c.columns) }
-
 func (c *multiRowGroup) ColumnChunks() []ColumnChunk { return c.columns }
 
 func (c *multiRowGroup) SortingColumns() []SortingColumn { return nil }
