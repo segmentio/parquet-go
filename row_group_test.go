@@ -50,7 +50,7 @@ func newPeopleFile(people []Person) parquet.RowGroup {
 	if err != nil {
 		panic(err)
 	}
-	return f.RowGroup(0)
+	return f.RowGroups()[0]
 }
 
 func TestSeekToRow(t *testing.T) {
@@ -124,7 +124,7 @@ func fileRowGroup(rowGroup parquet.RowGroup) parquet.RowGroup {
 	if err != nil {
 		panic(err)
 	}
-	return f.RowGroup(0)
+	return f.RowGroups()[0]
 }
 
 func TestMergeRowGroups(t *testing.T) {

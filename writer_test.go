@@ -506,9 +506,10 @@ func TestWriterGenerateBloomFilters(t *testing.T) {
 			t.Error(err)
 			return false
 		}
-		rowGroup := f.RowGroup(0)
-		firstName := rowGroup.Column(0)
-		lastName := rowGroup.Column(1)
+		rowGroup := f.RowGroups()[0]
+		columns := rowGroup.ColumnChunks()
+		firstName := columns[0]
+		lastName := columns[1]
 
 		if firstName.BloomFilter() != nil {
 			t.Errorf(`"first_name" column has a bloom filter even though none were configured`)
@@ -568,7 +569,7 @@ func TestBloomFilterForDict(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ok, err := f.RowGroup(0).Column(0).BloomFilter().Check(parquet.ValueOf("test"))
+	ok, err := f.RowGroups()[0].ColumnChunks()[0].BloomFilter().Check(parquet.ValueOf("test"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -601,7 +602,7 @@ func TestWriterRepeatedUUIDDict(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rows := f.RowGroup(0).Rows()
+	rows := f.RowGroups()[0].Rows()
 	row, err := rows.ReadRow(nil)
 	if err != nil {
 		t.Fatalf("reading row from parquet file: %v", err)

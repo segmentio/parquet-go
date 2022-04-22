@@ -131,8 +131,8 @@ func testColumnPageIndexWithBuffer(t *testing.T, rows rows) bool {
 }
 
 func checkRowGroupColumnIndex(rowGroup parquet.RowGroup) error {
-	for i, n := 0, rowGroup.NumColumns(); i < n; i++ {
-		if err := checkColumnChunkColumnIndex(rowGroup.Column(i)); err != nil {
+	for i, column := range rowGroup.ColumnChunks() {
+		if err := checkColumnChunkColumnIndex(column); err != nil {
 			return fmt.Errorf("column chunk @i=%d: %w", i, err)
 		}
 	}
@@ -215,8 +215,8 @@ func checkColumnChunkColumnIndex(columnChunk parquet.ColumnChunk) error {
 }
 
 func checkRowGroupOffsetIndex(rowGroup parquet.RowGroup) error {
-	for i, n := 0, rowGroup.NumColumns(); i < n; i++ {
-		if err := checkColumnChunkOffsetIndex(rowGroup.Column(i)); err != nil {
+	for i, column := range rowGroup.ColumnChunks() {
+		if err := checkColumnChunkOffsetIndex(column); err != nil {
 			return fmt.Errorf("column chunk @i=%d: %w", i, err)
 		}
 	}
@@ -265,12 +265,12 @@ func testColumnPageIndexWithFile(t *testing.T, rows rows) bool {
 			t.Error(err)
 			return false
 		}
-		for i, n := 0, f.NumRowGroups(); i < n; i++ {
-			if err := checkRowGroupColumnIndex(f.RowGroup(i)); err != nil {
+		for i, rowGroup := range f.RowGroups() {
+			if err := checkRowGroupColumnIndex(rowGroup); err != nil {
 				t.Errorf("checking column index of row group @i=%d: %v", i, err)
 				return false
 			}
-			if err := checkRowGroupOffsetIndex(f.RowGroup(i)); err != nil {
+			if err := checkRowGroupOffsetIndex(rowGroup); err != nil {
 				t.Errorf("checking offset index of row group @i=%d: %v", i, err)
 				return false
 			}

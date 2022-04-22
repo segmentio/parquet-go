@@ -275,7 +275,7 @@ func testBuffer(t *testing.T, node parquet.Node, reader parquet.ColumnReader, bu
 	sortFunc(typ, batch)
 	sort.Sort(buffer)
 
-	page := buffer.ColumnBuffer(0).Page()
+	page := buffer.ColumnBuffers()[0].Page()
 	numValues := page.NumValues()
 	if numValues != int64(len(batch)) {
 		t.Fatalf("number of values mistmatch: want=%d got=%d", len(batch), numValues)
@@ -387,10 +387,11 @@ func TestBufferGenerateBloomFilters(t *testing.T) {
 			t.Error(err)
 			return false
 		}
-		rowGroup := f.RowGroup(0)
-		x := rowGroup.Column(0)
-		y := rowGroup.Column(1)
-		z := rowGroup.Column(2)
+		rowGroup := f.RowGroups()[0]
+		columns := rowGroup.ColumnChunks()
+		x := columns[0]
+		y := columns[1]
+		z := columns[2]
 
 		for i, col := range []parquet.ColumnChunk{x, y, z} {
 			if col.BloomFilter() == nil {

@@ -14,6 +14,7 @@ type Buffer struct {
 	schema  *Schema
 	rowbuf  []Value
 	colbuf  [][]Value
+	chunks  []ColumnChunk
 	columns []ColumnBuffer
 	sorted  []ColumnBuffer
 }
@@ -94,6 +95,11 @@ func (buf *Buffer) configure(schema *Schema) {
 	buf.schema = schema
 	buf.rowbuf = make([]Value, 0, 10)
 	buf.colbuf = make([][]Value, len(buf.columns))
+	buf.chunks = make([]ColumnChunk, len(buf.columns))
+
+	for i, column := range buf.columns {
+		buf.chunks[i] = column
+	}
 }
 
 // Size returns the estimated size of the buffer in memory (in bytes).
@@ -108,25 +114,19 @@ func (buf *Buffer) Size() int64 {
 // NumRows returns the number of rows written to the buffer.
 func (buf *Buffer) NumRows() int64 { return int64(buf.Len()) }
 
-// NumColumns returns the number of columns in the buffer.
-//
-// The count will be zero until a schema is configured on buf.
-func (buf *Buffer) NumColumns() int { return len(buf.columns) }
+// ColumnChunks returns the buffer columns.
+func (buf *Buffer) ColumnChunks() []ColumnChunk { return buf.chunks }
 
-// Column returns the buffer column at index i.
+// ColumnBuffer returns the buffer columns.
 //
-// The method panics if i is negative or beyond the last column index in buf.
-func (buf *Buffer) Column(i int) ColumnChunk { return buf.columns[i] }
-
-// ColumnBuffer returns the buffer column at index i.
-//
-// This method is similar to Column, but returns a ColumnBuffer type instead of
-// a Column type (the latter being read-only); calling ColumnBuffer or Column
-// with the same index returns the same underlying object, but with different
-// types, which removes the need for making a type assertion if the program
-// needed to write directly to the column buffers. The presence of the Column
-// method is still required to satisfy the RowGroup interface.
-func (buf *Buffer) ColumnBuffer(i int) ColumnBuffer { return buf.columns[i] }
+// This method is similar to ColumnChunks, but returns a list of ColumnBuffer
+// instead of a ColumnChunk values (the latter being read-only); calling
+// ColumnBuffers or ColumnChunks with the same index returns the same underlying
+// objects, but with different types, which removes the need for making a type
+// assertion if the program needed to write directly to the column buffers.
+// The presence of the ColumnChunks method is still required to satisfy the
+// RowGroup interface.
+func (buf *Buffer) ColumnBuffers() []ColumnBuffer { return buf.columns }
 
 // Schema returns the schema of the buffer.
 //

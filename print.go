@@ -221,7 +221,7 @@ func PrintRowGroup(w io.Writer, rowGroup RowGroup) error {
 		}
 	}
 
-	var row = make(Row, 0, rowGroup.NumColumns())
+	var row = make(Row, 0, len(columns))
 	var err error
 
 	cells := make([]string, 0, len(columns))
