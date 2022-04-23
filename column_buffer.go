@@ -482,7 +482,6 @@ func (col *repeatedColumnBuffer) Page() BufferedPage {
 		}
 
 		col.swapReorderingBuffer(column)
-		//debug.PrintStack()
 	}
 
 	return newRepeatedPage(
