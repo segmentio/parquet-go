@@ -18,6 +18,8 @@ type ColumnBuffer interface {
 	// Exposes a read-only view of the column buffer.
 	ColumnChunk
 
+	// The column implements ValueReaderAt as a mechanism to read values at
+	// specific locations within the buffer.
 	ValueReaderAt
 
 	// The column implements ValueWriter as a mechanism to optimize the copy
