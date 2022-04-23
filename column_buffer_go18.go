@@ -113,16 +113,3 @@ func (col *columnBuffer[T]) ReadValuesAt(values []Value, offset int64) (n int, e
 		return n, err
 	}
 }
-
-func (col *columnBuffer[T]) ReadRowAt(row Row, index int64) (Row, error) {
-	switch {
-	case index < 0:
-		return row, errRowIndexOutOfBounds(index, int64(len(col.values)))
-	case index >= int64(len(col.values)):
-		return row, io.EOF
-	default:
-		v := col.class.makeValue(col.values[index])
-		v.columnIndex = col.columnIndex
-		return append(row, v), nil
-	}
-}

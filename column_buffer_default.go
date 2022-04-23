@@ -95,19 +95,6 @@ func (col *booleanColumnBuffer) WriteValues(values []Value) (int, error) {
 	return len(values), nil
 }
 
-func (col *booleanColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {
-	switch {
-	case index < 0:
-		return row, errRowIndexOutOfBounds(index, int64(len(col.values)))
-	case index >= int64(len(col.values)):
-		return row, io.EOF
-	default:
-		v := makeValueBoolean(col.values[index])
-		v.columnIndex = col.columnIndex
-		return append(row, v), nil
-	}
-}
-
 type int32ColumnBuffer struct {
 	int32Page
 	typ Type
@@ -177,19 +164,6 @@ func (col *int32ColumnBuffer) WriteValues(values []Value) (int, error) {
 		col.values = append(col.values, v.Int32())
 	}
 	return len(values), nil
-}
-
-func (col *int32ColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {
-	switch {
-	case index < 0:
-		return row, errRowIndexOutOfBounds(index, int64(len(col.values)))
-	case index >= int64(len(col.values)):
-		return row, io.EOF
-	default:
-		v := makeValueInt32(col.values[index])
-		v.columnIndex = col.columnIndex
-		return append(row, v), nil
-	}
 }
 
 type int64ColumnBuffer struct {
@@ -263,19 +237,6 @@ func (col *int64ColumnBuffer) WriteValues(values []Value) (int, error) {
 	return len(values), nil
 }
 
-func (col *int64ColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {
-	switch {
-	case index < 0:
-		return row, errRowIndexOutOfBounds(index, int64(len(col.values)))
-	case index >= int64(len(col.values)):
-		return row, io.EOF
-	default:
-		v := makeValueInt64(col.values[index])
-		v.columnIndex = col.columnIndex
-		return append(row, v), nil
-	}
-}
-
 type int96ColumnBuffer struct {
 	int96Page
 	typ Type
@@ -345,19 +306,6 @@ func (col *int96ColumnBuffer) WriteValues(values []Value) (int, error) {
 		col.values = append(col.values, v.Int96())
 	}
 	return len(values), nil
-}
-
-func (col *int96ColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {
-	switch {
-	case index < 0:
-		return row, errRowIndexOutOfBounds(index, int64(len(col.values)))
-	case index >= int64(len(col.values)):
-		return row, io.EOF
-	default:
-		v := makeValueInt96(col.values[index])
-		v.columnIndex = col.columnIndex
-		return append(row, v), nil
-	}
 }
 
 type floatColumnBuffer struct {
@@ -431,19 +379,6 @@ func (col *floatColumnBuffer) WriteValues(values []Value) (int, error) {
 	return len(values), nil
 }
 
-func (col *floatColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {
-	switch {
-	case index < 0:
-		return row, errRowIndexOutOfBounds(index, int64(len(col.values)))
-	case index >= int64(len(col.values)):
-		return row, io.EOF
-	default:
-		v := makeValueFloat(col.values[index])
-		v.columnIndex = col.columnIndex
-		return append(row, v), nil
-	}
-}
-
 type doubleColumnBuffer struct {
 	doublePage
 	typ Type
@@ -513,19 +448,6 @@ func (col *doubleColumnBuffer) WriteValues(values []Value) (int, error) {
 		col.values = append(col.values, v.Double())
 	}
 	return len(values), nil
-}
-
-func (col *doubleColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {
-	switch {
-	case index < 0:
-		return row, errRowIndexOutOfBounds(index, int64(len(col.values)))
-	case index >= int64(len(col.values)):
-		return row, io.EOF
-	default:
-		v := makeValueDouble(col.values[index])
-		v.columnIndex = col.columnIndex
-		return append(row, v), nil
-	}
 }
 
 type uint32ColumnBuffer struct{ *int32ColumnBuffer }

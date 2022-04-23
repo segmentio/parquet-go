@@ -52,11 +52,6 @@ type RowReader interface {
 	ReadRow(Row) (Row, error)
 }
 
-// RowReaderAt reads parquet rows at specific indexes.
-type RowReaderAt interface {
-	ReadRowAt(Row, int64) (Row, error)
-}
-
 // RowReaderFrom reads parquet rows from reader.
 type RowReaderFrom interface {
 	ReadRowsFrom(RowReader) (int64, error)
@@ -79,11 +74,6 @@ type RowReadSeeker interface {
 // RowWriter writes parquet rows to an underlying medium.
 type RowWriter interface {
 	WriteRow(Row) error
-}
-
-// RowWriterAt writes parquet rows at specific indexes.
-type RowWriterAt interface {
-	WriteRowAt(Row, int64) error
 }
 
 // RowWriterTo writes parquet rows to a writer.

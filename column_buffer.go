@@ -18,9 +18,6 @@ type ColumnBuffer interface {
 	// Exposes a read-only view of the column buffer.
 	ColumnChunk
 
-	// Allows reading rows back from the column by calling ReadRowAt.
-	RowReaderAt
-
 	ValueReaderAt
 
 	// The column implements ValueWriter as a mechanism to optimize the copy
@@ -345,33 +342,6 @@ func (col *optionalColumnBuffer) ReadValuesAt(values []Value, offset int64) (int
 	return int(length), nil
 }
 
-func (col *optionalColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {
-	if index < 0 {
-		return row, errRowIndexOutOfBounds(index, int64(len(col.definitionLevels)))
-	}
-	if index >= int64(len(col.definitionLevels)) {
-		return row, io.EOF
-	}
-
-	if definitionLevel := col.definitionLevels[index]; definitionLevel != col.maxDefinitionLevel {
-		row = append(row, Value{definitionLevel: definitionLevel})
-	} else {
-		var err error
-		var n = len(row)
-
-		if row, err = col.base.ReadRowAt(row, int64(col.rows[index])); err != nil {
-			return row, err
-		}
-
-		for n < len(row) {
-			row[n].definitionLevel = definitionLevel
-			n++
-		}
-	}
-
-	return row, nil
-}
-
 func (col *optionalColumnBuffer) Values() ValueReader {
 	return &optionalPageReader{page: col.Page().(*optionalPage)}
 }
@@ -491,12 +461,12 @@ func (col *repeatedColumnBuffer) Page() BufferedPage {
 			if numValues > 0 {
 				n, err := col.base.ReadValuesAt(buffer[:numValues], int64(row.baseOffset))
 				if err != nil && int64(n) < numValues {
-					fmt.Printf("ReadRowAt ERROR: %v\n", err)
+					fmt.Printf("ReadValuesAt ERROR: %v\n", err)
 					return newErrorPage(col.Column(), "reordering rows of repeated column: %w", err)
 				}
 			}
 			if _, err := column.base.WriteValues(buffer[:numValues]); err != nil {
-				fmt.Println("WriteRow ERROR", err)
+				fmt.Println("WriteValues ERROR", err)
 				return newErrorPage(col.Column(), "reordering rows of repeated column: %w", err)
 			}
 
@@ -648,48 +618,8 @@ func (col *repeatedColumnBuffer) writeRow(row []Value) error {
 }
 
 func (col *repeatedColumnBuffer) ReadValuesAt(values []Value, offset int64) (int, error) {
+	// TODO:
 	panic("NOT IMPLEMENTED")
-}
-
-func (col *repeatedColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {
-	if index < 0 {
-		return row, errRowIndexOutOfBounds(index, int64(len(col.rows)))
-	}
-	if index >= int64(len(col.rows)) {
-		return row, io.EOF
-	}
-
-	reset := len(row)
-	region := col.rows[index]
-	maxDefinitionLevel := col.maxDefinitionLevel
-	repetitionLevels := col.repetitionLevels[region.offset : region.offset+region.length]
-	definitionLevels := col.definitionLevels[region.offset : region.offset+region.length]
-	baseIndex := int64(0)
-
-	for i := range definitionLevels {
-		if definitionLevels[i] != maxDefinitionLevel {
-			row = append(row, Value{
-				repetitionLevel: repetitionLevels[i],
-				definitionLevel: definitionLevels[i],
-			})
-		} else {
-			var err error
-			var n = int64(len(row))
-
-			if row, err = col.base.ReadRowAt(row, int64(region.offset)+baseIndex); err != nil {
-				return row[:reset], err
-			}
-
-			baseIndex += n
-			for n < int64(len(row)) {
-				row[n].repetitionLevel = repetitionLevels[i]
-				row[n].definitionLevel = definitionLevels[i]
-				n++
-			}
-		}
-	}
-
-	return row, nil
 }
 
 func (col *repeatedColumnBuffer) Values() ValueReader {
@@ -841,19 +771,6 @@ func (col *byteArrayColumnBuffer) ReadValuesAt(values []Value, offset int64) (n 
 	}
 }
 
-func (col *byteArrayColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {
-	switch {
-	case index < 0:
-		return row, errRowIndexOutOfBounds(index, int64(col.values.Len()))
-	case index >= int64(col.values.Len()):
-		return row, io.EOF
-	default:
-		v := makeValueBytes(ByteArray, col.values.Index(int(index)))
-		v.columnIndex = col.columnIndex
-		return append(row, v), nil
-	}
-}
-
 type fixedLenByteArrayColumnBuffer struct {
 	fixedLenByteArrayPage
 	typ Type
@@ -969,21 +886,6 @@ func (col *fixedLenByteArrayColumnBuffer) ReadValuesAt(values []Value, offset in
 			err = io.EOF
 		}
 		return n, err
-	}
-}
-
-func (col *fixedLenByteArrayColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {
-	i := (index + 0) * int64(col.size)
-	j := (index + 1) * int64(col.size)
-	switch {
-	case i < 0:
-		return row, errRowIndexOutOfBounds(index, int64(col.Len()))
-	case j > int64(len(col.data)):
-		return row, io.EOF
-	default:
-		v := makeValueBytes(FixedLenByteArray, col.data[i:j])
-		v.columnIndex = col.columnIndex
-		return append(row, v), nil
 	}
 }
 
