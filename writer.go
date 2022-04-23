@@ -165,7 +165,7 @@ func (w *Writer) WriteRowGroup(rowGroup RowGroup) (int64, error) {
 	if err := w.writer.flush(); err != nil {
 		return 0, err
 	}
-	w.writer.configureBloomFilters(rowGroup)
+	w.writer.configureBloomFilters(rowGroup.ColumnChunks())
 	n, err := CopyRows(w.writer, rowGroup.Rows())
 	if err != nil {
 		return n, err
@@ -430,10 +430,10 @@ func (w *writer) writeFileHeader() error {
 	return nil
 }
 
-func (w *writer) configureBloomFilters(rowGroup RowGroup) {
+func (w *writer) configureBloomFilters(columnChunks []ColumnChunk) {
 	for i, c := range w.columns {
 		if c.columnFilter != nil {
-			c.page.filter = c.newBloomFilterEncoder(rowGroup.Column(i).NumValues())
+			c.page.filter = c.newBloomFilterEncoder(columnChunks[i].NumValues())
 		}
 	}
 }

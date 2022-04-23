@@ -201,15 +201,14 @@ func PrintRowGroup(w io.Writer, rowGroup RowGroup) error {
 	pw := &printWriter{writer: w}
 	tw := tablewriter.NewWriter(pw)
 
-	mapping := ColumnMappingOf(schema)
-	columns := mapping.Columns()
+	columns := schema.Columns()
 	header := make([]string, len(columns))
 	footer := make([]string, len(columns))
 	alignment := make([]int, len(columns))
 
 	for i, column := range columns {
-		_, node := mapping.Lookup(column...)
-		columnType := node.Type()
+		leaf, _ := schema.Lookup(column...)
+		columnType := leaf.Node.Type()
 
 		header[i] = strings.Join(column, ".")
 		footer[i] = columnType.String()
@@ -222,7 +221,7 @@ func PrintRowGroup(w io.Writer, rowGroup RowGroup) error {
 		}
 	}
 
-	var row = make(Row, 0, rowGroup.NumColumns())
+	var row = make(Row, 0, len(columns))
 	var err error
 
 	cells := make([]string, 0, len(columns))

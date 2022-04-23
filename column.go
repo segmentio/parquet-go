@@ -99,7 +99,7 @@ func (c *Column) Pages() Pages {
 		pages: make([]filePages, len(c.file.rowGroups)),
 	}
 	for i := range r.pages {
-		c.file.rowGroups[i].columns[c.index].setPagesOn(&r.pages[i])
+		c.file.rowGroups[i].(*fileRowGroup).columns[c.index].(*fileColumnChunk).setPagesOn(&r.pages[i])
 	}
 	return r
 }
