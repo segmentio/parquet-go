@@ -204,6 +204,12 @@ func forEachPageSlice(page BufferedPage, wantSize int64, do func(BufferedPage) e
 	return nil
 }
 
+// errorPage is an implementation of the Page interface which always errors when
+// attempting to read its values.
+//
+// The error page declares that it contains one value (even if it does not)
+// as a way to ensure that it is not ignored due to being empty when written
+// to a file.
 type errorPage struct {
 	err         error
 	columnIndex int
@@ -218,13 +224,13 @@ func newErrorPage(columnIndex int, msg string, args ...interface{}) *errorPage {
 
 func (page *errorPage) Column() int                       { return page.columnIndex }
 func (page *errorPage) Dictionary() Dictionary            { return nil }
-func (page *errorPage) NumRows() int64                    { return 0 }
-func (page *errorPage) NumValues() int64                  { return 0 }
+func (page *errorPage) NumRows() int64                    { return 1 }
+func (page *errorPage) NumValues() int64                  { return 1 }
 func (page *errorPage) NumNulls() int64                   { return 0 }
 func (page *errorPage) Bounds() (min, max Value, ok bool) { return }
 func (page *errorPage) Clone() BufferedPage               { return page }
 func (page *errorPage) Slice(i, j int64) BufferedPage     { return page }
-func (page *errorPage) Size() int64                       { return 0 }
+func (page *errorPage) Size() int64                       { return 1 }
 func (page *errorPage) RepetitionLevels() []int8          { return nil }
 func (page *errorPage) DefinitionLevels() []int8          { return nil }
 func (page *errorPage) WriteTo(encoding.Encoder) error    { return page.err }

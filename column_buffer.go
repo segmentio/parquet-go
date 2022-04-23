@@ -463,12 +463,10 @@ func (col *repeatedColumnBuffer) Page() BufferedPage {
 			if numValues > 0 {
 				n, err := col.base.ReadValuesAt(buffer[:numValues], int64(row.baseOffset))
 				if err != nil && int64(n) < numValues {
-					fmt.Printf("ReadValuesAt ERROR: %v\n", err)
 					return newErrorPage(col.Column(), "reordering rows of repeated column: %w", err)
 				}
 			}
 			if _, err := column.base.WriteValues(buffer[:numValues]); err != nil {
-				fmt.Println("WriteValues ERROR", err)
 				return newErrorPage(col.Column(), "reordering rows of repeated column: %w", err)
 			}
 
