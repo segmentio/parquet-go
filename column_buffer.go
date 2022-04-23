@@ -403,6 +403,8 @@ type repeatedColumnBuffer struct {
 type region struct {
 	offset uint32
 	length uint32
+	// offset within the base column buffer
+	baseOffset uint32
 }
 
 func sizeOfRegion(regions []region) int64 { return 8 * int64(len(regions)) }
@@ -480,32 +482,33 @@ func (col *repeatedColumnBuffer) Page() BufferedPage {
 		column.Reset()
 		defer clearValues(buffer)
 
-		numNulls1 := int64(0)
+		baseOffset := int64(0)
 
 		for _, row := range col.rows {
-			numNulls2 := int64(countLevelsNotEqual(col.definitionLevels[row.offset:row.offset+row.length], col.maxDefinitionLevel))
-			numValues := int64(row.length) - numNulls2
+			numNulls := int64(countLevelsNotEqual(col.definitionLevels[row.offset:row.offset+row.length], col.maxDefinitionLevel))
+			numValues := int64(row.length) - numNulls
 
-			n, err := col.base.ReadValuesAt(buffer[:numValues], int64(row.offset)-numNulls1)
-			if err != nil && int64(n) < numValues {
-				fmt.Printf("ReadRowAt ERROR: %v\n", err)
-				return newErrorPage(col.Column(), "reordering rows of repeated column: %w", err)
+			if numValues > 0 {
+				n, err := col.base.ReadValuesAt(buffer[:numValues], int64(row.baseOffset))
+				if err != nil && int64(n) < numValues {
+					fmt.Printf("ReadRowAt ERROR: %v\n", err)
+					return newErrorPage(col.Column(), "reordering rows of repeated column: %w", err)
+				}
 			}
-			if _, err = column.base.WriteValues(buffer[:numValues]); err != nil {
+			if _, err := column.base.WriteValues(buffer[:numValues]); err != nil {
 				fmt.Println("WriteRow ERROR", err)
 				return newErrorPage(col.Column(), "reordering rows of repeated column: %w", err)
 			}
 
-			numNulls1 += numNulls2
-		}
-
-		for _, row := range col.rows {
 			column.rows = append(column.rows, region{
-				offset: uint32(len(column.repetitionLevels)),
-				length: row.length,
+				offset:     uint32(len(column.repetitionLevels)),
+				length:     row.length,
+				baseOffset: uint32(baseOffset),
 			})
+
 			column.repetitionLevels = append(column.repetitionLevels, col.repetitionLevels[row.offset:row.offset+row.length]...)
 			column.definitionLevels = append(column.definitionLevels, col.definitionLevels[row.offset:row.offset+row.length]...)
+			baseOffset += numValues
 		}
 
 		col.swapReorderingBuffer(column)
@@ -623,6 +626,7 @@ func (col *repeatedColumnBuffer) writeRow(row []Value) error {
 		}
 	}
 
+	baseOffset := col.base.NumValues()
 	if len(col.buffer) > 0 {
 		if _, err := col.base.WriteValues(col.buffer); err != nil {
 			return err
@@ -630,8 +634,9 @@ func (col *repeatedColumnBuffer) writeRow(row []Value) error {
 	}
 
 	col.rows = append(col.rows, region{
-		offset: uint32(len(col.repetitionLevels)),
-		length: uint32(len(row)),
+		offset:     uint32(len(col.repetitionLevels)),
+		length:     uint32(len(row)),
+		baseOffset: uint32(baseOffset),
 	})
 
 	for _, v := range row {
