@@ -237,7 +237,6 @@ func PrintRowGroup(w io.Writer, rowGroup RowGroup) error {
 		}
 
 		cells = cells[:0]
-		fmt.Printf("%#v\n", row)
 
 		for i := 0; i < len(row); {
 			j := i + 1

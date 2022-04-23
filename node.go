@@ -49,23 +49,18 @@ type Node interface {
 	// This method returns an empty mapping when called on leaf nodes.
 	Fields() []Field
 
-	// Returns the list of encodings used by the node.
+	// Returns the encoding used by the node.
 	//
-	// The method may return an empty slice to indicate that only the plain
-	// encoding is used.
-	//
-	// As an optimization, the returned slice may be the same across calls to
-	// this method. Applications should treat the return value as immutable.
-	Encoding() []encoding.Encoding
+	// The method may return nil to indicate that no specific encoding was
+	// configured on the node, in which case a default encoding might be used.
+	Encoding() encoding.Encoding
 
-	// Returns the list of compression codecs used by the node.
+	// Returns compression codec used by the node.
 	//
-	// The method may return an empty slice to indicate that no compression was
-	// configured on the node.
-	//
-	// As an optimization, the returned slice may be the same across calls to
-	// this method. Applications should treat the return value as immutable.
-	Compression() []compress.Codec
+	// The method may return nil to indicate that no specific compression codec
+	// was configured on the node, in which case a default compression might be
+	// used.
+	Compression() compress.Codec
 
 	// Returns the Go type that best represents the parquet node.
 	//
@@ -97,130 +92,89 @@ type Field interface {
 	Value(base reflect.Value) reflect.Value
 }
 
-// WrappedNode is an extension of the Node interface implemented by types which
-// wrap another underlying node.
-type WrappedNode interface {
-	Node
-	// Unwrap returns the underlying base node.
-	//
-	// Note that Unwrap is not intended to recursively unwrap multiple layers of
-	// wrappers, it returns the immediate next layer.
-	Unwrap() Node
-}
-
-type wrappedNode struct{ Node }
-
-func (w wrappedNode) Unwrap() Node { return w.Node }
-
-func wrap(node Node) wrappedNode { return wrappedNode{node} }
-
-func unwrap(node Node) Node {
-	for {
-		if w, ok := node.(WrappedNode); ok {
-			node = w.Unwrap()
-		} else {
-			break
-		}
-	}
-	return node
-}
-
-// Encoded wraps the node passed as argument to add the given list of encodings.
+// Encoded wraps the node passed as argument to use the given encoding.
 //
-// The function panics if it is called on a non-leaf node, or if one of the
-// encodings is not able to encode the node type.
-func Encoded(node Node, encodings ...encoding.Encoding) Node {
-	if len(encodings) == 0 {
-		return node
-	}
+// The function panics if it is called on a non-leaf node, or if the
+// encoding does not support the node type.
+func Encoded(node Node, encoding encoding.Encoding) Node {
 	if !node.Leaf() {
-		panic("cannot add encodings to a non-leaf node")
+		panic("cannot add encoding to a non-leaf node")
 	}
-	kind := node.Type().Kind()
-	for _, e := range encodings {
-		if !e.CanEncode(format.Type(kind)) {
-			panic("cannot apply " + e.Encoding().String() + " to node of type " + kind.String())
+	if encoding != nil {
+		kind := node.Type().Kind()
+		if !encoding.CanEncode(format.Type(kind)) {
+			panic("cannot apply " + encoding.Encoding().String() + " to node of type " + kind.String())
 		}
 	}
-	encodings = append([]encoding.Encoding{}, encodings...)
-	encodings = append(encodings, node.Encoding()...)
-	sortEncodings(encodings)
-	encodings = dedupeSortedEncodings(encodings)
 	return &encodedNode{
-		wrappedNode: wrap(node),
-		encodings:   encodings[:len(encodings):len(encodings)],
+		Node:     node,
+		encoding: encoding,
 	}
 }
 
 type encodedNode struct {
-	wrappedNode
-	encodings []encoding.Encoding
+	Node
+	encoding encoding.Encoding
 }
 
-func (n *encodedNode) Encoding() []encoding.Encoding {
-	return n.encodings
+func (n *encodedNode) Encoding() encoding.Encoding {
+	return n.encoding
 }
 
-// Compressed wraps the node passed as argument to add the given list of
-// compression codecs.
+// Compressed wraps the node passed as argument to use the given compression
+// codec.
+//
+// If the codec is nil, the node's compression is left unchanged.
 //
 // The function panics if it is called on a non-leaf node.
-func Compressed(node Node, codecs ...compress.Codec) Node {
-	if len(codecs) == 0 {
-		return node
-	}
+func Compressed(node Node, codec compress.Codec) Node {
 	if !node.Leaf() {
-		panic("cannot add compression codecs to a non-leaf node")
+		panic("cannot add compression codec to a non-leaf node")
 	}
-	codecs = append([]compress.Codec{}, codecs...)
-	codecs = append(codecs, node.Compression()...)
-	codecs = codecs[:len(codecs):len(codecs)]
-	sortCodecs(codecs)
-	codecs = dedupeSortedCodecs(codecs)
 	return &compressedNode{
-		wrappedNode: wrap(node),
-		codecs:      codecs[:len(codecs):len(codecs)],
+		Node:  node,
+		codec: codec,
 	}
 }
 
 type compressedNode struct {
-	wrappedNode
-	codecs []compress.Codec
+	Node
+	codec compress.Codec
 }
 
-func (n *compressedNode) Compression() []compress.Codec {
-	return n.codecs
+func (n *compressedNode) Compression() compress.Codec {
+	return n.codec
 }
 
 // Optional wraps the given node to make it optional.
-func Optional(node Node) Node { return &optionalNode{wrap(node)} }
+func Optional(node Node) Node { return &optionalNode{node} }
 
-type optionalNode struct{ wrappedNode }
+type optionalNode struct{ Node }
 
 func (opt *optionalNode) Optional() bool       { return true }
 func (opt *optionalNode) Repeated() bool       { return false }
 func (opt *optionalNode) Required() bool       { return false }
-func (opt *optionalNode) GoType() reflect.Type { return reflect.PtrTo(unwrap(opt).GoType()) }
+func (opt *optionalNode) GoType() reflect.Type { return reflect.PtrTo(opt.Node.GoType()) }
 
 // Repeated wraps the given node to make it repeated.
-func Repeated(node Node) Node { return &repeatedNode{wrap(node)} }
+func Repeated(node Node) Node { return &repeatedNode{node} }
 
-type repeatedNode struct{ wrappedNode }
+type repeatedNode struct{ Node }
 
 func (rep *repeatedNode) Optional() bool       { return false }
 func (rep *repeatedNode) Repeated() bool       { return true }
 func (rep *repeatedNode) Required() bool       { return false }
-func (rep *repeatedNode) GoType() reflect.Type { return reflect.SliceOf(unwrap(rep).GoType()) }
+func (rep *repeatedNode) GoType() reflect.Type { return reflect.SliceOf(rep.Node.GoType()) }
 
 // Required wraps the given node to make it required.
-func Required(node Node) Node { return &requiredNode{wrap(node)} }
+func Required(node Node) Node { return &requiredNode{node} }
 
-type requiredNode struct{ wrappedNode }
+type requiredNode struct{ Node }
 
 func (req *requiredNode) Optional() bool       { return false }
 func (req *requiredNode) Repeated() bool       { return false }
 func (req *requiredNode) Required() bool       { return true }
-func (req *requiredNode) GoType() reflect.Type { return unwrap(req).GoType() }
+func (req *requiredNode) GoType() reflect.Type { return req.Node.GoType() }
 
 type node struct{}
 
@@ -245,9 +199,9 @@ func (n *leafNode) Leaf() bool { return true }
 
 func (n *leafNode) Fields() []Field { return nil }
 
-func (n *leafNode) Encoding() []encoding.Encoding { return nil }
+func (n *leafNode) Encoding() encoding.Encoding { return nil }
 
-func (n *leafNode) Compression() []compress.Codec { return nil }
+func (n *leafNode) Compression() compress.Codec { return nil }
 
 func (n *leafNode) GoType() reflect.Type { return goTypeOfLeaf(n) }
 
@@ -299,8 +253,8 @@ func (g Group) Fields() []Field {
 	groupFields := make([]groupField, 0, len(g))
 	for name, node := range g {
 		groupFields = append(groupFields, groupField{
-			wrappedNode: wrap(node),
-			name:        name,
+			Node: node,
+			name: name,
 		})
 	}
 	sort.Slice(groupFields, func(i, j int) bool {
@@ -313,14 +267,14 @@ func (g Group) Fields() []Field {
 	return fields
 }
 
-func (g Group) Encoding() []encoding.Encoding { return nil }
+func (g Group) Encoding() encoding.Encoding { return nil }
 
-func (g Group) Compression() []compress.Codec { return nil }
+func (g Group) Compression() compress.Codec { return nil }
 
 func (g Group) GoType() reflect.Type { return goTypeOfGroup(g) }
 
 type groupField struct {
-	wrappedNode
+	Node
 	name string
 }
 
@@ -449,15 +403,8 @@ func mapKeyValueOf(node Node) Node {
 	panic("node with logical type MAP is not composed of a repeated .key_value group with key and value fields")
 }
 
-func encodingAndCompressionOf(node Node) (encoding.Encoding, compress.Codec) {
-	// TODO: we pick the first encoding and compression algorithm configured
-	// on the node. An amelioration we could bring to this model is to
-	// generate a matrix of encoding x codec and generate multiple
-	// representations of the pages, picking the one with the smallest space
-	// footprint; keep it simple for now.
-	encoding := encoding.Encoding(&Plain)
-	nodeEncoding := node.Encoding()
-	compression := compress.Codec(&Uncompressed)
+func encodingOf(node Node) encoding.Encoding {
+	encoding := node.Encoding()
 	// The parquet-format documentation states that the
 	// DELTA_LENGTH_BYTE_ARRAY is always preferred to PLAIN when
 	// encoding BYTE_ARRAY values. We apply it as a default if
@@ -465,21 +412,74 @@ func encodingAndCompressionOf(node Node) (encoding.Encoding, compress.Codec) {
 	// the opportunity to override this behavior if needed.
 	//
 	// https://github.com/apache/parquet-format/blob/master/Encodings.md#delta-length-byte-array-delta_length_byte_array--6
-	if node.Type().Kind() == ByteArray && len(nodeEncoding) == 0 {
+	if node.Type().Kind() == ByteArray && encoding == nil {
 		encoding = &DeltaLengthByteArray
 	}
+	if encoding == nil {
+		encoding = &Plain
+	}
+	return encoding
+}
 
-	for _, e := range nodeEncoding {
-		encoding = e
-		break
+func forEachNodeOf(name string, node Node, do func(string, Node)) {
+	do(name, node)
+
+	for _, f := range node.Fields() {
+		forEachNodeOf(f.Name(), f, do)
+	}
+}
+
+func childByName(node Node, name string) Node {
+	for _, f := range node.Fields() {
+		if f.Name() == name {
+			return f
+		}
+	}
+	return nil
+}
+
+func nodesAreEqual(node1, node2 Node) bool {
+	if node1.Leaf() {
+		return node2.Leaf() && leafNodesAreEqual(node1, node2)
+	} else {
+		return !node2.Leaf() && groupNodesAreEqual(node1, node2)
+	}
+}
+
+func typesAreEqual(node1, node2 Node) bool {
+	return node1.Type().Kind() == node2.Type().Kind()
+}
+
+func repetitionsAreEqual(node1, node2 Node) bool {
+	return node1.Optional() == node2.Optional() && node1.Repeated() == node2.Repeated()
+}
+
+func leafNodesAreEqual(node1, node2 Node) bool {
+	return typesAreEqual(node1, node2) && repetitionsAreEqual(node1, node2)
+}
+
+func groupNodesAreEqual(node1, node2 Node) bool {
+	fields1 := node1.Fields()
+	fields2 := node2.Fields()
+
+	if len(fields1) != len(fields2) {
+		return false
 	}
 
-	for _, c := range node.Compression() {
-		compression = c
-		break
+	for i := range fields1 {
+		f1 := fields1[i]
+		f2 := fields2[i]
+
+		if f1.Name() != f2.Name() {
+			return false
+		}
+
+		if !nodesAreEqual(f1, f2) {
+			return false
+		}
 	}
 
-	return encoding, compression
+	return true
 }
 
 func forEachNodeOf(name string, node Node, do func(string, Node)) {

@@ -270,11 +270,21 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 		dataPageType = format.DataPageV2
 	}
 
+	defaultCompression := config.Compression
+	if defaultCompression == nil {
+		defaultCompression = &Uncompressed
+	}
+
 	forEachLeafColumnOf(config.Schema, func(leaf leafColumn) {
-		encoding, compression := encodingAndCompressionOf(leaf.node)
+		encoding := encodingOf(leaf.node)
 		dictionary := Dictionary(nil)
 		columnType := leaf.node.Type()
 		columnIndex := int(leaf.columnIndex)
+		compression := leaf.node.Compression()
+
+		if compression == nil {
+			compression = defaultCompression
+		}
 
 		if isDictionaryEncoding(encoding) {
 			dictionary = columnType.NewDictionary(columnIndex, defaultDictBufferSize)
@@ -1186,7 +1196,7 @@ func (c *writerColumn) compressedPage(w io.Writer) (compress.Writer, error) {
 
 func (c *writerColumn) makePageStatistics(page Page) format.Statistics {
 	numNulls := page.NumNulls()
-	minValue, maxValue := page.Bounds()
+	minValue, maxValue, _ := page.Bounds()
 	minValueBytes := minValue.Bytes()
 	maxValueBytes := maxValue.Bytes()
 	return format.Statistics{
@@ -1205,7 +1215,7 @@ func (c *writerColumn) recordPageStats(headerSize int32, header *format.PageHead
 	if page != nil {
 		numNulls := page.NumNulls()
 		numValues := page.NumValues()
-		minValue, maxValue := page.Bounds()
+		minValue, maxValue, _ := page.Bounds()
 		c.columnIndex.IndexPage(numValues, numNulls, minValue, maxValue)
 		c.columnChunk.MetaData.NumValues += numValues
 

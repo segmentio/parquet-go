@@ -27,8 +27,8 @@ type Column struct {
 	chunks      []*format.ColumnChunk
 	columnIndex []*format.ColumnIndex
 	offsetIndex []*format.OffsetIndex
-	encoding    []encoding.Encoding
-	compression []compress.Codec
+	encoding    encoding.Encoding
+	compression compress.Codec
 
 	depth              int8
 	maxRepetitionLevel int8
@@ -63,10 +63,10 @@ func (c *Column) Fields() []Field {
 }
 
 // Encoding returns the encodings used by this column.
-func (c *Column) Encoding() []encoding.Encoding { return c.encoding }
+func (c *Column) Encoding() encoding.Encoding { return c.encoding }
 
 // Compression returns the compression codecs used by this column.
-func (c *Column) Compression() []compress.Codec { return c.compression }
+func (c *Column) Compression() compress.Codec { return c.compression }
 
 // Path of the column in the parquet schema.
 func (c *Column) Path() []string { return c.path }
@@ -303,21 +303,25 @@ func (cl *columnLoader) open(file *File, path []string) (*Column, error) {
 			}
 		}
 
-		c.encoding = make([]encoding.Encoding, 0, len(c.chunks))
-		for _, chunk := range c.chunks {
-			for _, encoding := range chunk.MetaData.Encoding {
-				c.encoding = append(c.encoding, LookupEncoding(encoding))
+		if len(c.chunks) > 0 {
+			// Pick the encoding and compression codec of the first chunk.
+			//
+			// Technically each column chunk may use a different compression
+			// codec, and each page of the columm chunk might have a different
+			// encoding. Exposing these details does not provide a lot of value
+			// to the end user.
+			//
+			// Programs that wish to determine the encoding and compression of
+			// each page of the column should iterate through the pages and read
+			// the page headers to determine which compression and encodings are
+			// applied.
+			for _, encoding := range c.chunks[0].MetaData.Encoding {
+				c.encoding = LookupEncoding(encoding)
+				break
 			}
+			c.compression = LookupCompressionCodec(c.chunks[0].MetaData.Codec)
 		}
-		sortEncodings(c.encoding)
-		c.encoding = dedupeSortedEncodings(c.encoding)
 
-		c.compression = make([]compress.Codec, len(c.chunks))
-		for i, chunk := range c.chunks {
-			c.compression[i] = LookupCompressionCodec(chunk.MetaData.Codec)
-		}
-		sortCodecs(c.compression)
-		c.compression = dedupeSortedCodecs(c.compression)
 		return c, nil
 	}
 

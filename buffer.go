@@ -63,7 +63,7 @@ func (buf *Buffer) configure(schema *Schema) {
 		columnType := leaf.node.Type()
 		bufferSize := buf.config.ColumnBufferSize
 		dictionary := (Dictionary)(nil)
-		encoding, _ := encodingAndCompressionOf(leaf.node)
+		encoding := encodingOf(leaf.node)
 
 		if isDictionaryEncoding(encoding) {
 			bufferSize /= 2

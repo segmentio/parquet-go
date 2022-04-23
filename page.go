@@ -35,7 +35,12 @@ type Page interface {
 	NumNulls() int64
 
 	// Returns the min and max values currently buffered in the writer.
-	Bounds() (min, max Value)
+	//
+	// The third value is a boolean indicating whether the page bounds were
+	// available. Page bounds may not be known if the page contained no values
+	// or only nulls, or if they were read from a parquet file which had neither
+	// page statistics nor a page index.
+	Bounds() (min, max Value, ok bool)
 
 	// Returns the size of the page in bytes (uncompressed).
 	Size() int64
@@ -211,20 +216,20 @@ func newErrorPage(columnIndex int, msg string, args ...interface{}) *errorPage {
 	}
 }
 
-func (page *errorPage) Column() int                    { return page.columnIndex }
-func (page *errorPage) Dictionary() Dictionary         { return nil }
-func (page *errorPage) NumRows() int64                 { return 0 }
-func (page *errorPage) NumValues() int64               { return 0 }
-func (page *errorPage) NumNulls() int64                { return 0 }
-func (page *errorPage) Bounds() (min, max Value)       { return }
-func (page *errorPage) Clone() BufferedPage            { return page }
-func (page *errorPage) Slice(i, j int64) BufferedPage  { return page }
-func (page *errorPage) Size() int64                    { return 0 }
-func (page *errorPage) RepetitionLevels() []int8       { return nil }
-func (page *errorPage) DefinitionLevels() []int8       { return nil }
-func (page *errorPage) WriteTo(encoding.Encoder) error { return page.err }
-func (page *errorPage) Values() ValueReader            { return &errorValueReader{err: page.err} }
-func (page *errorPage) Buffer() BufferedPage           { return page }
+func (page *errorPage) Column() int                       { return page.columnIndex }
+func (page *errorPage) Dictionary() Dictionary            { return nil }
+func (page *errorPage) NumRows() int64                    { return 0 }
+func (page *errorPage) NumValues() int64                  { return 0 }
+func (page *errorPage) NumNulls() int64                   { return 0 }
+func (page *errorPage) Bounds() (min, max Value, ok bool) { return }
+func (page *errorPage) Clone() BufferedPage               { return page }
+func (page *errorPage) Slice(i, j int64) BufferedPage     { return page }
+func (page *errorPage) Size() int64                       { return 0 }
+func (page *errorPage) RepetitionLevels() []int8          { return nil }
+func (page *errorPage) DefinitionLevels() []int8          { return nil }
+func (page *errorPage) WriteTo(encoding.Encoder) error    { return page.err }
+func (page *errorPage) Values() ValueReader               { return &errorValueReader{err: page.err} }
+func (page *errorPage) Buffer() BufferedPage              { return page }
 
 func errPageBoundsOutOfRange(i, j, n int64) error {
 	return fmt.Errorf("page bounds out of range [%d:%d]: with length %d", i, j, n)
@@ -292,7 +297,7 @@ func (page *optionalPage) NumNulls() int64 {
 	return int64(countLevelsNotEqual(page.definitionLevels, page.maxDefinitionLevel))
 }
 
-func (page *optionalPage) Bounds() (min, max Value) {
+func (page *optionalPage) Bounds() (min, max Value, ok bool) {
 	return page.base.Bounds()
 }
 
@@ -425,7 +430,7 @@ func (page *repeatedPage) NumNulls() int64 {
 	return int64(countLevelsNotEqual(page.definitionLevels, page.maxDefinitionLevel))
 }
 
-func (page *repeatedPage) Bounds() (min, max Value) {
+func (page *repeatedPage) Bounds() (min, max Value, ok bool) {
 	return page.base.Bounds()
 }
 
@@ -615,13 +620,13 @@ func (page *byteArrayPage) bounds() (min, max []byte) {
 	return min, max
 }
 
-func (page *byteArrayPage) Bounds() (min, max Value) {
-	if page.values.Len() > 0 {
+func (page *byteArrayPage) Bounds() (min, max Value, ok bool) {
+	if ok = page.values.Len() > 0; ok {
 		minBytes, maxBytes := page.bounds()
 		min = makeValueBytes(ByteArray, minBytes)
 		max = makeValueBytes(ByteArray, maxBytes)
 	}
-	return min, max
+	return min, max, ok
 }
 
 func (page *byteArrayPage) Clone() BufferedPage {
@@ -731,13 +736,13 @@ func (page *fixedLenByteArrayPage) bounds() (min, max []byte) {
 	return bits.MinMaxFixedLenByteArray(page.size, page.data)
 }
 
-func (page *fixedLenByteArrayPage) Bounds() (min, max Value) {
-	if len(page.data) > 0 {
+func (page *fixedLenByteArrayPage) Bounds() (min, max Value, ok bool) {
+	if ok = len(page.data) > 0; ok {
 		minBytes, maxBytes := page.bounds()
 		min = makeValueBytes(FixedLenByteArray, minBytes)
 		max = makeValueBytes(FixedLenByteArray, maxBytes)
 	}
-	return min, max
+	return min, max, ok
 }
 
 func (page *fixedLenByteArrayPage) Clone() BufferedPage {

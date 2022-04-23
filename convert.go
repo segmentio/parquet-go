@@ -323,14 +323,14 @@ func (missingBloomFilter) Check(Value) (bool, error)         { return false, nil
 
 type missingPage struct{ *missingColumnChunk }
 
-func (p missingPage) Column() int              { return int(p.column) }
-func (p missingPage) Dictionary() Dictionary   { return nil }
-func (p missingPage) NumRows() int64           { return p.numRows }
-func (p missingPage) NumValues() int64         { return p.numValues }
-func (p missingPage) NumNulls() int64          { return p.numNulls }
-func (p missingPage) Bounds() (min, max Value) { return }
-func (p missingPage) Size() int64              { return 0 }
-func (p missingPage) Values() ValueReader      { return &missingValues{page: p} }
+func (p missingPage) Column() int                       { return int(p.column) }
+func (p missingPage) Dictionary() Dictionary            { return nil }
+func (p missingPage) NumRows() int64                    { return p.numRows }
+func (p missingPage) NumValues() int64                  { return p.numValues }
+func (p missingPage) NumNulls() int64                   { return p.numNulls }
+func (p missingPage) Bounds() (min, max Value, ok bool) { return }
+func (p missingPage) Size() int64                       { return 0 }
+func (p missingPage) Values() ValueReader               { return &missingValues{page: p} }
 func (p missingPage) Buffer() BufferedPage {
 	return newErrorPage(p.Column(), "cannot buffer missing page")
 }
