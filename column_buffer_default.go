@@ -95,6 +95,27 @@ func (col *booleanColumnBuffer) WriteValues(values []Value) (int, error) {
 	return len(values), nil
 }
 
+func (col *booleanColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int, err error) {
+	i := int(offset)
+	switch {
+	case i < 0:
+		return 0, errRowIndexOutOfBounds(offset, int64(len(col.values)))
+	case i >= len(col.values):
+		return 0, io.EOF
+	default:
+		for n < len(values) && i < len(col.values) {
+			values[n] = makeValueBoolean(col.values[i])
+			values[n].columnIndex = col.columnIndex
+			n++
+			i++
+		}
+		if n < len(values) {
+			err = io.EOF
+		}
+		return n, err
+	}
+}
+
 type int32ColumnBuffer struct {
 	int32Page
 	typ Type
@@ -164,6 +185,27 @@ func (col *int32ColumnBuffer) WriteValues(values []Value) (int, error) {
 		col.values = append(col.values, v.Int32())
 	}
 	return len(values), nil
+}
+
+func (col *int32ColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int, err error) {
+	i := int(offset)
+	switch {
+	case i < 0:
+		return 0, errRowIndexOutOfBounds(offset, int64(len(col.values)))
+	case i >= len(col.values):
+		return 0, io.EOF
+	default:
+		for n < len(values) && i < len(col.values) {
+			values[n] = makeValueInt32(col.values[i])
+			values[n].columnIndex = col.columnIndex
+			n++
+			i++
+		}
+		if n < len(values) {
+			err = io.EOF
+		}
+		return n, err
+	}
 }
 
 type int64ColumnBuffer struct {
@@ -237,6 +279,27 @@ func (col *int64ColumnBuffer) WriteValues(values []Value) (int, error) {
 	return len(values), nil
 }
 
+func (col *int64ColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int, err error) {
+	i := int(offset)
+	switch {
+	case i < 0:
+		return 0, errRowIndexOutOfBounds(offset, int64(len(col.values)))
+	case i >= len(col.values):
+		return 0, io.EOF
+	default:
+		for n < len(values) && i < len(col.values) {
+			values[n] = makeValueInt64(col.values[i])
+			values[n].columnIndex = col.columnIndex
+			n++
+			i++
+		}
+		if n < len(values) {
+			err = io.EOF
+		}
+		return n, err
+	}
+}
+
 type int96ColumnBuffer struct {
 	int96Page
 	typ Type
@@ -306,6 +369,27 @@ func (col *int96ColumnBuffer) WriteValues(values []Value) (int, error) {
 		col.values = append(col.values, v.Int96())
 	}
 	return len(values), nil
+}
+
+func (col *int96ColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int, err error) {
+	i := int(offset)
+	switch {
+	case i < 0:
+		return 0, errRowIndexOutOfBounds(offset, int64(len(col.values)))
+	case i >= len(col.values):
+		return 0, io.EOF
+	default:
+		for n < len(values) && i < len(col.values) {
+			values[n] = makeValueInt96(col.values[i])
+			values[n].columnIndex = col.columnIndex
+			n++
+			i++
+		}
+		if n < len(values) {
+			err = io.EOF
+		}
+		return n, err
+	}
 }
 
 type floatColumnBuffer struct {
@@ -379,6 +463,27 @@ func (col *floatColumnBuffer) WriteValues(values []Value) (int, error) {
 	return len(values), nil
 }
 
+func (col *floatColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int, err error) {
+	i := int(offset)
+	switch {
+	case i < 0:
+		return 0, errRowIndexOutOfBounds(offset, int64(len(col.values)))
+	case i >= len(col.values):
+		return 0, io.EOF
+	default:
+		for n < len(values) && i < len(col.values) {
+			values[n] = makeValueFloat(col.values[i])
+			values[n].columnIndex = col.columnIndex
+			n++
+			i++
+		}
+		if n < len(values) {
+			err = io.EOF
+		}
+		return n, err
+	}
+}
+
 type doubleColumnBuffer struct {
 	doublePage
 	typ Type
@@ -448,6 +553,27 @@ func (col *doubleColumnBuffer) WriteValues(values []Value) (int, error) {
 		col.values = append(col.values, v.Double())
 	}
 	return len(values), nil
+}
+
+func (col *doubleColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int, err error) {
+	i := int(offset)
+	switch {
+	case i < 0:
+		return 0, errRowIndexOutOfBounds(offset, int64(len(col.values)))
+	case i >= len(col.values):
+		return 0, io.EOF
+	default:
+		for n < len(values) && i < len(col.values) {
+			values[n] = makeValueDouble(col.values[i])
+			values[n].columnIndex = col.columnIndex
+			n++
+			i++
+		}
+		if n < len(values) {
+			err = io.EOF
+		}
+		return n, err
+	}
 }
 
 type uint32ColumnBuffer struct{ *int32ColumnBuffer }
