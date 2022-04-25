@@ -19,25 +19,38 @@ func MultiRowGroup(rowGroups ...RowGroup) RowGroup {
 		panic(err)
 	}
 
+	rowGroupsCopy := make([]RowGroup, len(rowGroups))
+	copy(rowGroupsCopy, rowGroups)
+
 	c := new(multiRowGroup)
-	c.init(schema, rowGroups)
+	c.init(schema, rowGroupsCopy)
 	return c
 }
 
 func (c *multiRowGroup) init(schema *Schema, rowGroups []RowGroup) error {
+	columns := make([]multiColumnChunk, len(schema.Columns()))
+
+	rowGroupColumnChunks := make([][]ColumnChunk, len(rowGroups))
+	for i, rowGroup := range rowGroups {
+		rowGroupColumnChunks[i] = rowGroup.ColumnChunks()
+	}
+
+	for i := range columns {
+		columns[i].rowGroup = c
+		columns[i].column = i
+		columns[i].chunks = make([]ColumnChunk, len(rowGroupColumnChunks))
+
+		for j, columnChunks := range rowGroupColumnChunks {
+			columns[i].chunks[j] = columnChunks[i]
+		}
+	}
 
 	c.schema = schema
 	c.rowGroups = rowGroups
-	c.columns = make([]multiColumnChunk, numLeafColumnsOf(schema))
+	c.columns = make([]ColumnChunk, len(columns))
 
-	for i := range c.columns {
-		c.columns[i].rowGroup = c
-		c.columns[i].column = i
-		c.columns[i].chunks = make([]ColumnChunk, len(rowGroups))
-
-		for j, rowGroup := range rowGroups {
-			c.columns[i].chunks[j] = rowGroup.Column(i)
-		}
+	for i := range columns {
+		c.columns[i] = &columns[i]
 	}
 
 	return nil
@@ -73,7 +86,7 @@ func compatibleSchemaOf(rowGroups []RowGroup) (*Schema, error) {
 type multiRowGroup struct {
 	schema    *Schema
 	rowGroups []RowGroup
-	columns   []multiColumnChunk
+	columns   []ColumnChunk
 }
 
 func (c *multiRowGroup) NumRows() (numRows int64) {
@@ -83,9 +96,7 @@ func (c *multiRowGroup) NumRows() (numRows int64) {
 	return numRows
 }
 
-func (c *multiRowGroup) NumColumns() int { return len(c.columns) }
-
-func (c *multiRowGroup) Column(i int) ColumnChunk { return &c.columns[i] }
+func (c *multiRowGroup) ColumnChunks() []ColumnChunk { return c.columns }
 
 func (c *multiRowGroup) SortingColumns() []SortingColumn { return nil }
 

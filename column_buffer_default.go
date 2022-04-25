@@ -95,27 +95,24 @@ func (col *booleanColumnBuffer) WriteValues(values []Value) (int, error) {
 	return len(values), nil
 }
 
-func (col *booleanColumnBuffer) WriteRow(row Row) error {
-	if len(row) == 0 {
-		return errRowHasTooFewValues(int64(len(row)))
-	}
-	if len(row) > 1 {
-		return errRowHasTooManyValues(int64(len(row)))
-	}
-	col.values = append(col.values, row[0].Boolean())
-	return nil
-}
-
-func (col *booleanColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {
+func (col *booleanColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int, err error) {
+	i := int(offset)
 	switch {
-	case index < 0:
-		return row, errRowIndexOutOfBounds(index, int64(len(col.values)))
-	case index >= int64(len(col.values)):
-		return row, io.EOF
+	case i < 0:
+		return 0, errRowIndexOutOfBounds(offset, int64(len(col.values)))
+	case i >= len(col.values):
+		return 0, io.EOF
 	default:
-		v := makeValueBoolean(col.values[index])
-		v.columnIndex = col.columnIndex
-		return append(row, v), nil
+		for n < len(values) && i < len(col.values) {
+			values[n] = makeValueBoolean(col.values[i])
+			values[n].columnIndex = col.columnIndex
+			n++
+			i++
+		}
+		if n < len(values) {
+			err = io.EOF
+		}
+		return n, err
 	}
 }
 
@@ -190,27 +187,24 @@ func (col *int32ColumnBuffer) WriteValues(values []Value) (int, error) {
 	return len(values), nil
 }
 
-func (col *int32ColumnBuffer) WriteRow(row Row) error {
-	if len(row) == 0 {
-		return errRowHasTooFewValues(int64(len(row)))
-	}
-	if len(row) > 1 {
-		return errRowHasTooManyValues(int64(len(row)))
-	}
-	col.values = append(col.values, row[0].Int32())
-	return nil
-}
-
-func (col *int32ColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {
+func (col *int32ColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int, err error) {
+	i := int(offset)
 	switch {
-	case index < 0:
-		return row, errRowIndexOutOfBounds(index, int64(len(col.values)))
-	case index >= int64(len(col.values)):
-		return row, io.EOF
+	case i < 0:
+		return 0, errRowIndexOutOfBounds(offset, int64(len(col.values)))
+	case i >= len(col.values):
+		return 0, io.EOF
 	default:
-		v := makeValueInt32(col.values[index])
-		v.columnIndex = col.columnIndex
-		return append(row, v), nil
+		for n < len(values) && i < len(col.values) {
+			values[n] = makeValueInt32(col.values[i])
+			values[n].columnIndex = col.columnIndex
+			n++
+			i++
+		}
+		if n < len(values) {
+			err = io.EOF
+		}
+		return n, err
 	}
 }
 
@@ -285,27 +279,24 @@ func (col *int64ColumnBuffer) WriteValues(values []Value) (int, error) {
 	return len(values), nil
 }
 
-func (col *int64ColumnBuffer) WriteRow(row Row) error {
-	if len(row) == 0 {
-		return errRowHasTooFewValues(int64(len(row)))
-	}
-	if len(row) > 1 {
-		return errRowHasTooManyValues(int64(len(row)))
-	}
-	col.values = append(col.values, row[0].Int64())
-	return nil
-}
-
-func (col *int64ColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {
+func (col *int64ColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int, err error) {
+	i := int(offset)
 	switch {
-	case index < 0:
-		return row, errRowIndexOutOfBounds(index, int64(len(col.values)))
-	case index >= int64(len(col.values)):
-		return row, io.EOF
+	case i < 0:
+		return 0, errRowIndexOutOfBounds(offset, int64(len(col.values)))
+	case i >= len(col.values):
+		return 0, io.EOF
 	default:
-		v := makeValueInt64(col.values[index])
-		v.columnIndex = col.columnIndex
-		return append(row, v), nil
+		for n < len(values) && i < len(col.values) {
+			values[n] = makeValueInt64(col.values[i])
+			values[n].columnIndex = col.columnIndex
+			n++
+			i++
+		}
+		if n < len(values) {
+			err = io.EOF
+		}
+		return n, err
 	}
 }
 
@@ -380,27 +371,24 @@ func (col *int96ColumnBuffer) WriteValues(values []Value) (int, error) {
 	return len(values), nil
 }
 
-func (col *int96ColumnBuffer) WriteRow(row Row) error {
-	if len(row) == 0 {
-		return errRowHasTooFewValues(int64(len(row)))
-	}
-	if len(row) > 1 {
-		return errRowHasTooManyValues(int64(len(row)))
-	}
-	col.values = append(col.values, row[0].Int96())
-	return nil
-}
-
-func (col *int96ColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {
+func (col *int96ColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int, err error) {
+	i := int(offset)
 	switch {
-	case index < 0:
-		return row, errRowIndexOutOfBounds(index, int64(len(col.values)))
-	case index >= int64(len(col.values)):
-		return row, io.EOF
+	case i < 0:
+		return 0, errRowIndexOutOfBounds(offset, int64(len(col.values)))
+	case i >= len(col.values):
+		return 0, io.EOF
 	default:
-		v := makeValueInt96(col.values[index])
-		v.columnIndex = col.columnIndex
-		return append(row, v), nil
+		for n < len(values) && i < len(col.values) {
+			values[n] = makeValueInt96(col.values[i])
+			values[n].columnIndex = col.columnIndex
+			n++
+			i++
+		}
+		if n < len(values) {
+			err = io.EOF
+		}
+		return n, err
 	}
 }
 
@@ -475,27 +463,24 @@ func (col *floatColumnBuffer) WriteValues(values []Value) (int, error) {
 	return len(values), nil
 }
 
-func (col *floatColumnBuffer) WriteRow(row Row) error {
-	if len(row) == 0 {
-		return errRowHasTooFewValues(int64(len(row)))
-	}
-	if len(row) > 1 {
-		return errRowHasTooManyValues(int64(len(row)))
-	}
-	col.values = append(col.values, row[0].Float())
-	return nil
-}
-
-func (col *floatColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {
+func (col *floatColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int, err error) {
+	i := int(offset)
 	switch {
-	case index < 0:
-		return row, errRowIndexOutOfBounds(index, int64(len(col.values)))
-	case index >= int64(len(col.values)):
-		return row, io.EOF
+	case i < 0:
+		return 0, errRowIndexOutOfBounds(offset, int64(len(col.values)))
+	case i >= len(col.values):
+		return 0, io.EOF
 	default:
-		v := makeValueFloat(col.values[index])
-		v.columnIndex = col.columnIndex
-		return append(row, v), nil
+		for n < len(values) && i < len(col.values) {
+			values[n] = makeValueFloat(col.values[i])
+			values[n].columnIndex = col.columnIndex
+			n++
+			i++
+		}
+		if n < len(values) {
+			err = io.EOF
+		}
+		return n, err
 	}
 }
 
@@ -570,27 +555,24 @@ func (col *doubleColumnBuffer) WriteValues(values []Value) (int, error) {
 	return len(values), nil
 }
 
-func (col *doubleColumnBuffer) WriteRow(row Row) error {
-	if len(row) == 0 {
-		return errRowHasTooFewValues(int64(len(row)))
-	}
-	if len(row) > 1 {
-		return errRowHasTooManyValues(int64(len(row)))
-	}
-	col.values = append(col.values, row[0].Double())
-	return nil
-}
-
-func (col *doubleColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {
+func (col *doubleColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int, err error) {
+	i := int(offset)
 	switch {
-	case index < 0:
-		return row, errRowIndexOutOfBounds(index, int64(len(col.values)))
-	case index >= int64(len(col.values)):
-		return row, io.EOF
+	case i < 0:
+		return 0, errRowIndexOutOfBounds(offset, int64(len(col.values)))
+	case i >= len(col.values):
+		return 0, io.EOF
 	default:
-		v := makeValueDouble(col.values[index])
-		v.columnIndex = col.columnIndex
-		return append(row, v), nil
+		for n < len(values) && i < len(col.values) {
+			values[n] = makeValueDouble(col.values[i])
+			values[n].columnIndex = col.columnIndex
+			n++
+			i++
+		}
+		if n < len(values) {
+			err = io.EOF
+		}
+		return n, err
 	}
 }
 

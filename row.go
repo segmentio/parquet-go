@@ -1,9 +1,12 @@
 package parquet
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"reflect"
+
+	"github.com/segmentio/parquet-go/internal/bits"
 )
 
 // Row represents a parquet row as a slice of values.
@@ -52,11 +55,6 @@ type RowReader interface {
 	ReadRow(Row) (Row, error)
 }
 
-// RowReaderAt reads parquet rows at specific indexes.
-type RowReaderAt interface {
-	ReadRowAt(Row, int64) (Row, error)
-}
-
 // RowReaderFrom reads parquet rows from reader.
 type RowReaderFrom interface {
 	ReadRowsFrom(RowReader) (int64, error)
@@ -79,11 +77,6 @@ type RowReadSeeker interface {
 // RowWriter writes parquet rows to an underlying medium.
 type RowWriter interface {
 	WriteRow(Row) error
-}
-
-// RowWriterAt writes parquet rows at specific indexes.
-type RowWriterAt interface {
-	WriteRowAt(Row, int64) error
 }
 
 // RowWriterTo writes parquet rows to a writer.
@@ -218,14 +211,6 @@ func errRowIndexOutOfBounds(rowIndex, rowCount int64) error {
 	return fmt.Errorf("row index out of bounds: %d/%d", rowIndex, rowCount)
 }
 
-func errRowHasTooFewValues(numValues int64) error {
-	return fmt.Errorf("row has too few values to be written to the column: %d", numValues)
-}
-
-func errRowHasTooManyValues(numValues int64) error {
-	return fmt.Errorf("row has too many values to be written to the column: %d", numValues)
-}
-
 func hasRepeatedRowValues(values []Value) bool {
 	for _, v := range values {
 		if v.repetitionLevel != 0 {
@@ -233,6 +218,21 @@ func hasRepeatedRowValues(values []Value) bool {
 		}
 	}
 	return false
+}
+
+// repeatedRowLength gives the length of the repeated row starting at the
+// beginning of the repetitionLevels slice.
+func repeatedRowLength(repetitionLevels []int8) int {
+	// If a repetition level exists, at least one value is required to represent
+	// the column.
+	if len(repetitionLevels) > 0 {
+		// The subsequent levels will represent the start of a new record when
+		// they go back to zero.
+		if i := bytes.IndexByte(bits.Int8ToBytes(repetitionLevels[1:]), 0); i >= 0 {
+			return i + 1
+		}
+	}
+	return len(repetitionLevels)
 }
 
 func countRowsOf(values []Value) (numRows int) {
@@ -279,17 +279,6 @@ func splitRowValues(values []Value) (head, tail []Value) {
 		}
 	}
 	return values, nil
-}
-
-func forEachRepeatedRowOf(values []Value, do func(Row) error) error {
-	var row Row
-	for len(values) > 0 {
-		row, values = splitRowValues(values)
-		if err := do(row); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // =============================================================================

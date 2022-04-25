@@ -153,13 +153,8 @@ if err != nil {
     ...
 }
 
-numRowGroups := f.NumRowGroups()
-for i := 0; i < numRowGroups; i++ {
-    rowGroup := f.RowGroup(i)
-
-    numColumns := rowGroup.NumColumns()
-    for j := 0; j < numColumns; j++ {
-        columnChunk := rowGroup.Column(j)
+for _, rowGroup := range f.RowGroups() {
+    for _, columnChunk := range rowGroup.ColumnChunks() {
         ...
     }
 }
@@ -354,8 +349,8 @@ The following code snippet hilights how filters are typically used:
 ```go
 var candidateChunks []parquet.ColumnChunk
 
-for i, n := 0, file.NumRowGroups(); i < n; i++ {
-    columnChunk := file.RowGroup(i).Column(columnIndex)
+for _, rowGroup := range file.RowGroups() {
+    columnChunk := rowGroup.ColumnChunks()[columnIndex]
     bloomFilter := columnChunk.BloomFilter()
 
     if bloomFilter != nil {
@@ -450,7 +445,7 @@ of Go values:
 func writeColumns(buffer *parquet.Buffer, columns [3][]interface{}) error {
     values := make([]parquet.Value, len(columns[0]))
     for i := range columns {
-        c := buffer.ColumnBuffer(i)
+        c := buffer.ColumnBuffers()[i]
         for j, v := range columns[i] {
             values[j] = parquet.ValueOf(v)
         }
@@ -467,12 +462,11 @@ func writeColumns(buffer *parquet.Buffer, ids []int64, values []float32) error {
     if len(ids) != len(values) {
         return fmt.Errorf("number of ids and values mismatch: ids=%d values=%d", len(ids), len(values))
     }
-    col0 := buffer.ColumnBuffer(0)
-    col1 := buffer.ColumnBuffer(1)
-    if err := col0.(parquet.Int64Writer).WriteInt64s(ids); err != nil {
+    columns := buffer.ColumnBuffers()
+    if err := columns[0].(parquet.Int64Writer).WriteInt64s(ids); err != nil {
         return err
     }
-    if err := col1.(parquet.FloatWriter).WriteFloats(values); err != nil {
+    if err := columns[1].(parquet.FloatWriter).WriteFloats(values); err != nil {
         return err
     }
     return nil

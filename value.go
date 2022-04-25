@@ -47,6 +47,10 @@ type ValueReader interface {
 	ReadValues([]Value) (int, error)
 }
 
+type ValueReaderAt interface {
+	ReadValuesAt([]Value, int64) (int, error)
+}
+
 // ValueReaderFrom is an interface implemented by value writers to read values
 // from a reader.
 type ValueReaderFrom interface {
