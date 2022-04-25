@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"testing"
 	"testing/quick"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/segmentio/parquet-go"
@@ -300,9 +301,9 @@ func BenchmarkReader(b *testing.B) {
 
 	for _, test := range readerTests {
 		b.Run(test.scenario, func(b *testing.B) {
-			const N = 100
+			const numRows = 10e3
 			defer buf.Reset()
-			rows := rowsOf(N, test.model)
+			rows := rowsOf(numRows, test.model)
 
 			if err := writeParquetFile(buf, rows); err != nil {
 				b.Fatal(err)
@@ -318,9 +319,11 @@ func BenchmarkReader(b *testing.B) {
 			rowZero := reflect.Zero(rowType)
 			rowValue := rowPtr.Elem()
 
-			b.ResetTimer()
 			r := parquet.NewReader(f)
 			p := rowPtr.Interface()
+
+			b.ResetTimer()
+			start := time.Now()
 
 			for i := 0; i < b.N; i++ {
 				if err := r.Read(p); err != nil {
@@ -333,7 +336,9 @@ func BenchmarkReader(b *testing.B) {
 				rowValue.Set(rowZero)
 			}
 
-			b.SetBytes(int64(math.Ceil(float64(file.Size()) / N)))
+			seconds := time.Since(start).Seconds()
+			b.ReportMetric(float64(b.N)/seconds, "row/s")
+			b.SetBytes(int64(math.Ceil(float64(file.Size()) / numRows)))
 		})
 	}
 }
