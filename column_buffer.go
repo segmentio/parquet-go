@@ -451,14 +451,15 @@ func (col *repeatedColumnBuffer) Page() BufferedPage {
 			clearValues(col.buffer[:cap(col.buffer)])
 		}()
 
-		baseOffset := int64(0)
+		baseOffset := 0
 
 		for _, row := range col.rows {
-			rowLength := uint32(repeatedRowLength(col.repetitionLevels[row.offset:]))
-			numNulls := int64(countLevelsNotEqual(col.definitionLevels[row.offset:row.offset+rowLength], col.maxDefinitionLevel))
-			numValues := int64(rowLength) - numNulls
+			rowOffset := int(row.offset)
+			rowLength := repeatedRowLength(col.repetitionLevels[rowOffset:])
+			numNulls := countLevelsNotEqual(col.definitionLevels[rowOffset:rowOffset+rowLength], col.maxDefinitionLevel)
+			numValues := rowLength - numNulls
 
-			if numValues > int64(cap(col.buffer)) {
+			if numValues > cap(col.buffer) {
 				col.buffer = make([]Value, numValues)
 			} else {
 				col.buffer = col.buffer[:numValues]
@@ -466,7 +467,7 @@ func (col *repeatedColumnBuffer) Page() BufferedPage {
 
 			if numValues > 0 {
 				n, err := col.base.ReadValuesAt(col.buffer, int64(row.baseOffset))
-				if err != nil && int64(n) < numValues {
+				if err != nil && n < numValues {
 					return newErrorPage(col.Column(), "reordering rows of repeated column: %w", err)
 				}
 			}
@@ -480,8 +481,8 @@ func (col *repeatedColumnBuffer) Page() BufferedPage {
 				baseOffset: uint32(baseOffset),
 			})
 
-			column.repetitionLevels = append(column.repetitionLevels, col.repetitionLevels[row.offset:row.offset+rowLength]...)
-			column.definitionLevels = append(column.definitionLevels, col.definitionLevels[row.offset:row.offset+rowLength]...)
+			column.repetitionLevels = append(column.repetitionLevels, col.repetitionLevels[rowOffset:rowOffset+rowLength]...)
+			column.definitionLevels = append(column.definitionLevels, col.definitionLevels[rowOffset:rowOffset+rowLength]...)
 			baseOffset += numValues
 		}
 
