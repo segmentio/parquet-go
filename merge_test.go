@@ -37,7 +37,7 @@ func BenchmarkMergeRowGroups(b *testing.B) {
 				rowGroups[i] = sortedRowGroup(options, randomRowsOf(prng, rowsPerGroup, test.model)...)
 			}
 
-			for n := 1; n <= len(rowGroups); n++ {
+			for n := 1; n <= numRowGroups; n++ {
 				b.Run(fmt.Sprintf("groups=%d,rows=%d", n, n*rowsPerGroup), func(b *testing.B) {
 					mergedRowGroup, err := parquet.MergeRowGroups(rowGroups[:n])
 					if err != nil {
@@ -106,8 +106,7 @@ func BenchmarkMergeFiles(b *testing.B) {
 				files[i], rowGroups[i] = f, f.RowGroups()[0]
 			}
 
-			for i, f := range files {
-				n := i + 1
+			for n := 1; n <= numRowGroups; n++ {
 				b.Run(fmt.Sprintf("groups=%d,rows=%d", n, n*rowsPerGroup), func(b *testing.B) {
 					mergedRowGroup, err := parquet.MergeRowGroups(rowGroups[:n])
 					if err != nil {
@@ -128,9 +127,14 @@ func BenchmarkMergeFiles(b *testing.B) {
 						}
 					}
 
+					totalSize := int64(0)
+					for _, f := range files[:n] {
+						totalSize += f.Size()
+					}
+
 					seconds := time.Since(start).Seconds()
 					b.ReportMetric(float64(b.N)/seconds, "row/s")
-					b.SetBytes(int64(math.Ceil(float64(f.Size()) / benchmarkReaderNumRows)))
+					b.SetBytes(int64(math.Ceil(float64(totalSize) / benchmarkReaderNumRows)))
 				})
 			}
 		})
