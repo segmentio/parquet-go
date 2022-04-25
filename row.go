@@ -1,9 +1,12 @@
 package parquet
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"reflect"
+
+	"github.com/segmentio/parquet-go/internal/bits"
 )
 
 // Row represents a parquet row as a slice of values.
@@ -215,6 +218,21 @@ func hasRepeatedRowValues(values []Value) bool {
 		}
 	}
 	return false
+}
+
+// repeatedRowLength gives the length of the repeated row starting at the
+// beginning of the repetitionLevels slice.
+func repeatedRowLength(repetitionLevels []int8) int {
+	// If a repetition level exists, at least one value is required to represent
+	// the column.
+	if len(repetitionLevels) > 0 {
+		// The subsequent levels will represent the start of a new record when
+		// they go back to zero.
+		if i := bytes.IndexByte(bits.Int8ToBytes(repetitionLevels[1:]), 0); i >= 0 {
+			return i + 1
+		}
+	}
+	return len(repetitionLevels)
 }
 
 func countRowsOf(values []Value) (numRows int) {
