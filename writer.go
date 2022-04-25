@@ -1,6 +1,7 @@
 package parquet
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/binary"
 	"fmt"
@@ -194,6 +195,7 @@ func (w *Writer) ReadRowsFrom(rows RowReader) (written int64, err error) {
 func (w *Writer) Schema() *Schema { return w.schema }
 
 type writer struct {
+	buffer *bufio.Writer
 	writer offsetTrackingWriter
 
 	createdBy string
@@ -220,7 +222,12 @@ type writer struct {
 
 func newWriter(output io.Writer, config *WriterConfig) *writer {
 	w := new(writer)
-	w.writer.Reset(output)
+	if config.WriteBufferSize <= 0 {
+		w.writer.Reset(output)
+	} else {
+		w.buffer = bufio.NewWriterSize(output, config.WriteBufferSize)
+		w.writer.Reset(w.buffer)
+	}
 	w.createdBy = config.CreatedBy
 	w.metadata = make([]format.KeyValue, 0, len(config.KeyValueMetadata))
 	for k, v := range config.KeyValueMetadata {
@@ -385,7 +392,12 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 }
 
 func (w *writer) reset(writer io.Writer) {
-	w.writer.Reset(writer)
+	if w.buffer == nil {
+		w.writer.Reset(writer)
+	} else {
+		w.buffer.Reset(writer)
+		w.writer.Reset(w.buffer)
+	}
 	for _, c := range w.columns {
 		c.reset()
 	}
@@ -404,14 +416,19 @@ func (w *writer) reset(writer io.Writer) {
 }
 
 func (w *writer) close() error {
-	defer w.writer.Reset(nil)
 	if err := w.writeFileHeader(); err != nil {
 		return err
 	}
 	if err := w.flush(); err != nil {
 		return err
 	}
-	return w.writeFileFooter()
+	if err := w.writeFileFooter(); err != nil {
+		return err
+	}
+	if w.buffer != nil {
+		return w.buffer.Flush()
+	}
+	return nil
 }
 
 func (w *writer) flush() error {
