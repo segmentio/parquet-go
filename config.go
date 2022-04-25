@@ -12,6 +12,7 @@ const (
 	DefaultColumnIndexSizeLimit = 16
 	DefaultColumnBufferSize     = 1 * 1024 * 1024
 	DefaultPageBufferSize       = 1 * 1024 * 1024
+	DefaultWriteBufferSize      = 32 * 1024
 	DefaultDataPageVersion      = 2
 	DefaultDataPageStatistics   = false
 	DefaultSkipPageIndex        = false
@@ -137,6 +138,7 @@ type WriterConfig struct {
 	ColumnIndexSizeLimit int
 	PageBufferPool       PageBufferPool
 	PageBufferSize       int
+	WriteBufferSize      int
 	DataPageVersion      int
 	DataPageStatistics   bool
 	KeyValueMetadata     map[string]string
@@ -154,6 +156,7 @@ func DefaultWriterConfig() *WriterConfig {
 		ColumnPageBuffers:    &defaultPageBufferPool,
 		ColumnIndexSizeLimit: DefaultColumnIndexSizeLimit,
 		PageBufferSize:       DefaultPageBufferSize,
+		WriteBufferSize:      DefaultWriteBufferSize,
 		DataPageVersion:      DefaultDataPageVersion,
 		DataPageStatistics:   DefaultDataPageStatistics,
 	}
@@ -193,6 +196,7 @@ func (c *WriterConfig) ConfigureWriter(config *WriterConfig) {
 		ColumnPageBuffers:    coalescePageBufferPool(c.ColumnPageBuffers, config.ColumnPageBuffers),
 		ColumnIndexSizeLimit: coalesceInt(c.ColumnIndexSizeLimit, config.ColumnIndexSizeLimit),
 		PageBufferSize:       coalesceInt(c.PageBufferSize, config.PageBufferSize),
+		WriteBufferSize:      coalesceInt(c.WriteBufferSize, config.WriteBufferSize),
 		DataPageVersion:      coalesceInt(c.DataPageVersion, config.DataPageVersion),
 		DataPageStatistics:   config.DataPageStatistics,
 		KeyValueMetadata:     keyValueMetadata,
@@ -210,6 +214,7 @@ func (c *WriterConfig) Validate() error {
 		validateNotNil(baseName+"ColumnPageBuffers", c.ColumnPageBuffers),
 		validatePositiveInt(baseName+"ColumnIndexSizeLimit", c.ColumnIndexSizeLimit),
 		validatePositiveInt(baseName+"PageBufferSize", c.PageBufferSize),
+		validatePositiveInt(baseName+"WriteBufferSize", c.WriteBufferSize),
 		validateOneOfInt(baseName+"DataPageVersion", c.DataPageVersion, 1, 2),
 	)
 }
@@ -315,6 +320,16 @@ func SkipPageIndex(skip bool) FileOption {
 // Defaults to 1 MiB.
 func PageBufferSize(size int) WriterOption {
 	return writerOption(func(config *WriterConfig) { config.PageBufferSize = size })
+}
+
+// WriteBufferSize configures the size of the write buffer.
+//
+// Setting the writer buffer size to zero deactivates buffering, all writes are
+// immediately sent to the output io.Writer.
+//
+// Defaults to 32 KiB.
+func WriteBufferSize(size int) WriterOption {
+	return writerOption(func(config *WriterConfig) { config.WriteBufferSize = size })
 }
 
 // CreatedBy creates a configuration option which sets the name of the
