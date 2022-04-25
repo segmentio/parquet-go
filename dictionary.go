@@ -465,15 +465,25 @@ func (col *indexedColumnBuffer) WriteValues(values []Value) (int, error) {
 	return len(values), nil
 }
 
-func (col *indexedColumnBuffer) WriteRow(row Row) error {
-	if len(row) == 0 {
-		return errRowHasTooFewValues(int64(len(row)))
+func (col *indexedColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int, err error) {
+	i := int(offset)
+	switch {
+	case i < 0:
+		return 0, errRowIndexOutOfBounds(offset, int64(len(col.values)))
+	case i >= len(col.values):
+		return 0, io.EOF
+	default:
+		for n < len(values) && i < len(col.values) {
+			values[n] = col.dict.Index(col.values[i])
+			values[n].columnIndex = col.columnIndex
+			n++
+			i++
+		}
+		if n < len(values) {
+			err = io.EOF
+		}
+		return n, err
 	}
-	if len(row) > 1 {
-		return errRowHasTooManyValues(int64(len(row)))
-	}
-	_, err := col.WriteValues(row[:1])
-	return err
 }
 
 func (col *indexedColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {

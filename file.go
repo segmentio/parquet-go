@@ -33,7 +33,7 @@ type File struct {
 	root          *Column
 	columnIndexes []format.ColumnIndex
 	offsetIndexes []format.OffsetIndex
-	rowGroups     []fileRowGroup
+	rowGroups     []RowGroup
 }
 
 // OpenFile opens a parquet file and reads the content between offset 0 and the given
@@ -91,9 +91,13 @@ func OpenFile(r io.ReaderAt, size int64, options ...FileOption) (*File, error) {
 	f.schema = schema
 	f.root.forEachLeaf(func(c *Column) { columns = append(columns, c) })
 
-	f.rowGroups = make([]fileRowGroup, len(f.metadata.RowGroups))
-	for i := range f.rowGroups {
-		f.rowGroups[i].init(f, schema, columns, &f.metadata.RowGroups[i])
+	rowGroups := make([]fileRowGroup, len(f.metadata.RowGroups))
+	for i := range rowGroups {
+		rowGroups[i].init(f, schema, columns, &f.metadata.RowGroups[i])
+	}
+	f.rowGroups = make([]RowGroup, len(rowGroups))
+	for i := range rowGroups {
+		f.rowGroups[i] = &rowGroups[i]
 	}
 
 	if !c.SkipBloomFilters {
@@ -102,11 +106,11 @@ func OpenFile(r io.ReaderAt, size int64, options ...FileOption) (*File, error) {
 		s := io.NewSectionReader(r, 0, size)
 		d := thrift.NewDecoder(p.NewReader(s))
 
-		for i := range f.rowGroups {
-			g := &f.rowGroups[i]
+		for i := range rowGroups {
+			g := &rowGroups[i]
 
 			for j := range g.columns {
-				c := &g.columns[j]
+				c := g.columns[j].(*fileColumnChunk)
 
 				if offset := c.chunk.MetaData.BloomFilterOffset; offset > 0 {
 					s.Seek(offset, io.SeekStart)
@@ -211,11 +215,8 @@ func (f *File) readPageIndex(section *bufferedSectionReader, decoder *thrift.Dec
 // NumRows returns the number of rows in the file.
 func (f *File) NumRows() int64 { return f.metadata.NumRows }
 
-// NumRowGroups returns the number of row groups in f.
-func (f *File) NumRowGroups() int { return len(f.rowGroups) }
-
-// RowGroup returns the row group at the given index in f.
-func (f *File) RowGroup(i int) RowGroup { return &f.rowGroups[i] }
+// RowGroups returns the list of row group in the file.
+func (f *File) RowGroups() []RowGroup { return f.rowGroups }
 
 // Root returns the root column of f.
 func (f *File) Root() *Column { return f.root }
@@ -332,18 +333,19 @@ func lookupKeyValueMetadata(keyValueMetadata []format.KeyValue, key string) (val
 type fileRowGroup struct {
 	schema   *Schema
 	rowGroup *format.RowGroup
-	columns  []fileColumnChunk
+	columns  []ColumnChunk
 	sorting  []SortingColumn
 }
 
 func (g *fileRowGroup) init(file *File, schema *Schema, columns []*Column, rowGroup *format.RowGroup) {
 	g.schema = schema
 	g.rowGroup = rowGroup
-	g.columns = make([]fileColumnChunk, len(rowGroup.Columns))
+	g.columns = make([]ColumnChunk, len(rowGroup.Columns))
 	g.sorting = make([]SortingColumn, len(rowGroup.SortingColumns))
+	fileColumnChunks := make([]fileColumnChunk, len(rowGroup.Columns))
 
 	for i := range g.columns {
-		c := fileColumnChunk{
+		fileColumnChunks[i] = fileColumnChunk{
 			file:     file,
 			column:   columns[i],
 			rowGroup: rowGroup,
@@ -352,11 +354,11 @@ func (g *fileRowGroup) init(file *File, schema *Schema, columns []*Column, rowGr
 
 		if file.hasIndexes() {
 			j := (int(rowGroup.Ordinal) * len(columns)) + i
-			c.columnIndex = &file.columnIndexes[j]
-			c.offsetIndex = &file.offsetIndexes[j]
+			fileColumnChunks[i].columnIndex = &file.columnIndexes[j]
+			fileColumnChunks[i].offsetIndex = &file.offsetIndexes[j]
 		}
 
-		g.columns[i] = c
+		g.columns[i] = &fileColumnChunks[i]
 	}
 
 	for i := range g.sorting {
@@ -370,8 +372,7 @@ func (g *fileRowGroup) init(file *File, schema *Schema, columns []*Column, rowGr
 
 func (g *fileRowGroup) Schema() *Schema                 { return g.schema }
 func (g *fileRowGroup) NumRows() int64                  { return g.rowGroup.NumRows }
-func (g *fileRowGroup) NumColumns() int                 { return len(g.columns) }
-func (g *fileRowGroup) Column(i int) ColumnChunk        { return &g.columns[i] }
+func (g *fileRowGroup) ColumnChunks() []ColumnChunk     { return g.columns }
 func (g *fileRowGroup) SortingColumns() []SortingColumn { return g.sorting }
 func (g *fileRowGroup) Rows() Rows                      { return &rowGroupRowReader{rowGroup: g} }
 

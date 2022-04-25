@@ -53,7 +53,12 @@ func TestOpenFile(t *testing.T) {
 }
 
 func printColumns(t *testing.T, col *parquet.Column, indent string) {
-	t.Logf("%s%s %s %s", indent, strings.Join(col.Path(), "."), col.Encoding(), col.Compression())
+	path := strings.Join(col.Path(), ".")
+	if col.Leaf() {
+		t.Logf("%s%s %v %v", indent, path, col.Encoding(), col.Compression())
+	} else {
+		t.Logf("%s%s", indent, path)
+	}
 	indent += ". "
 
 	buffer := make([]parquet.Value, 42)

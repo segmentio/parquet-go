@@ -149,31 +149,31 @@ func Convert(to, from Node) (conv Conversion, err error) {
 	sourceToTargetIndex := columnIndexBuffer[len(targetColumns):]
 
 	for i, path := range targetColumns {
-		targetToSourceIndex[i], _ = sourceMapping.lookup(path)
-		_, targetNode := targetMapping.lookup(path)
-		targetColumnKinds[i] = targetNode.Type().Kind()
+		sourceColumn := sourceMapping.lookup(path)
+		targetColumn := targetMapping.lookup(path)
+		targetToSourceIndex[i] = sourceColumn.columnIndex
+		targetColumnKinds[i] = targetColumn.node.Type().Kind()
 	}
 
 	for i, path := range sourceColumns {
-		sourceIndex, sourceNode := sourceMapping.lookup(path)
-		targetIndex, targetNode := targetMapping.lookup(path)
+		sourceColumn := sourceMapping.lookup(path)
+		targetColumn := targetMapping.lookup(path)
 
-		if targetNode != nil {
-			sourceType := sourceNode.Type()
-			targetType := targetNode.Type()
+		if targetColumn.node != nil {
+			sourceType := sourceColumn.node.Type()
+			targetType := targetColumn.node.Type()
 			if sourceType.Kind() != targetType.Kind() {
-				return nil, &ConvertError{Path: path, From: sourceNode, To: targetNode}
+				return nil, &ConvertError{Path: path, From: sourceColumn.node, To: targetColumn.node}
 			}
 
-			sourceRepetition := fieldRepetitionTypeOf(sourceNode)
-			targetRepetition := fieldRepetitionTypeOf(targetNode)
+			sourceRepetition := fieldRepetitionTypeOf(sourceColumn.node)
+			targetRepetition := fieldRepetitionTypeOf(targetColumn.node)
 			if sourceRepetition != targetRepetition {
-				return nil, &ConvertError{Path: path, From: sourceNode, To: targetNode}
+				return nil, &ConvertError{Path: path, From: sourceColumn.node, To: targetColumn.node}
 			}
 		}
 
-		sourceToTargetIndex[i] = targetIndex
-		_ = sourceIndex
+		sourceToTargetIndex[i] = targetColumn.columnIndex
 	}
 
 	return &conversion{
@@ -189,6 +189,7 @@ func Convert(to, from Node) (conv Conversion, err error) {
 func ConvertRowGroup(rowGroup RowGroup, conv Conversion) RowGroup {
 	schema := conv.Schema()
 	numRows := rowGroup.NumRows()
+	rowGroupColumns := rowGroup.ColumnChunks()
 
 	columns := make([]ColumnChunk, numLeafColumnsOf(schema))
 	forEachLeafColumnOf(schema, func(leaf leafColumn) {
@@ -207,7 +208,7 @@ func ConvertRowGroup(rowGroup RowGroup, conv Conversion) RowGroup {
 				numNulls:  numRows,
 			}
 		} else {
-			columns[i] = rowGroup.Column(j)
+			columns[i] = rowGroupColumns[j]
 		}
 	})
 
@@ -250,13 +251,14 @@ func ConvertRowGroup(rowGroup RowGroup, conv Conversion) RowGroup {
 }
 
 func maskMissingRowGroupColumns(r RowGroup, numColumns int, conv Conversion) RowGroup {
-	columns := make([]ColumnChunk, r.NumColumns())
+	rowGroupColumns := r.ColumnChunks()
+	columns := make([]ColumnChunk, len(rowGroupColumns))
 	missing := make([]missingColumnChunk, len(columns))
 	numRows := r.NumRows()
 
 	for i := range missing {
 		missing[i] = missingColumnChunk{
-			typ:       r.Column(i).Type(),
+			typ:       rowGroupColumns[i].Type(),
 			column:    int16(i),
 			numRows:   numRows,
 			numValues: numRows,
@@ -271,7 +273,7 @@ func maskMissingRowGroupColumns(r RowGroup, numColumns int, conv Conversion) Row
 	for i := 0; i < numColumns; i++ {
 		j := conv.Column(i)
 		if j >= 0 && j < len(columns) {
-			columns[j] = r.Column(j)
+			columns[j] = rowGroupColumns[j]
 		}
 	}
 
@@ -363,10 +365,9 @@ type convertedRowGroup struct {
 }
 
 func (c *convertedRowGroup) NumRows() int64                  { return c.rowGroup.NumRows() }
-func (c *convertedRowGroup) NumColumns() int                 { return len(c.columns) }
-func (c *convertedRowGroup) Column(i int) ColumnChunk        { return c.columns[i] }
-func (c *convertedRowGroup) SortingColumns() []SortingColumn { return c.sorting }
+func (c *convertedRowGroup) ColumnChunks() []ColumnChunk     { return c.columns }
 func (c *convertedRowGroup) Schema() *Schema                 { return c.conv.Schema() }
+func (c *convertedRowGroup) SortingColumns() []SortingColumn { return c.sorting }
 func (c *convertedRowGroup) Rows() Rows                      { return &convertedRows{rows: c.rowGroup.Rows(), conv: c.conv} }
 
 // ConvertRowReader constructs a wrapper of the given row reader which applies
