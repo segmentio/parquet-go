@@ -372,10 +372,11 @@ type repeatedColumnBuffer struct {
 	nullOrdering       nullOrdering
 }
 
+// The region type maps the logical offset of rows within the repetition and
+// definition levels, to the base offsets in the underlying column buffers
+// where the non-null values have been written.
 type region struct {
-	offset uint32
-	length uint32
-	// offset within the base column buffer
+	offset     uint32
 	baseOffset uint32
 }
 
@@ -444,40 +445,43 @@ func (col *repeatedColumnBuffer) Page() BufferedPage {
 			col.reordering = col.Clone().(*repeatedColumnBuffer)
 		}
 
-		maxLen := maxRowLengthOf(col.rows)
-		if maxLen > uint32(cap(col.buffer)) {
-			col.buffer = make([]Value, maxLen)
-		}
-
-		buffer := col.buffer[:maxLen]
 		column := col.reordering
 		column.Reset()
-		defer clearValues(buffer)
+		defer func() {
+			clearValues(col.buffer[:cap(col.buffer)])
+		}()
 
 		baseOffset := int64(0)
 
 		for _, row := range col.rows {
-			numNulls := int64(countLevelsNotEqual(col.definitionLevels[row.offset:row.offset+row.length], col.maxDefinitionLevel))
-			numValues := int64(row.length) - numNulls
+			rowLength := uint32(repeatedRowLength(col.repetitionLevels[row.offset:]))
+			numNulls := int64(countLevelsNotEqual(col.definitionLevels[row.offset:row.offset+rowLength], col.maxDefinitionLevel))
+			numValues := int64(rowLength) - numNulls
+
+			if numValues > int64(cap(col.buffer)) {
+				col.buffer = make([]Value, numValues)
+			} else {
+				col.buffer = col.buffer[:numValues]
+			}
 
 			if numValues > 0 {
-				n, err := col.base.ReadValuesAt(buffer[:numValues], int64(row.baseOffset))
+				n, err := col.base.ReadValuesAt(col.buffer, int64(row.baseOffset))
 				if err != nil && int64(n) < numValues {
 					return newErrorPage(col.Column(), "reordering rows of repeated column: %w", err)
 				}
 			}
-			if _, err := column.base.WriteValues(buffer[:numValues]); err != nil {
+
+			if _, err := column.base.WriteValues(col.buffer); err != nil {
 				return newErrorPage(col.Column(), "reordering rows of repeated column: %w", err)
 			}
 
 			column.rows = append(column.rows, region{
 				offset:     uint32(len(column.repetitionLevels)),
-				length:     row.length,
 				baseOffset: uint32(baseOffset),
 			})
 
-			column.repetitionLevels = append(column.repetitionLevels, col.repetitionLevels[row.offset:row.offset+row.length]...)
-			column.definitionLevels = append(column.definitionLevels, col.definitionLevels[row.offset:row.offset+row.length]...)
+			column.repetitionLevels = append(column.repetitionLevels, col.repetitionLevels[row.offset:row.offset+rowLength]...)
+			column.definitionLevels = append(column.definitionLevels, col.definitionLevels[row.offset:row.offset+rowLength]...)
 			baseOffset += numValues
 		}
 
@@ -519,12 +523,14 @@ func (col *repeatedColumnBuffer) Less(i, j int) bool {
 	row1 := col.rows[i]
 	row2 := col.rows[j]
 	less := col.nullOrdering
+	row1Length := repeatedRowLength(col.repetitionLevels[row1.offset:])
+	row2Length := repeatedRowLength(col.repetitionLevels[row2.offset:])
 
-	for k := uint32(0); k < row1.length && k < row2.length; k++ {
-		x := int(row1.offset + k)
-		y := int(row2.offset + k)
-		definitionLevel1 := col.definitionLevels[j+int(k)]
-		definitionLevel2 := col.definitionLevels[j+int(k)]
+	for k := 0; k < row1Length && k < row2Length; k++ {
+		x := int(row1.offset) + k
+		y := int(row2.offset) + k
+		definitionLevel1 := col.definitionLevels[j+k]
+		definitionLevel2 := col.definitionLevels[j+k]
 		switch {
 		case less(col.base, x, y, col.maxDefinitionLevel, definitionLevel1, definitionLevel2):
 			return true
@@ -533,7 +539,7 @@ func (col *repeatedColumnBuffer) Less(i, j int) bool {
 		}
 	}
 
-	return row1.length < row2.length
+	return row1Length < row2Length
 }
 
 func (col *repeatedColumnBuffer) Swap(i, j int) {
@@ -555,8 +561,6 @@ func (col *repeatedColumnBuffer) WriteValues(values []Value) (numValues int, err
 	}
 
 	if len(continuation) > 0 {
-		lastRow := &col.rows[len(col.rows)-1]
-
 		for i, v := range continuation {
 			if v.definitionLevel == col.maxDefinitionLevel {
 				if _, err := col.base.WriteValues(continuation[i : i+1]); err != nil {
@@ -565,7 +569,6 @@ func (col *repeatedColumnBuffer) WriteValues(values []Value) (numValues int, err
 			}
 			col.repetitionLevels = append(col.repetitionLevels, v.repetitionLevel)
 			col.definitionLevels = append(col.definitionLevels, v.definitionLevel)
-			lastRow.length++
 			numValues++
 		}
 	}
@@ -604,7 +607,6 @@ func (col *repeatedColumnBuffer) writeRow(row []Value) error {
 
 	col.rows = append(col.rows, region{
 		offset:     uint32(len(col.repetitionLevels)),
-		length:     uint32(len(row)),
 		baseOffset: uint32(baseOffset),
 	})
 
@@ -646,23 +648,14 @@ func optionalRowsHaveBeenReordered(rows []int32) bool {
 }
 
 func repeatedRowsHaveBeenReordered(rows []region) bool {
-	offset := uint32(0)
+	lastOffset := uint32(0)
 	for _, row := range rows {
-		if row.offset != offset {
+		if row.offset < lastOffset {
 			return true
 		}
-		offset += row.length
+		lastOffset = row.offset
 	}
 	return false
-}
-
-func maxRowLengthOf(rows []region) (maxLength uint32) {
-	for _, row := range rows {
-		if row.length > maxLength {
-			maxLength = row.length
-		}
-	}
-	return maxLength
 }
 
 type byteArrayColumnBuffer struct {
