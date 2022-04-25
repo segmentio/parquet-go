@@ -326,7 +326,7 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 			c.commit = (*writerColumn).commitRepeated
 			c.values = make([]Value, 0, 10)
 		} else {
-			c.insert = (*writerColumn).WriteRow
+			c.insert = (*writerColumn).writeRow
 			c.commit = func(*writerColumn) error { return nil }
 		}
 
@@ -644,7 +644,7 @@ func (w *writer) WritePage(page Page) (int64, error) {
 }
 
 type writerColumn struct {
-	insert func(*writerColumn, Row) error
+	insert func(*writerColumn, []Value) error
 	commit func(*writerColumn) error
 	values []Value
 	filter []BufferedPage
@@ -798,7 +798,7 @@ func (c *writerColumn) flushFilterPages() error {
 	return nil
 }
 
-func (c *writerColumn) insertRepeated(row Row) error {
+func (c *writerColumn) insertRepeated(row []Value) error {
 	c.values = append(c.values, row...)
 	return nil
 }
@@ -808,7 +808,7 @@ func (c *writerColumn) commitRepeated() error {
 		clearValues(c.values)
 		c.values = c.values[:0]
 	}()
-	return c.WriteRow(c.values)
+	return c.writeRow(c.values)
 }
 
 func (c *writerColumn) newColumnBuffer() ColumnBuffer {
@@ -830,7 +830,7 @@ func (c *writerColumn) newBloomFilterEncoder(numRows int64) *bloomFilterEncoder 
 	)
 }
 
-func (c *writerColumn) WriteRow(row Row) error {
+func (c *writerColumn) writeRow(row []Value) error {
 	if c.columnBuffer == nil {
 		// Lazily create the row group column so we don't need to allocate it if
 		// rows are not written individually to the column.
@@ -844,7 +844,7 @@ func (c *writerColumn) WriteRow(row Row) error {
 		}
 	}
 
-	if err := c.columnBuffer.WriteRow(row); err != nil {
+	if _, err := c.columnBuffer.WriteValues(row); err != nil {
 		return err
 	}
 	c.numValues += int32(len(row))
@@ -1344,7 +1344,6 @@ var (
 	_ PageWriter  = (*writer)(nil)
 	_ ValueWriter = (*writer)(nil)
 
-	_ RowWriter   = (*writerColumn)(nil)
 	_ PageWriter  = (*writerColumn)(nil)
 	_ ValueWriter = (*writerColumn)(nil)
 )

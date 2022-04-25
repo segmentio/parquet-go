@@ -242,11 +242,11 @@ func (t *dateType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 }
 
 func (t *dateType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
-	return newColumnReader(t, makeColumnIndex(columnIndex), bufferSize, &int64Class)
+	return newColumnReader(t, makeColumnIndex(columnIndex), bufferSize, &int32Class)
 }
 
 func (t *dateType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
-	return readDictionary(t, makeColumnIndex(columnIndex), numValues, decoder, &int64Class)
+	return readDictionary(t, makeColumnIndex(columnIndex), numValues, decoder, &int32Class)
 }
 
 func (t *timeType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
