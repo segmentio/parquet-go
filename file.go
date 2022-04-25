@@ -570,7 +570,10 @@ func (r *filePages) readDictionary() error {
 	if err != nil {
 		return err
 	}
+	return r.readDictionaryPage(p)
+}
 
+func (r *filePages) readDictionaryPage(p *filePage) error {
 	page := acquireCompressedPageReader(p.codec, &p.data)
 	enc := r.page.header.DictionaryPageHeader.Encoding
 	dec := LookupEncoding(enc).NewDecoder(page)
@@ -594,15 +597,28 @@ func (r *filePages) ReadPage() (Page, error) {
 			return nil, err
 		}
 	}
+
 	for {
 		p, err := r.readPage()
 		if err != nil {
 			return nil, err
 		}
+
+		// Sometimes parquet files do not have the dictionary page offset
+		// recorded in the column metadata. We account for this by lazily
+		// checking whether the first page is a dictionary page.
+		if p.index == 0 && p.header.Type == format.DictionaryPage && r.page.dictionary == nil {
+			if err := r.readDictionaryPage(p); err != nil {
+				return nil, err
+			}
+			continue
+		}
+
 		p.index++
 		if r.skip == 0 {
 			return p, nil
 		}
+
 		numRows := p.NumRows()
 		if numRows > r.skip {
 			seek := r.skip
@@ -612,6 +628,7 @@ func (r *filePages) ReadPage() (Page, error) {
 			}
 			return p, nil
 		}
+
 		r.skip -= numRows
 	}
 }
@@ -930,7 +947,7 @@ func (s *filePageValueReaderState) init(columnType Type, column *Column, codec f
 		pageHeader = h
 
 	default:
-		return fmt.Errorf("cannot read values from page of type %s", h.PageType())
+		return fmt.Errorf("cannot read values of type %s from page of column %q", h.PageType(), columnPath(column.Path()))
 	}
 
 	pageEncoding := pageHeader.Encoding()

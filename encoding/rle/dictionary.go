@@ -34,19 +34,33 @@ func (e *DictionaryEncoding) String() string {
 
 type dictionaryDecoder struct {
 	encoding.NotSupportedDecoder
-	rle *Decoder
+	rle  *Decoder
+	zero bool
 }
 
 func (d dictionaryDecoder) Reset(r io.Reader) {
 	d.rle.Reset(r)
 	d.rle.SetBitWidth(0)
+	d.zero = false
 }
 
 func (d dictionaryDecoder) DecodeInt32(data []int32) (int, error) {
+	if d.zero {
+		clearInt32(data)
+		return len(data), nil
+	}
 	if d.rle.BitWidth() == 0 {
 		bitWidth, err := d.decodeBitWidth()
 		if err != nil {
 			return 0, err
+		}
+		// Sometimes, when the dictionary contains only a single value, the page
+		// can be encoded as a zero bit width to indicate that all indexes will
+		// be zero.
+		if bitWidth == 0 {
+			d.zero = true
+			clearInt32(data)
+			return len(data), nil
 		}
 		d.rle.SetBitWidth(bitWidth)
 	}
@@ -91,4 +105,10 @@ func (e dictionaryEncoder) EncodeInt32(data []int32) error {
 
 func (e dictionaryEncoder) encodeBitWidth(bitWidth int) error {
 	return e.rle.WriteByte(byte(bitWidth))
+}
+
+func clearInt32(data []int32) {
+	for i := range data {
+		data[i] = 0
+	}
 }
