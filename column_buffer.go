@@ -459,21 +459,19 @@ func (col *repeatedColumnBuffer) Page() BufferedPage {
 			numNulls := countLevelsNotEqual(col.definitionLevels[rowOffset:rowOffset+rowLength], col.maxDefinitionLevel)
 			numValues := rowLength - numNulls
 
-			if numValues > cap(col.buffer) {
-				col.buffer = make([]Value, numValues)
-			} else {
-				col.buffer = col.buffer[:numValues]
-			}
-
 			if numValues > 0 {
+				if numValues > cap(col.buffer) {
+					col.buffer = make([]Value, numValues)
+				} else {
+					col.buffer = col.buffer[:numValues]
+				}
 				n, err := col.base.ReadValuesAt(col.buffer, int64(row.baseOffset))
 				if err != nil && n < numValues {
 					return newErrorPage(col.Column(), "reordering rows of repeated column: %w", err)
 				}
-			}
-
-			if _, err := column.base.WriteValues(col.buffer); err != nil {
-				return newErrorPage(col.Column(), "reordering rows of repeated column: %w", err)
+				if _, err := column.base.WriteValues(col.buffer); err != nil {
+					return newErrorPage(col.Column(), "reordering rows of repeated column: %w", err)
+				}
 			}
 
 			column.rows = append(column.rows, region{
