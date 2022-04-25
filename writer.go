@@ -222,7 +222,7 @@ type writer struct {
 
 func newWriter(output io.Writer, config *WriterConfig) *writer {
 	w := new(writer)
-	if config.WriteBufferSize == 0 {
+	if config.WriteBufferSize <= 0 {
 		w.writer.Reset(output)
 	} else {
 		w.buffer = bufio.NewWriterSize(output, config.WriteBufferSize)

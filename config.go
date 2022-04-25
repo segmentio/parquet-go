@@ -214,7 +214,6 @@ func (c *WriterConfig) Validate() error {
 		validateNotNil(baseName+"ColumnPageBuffers", c.ColumnPageBuffers),
 		validatePositiveInt(baseName+"ColumnIndexSizeLimit", c.ColumnIndexSizeLimit),
 		validatePositiveInt(baseName+"PageBufferSize", c.PageBufferSize),
-		validatePositiveInt(baseName+"WriteBufferSize", c.WriteBufferSize),
 		validateOneOfInt(baseName+"DataPageVersion", c.DataPageVersion, 1, 2),
 	)
 }
