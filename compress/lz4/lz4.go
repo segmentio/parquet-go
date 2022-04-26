@@ -46,14 +46,7 @@ func (c *Codec) NewReader(r io.Reader) (compress.Reader, error) {
 }
 
 func (c *Codec) NewWriter(w io.Writer) (compress.Writer, error) {
-	return &writer{
-		wbuf:   make([]byte, 0, 32768),
-		zbuf:   make([]byte, 0, 32768),
-		writer: w,
-		compressor: lz4.CompressorHC{
-			Level: c.Level,
-		},
-	}, nil
+	return &writer{writer: w, compressor: lz4.CompressorHC{Level: c.Level}}, nil
 }
 
 type reader struct {
@@ -119,34 +112,37 @@ func (r *reader) decompress() error {
 }
 
 type writer struct {
-	wbuf       []byte
-	zbuf       []byte
+	buffer     bytes.Buffer
+	data       []byte
 	writer     io.Writer
 	compressor lz4.CompressorHC
 }
 
 func (w *writer) Reset(ww io.Writer) error {
-	w.wbuf = w.wbuf[:0]
-	w.zbuf = w.zbuf[:0]
+	w.buffer.Reset()
+	w.data = w.data[:0]
 	w.writer = ww
 	return nil
 }
 
 func (w *writer) Write(b []byte) (int, error) {
-	w.wbuf = append(w.wbuf, b...)
-	return len(b), nil
+	if w.writer == nil {
+		return 0, io.ErrClosedPipe
+	}
+	return w.buffer.Write(b)
 }
 
 func (w *writer) Close() (err error) {
-	if len(w.wbuf) > 0 {
-		limit := lz4.CompressBlockBound(len(w.wbuf))
-		if limit > cap(w.zbuf) {
-			w.zbuf = make([]byte, limit)
+	if w.writer != nil && w.buffer.Len() > 0 {
+		limit := lz4.CompressBlockBound(w.buffer.Len())
+		if limit > cap(w.data) {
+			w.data = make([]byte, limit)
 		} else {
-			w.zbuf = w.zbuf[:limit]
+			w.data = w.data[:limit]
 		}
-		size, _ := w.compressor.CompressBlock(w.wbuf, w.zbuf)
-		_, err = w.writer.Write(w.zbuf[:size])
+		size, _ := w.compressor.CompressBlock(w.buffer.Bytes(), w.data)
+		_, err = w.writer.Write(w.data[:size])
 	}
+	w.writer = nil
 	return err
 }
