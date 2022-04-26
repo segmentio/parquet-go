@@ -53,6 +53,10 @@ func TestOpenFile(t *testing.T) {
 }
 
 func printColumns(t *testing.T, col *parquet.Column, indent string) {
+	if t.Failed() {
+		return
+	}
+
 	path := strings.Join(col.Path(), ".")
 	if col.Leaf() {
 		t.Logf("%s%s %v %v", indent, path, col.Encoding(), col.Compression())
@@ -84,7 +88,7 @@ func printColumns(t *testing.T, col *parquet.Column, indent string) {
 				if err != io.EOF {
 					t.Error(err)
 				}
-				break
+				return
 			}
 		}
 	}

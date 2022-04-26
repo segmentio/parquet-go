@@ -105,15 +105,7 @@ func (d *BinaryPackedDecoder) DecodeInt64(data []int64) (int, error) {
 			return decoded, err
 		}
 
-		i := d.blockIndex
-		j := len(d.blockValues)
-		remain := d.totalValues - d.valueIndex
-
-		if (j - i) > remain {
-			j = i + remain
-		}
-
-		n := copy(data, d.blockValues[i:j])
+		n := copy(data, d.blockValues[d.blockIndex:])
 		data = data[n:]
 		decoded += n
 		d.valueIndex += n
@@ -150,10 +142,10 @@ func (d *BinaryPackedDecoder) decode() error {
 	}
 
 	if d.blockIndex == 0 || d.blockIndex == len(d.blockValues) {
-		d.blockIndex = 0
 		if err := d.decodeBlock(); err != nil {
 			return err
 		}
+		d.blockIndex = 0
 	}
 
 	return nil
@@ -202,7 +194,7 @@ func (d *BinaryPackedDecoder) decodeHeader() (blockSize, numMiniBlock, totalValu
 func (d *BinaryPackedDecoder) decodeBlock() error {
 	minDelta, err := binary.ReadVarint(d.reader)
 	if err != nil {
-		return fmt.Errorf("DELTA_BINARY_PACKED: reading min delta: %w", err)
+		return fmt.Errorf("DELTA_BINARY_PACKED: reading min delta (%d): %w", minDelta, err)
 	}
 
 	if cap(d.bitWidths) < d.numMiniBlock {
@@ -226,17 +218,25 @@ func (d *BinaryPackedDecoder) decodeBlock() error {
 		blockValues[i] = 0
 	}
 
-	for i, bitWidth := range d.bitWidths {
-		if bitWidth != 0 {
-			j := (i + 0) * d.miniBlockSize
-			k := (i + 1) * d.miniBlockSize
-			n := k - j
-			r := d.totalValues - d.valueIndex
-			if n > r {
-				n = r
-			}
+	if remain := d.totalValues - d.valueIndex; remain > len(blockValues) {
+		blockValues = blockValues[:remain]
+		d.blockValues = blockValues
+	}
 
-			for x := range blockValues[j:k] {
+	i := 0
+	j := d.miniBlockSize
+
+	for _, bitWidth := range d.bitWidths {
+		if i >= len(blockValues) {
+			break
+		}
+
+		if j > len(blockValues) {
+			j = len(blockValues)
+		}
+
+		if bitWidth != 0 {
+			for k := range blockValues[i:j] {
 				v, nbits, err := d.miniBlocks.ReadBits(uint(bitWidth))
 				if err != nil {
 					err = dontExpectEOF(err)
@@ -246,13 +246,12 @@ func (d *BinaryPackedDecoder) decodeBlock() error {
 				if nbits != uint(bitWidth) {
 					panic("BUG: wrong number of bits read from DELTA_BINARY_PACKED miniblock")
 				}
-				blockValues[j+x] = int64(v)
+				blockValues[i+k] = int64(v)
 			}
 		}
-	}
 
-	if remain := d.totalValues - d.valueIndex; len(blockValues) > remain {
-		blockValues = blockValues[:remain]
+		i += d.miniBlockSize
+		j += d.miniBlockSize
 	}
 
 	bits.AddInt64(blockValues, minDelta)
