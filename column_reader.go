@@ -420,6 +420,43 @@ func (r *fixedLenByteArrayColumnReader) Reset(numValues int, decoder encoding.De
 	r.remain = r.size * numValues
 }
 
+type nullColumnReader struct {
+	typ         Type
+	remain      int
+	columnIndex int16
+}
+
+func newNullColumnReader(typ Type, columnIndex int16) *nullColumnReader {
+	return &nullColumnReader{
+		typ:         typ,
+		columnIndex: ^columnIndex,
+	}
+}
+
+func (r *nullColumnReader) Type() Type {
+	return r.typ
+}
+
+func (r *nullColumnReader) Column() int {
+	return int(^r.columnIndex)
+}
+
+func (r *nullColumnReader) Reset(numValues int, decoder encoding.Decoder) {
+	r.remain = numValues
+}
+
+func (r *nullColumnReader) ReadValues(values []Value) (n int, err error) {
+	values = values[:min(r.remain, len(values))]
+	for i := range values {
+		values[i] = Value{columnIndex: r.columnIndex}
+	}
+	r.remain -= len(values)
+	if r.remain == 0 {
+		err = io.EOF
+	}
+	return len(values), err
+}
+
 func min(a, b int) int {
 	if a < b {
 		return a
