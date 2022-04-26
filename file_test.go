@@ -35,7 +35,6 @@ func TestOpenFile(t *testing.T) {
 
 			p, err := parquet.OpenFile(f, s.Size(),
 				parquet.SkipPageIndex(true),
-				parquet.SkipBloomFilters(true),
 			)
 			if err != nil {
 				t.Fatal(err)
