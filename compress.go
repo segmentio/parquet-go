@@ -44,9 +44,7 @@ var (
 
 	// Lz4Raw is the LZ4_RAW parquet compression codec.
 	Lz4Raw = lz4.Codec{
-		BlockSize:   lz4.DefaultBlockSize,
-		Level:       lz4.DefaultLevel,
-		Concurrency: lz4.DefaultConcurrency,
+		Level: lz4.DefaultLevel,
 	}
 
 	// Table of compression codecs indexed by their code in the parquet format.
