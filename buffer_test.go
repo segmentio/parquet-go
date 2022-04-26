@@ -252,7 +252,7 @@ func testBuffer(t *testing.T, node parquet.Node, reader parquet.ColumnReader, bu
 	}
 
 	for i := range batch {
-		if err := buffer.WriteRow(batch[i : i+1]); err != nil {
+		if _, err := buffer.WriteRows([]parquet.Row{batch[i : i+1]}); err != nil {
 			t.Fatalf("writing value to row group: %v", err)
 		}
 	}

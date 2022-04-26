@@ -46,6 +46,7 @@ type Writer struct {
 	schema *Schema
 	writer *writer
 	values []Value
+	buffer []Row
 }
 
 // NewWriter constructs a parquet writer writing a file to the given io.Writer.
@@ -134,17 +135,20 @@ func (w *Writer) Write(row interface{}) error {
 		clearValues(w.values)
 	}()
 	w.values = w.schema.Deconstruct(w.values[:0], row)
-	return w.WriteRow(w.values)
+	_, err := w.WriteRows([]Row{w.values})
+	return err
 }
 
-// WriteRow is called to write another row to the parquet file.
+// WriteRows is called to write rows to the parquet file.
 //
 // The Writer must have been given a schema when NewWriter was called, otherwise
 // the structure of the parquet file cannot be determined from the row only.
 //
 // The row is expected to contain values for each column of the writer's schema,
 // in the order produced by the parquet.(*Schema).Deconstruct method.
-func (w *Writer) WriteRow(row Row) error { return w.writer.WriteRow(row) }
+func (w *Writer) WriteRows(rows []Row) (int, error) {
+	return w.writer.WriteRows(rows)
+}
 
 // WriteRowGroup writes a row group to the parquet file.
 //
@@ -185,8 +189,11 @@ func (w *Writer) ReadRowsFrom(rows RowReader) (written int64, err error) {
 			w.configure(r.Schema())
 		}
 	}
-	written, w.values, err = copyRows(w.writer, rows, w.values[:0])
-	return written, err
+	if w.buffer == nil {
+		w.buffer = make([]Row, defaultRowBufferSize)
+	}
+	defer clearRows(w.buffer)
+	return copyRows(w.writer, rows, w.buffer)
 }
 
 // Schema returns the schema of rows written by w.
@@ -631,19 +638,21 @@ func (w *writer) writeRowGroup(rowGroupSchema *Schema, rowGroupSortingColumns []
 	return numRows, nil
 }
 
-func (w *writer) WriteRow(row Row) error {
-	for i := range row {
-		c := w.columns[row[i].Column()]
-		if err := c.insert(c, row[i:i+1]); err != nil {
-			return err
+func (w *writer) WriteRows(rows []Row) (int, error) {
+	for _, row := range rows {
+		for i := range row {
+			c := w.columns[row[i].Column()]
+			if err := c.insert(c, row[i:i+1]); err != nil {
+				return 0, err
+			}
 		}
 	}
 	for _, c := range w.columns {
 		if err := c.commit(c); err != nil {
-			return err
+			return 0, err
 		}
 	}
-	return nil
+	return len(rows), nil
 }
 
 // The WriteValues method is intended to work in pair with WritePage to allow

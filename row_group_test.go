@@ -72,22 +72,21 @@ func testSeekToRow(t *testing.T, newRowGroup func([]Person) parquet.RowGroup) {
 		}
 		rowGroup := newRowGroup(people)
 		rows := rowGroup.Rows()
-		rbuf := parquet.Row{}
+		rbuf := make([]parquet.Row, 1)
 		pers := Person{}
 		schema := parquet.SchemaOf(&pers)
 
 		for i := range people {
-			err := rows.SeekToRow(int64(i))
-			if err != nil {
+			if err := rows.SeekToRow(int64(i)); err != nil {
 				t.Errorf("seeking to row %d: %+v", i, err)
 				return false
 			}
-			rbuf, err = rows.ReadRow(rbuf[:0])
+			_, err := rows.ReadRows(rbuf)
 			if err != nil {
 				t.Errorf("reading row %d: %+v", i, err)
 				return false
 			}
-			if err := schema.Reconstruct(&pers, rbuf); err != nil {
+			if err := schema.Reconstruct(&pers, rbuf[0]); err != nil {
 				t.Errorf("deconstructing row %d: %+v", i, err)
 				return false
 			}
@@ -384,15 +383,13 @@ func TestMergeRowGroups(t *testing.T) {
 						t.Run(merge.scenario, func(t *testing.T) {
 							var expectedRows = test.output.Rows()
 							var mergedRows = merge.rowGroup.Rows()
-							var row1 parquet.Row
-							var row2 parquet.Row
-							var err1 error
-							var err2 error
+							var row1 = make([]parquet.Row, 1)
+							var row2 = make([]parquet.Row, 1)
 							var numRows int64
 
 							for {
-								row1, err1 = expectedRows.ReadRow(row1[:0])
-								row2, err2 = mergedRows.ReadRow(row2[:0])
+								_, err1 := expectedRows.ReadRows(row1)
+								_, err2 := mergedRows.ReadRows(row2)
 
 								if err1 != err2 {
 									t.Fatalf("errors mismatched while comparing row %+v: want=%v got=%v", row1, err1, err2)
@@ -402,8 +399,8 @@ func TestMergeRowGroups(t *testing.T) {
 									break
 								}
 
-								if !row1.Equal(row2) {
-									t.Errorf("row at index %d mismatch: want=%+v got=%+v", numRows, row1, row2)
+								if !row1[0].Equal(row2[0]) {
+									t.Errorf("row at index %d mismatch: want=%+v got=%+v", numRows, row1[0], row2[0])
 								}
 
 								numRows++

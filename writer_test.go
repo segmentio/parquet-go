@@ -603,10 +603,13 @@ func TestWriterRepeatedUUIDDict(t *testing.T) {
 	}
 
 	rows := f.RowGroups()[0].Rows()
-	row, err := rows.ReadRow(nil)
-	if err != nil {
+	rbuf := make([]parquet.Row, 1)
+
+	if _, err := rows.ReadRows(rbuf); err != nil {
 		t.Fatalf("reading row from parquet file: %v", err)
 	}
+
+	row := rbuf[0]
 	if len(row) != 1 {
 		t.Errorf("expected 1 value in row, got %d", len(row))
 	}

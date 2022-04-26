@@ -291,23 +291,31 @@ func (r *rowGroupRowReader) SeekToRow(rowIndex int64) error {
 	return nil
 }
 
-func (r *rowGroupRowReader) ReadRow(row Row) (Row, error) {
+func (r *rowGroupRowReader) ReadRows(rows []Row) (int, error) {
 	if r.rowGroup != nil {
 		err := r.init(r.rowGroup)
 		r.rowGroup = nil
 		if err != nil {
-			return row, err
+			return 0, err
 		}
 	}
 	if r.schema == nil {
-		return row, io.EOF
+		return 0, io.EOF
 	}
-	n := len(row)
-	row, err := r.schema.readRow(row, 0, r.columns)
-	if err == nil && len(row) == n {
-		err = io.EOF
+	for n, row := range rows {
+		// TODO: we need to optimize this so that we load multiple values from
+		// each column to avoid going through the abstraction layers for each
+		// row being read.
+		row, err := r.schema.readRow(row[:0], 0, r.columns)
+		rows[n] = row
+		if err == nil && len(row) == 0 {
+			err = io.EOF
+		}
+		if err != nil {
+			return n, err
+		}
 	}
-	return row, err
+	return len(rows), nil
 }
 
 func (r *rowGroupRowReader) WriteRowsTo(w RowWriter) (int64, error) {
@@ -476,7 +484,7 @@ func (emptyBloomFilter) Check(Value) (bool, error)         { return false, nil }
 type emptyRowReader struct{ schema *Schema }
 
 func (r emptyRowReader) Schema() *Schema                      { return r.schema }
-func (r emptyRowReader) ReadRow(row Row) (Row, error)         { return row, io.EOF }
+func (r emptyRowReader) ReadRows([]Row) (int, error)          { return 0, io.EOF }
 func (r emptyRowReader) SeekToRow(int64) error                { return nil }
 func (r emptyRowReader) WriteRowsTo(RowWriter) (int64, error) { return 0, nil }
 

@@ -94,41 +94,43 @@ func (r *mergedRowGroupRowReader) SeekToRow(rowIndex int64) error {
 	return fmt.Errorf("SeekToRow: merged row reader cannot seek backward from row %d to %d", r.index, rowIndex)
 }
 
-func (r *mergedRowGroupRowReader) ReadRow(row Row) (Row, error) {
+func (r *mergedRowGroupRowReader) ReadRows(rows []Row) (n int, err error) {
 	if r.rowGroup != nil {
 		r.init(r.rowGroup)
 		r.rowGroup = nil
 	}
 	if r.err != nil {
-		return row, r.err
+		return 0, r.err
 	}
 
-	for {
+	for n < len(rows) {
 		if len(r.cursors) == 0 {
-			return row, io.EOF
+			return n, io.EOF
 		}
 		min := r.cursors[0]
-		row, err := min.readRow(row)
+		r.values1, err = min.readRow(r.values1[:0])
 		if err != nil {
-			return row, err
+			return n, err
 		}
+
+		if r.index >= r.seek {
+			rows[n] = append(rows[n][:0], r.values1...)
+			n++
+		}
+		r.index++
 
 		if err := min.readNext(); err != nil {
 			if err != io.EOF {
 				r.err = err
-				return row, err
+				return n, err
 			}
 			heap.Pop(r)
 		} else {
 			heap.Fix(r, 0)
 		}
-
-		ret := r.index >= r.seek
-		r.index++
-		if ret {
-			return row, nil
-		}
 	}
+
+	return n, nil
 }
 
 // func (r *mergedRowGroupRowReader) WriteRowsTo(w RowWriter) (int64, error) {
@@ -207,23 +209,23 @@ type columnSortFunc struct {
 
 type bufferedRowGroupCursor struct {
 	reader  Rows
-	rowbuf  Row
+	rowbuf  [1]Row
 	columns [][]Value
 }
 
 func (cur *bufferedRowGroupCursor) readRow(row Row) (Row, error) {
-	return append(row, cur.rowbuf...), nil
+	return append(row, cur.rowbuf[0]...), nil
 }
 
-func (cur *bufferedRowGroupCursor) readNext() (err error) {
-	cur.rowbuf, err = cur.reader.ReadRow(cur.rowbuf[:0])
+func (cur *bufferedRowGroupCursor) readNext() error {
+	_, err := cur.reader.ReadRows(cur.rowbuf[:])
 	if err != nil {
 		return err
 	}
 	for i, c := range cur.columns {
 		cur.columns[i] = c[:0]
 	}
-	for _, v := range cur.rowbuf {
+	for _, v := range cur.rowbuf[0] {
 		columnIndex := v.Column()
 		cur.columns[columnIndex] = append(cur.columns[columnIndex], v)
 	}

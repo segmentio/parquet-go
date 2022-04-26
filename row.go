@@ -9,6 +9,10 @@ import (
 	"github.com/segmentio/parquet-go/internal/bits"
 )
 
+const (
+	defaultRowBufferSize = 20
+)
+
 // Row represents a parquet row as a slice of values.
 //
 // Each value should embed a column index, repetition level, and definition
@@ -52,7 +56,7 @@ type RowSeeker interface {
 
 // RowReader reads a sequence of parquet rows.
 type RowReader interface {
-	ReadRow(Row) (Row, error)
+	ReadRows([]Row) (int, error)
 }
 
 // RowReaderFrom reads parquet rows from reader.
@@ -76,7 +80,7 @@ type RowReadSeeker interface {
 
 // RowWriter writes parquet rows to an underlying medium.
 type RowWriter interface {
-	WriteRow(Row) error
+	WriteRows([]Row) (int, error)
 }
 
 // RowWriterTo writes parquet rows to a writer.
@@ -97,18 +101,22 @@ type forwardRowSeeker struct {
 	index int64
 }
 
-func (r *forwardRowSeeker) ReadRow(row Row) (Row, error) {
-	n := len(row)
+func (r *forwardRowSeeker) ReadRows(rows []Row) (int, error) {
 	for {
-		row, err := r.rows.ReadRow(row[:n])
-		if err != nil {
-			return row, err
+		n, err := r.rows.ReadRows(rows)
+
+		if r.index < r.seek {
+			skip := r.seek - r.index
+
+			if skip >= int64(n) {
+				r.index += int64(n)
+				continue
+			}
+
+			n = copy(rows, rows[skip:n])
 		}
-		ret := r.index >= r.seek
-		r.index++
-		if ret {
-			return row, err
-		}
+
+		return n, err
 	}
 }
 
@@ -135,11 +143,10 @@ func (r *forwardRowSeeker) SeekToRow(rowIndex int64) error {
 // The function returns the number of rows written, or any error encountered
 // other than io.EOF.
 func CopyRows(dst RowWriter, src RowReader) (int64, error) {
-	n, _, err := copyRows(dst, src, nil)
-	return n, err
+	return copyRows(dst, src, nil)
 }
 
-func copyRows(dst RowWriter, src RowReader, buf []Value) (written int64, ret []Value, err error) {
+func copyRows(dst RowWriter, src RowReader, buf []Row) (written int64, err error) {
 	targetSchema := targetSchemaOf(dst)
 	sourceSchema := sourceSchemaOf(src)
 
@@ -147,7 +154,7 @@ func copyRows(dst RowWriter, src RowReader, buf []Value) (written int64, ret []V
 		if !nodesAreEqual(targetSchema, sourceSchema) {
 			conv, err := Convert(targetSchema, sourceSchema)
 			if err != nil {
-				return 0, buf, err
+				return 0, err
 			}
 			// The conversion effectively disables a potential optimization
 			// if the source reader implemented RowWriterTo. It is a trade off
@@ -162,34 +169,41 @@ func copyRows(dst RowWriter, src RowReader, buf []Value) (written int64, ret []V
 	}
 
 	if wt, ok := src.(RowWriterTo); ok {
-		written, err = wt.WriteRowsTo(dst)
-		return written, buf, err
+		return wt.WriteRowsTo(dst)
 	}
 
 	if rf, ok := dst.(RowReaderFrom); ok {
-		written, err = rf.ReadRowsFrom(src)
-		return written, buf, err
+		return rf.ReadRowsFrom(src)
 	}
 
 	if len(buf) == 0 {
-		buf = make([]Value, 42)
+		buf = make([]Row, defaultRowBufferSize)
 	}
 
-	defer func() {
-		clearValues(buf)
-	}()
-
 	for {
-		if buf, err = src.ReadRow(buf[:0]); err != nil {
+		rn, err := src.ReadRows(buf)
+
+		if rn > 0 {
+			wn, err := dst.WriteRows(buf[:rn])
+			written += int64(wn)
+			if err != nil {
+				return written, err
+			}
+		}
+
+		if err != nil {
 			if err == io.EOF {
 				err = nil
 			}
-			return written, buf, err
+			return written, err
 		}
-		if err = dst.WriteRow(buf); err != nil {
-			return written, buf, err
-		}
-		written++
+	}
+}
+
+func clearRows(rows []Row) {
+	for i, row := range rows {
+		clearValues(row)
+		rows[i] = row[:0]
 	}
 }
 
