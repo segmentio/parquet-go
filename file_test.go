@@ -20,7 +20,6 @@ func init() {
 }
 
 func TestOpenFile(t *testing.T) {
-	//t.Skip()
 	for _, path := range fixtureFiles {
 		t.Run(path, func(t *testing.T) {
 			f, err := os.Open(path)
@@ -80,18 +79,41 @@ func printColumns(t *testing.T, col *parquet.Column, indent string) {
 			break
 		}
 
+		header := p.(parquet.CompressedPage).PageHeader().(parquet.DataPageHeader)
 		values := p.Values()
+		numValues := int64(0)
+		nullCount := int64(0)
+
 		for {
 			n, err := values.ReadValues(buffer)
 			for _, v := range buffer[:n] {
 				if v.Column() != col.Index() {
 					t.Errorf("value read from page of column %d says it belongs to column %d", col.Index(), v.Column())
+					return
+				}
+				if v.IsNull() {
+					nullCount++
 				}
 			}
+			numValues += int64(n)
 			if err != nil {
 				if err != io.EOF {
 					t.Error(err)
+					return
 				}
+				break
+			}
+		}
+
+		if numValues != header.NumValues() {
+			t.Errorf("page of column %d declared %d values but %d were read", col.Index(), header.NumValues(), numValues)
+			return
+		}
+
+		// Only the v2 data pages advertise the number of nulls they contain.
+		if _, isV2 := header.(parquet.DataPageHeaderV2); isV2 {
+			if nullCount != header.NullCount() {
+				t.Errorf("page of column %d declared %d nulls but %d were read", col.Index(), header.NullCount(), nullCount)
 				return
 			}
 		}
