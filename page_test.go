@@ -418,9 +418,9 @@ func TestOptionalPageTrailingNulls(t *testing.T) {
 		}
 	}
 
-	resultRows := make([]parquet.Row, 0, len(records))
+	resultRows := make([]parquet.Row, 0, len(rows))
 	bufferRows := make([]parquet.Row, 10)
-	reader := buf.Rows()
+	reader := buffer.Rows()
 	for {
 		n, err := reader.ReadRows(bufferRows)
 		resultRows = append(resultRows, bufferRows[:n]...)
@@ -441,7 +441,7 @@ func TestOptionalPagePreserveIndex(t *testing.T) {
 	schema := parquet.SchemaOf(&testStruct{})
 	buffer := parquet.NewBuffer(schema)
 
-	if err := buffer.WriteRow([]parquet.Row{
+	if _, err := buffer.WriteRows([]parquet.Row{
 		schema.Deconstruct(nil, &testStruct{Value: nil}),
 	}); err != nil {
 		t.Fatal("writing row:", err)
@@ -474,7 +474,7 @@ func TestRepeatedPageTrailingNulls(t *testing.T) {
 	buf := parquet.NewBuffer(s)
 	for _, rec := range records {
 		row := s.Deconstruct(nil, rec)
-		_, err := buf.WriteRow([]parquet.Row{row})
+		_, err := buf.WriteRows([]parquet.Row{row})
 		if err != nil {
 			t.Fatal(err)
 		}
