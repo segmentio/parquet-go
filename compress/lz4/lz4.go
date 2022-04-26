@@ -103,6 +103,12 @@ func (r *reader) decompress() error {
 
 	for {
 		n, err := lz4.UncompressBlock(r.buffer.Bytes(), r.data)
+		// The lz4 package does not expose the error values, they are declared
+		// in internal/lz4errors. Based on what I read of the implementation,
+		// the only condition where this function errors is if the output buffer
+		// was too short.
+		//
+		// https://github.com/pierrec/lz4/blob/a5532e5996ee86d17f8ce2694c08fb5bf3c6b471/internal/lz4block/block.go#L45-L53
 		if err != nil {
 			r.data = make([]byte, 2*len(r.data))
 		} else {
