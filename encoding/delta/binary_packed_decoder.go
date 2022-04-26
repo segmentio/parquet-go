@@ -213,32 +213,41 @@ func (d *BinaryPackedDecoder) decodeBlock() error {
 		d.blockValues = d.blockValues[:d.blockSize]
 	}
 
-	blockValues := d.blockValues
-	for i := range blockValues {
-		blockValues[i] = 0
+	for i := range d.blockValues {
+		d.blockValues[i] = 0
 	}
 
-	if remain := d.totalValues - d.valueIndex; remain > len(blockValues) {
-		blockValues = blockValues[:remain]
-		d.blockValues = blockValues
-	}
-
+	remain := d.totalValues - d.valueIndex
 	i := 0
 	j := d.miniBlockSize
 
 	for _, bitWidth := range d.bitWidths {
-		if i >= len(blockValues) {
-			break
-		}
-
-		if j > len(blockValues) {
-			j = len(blockValues)
+		lastMiniBlock := j >= len(d.blockValues)
+		if lastMiniBlock {
+			j = len(d.blockValues)
 		}
 
 		if bitWidth != 0 {
-			for k := range blockValues[i:j] {
+			for k := range d.blockValues[i:j] {
 				v, nbits, err := d.miniBlocks.ReadBits(uint(bitWidth))
 				if err != nil {
+					// In some cases, the last mini block seems to be missing
+					// trailing bytes when all values have already been decoded.
+					//
+					// The spec is unclear on the topic, it says that no padding
+					// is added for the miniblocks that contain no values, tho
+					// it is not explicit on whether the last miniblock is
+					// allowed to be incomplete.
+					//
+					// When we remove padding on the miniblock containing the
+					// last value, parquet-tools sometimes fails to read the
+					// column. However, if we don't handle the case where EOF
+					// is reached before reading the full last miniblock, we
+					// are unable to read some of the reference files from the
+					// parquet-testing repository.
+					if err == io.EOF && lastMiniBlock && (i+k) >= remain {
+						break
+					}
 					err = dontExpectEOF(err)
 					err = fmt.Errorf("DELTA_BINARY_PACKED: reading mini blocks: %w", err)
 					return err
@@ -246,20 +255,28 @@ func (d *BinaryPackedDecoder) decodeBlock() error {
 				if nbits != uint(bitWidth) {
 					panic("BUG: wrong number of bits read from DELTA_BINARY_PACKED miniblock")
 				}
-				blockValues[i+k] = int64(v)
+				d.blockValues[i+k] = int64(v)
 			}
+		}
+
+		if lastMiniBlock {
+			break
 		}
 
 		i += d.miniBlockSize
 		j += d.miniBlockSize
 	}
 
-	bits.AddInt64(blockValues, minDelta)
-	blockValues[0] += d.lastValue
-	for i := 1; i < len(blockValues); i++ {
-		blockValues[i] += blockValues[i-1]
+	if remain < len(d.blockValues) {
+		d.blockValues = d.blockValues[:remain]
 	}
-	d.lastValue = blockValues[len(blockValues)-1]
+
+	bits.AddInt64(d.blockValues, minDelta)
+	d.blockValues[0] += d.lastValue
+	for i := 1; i < len(d.blockValues); i++ {
+		d.blockValues[i] += d.blockValues[i-1]
+	}
+	d.lastValue = d.blockValues[len(d.blockValues)-1]
 	return nil
 }
 
