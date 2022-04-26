@@ -456,10 +456,3 @@ func (r *nullColumnReader) ReadValues(values []Value) (n int, err error) {
 	}
 	return len(values), err
 }
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
