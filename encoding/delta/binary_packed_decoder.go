@@ -43,14 +43,12 @@ func (d *BinaryPackedDecoder) Reset(r io.Reader) {
 		d.blockValues = make([]int64, 0, blockSize32)
 	}
 
-	if d.reader != nil {
+	if rbuf, _ := r.(*bufio.Reader); rbuf != nil {
+		d.reader = rbuf
+	} else if d.reader != nil {
 		d.reader.Reset(r)
 	} else if r != nil {
-		if br, _ := r.(*bufio.Reader); br != nil {
-			d.reader = br
-		} else {
-			d.reader = bufio.NewReaderSize(r, defaultBufferSize)
-		}
+		d.reader = bufio.NewReaderSize(r, defaultBufferSize)
 	}
 
 	d.miniBlocks.Reset(d.reader)
@@ -217,16 +215,11 @@ func (d *BinaryPackedDecoder) decodeBlock() error {
 		d.blockValues[i] = 0
 	}
 
-	remain := d.totalValues - d.valueIndex
 	i := 0
 	j := d.miniBlockSize
+	remain := d.totalValues - d.valueIndex
 
 	for _, bitWidth := range d.bitWidths {
-		lastMiniBlock := j >= len(d.blockValues)
-		if lastMiniBlock {
-			j = len(d.blockValues)
-		}
-
 		if bitWidth != 0 {
 			for k := range d.blockValues[i:j] {
 				v, nbits, err := d.miniBlocks.ReadBits(uint(bitWidth))
@@ -245,7 +238,7 @@ func (d *BinaryPackedDecoder) decodeBlock() error {
 					// is reached before reading the full last miniblock, we
 					// are unable to read some of the reference files from the
 					// parquet-testing repository.
-					if err == io.EOF && lastMiniBlock && (i+k) >= remain {
+					if err == io.EOF && (i+k) >= remain {
 						break
 					}
 					err = dontExpectEOF(err)
@@ -259,7 +252,7 @@ func (d *BinaryPackedDecoder) decodeBlock() error {
 			}
 		}
 
-		if lastMiniBlock {
+		if j >= remain {
 			break
 		}
 

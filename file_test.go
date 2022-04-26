@@ -20,7 +20,7 @@ func init() {
 }
 
 func TestOpenFile(t *testing.T) {
-	t.Skip()
+	//t.Skip()
 	for _, path := range fixtureFiles {
 		t.Run(path, func(t *testing.T) {
 			f, err := os.Open(path)
