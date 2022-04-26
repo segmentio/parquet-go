@@ -917,7 +917,7 @@ type nullType format.NullType
 
 func (t *nullType) String() string { return (*format.NullType)(t).String() }
 
-func (t *nullType) Kind() Kind { panic("cannot call Kind on parquet NULL type") }
+func (t *nullType) Kind() Kind { return -1 }
 
 func (t *nullType) Length() int { return 0 }
 
@@ -945,8 +945,8 @@ func (t *nullType) NewColumnBuffer(int, int) ColumnBuffer {
 	panic("cannot create column buffer from parquet NULL type")
 }
 
-func (t *nullType) NewColumnReader(int, int) ColumnReader {
-	panic("cannot create column reader from parquet NULL type")
+func (t *nullType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
+	return newNullColumnReader(t, makeColumnIndex(columnIndex))
 }
 
 func (t *nullType) ReadDictionary(int, int, encoding.Decoder) (Dictionary, error) {

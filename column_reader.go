@@ -121,12 +121,7 @@ func (r *fileColumnReader) ReadValues(values []Value) (int, error) {
 		wantRead := numValues - numNulls
 		n, err := r.values.ReadValues(values[:wantRead])
 		if n < wantRead && err != nil {
-			if err == io.EOF {
-				// EOF should not happen at this stage since we successfully
-				// decoded levels.
-				err = fmt.Errorf("after reading %d/%d values: %w", r.numValues-r.remain, r.numValues, io.ErrUnexpectedEOF)
-			}
-			return read, fmt.Errorf("decoding values from data page of column %d: %w", r.Column(), err)
+			return read, fmt.Errorf("read error after decoding %d/%d values from data page of column %d: %w", r.numValues-r.remain, r.numValues, r.Column(), err)
 		}
 
 		for i, j := n-1, len(definitionLevels)-1; j >= 0; j-- {
@@ -425,9 +420,39 @@ func (r *fixedLenByteArrayColumnReader) Reset(numValues int, decoder encoding.De
 	r.remain = r.size * numValues
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
+type nullColumnReader struct {
+	typ         Type
+	remain      int
+	columnIndex int16
+}
+
+func newNullColumnReader(typ Type, columnIndex int16) *nullColumnReader {
+	return &nullColumnReader{
+		typ:         typ,
+		columnIndex: ^columnIndex,
 	}
-	return b
+}
+
+func (r *nullColumnReader) Type() Type {
+	return r.typ
+}
+
+func (r *nullColumnReader) Column() int {
+	return int(^r.columnIndex)
+}
+
+func (r *nullColumnReader) Reset(numValues int, decoder encoding.Decoder) {
+	r.remain = numValues
+}
+
+func (r *nullColumnReader) ReadValues(values []Value) (n int, err error) {
+	values = values[:min(r.remain, len(values))]
+	for i := range values {
+		values[i] = Value{columnIndex: r.columnIndex}
+	}
+	r.remain -= len(values)
+	if r.remain == 0 {
+		err = io.EOF
+	}
+	return len(values), err
 }

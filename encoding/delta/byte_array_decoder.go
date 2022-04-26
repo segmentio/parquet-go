@@ -23,11 +23,8 @@ func NewByteArrayDecoder(r io.Reader) *ByteArrayDecoder {
 }
 
 func (d *ByteArrayDecoder) Reset(r io.Reader) {
-	if r != nil {
-		br, _ := r.(*bufio.Reader)
-		if br == nil {
-			r = bufio.NewReaderSize(r, defaultBufferSize)
-		}
+	if _, ok := r.(*bufio.Reader); !ok {
+		r = bufio.NewReaderSize(r, defaultBufferSize)
 	}
 	d.deltas.Reset(r)
 	d.arrays.Reset(r)
@@ -58,10 +55,10 @@ func (d *ByteArrayDecoder) DecodeFixedLenByteArray(size int, data []byte) (int, 
 func (d *ByteArrayDecoder) decode(limit int, push func(int) ([]byte, error)) (int, error) {
 	if d.arrays.index < 0 {
 		if err := d.decodePrefixes(); err != nil {
-			return 0, err
+			return 0, fmt.Errorf("DELTA_BYTE_ARRAY: decoding prefix lengths: %w", err)
 		}
 		if err := d.arrays.decodeLengths(); err != nil {
-			return 0, err
+			return 0, fmt.Errorf("DELTA_BYTE_ARRAY: decoding byte array lengths: %w", err)
 		}
 	}
 

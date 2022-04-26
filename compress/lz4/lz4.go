@@ -2,20 +2,12 @@
 package lz4
 
 import (
+	"bytes"
 	"io"
 
 	"github.com/pierrec/lz4/v4"
 	"github.com/segmentio/parquet-go/compress"
 	"github.com/segmentio/parquet-go/format"
-)
-
-type BlockSize = lz4.BlockSize
-
-const (
-	Block64Kb  = lz4.Block64Kb
-	Block256Kb = lz4.Block256Kb
-	Block1Mb   = lz4.Block1Mb
-	Block4Mb   = lz4.Block4Mb
 )
 
 type Level = lz4.CompressionLevel
@@ -34,15 +26,11 @@ const (
 )
 
 const (
-	DefaultBlockSize   = Block4Mb
-	DefaultLevel       = Fast
-	DefaultConcurrency = 1
+	DefaultLevel = Fast
 )
 
 type Codec struct {
-	BlockSize   BlockSize
-	Level       Level
-	Concurrency int
+	Level Level
 }
 
 func (c *Codec) String() string {
@@ -54,55 +42,114 @@ func (c *Codec) CompressionCodec() format.CompressionCodec {
 }
 
 func (c *Codec) NewReader(r io.Reader) (compress.Reader, error) {
-	lzr := lz4.NewReader(r)
-	err := lzr.Apply(
-		lz4.ConcurrencyOption(c.concurrency()),
-	)
-	if err != nil {
-		return nil, err
-	}
-	return reader{lzr}, nil
+	return &reader{reader: r}, nil
 }
 
 func (c *Codec) NewWriter(w io.Writer) (compress.Writer, error) {
-	lzw := lz4.NewWriter(w)
-	err := lzw.Apply(
-		lz4.BlockChecksumOption(false),
-		lz4.ChecksumOption(false),
-		lz4.BlockSizeOption(c.blockSize()),
-		lz4.CompressionLevelOption(c.level()),
-		lz4.ConcurrencyOption(c.concurrency()),
-	)
+	return &writer{writer: w, compressor: lz4.CompressorHC{Level: c.Level}}, nil
+}
+
+type reader struct {
+	buffer bytes.Buffer
+	data   []byte
+	offset int
+	reader io.Reader
+}
+
+func (r *reader) Close() error {
+	r.offset = len(r.data)
+	r.reader = nil
+	return nil
+}
+
+func (r *reader) Reset(rr io.Reader) error {
+	r.buffer.Reset()
+	r.data = r.data[:0]
+	r.offset = 0
+	r.reader = rr
+	return nil
+}
+
+func (r *reader) Read(b []byte) (n int, err error) {
+	if r.offset == 0 && len(r.data) == 0 {
+		if err := r.decompress(); err != nil {
+			return 0, err
+		}
+	}
+	n = copy(b, r.data[r.offset:])
+	r.offset += n
+	if r.offset == len(r.data) {
+		err = io.EOF
+	}
+	return n, err
+}
+
+func (r *reader) decompress() error {
+	if r.reader == nil {
+		return io.EOF
+	}
+
+	_, err := r.buffer.ReadFrom(r.reader)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return writer{lzw}, nil
-}
 
-func (c *Codec) concurrency() int {
-	if c.Concurrency != 0 {
-		return c.Concurrency
+	optimisticOutputSize := 3 * r.buffer.Len()
+	if cap(r.data) < optimisticOutputSize {
+		r.data = make([]byte, optimisticOutputSize)
+	} else {
+		r.data = r.data[:cap(r.data)]
 	}
-	return DefaultConcurrency
-}
 
-func (c *Codec) blockSize() BlockSize {
-	if c.BlockSize != 0 {
-		return c.BlockSize
+	for {
+		n, err := lz4.UncompressBlock(r.buffer.Bytes(), r.data)
+		// The lz4 package does not expose the error values, they are declared
+		// in internal/lz4errors. Based on what I read of the implementation,
+		// the only condition where this function errors is if the output buffer
+		// was too short.
+		//
+		// https://github.com/pierrec/lz4/blob/a5532e5996ee86d17f8ce2694c08fb5bf3c6b471/internal/lz4block/block.go#L45-L53
+		if err != nil {
+			r.data = make([]byte, 2*len(r.data))
+		} else {
+			r.data = r.data[:n]
+			return nil
+		}
 	}
-	return DefaultBlockSize
 }
 
-func (c *Codec) level() Level {
-	// zero == Fast
-	return c.Level
+type writer struct {
+	buffer     bytes.Buffer
+	data       []byte
+	writer     io.Writer
+	compressor lz4.CompressorHC
 }
 
-type reader struct{ *lz4.Reader }
+func (w *writer) Reset(ww io.Writer) error {
+	w.buffer.Reset()
+	w.data = w.data[:0]
+	w.writer = ww
+	return nil
+}
 
-func (r reader) Close() error             { return nil }
-func (r reader) Reset(rr io.Reader) error { r.Reader.Reset(rr); return nil }
+func (w *writer) Write(b []byte) (int, error) {
+	if w.writer == nil {
+		return 0, io.ErrClosedPipe
+	}
+	return w.buffer.Write(b)
+}
 
-type writer struct{ *lz4.Writer }
-
-func (w writer) Reset(ww io.Writer) error { w.Writer.Reset(ww); return nil }
+func (w *writer) Close() (err error) {
+	if w.writer != nil && w.buffer.Len() > 0 {
+		limit := lz4.CompressBlockBound(w.buffer.Len())
+		if limit > cap(w.data) {
+			w.data = make([]byte, limit)
+		} else {
+			w.data = w.data[:limit]
+		}
+		size, _ := w.compressor.CompressBlock(w.buffer.Bytes(), w.data)
+		_, err = w.writer.Write(w.data[:size])
+	}
+	w.writer = nil
+	return err
+}

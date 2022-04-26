@@ -43,14 +43,12 @@ func (d *BinaryPackedDecoder) Reset(r io.Reader) {
 		d.blockValues = make([]int64, 0, blockSize32)
 	}
 
-	if d.reader != nil {
+	if rbuf, _ := r.(*bufio.Reader); rbuf != nil {
+		d.reader = rbuf
+	} else if d.reader != nil {
 		d.reader.Reset(r)
 	} else if r != nil {
-		if br, _ := r.(*bufio.Reader); br != nil {
-			d.reader = br
-		} else {
-			d.reader = bufio.NewReaderSize(r, defaultBufferSize)
-		}
+		d.reader = bufio.NewReaderSize(r, defaultBufferSize)
 	}
 
 	d.miniBlocks.Reset(d.reader)
@@ -105,15 +103,7 @@ func (d *BinaryPackedDecoder) DecodeInt64(data []int64) (int, error) {
 			return decoded, err
 		}
 
-		i := d.blockIndex
-		j := len(d.blockValues)
-		remain := d.totalValues - d.valueIndex
-
-		if (j - i) > remain {
-			j = i + remain
-		}
-
-		n := copy(data, d.blockValues[i:j])
+		n := copy(data, d.blockValues[d.blockIndex:])
 		data = data[n:]
 		decoded += n
 		d.valueIndex += n
@@ -150,10 +140,10 @@ func (d *BinaryPackedDecoder) decode() error {
 	}
 
 	if d.blockIndex == 0 || d.blockIndex == len(d.blockValues) {
-		d.blockIndex = 0
 		if err := d.decodeBlock(); err != nil {
 			return err
 		}
+		d.blockIndex = 0
 	}
 
 	return nil
@@ -202,7 +192,7 @@ func (d *BinaryPackedDecoder) decodeHeader() (blockSize, numMiniBlock, totalValu
 func (d *BinaryPackedDecoder) decodeBlock() error {
 	minDelta, err := binary.ReadVarint(d.reader)
 	if err != nil {
-		return fmt.Errorf("DELTA_BINARY_PACKED: reading min delta: %w", err)
+		return fmt.Errorf("DELTA_BINARY_PACKED: reading min delta (%d): %w", minDelta, err)
 	}
 
 	if cap(d.bitWidths) < d.numMiniBlock {
@@ -221,24 +211,36 @@ func (d *BinaryPackedDecoder) decodeBlock() error {
 		d.blockValues = d.blockValues[:d.blockSize]
 	}
 
-	blockValues := d.blockValues
-	for i := range blockValues {
-		blockValues[i] = 0
+	for i := range d.blockValues {
+		d.blockValues[i] = 0
 	}
 
-	for i, bitWidth := range d.bitWidths {
-		if bitWidth != 0 {
-			j := (i + 0) * d.miniBlockSize
-			k := (i + 1) * d.miniBlockSize
-			n := k - j
-			r := d.totalValues - d.valueIndex
-			if n > r {
-				n = r
-			}
+	i := 0
+	j := d.miniBlockSize
+	remain := d.totalValues - d.valueIndex
 
-			for x := range blockValues[j:k] {
+	for _, bitWidth := range d.bitWidths {
+		if bitWidth != 0 {
+			for k := range d.blockValues[i:j] {
 				v, nbits, err := d.miniBlocks.ReadBits(uint(bitWidth))
 				if err != nil {
+					// In some cases, the last mini block seems to be missing
+					// trailing bytes when all values have already been decoded.
+					//
+					// The spec is unclear on the topic, it says that no padding
+					// is added for the miniblocks that contain no values, tho
+					// it is not explicit on whether the last miniblock is
+					// allowed to be incomplete.
+					//
+					// When we remove padding on the miniblock containing the
+					// last value, parquet-tools sometimes fails to read the
+					// column. However, if we don't handle the case where EOF
+					// is reached before reading the full last miniblock, we
+					// are unable to read some of the reference files from the
+					// parquet-testing repository.
+					if err == io.EOF && (i+k) >= remain {
+						break
+					}
 					err = dontExpectEOF(err)
 					err = fmt.Errorf("DELTA_BINARY_PACKED: reading mini blocks: %w", err)
 					return err
@@ -246,21 +248,28 @@ func (d *BinaryPackedDecoder) decodeBlock() error {
 				if nbits != uint(bitWidth) {
 					panic("BUG: wrong number of bits read from DELTA_BINARY_PACKED miniblock")
 				}
-				blockValues[j+x] = int64(v)
+				d.blockValues[i+k] = int64(v)
 			}
 		}
+
+		if j >= remain {
+			break
+		}
+
+		i += d.miniBlockSize
+		j += d.miniBlockSize
 	}
 
-	if remain := d.totalValues - d.valueIndex; len(blockValues) > remain {
-		blockValues = blockValues[:remain]
+	if remain < len(d.blockValues) {
+		d.blockValues = d.blockValues[:remain]
 	}
 
-	bits.AddInt64(blockValues, minDelta)
-	blockValues[0] += d.lastValue
-	for i := 1; i < len(blockValues); i++ {
-		blockValues[i] += blockValues[i-1]
+	bits.AddInt64(d.blockValues, minDelta)
+	d.blockValues[0] += d.lastValue
+	for i := 1; i < len(d.blockValues); i++ {
+		d.blockValues[i] += d.blockValues[i-1]
 	}
-	d.lastValue = blockValues[len(blockValues)-1]
+	d.lastValue = d.blockValues[len(d.blockValues)-1]
 	return nil
 }
 

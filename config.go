@@ -298,14 +298,24 @@ type RowGroupOption interface {
 	ConfigureRowGroup(*RowGroupConfig)
 }
 
-// SkipPageIndex is a file configuration option which when set to true, prevents
-// automatically reading the page index when opening a parquet file. This is
+// SkipPageIndex is a file configuration option which prevents automatically
+// reading the page index when opening a parquet file, when set to true. This is
 // useful as an optimization when programs know that they will not need to
 // consume the page index.
 //
 // Defaults to false.
 func SkipPageIndex(skip bool) FileOption {
 	return fileOption(func(config *FileConfig) { config.SkipPageIndex = skip })
+}
+
+// SkipBloomFilters is a file configuration option which prevents automatically
+// reading the bloom filters when opening a parquet file, when set to true.
+// This is useful as an optimization when programs know that they will not need
+// to consume the bloom filters.
+//
+// Defaults to false.
+func SkipBloomFilters(skip bool) FileOption {
+	return fileOption(func(config *FileConfig) { config.SkipBloomFilters = skip })
 }
 
 // PageBufferSize configures the size of column page buffers on parquet writers.
