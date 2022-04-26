@@ -555,17 +555,10 @@ func (r *filePages) readPage() (*filePage, error) {
 }
 
 func (r *filePages) readDictionary() error {
-	currentOffset, _ := r.section.Seek(0, io.SeekCurrent)
-	defer func() {
-		r.section.Seek(currentOffset, io.SeekStart)
-		r.rbuf.Reset(r.section)
-	}()
-
-	if _, err := r.section.Seek(0, io.SeekStart); err != nil {
+	if _, err := r.section.Seek(r.dictOffset-r.baseOffset, io.SeekStart); err != nil {
 		return fmt.Errorf("seeking to dictionary page offset: %w", err)
 	}
 	r.rbuf.Reset(r.section)
-
 	p, err := r.readPage()
 	if err != nil {
 		return err
@@ -575,12 +568,12 @@ func (r *filePages) readDictionary() error {
 
 func (r *filePages) readDictionaryPage(p *filePage) error {
 	page := acquireCompressedPageReader(p.codec, &p.data)
-	enc := r.page.header.DictionaryPageHeader.Encoding
+	enc := p.header.DictionaryPageHeader.Encoding
 	dec := LookupEncoding(enc).NewDecoder(page)
 
 	columnIndex := r.column.Column()
 	numValues := int(p.NumValues())
-	dict, err := r.page.columnType.ReadDictionary(columnIndex, numValues, dec)
+	dict, err := p.columnType.ReadDictionary(columnIndex, numValues, dec)
 	releaseCompressedPageReader(page)
 
 	if err != nil {
@@ -608,6 +601,12 @@ func (r *filePages) ReadPage() (Page, error) {
 		// recorded in the column metadata. We account for this by lazily
 		// checking whether the first page is a dictionary page.
 		if p.index == 0 && p.header.Type == format.DictionaryPage && r.page.dictionary == nil {
+			offset, err := r.section.Seek(0, io.SeekCurrent)
+			if err != nil {
+				return nil, err
+			}
+			r.dictOffset = r.baseOffset
+			r.dataOffset = r.baseOffset + offset
 			if err := r.readDictionaryPage(p); err != nil {
 				return nil, err
 			}
