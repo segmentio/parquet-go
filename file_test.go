@@ -10,17 +10,17 @@ import (
 	"github.com/segmentio/parquet-go"
 )
 
-var fixtureFiles []string
+var testdataFiles []string
 
 func init() {
-	entries, _ := os.ReadDir("fixtures")
+	entries, _ := os.ReadDir("testdata")
 	for _, e := range entries {
-		fixtureFiles = append(fixtureFiles, filepath.Join("fixtures", e.Name()))
+		testdataFiles = append(testdataFiles, filepath.Join("testdata", e.Name()))
 	}
 }
 
 func TestOpenFile(t *testing.T) {
-	for _, path := range fixtureFiles {
+	for _, path := range testdataFiles {
 		t.Run(path, func(t *testing.T) {
 			f, err := os.Open(path)
 			if err != nil {
