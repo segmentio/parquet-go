@@ -411,22 +411,25 @@ func TestOptionalPageTrailingNulls(t *testing.T) {
 	}}
 
 	for _, row := range rows {
-		if err := buffer.WriteRow(schema.Deconstruct(nil, row)); err != nil {
+		if _, err := buffer.WriteRows([]parquet.Row{
+			schema.Deconstruct(nil, row),
+		}); err != nil {
 			t.Fatal("writing row:", err)
 		}
 	}
 
-	resultRows := []parquet.Row{}
-	reader := buffer.Rows()
+	resultRows := make([]parquet.Row, 0, len(records))
+	bufferRows := make([]parquet.Row, 10)
+	reader := buf.Rows()
 	for {
-		row, err := reader.ReadRow(nil)
+		n, err := reader.ReadRows(bufferRows)
+		resultRows = append(resultRows, bufferRows[:n]...)
 		if err != nil {
 			if err == io.EOF {
 				break
 			}
 			t.Fatal("reading rows:", err)
 		}
-		resultRows = append(resultRows, row)
 	}
 
 	if len(resultRows) != len(rows) {
@@ -438,16 +441,19 @@ func TestOptionalPagePreserveIndex(t *testing.T) {
 	schema := parquet.SchemaOf(&testStruct{})
 	buffer := parquet.NewBuffer(schema)
 
-	if err := buffer.WriteRow(schema.Deconstruct(nil, &testStruct{Value: nil})); err != nil {
+	if err := buffer.WriteRow([]parquet.Row{
+		schema.Deconstruct(nil, &testStruct{Value: nil}),
+	}); err != nil {
 		t.Fatal("writing row:", err)
 	}
 
-	row, err := buffer.Rows().ReadRow(nil)
-	if err != nil {
+	rows := make([]parquet.Row, 10)
+	n, err := buffer.Rows().ReadRows(rows)
+	if err != nil && n == 0 {
 		t.Fatal("reading rows:", err)
 	}
 
-	if row[0].Column() != 0 {
+	if row := rows[n-1]; row[0].Column() != 0 {
 		t.Errorf("wrong index: got=%d want=%d", row[0].Column(), 0)
 	}
 }
@@ -468,23 +474,24 @@ func TestRepeatedPageTrailingNulls(t *testing.T) {
 	buf := parquet.NewBuffer(s)
 	for _, rec := range records {
 		row := s.Deconstruct(nil, rec)
-		err := buf.WriteRow(row)
+		_, err := buf.WriteRow([]parquet.Row{row})
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	resultRows := []parquet.Row{}
+	resultRows := make([]parquet.Row, 0, len(records))
+	bufferRows := make([]parquet.Row, 10)
 	reader := buf.Rows()
 	for {
-		row, err := reader.ReadRow(nil)
+		n, err := reader.ReadRows(bufferRows)
+		resultRows = append(resultRows, bufferRows[:n]...)
 		if err != nil {
 			if err == io.EOF {
 				break
 			}
 			t.Fatal("reading rows:", err)
 		}
-		resultRows = append(resultRows, row)
 	}
 
 	if len(resultRows) != len(records) {
