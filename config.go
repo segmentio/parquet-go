@@ -304,6 +304,16 @@ func SkipPageIndex(skip bool) FileOption {
 	return fileOption(func(config *FileConfig) { config.SkipPageIndex = skip })
 }
 
+// SkipBloomFilters is a file configuration option which when set to true,
+// prevents automatically reading the bloom filters when opening a parquet file.
+// This is useful as an optimization when programs know that they will not need
+// to consume the bloom filters.
+//
+// Defaults to false.
+func SkipBloomFilters(skip bool) FileOption {
+	return fileOption(func(config *FileConfig) { config.SkipBloomFilters = skip })
+}
+
 // PageBufferSize configures the size of column page buffers on parquet writers.
 //
 // Note that the page buffer size refers to the in-memory buffers where pages
