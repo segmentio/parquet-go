@@ -121,7 +121,7 @@ func (r *fileColumnReader) ReadValues(values []Value) (int, error) {
 		wantRead := numValues - numNulls
 		n, err := r.values.ReadValues(values[:wantRead])
 		if n < wantRead && err != nil {
-			return read, fmt.Errorf("after decoding %d/%d values from data page of column %d: %w", r.numValues-r.remain, r.numValues, r.Column(), err)
+			return read, fmt.Errorf("read error after decoding %d/%d values from data page of column %d: %w", r.numValues-r.remain, r.numValues, r.Column(), err)
 		}
 
 		for i, j := n-1, len(definitionLevels)-1; j >= 0; j-- {
