@@ -9,7 +9,7 @@ require (
 	github.com/klauspost/compress v1.15.1
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/pierrec/lz4/v4 v4.1.9
-	github.com/segmentio/encoding v0.3.3
+	github.com/segmentio/encoding v0.3.5
 	golang.org/x/sys v0.0.0-20211110154304-99a53858aa08
 )
 
