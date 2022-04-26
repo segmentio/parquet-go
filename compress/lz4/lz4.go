@@ -94,8 +94,9 @@ func (r *reader) decompress() error {
 		return err
 	}
 
-	if size := 3 * r.buffer.Len(); cap(r.data) < size {
-		r.data = make([]byte, size)
+	optimisticOutputSize := 3 * r.buffer.Len()
+	if cap(r.data) < optimisticOutputSize {
+		r.data = make([]byte, optimisticOutputSize)
 	} else {
 		r.data = r.data[:cap(r.data)]
 	}
