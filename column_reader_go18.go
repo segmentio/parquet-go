@@ -15,7 +15,6 @@ type columnReader[T primitive] struct {
 	buffer      []T
 	offset      int
 	remain      int
-	bufferSize  int
 	columnIndex int16
 }
 
@@ -23,7 +22,7 @@ func newColumnReader[T primitive](typ Type, columnIndex int16, bufferSize int, c
 	return &columnReader[T]{
 		class:       class,
 		typ:         typ,
-		bufferSize:  bufferSize,
+		buffer:      make([]T, 0, atLeastOne(bufferSize/sizeof[T]())),
 		columnIndex: ^columnIndex,
 	}
 }
@@ -51,10 +50,6 @@ func (r *columnReader[T]) ReadRequired(values []T) (n int, err error) {
 }
 
 func (r *columnReader[T]) ReadValues(values []Value) (n int, err error) {
-	if cap(r.buffer) == 0 {
-		r.buffer = make([]T, 0, atLeastOne(r.bufferSize))
-	}
-
 	makeValue := r.class.makeValue
 	columnIndex := r.columnIndex
 	for {

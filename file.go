@@ -18,7 +18,6 @@ import (
 
 const (
 	defaultDictBufferSize  = 8192
-	defaultReadBufferSize  = 4096
 	defaultLevelBufferSize = 1024
 )
 
@@ -34,6 +33,7 @@ type File struct {
 	columnIndexes []format.ColumnIndex
 	offsetIndexes []format.OffsetIndex
 	rowGroups     []RowGroup
+	bufferSize    int
 }
 
 // OpenFile opens a parquet file and reads the content between offset 0 and the given
@@ -43,11 +43,16 @@ type File struct {
 // parts of the file are left untouched; this means that successfully opening
 // a file does not validate that the pages have valid checksums.
 func OpenFile(r io.ReaderAt, size int64, options ...FileOption) (*File, error) {
-	b := make([]byte, 8)
-	f := &File{reader: r, size: size}
 	c, err := NewFileConfig(options...)
 	if err != nil {
 		return nil, err
+	}
+
+	b := make([]byte, 8)
+	f := &File{
+		reader:     r,
+		size:       size,
+		bufferSize: c.ReadBufferSize,
 	}
 
 	if _, err := r.ReadAt(b[:4], 0); err != nil {
@@ -416,7 +421,7 @@ func (c *fileColumnChunk) setPagesOn(r *filePages) {
 		r.dictOffset = r.baseOffset
 	}
 	r.section = io.NewSectionReader(c.file, r.baseOffset, c.chunk.MetaData.TotalCompressedSize)
-	r.rbuf = bufio.NewReaderSize(r.section, defaultReadBufferSize)
+	r.rbuf = bufio.NewReaderSize(r.section, c.file.bufferSize)
 	r.section.Seek(r.dataOffset-r.baseOffset, io.SeekStart)
 	r.decoder.Reset(r.protocol.NewReader(r.rbuf))
 }
@@ -982,7 +987,7 @@ func (s *filePageValueReaderState) init(columnType Type, column *Column, codec f
 	}
 
 	if s.reader == nil {
-		bufferSize := defaultReadBufferSize
+		bufferSize := column.file.bufferSize
 		if hasLevels {
 			bufferSize /= 2
 		}

@@ -12,6 +12,7 @@ const (
 	DefaultColumnIndexSizeLimit = 16
 	DefaultColumnBufferSize     = 1 * 1024 * 1024
 	DefaultPageBufferSize       = 1 * 1024 * 1024
+	DefaultReadBufferSize       = 4 * 1024
 	DefaultWriteBufferSize      = 32 * 1024
 	DefaultDataPageVersion      = 2
 	DefaultDataPageStatistics   = false
@@ -30,6 +31,7 @@ const (
 //	})
 //
 type FileConfig struct {
+	ReadBufferSize   int
 	SkipPageIndex    bool
 	SkipBloomFilters bool
 }
@@ -38,6 +40,7 @@ type FileConfig struct {
 // default file configuration.
 func DefaultFileConfig() *FileConfig {
 	return &FileConfig{
+		ReadBufferSize:   DefaultReadBufferSize,
 		SkipPageIndex:    DefaultSkipPageIndex,
 		SkipBloomFilters: DefaultSkipBloomFilters,
 	}
@@ -71,7 +74,10 @@ func (c *FileConfig) ConfigureFile(config *FileConfig) {
 
 // Validate returns a non-nil error if the configuration of c is invalid.
 func (c *FileConfig) Validate() error {
-	return nil
+	const baseName = "parquet.(*FileConfig)."
+	return errorInvalidConfiguration(
+		validatePositiveInt(baseName+"ReadBufferSize", c.ReadBufferSize),
+	)
 }
 
 // The ReaderConfig type carries configuration options for parquet readers.
@@ -296,6 +302,14 @@ type WriterOption interface {
 // options for parquet row groups.
 type RowGroupOption interface {
 	ConfigureRowGroup(*RowGroupConfig)
+}
+
+// ReadBufferSize configures the size of the read buffer. This value must be
+// positive.
+//
+// Defaults to 32 KiB.
+func ReadBufferSize(size int) FileOption {
+	return fileOption(func(config *FileConfig) { config.ReadBufferSize = size })
 }
 
 // SkipPageIndex is a file configuration option which prevents automatically
