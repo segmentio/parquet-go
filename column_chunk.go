@@ -39,6 +39,7 @@ type ColumnChunk interface {
 type Pages interface {
 	PageReader
 	RowSeeker
+	io.Closer
 }
 
 type pageAndValueWriter interface {
@@ -60,6 +61,20 @@ type columnChunkReader struct {
 
 func (r *columnChunkReader) buffered() int {
 	return len(r.buffer) - r.offset
+}
+
+func (r *columnChunkReader) close() (err error) {
+	if r.reader != nil {
+		err = r.reader.Close()
+	}
+	clearValues(r.buffer)
+	r.column = nil
+	r.buffer = r.buffer[:0]
+	r.offset = 0
+	r.page = nil
+	r.reader = nil
+	r.values = nil
+	return nil
 }
 
 func (r *columnChunkReader) seekToRow(rowIndex int64) error {

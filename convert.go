@@ -368,21 +368,30 @@ func (c *convertedRowGroup) NumRows() int64                  { return c.rowGroup
 func (c *convertedRowGroup) ColumnChunks() []ColumnChunk     { return c.columns }
 func (c *convertedRowGroup) Schema() *Schema                 { return c.conv.Schema() }
 func (c *convertedRowGroup) SortingColumns() []SortingColumn { return c.sorting }
-func (c *convertedRowGroup) Rows() Rows                      { return &convertedRows{rows: c.rowGroup.Rows(), conv: c.conv} }
+func (c *convertedRowGroup) Rows() Rows {
+	rows := c.rowGroup.Rows()
+	return &convertedRows{
+		convertedRowReader: convertedRowReader{
+			rows: rows,
+			conv: c.conv,
+		},
+		rows: rows,
+	}
+}
 
 // ConvertRowReader constructs a wrapper of the given row reader which applies
 // the given schema conversion to the rows.
 func ConvertRowReader(rows RowReader, conv Conversion) RowReaderWithSchema {
-	return &convertedRows{rows: &forwardRowSeeker{rows: rows}, conv: conv}
+	return &convertedRowReader{rows: &forwardRowSeeker{rows: rows}, conv: conv}
 }
 
-type convertedRows struct {
-	rows RowReadSeeker
+type convertedRowReader struct {
+	rows RowReader
 	buf  Row
 	conv Conversion
 }
 
-func (c *convertedRows) ReadRow(row Row) (Row, error) {
+func (c *convertedRowReader) ReadRow(row Row) (Row, error) {
 	defer func() {
 		clearValues(c.buf)
 	}()
@@ -394,8 +403,17 @@ func (c *convertedRows) ReadRow(row Row) (Row, error) {
 	return c.conv.Convert(row, c.buf)
 }
 
-func (c *convertedRows) Schema() *Schema {
+func (c *convertedRowReader) Schema() *Schema {
 	return c.conv.Schema()
+}
+
+type convertedRows struct {
+	convertedRowReader
+	rows Rows
+}
+
+func (c *convertedRows) Close() error {
+	return c.rows.Close()
 }
 
 func (c *convertedRows) SeekToRow(rowIndex int64) error {

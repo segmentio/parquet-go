@@ -157,6 +157,15 @@ func sizeOf(r io.ReaderAt) (int64, error) {
 	}
 }
 
+// Close closes the reader.
+func (r *Reader) Close() error {
+	r.file.Close()
+	r.read.Close()
+	r.rowIndex = 0
+	clearValues(r.values)
+	return nil
+}
+
 // Reset repositions the reader at the beginning of the underlying parquet file.
 func (r *Reader) Reset() {
 	r.file.Reset()
@@ -258,7 +267,19 @@ func (r *reader) init(schema *Schema, rowGroup RowGroup) {
 	r.Reset()
 }
 
+func (r *reader) Close() (err error) {
+	if r.rows != nil {
+		err = r.rows.Close()
+	}
+	r.rows = nil
+	r.rowIndex = 0
+	return err
+}
+
 func (r *reader) Reset() {
+	if r.rows != nil {
+		r.rows.Close()
+	}
 	r.rows = nil // TODO: can we make the RowReader reusable?
 	r.rowIndex = 0
 }

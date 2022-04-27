@@ -125,8 +125,11 @@ func writeParquetFileWithBuffer(w io.Writer, rows rows, options ...parquet.Write
 		}
 	}
 
+	reader := buffer.Rows()
+	defer reader.Close()
+
 	writer := parquet.NewWriter(w, options...)
-	numRows, err := parquet.CopyRows(writer, buffer.Rows())
+	numRows, err := parquet.CopyRows(writer, reader)
 	if err != nil {
 		return err
 	}

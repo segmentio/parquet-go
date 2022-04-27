@@ -121,14 +121,22 @@ type singlePage struct {
 	seek int64
 }
 
+func (r *singlePage) Close() error {
+	r.page = nil
+	r.seek = 0
+	return nil
+}
+
 func (r *singlePage) ReadPage() (Page, error) {
-	if numRows := r.page.NumRows(); r.seek < numRows {
-		seek := r.seek
-		r.seek = numRows
-		if seek > 0 {
-			return r.page.Buffer().Slice(seek, numRows), nil
+	if r.page != nil {
+		if numRows := r.page.NumRows(); r.seek < numRows {
+			seek := r.seek
+			r.seek = numRows
+			if seek > 0 {
+				return r.page.Buffer().Slice(seek, numRows), nil
+			}
+			return r.page, nil
 		}
-		return r.page, nil
 	}
 	return nil, io.EOF
 }

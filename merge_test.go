@@ -51,12 +51,15 @@ func BenchmarkMergeRowGroups(b *testing.B) {
 					for i := 0; i < b.N; i++ {
 						rbuf, err = rows.ReadRow(rbuf[:0])
 						if err != nil {
+							rows.Close()
 							if !errors.Is(err, io.EOF) {
 								b.Fatal(err)
 							}
 							rows = mergedRowGroup.Rows()
 						}
 					}
+
+					rows.Close()
 
 					seconds := time.Since(start).Seconds()
 					b.ReportMetric(float64(b.N)/seconds, "row/s")
@@ -90,8 +93,10 @@ func BenchmarkMergeFiles(b *testing.B) {
 				}
 				sort.Sort(buffer)
 				rowGroupBuffers[i].Reset()
+				rows := buffer.Rows()
 				writer := parquet.NewWriter(&rowGroupBuffers[i])
-				_, err := parquet.CopyRows(writer, buffer.Rows())
+				_, err := parquet.CopyRows(writer, rows)
+				rows.Close()
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -120,12 +125,15 @@ func BenchmarkMergeFiles(b *testing.B) {
 					for i := 0; i < b.N; i++ {
 						rbuf, err = rows.ReadRow(rbuf[:0])
 						if err != nil {
+							rows.Close()
 							if !errors.Is(err, io.EOF) {
 								b.Fatal(err)
 							}
 							rows = mergedRowGroup.Rows()
 						}
 					}
+
+					rows.Close()
 
 					totalSize := int64(0)
 					for _, f := range files[:n] {

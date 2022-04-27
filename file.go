@@ -9,6 +9,7 @@ import (
 	"hash/crc32"
 	"io"
 	"sort"
+	"sync"
 
 	"github.com/segmentio/encoding/thrift"
 	"github.com/segmentio/parquet-go/encoding"
@@ -365,7 +366,7 @@ func (g *fileRowGroup) Schema() *Schema                 { return g.schema }
 func (g *fileRowGroup) NumRows() int64                  { return g.rowGroup.NumRows }
 func (g *fileRowGroup) ColumnChunks() []ColumnChunk     { return g.columns }
 func (g *fileRowGroup) SortingColumns() []SortingColumn { return g.sorting }
-func (g *fileRowGroup) Rows() Rows                      { return &rowGroupRowReader{rowGroup: g} }
+func (g *fileRowGroup) Rows() Rows                      { return &rowGroupRows{rowGroup: g} }
 
 type fileSortingColumn struct {
 	column     *Column
@@ -455,17 +456,35 @@ type filePages struct {
 
 	section *io.SectionReader
 	rbuf    *bufio.Reader
+	limit   io.LimitedReader
 
 	// This buffer holds compressed pages in memory when they are read; we need
 	// to read whole pages because we have to compute the checksum prior to
 	// exposing the page to the application.
-	compressedPageData []byte
+	compressedPageData *bytes.Buffer
 
 	page filePage
 	skip int64
 }
 
+func (r *filePages) Close() error {
+	if r.page.values != nil {
+		r.page.values.release()
+		r.page.values = nil
+	}
+
+	releaseCompressedPageBuffer(r.compressedPageData)
+	r.compressedPageData = nil
+
+	r.rbuf = nil
+	return nil
+}
+
 func (r *filePages) readPage() (*filePage, error) {
+	if r.rbuf == nil {
+		return nil, io.EOF
+	}
+
 	r.page.header = format.PageHeader{}
 
 	/*
@@ -493,28 +512,26 @@ func (r *filePages) readPage() (*filePage, error) {
 		if err != io.EOF {
 			err = fmt.Errorf("decoding page header: %w", err)
 		}
-		if r.page.values != nil {
-			r.page.values.release()
-			r.page.values = nil
-		}
 		return nil, err
 	}
 
-	compressedPageSize := int(r.page.header.CompressedPageSize)
-	if cap(r.compressedPageData) < compressedPageSize {
-		r.compressedPageData = make([]byte, compressedPageSize)
-	} else {
-		r.compressedPageData = r.compressedPageData[:compressedPageSize]
+	if r.compressedPageData == nil {
+		r.compressedPageData = acquireCompressedPageBuffer()
 	}
+	r.compressedPageData.Reset()
+	r.compressedPageData.Grow(int(r.page.header.CompressedPageSize))
 
-	_, err := io.ReadFull(r.rbuf, r.compressedPageData)
+	r.limit.R = r.rbuf
+	r.limit.N = int64(r.page.header.CompressedPageSize)
+
+	_, err := r.compressedPageData.ReadFrom(&r.limit)
 	if err != nil {
 		return nil, fmt.Errorf("reading page %d of column %q", r.page.index, r.page.columnPath())
 	}
 
 	if r.page.header.CRC != 0 {
 		headerChecksum := uint32(r.page.header.CRC)
-		bufferChecksum := crc32.ChecksumIEEE(r.compressedPageData)
+		bufferChecksum := crc32.ChecksumIEEE(r.compressedPageData.Bytes())
 
 		if headerChecksum != bufferChecksum {
 			// The parquet specs indicate that corruption errors could be
@@ -535,7 +552,7 @@ func (r *filePages) readPage() (*filePage, error) {
 		}
 	}
 
-	r.page.data.Reset(r.compressedPageData)
+	r.page.data.Reset(r.compressedPageData.Bytes())
 
 	if r.column.columnIndex != nil {
 		err = r.page.parseColumnIndex(r.column.columnIndex)
@@ -1111,4 +1128,26 @@ func makeDecoder(decoder encoding.Decoder, oldEncoding, newEncoding format.Encod
 
 var (
 	_ CompressedPage = (*filePage)(nil)
+
+	// This buffer pool is used to optimize memory allocation when scanning
+	// through multiple pages of column chunks. Buffers are allocated lazily
+	// when reading the first page of a column, then retained until the
+	// Pages instance is closed.
+	compressedPageBufferPool sync.Pool // *bytes.Buffer
 )
+
+func acquireCompressedPageBuffer() *bytes.Buffer {
+	b, _ := compressedPageBufferPool.Get().(*bytes.Buffer)
+	if b != nil {
+		b.Reset()
+	} else {
+		b = new(bytes.Buffer)
+	}
+	return b
+}
+
+func releaseCompressedPageBuffer(b *bytes.Buffer) {
+	if b != nil {
+		compressedPageBufferPool.Put(b)
+	}
+}

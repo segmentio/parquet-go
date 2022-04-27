@@ -102,7 +102,7 @@ func (c *multiRowGroup) SortingColumns() []SortingColumn { return nil }
 
 func (c *multiRowGroup) Schema() *Schema { return c.schema }
 
-func (c *multiRowGroup) Rows() Rows { return &rowGroupRowReader{rowGroup: c} }
+func (c *multiRowGroup) Rows() Rows { return &rowGroupRows{rowGroup: c} }
 
 type multiColumnChunk struct {
 	rowGroup *multiRowGroup
@@ -217,6 +217,13 @@ type multiPages struct {
 	column *multiColumnChunk
 }
 
+func (r *multiPages) Close() error {
+	r.pages = nil
+	r.index = 0
+	r.column = nil
+	return nil
+}
+
 func (r *multiPages) ReadPage() (Page, error) {
 	for {
 		if r.pages != nil {
@@ -226,7 +233,7 @@ func (r *multiPages) ReadPage() (Page, error) {
 			}
 			r.pages = nil
 		}
-		if r.index == len(r.column.chunks) {
+		if r.column == nil || r.index == len(r.column.chunks) {
 			return nil, io.EOF
 		}
 		r.pages = r.column.chunks[r.index].Pages()
@@ -235,6 +242,10 @@ func (r *multiPages) ReadPage() (Page, error) {
 }
 
 func (r *multiPages) SeekToRow(rowIndex int64) error {
+	if r.column == nil {
+		return nil
+	}
+
 	rowGroups := r.column.rowGroup.rowGroups
 	numRows := int64(0)
 	r.pages = nil

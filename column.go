@@ -109,6 +109,12 @@ type columnPages struct {
 	index int
 }
 
+func (r *columnPages) Close() error {
+	r.pages = nil
+	r.index = 0
+	return nil
+}
+
 func (r *columnPages) ReadPage() (Page, error) {
 	for {
 		if r.index >= len(r.pages) {

@@ -75,6 +75,7 @@ func testSeekToRow(t *testing.T, newRowGroup func([]Person) parquet.RowGroup) {
 		rbuf := parquet.Row{}
 		pers := Person{}
 		schema := parquet.SchemaOf(&pers)
+		defer rows.Close()
 
 		for i := range people {
 			err := rows.SeekToRow(int64(i))
@@ -369,8 +370,10 @@ func TestMergeRowGroups(t *testing.T) {
 					// bypasses the ReadRow/WriteRow calls and the row group is written
 					// directly to the buffer by calling WriteRowsTo/WriteRowGroup.
 					mergedCopy := parquet.NewBuffer(options...)
+					mergedRows := merged.Rows()
+					defer mergedRows.Close()
 
-					if _, err := parquet.CopyRows(mergedCopy, merged.Rows()); err != nil {
+					if _, err := parquet.CopyRows(mergedCopy, mergedRows); err != nil {
 						t.Fatal(err)
 					}
 
@@ -389,6 +392,9 @@ func TestMergeRowGroups(t *testing.T) {
 							var err1 error
 							var err2 error
 							var numRows int64
+
+							defer expectedRows.Close()
+							defer mergedRows.Close()
 
 							for {
 								row1, err1 = expectedRows.ReadRow(row1[:0])
