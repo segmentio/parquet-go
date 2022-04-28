@@ -201,13 +201,6 @@ type writer struct {
 	createdBy string
 	metadata  []format.KeyValue
 
-	buffers struct {
-		compressed []byte
-		header     bytes.Buffer
-		page       bytes.Buffer
-		reader     bytes.Reader
-	}
-
 	columns       []*writerColumn
 	columnChunk   []format.ColumnChunk
 	columnIndex   []format.ColumnIndex
@@ -220,6 +213,13 @@ type writer struct {
 	columnIndexes  [][]format.ColumnIndex
 	offsetIndexes  [][]format.OffsetIndex
 	sortingColumns []format.SortingColumn
+}
+
+type writerBuffers struct {
+	compressed []byte
+	header     bytes.Buffer
+	page       bytes.Buffer
+	reader     bytes.Reader
 }
 
 func newWriter(output io.Writer, config *WriterConfig) *writer {
@@ -284,6 +284,12 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 		defaultCompression = &Uncompressed
 	}
 
+	// Those buffers are scratch space used to generate the page header and
+	// content, they are shared by all column chunks because they are only
+	// used during calls to writeDictionaryPage or writeDataPage, which are
+	// not done concurrently.
+	buffers := new(writerBuffers)
+
 	forEachLeafColumnOf(config.Schema, func(leaf leafColumn) {
 		encoding := encodingOf(leaf.node)
 		dictionary := Dictionary(nil)
@@ -301,6 +307,7 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 		}
 
 		c := &writerColumn{
+			buffers:            buffers,
 			pool:               config.ColumnPageBuffers,
 			columnPath:         leaf.path,
 			columnType:         columnType,
@@ -323,15 +330,7 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 			isCompressed: compression.CompressionCodec() != format.Uncompressed && (dataPageType != format.DataPageV2 || dictionary == nil),
 		}
 
-		// Those buffers are scratch space used to generate the page header and
-		// content, they are shared by all column chunks because they are only
-		// used during calls to writeDictionaryPage or writeDataPage, which are
-		// not done concurrently.
-		c.page.compressed = &w.buffers.compressed
-		c.page.buffer = &w.buffers.page
-		c.page.reader = &w.buffers.reader
-		c.header.buffer = &w.buffers.header
-		c.header.encoder.Reset(c.header.protocol.NewWriter(c.header.buffer))
+		c.header.encoder.Reset(c.header.protocol.NewWriter(&buffers.header))
 
 		if leaf.maxRepetitionLevel > 0 {
 			c.insert = (*writerColumn).insertRepeated
@@ -686,23 +685,21 @@ type writerColumn struct {
 	maxRepetitionLevel int8
 	maxDefinitionLevel int8
 
+	buffers *writerBuffers
+
 	levels struct {
 		encoder encoding.Encoder
 	}
 
 	header struct {
-		buffer   *bytes.Buffer
 		protocol thrift.CompactProtocol
 		encoder  thrift.Encoder
 	}
 
 	page struct {
-		compressed *[]byte
-		reader     *bytes.Reader
-		buffer     *bytes.Buffer
-		filter     *bloomFilterEncoder
-		encoding   format.Encoding
-		encoder    encoding.Encoder
+		filter   *bloomFilterEncoder
+		encoding format.Encoding
+		encoder  encoding.Encoder
 	}
 
 	dict struct {
@@ -954,23 +951,24 @@ func (c *writerColumn) writeBufferedPage(page BufferedPage) (int64, error) {
 		return 0, nil
 	}
 
-	c.page.buffer.Reset()
+	buffer := &c.buffers.page
+	buffer.Reset()
 	repetitionLevelsByteLength := 0
 	definitionLevelsByteLength := 0
 
 	switch c.dataPageType {
 	case format.DataPageV2:
 		if c.maxRepetitionLevel > 0 {
-			c.levels.encoder.Reset(c.page.buffer)
+			c.levels.encoder.Reset(buffer)
 			c.levels.encoder.SetBitWidth(bits.Len8(c.maxRepetitionLevel))
 			c.levels.encoder.EncodeInt8(page.RepetitionLevels())
-			repetitionLevelsByteLength = c.page.buffer.Len()
+			repetitionLevelsByteLength = buffer.Len()
 		}
 		if c.maxDefinitionLevel > 0 {
-			c.levels.encoder.Reset(c.page.buffer)
+			c.levels.encoder.Reset(buffer)
 			c.levels.encoder.SetBitWidth(bits.Len8(c.maxDefinitionLevel))
 			c.levels.encoder.EncodeInt8(page.DefinitionLevels())
-			definitionLevelsByteLength = c.page.buffer.Len() - repetitionLevelsByteLength
+			definitionLevelsByteLength = buffer.Len() - repetitionLevelsByteLength
 		}
 
 	case format.DataPage:
@@ -984,7 +982,6 @@ func (c *writerColumn) writeBufferedPage(page BufferedPage) (int64, error) {
 		// Reference https://github.com/apache/parquet-format/blob/master/Encodings.md#run-length-encoding--bit-packing-hybrid-rle--3
 		lengthPlaceholder := make([]byte, 4)
 		if c.maxRepetitionLevel > 0 {
-			buffer := c.page.buffer
 			buffer.Write(lengthPlaceholder)
 			offset := buffer.Len()
 			c.levels.encoder.Reset(buffer)
@@ -993,7 +990,6 @@ func (c *writerColumn) writeBufferedPage(page BufferedPage) (int64, error) {
 			binary.LittleEndian.PutUint32(buffer.Bytes()[offset-4:], uint32(buffer.Len()-offset))
 		}
 		if c.maxDefinitionLevel > 0 {
-			buffer := c.page.buffer
 			buffer.Write(lengthPlaceholder)
 			offset := buffer.Len()
 			c.levels.encoder.Reset(buffer)
@@ -1017,13 +1013,13 @@ func (c *writerColumn) writeBufferedPage(page BufferedPage) (int64, error) {
 		statistics = c.makePageStatistics(page)
 	}
 
-	c.page.encoder.Reset(c.page.buffer)
+	c.page.encoder.Reset(buffer)
 	if err := page.WriteTo(c.page.encoder); err != nil {
 		return 0, err
 	}
 
-	uncompressedPageSize := c.page.buffer.Len()
-	pageData := c.page.buffer.Bytes()
+	uncompressedPageSize := buffer.Len()
+	pageData := buffer.Bytes()
 	if c.isCompressed {
 		offset := repetitionLevelsByteLength + definitionLevelsByteLength
 		b, err := c.compress(pageData[offset:])
@@ -1031,12 +1027,10 @@ func (c *writerColumn) writeBufferedPage(page BufferedPage) (int64, error) {
 			return 0, fmt.Errorf("compressing parquet data page: %w", err)
 		}
 		// TODO: can we optimize this copy away?
-		c.page.buffer.Truncate(offset)
-		c.page.buffer.Write(b)
-		pageData = c.page.buffer.Bytes()
+		buffer.Truncate(offset)
+		buffer.Write(b)
+		pageData = buffer.Bytes()
 	}
-
-	c.header.buffer.Reset()
 
 	pageHeader := &format.PageHeader{
 		Type:                 c.dataPageType,
@@ -1069,15 +1063,21 @@ func (c *writerColumn) writeBufferedPage(page BufferedPage) (int64, error) {
 		}
 	}
 
+	header := &c.buffers.header
+	header.Reset()
 	if err := c.header.encoder.Encode(pageHeader); err != nil {
 		return 0, err
 	}
-	headerSize := int32(c.header.buffer.Len())
+	headerSize := int32(header.Len())
 	compressedSize := int64(headerSize) + int64(len(pageData))
-	c.page.reader.Reset(pageData)
-	if err := c.writePage(compressedSize, c.header.buffer, c.page.reader); err != nil {
+
+	reader := &c.buffers.reader
+	reader.Reset(pageData)
+
+	if err := c.writePage(compressedSize, header, reader); err != nil {
 		return 0, err
 	}
+
 	c.recordPageStats(headerSize, pageHeader, page)
 	return numValues, nil
 }
@@ -1119,15 +1119,18 @@ func (c *writerColumn) writeCompressedPage(page CompressedPage) (int64, error) {
 		return 0, fmt.Errorf("writing compressed page type of unknown type: %s", h.PageType())
 	}
 
-	c.header.buffer.Reset()
+	header := &c.buffers.header
+	header.Reset()
 	if err := c.header.encoder.Encode(pageHeader); err != nil {
 		return 0, err
 	}
-	headerSize := int32(c.header.buffer.Len())
+	headerSize := int32(header.Len())
 	compressedSize := int64(headerSize + pageHeader.CompressedPageSize)
-	if err := c.writePage(compressedSize, c.header.buffer, page.PageData()); err != nil {
+
+	if err := c.writePage(compressedSize, header, page.PageData()); err != nil {
 		return 0, err
 	}
+
 	c.recordPageStats(headerSize, pageHeader, page)
 	return page.NumValues(), nil
 }
@@ -1157,21 +1160,23 @@ func (c *writerColumn) writePage(size int64, header, data io.Reader) error {
 }
 
 func (c *writerColumn) writeDictionaryPage(output io.Writer, dict Dictionary) error {
-	c.page.buffer.Reset()
-	c.dict.encoder.Reset(c.page.buffer)
+	buffer := &c.buffers.page
+	buffer.Reset()
+	c.dict.encoder.Reset(buffer)
 
 	if err := dict.Page().WriteTo(&c.dict.encoder); err != nil {
 		return fmt.Errorf("writing parquet dictionary page: %w", err)
 	}
 
-	pageData, err := c.compress(c.page.buffer.Bytes())
+	uncompressedPageSize := buffer.Len()
+	pageData, err := c.compress(buffer.Bytes())
 	if err != nil {
 		return fmt.Errorf("compressing parquet dictionary page: %w", err)
 	}
 
 	pageHeader := &format.PageHeader{
 		Type:                 format.DictionaryPage,
-		UncompressedPageSize: int32(c.page.buffer.Len()),
+		UncompressedPageSize: int32(uncompressedPageSize),
 		CompressedPageSize:   int32(len(pageData)),
 		CRC:                  int32(crc32.ChecksumIEEE(pageData)),
 		DictionaryPageHeader: &format.DictionaryPageHeader{
@@ -1181,25 +1186,25 @@ func (c *writerColumn) writeDictionaryPage(output io.Writer, dict Dictionary) er
 		},
 	}
 
-	c.header.buffer.Reset()
+	header := &c.buffers.header
+	header.Reset()
 	if err := c.header.encoder.Encode(pageHeader); err != nil {
 		return err
 	}
-	if _, err := output.Write(c.header.buffer.Bytes()); err != nil {
+	if _, err := output.Write(header.Bytes()); err != nil {
 		return err
 	}
 	if _, err := output.Write(pageData); err != nil {
 		return err
 	}
-	c.recordPageStats(int32(c.header.buffer.Len()), pageHeader, nil)
+	c.recordPageStats(int32(header.Len()), pageHeader, nil)
 	return nil
 }
 
 func (c *writerColumn) compress(pageData []byte) ([]byte, error) {
 	if c.compression.CompressionCodec() != format.Uncompressed {
-		b := *c.page.compressed
-		b, err := c.compression.Encode(b[:0], pageData)
-		*c.page.compressed = b
+		b, err := c.compression.Encode(c.buffers.compressed[:0], pageData)
+		c.buffers.compressed = b
 		if err != nil {
 			return nil, err
 		}
