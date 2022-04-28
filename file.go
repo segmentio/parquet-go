@@ -850,19 +850,19 @@ func (p *filePage) Size() int64 {
 	return int64(p.header.UncompressedPageSize)
 }
 
-func (p *filePage) Values() ValueReader {
+func (p *filePage) Values() PageValues {
 	if p.values == nil {
 		p.values = new(filePageValueReaderState)
 	}
 	if err := p.values.init(p.columnType, p.column, p.codec, p.PageHeader(), &p.data, p.dictionary); err != nil {
-		return &errorValueReader{err: err}
+		return &errorValues{err: err}
 	}
 	return p.values.reader
 }
 
 func (p *filePage) Buffer() BufferedPage {
 	bufferedPage := p.column.Type().NewColumnBuffer(p.Column(), int(p.Size()))
-	_, err := CopyValues(bufferedPage, p.Values())
+	_, err := copyPageValues(bufferedPage, p.Values())
 	if err != nil {
 		return &errorPage{err: err, columnIndex: p.Column()}
 	}

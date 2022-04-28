@@ -775,7 +775,3 @@ func clearValues(values []Value) {
 		values[i] = Value{}
 	}
 }
-
-type errorValueReader struct{ err error }
-
-func (r *errorValueReader) ReadValues([]Value) (int, error) { return 0, r.err }

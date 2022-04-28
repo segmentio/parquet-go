@@ -3,9 +3,6 @@
 package parquet
 
 import (
-	"bytes"
-	"fmt"
-
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/format"
@@ -57,97 +54,13 @@ func (t primitiveType[T]) NewColumnReader(columnIndex, bufferSize int) ColumnRea
 	return newColumnReader(t, makeColumnIndex(columnIndex), bufferSize, t.class)
 }
 
+func (t primitiveType[T]) NewPageDecoder(columnIndex, numValues int, decoder encoding.Decoder) PageValues {
+	return newPageDecoder(t, makeColumnIndex(columnIndex), numValues, decoder, t.class)
+}
+
 func (t primitiveType[T]) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
 	return readDictionary(t, makeColumnIndex(columnIndex), numValues, decoder, t.class)
 }
-
-type byteArrayType struct{}
-
-func (t byteArrayType) String() string { return "BYTE_ARRAY" }
-
-func (t byteArrayType) Kind() Kind { return ByteArray }
-
-func (t byteArrayType) Length() int { return 0 }
-
-func (t byteArrayType) Compare(a, b Value) int {
-	return bytes.Compare(a.ByteArray(), b.ByteArray())
-}
-
-func (t byteArrayType) ColumnOrder() *format.ColumnOrder { return &typeDefinedColumnOrder }
-
-func (t byteArrayType) LogicalType() *format.LogicalType { return nil }
-
-func (t byteArrayType) ConvertedType() *deprecated.ConvertedType { return nil }
-
-func (t byteArrayType) PhysicalType() *format.Type {
-	return &physicalTypes[ByteArray]
-}
-
-func (t byteArrayType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
-	return newByteArrayColumnIndexer(sizeLimit)
-}
-
-func (t byteArrayType) NewDictionary(columnIndex, bufferSize int) Dictionary {
-	return newByteArrayDictionary(t, makeColumnIndex(columnIndex), bufferSize)
-}
-
-func (t byteArrayType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
-	return newByteArrayColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
-}
-
-func (t byteArrayType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
-	return newByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
-}
-
-func (t byteArrayType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
-	return readByteArrayDictionary(t, makeColumnIndex(columnIndex), numValues, decoder)
-}
-
-type fixedLenByteArrayType struct{ length int }
-
-func (t *fixedLenByteArrayType) String() string {
-	return fmt.Sprintf("FIXED_LEN_BYTE_ARRAY(%d)", t.length)
-}
-
-func (t *fixedLenByteArrayType) Kind() Kind { return FixedLenByteArray }
-
-func (t *fixedLenByteArrayType) Length() int { return t.length }
-
-func (t *fixedLenByteArrayType) Compare(a, b Value) int {
-	return bytes.Compare(a.ByteArray(), b.ByteArray())
-}
-
-func (t fixedLenByteArrayType) ColumnOrder() *format.ColumnOrder { return &typeDefinedColumnOrder }
-
-func (t fixedLenByteArrayType) LogicalType() *format.LogicalType { return nil }
-
-func (t fixedLenByteArrayType) ConvertedType() *deprecated.ConvertedType { return nil }
-
-func (t *fixedLenByteArrayType) PhysicalType() *format.Type { return &physicalTypes[FixedLenByteArray] }
-
-func (t *fixedLenByteArrayType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
-	return newFixedLenByteArrayColumnIndexer(t.length, sizeLimit)
-}
-
-func (t *fixedLenByteArrayType) NewDictionary(columnIndex, bufferSize int) Dictionary {
-	return newFixedLenByteArrayDictionary(t, makeColumnIndex(columnIndex), bufferSize)
-}
-
-func (t *fixedLenByteArrayType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
-	return newFixedLenByteArrayColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
-}
-
-func (t *fixedLenByteArrayType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
-	return newFixedLenByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
-}
-
-func (t *fixedLenByteArrayType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
-	return readFixedLenByteArrayDictionary(t, makeColumnIndex(columnIndex), numValues, decoder)
-}
-
-// FixedLenByteArrayType constructs a type for fixed-length values of the given
-// size (in bytes).
-func FixedLenByteArrayType(length int) Type { return &fixedLenByteArrayType{length: length} }
 
 func (t *intType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	if t.IsSigned {
@@ -213,6 +126,22 @@ func (t *intType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	}
 }
 
+func (t *intType) NewPageDecoder(columnIndex, numValues int, decoder encoding.Decoder) PageValues {
+	if t.IsSigned {
+		if t.BitWidth == 64 {
+			return newPageDecoder(t, makeColumnIndex(columnIndex), numValues, decoder, &int64Class)
+		} else {
+			return newPageDecoder(t, makeColumnIndex(columnIndex), numValues, decoder, &int32Class)
+		}
+	} else {
+		if t.BitWidth == 64 {
+			return newPageDecoder(t, makeColumnIndex(columnIndex), numValues, decoder, &uint64Class)
+		} else {
+			return newPageDecoder(t, makeColumnIndex(columnIndex), numValues, decoder, &uint32Class)
+		}
+	}
+}
+
 func (t *intType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
 	if t.IsSigned {
 		if t.BitWidth == 64 {
@@ -243,6 +172,10 @@ func (t *dateType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 
 func (t *dateType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newColumnReader(t, makeColumnIndex(columnIndex), bufferSize, &int32Class)
+}
+
+func (t *dateType) NewPageDecoder(columnIndex, numValues int, decoder encoding.Decoder) PageValues {
+	return newPageDecoder(t, makeColumnIndex(columnIndex), numValues, decoder, &int32Class)
 }
 
 func (t *dateType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
@@ -281,6 +214,14 @@ func (t *timeType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	}
 }
 
+func (t *timeType) NewPageDecoder(columnIndex, numValues int, decoder encoding.Decoder) PageValues {
+	if t.Unit.Millis != nil {
+		return newPageDecoder(t, makeColumnIndex(columnIndex), numValues, decoder, &int32Class)
+	} else {
+		return newPageDecoder(t, makeColumnIndex(columnIndex), numValues, decoder, &int64Class)
+	}
+}
+
 func (t *timeType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
 	if t.Unit.Millis != nil {
 		return readDictionary(t, makeColumnIndex(columnIndex), numValues, decoder, &int32Class)
@@ -303,6 +244,10 @@ func (t *timestampType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffe
 
 func (t *timestampType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newColumnReader(t, makeColumnIndex(columnIndex), bufferSize, &int64Class)
+}
+
+func (t *timestampType) NewPageDecoder(columnIndex, numValues int, decoder encoding.Decoder) PageValues {
+	return newPageDecoder(t, makeColumnIndex(columnIndex), numValues, decoder, &int64Class)
 }
 
 func (t *timestampType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {

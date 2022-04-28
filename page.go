@@ -3,10 +3,10 @@ package parquet
 import (
 	"fmt"
 	"io"
+	"sync"
 
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
-	"github.com/segmentio/parquet-go/encoding/plain"
 	"github.com/segmentio/parquet-go/internal/bits"
 )
 
@@ -52,7 +52,7 @@ type Page interface {
 	// like parquet.Int32Reader. Applications should use type assertions on
 	// the returned reader to determine whether those optimizations are
 	// available.
-	Values() ValueReader
+	Values() PageValues
 
 	// Buffer returns the page as a BufferedPage, which may be the page itself
 	// if it was already buffered.
@@ -114,6 +114,21 @@ type PageReader interface {
 // to an underlying storage medium.
 type PageWriter interface {
 	WritePage(Page) (int64, error)
+}
+
+type PageValues interface {
+	ValueReader
+	io.Closer
+}
+
+func copyPages(w PageWriter, p Pages) (int64, error) {
+	defer p.Close()
+	return CopyPages(w, p)
+}
+
+func copyPageValues(w ValueWriter, p PageValues) (int64, error) {
+	defer p.Close()
+	return CopyValues(w, p)
 }
 
 type singlePage struct {
@@ -242,7 +257,7 @@ func (page *errorPage) Size() int64                       { return 1 }
 func (page *errorPage) RepetitionLevels() []int8          { return nil }
 func (page *errorPage) DefinitionLevels() []int8          { return nil }
 func (page *errorPage) WriteTo(encoding.Encoder) error    { return page.err }
-func (page *errorPage) Values() ValueReader               { return &errorValueReader{err: page.err} }
+func (page *errorPage) Values() PageValues                { return &errorValues{err: page.err} }
 func (page *errorPage) Buffer() BufferedPage              { return page }
 
 func errPageBoundsOutOfRange(i, j, n int64) error {
@@ -349,61 +364,12 @@ func (page *optionalPage) WriteTo(e encoding.Encoder) error {
 	return page.base.WriteTo(e)
 }
 
-func (page *optionalPage) Values() ValueReader {
-	return &optionalPageReader{page: page}
+func (page *optionalPage) Values() PageValues {
+	return &optionalValues{page: page}
 }
 
 func (page *optionalPage) Buffer() BufferedPage {
 	return page
-}
-
-type optionalPageReader struct {
-	page   *optionalPage
-	values ValueReader
-	offset int
-}
-
-func (r *optionalPageReader) ReadValues(values []Value) (n int, err error) {
-	if r.values == nil {
-		r.values = r.page.base.Values()
-	}
-	maxDefinitionLevel := r.page.maxDefinitionLevel
-	columnIndex := ^int16(r.page.Column())
-
-	for n < len(values) && r.offset < len(r.page.definitionLevels) {
-		for n < len(values) && r.offset < len(r.page.definitionLevels) && r.page.definitionLevels[r.offset] != maxDefinitionLevel {
-			values[n] = Value{
-				definitionLevel: r.page.definitionLevels[r.offset],
-				columnIndex:     columnIndex,
-			}
-			r.offset++
-			n++
-		}
-
-		i := n
-		j := r.offset
-		for i < len(values) && j < len(r.page.definitionLevels) && r.page.definitionLevels[j] == maxDefinitionLevel {
-			i++
-			j++
-		}
-
-		if n < i {
-			for j, err = r.values.ReadValues(values[n:i]); j > 0; j-- {
-				values[n].definitionLevel = maxDefinitionLevel
-				r.offset++
-				n++
-			}
-			// Do not return on an io.EOF here as we may still have null values to read.
-			if err != nil && err != io.EOF {
-				return n, err
-			}
-		}
-	}
-
-	if r.offset == len(r.page.definitionLevels) {
-		err = io.EOF
-	}
-	return n, err
 }
 
 type repeatedPage struct {
@@ -517,62 +483,12 @@ func (page *repeatedPage) WriteTo(e encoding.Encoder) error {
 	return page.base.WriteTo(e)
 }
 
-func (page *repeatedPage) Values() ValueReader {
-	return &repeatedPageReader{page: page}
+func (page *repeatedPage) Values() PageValues {
+	return &repeatedValues{page: page}
 }
 
 func (page *repeatedPage) Buffer() BufferedPage {
 	return page
-}
-
-type repeatedPageReader struct {
-	page   *repeatedPage
-	values ValueReader
-	offset int
-}
-
-func (r *repeatedPageReader) ReadValues(values []Value) (n int, err error) {
-	if r.values == nil {
-		r.values = r.page.base.Values()
-	}
-	maxDefinitionLevel := r.page.maxDefinitionLevel
-	columnIndex := ^int16(r.page.Column())
-
-	for n < len(values) && r.offset < len(r.page.definitionLevels) {
-		for n < len(values) && r.offset < len(r.page.definitionLevels) && r.page.definitionLevels[r.offset] != maxDefinitionLevel {
-			values[n] = Value{
-				repetitionLevel: r.page.repetitionLevels[r.offset],
-				definitionLevel: r.page.definitionLevels[r.offset],
-				columnIndex:     columnIndex,
-			}
-			r.offset++
-			n++
-		}
-
-		i := n
-		j := r.offset
-		for i < len(values) && j < len(r.page.definitionLevels) && r.page.definitionLevels[j] == maxDefinitionLevel {
-			i++
-			j++
-		}
-
-		if n < i {
-			for j, err = r.values.ReadValues(values[n:i]); j > 0; j-- {
-				values[n].repetitionLevel = r.page.repetitionLevels[r.offset]
-				values[n].definitionLevel = maxDefinitionLevel
-				r.offset++
-				n++
-			}
-			if err != nil && err != io.EOF {
-				return n, err
-			}
-		}
-	}
-
-	if r.offset == len(r.page.definitionLevels) {
-		err = io.EOF
-	}
-	return n, err
 }
 
 type byteArrayPage struct {
@@ -665,62 +581,9 @@ func (page *byteArrayPage) DefinitionLevels() []int8 { return nil }
 
 func (page *byteArrayPage) WriteTo(e encoding.Encoder) error { return e.EncodeByteArray(page.values) }
 
-func (page *byteArrayPage) Values() ValueReader { return &byteArrayPageReader{page: page} }
+func (page *byteArrayPage) Values() PageValues { return &byteArrayValues{page: page} }
 
 func (page *byteArrayPage) Buffer() BufferedPage { return page }
-
-type byteArrayPageReader struct {
-	page   *byteArrayPage
-	offset int
-}
-
-func (r *byteArrayPageReader) Read(b []byte) (int, error) {
-	_, n, err := r.readByteArrays(b)
-	return n, err
-}
-
-func (r *byteArrayPageReader) ReadRequired(values []byte) (int, error) {
-	return r.ReadByteArrays(values)
-}
-
-func (r *byteArrayPageReader) ReadByteArrays(values []byte) (int, error) {
-	n, _, err := r.readByteArrays(values)
-	return n, err
-}
-
-func (r *byteArrayPageReader) readByteArrays(values []byte) (c, n int, err error) {
-	for r.offset < r.page.values.Len() {
-		b := r.page.values.Index(r.offset)
-		k := plain.ByteArrayLengthSize + len(b)
-		if k > (len(values) - n) {
-			break
-		}
-		plain.PutByteArrayLength(values[n:], len(b))
-		n += plain.ByteArrayLengthSize
-		n += copy(values[n:], b)
-		r.offset++
-		c++
-	}
-	if r.offset == r.page.values.Len() {
-		err = io.EOF
-	} else if n == 0 && len(values) > 0 {
-		err = io.ErrShortBuffer
-	}
-	return c, n, err
-}
-
-func (r *byteArrayPageReader) ReadValues(values []Value) (n int, err error) {
-	for n < len(values) && r.offset < r.page.values.Len() {
-		values[n] = makeValueBytes(ByteArray, r.page.values.Index(r.offset))
-		values[n].columnIndex = r.page.columnIndex
-		r.offset++
-		n++
-	}
-	if r.offset == r.page.values.Len() {
-		err = io.EOF
-	}
-	return n, err
-}
 
 type fixedLenByteArrayPage struct {
 	size        int
@@ -785,46 +648,30 @@ func (page *fixedLenByteArrayPage) WriteTo(e encoding.Encoder) error {
 	return e.EncodeFixedLenByteArray(page.size, page.data)
 }
 
-func (page *fixedLenByteArrayPage) Values() ValueReader {
-	return &fixedLenByteArrayPageReader{page: page}
+func (page *fixedLenByteArrayPage) Values() PageValues {
+	return &fixedLenByteArrayValues{page: page}
 }
 
 func (page *fixedLenByteArrayPage) Buffer() BufferedPage { return page }
 
-type fixedLenByteArrayPageReader struct {
-	page   *fixedLenByteArrayPage
-	offset int
-}
+const (
+	bufferSize = 4096
+)
 
-func (r *fixedLenByteArrayPageReader) Read(b []byte) (n int, err error) {
-	n, err = r.ReadFixedLenByteArrays(b)
-	return n * r.page.size, err
-}
+var (
+	buffers sync.Pool // *[bufferSize]byte
+)
 
-func (r *fixedLenByteArrayPageReader) ReadRequired(values []byte) (int, error) {
-	return r.ReadFixedLenByteArrays(values)
-}
-
-func (r *fixedLenByteArrayPageReader) ReadFixedLenByteArrays(values []byte) (n int, err error) {
-	n = copy(values, r.page.data[r.offset:]) / r.page.size
-	r.offset += n * r.page.size
-	if r.offset == len(r.page.data) {
-		err = io.EOF
-	} else if n == 0 && len(values) > 0 {
-		err = io.ErrShortBuffer
+func getBuffer() *[bufferSize]byte {
+	b, _ := buffers.Get().(*[bufferSize]byte)
+	if b == nil {
+		b = new([bufferSize]byte)
 	}
-	return n, err
+	return b
 }
 
-func (r *fixedLenByteArrayPageReader) ReadValues(values []Value) (n int, err error) {
-	for n < len(values) && r.offset < len(r.page.data) {
-		values[n] = makeValueBytes(FixedLenByteArray, r.page.data[r.offset:r.offset+r.page.size])
-		values[n].columnIndex = r.page.columnIndex
-		r.offset += r.page.size
-		n++
+func putBuffer(b *[bufferSize]byte) {
+	if b != nil {
+		buffers.Put(b)
 	}
-	if r.offset == len(r.page.data) {
-		err = io.EOF
-	}
-	return n, err
 }

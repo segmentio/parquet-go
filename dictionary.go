@@ -367,19 +367,26 @@ func (page *indexedPage) WriteTo(e encoding.Encoder) error {
 	return e.EncodeInt32(page.values)
 }
 
-func (page *indexedPage) Values() ValueReader { return &indexedPageReader{page: page} }
+func (page *indexedPage) Values() PageValues { return &indexedPageValues{page: page} }
 
 func (page *indexedPage) Buffer() BufferedPage { return page }
 
-type indexedPageReader struct {
+type indexedPageValues struct {
 	page   *indexedPage
 	offset int
 }
 
-func (r *indexedPageReader) ReadValues(values []Value) (n int, err error) {
-	var v Value
+func (r *indexedPageValues) Close() error {
+	r.page = nil
+	return nil
+}
+
+func (r *indexedPageValues) ReadValues(values []Value) (n int, err error) {
+	if r.page == nil {
+		return 0, io.EOF
+	}
 	for n < len(values) && r.offset < len(r.page.values) {
-		v = r.page.dict.Index(r.page.values[r.offset])
+		v := r.page.dict.Index(r.page.values[r.offset])
 		v.columnIndex = r.page.columnIndex
 		values[n] = v
 		r.offset++
@@ -388,7 +395,6 @@ func (r *indexedPageReader) ReadValues(values []Value) (n int, err error) {
 	if r.offset == len(r.page.values) {
 		err = io.EOF
 	}
-
 	return n, err
 }
 

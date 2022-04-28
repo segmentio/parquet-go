@@ -3,9 +3,6 @@
 package parquet
 
 import (
-	"bytes"
-	"fmt"
-
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/format"
@@ -241,89 +238,6 @@ func (t doubleType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 
 func (t doubleType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
 	return readDoubleDictionary(t, makeColumnIndex(columnIndex), numValues, decoder)
-}
-
-type byteArrayType struct{ primitiveType }
-
-func (t byteArrayType) String() string { return "BYTE_ARRAY" }
-
-func (t byteArrayType) Kind() Kind { return ByteArray }
-
-func (t byteArrayType) Length() int { return 0 }
-
-func (t byteArrayType) Compare(a, b Value) int {
-	return bytes.Compare(a.ByteArray(), b.ByteArray())
-}
-
-func (t byteArrayType) PhysicalType() *format.Type {
-	return &physicalTypes[ByteArray]
-}
-
-func (t byteArrayType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
-	return newByteArrayColumnIndexer(sizeLimit)
-}
-
-func (t byteArrayType) NewDictionary(columnIndex, bufferSize int) Dictionary {
-	return newByteArrayDictionary(t, makeColumnIndex(columnIndex), bufferSize)
-}
-
-func (t byteArrayType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
-	return newByteArrayColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
-}
-
-func (t byteArrayType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
-	return newByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
-}
-
-func (t byteArrayType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
-	return readByteArrayDictionary(t, makeColumnIndex(columnIndex), numValues, decoder)
-}
-
-type fixedLenByteArrayType struct {
-	primitiveType
-	length int
-}
-
-func (t *fixedLenByteArrayType) String() string {
-	return fmt.Sprintf("FIXED_LEN_BYTE_ARRAY(%d)", t.length)
-}
-
-func (t *fixedLenByteArrayType) Kind() Kind { return FixedLenByteArray }
-
-func (t *fixedLenByteArrayType) Length() int { return t.length }
-
-func (t *fixedLenByteArrayType) Compare(a, b Value) int {
-	return bytes.Compare(a.ByteArray(), b.ByteArray())
-}
-
-func (t *fixedLenByteArrayType) PhysicalType() *format.Type {
-	return &physicalTypes[FixedLenByteArray]
-}
-
-func (t *fixedLenByteArrayType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
-	return newFixedLenByteArrayColumnIndexer(t.length, sizeLimit)
-}
-
-func (t *fixedLenByteArrayType) NewDictionary(columnIndex, bufferSize int) Dictionary {
-	return newFixedLenByteArrayDictionary(t, makeColumnIndex(columnIndex), bufferSize)
-}
-
-func (t *fixedLenByteArrayType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
-	return newFixedLenByteArrayColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
-}
-
-func (t *fixedLenByteArrayType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
-	return newFixedLenByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
-}
-
-func (t *fixedLenByteArrayType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
-	return readFixedLenByteArrayDictionary(t, makeColumnIndex(columnIndex), numValues, decoder)
-}
-
-// FixedLenByteArrayType constructs a type for fixed-length values of the given
-// size (in bytes).
-func FixedLenByteArrayType(length int) Type {
-	return &fixedLenByteArrayType{length: length}
 }
 
 func (t *intType) NewColumnIndexer(sizeLimit int) ColumnIndexer {

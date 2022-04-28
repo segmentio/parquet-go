@@ -57,6 +57,18 @@ type class[T primitive] struct {
 	decode    func(encoding.Decoder, []T) (int, error)
 }
 
+func (c *class[T]) getBuffer() []T {
+	b := getBuffer()
+	return unsafe.Slice((*T)(unsafe.Pointer(&b[0])), bufferSize/sizeof[T]())
+}
+
+func (c *class[T]) putBuffer(b []T) {
+	if cap(b) == (bufferSize / sizeof[T]()) {
+		b = b[:1]
+		putBuffer((*[bufferSize]byte)(unsafe.Pointer(&b[0])))
+	}
+}
+
 var boolClass = class[bool]{
 	name:      "BOOLEAN",
 	bits:      1,

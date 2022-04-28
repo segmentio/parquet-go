@@ -344,8 +344,8 @@ func (col *optionalColumnBuffer) ReadValuesAt(values []Value, offset int64) (int
 	return int(length), nil
 }
 
-func (col *optionalColumnBuffer) Values() ValueReader {
-	return &optionalPageReader{page: col.Page().(*optionalPage)}
+func (col *optionalColumnBuffer) Values() PageValues {
+	return &optionalValues{page: col.Page().(*optionalPage)}
 }
 
 // repeatedColumnBuffer is an implementation of the ColumnBuffer interface used
@@ -622,8 +622,8 @@ func (col *repeatedColumnBuffer) ReadValuesAt(values []Value, offset int64) (int
 	panic("NOT IMPLEMENTED")
 }
 
-func (col *repeatedColumnBuffer) Values() ValueReader {
-	return &repeatedPageReader{page: col.Page().(*repeatedPage)}
+func (col *repeatedColumnBuffer) Values() PageValues {
+	return &repeatedValues{page: col.Page().(*repeatedPage)}
 }
 
 func optionalRowsHaveBeenReordered(rows []int32) bool {

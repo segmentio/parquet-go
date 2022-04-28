@@ -158,6 +158,17 @@ type Type interface {
 	// columns of INT32 values.
 	NewColumnReader(columnIndex, bufferSize int) ColumnReader
 
+	// Create a decoder for pages of this type.
+	//
+	// Page decoders are created using the index of the column they are reading
+	// values from (relative to the parent schema). The column index will be set
+	// on values read from the decoder.
+	//
+	// The number of values defines how many values exist in the page, the
+	// returned decoder will never produce more values than configured, but it
+	// may produce less if it encounters an error.
+	NewPageDecoder(columnIndex, numValues int, decoder encoding.Decoder) PageValues
+
 	// Reads a dictionary with values of this type from the decoder passed as
 	// argument.
 	//
@@ -208,6 +219,102 @@ var convertedTypes = [...]deprecated.ConvertedType{
 	20: deprecated.Bson,
 	21: deprecated.Interval,
 }
+
+type byteArrayType struct{}
+
+func (t byteArrayType) String() string { return "BYTE_ARRAY" }
+
+func (t byteArrayType) Kind() Kind { return ByteArray }
+
+func (t byteArrayType) Length() int { return 0 }
+
+func (t byteArrayType) Compare(a, b Value) int {
+	return bytes.Compare(a.ByteArray(), b.ByteArray())
+}
+
+func (t byteArrayType) ColumnOrder() *format.ColumnOrder { return &typeDefinedColumnOrder }
+
+func (t byteArrayType) LogicalType() *format.LogicalType { return nil }
+
+func (t byteArrayType) ConvertedType() *deprecated.ConvertedType { return nil }
+
+func (t byteArrayType) PhysicalType() *format.Type {
+	return &physicalTypes[ByteArray]
+}
+
+func (t byteArrayType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
+	return newByteArrayColumnIndexer(sizeLimit)
+}
+
+func (t byteArrayType) NewDictionary(columnIndex, bufferSize int) Dictionary {
+	return newByteArrayDictionary(t, makeColumnIndex(columnIndex), bufferSize)
+}
+
+func (t byteArrayType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newByteArrayColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
+}
+
+func (t byteArrayType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
+	return newByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
+}
+
+func (t byteArrayType) NewPageDecoder(columnIndex, numValues int, decoder encoding.Decoder) PageValues {
+	return newByteArrayPageDecoder(t, makeColumnIndex(columnIndex), numValues, decoder)
+}
+
+func (t byteArrayType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
+	return readByteArrayDictionary(t, makeColumnIndex(columnIndex), numValues, decoder)
+}
+
+type fixedLenByteArrayType struct{ length int }
+
+func (t *fixedLenByteArrayType) String() string {
+	return fmt.Sprintf("FIXED_LEN_BYTE_ARRAY(%d)", t.length)
+}
+
+func (t *fixedLenByteArrayType) Kind() Kind { return FixedLenByteArray }
+
+func (t *fixedLenByteArrayType) Length() int { return t.length }
+
+func (t *fixedLenByteArrayType) Compare(a, b Value) int {
+	return bytes.Compare(a.ByteArray(), b.ByteArray())
+}
+
+func (t *fixedLenByteArrayType) ColumnOrder() *format.ColumnOrder { return &typeDefinedColumnOrder }
+
+func (t *fixedLenByteArrayType) LogicalType() *format.LogicalType { return nil }
+
+func (t *fixedLenByteArrayType) ConvertedType() *deprecated.ConvertedType { return nil }
+
+func (t *fixedLenByteArrayType) PhysicalType() *format.Type { return &physicalTypes[FixedLenByteArray] }
+
+func (t *fixedLenByteArrayType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
+	return newFixedLenByteArrayColumnIndexer(t.length, sizeLimit)
+}
+
+func (t *fixedLenByteArrayType) NewDictionary(columnIndex, bufferSize int) Dictionary {
+	return newFixedLenByteArrayDictionary(t, makeColumnIndex(columnIndex), bufferSize)
+}
+
+func (t *fixedLenByteArrayType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newFixedLenByteArrayColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
+}
+
+func (t *fixedLenByteArrayType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
+	return newFixedLenByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
+}
+
+func (t *fixedLenByteArrayType) NewPageDecoder(columnIndex, numValues int, decoder encoding.Decoder) PageValues {
+	return newFixedLenByteArrayPageDecoder(t, makeColumnIndex(columnIndex), numValues, decoder)
+}
+
+func (t *fixedLenByteArrayType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
+	return readFixedLenByteArrayDictionary(t, makeColumnIndex(columnIndex), numValues, decoder)
+}
+
+// FixedLenByteArrayType constructs a type for fixed-length values of the given
+// size (in bytes).
+func FixedLenByteArrayType(length int) Type { return &fixedLenByteArrayType{length: length} }
 
 // Int constructs a leaf node of signed integer logical type of the given bit
 // width.
@@ -403,6 +510,10 @@ func (t *stringType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
+func (t *stringType) NewPageDecoder(columnIndex, numValues int, decoder encoding.Decoder) PageValues {
+	return newByteArrayPageDecoder(t, makeColumnIndex(columnIndex), numValues, decoder)
+}
+
 func (t *stringType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
 	return readByteArrayDictionary(t, makeColumnIndex(columnIndex), numValues, decoder)
 }
@@ -456,6 +567,10 @@ func (t *uuidType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 
 func (t *uuidType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newFixedLenByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
+}
+
+func (t *uuidType) NewPageDecoder(columnIndex, numValues int, decoder encoding.Decoder) PageValues {
+	return newFixedLenByteArrayPageDecoder(t, makeColumnIndex(columnIndex), numValues, decoder)
 }
 
 func (t *uuidType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
@@ -515,6 +630,10 @@ func (t *enumType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
+func (t *enumType) NewPageDecoder(columnIndex, numValues int, decoder encoding.Decoder) PageValues {
+	return newByteArrayPageDecoder(t, makeColumnIndex(columnIndex), numValues, decoder)
+}
+
 func (t *enumType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
 	return readByteArrayDictionary(t, makeColumnIndex(columnIndex), numValues, decoder)
 }
@@ -572,6 +691,10 @@ func (t *jsonType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
+func (t *jsonType) NewPageDecoder(columnIndex, numValues int, decoder encoding.Decoder) PageValues {
+	return newByteArrayPageDecoder(t, makeColumnIndex(columnIndex), numValues, decoder)
+}
+
 func (t *jsonType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
 	return readByteArrayDictionary(t, makeColumnIndex(columnIndex), numValues, decoder)
 }
@@ -623,6 +746,10 @@ func (t *bsonType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 
 func (t *bsonType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
+}
+
+func (t *bsonType) NewPageDecoder(columnIndex, numValues int, decoder encoding.Decoder) PageValues {
+	return newByteArrayPageDecoder(t, makeColumnIndex(columnIndex), numValues, decoder)
 }
 
 func (t *bsonType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
@@ -851,6 +978,10 @@ func (t *listType) NewColumnReader(int, int) ColumnReader {
 	panic("cannot create column reader from parquet LIST type")
 }
 
+func (t *listType) NewPageDecoder(int, int, encoding.Decoder) PageValues {
+	panic("cannot create page decoder from parquet LIST type")
+}
+
 func (t *listType) ReadDictionary(int, int, encoding.Decoder) (Dictionary, error) {
 	panic("cannot read dictionary from parquet LIST type")
 }
@@ -909,6 +1040,10 @@ func (t *mapType) NewColumnReader(int, int) ColumnReader {
 	panic("cannot create column reader from parquet MAP type")
 }
 
+func (t *mapType) NewPageDecoder(int, int, encoding.Decoder) PageValues {
+	panic("cannot create page decoder from parquet MAP type")
+}
+
 func (t *mapType) ReadDictionary(int, int, encoding.Decoder) (Dictionary, error) {
 	panic("cannot read dictionary from parquet MAP type")
 }
@@ -949,6 +1084,10 @@ func (t *nullType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newNullColumnReader(t, makeColumnIndex(columnIndex))
 }
 
+func (t *nullType) NewPageDecoder(columnIndex, numValues int, _ encoding.Decoder) PageValues {
+	return newNullValues(t, makeColumnIndex(columnIndex), numValues)
+}
+
 func (t *nullType) ReadDictionary(int, int, encoding.Decoder) (Dictionary, error) {
 	panic("cannot read dictionary from parquet NULL type")
 }
@@ -979,6 +1118,10 @@ func (t groupType) NewColumnBuffer(int, int) ColumnBuffer {
 
 func (t groupType) NewColumnReader(int, int) ColumnReader {
 	panic("cannot create column reader from parquet group")
+}
+
+func (t groupType) NewPageDecoder(int, int, encoding.Decoder) PageValues {
+	panic("cannot create page decoder from parquet group")
 }
 
 func (t groupType) ReadDictionary(int, int, encoding.Decoder) (Dictionary, error) {

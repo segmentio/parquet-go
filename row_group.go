@@ -346,7 +346,8 @@ func (r *rowGroupRows) WriteRowsTo(w RowWriter) (int64, error) {
 
 	case PageWriter:
 		for _, column := range rowGroup.ColumnChunks() {
-			if err := copyPages(dst, column.Pages()); err != nil {
+			_, err := copyPages(dst, column.Pages())
+			if err != nil {
 				return 0, err
 			}
 		}
@@ -369,12 +370,6 @@ func (r *rowGroupRows) writeRowsTo(w pageAndValueWriter, limit int64) (numRows i
 		}
 	}
 	return numRows, nil
-}
-
-func copyPages(w PageWriter, p Pages) error {
-	defer p.Close()
-	_, err := CopyPages(w, p)
-	return err
 }
 
 type seekRowGroup struct {

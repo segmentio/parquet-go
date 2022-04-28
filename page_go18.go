@@ -64,21 +64,29 @@ func (p *page[T]) DefinitionLevels() []int8 { return nil }
 
 func (p *page[T]) WriteTo(e encoding.Encoder) error { return p.class.encode(e, p.values) }
 
-func (p *page[T]) Values() ValueReader { return &pageReader[T]{page: p} }
+func (p *page[T]) Values() PageValues { return &pageValues[T]{page: p} }
 
 func (p *page[T]) Buffer() BufferedPage { return p }
 
-type pageReader[T primitive] struct {
+type pageValues[T primitive] struct {
 	page   *page[T]
 	offset int
 }
 
-func (r *pageReader[T]) Read(b []byte) (n int, err error) {
+func (r *pageValues[T]) Close() error {
+	r.page = nil
+	return nil
+}
+
+func (r *pageValues[T]) Read(b []byte) (n int, err error) {
 	n, err = r.ReadRequired(cast.BytesToSlice[T](b))
 	return sizeof[T]() * n, err
 }
 
-func (r *pageReader[T]) ReadRequired(values []T) (n int, err error) {
+func (r *pageValues[T]) ReadRequired(values []T) (n int, err error) {
+	if r.page == nil {
+		return 0, io.EOF
+	}
 	n = copy(values, r.page.values[r.offset:])
 	r.offset += n
 	if r.offset == len(r.page.values) {
@@ -87,22 +95,103 @@ func (r *pageReader[T]) ReadRequired(values []T) (n int, err error) {
 	return n, err
 }
 
-func (r *pageReader[T]) ReadValues(values []Value) (n int, err error) {
+func (r *pageValues[T]) ReadValues(values []Value) (n int, err error) {
+	if r.page == nil {
+		return 0, io.EOF
+	}
+
 	makeValue := r.page.class.makeValue
 	pageValues := r.page.values
 	columnIndex := r.page.columnIndex
+
 	for n < len(values) && r.offset < len(pageValues) {
 		values[n] = makeValue(pageValues[r.offset])
 		values[n].columnIndex = columnIndex
 		r.offset++
 		n++
 	}
+
 	if r.offset == len(pageValues) {
 		err = io.EOF
 	}
+
 	return n, err
 }
 
+type pageDecoder[T primitive] struct {
+	class       *class[T]
+	buffer      []T
+	typ         Type
+	decoder     encoding.Decoder
+	offset      int
+	remain      int
+	columnIndex int16
+}
+
+func newPageDecoder[T primitive](typ Type, columnIndex int16, numValues int, decoder encoding.Decoder, class *class[T]) *pageDecoder[T] {
+	return &pageDecoder[T]{
+		class:       class,
+		buffer:      class.getBuffer(),
+		typ:         typ,
+		decoder:     decoder,
+		remain:      numValues,
+		columnIndex: ^columnIndex,
+	}
+}
+
+func (r *pageDecoder[T]) Type() Type {
+	return r.typ
+}
+
+func (r *pageDecoder[T]) Column() int {
+	return int(^r.columnIndex)
+}
+
+func (r *pageDecoder[T]) Close() error {
+	r.class.putBuffer(r.buffer)
+	r.buffer = nil
+	r.decoder = nil
+	r.offset = 0
+	r.remain = 0
+	return nil
+}
+
+func (r *pageDecoder[T]) ReadValues(values []Value) (n int, err error) {
+	if r.decoder == nil {
+		return 0, io.EOF
+	}
+
+	makeValue := r.class.makeValue
+	columnIndex := r.columnIndex
+
+	for {
+		for r.offset < len(r.buffer) && n < len(values) {
+			values[n] = makeValue(r.buffer[r.offset])
+			values[n].columnIndex = columnIndex
+			r.offset++
+			r.remain--
+			n++
+		}
+
+		if r.remain == 0 || r.decoder == nil {
+			return n, io.EOF
+		}
+		if n == len(values) {
+			return n, nil
+		}
+
+		length := min(r.remain, cap(r.buffer))
+		buffer := r.buffer[:length]
+		d, err := r.class.decode(r.decoder, buffer)
+		if d == 0 {
+			return n, err
+		}
+
+		r.buffer = buffer[:d]
+		r.offset = 0
+	}
+}
+
 var (
-	_ RequiredReader[bool] = (*pageReader[bool])(nil)
+	_ RequiredReader[bool] = (*pageValues[bool])(nil)
 )

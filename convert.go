@@ -332,7 +332,7 @@ func (p missingPage) NumValues() int64                  { return p.numValues }
 func (p missingPage) NumNulls() int64                   { return p.numNulls }
 func (p missingPage) Bounds() (min, max Value, ok bool) { return }
 func (p missingPage) Size() int64                       { return 0 }
-func (p missingPage) Values() ValueReader               { return &missingValues{page: p} }
+func (p missingPage) Values() PageValues                { return &missingValues{page: p} }
 func (p missingPage) Buffer() BufferedPage {
 	return newErrorPage(p.Column(), "cannot buffer missing page")
 }
@@ -340,6 +340,11 @@ func (p missingPage) Buffer() BufferedPage {
 type missingValues struct {
 	page missingPage
 	read int64
+}
+
+func (r *missingValues) Close() error {
+	r.read = r.page.numValues
+	return nil
 }
 
 func (r *missingValues) ReadValues(values []Value) (int, error) {
