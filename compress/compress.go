@@ -5,7 +5,9 @@
 package compress
 
 import (
+	"bytes"
 	"io"
+	"sync"
 
 	"github.com/segmentio/parquet-go/format"
 )
@@ -21,25 +23,83 @@ type Codec interface {
 	// Returns the code of the compression codec in the parquet format.
 	CompressionCodec() format.CompressionCodec
 
-	// Creates a new Reader decompressing data from the io.Reader passed as
-	// argument.
-	NewReader(io.Reader) (Reader, error)
+	// Writes the compressed version of src to dst and returns it.
+	//
+	// The method automatically reallocates the output buffer if its capacity
+	// was too small to hold the compressed data.
+	Encode(dst, src []byte) ([]byte, error)
 
-	// Creates a new Writer compressing data to the io.Writer passed as
-	// argument.
-	NewWriter(io.Writer) (Writer, error)
+	// Writes the uncompressed version of src to dst and returns it.
+	//
+	// The method automatically reallocates the output buffer if its capacity
+	// was too small to hold the uncompressed data.
+	Decode(dst, src []byte) ([]byte, error)
 }
 
-// Reader is an extension of io.Reader implemented by all decompressors.
 type Reader interface {
-	io.Reader
-	io.Closer
+	io.ReadCloser
 	Reset(io.Reader) error
 }
 
-// Writer is an extension of io.Writer implemented by all compressors.
 type Writer interface {
-	io.Writer
-	io.Closer
-	Reset(io.Writer) error
+	io.WriteCloser
+	Reset(io.Writer)
+}
+
+type Compressor struct {
+	writers sync.Pool
+}
+
+func (c *Compressor) Encode(dst, src []byte, newWriter func(io.Writer) (Writer, error)) ([]byte, error) {
+	output := bytes.NewBuffer(dst[:0])
+
+	w, _ := c.writers.Get().(Writer)
+	if w != nil {
+		w.Reset(output)
+	} else {
+		var err error
+		if w, err = newWriter(output); err != nil {
+			return dst, err
+		}
+	}
+	defer c.writers.Put(w)
+	defer w.Reset(io.Discard)
+
+	if _, err := w.Write(src); err != nil {
+		return output.Bytes(), err
+	}
+	if err := w.Close(); err != nil {
+		return output.Bytes(), err
+	}
+	return output.Bytes(), nil
+}
+
+type Decompressor struct {
+	readers sync.Pool
+}
+
+func (d *Decompressor) Decode(dst, src []byte, newReader func(io.Reader) (Reader, error)) ([]byte, error) {
+	input := bytes.NewReader(src)
+
+	r, _ := d.readers.Get().(Reader)
+	if r != nil {
+		if err := r.Reset(input); err != nil {
+			return dst, err
+		}
+	} else {
+		var err error
+		if r, err = newReader(input); err != nil {
+			return dst, err
+		}
+	}
+
+	defer func() {
+		if err := r.Reset(nil); err == nil {
+			d.readers.Put(r)
+		}
+	}()
+
+	output := bytes.NewBuffer(dst[:0])
+	_, err := output.ReadFrom(r)
+	return output.Bytes(), err
 }

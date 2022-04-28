@@ -21,6 +21,9 @@ type Codec struct {
 	// LGWin is the base 2 logarithm of the sliding window size.
 	// Range is 10 to 24. 0 indicates automatic configuration based on Quality.
 	LGWin int
+
+	r compress.Decompressor
+	w compress.Compressor
 }
 
 func (c *Codec) String() string {
@@ -31,22 +34,21 @@ func (c *Codec) CompressionCodec() format.CompressionCodec {
 	return format.Brotli
 }
 
-func (c *Codec) NewReader(r io.Reader) (compress.Reader, error) {
-	return reader{brotli.NewReader(r)}, nil
+func (c *Codec) Encode(dst, src []byte) ([]byte, error) {
+	return c.w.Encode(dst, src, func(w io.Writer) (compress.Writer, error) {
+		return brotli.NewWriterOptions(w, brotli.WriterOptions{
+			Quality: c.Quality,
+			LGWin:   c.LGWin,
+		}), nil
+	})
 }
 
-func (c *Codec) NewWriter(w io.Writer) (compress.Writer, error) {
-	opts := brotli.WriterOptions{
-		Quality: c.Quality,
-		LGWin:   c.LGWin,
-	}
-	return writer{brotli.NewWriterOptions(w, opts)}, nil
+func (c *Codec) Decode(dst, src []byte) ([]byte, error) {
+	return c.r.Decode(dst, src, func(r io.Reader) (compress.Reader, error) {
+		return reader{brotli.NewReader(r)}, nil
+	})
 }
 
 type reader struct{ *brotli.Reader }
 
-func (r reader) Close() error { return nil }
-
-type writer struct{ *brotli.Writer }
-
-func (w writer) Reset(ww io.Writer) error { w.Writer.Reset(ww); return nil }
+func (reader) Close() error { return nil }

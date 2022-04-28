@@ -38,6 +38,9 @@ const (
 type Codec struct {
 	Level       Level
 	Concurrency int
+
+	r compress.Decompressor
+	w compress.Compressor
 }
 
 func (c *Codec) String() string {
@@ -48,27 +51,31 @@ func (c *Codec) CompressionCodec() format.CompressionCodec {
 	return format.Zstd
 }
 
-func (c *Codec) NewReader(r io.Reader) (compress.Reader, error) {
-	z, err := zstd.NewReader(r,
-		zstd.WithDecoderConcurrency(c.concurrency()),
-	)
-	if err != nil {
-		return nil, err
-	}
-	return reader{z}, nil
+func (c *Codec) Encode(dst, src []byte) ([]byte, error) {
+	return c.w.Encode(dst, src, func(w io.Writer) (compress.Writer, error) {
+		z, err := zstd.NewWriter(w,
+			zstd.WithEncoderConcurrency(c.concurrency()),
+			zstd.WithEncoderLevel(c.level()),
+			zstd.WithZeroFrames(true),
+			zstd.WithEncoderCRC(false),
+		)
+		if err != nil {
+			return nil, err
+		}
+		return writer{z}, nil
+	})
 }
 
-func (c *Codec) NewWriter(w io.Writer) (compress.Writer, error) {
-	z, err := zstd.NewWriter(nonNilWriter(w),
-		zstd.WithEncoderConcurrency(c.concurrency()),
-		zstd.WithEncoderLevel(c.level()),
-		zstd.WithZeroFrames(true),
-		zstd.WithEncoderCRC(false),
-	)
-	if err != nil {
-		return nil, err
-	}
-	return writer{z}, nil
+func (c *Codec) Decode(dst, src []byte) ([]byte, error) {
+	return c.r.Decode(dst, src, func(r io.Reader) (compress.Reader, error) {
+		z, err := zstd.NewReader(r,
+			zstd.WithDecoderConcurrency(c.concurrency()),
+		)
+		if err != nil {
+			return nil, err
+		}
+		return reader{z}, nil
+	})
 }
 
 func (c *Codec) concurrency() int {
@@ -91,12 +98,4 @@ func (r reader) Close() error { r.Decoder.Close(); return nil }
 
 type writer struct{ *zstd.Encoder }
 
-func (w writer) Close() error             { w.Encoder.Close(); return nil }
-func (w writer) Reset(ww io.Writer) error { w.Encoder.Reset(nonNilWriter(ww)); return nil }
-
-func nonNilWriter(w io.Writer) io.Writer {
-	if w == nil {
-		w = io.Discard
-	}
-	return w
-}
+func (w writer) Close() error { w.Encoder.Close(); return nil }

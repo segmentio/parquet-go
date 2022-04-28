@@ -56,9 +56,6 @@ type Page interface {
 
 	// Buffer returns the page as a BufferedPage, which may be the page itself
 	// if it was already buffered.
-	//
-	// Compressed pages will be consumed to create the returned buffered page,
-	// their content will no be readable anymore after the call.
 	Buffer() BufferedPage
 }
 

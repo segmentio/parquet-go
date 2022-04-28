@@ -65,14 +65,14 @@ type decimalColumn struct {
 }
 
 type addressBook struct {
-	Owner             utf8string
-	OwnerPhoneNumbers []utf8string
+	Owner             utf8string   `parquet:",plain"`
+	OwnerPhoneNumbers []utf8string `parquet:",plain"`
 	Contacts          []contact
 }
 
 type contact struct {
-	Name        utf8string
-	PhoneNumber utf8string
+	Name        utf8string `parquet:",plain"`
+	PhoneNumber utf8string `parquet:",plain"`
 }
 
 type listColumn2 struct {
