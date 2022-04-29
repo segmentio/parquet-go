@@ -47,59 +47,76 @@ type Writer interface {
 }
 
 type Compressor struct {
-	writers sync.Pool
+	writers sync.Pool // *writer
+}
+
+type writer struct {
+	output bytes.Buffer
+	writer Writer
 }
 
 func (c *Compressor) Encode(dst, src []byte, newWriter func(io.Writer) (Writer, error)) ([]byte, error) {
-	output := bytes.NewBuffer(dst[:0])
-
-	w, _ := c.writers.Get().(Writer)
+	w, _ := c.writers.Get().(*writer)
 	if w != nil {
-		w.Reset(output)
+		w.output = *bytes.NewBuffer(dst[:0])
+		w.writer.Reset(&w.output)
 	} else {
+		w = new(writer)
+		w.output = *bytes.NewBuffer(dst[:0])
 		var err error
-		if w, err = newWriter(output); err != nil {
+		if w.writer, err = newWriter(&w.output); err != nil {
 			return dst, err
 		}
 	}
-	defer c.writers.Put(w)
-	defer w.Reset(io.Discard)
 
-	if _, err := w.Write(src); err != nil {
-		return output.Bytes(), err
+	defer c.writers.Put(w)
+	defer func() {
+		w.output = *bytes.NewBuffer(nil)
+		w.writer.Reset(io.Discard)
+	}()
+
+	if _, err := w.writer.Write(src); err != nil {
+		return w.output.Bytes(), err
 	}
-	if err := w.Close(); err != nil {
-		return output.Bytes(), err
+	if err := w.writer.Close(); err != nil {
+		return w.output.Bytes(), err
 	}
-	return output.Bytes(), nil
+	return w.output.Bytes(), nil
 }
 
 type Decompressor struct {
-	readers sync.Pool
+	readers sync.Pool // *reader
+}
+
+type reader struct {
+	input  bytes.Reader
+	reader Reader
 }
 
 func (d *Decompressor) Decode(dst, src []byte, newReader func(io.Reader) (Reader, error)) ([]byte, error) {
-	input := bytes.NewReader(src)
-
-	r, _ := d.readers.Get().(Reader)
+	r, _ := d.readers.Get().(*reader)
 	if r != nil {
-		if err := r.Reset(input); err != nil {
+		r.input.Reset(src)
+		if err := r.reader.Reset(&r.input); err != nil {
 			return dst, err
 		}
 	} else {
+		r = new(reader)
+		r.input.Reset(src)
 		var err error
-		if r, err = newReader(input); err != nil {
+		if r.reader, err = newReader(&r.input); err != nil {
 			return dst, err
 		}
 	}
 
 	defer func() {
-		if err := r.Reset(nil); err == nil {
+		r.input.Reset(nil)
+		if err := r.reader.Reset(nil); err == nil {
 			d.readers.Put(r)
 		}
 	}()
 
 	output := bytes.NewBuffer(dst[:0])
-	_, err := output.ReadFrom(r)
+	_, err := output.ReadFrom(r.reader)
 	return output.Bytes(), err
 }

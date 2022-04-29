@@ -2,6 +2,7 @@ package compress_test
 
 import (
 	"bytes"
+	"io"
 	"testing"
 
 	"github.com/segmentio/parquet-go/compress"
@@ -76,5 +77,55 @@ func TestCompressionCodec(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+type simpleReader struct{ io.Reader }
+
+func (s *simpleReader) Close() error            { return nil }
+func (s *simpleReader) Reset(r io.Reader) error { s.Reader = r; return nil }
+
+type simpleWriter struct{ io.Writer }
+
+func (s *simpleWriter) Close() error      { return nil }
+func (s *simpleWriter) Reset(w io.Writer) { s.Writer = w }
+
+func BenchmarkCompressor(b *testing.B) {
+	compressor := compress.Compressor{}
+	src := make([]byte, 1000)
+	dst := make([]byte, 1000)
+
+	allocs := testing.AllocsPerRun(b.N, func() {
+		var err error
+		dst, err = compressor.Encode(dst, src, func(w io.Writer) (compress.Writer, error) {
+			return &simpleWriter{Writer: w}, nil
+		})
+		if err != nil {
+			b.Fatal(err)
+		}
+	})
+
+	if allocs != 0 {
+		b.Errorf("too many memory allocations: %g > 0", allocs)
+	}
+}
+
+func BenchmarkDecompressor(b *testing.B) {
+	decompressor := compress.Decompressor{}
+	src := make([]byte, 1000)
+	dst := make([]byte, 1000)
+
+	allocs := testing.AllocsPerRun(b.N, func() {
+		var err error
+		dst, err = decompressor.Decode(dst, src, func(r io.Reader) (compress.Reader, error) {
+			return &simpleReader{Reader: r}, nil
+		})
+		if err != nil {
+			b.Fatal(err)
+		}
+	})
+
+	if allocs != 0 {
+		b.Errorf("too many memory allocations: %g > 0", allocs)
 	}
 }
