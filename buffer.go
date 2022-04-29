@@ -214,7 +214,7 @@ func (buf *Buffer) WriteRows(rows []Row) (int, error) {
 	for columnIndex, values := range buf.colbuf {
 		if _, err := buf.columns[columnIndex].WriteValues(values); err != nil {
 			// TODO: we should rollback the writes that may have succeded or
-			// we are leaving the buffer in an undertermined state.
+			// we are leaving the buffer in an undetermined state.
 			//
 			// This condition might not be an issue considering writes are
 			// buffered in memory, if the inputs are valid there should be no
