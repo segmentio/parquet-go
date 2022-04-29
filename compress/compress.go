@@ -69,10 +69,10 @@ func (c *Compressor) Encode(dst, src []byte, newWriter func(io.Writer) (Writer, 
 		}
 	}
 
-	defer c.writers.Put(w)
 	defer func() {
 		w.output = *bytes.NewBuffer(nil)
 		w.writer.Reset(io.Discard)
+		c.writers.Put(w)
 	}()
 
 	if _, err := w.writer.Write(src); err != nil {
@@ -116,7 +116,27 @@ func (d *Decompressor) Decode(dst, src []byte, newReader func(io.Reader) (Reader
 		}
 	}()
 
-	output := bytes.NewBuffer(dst[:0])
-	_, err := output.ReadFrom(r.reader)
-	return output.Bytes(), err
+	if cap(dst) == 0 {
+		dst = make([]byte, 0, 2*len(src))
+	} else {
+		dst = dst[:0]
+	}
+
+	for {
+		n, err := r.reader.Read(dst[len(dst):cap(dst)])
+		dst = dst[:len(dst)+n]
+
+		if err != nil {
+			if err == io.EOF {
+				err = nil
+			}
+			return dst, err
+		}
+
+		if len(dst) == cap(dst) {
+			tmp := make([]byte, len(dst), 2*len(dst))
+			copy(tmp, dst)
+			dst = tmp
+		}
+	}
 }
