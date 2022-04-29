@@ -14,45 +14,46 @@ import (
 	"github.com/segmentio/parquet-go/compress/zstd"
 )
 
+var tests = [...]struct {
+	scenario string
+	codec    compress.Codec
+}{
+	{
+		scenario: "uncompressed",
+		codec:    new(uncompressed.Codec),
+	},
+
+	{
+		scenario: "snappy",
+		codec:    new(snappy.Codec),
+	},
+
+	{
+		scenario: "gzip",
+		codec:    new(gzip.Codec),
+	},
+
+	{
+		scenario: "brotli",
+		codec:    new(brotli.Codec),
+	},
+
+	{
+		scenario: "zstd",
+		codec:    new(zstd.Codec),
+	},
+
+	{
+		scenario: "lz4",
+		codec:    new(lz4.Codec),
+	},
+}
+
+var testdata = bytes.Repeat([]byte("1234567890qwertyuiopasdfghjklzxcvbnm"), 10e3)
+
 func TestCompressionCodec(t *testing.T) {
-	tests := []struct {
-		scenario string
-		codec    compress.Codec
-	}{
-		{
-			scenario: "uncompressed",
-			codec:    new(uncompressed.Codec),
-		},
-
-		{
-			scenario: "snappy",
-			codec:    new(snappy.Codec),
-		},
-
-		{
-			scenario: "gzip",
-			codec:    new(gzip.Codec),
-		},
-
-		{
-			scenario: "brotli",
-			codec:    new(brotli.Codec),
-		},
-
-		{
-			scenario: "zstd",
-			codec:    new(zstd.Codec),
-		},
-
-		{
-			scenario: "lz4",
-			codec:    new(lz4.Codec),
-		},
-	}
-
-	random := bytes.Repeat([]byte("1234567890qwertyuiopasdfghjklzxcvbnm"), 1000)
-	buffer := make([]byte, 0, len(random))
-	output := make([]byte, 0, len(random))
+	buffer := make([]byte, 0, len(testdata))
+	output := make([]byte, 0, len(testdata))
 
 	for _, test := range tests {
 		t.Run(test.scenario, func(t *testing.T) {
@@ -62,7 +63,7 @@ func TestCompressionCodec(t *testing.T) {
 			for i := 0; i < N; i++ {
 				var err error
 
-				buffer, err = test.codec.Encode(buffer[:0], random)
+				buffer, err = test.codec.Encode(buffer[:0], testdata)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -72,10 +73,38 @@ func TestCompressionCodec(t *testing.T) {
 					t.Fatal(err)
 				}
 
-				if !bytes.Equal(random, output) {
+				if !bytes.Equal(testdata, output) {
 					t.Errorf("content mismatch after compressing and decompressing (attempt %d/%d)", i+1, N)
 				}
 			}
+		})
+	}
+}
+
+func BenchmarkEncode(b *testing.B) {
+	buffer := make([]byte, 0, len(testdata))
+
+	for _, test := range tests {
+		b.Run(test.scenario, func(b *testing.B) {
+			b.SetBytes(int64(len(testdata)))
+			benchmarkZeroAllocsPerRun(b, func() {
+				buffer, _ = test.codec.Encode(buffer[:0], testdata)
+			})
+		})
+	}
+}
+
+func BenchmarkDecode(b *testing.B) {
+	buffer := make([]byte, 0, len(testdata))
+	output := make([]byte, 0, len(testdata))
+
+	for _, test := range tests {
+		b.Run(test.scenario, func(b *testing.B) {
+			buffer, _ = test.codec.Encode(buffer[:0], testdata)
+			b.SetBytes(int64(len(testdata)))
+			benchmarkZeroAllocsPerRun(b, func() {
+				output, _ = test.codec.Encode(output[:0], buffer)
+			})
 		})
 	}
 }
@@ -95,19 +124,11 @@ func BenchmarkCompressor(b *testing.B) {
 	src := make([]byte, 1000)
 	dst := make([]byte, 1000)
 
-	allocs := testing.AllocsPerRun(b.N, func() {
-		var err error
-		dst, err = compressor.Encode(dst, src, func(w io.Writer) (compress.Writer, error) {
+	benchmarkZeroAllocsPerRun(b, func() {
+		dst, _ = compressor.Encode(dst, src, func(w io.Writer) (compress.Writer, error) {
 			return &simpleWriter{Writer: w}, nil
 		})
-		if err != nil {
-			b.Fatal(err)
-		}
 	})
-
-	if allocs != 0 {
-		b.Errorf("too many memory allocations: %g > 0", allocs)
-	}
 }
 
 func BenchmarkDecompressor(b *testing.B) {
@@ -115,17 +136,15 @@ func BenchmarkDecompressor(b *testing.B) {
 	src := make([]byte, 1000)
 	dst := make([]byte, 1000)
 
-	allocs := testing.AllocsPerRun(b.N, func() {
-		var err error
-		dst, err = decompressor.Decode(dst, src, func(r io.Reader) (compress.Reader, error) {
+	benchmarkZeroAllocsPerRun(b, func() {
+		dst, _ = decompressor.Decode(dst, src, func(r io.Reader) (compress.Reader, error) {
 			return &simpleReader{Reader: r}, nil
 		})
-		if err != nil {
-			b.Fatal(err)
-		}
 	})
+}
 
-	if allocs != 0 {
+func benchmarkZeroAllocsPerRun(b *testing.B, f func()) {
+	if allocs := testing.AllocsPerRun(b.N, f); allocs != 0 {
 		b.Errorf("too many memory allocations: %g > 0", allocs)
 	}
 }

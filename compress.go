@@ -34,8 +34,7 @@ var (
 
 	// Zstd is the ZSTD parquet compression codec.
 	Zstd = zstd.Codec{
-		Level:       zstd.DefaultLevel,
-		Concurrency: zstd.DefaultConcurrency,
+		Level: zstd.DefaultLevel,
 	}
 
 	// Lz4Raw is the LZ4_RAW parquet compression codec.

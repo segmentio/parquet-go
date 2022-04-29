@@ -2,10 +2,9 @@
 package zstd
 
 import (
-	"io"
+	"sync"
 
 	"github.com/klauspost/compress/zstd"
-	"github.com/segmentio/parquet-go/compress"
 	"github.com/segmentio/parquet-go/format"
 )
 
@@ -31,16 +30,14 @@ const (
 )
 
 const (
-	DefaultLevel       = SpeedDefault
-	DefaultConcurrency = 1
+	DefaultLevel = SpeedDefault
 )
 
 type Codec struct {
-	Level       Level
-	Concurrency int
+	Level Level
 
-	r compress.Decompressor
-	w compress.Compressor
+	encoders sync.Pool // *zstd.Encoder
+	decoders sync.Pool // *zstd.Decoder
 }
 
 func (c *Codec) String() string {
@@ -52,37 +49,36 @@ func (c *Codec) CompressionCodec() format.CompressionCodec {
 }
 
 func (c *Codec) Encode(dst, src []byte) ([]byte, error) {
-	return c.w.Encode(dst, src, func(w io.Writer) (compress.Writer, error) {
-		z, err := zstd.NewWriter(w,
-			zstd.WithEncoderConcurrency(c.concurrency()),
+	e, _ := c.encoders.Get().(*zstd.Encoder)
+	if e == nil {
+		var err error
+		e, err = zstd.NewWriter(nil,
+			zstd.WithEncoderConcurrency(1),
 			zstd.WithEncoderLevel(c.level()),
 			zstd.WithZeroFrames(true),
 			zstd.WithEncoderCRC(false),
 		)
 		if err != nil {
-			return nil, err
+			return dst[:0], err
 		}
-		return writer{z}, nil
-	})
+	}
+	defer c.encoders.Put(e)
+	return e.EncodeAll(src, dst[:0]), nil
 }
 
 func (c *Codec) Decode(dst, src []byte) ([]byte, error) {
-	return c.r.Decode(dst, src, func(r io.Reader) (compress.Reader, error) {
-		z, err := zstd.NewReader(r,
-			zstd.WithDecoderConcurrency(c.concurrency()),
+	d, _ := c.decoders.Get().(*zstd.Decoder)
+	if d == nil {
+		var err error
+		d, err = zstd.NewReader(nil,
+			zstd.WithDecoderConcurrency(1),
 		)
 		if err != nil {
-			return nil, err
+			return dst[:0], err
 		}
-		return reader{z}, nil
-	})
-}
-
-func (c *Codec) concurrency() int {
-	if c.Concurrency != 0 {
-		return c.Concurrency
 	}
-	return DefaultConcurrency
+	defer c.decoders.Put(d)
+	return d.DecodeAll(src, dst[:0])
 }
 
 func (c *Codec) level() Level {
@@ -91,11 +87,3 @@ func (c *Codec) level() Level {
 	}
 	return DefaultLevel
 }
-
-type reader struct{ *zstd.Decoder }
-
-func (r reader) Close() error { r.Decoder.Close(); return nil }
-
-type writer struct{ *zstd.Encoder }
-
-func (w writer) Close() error { w.Encoder.Close(); return nil }
