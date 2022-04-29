@@ -19,9 +19,9 @@ func (c *Codec) CompressionCodec() format.CompressionCodec {
 }
 
 func (c *Codec) Encode(dst, src []byte) ([]byte, error) {
-	return append(dst, src...), nil
+	return append(dst[:0], src...), nil
 }
 
 func (c *Codec) Decode(dst, src []byte) ([]byte, error) {
-	return append(dst, src...), nil
+	return append(dst[:0], src...), nil
 }
