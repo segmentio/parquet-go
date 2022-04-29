@@ -1026,10 +1026,14 @@ func (c *writerColumn) writeBufferedPage(page BufferedPage) (int64, error) {
 		if err != nil {
 			return 0, fmt.Errorf("compressing parquet data page: %w", err)
 		}
-		// TODO: can we optimize this copy away?
-		buffer.Truncate(offset)
-		buffer.Write(b)
-		pageData = buffer.Bytes()
+		if offset == 0 {
+			pageData = b
+		} else {
+			// TODO: can this copy be optimized away?
+			buffer.Truncate(offset)
+			buffer.Write(b)
+			pageData = buffer.Bytes()
+		}
 	}
 
 	pageHeader := &format.PageHeader{
