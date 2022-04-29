@@ -447,8 +447,9 @@ func (col *repeatedColumnBuffer) Page() BufferedPage {
 
 		column := col.reordering
 		column.Reset()
+		maxNumValues := 0
 		defer func() {
-			clearValues(col.buffer[:cap(col.buffer)])
+			clearValues(col.buffer[:maxNumValues])
 		}()
 
 		baseOffset := 0
@@ -471,6 +472,9 @@ func (col *repeatedColumnBuffer) Page() BufferedPage {
 				}
 				if _, err := column.base.WriteValues(col.buffer); err != nil {
 					return newErrorPage(col.Column(), "reordering rows of repeated column: %w", err)
+				}
+				if numValues > maxNumValues {
+					maxNumValues = numValues
 				}
 			}
 
@@ -572,8 +576,9 @@ func (col *repeatedColumnBuffer) WriteValues(values []Value) (numValues int, err
 		}
 	}
 
+	maxNumValues := 0
 	defer func() {
-		clearValues(col.buffer[:cap(col.buffer)])
+		clearValues(col.buffer[:maxNumValues])
 	}()
 
 	var row []Value
@@ -584,6 +589,9 @@ func (col *repeatedColumnBuffer) WriteValues(values []Value) (numValues int, err
 			return numValues, err
 		}
 		numValues += len(row)
+		if len(col.buffer) > maxNumValues {
+			maxNumValues = len(col.buffer)
+		}
 	}
 
 	return numValues, nil
