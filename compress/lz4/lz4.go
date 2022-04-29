@@ -52,6 +52,9 @@ func (c *Codec) Encode(dst, src []byte) ([]byte, error) {
 }
 
 func (c *Codec) Decode(dst, src []byte) ([]byte, error) {
+	// 3x seems like a common compression ratio, so we optimistically size the
+	// output buffer to that size. Feel free to change the value if you observe
+	// different behaviors.
 	dst = reserveAtLeast(dst, 3*len(src))
 
 	for {
