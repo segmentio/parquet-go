@@ -24,6 +24,9 @@ const (
 
 type Codec struct {
 	Level int
+
+	r compress.Decompressor
+	w compress.Compressor
 }
 
 func (c *Codec) String() string {
@@ -34,43 +37,31 @@ func (c *Codec) CompressionCodec() format.CompressionCodec {
 	return format.Gzip
 }
 
-func (c *Codec) NewReader(r io.Reader) (compress.Reader, error) {
-	if r == nil {
-		r = strings.NewReader(emptyGzip)
-	}
-	z, err := gzip.NewReader(r)
-	if err != nil {
-		return nil, err
-	}
-	return reader{z}, nil
+func (c *Codec) Encode(dst, src []byte) ([]byte, error) {
+	return c.w.Encode(dst, src, func(w io.Writer) (compress.Writer, error) {
+		return gzip.NewWriterLevel(w, c.Level)
+	})
 }
 
-func (c *Codec) NewWriter(w io.Writer) (compress.Writer, error) {
-	if w == nil {
-		w = io.Discard
-	}
-	z, err := gzip.NewWriterLevel(w, c.Level)
-	if err != nil {
-		return nil, err
-	}
-	return writer{z}, nil
+func (c *Codec) Decode(dst, src []byte) ([]byte, error) {
+	return c.r.Decode(dst, src, func(r io.Reader) (compress.Reader, error) {
+		z, err := gzip.NewReader(r)
+		if err != nil {
+			return nil, err
+		}
+		return &reader{Reader: z}, nil
+	})
 }
 
-type reader struct{ *gzip.Reader }
+type reader struct {
+	*gzip.Reader
+	emptyGzip strings.Reader
+}
 
-func (r reader) Reset(rr io.Reader) error {
+func (r *reader) Reset(rr io.Reader) error {
 	if rr == nil {
-		rr = strings.NewReader(emptyGzip)
+		r.emptyGzip.Reset(emptyGzip)
+		rr = &r.emptyGzip
 	}
 	return r.Reader.Reset(rr)
-}
-
-type writer struct{ *gzip.Writer }
-
-func (w writer) Reset(ww io.Writer) error {
-	if ww == nil {
-		ww = io.Discard
-	}
-	w.Writer.Reset(ww)
-	return nil
 }

@@ -11,7 +11,6 @@ import (
 	"sort"
 
 	"github.com/segmentio/encoding/thrift"
-	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/format"
 )
 
@@ -456,11 +455,6 @@ type filePages struct {
 	section *io.SectionReader
 	rbuf    *bufio.Reader
 
-	// This buffer holds compressed pages in memory when they are read; we need
-	// to read whole pages because we have to compute the checksum prior to
-	// exposing the page to the application.
-	compressedPageData []byte
-
 	page filePage
 	skip int64
 }
@@ -493,28 +487,24 @@ func (r *filePages) readPage() (*filePage, error) {
 		if err != io.EOF {
 			err = fmt.Errorf("decoding page header: %w", err)
 		}
-		if r.page.values != nil {
-			r.page.values.release()
-			r.page.values = nil
-		}
 		return nil, err
 	}
 
 	compressedPageSize := int(r.page.header.CompressedPageSize)
-	if cap(r.compressedPageData) < compressedPageSize {
-		r.compressedPageData = make([]byte, compressedPageSize)
+	if cap(r.page.data) < compressedPageSize {
+		r.page.data = make([]byte, compressedPageSize)
 	} else {
-		r.compressedPageData = r.compressedPageData[:compressedPageSize]
+		r.page.data = r.page.data[:compressedPageSize]
 	}
 
-	_, err := io.ReadFull(r.rbuf, r.compressedPageData)
+	_, err := io.ReadFull(r.rbuf, r.page.data)
 	if err != nil {
 		return nil, fmt.Errorf("reading page %d of column %q", r.page.index, r.page.columnPath())
 	}
 
 	if r.page.header.CRC != 0 {
 		headerChecksum := uint32(r.page.header.CRC)
-		bufferChecksum := crc32.ChecksumIEEE(r.compressedPageData)
+		bufferChecksum := crc32.ChecksumIEEE(r.page.data)
 
 		if headerChecksum != bufferChecksum {
 			// The parquet specs indicate that corruption errors could be
@@ -534,8 +524,6 @@ func (r *filePages) readPage() (*filePage, error) {
 			)
 		}
 	}
-
-	r.page.data.Reset(r.compressedPageData)
 
 	if r.column.columnIndex != nil {
 		err = r.page.parseColumnIndex(r.column.columnIndex)
@@ -558,18 +546,22 @@ func (r *filePages) readDictionary() error {
 }
 
 func (r *filePages) readDictionaryPage(p *filePage) error {
-	page := acquireCompressedPageReader(p.codec, &p.data)
+	pageData, err := p.decompress(p.data)
+	if err != nil {
+		return fmt.Errorf("decompressing dictionary page of column %q: %w", p.columnPath(), err)
+	}
+
 	enc := p.header.DictionaryPageHeader.Encoding
-	dec := LookupEncoding(enc).NewDecoder(page)
+	dec := LookupEncoding(enc).NewDecoder(bytes.NewReader(pageData))
 
 	columnIndex := r.column.Column()
 	numValues := int(p.NumValues())
 	dict, err := p.columnType.ReadDictionary(columnIndex, numValues, dec)
-	releaseCompressedPageReader(page)
 
 	if err != nil {
 		return fmt.Errorf("reading dictionary of column %q: %w", p.columnPath(), err)
 	}
+
 	r.page.dictionary = dict
 	r.page.columnType = dict.Type()
 	return nil
@@ -651,18 +643,13 @@ type filePage struct {
 
 	codec  format.CompressionCodec
 	header format.PageHeader
-	data   bytes.Reader
+	data   []byte
+	buffer []byte
 
 	index     int
 	minValue  Value
 	maxValue  Value
 	hasBounds bool
-
-	// This field caches the state used when reading values from the page.
-	// We allocate it separately to avoid creating it if the Values method
-	// is never called (e.g. when the page data is never decompressed).
-	// The state is released when the parent page reader reaches EOF.
-	values *filePageValueReaderState
 }
 
 var (
@@ -671,6 +658,18 @@ var (
 	errPageIndexExceedsColumnIndexMaxValues  = errors.New("page index exceeds column index max values")
 	errPageIndexExceedsColumnIndexNullCounts = errors.New("page index exceeds column index null counts")
 )
+
+func (p *filePage) decompress(pageData []byte) ([]byte, error) {
+	if p.codec != format.Uncompressed {
+		var err error
+		p.buffer, err = LookupCompressionCodec(p.codec).Decode(p.buffer[:0], pageData)
+		if err != nil {
+			return nil, err
+		}
+		pageData = p.buffer
+	}
+	return pageData, nil
+}
 
 func (p *filePage) statistics() *format.Statistics {
 	switch p.header.Type {
@@ -829,13 +828,78 @@ func (p *filePage) Size() int64 {
 }
 
 func (p *filePage) Values() ValueReader {
-	if p.values == nil {
-		p.values = new(filePageValueReaderState)
+	v, err := p.values()
+	if err != nil {
+		v = &errorValueReader{err}
 	}
-	if err := p.values.init(p.columnType, p.column, p.codec, p.PageHeader(), &p.data, p.dictionary); err != nil {
-		return &errorValueReader{err: err}
+	return v
+}
+
+func (p *filePage) values() (ValueReader, error) {
+	var repetitionLevels []byte
+	var definitionLevels []byte
+	var pageEncoding format.Encoding
+	var pageData = p.data
+	var numValues int
+	var err error
+
+	maxRepetitionLevel := p.column.maxRepetitionLevel
+	maxDefinitionLevel := p.column.maxDefinitionLevel
+
+	switch p.header.Type {
+	case format.DataPageV2:
+		header := p.header.DataPageHeaderV2
+		repetitionLevels, definitionLevels, pageData, err = readDataPageV2(header, pageData)
+		if err != nil {
+			return nil, fmt.Errorf("initializing v2 reader for page of column %q: %w", p.columnPath(), err)
+		}
+		if p.codec != format.Uncompressed && (header.IsCompressed == nil || *header.IsCompressed) {
+			if pageData, err = p.decompress(pageData); err != nil {
+				return nil, fmt.Errorf("decompressing data page v2 of column %q: %w", p.columnPath(), err)
+			}
+		}
+		pageEncoding = header.Encoding
+		numValues = int(header.NumValues)
+
+	case format.DataPage:
+		if pageData, err = p.decompress(pageData); err != nil {
+			return nil, fmt.Errorf("decompressing data page v1 of column %q: %w", p.columnPath(), err)
+		}
+		repetitionLevels, definitionLevels, pageData, err = readDataPageV1(maxRepetitionLevel, maxDefinitionLevel, pageData)
+		if err != nil {
+			return nil, fmt.Errorf("initializing v1 reader for page of column %q: %w", p.columnPath(), err)
+		}
+		header := p.header.DataPageHeader
+		pageEncoding = header.Encoding
+		numValues = int(header.NumValues)
+
+	default:
+		return nil, fmt.Errorf("cannot read values of type %s from page of column %q", p.header.Type, p.columnPath())
 	}
-	return p.values.reader
+
+	// In some legacy configurations, the PLAIN_DICTIONARY encoding is used on
+	// data page headers to indicate that the page contains indexes into the
+	// dictionary page, tho it is still encoded using the RLE encoding in this
+	// case, so we convert the encoding to RLE_DICTIONARY to simplify.
+	switch pageEncoding {
+	case format.PlainDictionary:
+		pageEncoding = format.RLEDictionary
+	}
+
+	pageDecoder := LookupEncoding(pageEncoding).NewDecoder(bytes.NewReader(pageData))
+	reader := p.columnType.NewColumnReader(int(p.column.index), defaultReadBufferSize)
+	reader.Reset(numValues, pageDecoder)
+
+	hasLevels := maxRepetitionLevel > 0 || maxDefinitionLevel > 0
+	if hasLevels {
+		repetitions := RLE.NewDecoder(bytes.NewReader(repetitionLevels))
+		definitions := RLE.NewDecoder(bytes.NewReader(definitionLevels))
+		fileReader := newFileColumnReader(reader, maxRepetitionLevel, maxDefinitionLevel, defaultReadBufferSize)
+		fileReader.reset(numValues, repetitions, definitions, pageDecoder)
+		reader = fileReader
+	}
+
+	return reader, nil
 }
 
 func (p *filePage) Buffer() BufferedPage {
@@ -860,253 +924,69 @@ func (p *filePage) PageHeader() PageHeader {
 	}
 }
 
-func (p *filePage) PageData() io.Reader { return &p.data }
+func (p *filePage) PageData() io.Reader { return bytes.NewReader(p.data) }
 
 func (p *filePage) PageSize() int64 { return int64(p.header.CompressedPageSize) }
 
 func (p *filePage) CRC() uint32 { return uint32(p.header.CRC) }
 
-type filePageValueReaderState struct {
-	reader ColumnReader
-
-	v1 struct {
-		repetitions dataPageLevelV1
-		definitions dataPageLevelV1
-	}
-
-	v2 struct {
-		repetitions dataPageLevelV2
-		definitions dataPageLevelV2
-	}
-
-	repetitions struct {
-		encoding format.Encoding
-		decoder  encoding.Decoder
-	}
-
-	definitions struct {
-		encoding format.Encoding
-		decoder  encoding.Decoder
-	}
-
-	page struct {
-		encoding   format.Encoding
-		decoder    encoding.Decoder
-		compressed *compressedPageReader
-	}
-}
-
-func (s *filePageValueReaderState) release() {
-	if s.page.compressed != nil {
-		releaseCompressedPageReader(s.page.compressed)
-		s.page.compressed = nil
-	}
-}
-
-func (s *filePageValueReaderState) init(columnType Type, column *Column, codec format.CompressionCodec, header PageHeader, data *bytes.Reader, dict Dictionary) (err error) {
-	var repetitionLevels io.Reader
-	var definitionLevels io.Reader
-	var pageHeader DataPageHeader
-	var pageData io.Reader
-
-	switch h := header.(type) {
-	case DataPageHeaderV2:
-		repetitionLevels, definitionLevels, err = s.initDataPageV2(h, data)
+func readDataPageV1(maxRepetitionLevel, maxDefinitionLevel int8, page []byte) (repetitionLevels, definitionLevels, data []byte, err error) {
+	data = page
+	if maxRepetitionLevel > 0 {
+		repetitionLevels, data, err = readDataPageV1Level(data, "repetition")
 		if err != nil {
-			return fmt.Errorf("initializing v2 reader for page of column %q: %w", columnPath(column.Path()), err)
+			return nil, nil, page, err
 		}
-		if h.IsCompressed(codec) {
-			s.page.compressed = makeCompressedPage(s.page.compressed, codec, data)
-			pageData = s.page.compressed
-		} else {
-			pageData = data
-		}
-		pageHeader = h
-
-	case DataPageHeaderV1:
-		if h.IsCompressed(codec) {
-			s.page.compressed = makeCompressedPage(s.page.compressed, codec, data)
-			pageData = s.page.compressed
-		} else {
-			pageData = data
-		}
-		repetitionLevels, definitionLevels, err = s.initDataPageV1(column, pageData)
+	}
+	if maxDefinitionLevel > 0 {
+		definitionLevels, data, err = readDataPageV1Level(data, "definition")
 		if err != nil {
-			return fmt.Errorf("initializing v1 reader for page of column %q: %w", columnPath(column.Path()), err)
-		}
-		pageHeader = h
-
-	default:
-		return fmt.Errorf("cannot read values of type %s from page of column %q", h.PageType(), columnPath(column.Path()))
-	}
-
-	pageEncoding := pageHeader.Encoding()
-	// In some legacy configurations, the PLAIN_DICTIONARY encoding is used on
-	// data page headers to indicate that the page contains indexes into the
-	// dictionary page, tho it is still encoded using the RLE encoding in this
-	// case, so we convert the encoding to RLE_DICTIONARY to simplify.
-	switch pageEncoding {
-	case format.PlainDictionary:
-		pageEncoding = format.RLEDictionary
-	}
-	s.page.decoder = makeDecoder(s.page.decoder, s.page.encoding, pageEncoding, pageData)
-	s.page.encoding = pageEncoding
-
-	maxRepetitionLevel := column.maxRepetitionLevel
-	maxDefinitionLevel := column.maxDefinitionLevel
-	hasLevels := maxRepetitionLevel > 0 || maxDefinitionLevel > 0
-	if hasLevels {
-		repetitionLevelEncoding := pageHeader.RepetitionLevelEncoding()
-		definitionLevelEncoding := pageHeader.DefinitionLevelEncoding()
-		s.repetitions.decoder = makeDecoder(s.repetitions.decoder, s.repetitions.encoding, repetitionLevelEncoding, repetitionLevels)
-		s.definitions.decoder = makeDecoder(s.definitions.decoder, s.definitions.encoding, definitionLevelEncoding, definitionLevels)
-		s.repetitions.encoding = repetitionLevelEncoding
-		s.definitions.encoding = definitionLevelEncoding
-	}
-
-	if s.reader == nil {
-		bufferSize := defaultReadBufferSize
-		if hasLevels {
-			bufferSize /= 2
-		}
-		s.reader = columnType.NewColumnReader(int(column.index), bufferSize)
-		if hasLevels {
-			s.reader = newFileColumnReader(s.reader, maxRepetitionLevel, maxDefinitionLevel, bufferSize)
+			return nil, nil, page, err
 		}
 	}
-
-	numValues := int(header.NumValues())
-	switch r := s.reader.(type) {
-	case *fileColumnReader:
-		r.reset(numValues, s.repetitions.decoder, s.definitions.decoder, s.page.decoder)
-	default:
-		r.Reset(numValues, s.page.decoder)
-	}
-
-	return nil
+	return repetitionLevels, definitionLevels, data, nil
 }
 
-func (s *filePageValueReaderState) initDataPageV1(column *Column, data io.Reader) (repetitionLevels, definitionLevels io.Reader, err error) {
-	s.v1.repetitions.reset()
-	s.v1.definitions.reset()
-
-	if column.MaxRepetitionLevel() > 0 {
-		if err := s.v1.repetitions.readDataPageV1Level(data, "repetition"); err != nil {
-			return nil, nil, err
-		}
+func readDataPageV1Level(page []byte, typ string) (level, data []byte, err error) {
+	size, page, err := read(page, 4)
+	if err != nil {
+		return nil, page, fmt.Errorf("reading %s level: %w", typ, err)
 	}
-
-	if column.MaxDefinitionLevel() > 0 {
-		if err := s.v1.definitions.readDataPageV1Level(data, "definition"); err != nil {
-			return nil, nil, err
-		}
-	}
-
-	repetitionLevels = &s.v1.repetitions.section
-	definitionLevels = &s.v1.definitions.section
-	return repetitionLevels, definitionLevels, nil
+	return read(page, int(binary.LittleEndian.Uint32(size)))
 }
 
-func (s *filePageValueReaderState) initDataPageV2(header DataPageHeaderV2, data *bytes.Reader) (repetitionLevels, definitionLevels io.Reader, err error) {
-	repetitionLevelsByteLength := header.RepetitionLevelsByteLength()
-	definitionLevelsByteLength := header.DefinitionLevelsByteLength()
-
+func readDataPageV2(header *format.DataPageHeaderV2, page []byte) (repetitionLevels, definitionLevels, data []byte, err error) {
+	repetitionLevelsByteLength := header.RepetitionLevelsByteLength
+	definitionLevelsByteLength := header.DefinitionLevelsByteLength
+	data = page
 	if repetitionLevelsByteLength > 0 {
-		s.v2.repetitions.setDataPageV2Section(data, 0, repetitionLevelsByteLength)
-	} else {
-		s.v2.repetitions.reset()
-	}
-
-	if definitionLevelsByteLength > 0 {
-		s.v2.definitions.setDataPageV2Section(data, repetitionLevelsByteLength, definitionLevelsByteLength)
-	} else {
-		s.v2.definitions.reset()
-	}
-
-	if _, err := data.Seek(repetitionLevelsByteLength+definitionLevelsByteLength, io.SeekStart); err != nil {
-		return nil, nil, err
-	}
-
-	repetitionLevels = &s.v2.repetitions.section
-	definitionLevels = &s.v2.definitions.section
-	return repetitionLevels, definitionLevels, nil
-}
-
-type dataPageLevelV1 struct {
-	section bytes.Reader
-	buffer  [4]byte
-	data    []byte
-}
-
-func (lvl *dataPageLevelV1) reset() {
-	lvl.section.Reset(nil)
-}
-
-// This method breaks abstraction layers a bit, but it is helpful to avoid
-// decoding repetition and definition levels if there is no need to.
-//
-// In the data header format v1, the repetition and definition levels were
-// part of the compressed page payload. In order to access the data, the
-// levels must be fully read. Because of it, the levels have to be buffered
-// to allow the content to be decoded lazily later on.
-//
-// In the data header format v2, the repetition and definition levels are not
-// part of the compressed page data, they can be accessed by slicing a section
-// of the file according to the level lengths stored in the column metadata
-// header, therefore there is no need to buffer the levels.
-func (lvl *dataPageLevelV1) readDataPageV1Level(r io.Reader, typ string) error {
-	if _, err := io.ReadFull(r, lvl.buffer[:4]); err != nil {
-		return fmt.Errorf("reading RLE encoded length of %s levels: %w", typ, err)
-	}
-
-	n := int(binary.LittleEndian.Uint32(lvl.buffer[:4]))
-	if cap(lvl.data) < n {
-		lvl.data = make([]byte, n)
-	} else {
-		lvl.data = lvl.data[:n]
-	}
-
-	if rn, err := io.ReadFull(r, lvl.data); err != nil {
-		return fmt.Errorf("reading %d/%d bytes of %s levels: %w", rn, n, typ, err)
-	}
-
-	lvl.section.Reset(lvl.data)
-	return nil
-}
-
-type dataPageLevelV2 struct {
-	section io.SectionReader
-}
-
-func (lvl *dataPageLevelV2) reset() {
-	lvl.section = *io.NewSectionReader(nil, 0, 0)
-}
-
-func (lvl *dataPageLevelV2) setDataPageV2Section(file io.ReaderAt, dataPageOffset, dataPageLength int64) {
-	lvl.section = *io.NewSectionReader(file, dataPageOffset, dataPageLength)
-}
-
-func makeCompressedPage(page *compressedPageReader, codec format.CompressionCodec, compressed io.Reader) *compressedPageReader {
-	if page == nil {
-		page = acquireCompressedPageReader(codec, compressed)
-	} else {
-		if page.codec != codec {
-			releaseCompressedPageReader(page)
-			page = acquireCompressedPageReader(codec, compressed)
-		} else {
-			page.Reset(compressed)
+		repetitionLevels, data, err = readDataPageV2Level(data, repetitionLevelsByteLength, "repetition")
+		if err != nil {
+			return nil, nil, page, err
 		}
 	}
-	return page
+	if definitionLevelsByteLength > 0 {
+		definitionLevels, data, err = readDataPageV2Level(data, definitionLevelsByteLength, "definition")
+		if err != nil {
+			return nil, nil, page, err
+		}
+	}
+	return repetitionLevels, definitionLevels, data, nil
 }
 
-func makeDecoder(decoder encoding.Decoder, oldEncoding, newEncoding format.Encoding, input io.Reader) encoding.Decoder {
-	if decoder == nil || oldEncoding != newEncoding {
-		decoder = LookupEncoding(newEncoding).NewDecoder(input)
-	} else {
-		decoder.Reset(input)
+func readDataPageV2Level(page []byte, size int32, typ string) (level, data []byte, err error) {
+	level, data, err = read(page, int(size))
+	if err != nil {
+		err = fmt.Errorf("reading %s level: %w", typ, err)
 	}
-	return decoder
+	return level, data, err
+}
+
+func read(data []byte, size int) (head, tail []byte, err error) {
+	if len(data) < size {
+		return nil, data, io.ErrUnexpectedEOF
+	}
+	return data[:size], data[size:], nil
 }
 
 var (

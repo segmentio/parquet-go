@@ -179,7 +179,7 @@ func (r *Reader) Read(row interface{}) (err error) {
 	}
 
 	if err := r.read.SeekToRow(r.rowIndex); err != nil {
-		return err
+		return fmt.Errorf("seeking reader to row %d: %w", r.rowIndex, err)
 	}
 
 	r.values, err = r.read.ReadRow(r.values[:0])

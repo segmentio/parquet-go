@@ -2,10 +2,9 @@
 package zstd
 
 import (
-	"io"
+	"sync"
 
 	"github.com/klauspost/compress/zstd"
-	"github.com/segmentio/parquet-go/compress"
 	"github.com/segmentio/parquet-go/format"
 )
 
@@ -31,13 +30,14 @@ const (
 )
 
 const (
-	DefaultLevel       = SpeedDefault
-	DefaultConcurrency = 1
+	DefaultLevel = SpeedDefault
 )
 
 type Codec struct {
-	Level       Level
-	Concurrency int
+	Level Level
+
+	encoders sync.Pool // *zstd.Encoder
+	decoders sync.Pool // *zstd.Decoder
 }
 
 func (c *Codec) String() string {
@@ -48,34 +48,37 @@ func (c *Codec) CompressionCodec() format.CompressionCodec {
 	return format.Zstd
 }
 
-func (c *Codec) NewReader(r io.Reader) (compress.Reader, error) {
-	z, err := zstd.NewReader(r,
-		zstd.WithDecoderConcurrency(c.concurrency()),
-	)
-	if err != nil {
-		return nil, err
+func (c *Codec) Encode(dst, src []byte) ([]byte, error) {
+	e, _ := c.encoders.Get().(*zstd.Encoder)
+	if e == nil {
+		var err error
+		e, err = zstd.NewWriter(nil,
+			zstd.WithEncoderConcurrency(1),
+			zstd.WithEncoderLevel(c.level()),
+			zstd.WithZeroFrames(true),
+			zstd.WithEncoderCRC(false),
+		)
+		if err != nil {
+			return dst[:0], err
+		}
 	}
-	return reader{z}, nil
+	defer c.encoders.Put(e)
+	return e.EncodeAll(src, dst[:0]), nil
 }
 
-func (c *Codec) NewWriter(w io.Writer) (compress.Writer, error) {
-	z, err := zstd.NewWriter(nonNilWriter(w),
-		zstd.WithEncoderConcurrency(c.concurrency()),
-		zstd.WithEncoderLevel(c.level()),
-		zstd.WithZeroFrames(true),
-		zstd.WithEncoderCRC(false),
-	)
-	if err != nil {
-		return nil, err
+func (c *Codec) Decode(dst, src []byte) ([]byte, error) {
+	d, _ := c.decoders.Get().(*zstd.Decoder)
+	if d == nil {
+		var err error
+		d, err = zstd.NewReader(nil,
+			zstd.WithDecoderConcurrency(1),
+		)
+		if err != nil {
+			return dst[:0], err
+		}
 	}
-	return writer{z}, nil
-}
-
-func (c *Codec) concurrency() int {
-	if c.Concurrency != 0 {
-		return c.Concurrency
-	}
-	return DefaultConcurrency
+	defer c.decoders.Put(d)
+	return d.DecodeAll(src, dst[:0])
 }
 
 func (c *Codec) level() Level {
@@ -83,20 +86,4 @@ func (c *Codec) level() Level {
 		return c.Level
 	}
 	return DefaultLevel
-}
-
-type reader struct{ *zstd.Decoder }
-
-func (r reader) Close() error { r.Decoder.Close(); return nil }
-
-type writer struct{ *zstd.Encoder }
-
-func (w writer) Close() error             { w.Encoder.Close(); return nil }
-func (w writer) Reset(ww io.Writer) error { w.Encoder.Reset(nonNilWriter(ww)); return nil }
-
-func nonNilWriter(w io.Writer) io.Writer {
-	if w == nil {
-		w = io.Discard
-	}
-	return w
 }
