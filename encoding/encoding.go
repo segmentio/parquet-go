@@ -24,6 +24,26 @@ type Encoding interface {
 	// the given type.
 	CanEncode(format.Type) bool
 
+	EncodeBoolean(dst []byte, src []bool) ([]byte, error)
+	EncodeInt8(dst []byte, src []int8) ([]byte, error)
+	EncodeInt32(dst []byte, src []int32) ([]byte, error)
+	EncodeInt64(dst []byte, src []int64) ([]byte, error)
+	EncodeInt96(dst []byte, src []deprecated.Int96) ([]byte, error)
+	EncodeFloat(dst []byte, src []float32) ([]byte, error)
+	EncodeDouble(dst []byte, src []float64) ([]byte, error)
+	EncodeByteArray(dst, src []byte) ([]byte, error)
+	EncodeFixedLenByteArray(dst, src []byte, size int) ([]byte, error)
+
+	DecodeBoolean(dst []bool, src []byte) ([]bool, error)
+	DecodeInt8(dst []int8, src []byte) ([]int8, error)
+	DecodeInt32(dst []int32, src []byte) ([]int32, error)
+	DecodeInt64(dst []int64, src []byte) ([]int64, error)
+	DecodeInt96(dst []deprecated.Int96, src []byte) ([]deprecated.Int96, error)
+	DecodeFloat(dst []float32, src []byte) ([]float32, error)
+	DecodeDouble(dst []float64, src []byte) ([]float64, error)
+	DecodeByteArray(dst, src []byte) ([]byte, error)
+	DecodeFixedLenByteArray(dst, src []byte, size int) ([]byte, error)
+
 	// Creates a decoder reading encoded values to the io.Reader passed as
 	// argument.
 	//

@@ -8,6 +8,7 @@ import (
 )
 
 type ByteArrayEncoding struct {
+	encoding.NotSupported
 }
 
 func (e *ByteArrayEncoding) Encoding() format.Encoding {

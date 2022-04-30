@@ -10,6 +10,7 @@ import (
 )
 
 type DictionaryEncoding struct {
+	encoding.NotSupported
 }
 
 func (e *DictionaryEncoding) Encoding() format.Encoding {

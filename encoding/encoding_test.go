@@ -2,19 +2,17 @@ package encoding_test
 
 import (
 	"bytes"
-	"errors"
 	"io"
 	"math"
+	"math/rand"
+	"reflect"
 	"testing"
 
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/encoding/bytestreamsplit"
-	"github.com/segmentio/parquet-go/encoding/delta"
 	"github.com/segmentio/parquet-go/encoding/plain"
-	"github.com/segmentio/parquet-go/encoding/rle"
 	"github.com/segmentio/parquet-go/format"
-	"github.com/segmentio/parquet-go/internal/bits"
 )
 
 var booleanTests = [...][]bool{
@@ -50,31 +48,6 @@ var int8Tests = [...][]int8{
 	{0},
 	{1},
 	{-1, 0, 1, 0, 2, 3, 4, 5, 6, math.MaxInt8, math.MaxInt8, 0},
-	{ // repeating 24x
-		42, 42, 42, 42, 42, 42, 42, 42,
-		42, 42, 42, 42, 42, 42, 42, 42,
-		42, 42, 42, 42, 42, 42, 42, 42,
-	},
-	{ // never repeating
-		0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-		0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
-		0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
-		0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F,
-	},
-	{ // streaks of repeating values
-		0, 0, 0, 0, 1, 1, 1, 1,
-		2, 2, 2, 2, 3, 3, 3, 3,
-		4, 4, 4, 4, 5, 5, 5, 5,
-		6, 6, 6, 7, 7, 7, 8, 8,
-		8, 9, 9, 9,
-	},
-}
-
-var int16Tests = [...][]int16{
-	{},
-	{0},
-	{1},
-	{-1, 0, 1, 0, 2, 3, 4, 5, 6, math.MaxInt16, math.MaxInt16, 0},
 	{ // repeating 24x
 		42, 42, 42, 42, 42, 42, 42, 42,
 		42, 42, 42, 42, 42, 42, 42, 42,
@@ -194,16 +167,16 @@ var fixedLenByteArrayTests = [...]struct {
 	{size: 8, data: []byte("ABCDEFGH")},
 }
 
-func TestEncoding(t *testing.T) {
-	for _, test := range [...]struct {
-		scenario string
-		encoding encoding.Encoding
-	}{
-		{
-			scenario: "PLAIN",
-			encoding: new(plain.Encoding),
-		},
+var encodings = [...]struct {
+	scenario string
+	encoding encoding.Encoding
+}{
+	{
+		scenario: "PLAIN",
+		encoding: new(plain.Encoding),
+	},
 
+	/*
 		{
 			scenario: "RLE",
 			encoding: new(rle.Encoding),
@@ -233,12 +206,16 @@ func TestEncoding(t *testing.T) {
 			scenario: "DELTA_BYTE_ARRAY",
 			encoding: new(delta.ByteArrayEncoding),
 		},
+	*/
 
-		{
-			scenario: "BYTE_STREAM_SPLIT",
-			encoding: new(bytestreamsplit.Encoding),
-		},
-	} {
+	{
+		scenario: "BYTE_STREAM_SPLIT",
+		encoding: new(bytestreamsplit.Encoding),
+	},
+}
+
+func TestEncoding(t *testing.T) {
+	for _, test := range encodings {
 		t.Run(test.scenario, func(t *testing.T) { testEncoding(t, test.encoding) })
 	}
 }
@@ -256,11 +233,6 @@ func testEncoding(t *testing.T, e encoding.Encoding) {
 		{
 			scenario: "int8",
 			function: testInt8Encoding,
-		},
-
-		{
-			scenario: "int16",
-			function: testInt16Encoding,
 		},
 
 		{
@@ -303,529 +275,572 @@ func testEncoding(t *testing.T, e encoding.Encoding) {
 }
 
 func testBooleanEncoding(t *testing.T, e encoding.Encoding) {
-	if !e.CanEncode(format.Boolean) {
-		t.Skipf("%s cannot encode boolean values", e)
-	}
-
-	buf := new(bytes.Buffer)
-	enc := e.NewEncoder(buf)
-	dec := e.NewDecoder(buf)
-	tmp := [1]bool{}
+	testCanEncode(t, e, format.Boolean)
+	buffer := []byte{}
+	values := []bool{}
 
 	for _, test := range booleanTests {
 		t.Run("", func(t *testing.T) {
-			defer dec.Reset(buf)
-			defer enc.Reset(buf)
-			defer buf.Reset()
-
-			if err := enc.EncodeBoolean(test); err != nil {
-				if errors.Is(err, encoding.ErrNotSupported) {
-					t.Skip(err)
-				}
-				t.Fatal("encode:", err)
+			var err error
+			buffer, err = e.EncodeBoolean(buffer, test)
+			if err != nil {
+				t.Fatal(err)
 			}
-
-			for i, want := range test {
-				n, err := dec.DecodeBoolean(tmp[:])
-				if err != nil {
-					t.Fatal("decode:", err)
-				}
-				if n != 1 {
-					t.Fatalf("decoder decoded the wrong number of items: %d", n)
-				}
-				if got := tmp[0]; got != want {
-					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, want, got)
-				}
+			values, err = e.DecodeBoolean(values, buffer)
+			if err != nil {
+				t.Fatal(err)
 			}
-
+			if !reflect.DeepEqual(test, values[:len(test)]) {
+				t.Fatalf("values mismatch:\nwant = %+v\ngot  = %+v", test, values)
+			}
 			// Boolean encodings may pad their output with up to 7 bits, so we
 			// count the distance from the last decoded value to the EOF error,
 			// and ensure that it's always smaller than 8.
-			extra := 0
-			for {
-				if extra == 8 {
-					t.Fatal("nil error returned for more than 7 tailing bits")
-					break
-				}
-				if n, err := dec.DecodeBoolean(tmp[:]); err == io.EOF {
-					break
-				} else if n != 1 {
-					t.Fatal("non-zero number of values decoded at EOF:", n)
-				}
-				extra++
+			if extra := len(values) - len(test); extra > 7 {
+				t.Fatal("nil error returned for more than 7 tailing bits")
 			}
 		})
 	}
 }
 
 func testInt8Encoding(t *testing.T, e encoding.Encoding) {
-	if !e.CanEncode(format.Int32) {
-		t.Skipf("%s cannot encode int32 values", e)
-	}
-
-	buf := new(bytes.Buffer)
-	enc := e.NewEncoder(buf)
-	dec := e.NewDecoder(buf)
-	tmp := [1]int8{}
+	testCanEncode(t, e, format.Int32)
+	buffer := []byte{}
+	values := []int8{}
 
 	for _, test := range int8Tests {
 		t.Run("", func(t *testing.T) {
-			defer dec.Reset(buf)
-			defer enc.Reset(buf)
-			defer buf.Reset()
-
-			bitWidth := bits.MaxLen8(test)
-			if bitWidth == 0 {
-				bitWidth = 1
-			}
-			enc.SetBitWidth(bitWidth)
-			dec.SetBitWidth(bitWidth)
-
-			if err := enc.EncodeInt8(test); err != nil {
-				if errors.Is(err, encoding.ErrNotSupported) {
-					t.Skip(err)
-				}
-				t.Fatal("encode:", err)
-			}
-
-			for i := range test {
-				n, err := dec.DecodeInt8(tmp[:])
-				if err != nil {
-					t.Fatal("decode:", err)
-				}
-				if n != 1 {
-					t.Fatalf("decoder decoded the wrong number of items: %d", n)
-				}
-				if tmp[0] != test[i] {
-					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, test[i], tmp[0])
-				}
-			}
-
-			if n, err := dec.DecodeInt8(tmp[:]); err != io.EOF {
-				t.Fatal("non-EOF error returned after decoding all the values:", err)
-			} else if n != 0 {
-				t.Fatal("non-zero number of values decoded at EOF:", n)
-			}
-		})
-	}
-}
-
-func testInt16Encoding(t *testing.T, e encoding.Encoding) {
-	if !e.CanEncode(format.Int32) {
-		t.Skipf("%s cannot encode int32 values", e)
-	}
-
-	buf := new(bytes.Buffer)
-	enc := e.NewEncoder(buf)
-	dec := e.NewDecoder(buf)
-	tmp := [1]int16{}
-
-	for _, test := range int16Tests {
-		t.Run("", func(t *testing.T) {
-			defer dec.Reset(buf)
-			defer enc.Reset(buf)
-			defer buf.Reset()
-
-			bitWidth := bits.MaxLen16(test)
-			if bitWidth == 0 {
-				bitWidth = 1
-			}
-			enc.SetBitWidth(bitWidth)
-			dec.SetBitWidth(bitWidth)
-
-			if err := enc.EncodeInt16(test); err != nil {
-				if errors.Is(err, encoding.ErrNotSupported) {
-					t.Skip(err)
-				}
-				t.Fatal("encode:", err)
-			}
-
-			for i := range test {
-				n, err := dec.DecodeInt16(tmp[:])
-				if err != nil {
-					t.Fatal("decode:", err)
-				}
-				if n != 1 {
-					t.Fatalf("decoder decoded the wrong number of items: %d", n)
-				}
-				if tmp[0] != test[i] {
-					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, test[i], tmp[0])
-				}
-			}
-
-			if n, err := dec.DecodeInt16(tmp[:]); err != io.EOF {
-				t.Fatal("non-EOF error returned after decoding all the values:", err)
-			} else if n != 0 {
-				t.Fatal("non-zero number of values decoded at EOF:", n)
-			}
+			var err error
+			buffer, err = e.EncodeInt8(buffer, test)
+			assertNoError(t, err)
+			values, err = e.DecodeInt8(values, buffer)
+			assertNoError(t, err)
+			assertDeepEqual(t, test, values)
 		})
 	}
 }
 
 func testInt32Encoding(t *testing.T, e encoding.Encoding) {
-	if !e.CanEncode(format.Int32) {
-		t.Skipf("%s cannot encode int32 values", e)
-	}
-
-	buf := new(bytes.Buffer)
-	enc := e.NewEncoder(buf)
-	dec := e.NewDecoder(buf)
-	tmp := [1]int32{}
+	testCanEncode(t, e, format.Int32)
+	buffer := []byte{}
+	values := []int32{}
 
 	for _, test := range int32Tests {
 		t.Run("", func(t *testing.T) {
-			defer dec.Reset(buf)
-			defer enc.Reset(buf)
-			defer buf.Reset()
-
-			bitWidth := bits.MaxLen32(test)
-			if bitWidth == 0 {
-				bitWidth = 1
-			}
-			enc.SetBitWidth(bitWidth)
-			dec.SetBitWidth(bitWidth)
-
-			if err := enc.EncodeInt32(test); err != nil {
-				if errors.Is(err, encoding.ErrNotSupported) {
-					t.Skip(err)
-				}
-				t.Fatal("encode:", err)
-			}
-
-			for i := range test {
-				n, err := dec.DecodeInt32(tmp[:])
-				if err != nil {
-					t.Fatal("decode:", err)
-				}
-				if n != 1 {
-					t.Fatalf("decoder decoded the wrong number of items: %d", n)
-				}
-				if tmp[0] != test[i] {
-					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, test[i], tmp[0])
-				}
-			}
-
-			if n, err := dec.DecodeInt32(tmp[:]); err != io.EOF {
-				t.Fatal("non-EOF error returned after decoding all the values:", err)
-			} else if n != 0 {
-				t.Fatal("non-zero number of values decoded at EOF:", n)
-			}
+			var err error
+			buffer, err = e.EncodeInt32(buffer, test)
+			assertNoError(t, err)
+			values, err = e.DecodeInt32(values, buffer)
+			assertNoError(t, err)
+			assertDeepEqual(t, test, values)
 		})
 	}
 }
 
 func testInt64Encoding(t *testing.T, e encoding.Encoding) {
-	if !e.CanEncode(format.Int64) {
-		t.Skipf("%s cannot encode int64 values", e)
-	}
-
-	buf := new(bytes.Buffer)
-	enc := e.NewEncoder(buf)
-	dec := e.NewDecoder(buf)
-	tmp := [1]int64{}
+	testCanEncode(t, e, format.Int64)
+	buffer := []byte{}
+	values := []int64{}
 
 	for _, test := range int64Tests {
 		t.Run("", func(t *testing.T) {
-			defer dec.Reset(buf)
-			defer enc.Reset(buf)
-			defer buf.Reset()
-
-			bitWidth := bits.MaxLen64(test)
-			if bitWidth == 0 {
-				bitWidth = 1
-			}
-			enc.SetBitWidth(bitWidth)
-			dec.SetBitWidth(bitWidth)
-
-			if err := enc.EncodeInt64(test); err != nil {
-				if errors.Is(err, encoding.ErrNotSupported) {
-					t.Skip(err)
-				}
-				t.Fatal("encode:", err)
-			}
-
-			for i := range test {
-				n, err := dec.DecodeInt64(tmp[:])
-				if err != nil {
-					t.Fatal("decode:", err)
-				}
-				if n != 1 {
-					t.Fatalf("decoder decoded the wrong number of items: %d", n)
-				}
-				if tmp[0] != test[i] {
-					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, test[i], tmp[0])
-				}
-			}
-
-			if n, err := dec.DecodeInt64(tmp[:]); err != io.EOF {
-				t.Fatal("non-EOF error returned after decoding all the values:", err)
-			} else if n != 0 {
-				t.Fatal("non-zero number of values decoded at EOF:", n)
-			}
+			var err error
+			buffer, err = e.EncodeInt64(buffer, test)
+			assertNoError(t, err)
+			values, err = e.DecodeInt64(values, buffer)
+			assertNoError(t, err)
+			assertDeepEqual(t, test, values)
 		})
 	}
 }
 
 func testInt96Encoding(t *testing.T, e encoding.Encoding) {
-	if !e.CanEncode(format.Int96) {
-		t.Skipf("%s cannot encode int96 values", e)
-	}
-
-	buf := new(bytes.Buffer)
-	enc := e.NewEncoder(buf)
-	dec := e.NewDecoder(buf)
-	tmp := [1]deprecated.Int96{}
+	testCanEncode(t, e, format.Int96)
+	buffer := []byte{}
+	values := []deprecated.Int96{}
 
 	for _, test := range int96Tests {
 		t.Run("", func(t *testing.T) {
-			defer dec.Reset(buf)
-			defer enc.Reset(buf)
-			defer buf.Reset()
-
-			bitWidth := deprecated.MaxLenInt96(test)
-			if bitWidth == 0 {
-				bitWidth = 1
-			}
-			enc.SetBitWidth(bitWidth)
-			dec.SetBitWidth(bitWidth)
-
-			if err := enc.EncodeInt96(test); err != nil {
-				if errors.Is(err, encoding.ErrNotSupported) {
-					t.Skip(err)
-				}
-				t.Fatal("encode:", err)
-			}
-
-			for i := range test {
-				n, err := dec.DecodeInt96(tmp[:])
-				if err != nil {
-					t.Fatal("decode:", err)
-				}
-				if n != 1 {
-					t.Fatalf("decoder decoded the wrong number of items: %d", n)
-				}
-				if tmp[0] != test[i] {
-					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, test[i], tmp[i])
-				}
-			}
-
-			if n, err := dec.DecodeInt96(tmp[:]); err != io.EOF {
-				t.Fatal("non-EOF error returned after decoding all the values:", err)
-			} else if n != 0 {
-				t.Fatal("non-zero number of values decoded at EOF:", n)
-			}
+			var err error
+			buffer, err = e.EncodeInt96(buffer, test)
+			assertNoError(t, err)
+			values, err = e.DecodeInt96(values, buffer)
+			assertNoError(t, err)
+			assertDeepEqual(t, test, values)
 		})
 	}
 }
 
 func testFloatEncoding(t *testing.T, e encoding.Encoding) {
-	if !e.CanEncode(format.Float) {
-		t.Skipf("%s cannot encode float values", e)
-	}
-
-	buf := new(bytes.Buffer)
-	enc := e.NewEncoder(buf)
-	dec := e.NewDecoder(buf)
-	tmp := [1]float32{}
+	testCanEncode(t, e, format.Float)
+	buffer := []byte{}
+	values := []float32{}
 
 	for _, test := range floatTests {
 		t.Run("", func(t *testing.T) {
-			defer dec.Reset(buf)
-			defer enc.Reset(buf)
-			defer buf.Reset()
-
-			if err := enc.EncodeFloat(test); err != nil {
-				if errors.Is(err, encoding.ErrNotSupported) {
-					t.Skip(err)
-				}
-				t.Fatal("encode:", err)
-			}
-
-			for i := range test {
-				n, err := dec.DecodeFloat(tmp[:])
-				if err != nil {
-					t.Fatal("decode:", err)
-				}
-				if n != 1 {
-					t.Fatalf("decoder decoded the wrong number of items: %d", n)
-				}
-				if tmp[0] != test[i] {
-					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, test[i], tmp[i])
-				}
-			}
-
-			if n, err := dec.DecodeFloat(tmp[:]); err != nil && err != io.EOF {
-				t.Fatal("non-EOF error returned after decoding all the values:", err)
-			} else if n != 0 {
-				t.Fatal("non-zero number of values decoded at EOF:", n)
-			}
+			var err error
+			buffer, err = e.EncodeFloat(buffer, test)
+			assertNoError(t, err)
+			values, err = e.DecodeFloat(values, buffer)
+			assertNoError(t, err)
+			assertDeepEqual(t, test, values)
 		})
 	}
 }
 
 func testDoubleEncoding(t *testing.T, e encoding.Encoding) {
-	if !e.CanEncode(format.Double) {
-		t.Skipf("%s cannot encode double values", e)
-	}
-
-	buf := new(bytes.Buffer)
-	enc := e.NewEncoder(buf)
-	dec := e.NewDecoder(buf)
-	tmp := [1]float64{}
+	testCanEncode(t, e, format.Double)
+	buffer := []byte{}
+	values := []float64{}
 
 	for _, test := range doubleTests {
 		t.Run("", func(t *testing.T) {
-			defer dec.Reset(buf)
-			defer enc.Reset(buf)
-			defer buf.Reset()
-
-			if err := enc.EncodeDouble(test); err != nil {
-				if errors.Is(err, encoding.ErrNotSupported) {
-					t.Skip(err)
-				}
-				t.Fatal("encode:", err)
-			}
-
-			for i := range test {
-				n, err := dec.DecodeDouble(tmp[:])
-				if err != nil {
-					t.Fatal("decode:", err)
-				}
-				if n != 1 {
-					t.Fatalf("decoder decoded the wrong number of items: %d", n)
-				}
-				if tmp[0] != test[i] {
-					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, test[i], tmp[i])
-				}
-			}
-
-			if n, err := dec.DecodeDouble(tmp[:]); err != io.EOF {
-				t.Fatal("non-EOF error returned after decoding all the values:", err)
-			} else if n != 0 {
-				t.Fatal("non-zero number of values decoded at EOF:", n)
-			}
+			var err error
+			buffer, err = e.EncodeDouble(buffer, test)
+			assertNoError(t, err)
+			values, err = e.DecodeDouble(values, buffer)
+			assertNoError(t, err)
+			assertDeepEqual(t, test, values)
 		})
 	}
 }
 
 func testByteArrayEncoding(t *testing.T, e encoding.Encoding) {
-	if !e.CanEncode(format.ByteArray) {
-		t.Skipf("%s cannot encode byte array values", e)
-	}
-
-	buf := new(bytes.Buffer)
-	enc := e.NewEncoder(buf)
-	dec := e.NewDecoder(buf)
-	tmp := encoding.MakeByteArrayList(1)
+	testCanEncode(t, e, format.ByteArray)
+	buffer := []byte{}
+	values := []byte{}
+	byteArrays := []byte{}
 
 	for _, test := range byteArrayTests {
+		byteArrays = byteArrays[:0]
+
+		for _, value := range test {
+			byteArrays = plain.AppendByteArray(byteArrays, value)
+		}
+
 		t.Run("", func(t *testing.T) {
-			defer dec.Reset(buf)
-			defer enc.Reset(buf)
-			defer buf.Reset()
-			defer tmp.Reset()
-
-			for _, v := range test {
-				tmp.Push(v)
-			}
-
-			if err := enc.EncodeByteArray(tmp); err != nil {
-				if errors.Is(err, encoding.ErrNotSupported) {
-					t.Skip(err)
-				}
-				t.Fatal("encode:", err)
-			}
-
-			for i := 0; i < len(test); {
-				tmp.Reset()
-				n, err := dec.DecodeByteArray(&tmp)
-				if err != nil && (err != io.EOF || n != len(test)) {
-					t.Fatal("decode:", n, err)
-				}
-				if n == 0 {
-					t.Fatalf("decoder decoded the wrong number of items: %d", n)
-				}
-				tmp.Range(func(value []byte) bool {
-					if !bytes.Equal(value, test[i]) {
-						t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, test[i], value)
-					}
-					i++
-					return true
-				})
-			}
-
-			tmp.Reset()
-			if n, err := dec.DecodeByteArray(&tmp); err != io.EOF {
-				t.Fatal("non-EOF error returned after decoding all the values:", err)
-			} else if n != 0 {
-				t.Fatal("non-zero number of values decoded at EOF:", n)
-			}
+			var err error
+			buffer, err = e.EncodeByteArray(buffer, byteArrays)
+			assertNoError(t, err)
+			values, err = e.DecodeByteArray(values, buffer)
+			assertNoError(t, err)
+			assertDeepEqual(t, byteArrays, values)
 		})
 	}
 }
 
 func testFixedLenByteArrayEncoding(t *testing.T, e encoding.Encoding) {
-	if !e.CanEncode(format.FixedLenByteArray) {
-		t.Skipf("%s cannot encode fixed-length byte array values", e)
-	}
-
-	buf := new(bytes.Buffer)
-	enc := e.NewEncoder(buf)
-	dec := e.NewDecoder(buf)
+	testCanEncode(t, e, format.FixedLenByteArray)
+	buffer := []byte{}
+	values := []byte{}
 
 	for _, test := range fixedLenByteArrayTests {
 		t.Run("", func(t *testing.T) {
-			defer dec.Reset(buf)
-			defer enc.Reset(buf)
-			defer buf.Reset()
-			tmp := make([]byte, test.size)
-
-			if err := enc.EncodeFixedLenByteArray(test.size, test.data); err != nil {
-				if errors.Is(err, encoding.ErrNotSupported) {
-					t.Skip(err)
-				}
-				t.Fatal("encode:", err)
-			}
-
-			for i := 0; i < (len(test.data) / test.size); i++ {
-				n, err := dec.DecodeFixedLenByteArray(test.size, tmp)
-				if err != nil {
-					t.Fatal("decode:", err)
-				}
-				if n != 1 {
-					t.Fatalf("decoder decoded the wrong number of items: %d", n)
-				}
-				want := test.data[i*test.size : (i+1)*test.size]
-				if !bytes.Equal(want, tmp) {
-					t.Fatalf("decoder decoded the wrong value at index %d:\nwant = %#v\ngot  = %#v", i, want, tmp)
-				}
-			}
-
-			if n, err := dec.DecodeFixedLenByteArray(test.size, tmp); err != io.EOF {
-				t.Fatal("non-EOF error returned after decoding all the values:", err)
-			} else if n != 0 {
-				t.Fatal("non-zero number of values decoded at EOF:", n)
-			}
+			var err error
+			buffer, err = e.EncodeFixedLenByteArray(buffer, test.data, test.size)
+			assertNoError(t, err)
+			values, err = e.DecodeFixedLenByteArray(values, buffer, test.size)
+			assertNoError(t, err)
+			assertDeepEqual(t, test.data, values)
 		})
 	}
 }
 
-func BenchmarkFloatEncoding(b *testing.B) {
-	buf := new(bytes.Buffer)
-	enc := bytestreamsplit.NewEncoder(buf)
-	dec := bytestreamsplit.NewDecoder(buf)
-
-	for n := 0; n < b.N; n++ {
-		for _, test := range floatTests {
-			tmp := make([]float32, len(test))
-
-			if err := enc.EncodeFloat(test); err != nil {
-				b.Fatal(err)
-			}
-
-			if _, err := dec.DecodeFloat(tmp); err != nil && err != io.EOF {
-				b.Fatal(err)
-			}
-		}
+func testCanEncode(t testing.TB, e encoding.Encoding, k format.Type) {
+	if !e.CanEncode(k) {
+		t.Skipf("%s cannot encode %s values", e, k)
 	}
+}
+
+func assertNoError(t *testing.T, err error) {
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func assertDeepEqual(t *testing.T, want, got interface{}) {
+	if !reflect.DeepEqual(want, got) {
+		t.Fatalf("values mismatch:\nwant = %+v\ngot  = %+v", want, got)
+	}
+}
+
+const (
+	benchmarkNumValues = 10e3
+)
+
+func newRand() *rand.Rand {
+	return rand.New(rand.NewSource(1))
+}
+
+func BenchmarkEncode(b *testing.B) {
+	for _, test := range encodings {
+		b.Run(test.scenario, func(b *testing.B) { benchmarkEncode(b, test.encoding) })
+	}
+}
+
+func benchmarkEncode(b *testing.B, e encoding.Encoding) {
+	for _, test := range [...]struct {
+		scenario string
+		function func(*testing.B, encoding.Encoding)
+	}{
+		{
+			scenario: "boolean",
+			function: benchmarkEncodeBoolean,
+		},
+		{
+			scenario: "int8",
+			function: benchmarkEncodeInt8,
+		},
+		{
+			scenario: "int32",
+			function: benchmarkEncodeInt32,
+		},
+		{
+			scenario: "int64",
+			function: benchmarkEncodeInt64,
+		},
+		{
+			scenario: "float",
+			function: benchmarkEncodeFloat,
+		},
+		{
+			scenario: "double",
+			function: benchmarkEncodeDouble,
+		},
+		{
+			scenario: "byte array",
+			function: benchmarkEncodeByteArray,
+		},
+		{
+			scenario: "fixed length byte array",
+			function: benchmarkEncodeFixedLenByteArray,
+		},
+	} {
+		b.Run(test.scenario, func(b *testing.B) { test.function(b, e) })
+	}
+}
+
+func benchmarkEncodeBoolean(b *testing.B, e encoding.Encoding) {
+	testCanEncode(b, e, format.Boolean)
+	buffer := make([]byte, 0)
+	values := generateBooleanValues(benchmarkNumValues, newRand())
+
+	benchmarkZeroAllocsPerRun(b, func() {
+		buffer, _ = e.EncodeBoolean(buffer, values)
+	})
+
+	b.SetBytes(int64(len(buffer)))
+}
+
+func benchmarkEncodeInt8(b *testing.B, e encoding.Encoding) {
+	testCanEncode(b, e, format.Int32)
+	buffer := make([]byte, 0)
+	values := generateInt8Values(benchmarkNumValues, newRand())
+
+	benchmarkZeroAllocsPerRun(b, func() {
+		buffer, _ = e.EncodeInt8(buffer, values)
+	})
+
+	b.SetBytes(int64(len(buffer)))
+}
+
+func benchmarkEncodeInt32(b *testing.B, e encoding.Encoding) {
+	testCanEncode(b, e, format.Int32)
+	buffer := make([]byte, 0)
+	values := generateInt32Values(benchmarkNumValues, newRand())
+
+	benchmarkZeroAllocsPerRun(b, func() {
+		buffer, _ = e.EncodeInt32(buffer, values)
+	})
+
+	b.SetBytes(int64(len(buffer)))
+}
+
+func benchmarkEncodeInt64(b *testing.B, e encoding.Encoding) {
+	testCanEncode(b, e, format.Int64)
+	buffer := make([]byte, 0)
+	values := generateInt64Values(benchmarkNumValues, newRand())
+
+	benchmarkZeroAllocsPerRun(b, func() {
+		buffer, _ = e.EncodeInt64(buffer, values)
+	})
+
+	b.SetBytes(int64(len(buffer)))
+}
+
+func benchmarkEncodeFloat(b *testing.B, e encoding.Encoding) {
+	testCanEncode(b, e, format.Float)
+	buffer := make([]byte, 0)
+	values := generateFloatValues(benchmarkNumValues, newRand())
+
+	benchmarkZeroAllocsPerRun(b, func() {
+		buffer, _ = e.EncodeFloat(buffer, values)
+	})
+
+	b.SetBytes(int64(len(buffer)))
+}
+
+func benchmarkEncodeDouble(b *testing.B, e encoding.Encoding) {
+	testCanEncode(b, e, format.Double)
+	buffer := make([]byte, 0)
+	values := generateDoubleValues(benchmarkNumValues, newRand())
+
+	benchmarkZeroAllocsPerRun(b, func() {
+		buffer, _ = e.EncodeDouble(buffer, values)
+	})
+
+	b.SetBytes(int64(len(buffer)))
+}
+
+func benchmarkEncodeByteArray(b *testing.B, e encoding.Encoding) {
+	testCanEncode(b, e, format.ByteArray)
+	buffer := make([]byte, 0)
+	values := generateByteArrayValues(benchmarkNumValues, newRand())
+
+	benchmarkZeroAllocsPerRun(b, func() {
+		buffer, _ = e.EncodeByteArray(buffer, values)
+	})
+
+	b.SetBytes(int64(len(buffer)))
+}
+
+func benchmarkEncodeFixedLenByteArray(b *testing.B, e encoding.Encoding) {
+	testCanEncode(b, e, format.FixedLenByteArray)
+	const size = 16
+	buffer := make([]byte, 0)
+	values := generateFixedLenByteArrayValues(benchmarkNumValues, newRand(), size)
+
+	benchmarkZeroAllocsPerRun(b, func() {
+		buffer, _ = e.EncodeFixedLenByteArray(buffer, values, size)
+	})
+
+	b.SetBytes(int64(len(buffer)))
+}
+
+func BenchmarkDecode(b *testing.B) {
+	for _, test := range encodings {
+		b.Run(test.scenario, func(b *testing.B) { benchmarkDecode(b, test.encoding) })
+	}
+}
+
+func benchmarkDecode(b *testing.B, e encoding.Encoding) {
+	for _, test := range [...]struct {
+		scenario string
+		function func(*testing.B, encoding.Encoding)
+	}{
+		{
+			scenario: "boolean",
+			function: benchmarkDecodeBoolean,
+		},
+		{
+			scenario: "int8",
+			function: benchmarkDecodeInt8,
+		},
+		{
+			scenario: "int32",
+			function: benchmarkDecodeInt32,
+		},
+		{
+			scenario: "int64",
+			function: benchmarkDecodeInt64,
+		},
+		{
+			scenario: "float",
+			function: benchmarkDecodeFloat,
+		},
+		{
+			scenario: "double",
+			function: benchmarkDecodeDouble,
+		},
+		{
+			scenario: "byte array",
+			function: benchmarkDecodeByteArray,
+		},
+		{
+			scenario: "fixed length byte array",
+			function: benchmarkDecodeFixedLenByteArray,
+		},
+	} {
+		b.Run(test.scenario, func(b *testing.B) { test.function(b, e) })
+	}
+}
+
+func benchmarkDecodeBoolean(b *testing.B, e encoding.Encoding) {
+	testCanEncode(b, e, format.Boolean)
+	values := generateBooleanValues(benchmarkNumValues, newRand())
+	output := make([]bool, 0)
+	buffer, _ := e.EncodeBoolean(nil, values)
+
+	benchmarkZeroAllocsPerRun(b, func() {
+		output, _ = e.DecodeBoolean(output, buffer)
+	})
+
+	b.SetBytes(int64(len(buffer)))
+}
+
+func benchmarkDecodeInt8(b *testing.B, e encoding.Encoding) {
+	testCanEncode(b, e, format.Int32)
+	values := generateInt8Values(benchmarkNumValues, newRand())
+	output := make([]int8, 0)
+	buffer, _ := e.EncodeInt8(nil, values)
+
+	benchmarkZeroAllocsPerRun(b, func() {
+		output, _ = e.DecodeInt8(output, buffer)
+	})
+
+	b.SetBytes(int64(len(buffer)))
+}
+
+func benchmarkDecodeInt32(b *testing.B, e encoding.Encoding) {
+	testCanEncode(b, e, format.Int32)
+	values := generateInt32Values(benchmarkNumValues, newRand())
+	output := make([]int32, 0)
+	buffer, _ := e.EncodeInt32(nil, values)
+
+	benchmarkZeroAllocsPerRun(b, func() {
+		output, _ = e.DecodeInt32(output, buffer)
+	})
+
+	b.SetBytes(int64(len(buffer)))
+}
+
+func benchmarkDecodeInt64(b *testing.B, e encoding.Encoding) {
+	testCanEncode(b, e, format.Int64)
+	values := generateInt64Values(benchmarkNumValues, newRand())
+	output := make([]int64, 0)
+	buffer, _ := e.EncodeInt64(nil, values)
+
+	benchmarkZeroAllocsPerRun(b, func() {
+		output, _ = e.DecodeInt64(output, buffer)
+	})
+
+	b.SetBytes(int64(len(buffer)))
+}
+
+func benchmarkDecodeFloat(b *testing.B, e encoding.Encoding) {
+	testCanEncode(b, e, format.Float)
+	values := generateFloatValues(benchmarkNumValues, newRand())
+	output := make([]float32, 0)
+	buffer, _ := e.EncodeFloat(nil, values)
+
+	benchmarkZeroAllocsPerRun(b, func() {
+		output, _ = e.DecodeFloat(output, buffer)
+	})
+
+	b.SetBytes(int64(len(buffer)))
+}
+
+func benchmarkDecodeDouble(b *testing.B, e encoding.Encoding) {
+	testCanEncode(b, e, format.Double)
+	values := generateDoubleValues(benchmarkNumValues, newRand())
+	output := make([]float64, 0)
+	buffer, _ := e.EncodeDouble(nil, values)
+
+	benchmarkZeroAllocsPerRun(b, func() {
+		output, _ = e.DecodeDouble(output, buffer)
+	})
+
+	b.SetBytes(int64(len(buffer)))
+}
+
+func benchmarkDecodeByteArray(b *testing.B, e encoding.Encoding) {
+	testCanEncode(b, e, format.ByteArray)
+	values := generateByteArrayValues(benchmarkNumValues, newRand())
+	output := make([]byte, 0)
+	buffer, _ := e.EncodeByteArray(nil, values)
+
+	benchmarkZeroAllocsPerRun(b, func() {
+		output, _ = e.DecodeByteArray(output, buffer)
+	})
+
+	b.SetBytes(int64(len(buffer)))
+}
+
+func benchmarkDecodeFixedLenByteArray(b *testing.B, e encoding.Encoding) {
+	testCanEncode(b, e, format.FixedLenByteArray)
+	const size = 16
+	values := generateFixedLenByteArrayValues(benchmarkNumValues, newRand(), size)
+	output := make([]byte, 0)
+	buffer, _ := e.EncodeFixedLenByteArray(nil, values, size)
+
+	benchmarkZeroAllocsPerRun(b, func() {
+		output, _ = e.DecodeFixedLenByteArray(output, buffer, size)
+	})
+
+	b.SetBytes(int64(len(buffer)))
+}
+
+func benchmarkZeroAllocsPerRun(b *testing.B, f func()) {
+	if allocs := testing.AllocsPerRun(b.N, f); allocs != 0 {
+		b.Errorf("too many memory allocations: %g", allocs)
+	}
+}
+
+func generateBooleanValues(n int, r *rand.Rand) []bool {
+	values := make([]bool, n)
+	for i := range values {
+		values[i] = r.Float64() > 0.5
+	}
+	return values
+}
+
+func generateInt8Values(n int, r *rand.Rand) []int8 {
+	values := make([]int8, n)
+	for i := range values {
+		values[i] = int8(r.Intn(6))
+	}
+	return values
+}
+
+func generateInt32Values(n int, r *rand.Rand) []int32 {
+	values := make([]int32, n)
+	for i := range values {
+		values[i] = r.Int31n(100)
+	}
+	return values
+}
+
+func generateInt64Values(n int, r *rand.Rand) []int64 {
+	values := make([]int64, n)
+	for i := range values {
+		values[i] = r.Int63n(100)
+	}
+	return values
+}
+
+func generateFloatValues(n int, r *rand.Rand) []float32 {
+	values := make([]float32, n)
+	for i := range values {
+		values[i] = r.Float32()
+	}
+	return values
+}
+
+func generateDoubleValues(n int, r *rand.Rand) []float64 {
+	values := make([]float64, n)
+	for i := range values {
+		values[i] = r.Float64()
+	}
+	return values
+}
+
+func generateByteArrayValues(n int, r *rand.Rand) []byte {
+	values := make([]byte, n*21)
+	length := 0
+
+	for i := 0; i < n; i++ {
+		k := r.Intn(20) + 1
+		plain.PutByteArrayLength(values[length:], k)
+		length += 4
+		io.ReadFull(r, values[length:length+k])
+		length += k
+	}
+
+	return values[:length]
+}
+
+func generateFixedLenByteArrayValues(n int, r *rand.Rand, size int) []byte {
+	values := make([]byte, n*size)
+	io.ReadFull(r, values)
+	return values
 }

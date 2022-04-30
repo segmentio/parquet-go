@@ -8,23 +8,6 @@ import (
 	"github.com/segmentio/parquet-go/internal/bits"
 )
 
-// TODO: figure out better heuristics to determine those values,
-// right now they are optimized for keeping the memory footprint
-// of the encoder/decoder at ~8KB.
-const (
-	blockSize64     = 128
-	numMiniBlock64  = 4 // (blockSize64 / numMiniBlock64) % 32 == 0
-	miniBlockSize64 = blockSize64 / numMiniBlock64
-
-	blockSize32     = 2 * blockSize64
-	numMiniBlock32  = 2 * numMiniBlock64
-	miniBlockSize32 = blockSize32 / numMiniBlock32
-
-	headerBufferSize    = 32
-	blockBufferSize     = 8 * blockSize64
-	bitWidthsBufferSize = 2 * numMiniBlock64
-)
-
 type BinaryPackedEncoder struct {
 	encoding.NotSupportedEncoder
 	writer    io.Writer

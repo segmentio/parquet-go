@@ -3,6 +3,7 @@
 
 package encoding_test
 
+/*
 import (
 	"bytes"
 	"encoding/binary"
@@ -410,3 +411,4 @@ func (s *byteSource) Int63() int64 {
 }
 
 func (s *byteSource) Seed(seed int64) {}
+*/

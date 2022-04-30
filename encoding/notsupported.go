@@ -27,6 +27,10 @@ var (
 	ErrInvalidArgument = errors.New("invalid argument")
 )
 
+func ErrInvalidInputSize(e Encoding, typ string, size int) error {
+	return fmt.Errorf("%s: cannot decode %s from input of size %d: %w", e, typ, size, ErrInvalidArgument)
+}
+
 // NotSupported is a type satisfying the Encoding interface which does not
 // support encoding nor decoding any value types.
 type NotSupported struct {
@@ -38,6 +42,78 @@ func (NotSupported) Encoding() format.Encoding {
 
 func (NotSupported) CanEncode(format.Type) bool {
 	return false
+}
+
+func (NotSupported) EncodeBoolean(dst []byte, src []bool) ([]byte, error) {
+	return dst[:0], errNotSupported("BOOLEAN")
+}
+
+func (NotSupported) EncodeInt8(dst []byte, src []int8) ([]byte, error) {
+	return dst[:0], errNotSupported("INT8")
+}
+
+func (NotSupported) EncodeInt32(dst []byte, src []int32) ([]byte, error) {
+	return dst[:0], errNotSupported("INT32")
+}
+
+func (NotSupported) EncodeInt64(dst []byte, src []int64) ([]byte, error) {
+	return dst[:0], errNotSupported("INT64")
+}
+
+func (NotSupported) EncodeInt96(dst []byte, src []deprecated.Int96) ([]byte, error) {
+	return dst[:0], errNotSupported("INT96")
+}
+
+func (NotSupported) EncodeFloat(dst []byte, src []float32) ([]byte, error) {
+	return dst[:0], errNotSupported("FLOAT")
+}
+
+func (NotSupported) EncodeDouble(dst []byte, src []float64) ([]byte, error) {
+	return dst[:0], errNotSupported("DOUBLE")
+}
+
+func (NotSupported) EncodeByteArray(dst, src []byte) ([]byte, error) {
+	return dst[:0], errNotSupported("BYTE_ARRAY")
+}
+
+func (NotSupported) EncodeFixedLenByteArray(dst, src []byte, size int) ([]byte, error) {
+	return dst[:0], errNotSupported("FIXED_LEN_BYTE_ARRAY")
+}
+
+func (NotSupported) DecodeBoolean(dst []bool, src []byte) ([]bool, error) {
+	return dst[:0], errNotSupported("BOOLEAN")
+}
+
+func (NotSupported) DecodeInt8(dst []int8, src []byte) ([]int8, error) {
+	return dst[:0], errNotSupported("INT8")
+}
+
+func (NotSupported) DecodeInt32(dst []int32, src []byte) ([]int32, error) {
+	return dst[:0], errNotSupported("INT32")
+}
+
+func (NotSupported) DecodeInt64(dst []int64, src []byte) ([]int64, error) {
+	return dst[:0], errNotSupported("INT64")
+}
+
+func (NotSupported) DecodeInt96(dst []deprecated.Int96, src []byte) ([]deprecated.Int96, error) {
+	return dst[:0], errNotSupported("INT96")
+}
+
+func (NotSupported) DecodeFloat(dst []float32, src []byte) ([]float32, error) {
+	return dst[:0], errNotSupported("FLOAT")
+}
+
+func (NotSupported) DecodeDouble(dst []float64, src []byte) ([]float64, error) {
+	return dst[:0], errNotSupported("DOUBLE")
+}
+
+func (NotSupported) DecodeByteArray(dst, src []byte) ([]byte, error) {
+	return dst[:0], errNotSupported("BYTE_ARRAY")
+}
+
+func (NotSupported) DecodeFixedLenByteArray(dst, src []byte, size int) ([]byte, error) {
+	return dst[:0], errNotSupported("FIXED_LEN_BYTE_ARRAY")
 }
 
 func (NotSupported) NewDecoder(io.Reader) Decoder {
@@ -175,3 +251,7 @@ func (NotSupportedEncoder) SetBitWidth(int) {
 func errNotSupported(typ string) error {
 	return fmt.Errorf("%w for type %s", ErrNotSupported, typ)
 }
+
+var (
+	_ Encoding = NotSupported{}
+)

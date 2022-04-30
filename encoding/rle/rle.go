@@ -13,6 +13,7 @@ import (
 )
 
 type Encoding struct {
+	encoding.NotSupported
 }
 
 func (e *Encoding) Encoding() format.Encoding {
