@@ -4,9 +4,14 @@ package encoding
 
 import (
 	"io"
+	"math"
 
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/format"
+)
+
+const (
+	MaxFixedLenByteArraySize = math.MaxInt16
 )
 
 // The Encoding interface is implemented by types representing parquet column

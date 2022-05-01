@@ -27,8 +27,77 @@ var (
 	ErrInvalidArgument = errors.New("invalid argument")
 )
 
+// Error constructs an error which wraps err and indicate that it originated
+// from the given encoding.
+func Error(e Encoding, err error) error {
+	return fmt.Errorf("%s: %w", e, err)
+}
+
+// Errorf is like Error but constructs the error message from the given format
+// and arguments.
+func Errorf(e Encoding, msg string, args ...interface{}) error {
+	return Error(e, fmt.Errorf(msg, args...))
+}
+
+// ErrInvalidInputSize constructs an error indicating that decoding failed due
+// to the size of the input.
 func ErrInvalidInputSize(e Encoding, typ string, size int) error {
-	return fmt.Errorf("%s: cannot decode %s from input of size %d: %w", e, typ, size, ErrInvalidArgument)
+	return Errorf(e, "cannot decode %s from input of size %d: %w", typ, size, ErrInvalidArgument)
+}
+
+// CanEncodeBoolean returns true if the e can encode BOOLEAN values.
+func CanEncodeBoolean(e Encoding) bool {
+	_, err := e.EncodeBoolean(nil, nil)
+	return !errors.Is(err, ErrNotSupported)
+}
+
+// CanEncodeInt8 returns true if the e can encode INT8 values.
+func CanEncodeInt8(e Encoding) bool {
+	_, err := e.EncodeInt8(nil, nil)
+	return !errors.Is(err, ErrNotSupported)
+}
+
+// CanEncodeInt32 returns true if the e can encode INT32 values.
+func CanEncodeInt32(e Encoding) bool {
+	_, err := e.EncodeInt32(nil, nil)
+	return !errors.Is(err, ErrNotSupported)
+}
+
+// CanEncodeInt64 returns true if the e can encode INT64 values.
+func CanEncodeInt64(e Encoding) bool {
+	_, err := e.EncodeInt64(nil, nil)
+	return !errors.Is(err, ErrNotSupported)
+}
+
+// CanEncodeInt96 returns true if the e can encode INT96 values.
+func CanEncodeInt96(e Encoding) bool {
+	_, err := e.EncodeInt96(nil, nil)
+	return !errors.Is(err, ErrNotSupported)
+}
+
+// CanEncodeFloat returns true if the e can encode FLOAT values.
+func CanEncodeFloat(e Encoding) bool {
+	_, err := e.EncodeFloat(nil, nil)
+	return !errors.Is(err, ErrNotSupported)
+}
+
+// CanEncodeDouble returns true if the e can encode DOUBLE values.
+func CanEncodeDouble(e Encoding) bool {
+	_, err := e.EncodeDouble(nil, nil)
+	return !errors.Is(err, ErrNotSupported)
+}
+
+// CanEncodeByteArray returns true if the e can encode BYTE_ARRAY values.
+func CanEncodeByteArray(e Encoding) bool {
+	_, err := e.EncodeByteArray(nil, nil)
+	return !errors.Is(err, ErrNotSupported)
+}
+
+// CanEncodeFixedLenByteArray returns true if the e can encode
+// FIXED_LEN_BYTE_ARRAY values.
+func CanEncodeFixedLenByteArray(e Encoding) bool {
+	_, err := e.EncodeFixedLenByteArray(nil, nil, 1)
+	return !errors.Is(err, ErrNotSupported)
 }
 
 // NotSupported is a type satisfying the Encoding interface which does not

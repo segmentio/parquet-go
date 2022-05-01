@@ -11,8 +11,10 @@ import (
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/encoding/bytestreamsplit"
+	"github.com/segmentio/parquet-go/encoding/delta"
 	"github.com/segmentio/parquet-go/encoding/plain"
-	"github.com/segmentio/parquet-go/format"
+	"github.com/segmentio/parquet-go/encoding/rle"
+	"github.com/segmentio/parquet-go/internal/bits"
 )
 
 var booleanTests = [...][]bool{
@@ -47,7 +49,7 @@ var int8Tests = [...][]int8{
 	{},
 	{0},
 	{1},
-	{-1, 0, 1, 0, 2, 3, 4, 5, 6, math.MaxInt8, math.MaxInt8, 0},
+	{0, 1, 0, 2, 3, 4, 5, 6, math.MaxInt8, math.MaxInt8, 0},
 	{ // repeating 24x
 		42, 42, 42, 42, 42, 42, 42, 42,
 		42, 42, 42, 42, 42, 42, 42, 42,
@@ -176,37 +178,35 @@ var encodings = [...]struct {
 		encoding: new(plain.Encoding),
 	},
 
-	/*
-		{
-			scenario: "RLE",
-			encoding: new(rle.Encoding),
-		},
+	{
+		scenario: "RLE",
+		encoding: new(rle.Encoding),
+	},
 
-		{
-			scenario: "PLAIN_DICTIONARY",
-			encoding: new(plain.DictionaryEncoding),
-		},
+	{
+		scenario: "PLAIN_DICTIONARY",
+		encoding: new(plain.DictionaryEncoding),
+	},
 
-		{
-			scenario: "RLE_DICTIONARY",
-			encoding: new(rle.DictionaryEncoding),
-		},
+	{
+		scenario: "RLE_DICTIONARY",
+		encoding: new(rle.DictionaryEncoding),
+	},
 
-		{
-			scenario: "DELTA_BINARY_PACKED",
-			encoding: new(delta.BinaryPackedEncoding),
-		},
+	{
+		scenario: "DELTA_BINARY_PACKED",
+		encoding: new(delta.BinaryPackedEncoding),
+	},
 
-		{
-			scenario: "DELTA_LENGTH_BYTE_ARRAY",
-			encoding: new(delta.LengthByteArrayEncoding),
-		},
+	{
+		scenario: "DELTA_LENGTH_BYTE_ARRAY",
+		encoding: new(delta.LengthByteArrayEncoding),
+	},
 
-		{
-			scenario: "DELTA_BYTE_ARRAY",
-			encoding: new(delta.ByteArrayEncoding),
-		},
-	*/
+	{
+		scenario: "DELTA_BYTE_ARRAY",
+		encoding: new(delta.ByteArrayEncoding),
+	},
 
 	{
 		scenario: "BYTE_STREAM_SPLIT",
@@ -274,10 +274,17 @@ func testEncoding(t *testing.T, e encoding.Encoding) {
 	}
 }
 
+func setBitWidth(e encoding.Encoding, bitWidth int) {
+	if r, ok := e.(*rle.Encoding); ok {
+		r.BitWidth = bitWidth
+	}
+}
+
 func testBooleanEncoding(t *testing.T, e encoding.Encoding) {
-	testCanEncode(t, e, format.Boolean)
+	testCanEncodeBoolean(t, e)
 	buffer := []byte{}
 	values := []bool{}
+	setBitWidth(e, 1)
 
 	for _, test := range booleanTests {
 		t.Run("", func(t *testing.T) {
@@ -304,11 +311,13 @@ func testBooleanEncoding(t *testing.T, e encoding.Encoding) {
 }
 
 func testInt8Encoding(t *testing.T, e encoding.Encoding) {
-	testCanEncode(t, e, format.Int32)
+	testCanEncodeInt8(t, e)
 	buffer := []byte{}
 	values := []int8{}
 
 	for _, test := range int8Tests {
+		setBitWidth(e, bits.MaxLen8(test))
+
 		t.Run("", func(t *testing.T) {
 			var err error
 			buffer, err = e.EncodeInt8(buffer, test)
@@ -321,11 +330,13 @@ func testInt8Encoding(t *testing.T, e encoding.Encoding) {
 }
 
 func testInt32Encoding(t *testing.T, e encoding.Encoding) {
-	testCanEncode(t, e, format.Int32)
+	testCanEncodeInt32(t, e)
 	buffer := []byte{}
 	values := []int32{}
 
 	for _, test := range int32Tests {
+		setBitWidth(e, bits.MaxLen32(test))
+
 		t.Run("", func(t *testing.T) {
 			var err error
 			buffer, err = e.EncodeInt32(buffer, test)
@@ -338,11 +349,13 @@ func testInt32Encoding(t *testing.T, e encoding.Encoding) {
 }
 
 func testInt64Encoding(t *testing.T, e encoding.Encoding) {
-	testCanEncode(t, e, format.Int64)
+	testCanEncodeInt64(t, e)
 	buffer := []byte{}
 	values := []int64{}
 
 	for _, test := range int64Tests {
+		setBitWidth(e, bits.MaxLen64(test))
+
 		t.Run("", func(t *testing.T) {
 			var err error
 			buffer, err = e.EncodeInt64(buffer, test)
@@ -355,7 +368,7 @@ func testInt64Encoding(t *testing.T, e encoding.Encoding) {
 }
 
 func testInt96Encoding(t *testing.T, e encoding.Encoding) {
-	testCanEncode(t, e, format.Int96)
+	testCanEncodeInt96(t, e)
 	buffer := []byte{}
 	values := []deprecated.Int96{}
 
@@ -372,7 +385,7 @@ func testInt96Encoding(t *testing.T, e encoding.Encoding) {
 }
 
 func testFloatEncoding(t *testing.T, e encoding.Encoding) {
-	testCanEncode(t, e, format.Float)
+	testCanEncodeFloat(t, e)
 	buffer := []byte{}
 	values := []float32{}
 
@@ -389,7 +402,7 @@ func testFloatEncoding(t *testing.T, e encoding.Encoding) {
 }
 
 func testDoubleEncoding(t *testing.T, e encoding.Encoding) {
-	testCanEncode(t, e, format.Double)
+	testCanEncodeDouble(t, e)
 	buffer := []byte{}
 	values := []float64{}
 
@@ -406,7 +419,7 @@ func testDoubleEncoding(t *testing.T, e encoding.Encoding) {
 }
 
 func testByteArrayEncoding(t *testing.T, e encoding.Encoding) {
-	testCanEncode(t, e, format.ByteArray)
+	testCanEncodeByteArray(t, e)
 	buffer := []byte{}
 	values := []byte{}
 	byteArrays := []byte{}
@@ -430,7 +443,7 @@ func testByteArrayEncoding(t *testing.T, e encoding.Encoding) {
 }
 
 func testFixedLenByteArrayEncoding(t *testing.T, e encoding.Encoding) {
-	testCanEncode(t, e, format.FixedLenByteArray)
+	testCanEncodeFixedLenByteArray(t, e)
 	buffer := []byte{}
 	values := []byte{}
 
@@ -446,9 +459,45 @@ func testFixedLenByteArrayEncoding(t *testing.T, e encoding.Encoding) {
 	}
 }
 
-func testCanEncode(t testing.TB, e encoding.Encoding, k format.Type) {
-	if !e.CanEncode(k) {
-		t.Skipf("%s cannot encode %s values", e, k)
+func testCanEncodeBoolean(t testing.TB, e encoding.Encoding) {
+	testCanEncode(t, e, encoding.CanEncodeBoolean)
+}
+
+func testCanEncodeInt8(t testing.TB, e encoding.Encoding) {
+	testCanEncode(t, e, encoding.CanEncodeInt8)
+}
+
+func testCanEncodeInt32(t testing.TB, e encoding.Encoding) {
+	testCanEncode(t, e, encoding.CanEncodeInt32)
+}
+
+func testCanEncodeInt64(t testing.TB, e encoding.Encoding) {
+	testCanEncode(t, e, encoding.CanEncodeInt64)
+}
+
+func testCanEncodeInt96(t testing.TB, e encoding.Encoding) {
+	testCanEncode(t, e, encoding.CanEncodeInt96)
+}
+
+func testCanEncodeFloat(t testing.TB, e encoding.Encoding) {
+	testCanEncode(t, e, encoding.CanEncodeFloat)
+}
+
+func testCanEncodeDouble(t testing.TB, e encoding.Encoding) {
+	testCanEncode(t, e, encoding.CanEncodeDouble)
+}
+
+func testCanEncodeByteArray(t testing.TB, e encoding.Encoding) {
+	testCanEncode(t, e, encoding.CanEncodeByteArray)
+}
+
+func testCanEncodeFixedLenByteArray(t testing.TB, e encoding.Encoding) {
+	testCanEncode(t, e, encoding.CanEncodeFixedLenByteArray)
+}
+
+func testCanEncode(t testing.TB, e encoding.Encoding, test func(encoding.Encoding) bool) {
+	if !test(e) {
+		t.Skip("encoding not supported")
 	}
 }
 
@@ -521,55 +570,59 @@ func benchmarkEncode(b *testing.B, e encoding.Encoding) {
 }
 
 func benchmarkEncodeBoolean(b *testing.B, e encoding.Encoding) {
-	testCanEncode(b, e, format.Boolean)
+	testCanEncodeBoolean(b, e)
 	buffer := make([]byte, 0)
 	values := generateBooleanValues(benchmarkNumValues, newRand())
+	setBitWidth(e, 1)
 
 	benchmarkZeroAllocsPerRun(b, func() {
 		buffer, _ = e.EncodeBoolean(buffer, values)
 	})
 
-	b.SetBytes(int64(len(buffer)))
+	b.SetBytes(1 * int64(len(values)))
 }
 
 func benchmarkEncodeInt8(b *testing.B, e encoding.Encoding) {
-	testCanEncode(b, e, format.Int32)
+	testCanEncodeInt8(b, e)
 	buffer := make([]byte, 0)
 	values := generateInt8Values(benchmarkNumValues, newRand())
+	setBitWidth(e, bits.MaxLen8(values))
 
 	benchmarkZeroAllocsPerRun(b, func() {
 		buffer, _ = e.EncodeInt8(buffer, values)
 	})
 
-	b.SetBytes(int64(len(buffer)))
+	b.SetBytes(1 * int64(len(values)))
 }
 
 func benchmarkEncodeInt32(b *testing.B, e encoding.Encoding) {
-	testCanEncode(b, e, format.Int32)
+	testCanEncodeInt32(b, e)
 	buffer := make([]byte, 0)
 	values := generateInt32Values(benchmarkNumValues, newRand())
+	setBitWidth(e, bits.MaxLen32(values))
 
 	benchmarkZeroAllocsPerRun(b, func() {
 		buffer, _ = e.EncodeInt32(buffer, values)
 	})
 
-	b.SetBytes(int64(len(buffer)))
+	b.SetBytes(4 * int64(len(values)))
 }
 
 func benchmarkEncodeInt64(b *testing.B, e encoding.Encoding) {
-	testCanEncode(b, e, format.Int64)
+	testCanEncodeInt64(b, e)
 	buffer := make([]byte, 0)
 	values := generateInt64Values(benchmarkNumValues, newRand())
+	setBitWidth(e, bits.MaxLen64(values))
 
 	benchmarkZeroAllocsPerRun(b, func() {
 		buffer, _ = e.EncodeInt64(buffer, values)
 	})
 
-	b.SetBytes(int64(len(buffer)))
+	b.SetBytes(8 * int64(len(values)))
 }
 
 func benchmarkEncodeFloat(b *testing.B, e encoding.Encoding) {
-	testCanEncode(b, e, format.Float)
+	testCanEncodeFloat(b, e)
 	buffer := make([]byte, 0)
 	values := generateFloatValues(benchmarkNumValues, newRand())
 
@@ -577,11 +630,11 @@ func benchmarkEncodeFloat(b *testing.B, e encoding.Encoding) {
 		buffer, _ = e.EncodeFloat(buffer, values)
 	})
 
-	b.SetBytes(int64(len(buffer)))
+	b.SetBytes(4 * int64(len(values)))
 }
 
 func benchmarkEncodeDouble(b *testing.B, e encoding.Encoding) {
-	testCanEncode(b, e, format.Double)
+	testCanEncodeDouble(b, e)
 	buffer := make([]byte, 0)
 	values := generateDoubleValues(benchmarkNumValues, newRand())
 
@@ -589,11 +642,11 @@ func benchmarkEncodeDouble(b *testing.B, e encoding.Encoding) {
 		buffer, _ = e.EncodeDouble(buffer, values)
 	})
 
-	b.SetBytes(int64(len(buffer)))
+	b.SetBytes(8 * int64(len(values)))
 }
 
 func benchmarkEncodeByteArray(b *testing.B, e encoding.Encoding) {
-	testCanEncode(b, e, format.ByteArray)
+	testCanEncodeByteArray(b, e)
 	buffer := make([]byte, 0)
 	values := generateByteArrayValues(benchmarkNumValues, newRand())
 
@@ -601,11 +654,11 @@ func benchmarkEncodeByteArray(b *testing.B, e encoding.Encoding) {
 		buffer, _ = e.EncodeByteArray(buffer, values)
 	})
 
-	b.SetBytes(int64(len(buffer)))
+	b.SetBytes(int64(len(values)))
 }
 
 func benchmarkEncodeFixedLenByteArray(b *testing.B, e encoding.Encoding) {
-	testCanEncode(b, e, format.FixedLenByteArray)
+	testCanEncodeFixedLenByteArray(b, e)
 	const size = 16
 	buffer := make([]byte, 0)
 	values := generateFixedLenByteArrayValues(benchmarkNumValues, newRand(), size)
@@ -614,7 +667,7 @@ func benchmarkEncodeFixedLenByteArray(b *testing.B, e encoding.Encoding) {
 		buffer, _ = e.EncodeFixedLenByteArray(buffer, values, size)
 	})
 
-	b.SetBytes(int64(len(buffer)))
+	b.SetBytes(int64(len(values)))
 }
 
 func BenchmarkDecode(b *testing.B) {
@@ -666,59 +719,63 @@ func benchmarkDecode(b *testing.B, e encoding.Encoding) {
 }
 
 func benchmarkDecodeBoolean(b *testing.B, e encoding.Encoding) {
-	testCanEncode(b, e, format.Boolean)
+	testCanEncodeBoolean(b, e)
 	values := generateBooleanValues(benchmarkNumValues, newRand())
 	output := make([]bool, 0)
+	setBitWidth(e, 1)
 	buffer, _ := e.EncodeBoolean(nil, values)
 
 	benchmarkZeroAllocsPerRun(b, func() {
 		output, _ = e.DecodeBoolean(output, buffer)
 	})
 
-	b.SetBytes(int64(len(buffer)))
+	b.SetBytes(1 * int64(len(values)))
 }
 
 func benchmarkDecodeInt8(b *testing.B, e encoding.Encoding) {
-	testCanEncode(b, e, format.Int32)
+	testCanEncodeInt8(b, e)
 	values := generateInt8Values(benchmarkNumValues, newRand())
 	output := make([]int8, 0)
+	setBitWidth(e, bits.MaxLen8(values))
 	buffer, _ := e.EncodeInt8(nil, values)
 
 	benchmarkZeroAllocsPerRun(b, func() {
 		output, _ = e.DecodeInt8(output, buffer)
 	})
 
-	b.SetBytes(int64(len(buffer)))
+	b.SetBytes(1 * int64(len(values)))
 }
 
 func benchmarkDecodeInt32(b *testing.B, e encoding.Encoding) {
-	testCanEncode(b, e, format.Int32)
+	testCanEncodeInt32(b, e)
 	values := generateInt32Values(benchmarkNumValues, newRand())
 	output := make([]int32, 0)
+	setBitWidth(e, bits.MaxLen32(values))
 	buffer, _ := e.EncodeInt32(nil, values)
 
 	benchmarkZeroAllocsPerRun(b, func() {
 		output, _ = e.DecodeInt32(output, buffer)
 	})
 
-	b.SetBytes(int64(len(buffer)))
+	b.SetBytes(4 * int64(len(values)))
 }
 
 func benchmarkDecodeInt64(b *testing.B, e encoding.Encoding) {
-	testCanEncode(b, e, format.Int64)
+	testCanEncodeInt64(b, e)
 	values := generateInt64Values(benchmarkNumValues, newRand())
 	output := make([]int64, 0)
+	setBitWidth(e, bits.MaxLen64(values))
 	buffer, _ := e.EncodeInt64(nil, values)
 
 	benchmarkZeroAllocsPerRun(b, func() {
 		output, _ = e.DecodeInt64(output, buffer)
 	})
 
-	b.SetBytes(int64(len(buffer)))
+	b.SetBytes(8 * int64(len(values)))
 }
 
 func benchmarkDecodeFloat(b *testing.B, e encoding.Encoding) {
-	testCanEncode(b, e, format.Float)
+	testCanEncodeFloat(b, e)
 	values := generateFloatValues(benchmarkNumValues, newRand())
 	output := make([]float32, 0)
 	buffer, _ := e.EncodeFloat(nil, values)
@@ -727,11 +784,11 @@ func benchmarkDecodeFloat(b *testing.B, e encoding.Encoding) {
 		output, _ = e.DecodeFloat(output, buffer)
 	})
 
-	b.SetBytes(int64(len(buffer)))
+	b.SetBytes(4 * int64(len(values)))
 }
 
 func benchmarkDecodeDouble(b *testing.B, e encoding.Encoding) {
-	testCanEncode(b, e, format.Double)
+	testCanEncodeDouble(b, e)
 	values := generateDoubleValues(benchmarkNumValues, newRand())
 	output := make([]float64, 0)
 	buffer, _ := e.EncodeDouble(nil, values)
@@ -740,11 +797,11 @@ func benchmarkDecodeDouble(b *testing.B, e encoding.Encoding) {
 		output, _ = e.DecodeDouble(output, buffer)
 	})
 
-	b.SetBytes(int64(len(buffer)))
+	b.SetBytes(8 * int64(len(values)))
 }
 
 func benchmarkDecodeByteArray(b *testing.B, e encoding.Encoding) {
-	testCanEncode(b, e, format.ByteArray)
+	testCanEncodeByteArray(b, e)
 	values := generateByteArrayValues(benchmarkNumValues, newRand())
 	output := make([]byte, 0)
 	buffer, _ := e.EncodeByteArray(nil, values)
@@ -753,11 +810,11 @@ func benchmarkDecodeByteArray(b *testing.B, e encoding.Encoding) {
 		output, _ = e.DecodeByteArray(output, buffer)
 	})
 
-	b.SetBytes(int64(len(buffer)))
+	b.SetBytes(int64(len(values)))
 }
 
 func benchmarkDecodeFixedLenByteArray(b *testing.B, e encoding.Encoding) {
-	testCanEncode(b, e, format.FixedLenByteArray)
+	testCanEncodeFixedLenByteArray(b, e)
 	const size = 16
 	values := generateFixedLenByteArrayValues(benchmarkNumValues, newRand(), size)
 	output := make([]byte, 0)
@@ -767,7 +824,7 @@ func benchmarkDecodeFixedLenByteArray(b *testing.B, e encoding.Encoding) {
 		output, _ = e.DecodeFixedLenByteArray(output, buffer, size)
 	})
 
-	b.SetBytes(int64(len(buffer)))
+	b.SetBytes(int64(len(values)))
 }
 
 func benchmarkZeroAllocsPerRun(b *testing.B, f func()) {

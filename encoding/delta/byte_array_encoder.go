@@ -1,7 +1,6 @@
 package delta
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"math"
@@ -61,23 +60,4 @@ func (e *ByteArrayEncoder) encode(count int, valueAt func(int) []byte) error {
 		return err
 	}
 	return e.arrays.EncodeByteArray(e.suffixes)
-}
-
-func prefixLength(base, data []byte) int {
-	return binarySearchPrefixLength(len(base)/2, base, data)
-}
-
-func binarySearchPrefixLength(max int, base, data []byte) int {
-	for len(base) > 0 {
-		if bytes.HasPrefix(data, base[:max]) {
-			if max == len(base) {
-				return max
-			}
-			max += (len(base)-max)/2 + 1
-		} else {
-			base = base[:max-1]
-			max /= 2
-		}
-	}
-	return 0
 }

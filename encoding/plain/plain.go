@@ -117,10 +117,16 @@ func (e *Encoding) EncodeDouble(dst []byte, src []float64) ([]byte, error) {
 }
 
 func (e *Encoding) EncodeByteArray(dst []byte, src []byte) ([]byte, error) {
+	if err := RangeByteArrays(src, func([]byte) error { return nil }); err != nil {
+		return dst[:0], encoding.Error(e, err)
+	}
 	return append(dst[:0], src...), nil
 }
 
 func (e *Encoding) EncodeFixedLenByteArray(dst, src []byte, size int) ([]byte, error) {
+	if size < 0 || size > encoding.MaxFixedLenByteArraySize {
+		return dst[:0], encoding.Error(e, encoding.ErrInvalidArgument)
+	}
 	return append(dst[:0], src...), nil
 }
 
@@ -182,12 +188,15 @@ func (e *Encoding) DecodeDouble(dst []float64, src []byte) ([]float64, error) {
 
 func (e *Encoding) DecodeByteArray(dst, src []byte) ([]byte, error) {
 	if err := RangeByteArrays(src, func([]byte) error { return nil }); err != nil {
-		return dst[:0], err
+		return dst[:0], encoding.Error(e, err)
 	}
 	return append(dst[:0], src...), nil
 }
 
 func (e *Encoding) DecodeFixedLenByteArray(dst, src []byte, size int) ([]byte, error) {
+	if size < 0 || size > encoding.MaxFixedLenByteArraySize {
+		return dst[:0], encoding.Error(e, encoding.ErrInvalidArgument)
+	}
 	if (len(src) % size) != 0 {
 		return dst[:0], encoding.ErrInvalidInputSize(e, "FIXED_LEN_BYTE_ARRAY", len(src))
 	}
@@ -258,6 +267,10 @@ func AppendByteArray(b, v []byte) []byte {
 	return b
 }
 
+func ByteArrayLength(b []byte) int {
+	return int(binary.LittleEndian.Uint32(b))
+}
+
 func PutByteArrayLength(b []byte, n int) {
 	binary.LittleEndian.PutUint32(b, uint32(n))
 }
@@ -283,5 +296,5 @@ func NextByteArray(b []byte) (v, r []byte, err error) {
 	if n > len(b) {
 		return nil, b, fmt.Errorf("input of length %d is too short to contain a PLAIN encoded byte array of length %d: %w", len(b)-4, n-4, io.ErrUnexpectedEOF)
 	}
-	return b[4:n], b[n:], nil
+	return b[4:n:n], b[n:len(b):len(b)], nil
 }

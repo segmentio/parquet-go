@@ -33,6 +33,28 @@ func (e *DictionaryEncoding) String() string {
 	return "RLE_DICTIONARY"
 }
 
+func (e *DictionaryEncoding) EncodeInt32(dst []byte, src []int32) ([]byte, error) {
+	bitWidth := bits.MaxLen32(src)
+	dst = append(dst[:0], byte(bitWidth))
+	dst, err := encodeInt32(dst, src, uint(bitWidth))
+	return dst, e.wrap(err)
+}
+
+func (e *DictionaryEncoding) DecodeInt32(dst []int32, src []byte) ([]int32, error) {
+	if len(src) == 0 {
+		return dst[:0], nil
+	}
+	dst, err := decodeInt32(dst[:0], src[1:], uint(src[0]))
+	return dst, e.wrap(err)
+}
+
+func (e *DictionaryEncoding) wrap(err error) error {
+	if err != nil {
+		err = encoding.Error(e, err)
+	}
+	return err
+}
+
 type dictionaryDecoder struct {
 	encoding.NotSupportedDecoder
 	rle  *Decoder
