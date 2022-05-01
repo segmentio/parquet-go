@@ -18,10 +18,6 @@ func (e *LengthByteArrayEncoding) Encoding() format.Encoding {
 	return format.DeltaLengthByteArray
 }
 
-func (e *LengthByteArrayEncoding) CanEncode(t format.Type) bool {
-	return t == format.ByteArray
-}
-
 func (e *LengthByteArrayEncoding) NewDecoder(r io.Reader) encoding.Decoder {
 	return NewLengthByteArrayDecoder(r)
 }

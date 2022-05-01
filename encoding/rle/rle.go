@@ -26,10 +26,6 @@ func (e *Encoding) Encoding() format.Encoding {
 	return format.RLE
 }
 
-func (e *Encoding) CanEncode(t format.Type) bool {
-	return t == format.Boolean || t == format.Int32 || t == format.Int64
-}
-
 func (e *Encoding) NewDecoder(r io.Reader) encoding.Decoder {
 	return NewDecoder(r)
 }

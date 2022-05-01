@@ -17,10 +17,6 @@ func (e *DictionaryEncoding) Encoding() format.Encoding {
 	return format.RLEDictionary
 }
 
-func (e *DictionaryEncoding) CanEncode(t format.Type) bool {
-	return true
-}
-
 func (e *DictionaryEncoding) NewDecoder(r io.Reader) encoding.Decoder {
 	return dictionaryDecoder{rle: NewDecoder(r)}
 }

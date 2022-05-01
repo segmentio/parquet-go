@@ -1,8 +1,6 @@
 package parquet
 
 import (
-	"sort"
-
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/encoding/bytestreamsplit"
 	"github.com/segmentio/parquet-go/encoding/delta"
@@ -75,31 +73,28 @@ func LookupEncoding(enc format.Encoding) encoding.Encoding {
 	return encoding.NotSupported{}
 }
 
-func sortEncodings(encodings []encoding.Encoding) {
-	if len(encodings) > 1 {
-		sort.Slice(encodings, func(i, j int) bool {
-			return encodings[i].Encoding() < encodings[j].Encoding()
-		})
+func canEncode(e encoding.Encoding, k Kind) bool {
+	if isDictionaryEncoding(e) {
+		return true
 	}
-}
-
-func dedupeSortedEncodings(encodings []encoding.Encoding) []encoding.Encoding {
-	if len(encodings) > 1 {
-		i := 0
-
-		for _, c := range encodings[1:] {
-			if c.Encoding() != encodings[i].Encoding() {
-				i++
-				encodings[i] = c
-			}
-		}
-
-		clear := encodings[i+1:]
-		for i := range clear {
-			clear[i] = nil
-		}
-
-		encodings = encodings[:i+1]
+	switch k {
+	case Boolean:
+		return encoding.CanEncodeBoolean(e)
+	case Int32:
+		return encoding.CanEncodeInt32(e)
+	case Int64:
+		return encoding.CanEncodeInt64(e)
+	case Int96:
+		return encoding.CanEncodeInt96(e)
+	case Float:
+		return encoding.CanEncodeFloat(e)
+	case Double:
+		return encoding.CanEncodeDouble(e)
+	case ByteArray:
+		return encoding.CanEncodeByteArray(e)
+	case FixedLenByteArray:
+		return encoding.CanEncodeFixedLenByteArray(e)
+	default:
+		return false
 	}
-	return encodings
 }

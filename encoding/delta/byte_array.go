@@ -19,10 +19,6 @@ func (e *ByteArrayEncoding) Encoding() format.Encoding {
 	return format.DeltaByteArray
 }
 
-func (e *ByteArrayEncoding) CanEncode(t format.Type) bool {
-	return t == format.ByteArray || t == format.FixedLenByteArray
-}
-
 func (e *ByteArrayEncoding) NewDecoder(r io.Reader) encoding.Decoder {
 	return NewByteArrayDecoder(r)
 }

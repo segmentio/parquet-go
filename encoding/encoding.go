@@ -25,10 +25,16 @@ type Encoding interface {
 	// Returns the parquet code representing the encoding.
 	Encoding() format.Encoding
 
-	// Checks whether the encoding is capable of serializing parquet values of
-	// the given type.
-	CanEncode(format.Type) bool
-
+	// Encode methods serialize the source sequence of values into the
+	// destination buffer, potentially reallocating it if it was too short to
+	// contain the output.
+	//
+	// When encoding columns of byte array values, the input is expected to be
+	// formatted with the PLAIN encoding (a sequence of 4-bytes length prefix
+	// followed by the data).
+	//
+	// When encoding fixed-length byte array values, each value is expected to
+	// be found back-to-back in chunks of the given size.
 	EncodeBoolean(dst []byte, src []bool) ([]byte, error)
 	EncodeInt8(dst []byte, src []int8) ([]byte, error)
 	EncodeInt32(dst []byte, src []int32) ([]byte, error)
@@ -39,6 +45,14 @@ type Encoding interface {
 	EncodeByteArray(dst, src []byte) ([]byte, error)
 	EncodeFixedLenByteArray(dst, src []byte, size int) ([]byte, error)
 
+	// Decode methods deserialize from the source buffer into the destination
+	// slice, potentially growing it if it was too short to contain the result.
+	//
+	// When decoding columns of byte array values, the values are written to the
+	// output buffer using the PLAIN encoding.
+	//
+	// When encoding fixed-length byte array values, each value is written
+	// back-to-back in chunks of the given size to the output buffer.
 	DecodeBoolean(dst []bool, src []byte) ([]bool, error)
 	DecodeInt8(dst []int8, src []byte) ([]int8, error)
 	DecodeInt32(dst []int32, src []byte) ([]int32, error)

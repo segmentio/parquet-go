@@ -881,8 +881,7 @@ func (p *filePage) values() (ValueReader, error) {
 	// data page headers to indicate that the page contains indexes into the
 	// dictionary page, tho it is still encoded using the RLE encoding in this
 	// case, so we convert the encoding to RLE_DICTIONARY to simplify.
-	switch pageEncoding {
-	case format.PlainDictionary:
+	if pageEncoding == format.PlainDictionary {
 		pageEncoding = format.RLEDictionary
 	}
 

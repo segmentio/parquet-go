@@ -24,10 +24,6 @@ func (e *BinaryPackedEncoding) Encoding() format.Encoding {
 	return format.DeltaBinaryPacked
 }
 
-func (e *BinaryPackedEncoding) CanEncode(t format.Type) bool {
-	return t == format.Int32 || t == format.Int64
-}
-
 func (e *BinaryPackedEncoding) NewDecoder(r io.Reader) encoding.Decoder {
 	return NewBinaryPackedDecoder(r)
 }

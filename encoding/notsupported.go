@@ -109,10 +109,6 @@ func (NotSupported) Encoding() format.Encoding {
 	return -1
 }
 
-func (NotSupported) CanEncode(format.Type) bool {
-	return false
-}
-
 func (NotSupported) EncodeBoolean(dst []byte, src []bool) ([]byte, error) {
 	return dst[:0], errNotSupported("BOOLEAN")
 }
