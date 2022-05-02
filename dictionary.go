@@ -363,17 +363,13 @@ func (page *indexedPage) RepetitionLevels() []int8 { return nil }
 
 func (page *indexedPage) DefinitionLevels() []int8 { return nil }
 
-func (page *indexedPage) Encode(dst []byte, enc encoding.Encoding) ([]byte, error) {
-	return enc.EncodeInt32(dst, page.values)
-}
-
-func (page *indexedPage) WriteTo(e encoding.Encoder) error {
-	return e.EncodeInt32(page.values)
-}
-
 func (page *indexedPage) Values() ValueReader { return &indexedPageReader{page: page} }
 
 func (page *indexedPage) Buffer() BufferedPage { return page }
+
+func (page *indexedPage) Encode(dst []byte, enc encoding.Encoding) ([]byte, error) {
+	return enc.EncodeInt32(dst, page.values)
+}
 
 type indexedPageReader struct {
 	page   *indexedPage

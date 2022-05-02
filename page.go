@@ -79,9 +79,7 @@ type BufferedPage interface {
 	RepetitionLevels() []int8
 	DefinitionLevels() []int8
 
-	// Writes the page to the given encoder.
-	WriteTo(encoding.Encoder) error
-
+	// Writes the page data to dst with the given encoding.
 	Encode(dst []byte, enc encoding.Encoding) ([]byte, error)
 }
 
@@ -232,10 +230,9 @@ func (page *errorPage) Slice(i, j int64) BufferedPage                          {
 func (page *errorPage) Size() int64                                            { return 1 }
 func (page *errorPage) RepetitionLevels() []int8                               { return nil }
 func (page *errorPage) DefinitionLevels() []int8                               { return nil }
-func (page *errorPage) Encode(dst []byte, _ encoding.Encoding) ([]byte, error) { return dst, page.err }
-func (page *errorPage) WriteTo(encoding.Encoder) error                         { return page.err }
 func (page *errorPage) Values() ValueReader                                    { return &errorValueReader{err: page.err} }
 func (page *errorPage) Buffer() BufferedPage                                   { return page }
+func (page *errorPage) Encode(dst []byte, _ encoding.Encoding) ([]byte, error) { return dst, page.err }
 
 func errPageBoundsOutOfRange(i, j, n int64) error {
 	return fmt.Errorf("page bounds out of range [%d:%d]: with length %d", i, j, n)
@@ -337,20 +334,16 @@ func (page *optionalPage) DefinitionLevels() []int8 {
 	return page.definitionLevels
 }
 
-func (page *optionalPage) Encode(dst []byte, enc encoding.Encoding) ([]byte, error) {
-	return page.base.Encode(dst, enc)
-}
-
-func (page *optionalPage) WriteTo(e encoding.Encoder) error {
-	return page.base.WriteTo(e)
-}
-
 func (page *optionalPage) Values() ValueReader {
 	return &optionalPageReader{page: page}
 }
 
 func (page *optionalPage) Buffer() BufferedPage {
 	return page
+}
+
+func (page *optionalPage) Encode(dst []byte, enc encoding.Encoding) ([]byte, error) {
+	return page.base.Encode(dst, enc)
 }
 
 type optionalPageReader struct {
@@ -513,10 +506,6 @@ func (page *repeatedPage) Encode(dst []byte, enc encoding.Encoding) ([]byte, err
 	return page.base.Encode(dst, enc)
 }
 
-func (page *repeatedPage) WriteTo(e encoding.Encoder) error {
-	return page.base.WriteTo(e)
-}
-
 func (page *repeatedPage) Values() ValueReader {
 	return &repeatedPageReader{page: page}
 }
@@ -663,6 +652,10 @@ func (page *byteArrayPage) RepetitionLevels() []int8 { return nil }
 
 func (page *byteArrayPage) DefinitionLevels() []int8 { return nil }
 
+func (page *byteArrayPage) Values() ValueReader { return &byteArrayPageReader{page: page} }
+
+func (page *byteArrayPage) Buffer() BufferedPage { return page }
+
 func (page *byteArrayPage) Encode(dst []byte, enc encoding.Encoding) ([]byte, error) {
 	values := make([]byte, 0, page.values.Size())
 	page.values.Range(func(value []byte) bool {
@@ -671,12 +664,6 @@ func (page *byteArrayPage) Encode(dst []byte, enc encoding.Encoding) ([]byte, er
 	})
 	return enc.EncodeByteArray(dst, values)
 }
-
-func (page *byteArrayPage) WriteTo(e encoding.Encoder) error { return e.EncodeByteArray(page.values) }
-
-func (page *byteArrayPage) Values() ValueReader { return &byteArrayPageReader{page: page} }
-
-func (page *byteArrayPage) Buffer() BufferedPage { return page }
 
 type byteArrayPageReader struct {
 	page   *byteArrayPage
@@ -790,19 +777,15 @@ func (page *fixedLenByteArrayPage) RepetitionLevels() []int8 { return nil }
 
 func (page *fixedLenByteArrayPage) DefinitionLevels() []int8 { return nil }
 
-func (page *fixedLenByteArrayPage) Encode(dst []byte, enc encoding.Encoding) ([]byte, error) {
-	return enc.EncodeFixedLenByteArray(dst, page.data, page.size)
-}
-
-func (page *fixedLenByteArrayPage) WriteTo(e encoding.Encoder) error {
-	return e.EncodeFixedLenByteArray(page.size, page.data)
-}
-
 func (page *fixedLenByteArrayPage) Values() ValueReader {
 	return &fixedLenByteArrayPageReader{page: page}
 }
 
 func (page *fixedLenByteArrayPage) Buffer() BufferedPage { return page }
+
+func (page *fixedLenByteArrayPage) Encode(dst []byte, enc encoding.Encoding) ([]byte, error) {
+	return enc.EncodeFixedLenByteArray(dst, page.data, page.size)
+}
 
 type fixedLenByteArrayPageReader struct {
 	page   *fixedLenByteArrayPage

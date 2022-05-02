@@ -144,6 +144,11 @@ type splitBlockEncoding struct {
 	encoding.NotSupported
 }
 
+func (splitBlockEncoding) EncodeBoolean(dst []byte, src []bool) ([]byte, error) {
+	splitBlockEncodeUint8(bloom.MakeSplitBlockFilter(dst), bits.BoolToBytes(src))
+	return dst, nil
+}
+
 func (splitBlockEncoding) EncodeInt32(dst []byte, src []int32) ([]byte, error) {
 	splitBlockEncodeUint32(bloom.MakeSplitBlockFilter(dst), bits.Int32ToUint32(src))
 	return dst, nil
@@ -212,6 +217,16 @@ func splitBlockEncodeFixedLenByteArray(filter bloom.SplitBlockFilter, data []byt
 	filter.InsertBulk(buffer)
 }
 
+func splitBlockEncodeUint8(filter bloom.SplitBlockFilter, values []uint8) {
+	buffer := make([]uint64, filterEncodeBufferSize)
+
+	for i := 0; i < len(values); {
+		n := xxhash.MultiSum64Uint8(buffer, values[i:])
+		filter.InsertBulk(buffer[:n])
+		i += n
+	}
+}
+
 func splitBlockEncodeUint32(filter bloom.SplitBlockFilter, values []uint32) {
 	buffer := make([]uint64, filterEncodeBufferSize)
 
@@ -240,130 +255,4 @@ func splitBlockEncodeUint128(filter bloom.SplitBlockFilter, values [][16]byte) {
 		filter.InsertBulk(buffer[:n])
 		i += n
 	}
-}
-
-// bloomFilterEncoder is an adapter type which implements the encoding.Encoder
-// interface on top of a bloom filter.
-type bloomFilterEncoder struct {
-	filter bloom.MutableFilter
-	hash   bloom.Hash
-	keys   [128]uint64
-}
-
-func newBloomFilterEncoder(filter bloom.MutableFilter, hash bloom.Hash) *bloomFilterEncoder {
-	return &bloomFilterEncoder{filter: filter, hash: hash}
-}
-
-func (e *bloomFilterEncoder) Bytes() []byte {
-	return e.filter.Bytes()
-}
-
-func (e *bloomFilterEncoder) Reset(io.Writer) {
-	e.filter.Reset()
-}
-
-func (e *bloomFilterEncoder) SetBitWidth(int) {
-}
-
-func (e *bloomFilterEncoder) EncodeBoolean(data []bool) error {
-	return e.insert8(bits.BoolToBytes(data))
-}
-
-func (e *bloomFilterEncoder) EncodeInt8(data []int8) error {
-	return e.insert8(bits.Int8ToBytes(data))
-}
-
-func (e *bloomFilterEncoder) EncodeInt16(data []int16) error {
-	return e.insert16(bits.Int16ToUint16(data))
-}
-
-func (e *bloomFilterEncoder) EncodeInt32(data []int32) error {
-	return e.insert32(bits.Int32ToUint32(data))
-}
-
-func (e *bloomFilterEncoder) EncodeInt64(data []int64) error {
-	return e.insert64(bits.Int64ToUint64(data))
-}
-
-func (e *bloomFilterEncoder) EncodeInt96(data []deprecated.Int96) error {
-	return e.EncodeFixedLenByteArray(12, deprecated.Int96ToBytes(data))
-}
-
-func (e *bloomFilterEncoder) EncodeFloat(data []float32) error {
-	return e.insert32(bits.Float32ToUint32(data))
-}
-
-func (e *bloomFilterEncoder) EncodeDouble(data []float64) error {
-	return e.insert64(bits.Float64ToUint64(data))
-}
-
-func (e *bloomFilterEncoder) EncodeByteArray(data encoding.ByteArrayList) error {
-	data.Range(func(v []byte) bool { e.insert(v); return true })
-	return nil
-}
-
-func (e *bloomFilterEncoder) EncodeFixedLenByteArray(size int, data []byte) error {
-	if size == 16 {
-		return e.insert128(bits.BytesToUint128(data))
-	}
-	for i, j := 0, size; j <= len(data); {
-		e.insert(data[i:j])
-		i += size
-		j += size
-	}
-	return nil
-}
-
-func (e *bloomFilterEncoder) insert(value []byte) {
-	e.filter.Insert(e.hash.Sum64(value))
-}
-
-func (e *bloomFilterEncoder) insert8(data []uint8) error {
-	k := e.keys[:]
-	for i := 0; i < len(data); {
-		n := e.hash.MultiSum64Uint8(k, data[i:])
-		e.filter.InsertBulk(k[:n:n])
-		i += n
-	}
-	return nil
-}
-
-func (e *bloomFilterEncoder) insert16(data []uint16) error {
-	k := e.keys[:]
-	for i := 0; i < len(data); {
-		n := e.hash.MultiSum64Uint16(k, data[i:])
-		e.filter.InsertBulk(k[:n:n])
-		i += n
-	}
-	return nil
-}
-
-func (e *bloomFilterEncoder) insert32(data []uint32) error {
-	k := e.keys[:]
-	for i := 0; i < len(data); {
-		n := e.hash.MultiSum64Uint32(k, data[i:])
-		e.filter.InsertBulk(k[:n:n])
-		i += n
-	}
-	return nil
-}
-
-func (e *bloomFilterEncoder) insert64(data []uint64) error {
-	k := e.keys[:]
-	for i := 0; i < len(data); {
-		n := e.hash.MultiSum64Uint64(k, data[i:])
-		e.filter.InsertBulk(k[:n:n])
-		i += n
-	}
-	return nil
-}
-
-func (e *bloomFilterEncoder) insert128(data [][16]byte) error {
-	k := e.keys[:]
-	for i := 0; i < len(data); {
-		n := e.hash.MultiSum64Uint128(k, data[i:])
-		e.filter.InsertBulk(k[:n:n])
-		i += n
-	}
-	return nil
 }

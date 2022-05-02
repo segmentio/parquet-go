@@ -95,11 +95,13 @@ func (page *booleanPage) RepetitionLevels() []int8 { return nil }
 
 func (page *booleanPage) DefinitionLevels() []int8 { return nil }
 
-func (page *booleanPage) WriteTo(e encoding.Encoder) error { return e.EncodeBoolean(page.values) }
-
 func (page *booleanPage) Values() ValueReader { return &booleanPageReader{page: page} }
 
 func (page *booleanPage) Buffer() BufferedPage { return page }
+
+func (page *booleanPage) Encode(dst []byte, enc encoding.Encoder) ([]byte, error) {
+	return enc.EncodeBoolean(dst, page.values)
+}
 
 type booleanPageReader struct {
 	page   *booleanPage
@@ -182,11 +184,13 @@ func (page *int32Page) RepetitionLevels() []int8 { return nil }
 
 func (page *int32Page) DefinitionLevels() []int8 { return nil }
 
-func (page *int32Page) WriteTo(e encoding.Encoder) error { return e.EncodeInt32(page.values) }
-
 func (page *int32Page) Values() ValueReader { return &int32PageReader{page: page} }
 
 func (page *int32Page) Buffer() BufferedPage { return page }
+
+func (page *int32Page) Encode(dst []byte, enc encoding.Encoder) ([]byte, error) {
+	return enc.EncodeInt32(dst, page.values)
+}
 
 type int32PageReader struct {
 	page   *int32Page
@@ -270,11 +274,13 @@ func (page *int64Page) RepetitionLevels() []int8 { return nil }
 
 func (page *int64Page) DefinitionLevels() []int8 { return nil }
 
-func (page *int64Page) WriteTo(e encoding.Encoder) error { return e.EncodeInt64(page.values) }
-
 func (page *int64Page) Values() ValueReader { return &int64PageReader{page: page} }
 
 func (page *int64Page) Buffer() BufferedPage { return page }
+
+func (page *int64Page) Encode(dst []byte, enc encoding.Encoder) ([]byte, error) {
+	return enc.EncodeInt64(dst, page.values)
+}
 
 type int64PageReader struct {
 	page   *int64Page
@@ -360,11 +366,13 @@ func (page *int96Page) RepetitionLevels() []int8 { return nil }
 
 func (page *int96Page) DefinitionLevels() []int8 { return nil }
 
-func (page *int96Page) WriteTo(e encoding.Encoder) error { return e.EncodeInt96(page.values) }
-
 func (page *int96Page) Values() ValueReader { return &int96PageReader{page: page} }
 
 func (page *int96Page) Buffer() BufferedPage { return page }
+
+func (page *int96Page) Encode(dst []byte, enc encoding.Encoder) ([]byte, error) {
+	return enc.EncodeInt96(dst, page.values)
+}
 
 type int96PageReader struct {
 	page   *int96Page
@@ -448,11 +456,13 @@ func (page *floatPage) RepetitionLevels() []int8 { return nil }
 
 func (page *floatPage) DefinitionLevels() []int8 { return nil }
 
-func (page *floatPage) WriteTo(e encoding.Encoder) error { return e.EncodeFloat(page.values) }
-
 func (page *floatPage) Values() ValueReader { return &floatPageReader{page: page} }
 
 func (page *floatPage) Buffer() BufferedPage { return page }
+
+func (page *floatPage) Encode(dst []byte, enc encoding.Encoder) ([]byte, error) {
+	return enc.EncodeFloat(dst, page.values)
+}
 
 type floatPageReader struct {
 	page   *floatPage
@@ -536,11 +546,13 @@ func (page *doublePage) RepetitionLevels() []int8 { return nil }
 
 func (page *doublePage) DefinitionLevels() []int8 { return nil }
 
-func (page *doublePage) WriteTo(e encoding.Encoder) error { return e.EncodeDouble(page.values) }
-
 func (page *doublePage) Values() ValueReader { return &doublePageReader{page: page} }
 
 func (page *doublePage) Buffer() BufferedPage { return page }
+
+func (page *doublePage) Encode(dst []byte, enc encoding.Encoder) ([]byte, error) {
+	return enc.EncodeDouble(dst, page.values)
+}
 
 type doublePageReader struct {
 	page   *doublePage
