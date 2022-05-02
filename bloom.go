@@ -4,8 +4,10 @@ import (
 	"io"
 
 	"github.com/segmentio/parquet-go/bloom"
+	"github.com/segmentio/parquet-go/bloom/xxhash"
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
+	"github.com/segmentio/parquet-go/encoding/plain"
 	"github.com/segmentio/parquet-go/format"
 	"github.com/segmentio/parquet-go/internal/bits"
 )
@@ -80,9 +82,13 @@ type BloomFilterColumn interface {
 	// filter.
 	Hash() bloom.Hash
 
-	// NewFilter constructs a new bloom filter configured to hold the given
-	// number of values and bits of filter per value.
-	NewFilter(numValues int64, bitsPerValue uint) bloom.MutableFilter
+	// Returns an encoding which can be used to write columns of values to the
+	// filter.
+	Encoding() encoding.Encoding
+
+	// Returns the size of the filter needed to encode values in the filter,
+	// assuming each value will be encoded with the given number of bits.
+	Size(numValues int64, bitsPerValue uint) int
 }
 
 // SplitBlockFilter constructs a split block bloom filter object for the column
@@ -91,10 +97,11 @@ func SplitBlockFilter(path ...string) BloomFilterColumn { return splitBlockFilte
 
 type splitBlockFilter []string
 
-func (f splitBlockFilter) Path() []string   { return f }
-func (f splitBlockFilter) Hash() bloom.Hash { return bloom.XXH64{} }
-func (f splitBlockFilter) NewFilter(numValues int64, bitsPerValue uint) bloom.MutableFilter {
-	return make(bloom.SplitBlockFilter, bloom.NumSplitBlocksOf(numValues, bitsPerValue))
+func (f splitBlockFilter) Path() []string              { return f }
+func (f splitBlockFilter) Hash() bloom.Hash            { return bloom.XXH64{} }
+func (f splitBlockFilter) Encoding() encoding.Encoding { return splitBlockEncoding{} }
+func (f splitBlockFilter) Size(numValues int64, bitsPerValue uint) int {
+	return bloom.BlockSize * bloom.NumSplitBlocksOf(numValues, bitsPerValue)
 }
 
 // Creates a header from the given bloom filter.
@@ -122,6 +129,117 @@ func searchBloomFilterColumn(filters []BloomFilterColumn, path columnPath) Bloom
 		}
 	}
 	return nil
+}
+
+const (
+	// Size of the stack buffer used to perform bulk operations on bloom filters.
+	//
+	// This value was determined as being a good default empirically,
+	// 128 x uint64 makes a 1KiB buffer which amortizes the cost of calling
+	// methods of bloom filters while not causing too much stack growth either.
+	filterEncodeBufferSize = 128
+)
+
+type splitBlockEncoding struct {
+	encoding.NotSupported
+}
+
+func (splitBlockEncoding) EncodeInt32(dst []byte, src []int32) ([]byte, error) {
+	splitBlockEncodeUint32(bloom.MakeSplitBlockFilter(dst), bits.Int32ToUint32(src))
+	return dst, nil
+}
+
+func (splitBlockEncoding) EncodeInt64(dst []byte, src []int64) ([]byte, error) {
+	splitBlockEncodeUint64(bloom.MakeSplitBlockFilter(dst), bits.Int64ToUint64(src))
+	return dst, nil
+}
+
+func (e splitBlockEncoding) EncodeInt96(dst []byte, src []deprecated.Int96) ([]byte, error) {
+	splitBlockEncodeFixedLenByteArray(bloom.MakeSplitBlockFilter(dst), deprecated.Int96ToBytes(src), 12)
+	return dst, nil
+}
+
+func (splitBlockEncoding) EncodeFloat(dst []byte, src []float32) ([]byte, error) {
+	splitBlockEncodeUint32(bloom.MakeSplitBlockFilter(dst), bits.Float32ToUint32(src))
+	return dst, nil
+}
+
+func (splitBlockEncoding) EncodeDouble(dst []byte, src []float64) ([]byte, error) {
+	splitBlockEncodeUint64(bloom.MakeSplitBlockFilter(dst), bits.Float64ToUint64(src))
+	return dst, nil
+}
+
+func (splitBlockEncoding) EncodeByteArray(dst, src []byte) ([]byte, error) {
+	filter := bloom.MakeSplitBlockFilter(dst)
+	buffer := make([]uint64, 0, filterEncodeBufferSize)
+
+	err := plain.RangeByteArrays(src, func(value []byte) error {
+		if len(buffer) == cap(buffer) {
+			filter.InsertBulk(buffer)
+			buffer = buffer[:0]
+		}
+		buffer = append(buffer, xxhash.Sum64(value))
+		return nil
+	})
+
+	filter.InsertBulk(buffer)
+	return dst, err
+}
+
+func (splitBlockEncoding) EncodeFixedLenByteArray(dst, src []byte, size int) ([]byte, error) {
+	filter := bloom.MakeSplitBlockFilter(dst)
+	if size == 16 {
+		splitBlockEncodeUint128(filter, bits.BytesToUint128(src))
+	} else {
+		splitBlockEncodeFixedLenByteArray(filter, src, size)
+	}
+	return dst, nil
+}
+
+func splitBlockEncodeFixedLenByteArray(filter bloom.SplitBlockFilter, data []byte, size int) {
+	buffer := make([]uint64, 0, filterEncodeBufferSize)
+
+	for i, j := 0, size; j <= len(data); {
+		if len(buffer) == cap(buffer) {
+			filter.InsertBulk(buffer)
+			buffer = buffer[:0]
+		}
+		buffer = append(buffer, xxhash.Sum64(data[i:j]))
+		i += size
+		j += size
+	}
+
+	filter.InsertBulk(buffer)
+}
+
+func splitBlockEncodeUint32(filter bloom.SplitBlockFilter, values []uint32) {
+	buffer := make([]uint64, filterEncodeBufferSize)
+
+	for i := 0; i < len(values); {
+		n := xxhash.MultiSum64Uint32(buffer, values[i:])
+		filter.InsertBulk(buffer[:n])
+		i += n
+	}
+}
+
+func splitBlockEncodeUint64(filter bloom.SplitBlockFilter, values []uint64) {
+	buffer := make([]uint64, filterEncodeBufferSize)
+
+	for i := 0; i < len(values); {
+		n := xxhash.MultiSum64Uint64(buffer, values[i:])
+		filter.InsertBulk(buffer[:n])
+		i += n
+	}
+}
+
+func splitBlockEncodeUint128(filter bloom.SplitBlockFilter, values [][16]byte) {
+	buffer := make([]uint64, filterEncodeBufferSize)
+
+	for i := 0; i < len(values); {
+		n := xxhash.MultiSum64Uint128(buffer, values[i:])
+		filter.InsertBulk(buffer[:n])
+		i += n
+	}
 }
 
 // bloomFilterEncoder is an adapter type which implements the encoding.Encoder

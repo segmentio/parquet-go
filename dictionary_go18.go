@@ -43,7 +43,7 @@ func readDictionary[T primitive](typ Type, columnIndex int16, numValues int, dec
 			d.values = newValues
 		}
 
-		n, err := d.class.decode(decoder, d.values[len(d.values):cap(d.values)])
+		n, err := d.class.readFrom(decoder, d.values[len(d.values):cap(d.values)])
 		if n > 0 {
 			d.values = d.values[:len(d.values)+n]
 		}

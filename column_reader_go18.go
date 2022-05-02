@@ -42,7 +42,7 @@ func (r *columnReader[T]) ReadRequired(values []T) (n int, err error) {
 	if r.remain == 0 || r.decoder == nil {
 		return n, io.EOF
 	}
-	d, err := r.class.decode(r.decoder, values)
+	d, err := r.class.readFrom(r.decoder, values)
 	r.remain -= d
 	if r.remain == 0 && err == nil {
 		err = io.EOF
@@ -75,7 +75,7 @@ func (r *columnReader[T]) ReadValues(values []Value) (n int, err error) {
 
 		length := min(r.remain, cap(r.buffer))
 		buffer := r.buffer[:length]
-		d, err := r.class.decode(r.decoder, buffer)
+		d, err := r.class.readFrom(r.decoder, buffer)
 		if d == 0 {
 			return n, err
 		}

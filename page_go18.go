@@ -62,7 +62,11 @@ func (p *page[T]) RepetitionLevels() []int8 { return nil }
 
 func (p *page[T]) DefinitionLevels() []int8 { return nil }
 
-func (p *page[T]) WriteTo(e encoding.Encoder) error { return p.class.encode(e, p.values) }
+func (p *page[T]) Encode(dst []byte, enc encoding.Encoding) ([]byte, error) {
+	return p.class.encode(enc, dst, p.values)
+}
+
+func (p *page[T]) WriteTo(e encoding.Encoder) error { return p.class.writeTo(e, p.values) }
 
 func (p *page[T]) Values() ValueReader { return &pageReader[T]{page: p} }
 

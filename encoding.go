@@ -49,6 +49,19 @@ var (
 		format.DeltaByteArray:       &DeltaByteArray,
 		format.ByteStreamSplit:      &ByteStreamSplit,
 	}
+
+	// Table indexing RLE encodings for repetition and definition levels of
+	// all supported bit widths.
+	levelEncodings = [...]rle.Encoding{
+		0: {BitWidth: 1},
+		1: {BitWidth: 2},
+		2: {BitWidth: 3},
+		3: {BitWidth: 4},
+		4: {BitWidth: 5},
+		5: {BitWidth: 6},
+		6: {BitWidth: 7},
+		7: {BitWidth: 8},
+	}
 )
 
 func isDictionaryEncoding(encoding encoding.Encoding) bool {
