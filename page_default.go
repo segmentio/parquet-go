@@ -99,7 +99,7 @@ func (page *booleanPage) Values() ValueReader { return &booleanPageReader{page: 
 
 func (page *booleanPage) Buffer() BufferedPage { return page }
 
-func (page *booleanPage) Encode(dst []byte, enc encoding.Encoder) ([]byte, error) {
+func (page *booleanPage) Encode(dst []byte, enc encoding.Encoding) ([]byte, error) {
 	return enc.EncodeBoolean(dst, page.values)
 }
 
@@ -188,7 +188,7 @@ func (page *int32Page) Values() ValueReader { return &int32PageReader{page: page
 
 func (page *int32Page) Buffer() BufferedPage { return page }
 
-func (page *int32Page) Encode(dst []byte, enc encoding.Encoder) ([]byte, error) {
+func (page *int32Page) Encode(dst []byte, enc encoding.Encoding) ([]byte, error) {
 	return enc.EncodeInt32(dst, page.values)
 }
 
@@ -278,7 +278,7 @@ func (page *int64Page) Values() ValueReader { return &int64PageReader{page: page
 
 func (page *int64Page) Buffer() BufferedPage { return page }
 
-func (page *int64Page) Encode(dst []byte, enc encoding.Encoder) ([]byte, error) {
+func (page *int64Page) Encode(dst []byte, enc encoding.Encoding) ([]byte, error) {
 	return enc.EncodeInt64(dst, page.values)
 }
 
@@ -370,7 +370,7 @@ func (page *int96Page) Values() ValueReader { return &int96PageReader{page: page
 
 func (page *int96Page) Buffer() BufferedPage { return page }
 
-func (page *int96Page) Encode(dst []byte, enc encoding.Encoder) ([]byte, error) {
+func (page *int96Page) Encode(dst []byte, enc encoding.Encoding) ([]byte, error) {
 	return enc.EncodeInt96(dst, page.values)
 }
 
@@ -460,7 +460,7 @@ func (page *floatPage) Values() ValueReader { return &floatPageReader{page: page
 
 func (page *floatPage) Buffer() BufferedPage { return page }
 
-func (page *floatPage) Encode(dst []byte, enc encoding.Encoder) ([]byte, error) {
+func (page *floatPage) Encode(dst []byte, enc encoding.Encoding) ([]byte, error) {
 	return enc.EncodeFloat(dst, page.values)
 }
 
@@ -550,7 +550,7 @@ func (page *doublePage) Values() ValueReader { return &doublePageReader{page: pa
 
 func (page *doublePage) Buffer() BufferedPage { return page }
 
-func (page *doublePage) Encode(dst []byte, enc encoding.Encoder) ([]byte, error) {
+func (page *doublePage) Encode(dst []byte, enc encoding.Encoding) ([]byte, error) {
 	return enc.EncodeDouble(dst, page.values)
 }
 

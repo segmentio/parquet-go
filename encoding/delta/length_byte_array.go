@@ -22,10 +22,6 @@ func (e *LengthByteArrayEncoding) NewDecoder(r io.Reader) encoding.Decoder {
 	return NewLengthByteArrayDecoder(r)
 }
 
-func (e *LengthByteArrayEncoding) NewEncoder(w io.Writer) encoding.Encoder {
-	return NewLengthByteArrayEncoder(w)
-}
-
 func (e *LengthByteArrayEncoding) String() string {
 	return "DELTA_LENGTH_BYTE_ARRAY"
 }

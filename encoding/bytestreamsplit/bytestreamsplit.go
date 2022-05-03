@@ -18,10 +18,6 @@ func (e *Encoding) Encoding() format.Encoding {
 	return format.ByteStreamSplit
 }
 
-func (e *Encoding) NewEncoder(w io.Writer) encoding.Encoder {
-	return NewEncoder(w)
-}
-
 func (e *Encoding) NewDecoder(r io.Reader) encoding.Decoder {
 	return NewDecoder(r)
 }

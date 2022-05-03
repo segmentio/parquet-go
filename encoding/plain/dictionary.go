@@ -20,10 +20,6 @@ func (e *DictionaryEncoding) NewDecoder(r io.Reader) encoding.Decoder {
 	return NewDecoder(r)
 }
 
-func (e *DictionaryEncoding) NewEncoder(w io.Writer) encoding.Encoder {
-	return NewEncoder(w)
-}
-
 func (e *DictionaryEncoding) String() string {
 	return "PLAIN_DICTIONARY"
 }

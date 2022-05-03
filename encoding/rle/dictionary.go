@@ -21,10 +21,6 @@ func (e *DictionaryEncoding) NewDecoder(r io.Reader) encoding.Decoder {
 	return dictionaryDecoder{rle: NewDecoder(r)}
 }
 
-func (e *DictionaryEncoding) NewEncoder(w io.Writer) encoding.Encoder {
-	return dictionaryEncoder{rle: NewEncoder(w)}
-}
-
 func (e *DictionaryEncoding) String() string {
 	return "RLE_DICTIONARY"
 }
@@ -99,31 +95,6 @@ func (d dictionaryDecoder) decodeBitWidth() (int, error) {
 	default:
 		return 0, fmt.Errorf("decoding RLE bit width: %w", err)
 	}
-}
-
-type dictionaryEncoder struct {
-	encoding.NotSupportedEncoder
-	rle *Encoder
-}
-
-func (e dictionaryEncoder) Reset(w io.Writer) {
-	e.rle.Reset(w)
-}
-
-func (e dictionaryEncoder) EncodeInt32(data []int32) error {
-	bitWidth := bits.MaxLen32(data)
-	if bitWidth == 0 {
-		bitWidth = 1
-	}
-	if err := e.encodeBitWidth(bitWidth); err != nil {
-		return err
-	}
-	e.rle.SetBitWidth(bitWidth)
-	return e.rle.EncodeInt32(data)
-}
-
-func (e dictionaryEncoder) encodeBitWidth(bitWidth int) error {
-	return e.rle.WriteByte(byte(bitWidth))
 }
 
 func clearInt32(data []int32) {

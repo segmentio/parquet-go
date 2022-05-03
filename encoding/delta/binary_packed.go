@@ -28,10 +28,6 @@ func (e *BinaryPackedEncoding) NewDecoder(r io.Reader) encoding.Decoder {
 	return NewBinaryPackedDecoder(r)
 }
 
-func (e *BinaryPackedEncoding) NewEncoder(w io.Writer) encoding.Encoder {
-	return NewBinaryPackedEncoder(w)
-}
-
 func (e *BinaryPackedEncoding) String() string {
 	return "DELTA_BINARY_PACKED"
 }

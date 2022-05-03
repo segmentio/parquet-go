@@ -769,10 +769,6 @@ type writerColumn struct {
 
 	buffers *writerBuffers
 
-	levels struct {
-		encoder encoding.Encoder
-	}
-
 	header struct {
 		protocol thrift.CompactProtocol
 		encoder  thrift.Encoder

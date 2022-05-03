@@ -23,10 +23,6 @@ func (e *ByteArrayEncoding) NewDecoder(r io.Reader) encoding.Decoder {
 	return NewByteArrayDecoder(r)
 }
 
-func (e *ByteArrayEncoding) NewEncoder(w io.Writer) encoding.Encoder {
-	return NewByteArrayEncoder(w)
-}
-
 func (e *ByteArrayEncoding) String() string {
 	return "DELTA_BYTE_ARRAY"
 }
