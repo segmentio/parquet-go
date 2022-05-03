@@ -380,7 +380,7 @@ func BenchmarkOrderOfBool(b *testing.B) {
 
 func BenchmarkOrderOfInt32(b *testing.B) {
 	forEachBenchmarkBufferSize(b, func(b *testing.B, bufferSize int) {
-		values := make([]int32, bufferSize/1)
+		values := make([]int32, bufferSize/4)
 		for i := 0; i < b.N; i++ {
 			bits.OrderOfInt32(values)
 		}
@@ -389,7 +389,7 @@ func BenchmarkOrderOfInt32(b *testing.B) {
 
 func BenchmarkOrderOfInt64(b *testing.B) {
 	forEachBenchmarkBufferSize(b, func(b *testing.B, bufferSize int) {
-		values := make([]int64, bufferSize/1)
+		values := make([]int64, bufferSize/8)
 		for i := 0; i < b.N; i++ {
 			bits.OrderOfInt64(values)
 		}
@@ -398,7 +398,7 @@ func BenchmarkOrderOfInt64(b *testing.B) {
 
 func BenchmarkOrderOfUint32(b *testing.B) {
 	forEachBenchmarkBufferSize(b, func(b *testing.B, bufferSize int) {
-		values := make([]uint32, bufferSize/1)
+		values := make([]uint32, bufferSize/4)
 		for i := 0; i < b.N; i++ {
 			bits.OrderOfUint32(values)
 		}
@@ -407,7 +407,7 @@ func BenchmarkOrderOfUint32(b *testing.B) {
 
 func BenchmarkOrderOfUint64(b *testing.B) {
 	forEachBenchmarkBufferSize(b, func(b *testing.B, bufferSize int) {
-		values := make([]uint64, bufferSize/1)
+		values := make([]uint64, bufferSize/8)
 		for i := 0; i < b.N; i++ {
 			bits.OrderOfUint64(values)
 		}
@@ -416,7 +416,7 @@ func BenchmarkOrderOfUint64(b *testing.B) {
 
 func BenchmarkOrderOfFloat32(b *testing.B) {
 	forEachBenchmarkBufferSize(b, func(b *testing.B, bufferSize int) {
-		values := make([]float32, bufferSize/1)
+		values := make([]float32, bufferSize/4)
 		for i := 0; i < b.N; i++ {
 			bits.OrderOfFloat32(values)
 		}
@@ -425,7 +425,7 @@ func BenchmarkOrderOfFloat32(b *testing.B) {
 
 func BenchmarkOrderOfFloat64(b *testing.B) {
 	forEachBenchmarkBufferSize(b, func(b *testing.B, bufferSize int) {
-		values := make([]float64, bufferSize/1)
+		values := make([]float64, bufferSize/8)
 		for i := 0; i < b.N; i++ {
 			bits.OrderOfFloat64(values)
 		}
