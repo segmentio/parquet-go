@@ -582,9 +582,6 @@ func makeByteArrayOffsets(numValues int32, values []byte) []uint32 {
 		lastOffset += 4 + uint32(len(value))
 		return nil
 	})
-	if len(offsets) != int(numValues) {
-		panic(fmt.Errorf("number of values mismatch in numValues and data arguments: %d != %d", numValues, len(offsets)))
-	}
 	return offsets
 }
 
