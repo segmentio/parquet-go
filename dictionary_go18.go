@@ -7,6 +7,7 @@ import (
 	"io"
 
 	"github.com/segmentio/parquet-go/encoding"
+	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 type dictionary[T primitive] struct {
@@ -15,12 +16,16 @@ type dictionary[T primitive] struct {
 	index map[T]int32
 }
 
-func newDictionary[T primitive](typ Type, columnIndex int16, bufferSize int, class *class[T]) *dictionary[T] {
+func newDictionary[T primitive](typ Type, columnIndex int16, numValues int32, data []byte, class *class[T]) *dictionary[T] {
+	values := unsafecast.Slice[T](data)
+	if len(values) != int(numValues) {
+		panic(fmt.Errorf("number of values mismatch in numValues and data arguments: %d != %d", numValues, len(values)))
+	}
 	return &dictionary[T]{
 		typ: typ,
 		page: page[T]{
 			class:       class,
-			values:      make([]T, 0, dictCap(bufferSize, sizeof[T]())),
+			values:      values,
 			columnIndex: ^columnIndex,
 		},
 	}

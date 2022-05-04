@@ -8,7 +8,7 @@ import (
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/internal/bits"
-	"github.com/segmentio/parquet-go/internal/cast"
+	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 type primitive interface {
@@ -172,14 +172,14 @@ var uint32Class = class[uint32]{
 	max:       bits.MaxUint32,
 	bounds:    bits.MinMaxUint32,
 	encode: func(enc encoding.Encoding, dst []byte, src []uint32) ([]byte, error) {
-		return enc.EncodeInt32(dst, cast.Slice[int32](src))
+		return enc.EncodeInt32(dst, unsafecast.Slice[int32](src))
 	},
 	decode: func(enc encoding.Encoding, dst []uint32, src []byte) ([]uint32, error) {
-		ret, err := enc.DecodeInt32(cast.Slice[int32](src), src)
-		return cast.Slice[uint32](ret), err
+		ret, err := enc.DecodeInt32(unsafecast.Slice[int32](src), src)
+		return unsafecast.Slice[uint32](ret), err
 	},
 	readFrom: func(d encoding.Decoder, v []uint32) (int, error) {
-		return d.DecodeInt32(cast.Slice[int32](v))
+		return d.DecodeInt32(unsafecast.Slice[int32](v))
 	},
 }
 
@@ -196,13 +196,13 @@ var uint64Class = class[uint64]{
 	max:       bits.MaxUint64,
 	bounds:    bits.MinMaxUint64,
 	encode: func(enc encoding.Encoding, dst []byte, src []uint64) ([]byte, error) {
-		return enc.EncodeInt64(dst, cast.Slice[int64](src))
+		return enc.EncodeInt64(dst, unsafecast.Slice[int64](src))
 	},
 	decode: func(enc encoding.Encoding, dst []uint64, src []byte) ([]uint64, error) {
-		ret, err := enc.DecodeInt64(cast.Slice[int64](dst), src)
-		return cast.Slice[uint64](ret), err
+		ret, err := enc.DecodeInt64(unsafecast.Slice[int64](dst), src)
+		return unsafecast.Slice[uint64](ret), err
 	},
 	readFrom: func(d encoding.Decoder, v []uint64) (int, error) {
-		return d.DecodeInt64(cast.Slice[int64](v))
+		return d.DecodeInt64(unsafecast.Slice[int64](v))
 	},
 }

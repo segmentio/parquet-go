@@ -6,7 +6,6 @@ import (
 	"io"
 	"sort"
 
-	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/encoding/plain"
 )
 
@@ -673,7 +672,8 @@ type byteArrayColumnBuffer struct {
 func newByteArrayColumnBuffer(typ Type, columnIndex int16, bufferSize int) *byteArrayColumnBuffer {
 	return &byteArrayColumnBuffer{
 		byteArrayPage: byteArrayPage{
-			values:      encoding.MakeByteArrayList(bufferSize / 16),
+			offsets:     make([]uint32, 0, bufferSize/8),
+			values:      make([]byte, 0, bufferSize/2),
 			columnIndex: ^columnIndex,
 		},
 		typ: typ,
@@ -683,7 +683,8 @@ func newByteArrayColumnBuffer(typ Type, columnIndex int16, bufferSize int) *byte
 func (col *byteArrayColumnBuffer) Clone() ColumnBuffer {
 	return &byteArrayColumnBuffer{
 		byteArrayPage: byteArrayPage{
-			values:      col.values.Clone(),
+			offsets:     col.cloneOffsets(),
+			values:      col.cloneValues(),
 			columnIndex: col.columnIndex,
 		},
 		typ: col.typ,
@@ -708,15 +709,23 @@ func (col *byteArrayColumnBuffer) Pages() Pages { return onePage(col.Page()) }
 
 func (col *byteArrayColumnBuffer) Page() BufferedPage { return &col.byteArrayPage }
 
-func (col *byteArrayColumnBuffer) Reset() { col.values.Reset() }
+func (col *byteArrayColumnBuffer) Reset() {
+	col.offsets, col.values = col.offsets[:0], col.values[:0]
+}
 
-func (col *byteArrayColumnBuffer) Cap() int { return col.values.Cap() }
+func (col *byteArrayColumnBuffer) Cap() int { return cap(col.offsets) }
 
-func (col *byteArrayColumnBuffer) Len() int { return col.values.Len() }
+func (col *byteArrayColumnBuffer) Len() int { return len(col.offsets) }
 
-func (col *byteArrayColumnBuffer) Less(i, j int) bool { return col.values.Less(i, j) }
+func (col *byteArrayColumnBuffer) Less(i, j int) bool {
+	a := col.valueAt(col.offsets[i])
+	b := col.valueAt(col.offsets[j])
+	return bytes.Compare(a, b) < 0
+}
 
-func (col *byteArrayColumnBuffer) Swap(i, j int) { col.values.Swap(i, j) }
+func (col *byteArrayColumnBuffer) Swap(i, j int) {
+	col.offsets[i], col.offsets[j] = col.offsets[j], col.offsets[i]
+}
 
 func (col *byteArrayColumnBuffer) Write(b []byte) (int, error) {
 	_, n, err := col.writeByteArrays(b)
@@ -732,19 +741,20 @@ func (col *byteArrayColumnBuffer) WriteByteArrays(values []byte) (int, error) {
 	return n, err
 }
 
-func (col *byteArrayColumnBuffer) writeByteArrays(values []byte) (c, n int, err error) {
-	err = plain.RangeByteArrays(values, func(v []byte) error {
-		col.values.Push(v)
-		n += plain.ByteArrayLengthSize + len(v)
-		c++
+func (col *byteArrayColumnBuffer) writeByteArrays(values []byte) (count, bytes int, err error) {
+	baseCount, baseBytes := len(col.offsets), len(col.values)
+
+	err = plain.RangeByteArrays(values, func(value []byte) error {
+		col.append(value)
 		return nil
 	})
-	return c, n, err
+
+	return len(col.offsets) - baseCount, len(col.values) - baseBytes, err
 }
 
 func (col *byteArrayColumnBuffer) WriteValues(values []Value) (int, error) {
-	for _, v := range values {
-		col.values.Push(v.ByteArray())
+	for _, value := range values {
+		col.append(value.ByteArray())
 	}
 	return len(values), nil
 }
@@ -753,12 +763,12 @@ func (col *byteArrayColumnBuffer) ReadValuesAt(values []Value, offset int64) (n 
 	i := int(offset)
 	switch {
 	case i < 0:
-		return 0, errRowIndexOutOfBounds(offset, int64(col.values.Len()))
-	case i >= col.values.Len():
+		return 0, errRowIndexOutOfBounds(offset, int64(len(col.offsets)))
+	case i >= len(col.offsets):
 		return 0, io.EOF
 	default:
-		for n < len(values) && i < col.values.Len() {
-			values[n] = makeValueBytes(ByteArray, col.values.Index(i))
+		for n < len(values) && i < len(col.offsets) {
+			values[n] = makeValueBytes(ByteArray, col.valueAt(col.offsets[i]))
 			values[n].columnIndex = col.columnIndex
 			n++
 			i++

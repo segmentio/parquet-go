@@ -45,8 +45,8 @@ func (t primitiveType[T]) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	return newColumnIndexer(t.class)
 }
 
-func (t primitiveType[T]) NewDictionary(columnIndex, bufferSize int) Dictionary {
-	return newDictionary(t, makeColumnIndex(columnIndex), bufferSize, t.class)
+func (t primitiveType[T]) NewDictionary(columnIndex, numValues int, data []byte) Dictionary {
+	return newDictionary(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data, t.class)
 }
 
 func (t primitiveType[T]) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
@@ -55,6 +55,10 @@ func (t primitiveType[T]) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuf
 
 func (t primitiveType[T]) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newColumnReader(t, makeColumnIndex(columnIndex), bufferSize, t.class)
+}
+
+func (t primitiveType[T]) NewPage(columnIndex, numValues int, data []byte) Page {
+	return newPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data, t.class)
 }
 
 func (t primitiveType[T]) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
@@ -87,8 +91,8 @@ func (t byteArrayType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	return newByteArrayColumnIndexer(sizeLimit)
 }
 
-func (t byteArrayType) NewDictionary(columnIndex, bufferSize int) Dictionary {
-	return newByteArrayDictionary(t, makeColumnIndex(columnIndex), bufferSize)
+func (t byteArrayType) NewDictionary(columnIndex, numValues int, data []byte) Dictionary {
+	return newByteArrayDictionary(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
 func (t byteArrayType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
@@ -97,6 +101,10 @@ func (t byteArrayType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer
 
 func (t byteArrayType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
+}
+
+func (t byteArrayType) NewPage(columnIndex, numValues int, data []byte) Page {
+	return newByteArrayPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
 func (t byteArrayType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
@@ -129,8 +137,8 @@ func (t *fixedLenByteArrayType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	return newFixedLenByteArrayColumnIndexer(t.length, sizeLimit)
 }
 
-func (t *fixedLenByteArrayType) NewDictionary(columnIndex, bufferSize int) Dictionary {
-	return newFixedLenByteArrayDictionary(t, makeColumnIndex(columnIndex), bufferSize)
+func (t *fixedLenByteArrayType) NewDictionary(columnIndex, numValues int, data []byte) Dictionary {
+	return newFixedLenByteArrayDictionary(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
 func (t *fixedLenByteArrayType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
@@ -139,6 +147,10 @@ func (t *fixedLenByteArrayType) NewColumnBuffer(columnIndex, bufferSize int) Col
 
 func (t *fixedLenByteArrayType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newFixedLenByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
+}
+
+func (t fixedLenByteArrayType) NewPage(columnIndex, numValues int, data []byte) Page {
+	return newFixedLenByteArrayPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data, t.Length())
 }
 
 func (t *fixedLenByteArrayType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
@@ -165,18 +177,18 @@ func (t *intType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	}
 }
 
-func (t *intType) NewDictionary(columnIndex, bufferSize int) Dictionary {
+func (t *intType) NewDictionary(columnIndex, numValues int, data []byte) Dictionary {
 	if t.IsSigned {
 		if t.BitWidth == 64 {
-			return newDictionary(t, makeColumnIndex(columnIndex), bufferSize, &int64Class)
+			return newDictionary(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data, &int64Class)
 		} else {
-			return newDictionary(t, makeColumnIndex(columnIndex), bufferSize, &int32Class)
+			return newDictionary(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data, &int32Class)
 		}
 	} else {
 		if t.BitWidth == 64 {
-			return newDictionary(t, makeColumnIndex(columnIndex), bufferSize, &uint64Class)
+			return newDictionary(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data, &uint64Class)
 		} else {
-			return newDictionary(t, makeColumnIndex(columnIndex), bufferSize, &uint32Class)
+			return newDictionary(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data, &uint32Class)
 		}
 	}
 }
@@ -213,6 +225,22 @@ func (t *intType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	}
 }
 
+func (t *intType) NewPage(columnIndex, numValues int, data []byte) Page {
+	if t.IsSigned {
+		if t.BitWidth == 64 {
+			return newPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data, &int64Class)
+		} else {
+			return newPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data, &int32Class)
+		}
+	} else {
+		if t.BitWidth == 64 {
+			return newPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data, &uint64Class)
+		} else {
+			return newPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data, &uint32Class)
+		}
+	}
+}
+
 func (t *intType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
 	if t.IsSigned {
 		if t.BitWidth == 64 {
@@ -233,8 +261,8 @@ func (t *dateType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	return newColumnIndexer(&int32Class)
 }
 
-func (t *dateType) NewDictionary(columnIndex, bufferSize int) Dictionary {
-	return newDictionary(t, makeColumnIndex(columnIndex), bufferSize, &int32Class)
+func (t *dateType) NewDictionary(columnIndex, numValues int, data []byte) Dictionary {
+	return newDictionary(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data, &int32Class)
 }
 
 func (t *dateType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
@@ -243,6 +271,10 @@ func (t *dateType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 
 func (t *dateType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newColumnReader(t, makeColumnIndex(columnIndex), bufferSize, &int32Class)
+}
+
+func (t *dateType) NewPage(columnIndex, numValues int, data []byte) Page {
+	return newPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data, &int32Class)
 }
 
 func (t *dateType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
@@ -257,11 +289,11 @@ func (t *timeType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	}
 }
 
-func (t *timeType) NewDictionary(columnIndex, bufferSize int) Dictionary {
+func (t *timeType) NewDictionary(columnIndex, numValues int, data []byte) Dictionary {
 	if t.Unit.Millis != nil {
-		return newDictionary(t, makeColumnIndex(columnIndex), bufferSize, &int32Class)
+		return newDictionary(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data, &int32Class)
 	} else {
-		return newDictionary(t, makeColumnIndex(columnIndex), bufferSize, &int64Class)
+		return newDictionary(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data, &int64Class)
 	}
 }
 
@@ -281,6 +313,14 @@ func (t *timeType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	}
 }
 
+func (t *timeType) NewPage(columnIndex, numValues int, data []byte) Page {
+	if t.Unit.Millis != nil {
+		return newPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data, &int32Class)
+	} else {
+		return newPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data, &int64Class)
+	}
+}
+
 func (t *timeType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
 	if t.Unit.Millis != nil {
 		return readDictionary(t, makeColumnIndex(columnIndex), numValues, decoder, &int32Class)
@@ -293,8 +333,8 @@ func (t *timestampType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	return newColumnIndexer(&int64Class)
 }
 
-func (t *timestampType) NewDictionary(columnIndex, bufferSize int) Dictionary {
-	return newDictionary(t, makeColumnIndex(columnIndex), bufferSize, &int64Class)
+func (t *timestampType) NewDictionary(columnIndex, numValues int, data []byte) Dictionary {
+	return newDictionary(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data, &int64Class)
 }
 
 func (t *timestampType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
@@ -303,6 +343,10 @@ func (t *timestampType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffe
 
 func (t *timestampType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
 	return newColumnReader(t, makeColumnIndex(columnIndex), bufferSize, &int64Class)
+}
+
+func (t *timestampType) NewPage(columnIndex, numValues int, data []byte) Page {
+	return newPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data, &int64Class)
 }
 
 func (t *timestampType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {

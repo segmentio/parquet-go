@@ -295,7 +295,7 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 		}
 
 		if isDictionaryEncoding(encoding) {
-			dictionary = columnType.NewDictionary(columnIndex, defaultDictBufferSize)
+			dictionary = columnType.NewDictionary(columnIndex, 0, make([]byte, 0, defaultDictBufferSize))
 			columnType = dictionary.Type()
 		}
 

@@ -92,5 +92,5 @@ func (u *unsupported) error() error {
 }
 
 func isCompressed(c compress.Codec) bool {
-	return c.CompressionCodec() != format.Uncompressed
+	return c != nil && c.CompressionCodec() != format.Uncompressed
 }

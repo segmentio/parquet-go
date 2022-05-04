@@ -68,7 +68,7 @@ func (buf *Buffer) configure(schema *Schema) {
 
 		if isDictionaryEncoding(encoding) {
 			bufferSize /= 2
-			dictionary = columnType.NewDictionary(columnIndex, bufferSize)
+			dictionary = columnType.NewDictionary(columnIndex, 0, make([]byte, 0, bufferSize))
 			columnType = dictionary.Type()
 		}
 

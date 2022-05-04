@@ -68,11 +68,12 @@ type byteArrayDictionary struct {
 	index map[string]int32
 }
 
-func newByteArrayDictionary(typ Type, columnIndex int16, bufferSize int) *byteArrayDictionary {
+func newByteArrayDictionary(typ Type, columnIndex int16, numValues int32, values []byte) *byteArrayDictionary {
 	return &byteArrayDictionary{
 		typ: typ,
 		byteArrayPage: byteArrayPage{
-			values:      encoding.MakeByteArrayList(dictCap(bufferSize, 16)),
+			offsets:     makeByteArrayOffsets(numValues, values),
+			values:      values,
 			columnIndex: ^columnIndex,
 		},
 	}
@@ -82,44 +83,45 @@ func readByteArrayDictionary(typ Type, columnIndex int16, numValues int, decoder
 	d := &byteArrayDictionary{
 		typ: typ,
 		byteArrayPage: byteArrayPage{
-			values:      encoding.MakeByteArrayList(atLeastOne(numValues)),
+			offsets:     make([]uint32, 0, numValues),
+			values:      make([]byte, 0, 8*numValues),
 			columnIndex: ^columnIndex,
 		},
 	}
 
+	buffer := encoding.MakeByteArrayList(atLeastOne(numValues)) // TODO: remove
 	for {
-		if d.values.Len() == d.values.Cap() {
-			d.values.Grow(d.values.Len())
-		}
-		_, err := decoder.DecodeByteArray(&d.values)
+		_, err := decoder.DecodeByteArray(&buffer)
 		if err != nil {
 			if err == io.EOF {
 				err = nil
 			}
 			return d, err
 		}
+		buffer.Range(func(value []byte) bool {
+			d.append(value)
+			return true
+		})
+		buffer.Reset()
 	}
 }
 
 func (d *byteArrayDictionary) Type() Type { return newIndexedType(d.typ, d) }
 
-func (d *byteArrayDictionary) Len() int { return d.values.Len() }
+func (d *byteArrayDictionary) Len() int { return len(d.offsets) }
 
 func (d *byteArrayDictionary) Index(i int32) Value {
-	return makeValueBytes(ByteArray, d.values.Index(int(i)))
+	return makeValueBytes(ByteArray, d.valueAt(d.offsets[i]))
 }
 
 func (d *byteArrayDictionary) Insert(indexes []int32, values []Value) {
 	_ = indexes[:len(values)]
 
 	if d.index == nil {
-		index := int32(0)
-		d.index = make(map[string]int32, d.values.Cap())
-		d.values.Range(func(v []byte) bool {
-			d.index[bits.BytesToString(v)] = index
-			index++
-			return true
-		})
+		d.index = make(map[string]int32, cap(d.offsets))
+		for index, offset := range d.offsets {
+			d.index[bits.BytesToString(d.valueAt(offset))] = int32(index)
+		}
 	}
 
 	for i, v := range values {
@@ -127,9 +129,9 @@ func (d *byteArrayDictionary) Insert(indexes []int32, values []Value) {
 
 		index, exists := d.index[string(value)]
 		if !exists {
-			d.values.Push(value)
-			index = int32(d.values.Len() - 1)
-			stringValue := bits.BytesToString(d.values.Index(int(index)))
+			index = int32(len(d.offsets))
+			d.append(value)
+			stringValue := bits.BytesToString(d.valueAt(d.offsets[index]))
 			d.index[stringValue] = index
 		}
 
@@ -145,11 +147,11 @@ func (d *byteArrayDictionary) Lookup(indexes []int32, values []Value) {
 
 func (d *byteArrayDictionary) Bounds(indexes []int32) (min, max Value) {
 	if len(indexes) > 0 {
-		minValue := d.values.Index(int(indexes[0]))
+		minValue := d.valueAt(d.offsets[indexes[0]])
 		maxValue := minValue
 
 		for _, i := range indexes[1:] {
-			value := d.values.Index(int(i))
+			value := d.valueAt(d.offsets[i])
 			switch {
 			case bytes.Compare(value, minValue) < 0:
 				minValue = value
@@ -165,7 +167,8 @@ func (d *byteArrayDictionary) Bounds(indexes []int32) (min, max Value) {
 }
 
 func (d *byteArrayDictionary) Reset() {
-	d.values.Reset()
+	d.offsets = d.offsets[:0]
+	d.values = d.values[:0]
 	d.index = nil
 }
 
@@ -179,13 +182,13 @@ type fixedLenByteArrayDictionary struct {
 	index map[string]int32
 }
 
-func newFixedLenByteArrayDictionary(typ Type, columnIndex int16, bufferSize int) *fixedLenByteArrayDictionary {
+func newFixedLenByteArrayDictionary(typ Type, columnIndex int16, numValues int32, data []byte) *fixedLenByteArrayDictionary {
 	size := typ.Length()
 	return &fixedLenByteArrayDictionary{
 		typ: typ,
 		fixedLenByteArrayPage: fixedLenByteArrayPage{
 			size:        size,
-			data:        make([]byte, 0, dictCap(bufferSize, size)*size),
+			data:        data,
 			columnIndex: ^columnIndex,
 		},
 	}
@@ -316,10 +319,29 @@ func (t *indexedType) NewColumnReader(columnIndex, bufferSize int) ColumnReader 
 	return newIndexedColumnReader(t.dict, t, makeColumnIndex(columnIndex), bufferSize)
 }
 
+func (t *indexedType) NewPage(columnIndex, numValues int, data []byte) Page {
+	return newIndexedPage(t.dict, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
+}
+
 type indexedPage struct {
 	dict        Dictionary
 	values      []int32
 	columnIndex int16
+}
+
+func newIndexedPage(dict Dictionary, columnIndex int16, numValues int32, data []byte) *indexedPage {
+	values := bits.BytesToInt32(data)
+	for len(values) < int(numValues) {
+		values = append(values, 0)
+	}
+	if len(values) > int(numValues) {
+		values = values[:numValues]
+	}
+	return &indexedPage{
+		dict:        dict,
+		values:      values,
+		columnIndex: ^columnIndex,
+	}
 }
 
 func (page *indexedPage) Column() int { return int(^page.columnIndex) }

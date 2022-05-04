@@ -161,7 +161,7 @@ func TestBuffer(t *testing.T) {
 				typ      parquet.Type
 			}{
 				{scenario: "plain", typ: test.typ},
-				{scenario: "indexed", typ: test.typ.NewDictionary(0, 0).Type()},
+				{scenario: "indexed", typ: test.typ.NewDictionary(0, 0, nil).Type()},
 			} {
 				t.Run(config.scenario, func(t *testing.T) {
 					for _, mod := range [...]struct {

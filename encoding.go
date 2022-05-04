@@ -7,6 +7,7 @@ import (
 	"github.com/segmentio/parquet-go/encoding/plain"
 	"github.com/segmentio/parquet-go/encoding/rle"
 	"github.com/segmentio/parquet-go/format"
+	"github.com/segmentio/parquet-go/internal/bits"
 )
 
 var (
@@ -84,6 +85,15 @@ func LookupEncoding(enc format.Encoding) encoding.Encoding {
 		}
 	}
 	return encoding.NotSupported{}
+}
+
+func lookupLevelEncoding(enc format.Encoding, max int8) encoding.Encoding {
+	switch enc {
+	case format.RLE:
+		return &levelEncodings[bits.Len8(max)-1]
+	default:
+		return encoding.NotSupported{}
+	}
 }
 
 func canEncode(e encoding.Encoding, k Kind) bool {
