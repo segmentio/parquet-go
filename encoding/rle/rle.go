@@ -34,6 +34,16 @@ func (e *Encoding) String() string {
 	return "RLE"
 }
 
+func (e *Encoding) EncodeBoolean(dst []byte, src []bool) ([]byte, error) {
+	// In the case of encoding a boolean values, the 4 bytes length of the
+	// output is expected by the parquet format. We add the bytes as placeholder
+	// before appending the encoded data.
+	dst = append(dst[:0], 0, 0, 0, 0)
+	dst, err := encodeInt8(dst, bits.BytesToInt8(bits.BoolToBytes(src)), 1)
+	binary.LittleEndian.PutUint32(dst, uint32(len(dst))-4)
+	return dst, e.wrap(err)
+}
+
 func (e *Encoding) EncodeInt8(dst []byte, src []int8) ([]byte, error) {
 	dst, err := encodeInt8(dst[:0], src, uint(e.BitWidth))
 	return dst, e.wrap(err)
@@ -42,6 +52,23 @@ func (e *Encoding) EncodeInt8(dst []byte, src []int8) ([]byte, error) {
 func (e *Encoding) EncodeInt32(dst []byte, src []int32) ([]byte, error) {
 	dst, err := encodeInt32(dst[:0], src, uint(e.BitWidth))
 	return dst, e.wrap(err)
+}
+
+func (e *Encoding) DecodeBoolean(dst []bool, src []byte) ([]bool, error) {
+	if len(src) == 4 {
+		return dst[:0], nil
+	}
+	if len(src) < 4 {
+		return dst[:0], fmt.Errorf("input shorter than 4 bytes: %w", io.ErrUnexpectedEOF)
+	}
+	n := int(binary.LittleEndian.Uint32(src))
+	src = src[4:]
+	if n > len(src) {
+		return dst[:0], fmt.Errorf("input shorter than length prefix: %d < %d: %w", len(src), n, io.ErrUnexpectedEOF)
+	}
+	buf := bits.BytesToInt8(bits.BoolToBytes(dst))
+	buf, err := decodeInt8(buf[:0], src[:n], 1)
+	return bits.BytesToBool(bits.Int8ToBytes(buf)), e.wrap(err)
 }
 
 func (e *Encoding) DecodeInt8(dst []int8, src []byte) ([]int8, error) {

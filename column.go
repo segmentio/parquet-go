@@ -662,8 +662,8 @@ func (c *Column) decodeDataPageV2(header DataPageHeaderV2, page *dataPage) (Page
 }
 
 func (c *Column) decodeDataPage(header DataPageHeader, numValues int64, page *dataPage, data []byte) (Page, error) {
-	var encoding = LookupEncoding(header.Encoding())
-	var pageType = c.Type()
+	encoding := LookupEncoding(header.Encoding())
+	pageType := c.Type()
 
 	if isDictionaryEncoding(encoding) {
 		// In some legacy configurations, the PLAIN_DICTIONARY encoding is used
