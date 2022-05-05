@@ -15,6 +15,13 @@ type booleanPage struct {
 	columnIndex int16
 }
 
+func newBooleanPage(columnIndex int16, numValues int32, data []byte) *booleanPage {
+	return &booleanPage{
+		values:      bits.BytesToBool(data),
+		columnIndex: columnIndex,
+	}
+}
+
 func (page *booleanPage) Column() int { return int(^page.columnIndex) }
 
 func (page *booleanPage) Dictionary() Dictionary { return nil }
@@ -139,6 +146,13 @@ type int32Page struct {
 	columnIndex int16
 }
 
+func newInt32Page(columnIndex int16, numValues int32, data []byte) *int32Page {
+	return &int32Page{
+		values:      bits.BytesToInt32(data),
+		columnIndex: columnIndex,
+	}
+}
+
 func (page *int32Page) Column() int { return int(^page.columnIndex) }
 
 func (page *int32Page) Dictionary() Dictionary { return nil }
@@ -227,6 +241,13 @@ func (r *int32PageReader) ReadValues(values []Value) (n int, err error) {
 type int64Page struct {
 	values      []int64
 	columnIndex int16
+}
+
+func newInt64Page(columnIndex int16, numValues int32, data []byte) *int64Page {
+	return &int64Page{
+		values:      bits.BytesToInt64(data),
+		columnIndex: columnIndex,
+	}
 }
 
 func (page *int64Page) Column() int { return int(^page.columnIndex) }
@@ -411,6 +432,13 @@ type floatPage struct {
 	columnIndex int16
 }
 
+func newFloatPage(columnIndex int16, numValues int32, data []byte) *floatPage {
+	return &floatPage{
+		values:      bits.BytesToFloat32(data),
+		columnIndex: columnIndex,
+	}
+}
+
 func (page *floatPage) Column() int { return int(^page.columnIndex) }
 
 func (page *floatPage) Dictionary() Dictionary { return nil }
@@ -499,6 +527,13 @@ func (r *floatPageReader) ReadValues(values []Value) (n int, err error) {
 type doublePage struct {
 	values      []float64
 	columnIndex int16
+}
+
+func newDoublePage(columnIndex int16, numValues int32, data []byte) *doublePage {
+	return &doublePage{
+		values:      bits.BytesToFloat64(data),
+		columnIndex: columnIndex,
+	}
 }
 
 func (page *doublePage) Column() int { return int(^page.columnIndex) }
@@ -591,6 +626,10 @@ func (r *doublePageReader) ReadValues(values []Value) (n int, err error) {
 
 type uint32Page struct{ *int32Page }
 
+func newUint32Page(columnIndex int16, numValues int32, data []byte) uint32Page {
+	return uint32Page{newInt32Page(columnIndex, numValues, data)}
+}
+
 func (page uint32Page) min() uint32 { return bits.MinUint32(bits.Int32ToUint32(page.values)) }
 
 func (page uint32Page) max() uint32 { return bits.MaxUint32(bits.Int32ToUint32(page.values)) }
@@ -619,6 +658,10 @@ func (page uint32Page) Slice(i, j int64) BufferedPage {
 func (page uint32Page) Buffer() BufferedPage { return page }
 
 type uint64Page struct{ *int64Page }
+
+func newUint64Page(columnIndex int16, numValues int32, data []byte) uint64Page {
+	return uint64Page{newInt64Page(columnIndex, numValues, data)}
+}
 
 func (page uint64Page) min() uint64 { return bits.MinUint64(bits.Int64ToUint64(page.values)) }
 
