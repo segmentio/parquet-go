@@ -123,12 +123,12 @@ func (e *BinaryPackedEncoding) encode(dst []byte, totalValues int, valueAt func(
 
 func (e *BinaryPackedEncoding) DecodeInt32(dst []int32, src []byte) ([]int32, error) {
 	dst, _, err := e.decodeInt32(dst[:0], src)
-	return dst, err
+	return dst, e.wrap(err)
 }
 
 func (e *BinaryPackedEncoding) DecodeInt64(dst []int64, src []byte) ([]int64, error) {
 	dst, _, err := e.decodeInt64(dst[:0], src)
-	return dst, err
+	return dst, e.wrap(err)
 }
 
 func (e *BinaryPackedEncoding) decodeInt32(dst []int32, src []byte) ([]int32, []byte, error) {
@@ -142,9 +142,9 @@ func (e *BinaryPackedEncoding) decodeInt64(dst []int64, src []byte) ([]int64, []
 }
 
 func (e *BinaryPackedEncoding) decode(src []byte, observe func(int64)) ([]byte, error) {
-	src, blockSize, numMiniBlocks, totalValues, firstValue, err := readBinaryPackedHeader(src)
+	blockSize, numMiniBlocks, totalValues, firstValue, src, err := decodeBinaryPackedHeader(src)
 	if err != nil {
-		return src, encoding.Error(e, err)
+		return src, err
 	}
 	if totalValues == 0 {
 		return src, nil
@@ -162,10 +162,12 @@ func (e *BinaryPackedEncoding) decode(src []byte, observe func(int64)) ([]byte, 
 		block = block[:blockSize]
 	}
 
+	miniBlockData := make([]byte, 256)
+
 	for totalValues > 0 && len(src) > 0 {
 		var minDelta int64
 		var bitWidths []byte
-		src, minDelta, bitWidths = readBinaryPackedBlock(src, numMiniBlocks)
+		minDelta, bitWidths, src = decodeBinaryPackedBlock(src, numMiniBlocks)
 
 		blockOffset := 0
 		for i := range block {
@@ -174,34 +176,41 @@ func (e *BinaryPackedEncoding) decode(src []byte, observe func(int64)) ([]byte, 
 
 		for _, bitWidth := range bitWidths {
 			if bitWidth == 0 {
-				blockOffset += numValuesInMiniBlock
+				n := numValuesInMiniBlock
+				if n > totalValues {
+					n = totalValues
+				}
+				blockOffset += n
+				totalValues -= n
 			} else {
 				miniBlockSize := (numValuesInMiniBlock * int(bitWidth)) / 8
-				miniBlockData := ([]byte)(nil)
-
-				if len(src) < miniBlockSize {
-					miniBlockSize = len(src)
+				if cap(miniBlockData) < miniBlockSize {
+					miniBlockData = make([]byte, miniBlockSize, miniBlockSize)
+				} else {
+					miniBlockData = miniBlockData[:miniBlockSize]
 				}
 
-				miniBlockData, src = src[:miniBlockSize], src[miniBlockSize:]
+				n := copy(miniBlockData, src)
+				src = src[n:]
 				bitOffset := uint(0)
 
-				for i := 0; i < numValuesInMiniBlock; i++ {
+				for count := numValuesInMiniBlock; count > 0 && totalValues > 0; count-- {
 					delta := int64(0)
 
 					for b := uint(0); b < uint(bitWidth); b++ {
-						x := bitOffset / 8
-						y := bitOffset % 8
+						x := (bitOffset + b) / 8
+						y := (bitOffset + b) % 8
 						delta |= int64((miniBlockData[x]>>y)&1) << b
-						bitOffset++
 					}
 
 					block[blockOffset] = delta
 					blockOffset++
+					totalValues--
+					bitOffset += uint(bitWidth)
 				}
 			}
 
-			if len(src) == 0 {
+			if totalValues == 0 {
 				break
 			}
 		}
@@ -211,23 +220,25 @@ func (e *BinaryPackedEncoding) decode(src []byte, observe func(int64)) ([]byte, 
 		for i := 1; i < len(block); i++ {
 			block[i] += block[i-1]
 		}
-
-		values := block
-		if len(values) > totalValues {
-			values = values[:totalValues]
-		}
+		values := block[:blockOffset]
 		for _, v := range values {
 			observe(v)
 		}
 		lastValue = values[len(values)-1]
-		totalValues -= len(values)
 	}
 
 	if totalValues > 0 {
-		return src, encoding.Errorf(e, "%d missing values: %w", totalValues, io.ErrUnexpectedEOF)
+		return src, fmt.Errorf("%d missing values: %w", totalValues, io.ErrUnexpectedEOF)
 	}
 
 	return src, nil
+}
+
+func (e *BinaryPackedEncoding) wrap(err error) error {
+	if err != nil {
+		err = encoding.Error(e, err)
+	}
+	return err
 }
 
 func appendBinaryPackedHeader(dst []byte, blockSize, numMiniBlocks, totalValues int, firstValue int64) []byte {
@@ -248,7 +259,7 @@ func appendBinaryPackedBlock(dst []byte, minDelta int64, bitWidths []byte) []byt
 	return dst
 }
 
-func readBinaryPackedHeader(src []byte) (next []byte, blockSize, numMiniBlocks, totalValues int, firstValue int64, err error) {
+func decodeBinaryPackedHeader(src []byte) (blockSize, numMiniBlocks, totalValues int, firstValue int64, next []byte, err error) {
 	u := uint64(0)
 	n := 0
 	i := 0
@@ -278,16 +289,16 @@ func readBinaryPackedHeader(src []byte) (next []byte, blockSize, numMiniBlocks, 
 		err = fmt.Errorf("invalid total number of values is negative (%d)", totalValues)
 	}
 
-	return src[i:], blockSize, numMiniBlocks, totalValues, firstValue, err
+	return blockSize, numMiniBlocks, totalValues, firstValue, src[i:], err
 }
 
-func readBinaryPackedBlock(src []byte, numMiniBlocks int) (next []byte, minDelta int64, bitWidths []byte) {
+func decodeBinaryPackedBlock(src []byte, numMiniBlocks int) (minDelta int64, bitWidths, next []byte) {
 	minDelta, n := binary.Varint(src)
 	src = src[n:]
 	if len(src) < numMiniBlocks {
-		bitWidths, src = src, nil
+		bitWidths, next = src, nil
 	} else {
-		bitWidths, src = src[:numMiniBlocks], src[numMiniBlocks:]
+		bitWidths, next = src[:numMiniBlocks], src[numMiniBlocks:]
 	}
-	return src, minDelta, bitWidths
+	return minDelta, bitWidths, next
 }

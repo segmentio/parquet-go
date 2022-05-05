@@ -5,7 +5,6 @@ import (
 	"math/rand"
 	"testing"
 	"testing/quick"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/segmentio/parquet-go"
@@ -103,7 +102,9 @@ func TestColumnPageIndex(t *testing.T) {
 				},
 			} {
 				t.Run(test.scenario, func(t *testing.T) {
-					if err := quick.Check(test.function(t), nil); err != nil {
+					if err := quick.Check(test.function(t), &quick.Config{
+						Rand: rand.New(rand.NewSource(0)),
+					}); err != nil {
 						t.Error(err)
 					}
 				})
@@ -154,10 +155,10 @@ func checkColumnChunkColumnIndex(columnChunk parquet.ColumnChunk) error {
 		indexMax := columnIndex.MaxValue(pagesRead)
 
 		if !parquet.Equal(pageMin, indexMin) {
-			return fmt.Errorf("max page value mismatch: index=%x page=%x", indexMin, pageMin)
+			return fmt.Errorf("max page value mismatch: index=%q page=%q", indexMin, pageMin)
 		}
 		if !parquet.Equal(pageMax, indexMax) {
-			return fmt.Errorf("max page value mismatch: index=%x page=%x", indexMax, pageMax)
+			return fmt.Errorf("max page value mismatch: index=%q page=%q", indexMax, pageMax)
 		}
 
 		numNulls := int64(0)
@@ -250,9 +251,11 @@ func checkColumnChunkOffsetIndex(columnChunk parquet.ColumnChunk) error {
 
 func testColumnPageIndexWithFile(t *testing.T, rows rows) bool {
 	if len(rows) > 0 {
-		r := rand.New(rand.NewSource(time.Now().UnixNano()))
-		size := parquet.PageBufferSize(r.Intn(49) + 1)
-		f, err := createParquetFile(rows, size)
+		r := rand.New(rand.NewSource(5))
+		f, err := createParquetFile(rows,
+			parquet.PageBufferSize(r.Intn(49)+1),
+			parquet.ColumnIndexSizeLimit(4096),
+		)
 		if err != nil {
 			t.Error(err)
 			return false
@@ -427,15 +430,15 @@ func newColumnStats(columnType parquet.Type) *columnStats {
 
 func (c *columnStats) observe(value parquet.Value) {
 	if c.page >= len(c.minValues) {
-		c.minValues = append(c.minValues, value)
+		c.minValues = append(c.minValues, value.Clone())
 	} else if c.columnType.Compare(c.minValues[c.page], value) > 0 {
-		c.minValues[c.page] = value
+		c.minValues[c.page] = value.Clone()
 	}
 
 	if c.page >= len(c.maxValues) {
-		c.maxValues = append(c.maxValues, value)
+		c.maxValues = append(c.maxValues, value.Clone())
 	} else if c.columnType.Compare(c.maxValues[c.page], value) < 0 {
-		c.maxValues[c.page] = value
+		c.maxValues[c.page] = value.Clone()
 	}
 }
 

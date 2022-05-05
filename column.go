@@ -646,15 +646,11 @@ func (c *Column) decodeDataPageV2(header DataPageHeaderV2, page *dataPage) (Page
 		}
 	}
 
-	//fmt.Printf("%+v\n", header)
-
 	if isCompressed(c.compression) && header.IsCompressed() {
-		//fmt.Printf("compressed: %q\n", data)
 		if err := page.decompress(c.compression, data); err != nil {
 			return nil, fmt.Errorf("decompressing data page v2: %w", err)
 		}
 		data = page.data
-		//fmt.Printf("decompressed: %q\n", data)
 	}
 
 	numValues -= header.NumNulls()
@@ -670,11 +666,9 @@ func (c *Column) decodeDataPage(header DataPageHeader, numValues int64, page *da
 		// on data page headers to indicate that the page contains indexes into
 		// the dictionary page, but the page is still encoded using the RLE
 		// encoding in this case, so we convert it to RLE_DICTIONARY.
-		//fmt.Printf("%+v\n", page.dictionary)
 		pageType, encoding = Int32Type, &RLEDictionary
 	}
 
-	//fmt.Printf("decode: % 08b\n", data)
 	if err := page.decode(pageType, encoding, data); err != nil {
 		return nil, err
 	}
