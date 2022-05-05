@@ -16,8 +16,15 @@ type booleanPage struct {
 }
 
 func newBooleanPage(columnIndex int16, numValues int32, data []byte) *booleanPage {
+	values := bits.BytesToBool(data)
+	for len(values) < int(numValues) {
+		values = append(values, false)
+	}
+	if len(values) > int(numValues) {
+		values = values[:numValues]
+	}
 	return &booleanPage{
-		values:      bits.BytesToBool(data),
+		values:      values,
 		columnIndex: columnIndex,
 	}
 }
@@ -147,8 +154,15 @@ type int32Page struct {
 }
 
 func newInt32Page(columnIndex int16, numValues int32, data []byte) *int32Page {
+	values := bits.BytesToInt32(data)
+	for len(values) < int(numValues) {
+		values = append(values, 0)
+	}
+	if len(values) > int(numValues) {
+		values = values[:numValues]
+	}
 	return &int32Page{
-		values:      bits.BytesToInt32(data),
+		values:      values,
 		columnIndex: columnIndex,
 	}
 }
@@ -244,8 +258,15 @@ type int64Page struct {
 }
 
 func newInt64Page(columnIndex int16, numValues int32, data []byte) *int64Page {
+	values := bits.BytesToInt64(data)
+	for len(values) < int(numValues) {
+		values = append(values, 0)
+	}
+	if len(values) > int(numValues) {
+		values = values[:numValues]
+	}
 	return &int64Page{
-		values:      bits.BytesToInt64(data),
+		values:      values,
 		columnIndex: columnIndex,
 	}
 }
@@ -338,6 +359,20 @@ func (r *int64PageReader) ReadValues(values []Value) (n int, err error) {
 type int96Page struct {
 	values      []deprecated.Int96
 	columnIndex int16
+}
+
+func newInt96Page(columnIndex int16, numValues int32, data []byte) *int96Page {
+	values := deprecated.BytesToInt96(data)
+	for len(values) < int(numValues) {
+		values = append(values, deprecated.Int96{})
+	}
+	if len(values) > int(numValues) {
+		values = values[:numValues]
+	}
+	return &int96Page{
+		values:      values,
+		columnIndex: columnIndex,
+	}
 }
 
 func (page *int96Page) Column() int { return int(^page.columnIndex) }
@@ -433,8 +468,15 @@ type floatPage struct {
 }
 
 func newFloatPage(columnIndex int16, numValues int32, data []byte) *floatPage {
+	values := bits.BytesToFloat32(data)
+	for len(values) < int(numValues) {
+		values = append(values, 0)
+	}
+	if len(values) > int(numValues) {
+		values = values[:numValues]
+	}
 	return &floatPage{
-		values:      bits.BytesToFloat32(data),
+		values:      values,
 		columnIndex: columnIndex,
 	}
 }
@@ -530,8 +572,15 @@ type doublePage struct {
 }
 
 func newDoublePage(columnIndex int16, numValues int32, data []byte) *doublePage {
+	values := bits.BytesToFloat64(data)
+	for len(values) < int(numValues) {
+		values = append(values, 0)
+	}
+	if len(values) > int(numValues) {
+		values = values[:numValues]
+	}
 	return &doublePage{
-		values:      bits.BytesToFloat64(data),
+		values:      values,
 		columnIndex: columnIndex,
 	}
 }
