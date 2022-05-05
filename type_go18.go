@@ -53,10 +53,6 @@ func (t primitiveType[T]) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuf
 	return newColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize, t.class)
 }
 
-func (t primitiveType[T]) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
-	return newColumnReader(t, makeColumnIndex(columnIndex), bufferSize, t.class)
-}
-
 func (t primitiveType[T]) NewPage(columnIndex, numValues int, data []byte) Page {
 	return newPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data, t.class)
 }
@@ -99,10 +95,6 @@ func (t byteArrayType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer
 	return newByteArrayColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
-func (t byteArrayType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
-	return newByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
-}
-
 func (t byteArrayType) NewPage(columnIndex, numValues int, data []byte) Page {
 	return newByteArrayPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
@@ -143,10 +135,6 @@ func (t *fixedLenByteArrayType) NewDictionary(columnIndex, numValues int, data [
 
 func (t *fixedLenByteArrayType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 	return newFixedLenByteArrayColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
-}
-
-func (t *fixedLenByteArrayType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
-	return newFixedLenByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t fixedLenByteArrayType) NewPage(columnIndex, numValues int, data []byte) Page {
@@ -209,22 +197,6 @@ func (t *intType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 	}
 }
 
-func (t *intType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
-	if t.IsSigned {
-		if t.BitWidth == 64 {
-			return newColumnReader(t, makeColumnIndex(columnIndex), bufferSize, &int64Class)
-		} else {
-			return newColumnReader(t, makeColumnIndex(columnIndex), bufferSize, &int32Class)
-		}
-	} else {
-		if t.BitWidth == 64 {
-			return newColumnReader(t, makeColumnIndex(columnIndex), bufferSize, &uint64Class)
-		} else {
-			return newColumnReader(t, makeColumnIndex(columnIndex), bufferSize, &uint32Class)
-		}
-	}
-}
-
 func (t *intType) NewPage(columnIndex, numValues int, data []byte) Page {
 	if t.IsSigned {
 		if t.BitWidth == 64 {
@@ -269,10 +241,6 @@ func (t *dateType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 	return newColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize, &int32Class)
 }
 
-func (t *dateType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
-	return newColumnReader(t, makeColumnIndex(columnIndex), bufferSize, &int32Class)
-}
-
 func (t *dateType) NewPage(columnIndex, numValues int, data []byte) Page {
 	return newPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data, &int32Class)
 }
@@ -305,14 +273,6 @@ func (t *timeType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 	}
 }
 
-func (t *timeType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
-	if t.Unit.Millis != nil {
-		return newColumnReader(t, makeColumnIndex(columnIndex), bufferSize, &int32Class)
-	} else {
-		return newColumnReader(t, makeColumnIndex(columnIndex), bufferSize, &int64Class)
-	}
-}
-
 func (t *timeType) NewPage(columnIndex, numValues int, data []byte) Page {
 	if t.Unit.Millis != nil {
 		return newPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data, &int32Class)
@@ -339,10 +299,6 @@ func (t *timestampType) NewDictionary(columnIndex, numValues int, data []byte) D
 
 func (t *timestampType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 	return newColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize, &int64Class)
-}
-
-func (t *timestampType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
-	return newColumnReader(t, makeColumnIndex(columnIndex), bufferSize, &int64Class)
 }
 
 func (t *timestampType) NewPage(columnIndex, numValues int, data []byte) Page {

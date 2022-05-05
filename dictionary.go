@@ -315,10 +315,6 @@ func (t *indexedType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer 
 	return newIndexedColumnBuffer(t.dict, t, makeColumnIndex(columnIndex), bufferSize)
 }
 
-func (t *indexedType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
-	return newIndexedColumnReader(t.dict, t, makeColumnIndex(columnIndex), bufferSize)
-}
-
 func (t *indexedType) NewPage(columnIndex, numValues int, data []byte) Page {
 	return newIndexedPage(t.dict, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
@@ -519,85 +515,6 @@ func (col *indexedColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {
 		v.columnIndex = col.columnIndex
 		return append(row, v), nil
 	}
-}
-
-type indexedColumnReader struct {
-	dict        Dictionary
-	typ         Type
-	decoder     encoding.Decoder
-	buffer      []int32
-	offset      int
-	remain      int
-	columnIndex int16
-}
-
-func newIndexedColumnReader(dict Dictionary, typ Type, columnIndex int16, bufferSize int) *indexedColumnReader {
-	return &indexedColumnReader{
-		dict:        dict,
-		typ:         typ,
-		buffer:      make([]int32, 0, atLeastOne(bufferSize)),
-		columnIndex: ^columnIndex,
-	}
-}
-
-func (r *indexedColumnReader) Type() Type { return r.typ }
-
-func (r *indexedColumnReader) Column() int { return int(^r.columnIndex) }
-
-func (r *indexedColumnReader) ReadValues(values []Value) (int, error) {
-	i := 0
-	for {
-		for r.offset < len(r.buffer) && i < len(values) {
-			count := len(r.buffer) - r.offset
-			limit := len(values) - i
-
-			if count > limit {
-				count = limit
-			}
-
-			indexes := r.buffer[r.offset : r.offset+count]
-			dictLen := r.dict.Len()
-			for _, index := range indexes {
-				if index < 0 || int(index) >= dictLen {
-					return i, fmt.Errorf("reading value from indexed page: index out of bounds: %d/%d", index, dictLen)
-				}
-			}
-
-			r.dict.Lookup(indexes, values[i:])
-			r.offset += count
-			r.remain -= count
-
-			j := i + int(count)
-			for i < j {
-				values[i].columnIndex = r.columnIndex
-				i++
-			}
-		}
-
-		if r.remain == 0 {
-			return i, io.EOF
-		}
-		if i == len(values) {
-			return i, nil
-		}
-
-		length := min(r.remain, cap(r.buffer))
-		buffer := r.buffer[:length]
-		n, err := r.decoder.DecodeInt32(buffer)
-		if n == 0 {
-			return i, err
-		}
-
-		r.buffer = buffer[:n]
-		r.offset = 0
-	}
-}
-
-func (r *indexedColumnReader) Reset(numValues int, decoder encoding.Decoder) {
-	r.decoder = decoder
-	r.buffer = r.buffer[:0]
-	r.offset = 0
-	r.remain = numValues
 }
 
 type indexedColumnIndex struct{ col *indexedColumnBuffer }

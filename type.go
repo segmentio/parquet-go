@@ -137,22 +137,6 @@ type Type interface {
 	// The method panics if it is called on a group type.
 	NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer
 
-	// Creates a reader for columns of this type.
-	//
-	// Column readers are created using the index of the column they are reading
-	// values from (relative to the parent schema). The column index will be set
-	// on values read from the reader.
-	//
-	// The buffer size is given in bytes, because we want to control memory
-	// consumption of the application, which is simpler to achieve with buffer
-	// size expressed in bytes rather than number of elements.
-	//
-	// The returned reader may implement extensions that can be tested via type
-	// assertions. For example, on a INT32 type, the reader could implement the
-	// parquet.Int32Reader interface to allow programs to more efficiently read
-	// columns of INT32 values.
-	NewColumnReader(columnIndex, bufferSize int) ColumnReader
-
 	// Creates a dictionary holding values of this type.
 	//
 	// If the length of data is not zero, it must contain PLAIN encoded values
@@ -422,10 +406,6 @@ func (t *stringType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 	return newByteArrayColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
-func (t *stringType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
-	return newByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
-}
-
 func (t *stringType) NewPage(columnIndex, numValues int, data []byte) Page {
 	return newByteArrayPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
@@ -479,10 +459,6 @@ func (t *uuidType) NewDictionary(columnIndex, numValues int, data []byte) Dictio
 
 func (t *uuidType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 	return newFixedLenByteArrayColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
-}
-
-func (t *uuidType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
-	return newFixedLenByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t *uuidType) NewPage(columnIndex, numValues int, data []byte) Page {
@@ -542,10 +518,6 @@ func (t *enumType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 	return newByteArrayColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
-func (t *enumType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
-	return newByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
-}
-
 func (t *enumType) NewPage(columnIndex, numValues int, data []byte) Page {
 	return newByteArrayPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
@@ -603,10 +575,6 @@ func (t *jsonType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 	return newByteArrayColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
-func (t *jsonType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
-	return newByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
-}
-
 func (t *jsonType) NewPage(columnIndex, numValues int, data []byte) Page {
 	return newByteArrayPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
@@ -658,10 +626,6 @@ func (t *bsonType) NewDictionary(columnIndex, numValues int, data []byte) Dictio
 
 func (t *bsonType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 	return newByteArrayColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
-}
-
-func (t *bsonType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
-	return newByteArrayColumnReader(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t *bsonType) NewPage(columnIndex, numValues int, data []byte) Page {
@@ -890,10 +854,6 @@ func (t *listType) NewColumnBuffer(int, int) ColumnBuffer {
 	panic("cannot create column buffer from parquet LIST type")
 }
 
-func (t *listType) NewColumnReader(int, int) ColumnReader {
-	panic("cannot create column reader from parquet LIST type")
-}
-
 func (t *listType) NewPage(int, int, []byte) Page {
 	panic("cannot create page from parquet LIST type")
 }
@@ -952,10 +912,6 @@ func (t *mapType) NewColumnBuffer(int, int) ColumnBuffer {
 	panic("cannot create column buffer from parquet MAP type")
 }
 
-func (t *mapType) NewColumnReader(int, int) ColumnReader {
-	panic("cannot create column reader from parquet MAP type")
-}
-
 func (t *mapType) NewPage(int, int, []byte) Page {
 	panic("cannot create page from parquet MAP type")
 }
@@ -996,10 +952,6 @@ func (t *nullType) NewColumnBuffer(int, int) ColumnBuffer {
 	panic("cannot create column buffer from parquet NULL type")
 }
 
-func (t *nullType) NewColumnReader(columnIndex, bufferSize int) ColumnReader {
-	return newNullColumnReader(t, makeColumnIndex(columnIndex))
-}
-
 func (t *nullType) NewPage(columnIndex, numValues int, _ []byte) Page {
 	return newNullPage(makeColumnIndex(columnIndex), makeNumValues(numValues))
 }
@@ -1030,10 +982,6 @@ func (groupType) NewDictionary(int, int, []byte) Dictionary {
 
 func (t groupType) NewColumnBuffer(int, int) ColumnBuffer {
 	panic("cannot create column buffer from parquet group")
-}
-
-func (t groupType) NewColumnReader(int, int) ColumnReader {
-	panic("cannot create column reader from parquet group")
 }
 
 func (t groupType) NewPage(int, int, []byte) Page {
