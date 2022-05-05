@@ -52,9 +52,6 @@ type class[T primitive] struct {
 	max       func([]T) T
 	bounds    func([]T) (T, T)
 	encode    func(encoding.Encoding, []byte, []T) ([]byte, error)
-	decode    func(encoding.Encoding, []T, []byte) ([]T, error)
-
-	readFrom func(encoding.Decoder, []T) (int, error)
 }
 
 var boolClass = class[bool]{
@@ -70,8 +67,6 @@ var boolClass = class[bool]{
 	max:       bits.MaxBool,
 	bounds:    bits.MinMaxBool,
 	encode:    encoding.Encoding.EncodeBoolean,
-	decode:    encoding.Encoding.DecodeBoolean,
-	readFrom:  encoding.Decoder.DecodeBoolean,
 }
 
 var int32Class = class[int32]{
@@ -87,8 +82,6 @@ var int32Class = class[int32]{
 	max:       bits.MaxInt32,
 	bounds:    bits.MinMaxInt32,
 	encode:    encoding.Encoding.EncodeInt32,
-	decode:    encoding.Encoding.DecodeInt32,
-	readFrom:  encoding.Decoder.DecodeInt32,
 }
 
 var int64Class = class[int64]{
@@ -104,8 +97,6 @@ var int64Class = class[int64]{
 	max:       bits.MaxInt64,
 	bounds:    bits.MinMaxInt64,
 	encode:    encoding.Encoding.EncodeInt64,
-	decode:    encoding.Encoding.DecodeInt64,
-	readFrom:  encoding.Decoder.DecodeInt64,
 }
 
 var int96Class = class[deprecated.Int96]{
@@ -121,8 +112,6 @@ var int96Class = class[deprecated.Int96]{
 	max:       deprecated.MaxInt96,
 	bounds:    deprecated.MinMaxInt96,
 	encode:    encoding.Encoding.EncodeInt96,
-	decode:    encoding.Encoding.DecodeInt96,
-	readFrom:  encoding.Decoder.DecodeInt96,
 }
 
 var float32Class = class[float32]{
@@ -138,8 +127,6 @@ var float32Class = class[float32]{
 	max:       bits.MaxFloat32,
 	bounds:    bits.MinMaxFloat32,
 	encode:    encoding.Encoding.EncodeFloat,
-	decode:    encoding.Encoding.DecodeFloat,
-	readFrom:  encoding.Decoder.DecodeFloat,
 }
 
 var float64Class = class[float64]{
@@ -155,8 +142,6 @@ var float64Class = class[float64]{
 	max:       bits.MaxFloat64,
 	bounds:    bits.MinMaxFloat64,
 	encode:    encoding.Encoding.EncodeDouble,
-	decode:    encoding.Encoding.DecodeDouble,
-	readFrom:  encoding.Decoder.DecodeDouble,
 }
 
 var uint32Class = class[uint32]{
@@ -174,13 +159,6 @@ var uint32Class = class[uint32]{
 	encode: func(enc encoding.Encoding, dst []byte, src []uint32) ([]byte, error) {
 		return enc.EncodeInt32(dst, unsafecast.Slice[int32](src))
 	},
-	decode: func(enc encoding.Encoding, dst []uint32, src []byte) ([]uint32, error) {
-		ret, err := enc.DecodeInt32(unsafecast.Slice[int32](src), src)
-		return unsafecast.Slice[uint32](ret), err
-	},
-	readFrom: func(d encoding.Decoder, v []uint32) (int, error) {
-		return d.DecodeInt32(unsafecast.Slice[int32](v))
-	},
 }
 
 var uint64Class = class[uint64]{
@@ -197,12 +175,5 @@ var uint64Class = class[uint64]{
 	bounds:    bits.MinMaxUint64,
 	encode: func(enc encoding.Encoding, dst []byte, src []uint64) ([]byte, error) {
 		return enc.EncodeInt64(dst, unsafecast.Slice[int64](src))
-	},
-	decode: func(enc encoding.Encoding, dst []uint64, src []byte) ([]uint64, error) {
-		ret, err := enc.DecodeInt64(unsafecast.Slice[int64](dst), src)
-		return unsafecast.Slice[uint64](ret), err
-	},
-	readFrom: func(d encoding.Decoder, v []uint64) (int, error) {
-		return d.DecodeInt64(unsafecast.Slice[int64](v))
 	},
 }

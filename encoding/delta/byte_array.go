@@ -3,7 +3,6 @@ package delta
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"math"
 
 	"github.com/segmentio/parquet-go/encoding"
@@ -15,16 +14,12 @@ type ByteArrayEncoding struct {
 	encoding.NotSupported
 }
 
-func (e *ByteArrayEncoding) Encoding() format.Encoding {
-	return format.DeltaByteArray
-}
-
-func (e *ByteArrayEncoding) NewDecoder(r io.Reader) encoding.Decoder {
-	return NewByteArrayDecoder(r)
-}
-
 func (e *ByteArrayEncoding) String() string {
 	return "DELTA_BYTE_ARRAY"
+}
+
+func (e *ByteArrayEncoding) Encoding() format.Encoding {
+	return format.DeltaByteArray
 }
 
 func (e *ByteArrayEncoding) EncodeByteArray(dst, src []byte) ([]byte, error) {

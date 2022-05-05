@@ -1,7 +1,6 @@
 package bytestreamsplit
 
 import (
-	"io"
 	"math"
 
 	"github.com/segmentio/parquet-go/encoding"
@@ -14,16 +13,12 @@ type Encoding struct {
 	encoding.NotSupported
 }
 
-func (e *Encoding) Encoding() format.Encoding {
-	return format.ByteStreamSplit
-}
-
-func (e *Encoding) NewDecoder(r io.Reader) encoding.Decoder {
-	return NewDecoder(r)
-}
-
 func (e *Encoding) String() string {
 	return "BYTE_STREAM_SPLIT"
+}
+
+func (e *Encoding) Encoding() format.Encoding {
+	return format.ByteStreamSplit
 }
 
 func (e *Encoding) EncodeFloat(dst []byte, src []float32) ([]byte, error) {

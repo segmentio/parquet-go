@@ -3,7 +3,6 @@ package encoding
 import (
 	"errors"
 	"fmt"
-	"io"
 
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/format"
@@ -105,6 +104,10 @@ func CanEncodeFixedLenByteArray(e Encoding) bool {
 type NotSupported struct {
 }
 
+func (NotSupported) String() string {
+	return "NOT_SUPPORTED"
+}
+
 func (NotSupported) Encoding() format.Encoding {
 	return -1
 }
@@ -179,74 +182,6 @@ func (NotSupported) DecodeByteArray(dst, src []byte) ([]byte, error) {
 
 func (NotSupported) DecodeFixedLenByteArray(dst, src []byte, size int) ([]byte, error) {
 	return dst[:0], errNotSupported("FIXED_LEN_BYTE_ARRAY")
-}
-
-func (NotSupported) NewDecoder(io.Reader) Decoder {
-	return NotSupportedDecoder{}
-}
-
-func (NotSupported) String() string {
-	return "NOT_SUPPORTED"
-}
-
-// NotSupportedDecoder is an implementation of the Decoder interface which does
-// not support decoding any value types.
-//
-// Many parquet encodings only support decoding a subset of the parquet types,
-// they can embed this type to default to not supporting any decoding, then
-// override specific Decode* methods to provide implementations for the types
-// they do support.
-type NotSupportedDecoder struct {
-}
-
-func (NotSupportedDecoder) Encoding() format.Encoding {
-	return -1
-}
-
-func (NotSupportedDecoder) Reset(io.Reader) {
-}
-
-func (NotSupportedDecoder) DecodeBoolean([]bool) (int, error) {
-	return 0, errNotSupported("BOOLEAN")
-}
-
-func (NotSupportedDecoder) DecodeInt8([]int8) (int, error) {
-	return 0, errNotSupported("INT8")
-}
-
-func (NotSupportedDecoder) DecodeInt16([]int16) (int, error) {
-	return 0, errNotSupported("INT16")
-}
-
-func (NotSupportedDecoder) DecodeInt32([]int32) (int, error) {
-	return 0, errNotSupported("INT32")
-}
-
-func (NotSupportedDecoder) DecodeInt64([]int64) (int, error) {
-	return 0, errNotSupported("INT64")
-}
-
-func (NotSupportedDecoder) DecodeInt96([]deprecated.Int96) (int, error) {
-	return 0, errNotSupported("INT96")
-}
-
-func (NotSupportedDecoder) DecodeFloat([]float32) (int, error) {
-	return 0, errNotSupported("FLOAT")
-}
-
-func (NotSupportedDecoder) DecodeDouble([]float64) (int, error) {
-	return 0, errNotSupported("DOUBLE")
-}
-
-func (NotSupportedDecoder) DecodeByteArray(*ByteArrayList) (int, error) {
-	return 0, errNotSupported("BYTE_ARRAY")
-}
-
-func (NotSupportedDecoder) DecodeFixedLenByteArray(size int, data []byte) (int, error) {
-	return 0, errNotSupported("FIXED_LEN_BYTE_ARRAY")
-}
-
-func (NotSupportedDecoder) SetBitWidth(int) {
 }
 
 func errNotSupported(typ string) error {

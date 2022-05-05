@@ -9,7 +9,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/segmentio/parquet-go/deprecated"
-	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/format"
 	"github.com/segmentio/parquet-go/internal/bits"
 )
@@ -164,14 +163,6 @@ type Type interface {
 	// The method panics if the data is not a valid PLAIN encoded representation
 	// of the page values.
 	NewPage(columnIndex, numValues int, data []byte) Page
-
-	// Reads a dictionary with values of this type from the decoder passed as
-	// argument.
-	//
-	// The number of values is a hint to optimize the allocation of memory
-	// buffers for the dictionary. Callers that don't know how many values will
-	// be decoded should pass zero for numValues.
-	ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error)
 }
 
 // In the current parquet version supported by this library, only type-defined
@@ -410,10 +401,6 @@ func (t *stringType) NewPage(columnIndex, numValues int, data []byte) Page {
 	return newByteArrayPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
-func (t *stringType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
-	return readByteArrayDictionary(t, makeColumnIndex(columnIndex), numValues, decoder)
-}
-
 func (t *stringType) GoType() reflect.Type {
 	return reflect.TypeOf("")
 }
@@ -463,10 +450,6 @@ func (t *uuidType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 
 func (t *uuidType) NewPage(columnIndex, numValues int, data []byte) Page {
 	return newFixedLenByteArrayPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data, 16)
-}
-
-func (t *uuidType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
-	return readFixedLenByteArrayDictionary(t, makeColumnIndex(columnIndex), numValues, decoder)
 }
 
 func (t *uuidType) GoType() reflect.Type {
@@ -522,10 +505,6 @@ func (t *enumType) NewPage(columnIndex, numValues int, data []byte) Page {
 	return newByteArrayPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
-func (t *enumType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
-	return readByteArrayDictionary(t, makeColumnIndex(columnIndex), numValues, decoder)
-}
-
 func (t *enumType) GoType() reflect.Type {
 	return reflect.TypeOf("")
 }
@@ -579,10 +558,6 @@ func (t *jsonType) NewPage(columnIndex, numValues int, data []byte) Page {
 	return newByteArrayPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
-func (t *jsonType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
-	return readByteArrayDictionary(t, makeColumnIndex(columnIndex), numValues, decoder)
-}
-
 // BSON constructs a leaf node of BSON logical type.
 //
 // https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#bson
@@ -630,10 +605,6 @@ func (t *bsonType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 
 func (t *bsonType) NewPage(columnIndex, numValues int, data []byte) Page {
 	return newByteArrayPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data)
-}
-
-func (t *bsonType) ReadDictionary(columnIndex, numValues int, decoder encoding.Decoder) (Dictionary, error) {
-	return readByteArrayDictionary(t, makeColumnIndex(columnIndex), numValues, decoder)
 }
 
 // Date constructs a leaf node of DATE logical type.
@@ -858,10 +829,6 @@ func (t *listType) NewPage(int, int, []byte) Page {
 	panic("cannot create page from parquet LIST type")
 }
 
-func (t *listType) ReadDictionary(int, int, encoding.Decoder) (Dictionary, error) {
-	panic("cannot read dictionary from parquet LIST type")
-}
-
 // Map constructs a node of MAP logical type.
 //
 // https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#maps
@@ -916,10 +883,6 @@ func (t *mapType) NewPage(int, int, []byte) Page {
 	panic("cannot create page from parquet MAP type")
 }
 
-func (t *mapType) ReadDictionary(int, int, encoding.Decoder) (Dictionary, error) {
-	panic("cannot read dictionary from parquet MAP type")
-}
-
 type nullType format.NullType
 
 func (t *nullType) String() string { return (*format.NullType)(t).String() }
@@ -956,10 +919,6 @@ func (t *nullType) NewPage(columnIndex, numValues int, _ []byte) Page {
 	return newNullPage(makeColumnIndex(columnIndex), makeNumValues(numValues))
 }
 
-func (t *nullType) ReadDictionary(int, int, encoding.Decoder) (Dictionary, error) {
-	panic("cannot read dictionary from parquet NULL type")
-}
-
 type groupType struct{}
 
 func (groupType) String() string { return "group" }
@@ -986,10 +945,6 @@ func (t groupType) NewColumnBuffer(int, int) ColumnBuffer {
 
 func (t groupType) NewPage(int, int, []byte) Page {
 	panic("cannot create page from parquet group")
-}
-
-func (t groupType) ReadDictionary(int, int, encoding.Decoder) (Dictionary, error) {
-	panic("cannot read dictionary from parquet group")
 }
 
 func (groupType) Length() int { return 0 }

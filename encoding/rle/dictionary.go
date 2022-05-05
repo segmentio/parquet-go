@@ -1,9 +1,6 @@
 package rle
 
 import (
-	"fmt"
-	"io"
-
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/format"
 	"github.com/segmentio/parquet-go/internal/bits"
@@ -13,16 +10,12 @@ type DictionaryEncoding struct {
 	encoding.NotSupported
 }
 
-func (e *DictionaryEncoding) Encoding() format.Encoding {
-	return format.RLEDictionary
-}
-
-func (e *DictionaryEncoding) NewDecoder(r io.Reader) encoding.Decoder {
-	return dictionaryDecoder{rle: NewDecoder(r)}
-}
-
 func (e *DictionaryEncoding) String() string {
 	return "RLE_DICTIONARY"
+}
+
+func (e *DictionaryEncoding) Encoding() format.Encoding {
+	return format.RLEDictionary
 }
 
 func (e *DictionaryEncoding) EncodeInt32(dst []byte, src []int32) ([]byte, error) {
@@ -45,56 +38,6 @@ func (e *DictionaryEncoding) wrap(err error) error {
 		err = encoding.Error(e, err)
 	}
 	return err
-}
-
-type dictionaryDecoder struct {
-	encoding.NotSupportedDecoder
-	rle  *Decoder
-	zero bool
-}
-
-func (d dictionaryDecoder) Reset(r io.Reader) {
-	d.rle.Reset(r)
-	d.rle.SetBitWidth(0)
-	d.zero = false
-}
-
-func (d dictionaryDecoder) DecodeInt32(data []int32) (int, error) {
-	if d.zero {
-		clearInt32(data)
-		return len(data), nil
-	}
-	if d.rle.BitWidth() == 0 {
-		bitWidth, err := d.decodeBitWidth()
-		if err != nil {
-			return 0, err
-		}
-		// Sometimes, when the dictionary contains only a single value, the page
-		// can be encoded as a zero bit width to indicate that all indexes will
-		// be zero.
-		if bitWidth == 0 {
-			d.zero = true
-			clearInt32(data)
-			return len(data), nil
-		}
-		d.rle.SetBitWidth(bitWidth)
-	}
-	return d.rle.DecodeInt32(data)
-}
-
-func (d dictionaryDecoder) decodeBitWidth() (int, error) {
-	b, err := d.rle.ReadByte()
-	switch err {
-	case nil:
-		if b > 32 {
-			return 0, fmt.Errorf("decoding RLE bit width: %d>32", b)
-		}
-		return int(b), nil
-	case io.EOF:
-		return 0, err
-	default:
-		return 0, fmt.Errorf("decoding RLE bit width: %w", err)
-	}
 }
 
 func clearInt32(data []int32) {

@@ -1,8 +1,6 @@
 package plain
 
 import (
-	"io"
-
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/format"
 	"github.com/segmentio/parquet-go/internal/bits"
@@ -12,16 +10,12 @@ type DictionaryEncoding struct {
 	encoding.NotSupported
 }
 
-func (e *DictionaryEncoding) Encoding() format.Encoding {
-	return format.PlainDictionary
-}
-
-func (e *DictionaryEncoding) NewDecoder(r io.Reader) encoding.Decoder {
-	return NewDecoder(r)
-}
-
 func (e *DictionaryEncoding) String() string {
 	return "PLAIN_DICTIONARY"
+}
+
+func (e *DictionaryEncoding) Encoding() format.Encoding {
+	return format.PlainDictionary
 }
 
 func (e *DictionaryEncoding) EncodeInt32(dst []byte, src []int32) ([]byte, error) {

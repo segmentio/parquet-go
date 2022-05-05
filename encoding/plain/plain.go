@@ -22,16 +22,12 @@ const (
 type Encoding struct {
 }
 
-func (e *Encoding) Encoding() format.Encoding {
-	return format.Plain
-}
-
-func (e *Encoding) NewDecoder(r io.Reader) encoding.Decoder {
-	return NewDecoder(r)
-}
-
 func (e *Encoding) String() string {
 	return "PLAIN"
+}
+
+func (e *Encoding) Encoding() format.Encoding {
+	return format.Plain
 }
 
 func (e *Encoding) EncodeBoolean(dst []byte, src []bool) ([]byte, error) {

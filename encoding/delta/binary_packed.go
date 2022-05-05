@@ -20,16 +20,12 @@ type BinaryPackedEncoding struct {
 	encoding.NotSupported
 }
 
-func (e *BinaryPackedEncoding) Encoding() format.Encoding {
-	return format.DeltaBinaryPacked
-}
-
-func (e *BinaryPackedEncoding) NewDecoder(r io.Reader) encoding.Decoder {
-	return NewBinaryPackedDecoder(r)
-}
-
 func (e *BinaryPackedEncoding) String() string {
 	return "DELTA_BINARY_PACKED"
+}
+
+func (e *BinaryPackedEncoding) Encoding() format.Encoding {
+	return format.DeltaBinaryPacked
 }
 
 func (e *BinaryPackedEncoding) EncodeInt32(dst []byte, src []int32) ([]byte, error) {

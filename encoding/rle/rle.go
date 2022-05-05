@@ -22,16 +22,12 @@ type Encoding struct {
 	BitWidth int
 }
 
-func (e *Encoding) Encoding() format.Encoding {
-	return format.RLE
-}
-
-func (e *Encoding) NewDecoder(r io.Reader) encoding.Decoder {
-	return NewDecoder(r)
-}
-
 func (e *Encoding) String() string {
 	return "RLE"
+}
+
+func (e *Encoding) Encoding() format.Encoding {
+	return format.RLE
 }
 
 func (e *Encoding) EncodeBoolean(dst []byte, src []bool) ([]byte, error) {

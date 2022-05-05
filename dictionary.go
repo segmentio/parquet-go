@@ -2,7 +2,6 @@ package parquet
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 
 	"github.com/segmentio/parquet-go/encoding"
@@ -76,33 +75,6 @@ func newByteArrayDictionary(typ Type, columnIndex int16, numValues int32, values
 			values:      values,
 			columnIndex: ^columnIndex,
 		},
-	}
-}
-
-func readByteArrayDictionary(typ Type, columnIndex int16, numValues int, decoder encoding.Decoder) (Dictionary, error) {
-	d := &byteArrayDictionary{
-		typ: typ,
-		byteArrayPage: byteArrayPage{
-			offsets:     make([]uint32, 0, numValues),
-			values:      make([]byte, 0, 8*numValues),
-			columnIndex: ^columnIndex,
-		},
-	}
-
-	buffer := encoding.MakeByteArrayList(atLeastOne(numValues)) // TODO: remove
-	for {
-		_, err := decoder.DecodeByteArray(&buffer)
-		if err != nil {
-			if err == io.EOF {
-				err = nil
-			}
-			return d, err
-		}
-		buffer.Range(func(value []byte) bool {
-			d.append(value)
-			return true
-		})
-		buffer.Reset()
 	}
 }
 
@@ -192,40 +164,6 @@ func newFixedLenByteArrayDictionary(typ Type, columnIndex int16, numValues int32
 			columnIndex: ^columnIndex,
 		},
 	}
-}
-
-func readFixedLenByteArrayDictionary(typ Type, columnIndex int16, numValues int, decoder encoding.Decoder) (Dictionary, error) {
-	size := typ.Length()
-
-	d := &fixedLenByteArrayDictionary{
-		typ: typ,
-		fixedLenByteArrayPage: fixedLenByteArrayPage{
-			size:        size,
-			data:        make([]byte, 0, atLeastOne(numValues)*size),
-			columnIndex: ^columnIndex,
-		},
-	}
-
-	for {
-		if len(d.data) == cap(d.data) {
-			newValues := make([]byte, len(d.data), 2*cap(d.data))
-			copy(newValues, d.data)
-			d.data = newValues
-		}
-
-		n, err := decoder.DecodeFixedLenByteArray(d.size, d.data[len(d.data):cap(d.data)])
-		if n > 0 {
-			d.data = d.data[:len(d.data)+(n*d.size)]
-		}
-
-		if err == io.EOF {
-			return d, nil
-		}
-		if err != nil {
-			return nil, fmt.Errorf("reading parquet dictionary of fixed-length binary values of size %d: %w", d.size, err)
-		}
-	}
-
 }
 
 func (d *fixedLenByteArrayDictionary) Type() Type { return newIndexedType(d.typ, d) }
