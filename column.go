@@ -98,17 +98,16 @@ func (c *Column) Pages() Pages {
 		return emptyPages{}
 	}
 	r := &columnPages{
-		pages: make([]filePages2, len(c.file.rowGroups)),
+		pages: make([]filePages, len(c.file.rowGroups)),
 	}
 	for i := range r.pages {
 		r.pages[i].init(c.file.rowGroups[i].(*fileRowGroup).columns[c.index].(*fileColumnChunk))
-		//c.file.rowGroups[i].(*fileRowGroup).columns[c.index].(*fileColumnChunk).setPagesOn(&r.pages[i])
 	}
 	return r
 }
 
 type columnPages struct {
-	pages []filePages2
+	pages []filePages
 	index int
 }
 
