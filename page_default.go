@@ -25,7 +25,7 @@ func newBooleanPage(columnIndex int16, numValues int32, data []byte) *booleanPag
 	}
 	return &booleanPage{
 		values:      values,
-		columnIndex: columnIndex,
+		columnIndex: ^columnIndex,
 	}
 }
 
@@ -163,7 +163,7 @@ func newInt32Page(columnIndex int16, numValues int32, data []byte) *int32Page {
 	}
 	return &int32Page{
 		values:      values,
-		columnIndex: columnIndex,
+		columnIndex: ^columnIndex,
 	}
 }
 
@@ -267,7 +267,7 @@ func newInt64Page(columnIndex int16, numValues int32, data []byte) *int64Page {
 	}
 	return &int64Page{
 		values:      values,
-		columnIndex: columnIndex,
+		columnIndex: ^columnIndex,
 	}
 }
 
@@ -371,7 +371,7 @@ func newInt96Page(columnIndex int16, numValues int32, data []byte) *int96Page {
 	}
 	return &int96Page{
 		values:      values,
-		columnIndex: columnIndex,
+		columnIndex: ^columnIndex,
 	}
 }
 
@@ -477,7 +477,7 @@ func newFloatPage(columnIndex int16, numValues int32, data []byte) *floatPage {
 	}
 	return &floatPage{
 		values:      values,
-		columnIndex: columnIndex,
+		columnIndex: ^columnIndex,
 	}
 }
 
@@ -581,7 +581,7 @@ func newDoublePage(columnIndex int16, numValues int32, data []byte) *doublePage 
 	}
 	return &doublePage{
 		values:      values,
-		columnIndex: columnIndex,
+		columnIndex: ^columnIndex,
 	}
 }
 
