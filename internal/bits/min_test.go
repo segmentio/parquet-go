@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/segmentio/parquet-go/internal/bits"
+	"github.com/segmentio/parquet-go/internal/fuzzing"
 )
 
 func TestMinBool(t *testing.T) {
@@ -33,6 +34,26 @@ func TestMinBool(t *testing.T) {
 	if !bits.MinBool(values) {
 		t.Error("min value must be true when all input values are true")
 	}
+}
+
+func FuzzMinBool(f *testing.F) {
+	f.Fuzz(func(t *testing.T, input []byte, size int) {
+		values := fuzzing.MakeRandBoolean(input, size)
+
+		expected := true
+		for i := range values {
+			if !values[i] {
+				expected = false
+				break
+			}
+		}
+
+		if bits.MinBool(values) != expected {
+			t.Logf("expected: %t", expected)
+			t.Logf("values: %v", values)
+			t.Error("unexpected min value")
+		}
+	})
 }
 
 func TestMinInt32(t *testing.T) {

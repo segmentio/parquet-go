@@ -1,4 +1,4 @@
-//go:build go1.18 && (purego || !amd64)
+//go:build go1.18 && (purego || !amd64 || !arm64)
 
 package bits
 
@@ -8,7 +8,7 @@ import (
 	"github.com/segmentio/parquet-go/internal/cast"
 )
 
-func minBool(data []bool) bool { return boolEqualAll(data, true) }
+//func minBool(data []bool) bool { return boolEqualAll(data, true) }
 
 func minInt32(data []int32) int32 { return min(data) }
 
