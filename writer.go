@@ -660,7 +660,7 @@ func (w *writer) WritePage(page Page) (int64, error) {
 // concurrently, which helps keep memory utilization low, both in the total
 // footprint and GC cost.
 //
-// The type alose exposes helper methods to facilitate the generation of parquet
+// The type also exposes helper methods to facilitate the generation of parquet
 // pages. A scratch space is used when serialization requires combining multiple
 // buffers or compressing the page data, with double-buffering technique being
 // employed by swapping the scratch and page buffers to minimize memory copies.

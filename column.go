@@ -309,7 +309,7 @@ func (cl *columnLoader) open(file *File, path []string) (*Column, error) {
 			// Pick the encoding and compression codec of the first chunk.
 			//
 			// Technically each column chunk may use a different compression
-			// codec, and each page of the columm chunk might have a different
+			// codec, and each page of the column chunk might have a different
 			// encoding. Exposing these details does not provide a lot of value
 			// to the end user.
 			//

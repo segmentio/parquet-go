@@ -35,7 +35,7 @@ var (
 	// which does not use a dictionary encoding.
 	ErrUnexpectedDictionaryPage = errors.New("unexpected dictionary page")
 
-	// ErrMIssingPageHeader is an error returned when a page reader encounters
+	// ErrMissingPageHeader is an error returned when a page reader encounters
 	// a malformed page header which is missing page-type-specific information.
 	ErrMissingPageHeader = errors.New("missing page header")
 
