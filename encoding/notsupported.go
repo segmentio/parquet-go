@@ -26,7 +26,7 @@ var (
 	ErrInvalidArgument = errors.New("invalid argument")
 )
 
-// Error constructs an error which wraps err and indicate that it originated
+// Error constructs an error which wraps err and indicates that it originated
 // from the given encoding.
 func Error(e Encoding, err error) error {
 	return fmt.Errorf("%s: %w", e, err)
