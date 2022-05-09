@@ -44,7 +44,7 @@ func ErrInvalidInputSize(e Encoding, typ string, size int) error {
 	return Errorf(e, "cannot decode %s from input of size %d: %w", typ, size, ErrInvalidArgument)
 }
 
-// CanEncodeBoolean returns true if the e can encode BOOLEAN values.
+// CanEncodeBoolean reports whether e can encode BOOLEAN values.
 func CanEncodeBoolean(e Encoding) bool {
 	_, err := e.EncodeBoolean(nil, nil)
 	return !errors.Is(err, ErrNotSupported)
