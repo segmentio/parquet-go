@@ -50,49 +50,49 @@ func CanEncodeBoolean(e Encoding) bool {
 	return !errors.Is(err, ErrNotSupported)
 }
 
-// CanEncodeInt8 returns true if the e can encode INT8 values.
+// CanEncodeInt8 reports whether e can encode INT8 values.
 func CanEncodeInt8(e Encoding) bool {
 	_, err := e.EncodeInt8(nil, nil)
 	return !errors.Is(err, ErrNotSupported)
 }
 
-// CanEncodeInt32 returns true if the e can encode INT32 values.
+// CanEncodeInt32 reports whether e can encode INT32 values.
 func CanEncodeInt32(e Encoding) bool {
 	_, err := e.EncodeInt32(nil, nil)
 	return !errors.Is(err, ErrNotSupported)
 }
 
-// CanEncodeInt64 returns true if the e can encode INT64 values.
+// CanEncodeInt64 reports whether e can encode INT64 values.
 func CanEncodeInt64(e Encoding) bool {
 	_, err := e.EncodeInt64(nil, nil)
 	return !errors.Is(err, ErrNotSupported)
 }
 
-// CanEncodeInt96 returns true if the e can encode INT96 values.
+// CanEncodeInt96 reports whether e can encode INT96 values.
 func CanEncodeInt96(e Encoding) bool {
 	_, err := e.EncodeInt96(nil, nil)
 	return !errors.Is(err, ErrNotSupported)
 }
 
-// CanEncodeFloat returns true if the e can encode FLOAT values.
+// CanEncodeFloat reports whether e can encode FLOAT values.
 func CanEncodeFloat(e Encoding) bool {
 	_, err := e.EncodeFloat(nil, nil)
 	return !errors.Is(err, ErrNotSupported)
 }
 
-// CanEncodeDouble returns true if the e can encode DOUBLE values.
+// CanEncodeDouble reports whether e can encode DOUBLE values.
 func CanEncodeDouble(e Encoding) bool {
 	_, err := e.EncodeDouble(nil, nil)
 	return !errors.Is(err, ErrNotSupported)
 }
 
-// CanEncodeByteArray returns true if the e can encode BYTE_ARRAY values.
+// CanEncodeByteArray reports whether e can encode BYTE_ARRAY values.
 func CanEncodeByteArray(e Encoding) bool {
 	_, err := e.EncodeByteArray(nil, nil)
 	return !errors.Is(err, ErrNotSupported)
 }
 
-// CanEncodeFixedLenByteArray returns true if the e can encode
+// CanEncodeFixedLenByteArray reports whether e can encode
 // FIXED_LEN_BYTE_ARRAY values.
 func CanEncodeFixedLenByteArray(e Encoding) bool {
 	_, err := e.EncodeFixedLenByteArray(nil, nil, 1)
