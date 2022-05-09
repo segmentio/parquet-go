@@ -657,7 +657,7 @@ func (w *writer) WritePage(page Page) (int64, error) {
 
 // One writerBuffers is used by each writer instance, the memory buffers here
 // are shared by all columns of the writer because serialization is not done
-// concurrently, which helps keep memory utilization low, both it the total
+// concurrently, which helps keep memory utilization low, both in the total
 // footprint and GC cost.
 //
 // The type alose exposes helper methods to facilitate the generation of parquet
