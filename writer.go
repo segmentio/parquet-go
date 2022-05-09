@@ -1263,7 +1263,7 @@ func (c *writerColumn) writePage(size int64, writeTo func(io.Writer) (int64, err
 		return err
 	}
 	if written != size {
-		return fmt.Errorf("writing parquet colum page expected %dB but got %dB: %w", size, written, io.ErrShortWrite)
+		return fmt.Errorf("writing parquet column page expected %dB but got %dB: %w", size, written, io.ErrShortWrite)
 	}
 	c.pages, buffer = append(c.pages, buffer), nil
 	return nil
