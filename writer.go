@@ -817,7 +817,7 @@ func (c *writerColumn) reset() {
 	}
 	c.pages = c.pages[:0]
 	// Bloom filters may change in size between row groups, but we retain the
-	// buffer to avoir reallocating large memory blocks.
+	// buffer to avoid reallocating large memory blocks.
 	c.filter.bits = c.filter.bits[:0]
 	c.filter.pages = c.filter.pages[:0]
 	c.numRows = 0
