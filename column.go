@@ -493,7 +493,7 @@ func (p *dataPage) decompress(codec compress.Codec, data []byte) (err error) {
 
 func (p *dataPage) decode(typ Type, enc encoding.Encoding, data []byte) error {
 	// Note: I am not sold on this design, it parts ways from the way type
-	// specific behavior are implemented in other places based on the Type
+	// specific behavior is implemented in other places based on the Type
 	// specializations.
 	//
 	// It was difficult to design an exported API that would optimize well
