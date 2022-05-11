@@ -15,9 +15,39 @@ import (
 )
 
 func EncodeBoolean(f *testing.F, e encoding.Encoding) {
+	var err error
+	var buf = make([]bool, 64*1024)
+	var src = make([]bool, 64*1024)
+	var dst = make([]byte, 64*1024)
+
+	f.Fuzz(func(t *testing.T, input []byte) {
+		src = src[:0]
+		for _, c := range input {
+			src = append(src, (c&1) == 1)
+		}
+		dst, err = e.EncodeBoolean(dst, src)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		buf, err = e.DecodeBoolean(buf, dst)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		if !bytes.Equal(unsafecast.Slice[byte](buf), unsafecast.Slice[byte](src)) {
+			t.Error("decoded output does not match the original input")
+			return
+		}
+		// Likely invalid inputs, look for panics.
+		buf, _ = e.DecodeBoolean(buf, input)
+	})
+}
+
+func EncodeInt8(f *testing.F, e encoding.Encoding) {
 	encode(f, e,
-		encoding.Encoding.EncodeBoolean,
-		encoding.Encoding.DecodeBoolean,
+		encoding.Encoding.EncodeInt8,
+		encoding.Encoding.DecodeInt8,
 	)
 }
 
@@ -79,7 +109,7 @@ func EncodeByteArray(f *testing.F, e encoding.Encoding) {
 	})
 }
 
-func encode[T bool | int32 | int64 | float32 | float64](f *testing.F, e encoding.Encoding, encode func(encoding.Encoding, []byte, []T) ([]byte, error), decode func(encoding.Encoding, []T, []byte) ([]T, error)) {
+func encode[T bool | int8 | int32 | int64 | float32 | float64](f *testing.F, e encoding.Encoding, encode func(encoding.Encoding, []byte, []T) ([]byte, error), decode func(encoding.Encoding, []T, []byte) ([]T, error)) {
 	var err error
 	var buf = make([]T, 16*1024)
 	var dst = make([]byte, 64*1024)
