@@ -17,6 +17,14 @@ import (
 	"github.com/segmentio/parquet-go/internal/bits"
 )
 
+func repeatInt64(seq []int64, n int) []int64 {
+	rep := make([]int64, len(seq)*n)
+	for i := 0; i < n; i++ {
+		copy(rep[i*len(seq):], seq)
+	}
+	return rep
+}
+
 var booleanTests = [...][]bool{
 	{},
 	{true},
@@ -128,6 +136,16 @@ var int64Tests = [...][]int64{
 		6, 6, 6, 7, 7, 7, 8, 8,
 		8, 9, 9, 9,
 	},
+	repeatInt64( // a sequence resulting in 64 bits words in the delta binary packed encoding
+		[]int64{
+			math.MinInt64, math.MaxInt64, math.MinInt64, math.MaxInt64,
+			math.MinInt64, math.MaxInt64, math.MinInt64, math.MaxInt64,
+
+			0, math.MaxInt64, math.MinInt64, math.MaxInt64,
+			math.MinInt64, math.MaxInt64, math.MinInt64, math.MaxInt64,
+		},
+		5,
+	),
 }
 
 var int96Tests = [...][]deprecated.Int96{

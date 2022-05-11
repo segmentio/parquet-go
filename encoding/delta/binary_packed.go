@@ -75,7 +75,14 @@ func (e *BinaryPackedEncoding) encode(dst []byte, totalValues int, valueAt func(
 		minDelta := bits.MinInt64(block)
 		bits.SubInt64(block, minDelta)
 
-		miniBlock := make([]byte, blockSize*4)
+		// blockSize x 8: we store at most `blockSize` count of values, which
+		// might be up to 64 bits in length, which is why we multiple by 8.
+		//
+		// Technically we could size the buffer to a smaller size when the
+		// bit width requires less than 8 bytes per value, but it would cause
+		// the buffer to be put on the heap since the compiler wouldn't know
+		// how much stack space it needs in advance.
+		miniBlock := make([]byte, blockSize*8)
 		bitWidths := make([]byte, numMiniBlocks)
 		bitOffset := uint(0)
 		miniBlockLength := 0
