@@ -109,7 +109,11 @@ func EncodeByteArray(f *testing.F, e encoding.Encoding) {
 	})
 }
 
-func encode[T bool | int8 | int32 | int64 | float32 | float64](f *testing.F, e encoding.Encoding, encode func(encoding.Encoding, []byte, []T) ([]byte, error), decode func(encoding.Encoding, []T, []byte) ([]T, error)) {
+type encodeFunc[T any] func(encoding.Encoding, []byte, []T) ([]byte, error)
+
+type decodeFunc[T any] func(encoding.Encoding, []T, []byte) ([]T, error)
+
+func encode[T any](f *testing.F, e encoding.Encoding, encode encodeFunc[T], decode decodeFunc[T]) {
 	var err error
 	var buf = make([]T, 16*1024)
 	var dst = make([]byte, 64*1024)
