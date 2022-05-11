@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/segmentio/parquet-go/internal/cast"
+	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 type columnBuffer[T primitive] struct {
@@ -76,7 +76,7 @@ func (col *columnBuffer[T]) Write(b []byte) (int, error) {
 	if (len(b) % sizeof[T]()) != 0 {
 		return 0, fmt.Errorf("cannot write %s values from input of size %d", col.class.name, len(b))
 	}
-	n, err := col.WriteRequired(cast.BytesToSlice[T](b))
+	n, err := col.WriteRequired(unsafecast.BytesToSlice[T](b))
 	return sizeof[T]() * n, err
 }
 

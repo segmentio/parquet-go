@@ -95,18 +95,17 @@ var writerTests = []struct {
 		},
 		dump: `row group 0
 --------------------------------------------------------------------------------
-first_name:  BINARY ZSTD DO:4 FPO:55 SZ:90/72/0.80 VC:3 ENC:PLAIN,RLE_DICTIONARY [more]...
-last_name:   BINARY ZSTD DO:0 FPO:94 SZ:148/121/0.82 VC:3 ENC:DELTA_BYTE_ARRAY [more]...
+first_name:  BINARY ZSTD DO:4 FPO:55 SZ:90/72/0.80 VC:3 ENC:PLAIN,RLE_DICTIONARY ST:[no stats for this column]
+last_name:   BINARY ZSTD DO:0 FPO:94 SZ:115/97/0.84 VC:3 ENC:DELTA_BYTE_ARRAY ST:[no stats for this column]
 
     first_name TV=3 RL=0 DL=0 DS: 3 DE:PLAIN
     ----------------------------------------------------------------------------
-    page 0:                        DLE:RLE RLE:RLE VLE:RLE_DICTIONARY  [more]... SZ:7
+    page 0:                        DLE:RLE RLE:RLE VLE:RLE_DICTIONARY ST:[no stats for this column] CRC:[PAGE CORRUPT] SZ:7 VC:3
 
     last_name TV=3 RL=0 DL=0
     ----------------------------------------------------------------------------
-    page 0:                        DLE:RLE RLE:RLE VLE:DELTA_BYTE_ARRAY [more]... SZ:14
-    page 1:                        DLE:RLE RLE:RLE VLE:DELTA_BYTE_ARRAY [more]... SZ:19
-    page 2:                        DLE:RLE RLE:RLE VLE:DELTA_BYTE_ARRAY [more]... SZ:19
+    page 0:                        DLE:RLE RLE:RLE VLE:DELTA_BYTE_ARRAY ST:[no stats for this column] CRC:[PAGE CORRUPT] SZ:32 VC:2
+    page 1:                        DLE:RLE RLE:RLE VLE:DELTA_BYTE_ARRAY ST:[no stats for this column] CRC:[PAGE CORRUPT] SZ:19 VC:1
 
 BINARY first_name
 --------------------------------------------------------------------------------
@@ -134,18 +133,17 @@ value 3: R:0 D:0 V:Skywalker
 		},
 		dump: `row group 0
 --------------------------------------------------------------------------------
-first_name:  BINARY ZSTD DO:4 FPO:55 SZ:86/77/0.90 VC:3 ENC:RLE_DICTIONARY,PLAIN [more]...
-last_name:   BINARY ZSTD DO:0 FPO:90 SZ:163/136/0.83 VC:3 ENC:DELTA_BYTE_ARRAY [more]...
+first_name:  BINARY ZSTD DO:4 FPO:55 SZ:86/77/0.90 VC:3 ENC:RLE_DICTIONARY,PLAIN ST:[no stats for this column]
+last_name:   BINARY ZSTD DO:0 FPO:90 SZ:125/107/0.86 VC:3 ENC:DELTA_BYTE_ARRAY ST:[no stats for this column]
 
     first_name TV=3 RL=0 DL=0 DS: 3 DE:PLAIN
     ----------------------------------------------------------------------------
-    page 0:                        DLE:RLE RLE:RLE VLE:RLE_DICTIONARY  [more]... VC:3
+    page 0:                        DLE:RLE RLE:RLE VLE:RLE_DICTIONARY ST:[no stats for this column] SZ:7 VC:3
 
     last_name TV=3 RL=0 DL=0
     ----------------------------------------------------------------------------
-    page 0:                        DLE:RLE RLE:RLE VLE:DELTA_BYTE_ARRAY [more]... VC:1
-    page 1:                        DLE:RLE RLE:RLE VLE:DELTA_BYTE_ARRAY [more]... VC:1
-    page 2:                        DLE:RLE RLE:RLE VLE:DELTA_BYTE_ARRAY [more]... VC:1
+    page 0:                        DLE:RLE RLE:RLE VLE:DELTA_BYTE_ARRAY ST:[no stats for this column] SZ:32 VC:2
+    page 1:                        DLE:RLE RLE:RLE VLE:DELTA_BYTE_ARRAY ST:[no stats for this column] SZ:19 VC:1
 
 BINARY first_name
 --------------------------------------------------------------------------------
@@ -181,30 +179,30 @@ value 3: R:0 D:0 V:Skywalker
 		},
 		dump: `row group 0
 --------------------------------------------------------------------------------
-name:       BINARY GZIP DO:4 FPO:70 SZ:126/101/0.80 VC:10 ENC:PLAIN,RL [more]...
-timestamp:  INT64 GZIP DO:0 FPO:130 SZ:403/278/0.69 VC:10 ENC:DELTA_BI [more]...
-value:      DOUBLE GZIP DO:0 FPO:533 SZ:344/219/0.64 VC:10 ENC:PLAIN S [more]...
+name:       BINARY GZIP DO:4 FPO:70 SZ:126/101/0.80 VC:10 ENC:PLAIN,RLE_DICTIONARY ST:[no stats for this column]
+timestamp:  INT64 GZIP DO:0 FPO:130 SZ:334/209/0.63 VC:10 ENC:DELTA_BINARY_PACKED ST:[no stats for this column]
+value:      DOUBLE GZIP DO:0 FPO:464 SZ:344/219/0.64 VC:10 ENC:PLAIN ST:[no stats for this column]
 
     name TV=10 RL=0 DL=0 DS: 1 DE:PLAIN
     ----------------------------------------------------------------------------
-    page 0:                   DLE:RLE RLE:RLE VLE:RLE_DICTIONARY ST:[n [more]... VC:5
-    page 1:                   DLE:RLE RLE:RLE VLE:RLE_DICTIONARY ST:[n [more]... VC:5
+    page 0:                   DLE:RLE RLE:RLE VLE:RLE_DICTIONARY ST:[no stats for this column] SZ:2 VC:5
+    page 1:                   DLE:RLE RLE:RLE VLE:RLE_DICTIONARY ST:[no stats for this column] SZ:2 VC:5
 
     timestamp TV=10 RL=0 DL=0
     ----------------------------------------------------------------------------
-    page 0:                   DLE:RLE RLE:RLE VLE:DELTA_BINARY_PACKED  [more]... VC:2
-    page 1:                   DLE:RLE RLE:RLE VLE:DELTA_BINARY_PACKED  [more]... VC:2
-    page 2:                   DLE:RLE RLE:RLE VLE:DELTA_BINARY_PACKED  [more]... VC:2
-    page 3:                   DLE:RLE RLE:RLE VLE:DELTA_BINARY_PACKED  [more]... VC:2
-    page 4:                   DLE:RLE RLE:RLE VLE:DELTA_BINARY_PACKED  [more]... VC:2
+    page 0:                   DLE:RLE RLE:RLE VLE:DELTA_BINARY_PACKED ST:[no stats for this column] SZ:14 VC:2
+    page 1:                   DLE:RLE RLE:RLE VLE:DELTA_BINARY_PACKED ST:[no stats for this column] SZ:14 VC:2
+    page 2:                   DLE:RLE RLE:RLE VLE:DELTA_BINARY_PACKED ST:[no stats for this column] SZ:14 VC:2
+    page 3:                   DLE:RLE RLE:RLE VLE:DELTA_BINARY_PACKED ST:[no stats for this column] SZ:14 VC:2
+    page 4:                   DLE:RLE RLE:RLE VLE:DELTA_BINARY_PACKED ST:[no stats for this column] SZ:14 VC:2
 
     value TV=10 RL=0 DL=0
     ----------------------------------------------------------------------------
-    page 0:                   DLE:RLE RLE:RLE VLE:PLAIN ST:[no stats f [more]... VC:2
-    page 1:                   DLE:RLE RLE:RLE VLE:PLAIN ST:[no stats f [more]... VC:2
-    page 2:                   DLE:RLE RLE:RLE VLE:PLAIN ST:[no stats f [more]... VC:2
-    page 3:                   DLE:RLE RLE:RLE VLE:PLAIN ST:[no stats f [more]... VC:2
-    page 4:                   DLE:RLE RLE:RLE VLE:PLAIN ST:[no stats f [more]... VC:2
+    page 0:                   DLE:RLE RLE:RLE VLE:PLAIN ST:[no stats for this column] SZ:16 VC:2
+    page 1:                   DLE:RLE RLE:RLE VLE:PLAIN ST:[no stats for this column] SZ:16 VC:2
+    page 2:                   DLE:RLE RLE:RLE VLE:PLAIN ST:[no stats for this column] SZ:16 VC:2
+    page 3:                   DLE:RLE RLE:RLE VLE:PLAIN ST:[no stats for this column] SZ:16 VC:2
+    page 4:                   DLE:RLE RLE:RLE VLE:PLAIN ST:[no stats for this column] SZ:16 VC:2
 
 BINARY name
 --------------------------------------------------------------------------------
@@ -278,31 +276,30 @@ value 10: R:0 D:0 V:10.0
 
 		dump: `row group 0
 --------------------------------------------------------------------------------
-owner:              BINARY ZSTD DO:0 FPO:4 SZ:98/80/0.82 VC:2 ENC:DELT [more]...
-ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:102 SZ:166/116/0.70 VC:3 ENC: [more]...
+owner:              BINARY ZSTD DO:0 FPO:4 SZ:66/57/0.86 VC:2 ENC:DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column]
+ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:70 SZ:162/112/0.69 VC:3 ENC:DELTA_LENGTH_BYTE_ARRAY,RLE ST:[no stats for this column]
 contacts:
-.name:              BINARY UNCOMPRESSED DO:0 FPO:268 SZ:120/120/1.00 VC:3 [more]...
-.phoneNumber:       BINARY ZSTD DO:0 FPO:388 SZ:114/96/0.84 VC:3 ENC:D [more]...
+.name:              BINARY UNCOMPRESSED DO:0 FPO:232 SZ:116/116/1.00 VC:3 ENC:DELTA_LENGTH_BYTE_ARRAY,RLE ST:[no stats for this column]
+.phoneNumber:       BINARY ZSTD DO:0 FPO:348 SZ:113/95/0.84 VC:3 ENC:DELTA_LENGTH_BYTE_ARRAY,RLE ST:[no stats for this column]
 
     owner TV=2 RL=0 DL=0
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:18
-    page 1:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:16
+    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column] CRC:[PAGE CORRUPT] SZ:34 VC:2
 
     ownerPhoneNumbers TV=3 RL=1 DL=1
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:52
-    page 1:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:17
+    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column] CRC:[PAGE CORRUPT] SZ:48 VC:2
+    page 1:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column] CRC:[PAGE CORRUPT] SZ:17 VC:1
 
     contacts.name TV=3 RL=1 DL=1
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:57
-    page 1:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:17
+    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column] CRC:[verified] SZ:53 VC:2
+    page 1:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column] CRC:[verified] SZ:17 VC:1
 
     contacts.phoneNumber TV=3 RL=1 DL=2
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:33
-    page 1:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... SZ:17
+    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column] CRC:[PAGE CORRUPT] SZ:33 VC:2
+    page 1:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column] CRC:[PAGE CORRUPT] SZ:17 VC:1
 
 BINARY owner
 --------------------------------------------------------------------------------
@@ -361,31 +358,30 @@ value 3: R:0 D:0 V:<null>
 
 		dump: `row group 0
 --------------------------------------------------------------------------------
-owner:              BINARY ZSTD DO:0 FPO:4 SZ:108/90/0.83 VC:2 ENC:DEL [more]...
-ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:112 SZ:159/109/0.69 VC:3 ENC: [more]...
+owner:              BINARY ZSTD DO:0 FPO:4 SZ:71/62/0.87 VC:2 ENC:DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column]
+ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:75 SZ:156/106/0.68 VC:3 ENC:DELTA_LENGTH_BYTE_ARRAY,RLE ST:[no stats for this column]
 contacts:
-.name:              BINARY UNCOMPRESSED DO:0 FPO:271 SZ:114/114/1.00 VC:3 [more]...
-.phoneNumber:       BINARY ZSTD DO:0 FPO:385 SZ:108/90/0.83 VC:3 ENC:D [more]...
+.name:              BINARY UNCOMPRESSED DO:0 FPO:231 SZ:110/110/1.00 VC:3 ENC:DELTA_LENGTH_BYTE_ARRAY,RLE ST:[no stats for this column]
+.phoneNumber:       BINARY ZSTD DO:0 FPO:341 SZ:108/90/0.83 VC:3 ENC:DELTA_LENGTH_BYTE_ARRAY,RLE ST:[no stats for this column]
 
     owner TV=2 RL=0 DL=0
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:1
-    page 1:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:1
+    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column] SZ:34 VC:2
 
     ownerPhoneNumbers TV=3 RL=1 DL=1
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:2
-    page 1:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:1
+    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column] SZ:40 VC:2
+    page 1:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column] SZ:9 VC:1
 
     contacts.name TV=3 RL=1 DL=1
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:2
-    page 1:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:1
+    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column] SZ:45 VC:2
+    page 1:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column] SZ:9 VC:1
 
     contacts.phoneNumber TV=3 RL=1 DL=2
     ----------------------------------------------------------------------------
-    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:2
-    page 1:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats  [more]... VC:1
+    page 0:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column] SZ:25 VC:2
+    page 1:  DLE:RLE RLE:RLE VLE:DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column] SZ:9 VC:1
 
 BINARY owner
 --------------------------------------------------------------------------------
@@ -455,7 +451,7 @@ func hasParquetTools() bool {
 }
 
 func parquetTools(cmd, path string) ([]byte, error) {
-	p := exec.Command("parquet-tools", cmd, "--debug", path)
+	p := exec.Command("parquet-tools", cmd, "--debug", "--disable-crop", path)
 
 	output, err := p.CombinedOutput()
 	if err != nil {

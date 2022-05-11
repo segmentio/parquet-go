@@ -161,7 +161,7 @@ func TestBuffer(t *testing.T) {
 				typ      parquet.Type
 			}{
 				{scenario: "plain", typ: test.typ},
-				{scenario: "indexed", typ: test.typ.NewDictionary(0, 0).Type()},
+				{scenario: "indexed", typ: test.typ.NewDictionary(0, 0, nil).Type()},
 			} {
 				t.Run(config.scenario, func(t *testing.T) {
 					for _, mod := range [...]struct {
@@ -196,23 +196,14 @@ func TestBuffer(t *testing.T) {
 									}
 
 									content := new(bytes.Buffer)
-									decoder := parquet.Plain.NewDecoder(content)
-									encoder := parquet.Plain.NewEncoder(content)
-									reader := config.typ.NewColumnReader(0, 32)
 									buffer := parquet.NewBuffer(options...)
-
-									reset := func() {
-										content.Reset()
-										decoder.Reset(content)
-										encoder.Reset(content)
-										buffer.Reset()
-									}
 
 									for _, values := range test.values {
 										t.Run("", func(t *testing.T) {
-											reset()
+											defer content.Reset()
+											defer buffer.Reset()
 											fields := schema.Fields()
-											testBuffer(t, fields[0], reader, buffer, encoder, decoder, values, ordering.sortFunc)
+											testBuffer(t, fields[0], buffer, &parquet.Plain, values, ordering.sortFunc)
 										})
 									}
 								})
@@ -237,7 +228,7 @@ func descending(typ parquet.Type, values []parquet.Value) {
 	sort.Slice(values, func(i, j int) bool { return typ.Compare(values[i], values[j]) > 0 })
 }
 
-func testBuffer(t *testing.T, node parquet.Node, reader parquet.ColumnReader, buffer *parquet.Buffer, encoder encoding.Encoder, decoder encoding.Decoder, values []interface{}, sortFunc sortFunc) {
+func testBuffer(t *testing.T, node parquet.Node, buffer *parquet.Buffer, encoding encoding.Encoding, values []interface{}, sortFunc sortFunc) {
 	repetitionLevel := 0
 	definitionLevel := 0
 	if !node.Required() {
@@ -297,11 +288,6 @@ func testBuffer(t *testing.T, node parquet.Node, reader parquet.ColumnReader, bu
 		t.Fatalf("max value mismatch: want=%v got=%v", maxValue, max)
 	}
 
-	if err := page.WriteTo(encoder); err != nil {
-		t.Fatalf("flushing page writer: %v", err)
-	}
-
-	reader.Reset(int(numValues), decoder)
 	// We write a single value per row, so num values = num rows for all pages
 	// including repeated ones, which makes it OK to slice the pages using the
 	// number of values as a proxy for the row indexes.
@@ -312,7 +298,6 @@ func testBuffer(t *testing.T, node parquet.Node, reader parquet.ColumnReader, bu
 		values   []parquet.Value
 		reader   parquet.ValueReader
 	}{
-		{"test", batch, reader},
 		{"page", batch, page.Values()},
 		{"head", batch[:halfValues], page.Slice(0, halfValues).Values()},
 		{"tail", batch[halfValues:], page.Slice(halfValues, numValues).Values()},

@@ -1,14 +1,13 @@
 package parquet
 
 import (
-	"sort"
-
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/encoding/bytestreamsplit"
 	"github.com/segmentio/parquet-go/encoding/delta"
 	"github.com/segmentio/parquet-go/encoding/plain"
 	"github.com/segmentio/parquet-go/encoding/rle"
 	"github.com/segmentio/parquet-go/format"
+	"github.com/segmentio/parquet-go/internal/bits"
 )
 
 var (
@@ -51,6 +50,19 @@ var (
 		format.DeltaByteArray:       &DeltaByteArray,
 		format.ByteStreamSplit:      &ByteStreamSplit,
 	}
+
+	// Table indexing RLE encodings for repetition and definition levels of
+	// all supported bit widths.
+	levelEncodings = [...]rle.Encoding{
+		0: {BitWidth: 1},
+		1: {BitWidth: 2},
+		2: {BitWidth: 3},
+		3: {BitWidth: 4},
+		4: {BitWidth: 5},
+		5: {BitWidth: 6},
+		6: {BitWidth: 7},
+		7: {BitWidth: 8},
+	}
 )
 
 func isDictionaryEncoding(encoding encoding.Encoding) bool {
@@ -75,31 +87,37 @@ func LookupEncoding(enc format.Encoding) encoding.Encoding {
 	return encoding.NotSupported{}
 }
 
-func sortEncodings(encodings []encoding.Encoding) {
-	if len(encodings) > 1 {
-		sort.Slice(encodings, func(i, j int) bool {
-			return encodings[i].Encoding() < encodings[j].Encoding()
-		})
+func lookupLevelEncoding(enc format.Encoding, max int8) encoding.Encoding {
+	switch enc {
+	case format.RLE:
+		return &levelEncodings[bits.Len8(max)-1]
+	default:
+		return encoding.NotSupported{}
 	}
 }
 
-func dedupeSortedEncodings(encodings []encoding.Encoding) []encoding.Encoding {
-	if len(encodings) > 1 {
-		i := 0
-
-		for _, c := range encodings[1:] {
-			if c.Encoding() != encodings[i].Encoding() {
-				i++
-				encodings[i] = c
-			}
-		}
-
-		clear := encodings[i+1:]
-		for i := range clear {
-			clear[i] = nil
-		}
-
-		encodings = encodings[:i+1]
+func canEncode(e encoding.Encoding, k Kind) bool {
+	if isDictionaryEncoding(e) {
+		return true
 	}
-	return encodings
+	switch k {
+	case Boolean:
+		return encoding.CanEncodeBoolean(e)
+	case Int32:
+		return encoding.CanEncodeInt32(e)
+	case Int64:
+		return encoding.CanEncodeInt64(e)
+	case Int96:
+		return encoding.CanEncodeInt96(e)
+	case Float:
+		return encoding.CanEncodeFloat(e)
+	case Double:
+		return encoding.CanEncodeDouble(e)
+	case ByteArray:
+		return encoding.CanEncodeByteArray(e)
+	case FixedLenByteArray:
+		return encoding.CanEncodeFixedLenByteArray(e)
+	default:
+		return false
+	}
 }

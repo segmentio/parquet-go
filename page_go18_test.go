@@ -13,7 +13,7 @@ import (
 	"github.com/segmentio/parquet-go"
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding/plain"
-	"github.com/segmentio/parquet-go/internal/cast"
+	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 func TestPage(t *testing.T) {
@@ -63,12 +63,12 @@ func testPageOf[T plain.Type](t *testing.T) {
 					0: randValue[T](r),
 					1: randValue[T](r),
 				}
-				n, err := w.(io.Writer).Write(cast.SliceToBytes(values))
+				n, err := w.(io.Writer).Write(unsafecast.SliceToBytes(values))
 				return values[:n/sizeof], err
 			},
 			read: func(r parquet.ValueReader) ([]T, error) {
 				values := make([]T, 2)
-				n, err := r.(io.Reader).Read(cast.SliceToBytes(values))
+				n, err := r.(io.Reader).Read(unsafecast.SliceToBytes(values))
 				return values[:n/sizeof], err
 			},
 		})

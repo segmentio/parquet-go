@@ -3,11 +3,8 @@
 package parquet
 
 import (
-	"fmt"
-	"io"
-
 	"github.com/segmentio/parquet-go/deprecated"
-	"github.com/segmentio/parquet-go/encoding"
+	"github.com/segmentio/parquet-go/internal/bits"
 )
 
 // The boolean dictionary always contains two values for true and false.
@@ -17,45 +14,13 @@ type booleanDictionary struct {
 	index map[bool]int32
 }
 
-func newBooleanDictionary(typ Type, columnIndex int16, bufferSize int) *booleanDictionary {
+func newBooleanDictionary(typ Type, columnIndex int16, numValues int32, data []byte) *booleanDictionary {
 	return &booleanDictionary{
 		typ: typ,
 		booleanPage: booleanPage{
-			values:      make([]bool, 0, atLeastOne(bufferSize)),
+			values:      bits.BytesToBool(data),
 			columnIndex: ^columnIndex,
 		},
-	}
-}
-
-func readBooleanDictionary(typ Type, columnIndex int16, numValues int, decoder encoding.Decoder) (*booleanDictionary, error) {
-	d := &booleanDictionary{
-		typ: typ,
-		booleanPage: booleanPage{
-			values:      make([]bool, 0, atLeastOne(numValues)),
-			columnIndex: ^columnIndex,
-		},
-	}
-
-	for {
-		if len(d.values) == cap(d.values) {
-			newValues := make([]bool, len(d.values), 2*cap(d.values))
-			copy(newValues, d.values)
-			d.values = newValues
-		}
-
-		n, err := decoder.DecodeBoolean(d.values[len(d.values):cap(d.values)])
-		if n > 0 {
-			d.values = d.values[:len(d.values)+n]
-		}
-
-		if err != nil {
-			if err == io.EOF {
-				err = nil
-			} else {
-				err = fmt.Errorf("reading parquet dictionary of int32 values: %w", err)
-			}
-			return d, err
-		}
 	}
 }
 
@@ -131,45 +96,13 @@ type int32Dictionary struct {
 	index map[int32]int32
 }
 
-func newInt32Dictionary(typ Type, columnIndex int16, bufferSize int) *int32Dictionary {
+func newInt32Dictionary(typ Type, columnIndex int16, numValues int32, data []byte) *int32Dictionary {
 	return &int32Dictionary{
 		typ: typ,
 		int32Page: int32Page{
-			values:      make([]int32, 0, dictCap(bufferSize, 4)),
+			values:      bits.BytesToInt32(data),
 			columnIndex: ^columnIndex,
 		},
-	}
-}
-
-func readInt32Dictionary(typ Type, columnIndex int16, numValues int, decoder encoding.Decoder) (*int32Dictionary, error) {
-	d := &int32Dictionary{
-		typ: typ,
-		int32Page: int32Page{
-			values:      make([]int32, 0, atLeastOne(numValues)),
-			columnIndex: ^columnIndex,
-		},
-	}
-
-	for {
-		if len(d.values) == cap(d.values) {
-			newValues := make([]int32, len(d.values), 2*cap(d.values))
-			copy(newValues, d.values)
-			d.values = newValues
-		}
-
-		n, err := decoder.DecodeInt32(d.values[len(d.values):cap(d.values)])
-		if n > 0 {
-			d.values = d.values[:len(d.values)+n]
-		}
-
-		if err != nil {
-			if err == io.EOF {
-				err = nil
-			} else {
-				err = fmt.Errorf("reading parquet dictionary of int32 values: %w", err)
-			}
-			return d, err
-		}
 	}
 }
 
@@ -245,45 +178,13 @@ type int64Dictionary struct {
 	index map[int64]int32
 }
 
-func newInt64Dictionary(typ Type, columnIndex int16, bufferSize int) *int64Dictionary {
+func newInt64Dictionary(typ Type, columnIndex int16, numValues int32, data []byte) *int64Dictionary {
 	return &int64Dictionary{
 		typ: typ,
 		int64Page: int64Page{
-			values:      make([]int64, 0, dictCap(bufferSize, 8)),
+			values:      bits.BytesToInt64(data),
 			columnIndex: ^columnIndex,
 		},
-	}
-}
-
-func readInt64Dictionary(typ Type, columnIndex int16, numValues int, decoder encoding.Decoder) (*int64Dictionary, error) {
-	d := &int64Dictionary{
-		typ: typ,
-		int64Page: int64Page{
-			values:      make([]int64, 0, atLeastOne(numValues)),
-			columnIndex: ^columnIndex,
-		},
-	}
-
-	for {
-		if len(d.values) == cap(d.values) {
-			newValues := make([]int64, len(d.values), 2*cap(d.values))
-			copy(newValues, d.values)
-			d.values = newValues
-		}
-
-		n, err := decoder.DecodeInt64(d.values[len(d.values):cap(d.values)])
-		if n > 0 {
-			d.values = d.values[:len(d.values)+n]
-		}
-
-		if err != nil {
-			if err == io.EOF {
-				err = nil
-			} else {
-				err = fmt.Errorf("reading parquet dictionary of int64 values: %w", err)
-			}
-			return d, err
-		}
 	}
 }
 
@@ -359,45 +260,13 @@ type int96Dictionary struct {
 	index map[deprecated.Int96]int32
 }
 
-func newInt96Dictionary(typ Type, columnIndex int16, bufferSize int) *int96Dictionary {
+func newInt96Dictionary(typ Type, columnIndex int16, numValues int32, data []byte) *int96Dictionary {
 	return &int96Dictionary{
 		typ: typ,
 		int96Page: int96Page{
-			values:      make([]deprecated.Int96, 0, dictCap(bufferSize, 12)),
+			values:      deprecated.BytesToInt96(data),
 			columnIndex: ^columnIndex,
 		},
-	}
-}
-
-func readInt96Dictionary(typ Type, columnIndex int16, numValues int, decoder encoding.Decoder) (*int96Dictionary, error) {
-	d := &int96Dictionary{
-		typ: typ,
-		int96Page: int96Page{
-			values:      make([]deprecated.Int96, 0, atLeastOne(numValues)),
-			columnIndex: ^columnIndex,
-		},
-	}
-
-	for {
-		if len(d.values) == cap(d.values) {
-			newValues := make([]deprecated.Int96, len(d.values), 2*cap(d.values))
-			copy(newValues, d.values)
-			d.values = newValues
-		}
-
-		n, err := decoder.DecodeInt96(d.values[len(d.values):cap(d.values)])
-		if n > 0 {
-			d.values = d.values[:len(d.values)+n]
-		}
-
-		if err != nil {
-			if err == io.EOF {
-				err = nil
-			} else {
-				err = fmt.Errorf("reading parquet dictionary of int96 values: %w", err)
-			}
-			return d, err
-		}
 	}
 }
 
@@ -473,45 +342,13 @@ type floatDictionary struct {
 	index map[float32]int32
 }
 
-func newFloatDictionary(typ Type, columnIndex int16, bufferSize int) *floatDictionary {
+func newFloatDictionary(typ Type, columnIndex int16, numValues int32, data []byte) *floatDictionary {
 	return &floatDictionary{
 		typ: typ,
 		floatPage: floatPage{
-			values:      make([]float32, 0, dictCap(bufferSize, 4)),
+			values:      bits.BytesToFloat32(data),
 			columnIndex: ^columnIndex,
 		},
-	}
-}
-
-func readFloatDictionary(typ Type, columnIndex int16, numValues int, decoder encoding.Decoder) (*floatDictionary, error) {
-	d := &floatDictionary{
-		typ: typ,
-		floatPage: floatPage{
-			values:      make([]float32, 0, atLeastOne(numValues)),
-			columnIndex: ^columnIndex,
-		},
-	}
-
-	for {
-		if len(d.values) == cap(d.values) {
-			newValues := make([]float32, len(d.values), 2*cap(d.values))
-			copy(newValues, d.values)
-			d.values = newValues
-		}
-
-		n, err := decoder.DecodeFloat(d.values[len(d.values):cap(d.values)])
-		if n > 0 {
-			d.values = d.values[:len(d.values)+n]
-		}
-
-		if err != nil {
-			if err == io.EOF {
-				err = nil
-			} else {
-				err = fmt.Errorf("reading parquet dictionary of float values: %w", err)
-			}
-			return d, err
-		}
 	}
 }
 
@@ -587,45 +424,13 @@ type doubleDictionary struct {
 	index map[float64]int32
 }
 
-func newDoubleDictionary(typ Type, columnIndex int16, bufferSize int) *doubleDictionary {
+func newDoubleDictionary(typ Type, columnIndex int16, numValues int32, data []byte) *doubleDictionary {
 	return &doubleDictionary{
 		typ: typ,
 		doublePage: doublePage{
-			values:      make([]float64, 0, dictCap(bufferSize, 8)),
+			values:      bits.BytesToFloat64(data),
 			columnIndex: ^columnIndex,
 		},
-	}
-}
-
-func readDoubleDictionary(typ Type, columnIndex int16, numValues int, decoder encoding.Decoder) (*doubleDictionary, error) {
-	d := &doubleDictionary{
-		typ: typ,
-		doublePage: doublePage{
-			values:      make([]float64, 0, atLeastOne(numValues)),
-			columnIndex: ^columnIndex,
-		},
-	}
-
-	for {
-		if len(d.values) == cap(d.values) {
-			newValues := make([]float64, len(d.values), 2*cap(d.values))
-			copy(newValues, d.values)
-			d.values = newValues
-		}
-
-		n, err := decoder.DecodeDouble(d.values[len(d.values):cap(d.values)])
-		if n > 0 {
-			d.values = d.values[:len(d.values)+n]
-		}
-
-		if err != nil {
-			if err == io.EOF {
-				err = nil
-			} else {
-				err = fmt.Errorf("reading parquet dictionary of double values: %w", err)
-			}
-			return d, err
-		}
 	}
 }
 
@@ -697,13 +502,8 @@ func (d *doubleDictionary) Page() BufferedPage {
 
 type uint32Dictionary struct{ *int32Dictionary }
 
-func newUint32Dictionary(typ Type, columnIndex int16, bufferSize int) uint32Dictionary {
-	return uint32Dictionary{newInt32Dictionary(typ, columnIndex, bufferSize)}
-}
-
-func readUint32Dictionary(typ Type, columnIndex int16, numValues int, decoder encoding.Decoder) (uint32Dictionary, error) {
-	d, err := readInt32Dictionary(typ, columnIndex, numValues, decoder)
-	return uint32Dictionary{d}, err
+func newUint32Dictionary(typ Type, columnIndex int16, numValues int32, data []byte) uint32Dictionary {
+	return uint32Dictionary{newInt32Dictionary(typ, columnIndex, numValues, data)}
 }
 
 func (d uint32Dictionary) Type() Type { return newIndexedType(d.typ, d) }
@@ -735,13 +535,8 @@ func (d uint32Dictionary) Page() BufferedPage {
 
 type uint64Dictionary struct{ *int64Dictionary }
 
-func newUint64Dictionary(typ Type, columnIndex int16, bufferSize int) uint64Dictionary {
-	return uint64Dictionary{newInt64Dictionary(typ, columnIndex, bufferSize)}
-}
-
-func readUint64Dictionary(typ Type, columnIndex int16, numValues int, decoder encoding.Decoder) (uint64Dictionary, error) {
-	d, err := readInt64Dictionary(typ, columnIndex, numValues, decoder)
-	return uint64Dictionary{d}, err
+func newUint64Dictionary(typ Type, columnIndex int16, numValues int32, data []byte) uint64Dictionary {
+	return uint64Dictionary{newInt64Dictionary(typ, columnIndex, numValues, data)}
 }
 
 func (d uint64Dictionary) Type() Type { return newIndexedType(d.typ, d) }

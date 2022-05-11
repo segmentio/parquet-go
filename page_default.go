@@ -15,6 +15,20 @@ type booleanPage struct {
 	columnIndex int16
 }
 
+func newBooleanPage(columnIndex int16, numValues int32, data []byte) *booleanPage {
+	values := bits.BytesToBool(data)
+	for len(values) < int(numValues) {
+		values = append(values, false)
+	}
+	if len(values) > int(numValues) {
+		values = values[:numValues]
+	}
+	return &booleanPage{
+		values:      values,
+		columnIndex: ^columnIndex,
+	}
+}
+
 func (page *booleanPage) Column() int { return int(^page.columnIndex) }
 
 func (page *booleanPage) Dictionary() Dictionary { return nil }
@@ -95,11 +109,13 @@ func (page *booleanPage) RepetitionLevels() []int8 { return nil }
 
 func (page *booleanPage) DefinitionLevels() []int8 { return nil }
 
-func (page *booleanPage) WriteTo(e encoding.Encoder) error { return e.EncodeBoolean(page.values) }
-
 func (page *booleanPage) Values() ValueReader { return &booleanPageReader{page: page} }
 
 func (page *booleanPage) Buffer() BufferedPage { return page }
+
+func (page *booleanPage) Encode(dst []byte, enc encoding.Encoding) ([]byte, error) {
+	return enc.EncodeBoolean(dst, page.values)
+}
 
 type booleanPageReader struct {
 	page   *booleanPage
@@ -135,6 +151,20 @@ func (r *booleanPageReader) ReadValues(values []Value) (n int, err error) {
 type int32Page struct {
 	values      []int32
 	columnIndex int16
+}
+
+func newInt32Page(columnIndex int16, numValues int32, data []byte) *int32Page {
+	values := bits.BytesToInt32(data)
+	for len(values) < int(numValues) {
+		values = append(values, 0)
+	}
+	if len(values) > int(numValues) {
+		values = values[:numValues]
+	}
+	return &int32Page{
+		values:      values,
+		columnIndex: ^columnIndex,
+	}
 }
 
 func (page *int32Page) Column() int { return int(^page.columnIndex) }
@@ -182,11 +212,13 @@ func (page *int32Page) RepetitionLevels() []int8 { return nil }
 
 func (page *int32Page) DefinitionLevels() []int8 { return nil }
 
-func (page *int32Page) WriteTo(e encoding.Encoder) error { return e.EncodeInt32(page.values) }
-
 func (page *int32Page) Values() ValueReader { return &int32PageReader{page: page} }
 
 func (page *int32Page) Buffer() BufferedPage { return page }
+
+func (page *int32Page) Encode(dst []byte, enc encoding.Encoding) ([]byte, error) {
+	return enc.EncodeInt32(dst, page.values)
+}
 
 type int32PageReader struct {
 	page   *int32Page
@@ -223,6 +255,20 @@ func (r *int32PageReader) ReadValues(values []Value) (n int, err error) {
 type int64Page struct {
 	values      []int64
 	columnIndex int16
+}
+
+func newInt64Page(columnIndex int16, numValues int32, data []byte) *int64Page {
+	values := bits.BytesToInt64(data)
+	for len(values) < int(numValues) {
+		values = append(values, 0)
+	}
+	if len(values) > int(numValues) {
+		values = values[:numValues]
+	}
+	return &int64Page{
+		values:      values,
+		columnIndex: ^columnIndex,
+	}
 }
 
 func (page *int64Page) Column() int { return int(^page.columnIndex) }
@@ -270,11 +316,13 @@ func (page *int64Page) RepetitionLevels() []int8 { return nil }
 
 func (page *int64Page) DefinitionLevels() []int8 { return nil }
 
-func (page *int64Page) WriteTo(e encoding.Encoder) error { return e.EncodeInt64(page.values) }
-
 func (page *int64Page) Values() ValueReader { return &int64PageReader{page: page} }
 
 func (page *int64Page) Buffer() BufferedPage { return page }
+
+func (page *int64Page) Encode(dst []byte, enc encoding.Encoding) ([]byte, error) {
+	return enc.EncodeInt64(dst, page.values)
+}
 
 type int64PageReader struct {
 	page   *int64Page
@@ -311,6 +359,20 @@ func (r *int64PageReader) ReadValues(values []Value) (n int, err error) {
 type int96Page struct {
 	values      []deprecated.Int96
 	columnIndex int16
+}
+
+func newInt96Page(columnIndex int16, numValues int32, data []byte) *int96Page {
+	values := deprecated.BytesToInt96(data)
+	for len(values) < int(numValues) {
+		values = append(values, deprecated.Int96{})
+	}
+	if len(values) > int(numValues) {
+		values = values[:numValues]
+	}
+	return &int96Page{
+		values:      values,
+		columnIndex: ^columnIndex,
+	}
 }
 
 func (page *int96Page) Column() int { return int(^page.columnIndex) }
@@ -360,11 +422,13 @@ func (page *int96Page) RepetitionLevels() []int8 { return nil }
 
 func (page *int96Page) DefinitionLevels() []int8 { return nil }
 
-func (page *int96Page) WriteTo(e encoding.Encoder) error { return e.EncodeInt96(page.values) }
-
 func (page *int96Page) Values() ValueReader { return &int96PageReader{page: page} }
 
 func (page *int96Page) Buffer() BufferedPage { return page }
+
+func (page *int96Page) Encode(dst []byte, enc encoding.Encoding) ([]byte, error) {
+	return enc.EncodeInt96(dst, page.values)
+}
 
 type int96PageReader struct {
 	page   *int96Page
@@ -401,6 +465,20 @@ func (r *int96PageReader) ReadValues(values []Value) (n int, err error) {
 type floatPage struct {
 	values      []float32
 	columnIndex int16
+}
+
+func newFloatPage(columnIndex int16, numValues int32, data []byte) *floatPage {
+	values := bits.BytesToFloat32(data)
+	for len(values) < int(numValues) {
+		values = append(values, 0)
+	}
+	if len(values) > int(numValues) {
+		values = values[:numValues]
+	}
+	return &floatPage{
+		values:      values,
+		columnIndex: ^columnIndex,
+	}
 }
 
 func (page *floatPage) Column() int { return int(^page.columnIndex) }
@@ -448,11 +526,13 @@ func (page *floatPage) RepetitionLevels() []int8 { return nil }
 
 func (page *floatPage) DefinitionLevels() []int8 { return nil }
 
-func (page *floatPage) WriteTo(e encoding.Encoder) error { return e.EncodeFloat(page.values) }
-
 func (page *floatPage) Values() ValueReader { return &floatPageReader{page: page} }
 
 func (page *floatPage) Buffer() BufferedPage { return page }
+
+func (page *floatPage) Encode(dst []byte, enc encoding.Encoding) ([]byte, error) {
+	return enc.EncodeFloat(dst, page.values)
+}
 
 type floatPageReader struct {
 	page   *floatPage
@@ -489,6 +569,20 @@ func (r *floatPageReader) ReadValues(values []Value) (n int, err error) {
 type doublePage struct {
 	values      []float64
 	columnIndex int16
+}
+
+func newDoublePage(columnIndex int16, numValues int32, data []byte) *doublePage {
+	values := bits.BytesToFloat64(data)
+	for len(values) < int(numValues) {
+		values = append(values, 0)
+	}
+	if len(values) > int(numValues) {
+		values = values[:numValues]
+	}
+	return &doublePage{
+		values:      values,
+		columnIndex: ^columnIndex,
+	}
 }
 
 func (page *doublePage) Column() int { return int(^page.columnIndex) }
@@ -536,11 +630,13 @@ func (page *doublePage) RepetitionLevels() []int8 { return nil }
 
 func (page *doublePage) DefinitionLevels() []int8 { return nil }
 
-func (page *doublePage) WriteTo(e encoding.Encoder) error { return e.EncodeDouble(page.values) }
-
 func (page *doublePage) Values() ValueReader { return &doublePageReader{page: page} }
 
 func (page *doublePage) Buffer() BufferedPage { return page }
+
+func (page *doublePage) Encode(dst []byte, enc encoding.Encoding) ([]byte, error) {
+	return enc.EncodeDouble(dst, page.values)
+}
 
 type doublePageReader struct {
 	page   *doublePage
@@ -579,6 +675,10 @@ func (r *doublePageReader) ReadValues(values []Value) (n int, err error) {
 
 type uint32Page struct{ *int32Page }
 
+func newUint32Page(columnIndex int16, numValues int32, data []byte) uint32Page {
+	return uint32Page{newInt32Page(columnIndex, numValues, data)}
+}
+
 func (page uint32Page) min() uint32 { return bits.MinUint32(bits.Int32ToUint32(page.values)) }
 
 func (page uint32Page) max() uint32 { return bits.MaxUint32(bits.Int32ToUint32(page.values)) }
@@ -607,6 +707,10 @@ func (page uint32Page) Slice(i, j int64) BufferedPage {
 func (page uint32Page) Buffer() BufferedPage { return page }
 
 type uint64Page struct{ *int64Page }
+
+func newUint64Page(columnIndex int16, numValues int32, data []byte) uint64Page {
+	return uint64Page{newInt64Page(columnIndex, numValues, data)}
+}
 
 func (page uint64Page) min() uint64 { return bits.MinUint64(bits.Int64ToUint64(page.values)) }
 

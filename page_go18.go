@@ -6,13 +6,29 @@ import (
 	"io"
 
 	"github.com/segmentio/parquet-go/encoding"
-	"github.com/segmentio/parquet-go/internal/cast"
+	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 type page[T primitive] struct {
 	class       *class[T]
 	values      []T
 	columnIndex int16
+}
+
+func newPage[T primitive](columnIndex int16, numValues int32, data []byte, class *class[T]) *page[T] {
+	var values = unsafecast.Slice[T](data)
+	var zero T
+	for len(values) < int(numValues) {
+		values = append(values, zero)
+	}
+	if len(values) > int(numValues) {
+		values = values[:numValues]
+	}
+	return &page[T]{
+		class:       class,
+		values:      values,
+		columnIndex: ^columnIndex,
+	}
 }
 
 func (p *page[T]) Column() int { return int(^p.columnIndex) }
@@ -62,23 +78,25 @@ func (p *page[T]) RepetitionLevels() []int8 { return nil }
 
 func (p *page[T]) DefinitionLevels() []int8 { return nil }
 
-func (p *page[T]) WriteTo(e encoding.Encoder) error { return p.class.encode(e, p.values) }
-
-func (p *page[T]) Values() ValueReader { return &pageReader[T]{page: p} }
+func (p *page[T]) Values() ValueReader { return &pageValueReader[T]{page: p} }
 
 func (p *page[T]) Buffer() BufferedPage { return p }
 
-type pageReader[T primitive] struct {
+func (p *page[T]) Encode(dst []byte, enc encoding.Encoding) ([]byte, error) {
+	return p.class.encode(enc, dst, p.values)
+}
+
+type pageValueReader[T primitive] struct {
 	page   *page[T]
 	offset int
 }
 
-func (r *pageReader[T]) Read(b []byte) (n int, err error) {
-	n, err = r.ReadRequired(cast.BytesToSlice[T](b))
+func (r *pageValueReader[T]) Read(b []byte) (n int, err error) {
+	n, err = r.ReadRequired(unsafecast.BytesToSlice[T](b))
 	return sizeof[T]() * n, err
 }
 
-func (r *pageReader[T]) ReadRequired(values []T) (n int, err error) {
+func (r *pageValueReader[T]) ReadRequired(values []T) (n int, err error) {
 	n = copy(values, r.page.values[r.offset:])
 	r.offset += n
 	if r.offset == len(r.page.values) {
@@ -87,7 +105,7 @@ func (r *pageReader[T]) ReadRequired(values []T) (n int, err error) {
 	return n, err
 }
 
-func (r *pageReader[T]) ReadValues(values []Value) (n int, err error) {
+func (r *pageValueReader[T]) ReadValues(values []Value) (n int, err error) {
 	makeValue := r.page.class.makeValue
 	pageValues := r.page.values
 	columnIndex := r.page.columnIndex
@@ -104,5 +122,5 @@ func (r *pageReader[T]) ReadValues(values []Value) (n int, err error) {
 }
 
 var (
-	_ RequiredReader[bool] = (*pageReader[bool])(nil)
+	_ RequiredReader[bool] = (*pageValueReader[bool])(nil)
 )

@@ -34,6 +34,11 @@ func makeColumnIndex(i int) int16 {
 	return int16(i)
 }
 
+func makeNumValues(i int) int32 {
+	checkIndexRange("number of values", i, 0, math.MaxInt32)
+	return int32(i)
+}
+
 func checkIndexRange(typ string, i, min, max int) {
 	if i < min || i > max {
 		panic(errIndexOutOfRange(typ, i, min, max))

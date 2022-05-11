@@ -76,7 +76,6 @@ func printColumns(t *testing.T, col *parquet.Column, indent string) {
 			break
 		}
 
-		header := p.(parquet.CompressedPage).PageHeader().(parquet.DataPageHeader)
 		values := p.Values()
 		numValues := int64(0)
 		nullCount := int64(0)
@@ -102,17 +101,14 @@ func printColumns(t *testing.T, col *parquet.Column, indent string) {
 			}
 		}
 
-		if numValues != header.NumValues() {
-			t.Errorf("page of column %d declared %d values but %d were read", col.Index(), header.NumValues(), numValues)
+		if numValues != p.NumValues() {
+			t.Errorf("page of column %d declared %d values but %d were read", col.Index(), p.NumValues(), numValues)
 			return
 		}
 
-		// Only the v2 data pages advertise the number of nulls they contain.
-		if _, isV2 := header.(parquet.DataPageHeaderV2); isV2 {
-			if nullCount != header.NullCount() {
-				t.Errorf("page of column %d declared %d nulls but %d were read", col.Index(), header.NullCount(), nullCount)
-				return
-			}
+		if nullCount != p.NumNulls() {
+			t.Errorf("page of column %d declared %d nulls but %d were read", col.Index(), p.NumNulls(), nullCount)
+			return
 		}
 	}
 

@@ -42,7 +42,7 @@ func benchmarkDictionary(b *testing.B, do func(*testing.B, parquet.Type)) {
 
 func randDictionaryPage(typ parquet.Type, values []parquet.Value) parquet.BufferedPage {
 	const bufferSize = 64 * 1024
-	dict := typ.NewDictionary(0, 4*bufferSize)
+	dict := typ.NewDictionary(0, 0, make([]byte, 0, 4*bufferSize))
 	buf := dict.Type().NewColumnBuffer(0, bufferSize)
 	buf.WriteValues(values)
 	return buf.Page()
