@@ -65,14 +65,14 @@ func EncodeInt64(f *testing.F, e encoding.Encoding) {
 	)
 }
 
-func EncodeFloat32(f *testing.F, e encoding.Encoding) {
+func EncodeFloat(f *testing.F, e encoding.Encoding) {
 	encode(f, e,
 		encoding.Encoding.EncodeFloat,
 		encoding.Encoding.DecodeFloat,
 	)
 }
 
-func EncodeFloat64(f *testing.F, e encoding.Encoding) {
+func EncodeDouble(f *testing.F, e encoding.Encoding) {
 	encode(f, e,
 		encoding.Encoding.EncodeDouble,
 		encoding.Encoding.DecodeDouble,
