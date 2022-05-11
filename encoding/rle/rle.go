@@ -17,6 +17,16 @@ import (
 	"github.com/segmentio/parquet-go/internal/bits"
 )
 
+const (
+	// This limit is intended to prevent unbounded memory allocations when
+	// decoding runs.
+	//
+	// We use a generous limit which allows for over a million values per page
+	// if there is only one run to encode the repetition or definition levels
+	// (this should be uncommon).
+	maxSupportedValueCount = 1024 * 1024
+)
+
 type Encoding struct {
 	encoding.NotSupported
 	BitWidth int
@@ -238,9 +248,18 @@ func decodeInt8(dst []int8, src []byte, bitWidth uint) ([]int8, error) {
 
 	for i := 0; i < len(src); {
 		u, n := binary.Uvarint(src[i:])
+		if n == 0 {
+			return dst, fmt.Errorf("decoding run-length block header: %w", io.ErrUnexpectedEOF)
+		}
+		if n < 0 {
+			return dst, fmt.Errorf("overflow after decoding %d/%d bytes of run-length block header", -n+i, len(src))
+		}
 		i += n
 
 		count, bitpack := uint(u>>1), (u&1) != 0
+		if count > maxSupportedValueCount {
+			return dst, fmt.Errorf("decoded run-length block cannot have more than %d values", maxSupportedValueCount)
+		}
 		if !bitpack {
 			if bitWidth != 0 && (i+1) > len(src) {
 				return dst, fmt.Errorf("decoding run-length block of %d values: %w", count, io.ErrUnexpectedEOF)
@@ -298,9 +317,18 @@ func decodeInt32(dst []int32, src []byte, bitWidth uint) ([]int32, error) {
 
 	for i := 0; i < len(src); {
 		u, n := binary.Uvarint(src[i:])
+		if n == 0 {
+			return dst, fmt.Errorf("decoding run-length block header: %w", io.ErrUnexpectedEOF)
+		}
+		if n < 0 {
+			return dst, fmt.Errorf("overflow after decoding %d/%d bytes of run-length block header", -n+i, len(src))
+		}
 		i += n
 
 		count, bitpack := uint(u>>1), (u&1) != 0
+		if count > maxSupportedValueCount {
+			return dst, fmt.Errorf("decoded run-length block cannot have more than %d values", maxSupportedValueCount)
+		}
 		if !bitpack {
 			j := i + byteCount1
 
