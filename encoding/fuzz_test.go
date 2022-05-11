@@ -3,6 +3,22 @@
 
 package encoding_test
 
+import (
+	"testing"
+)
+
+func FuzzEncodeBoolean(f *testing.F) {
+	dst := make([]byte, 64*1024)
+
+	f.Fuzz(func(t *testing.T, src []bool) {
+		var err error
+		dst, err = e.EncodeBoolean(dst, src)
+		if err != nil {
+			t.Error(err)
+		}
+	})
+}
+
 /*
 import (
 	"bytes"

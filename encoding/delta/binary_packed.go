@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"math"
 
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/format"
@@ -14,6 +15,11 @@ const (
 	blockSize     = 128
 	numMiniBlocks = 4
 	miniBlockSize = blockSize / numMiniBlocks
+	// The parquet spec does not enforce a limit to the block size, but we need
+	// one otherwise invalid inputs may result in unbounded memory allocations.
+	//
+	// 65K+ values should be enough for any valid use case.
+	maxSupportedBlockSize = 65536
 )
 
 type BinaryPackedEncoding struct {
@@ -170,7 +176,10 @@ func (e *BinaryPackedEncoding) decode(src []byte, observe func(int64)) ([]byte, 
 	for totalValues > 0 && len(src) > 0 {
 		var minDelta int64
 		var bitWidths []byte
-		minDelta, bitWidths, src = decodeBinaryPackedBlock(src, numMiniBlocks)
+		minDelta, bitWidths, src, err = decodeBinaryPackedBlock(src, numMiniBlocks)
+		if err != nil {
+			return src, err
+		}
 
 		blockOffset := 0
 		for i := range block {
@@ -223,11 +232,12 @@ func (e *BinaryPackedEncoding) decode(src []byte, observe func(int64)) ([]byte, 
 		for i := 1; i < len(block); i++ {
 			block[i] += block[i-1]
 		}
-		values := block[:blockOffset]
-		for _, v := range values {
-			observe(v)
+		if values := block[:blockOffset]; len(values) > 0 {
+			for _, v := range values {
+				observe(v)
+			}
+			lastValue = values[len(values)-1]
 		}
-		lastValue = values[len(values)-1]
 	}
 
 	if totalValues > 0 {
@@ -267,41 +277,78 @@ func decodeBinaryPackedHeader(src []byte) (blockSize, numMiniBlocks, totalValues
 	n := 0
 	i := 0
 
-	u, n = binary.Uvarint(src[i:])
+	if u, n, err = decodeUvarint(src[i:], "block size"); err != nil {
+		return
+	}
 	i += n
 	blockSize = int(u)
 
-	u, n = binary.Uvarint(src[i:])
+	if u, n, err = decodeUvarint(src[i:], "number of mini-blocks"); err != nil {
+		return
+	}
 	i += n
 	numMiniBlocks = int(u)
 
-	u, n = binary.Uvarint(src[i:])
+	if u, n, err = decodeUvarint(src[i:], "total values"); err != nil {
+		return
+	}
 	i += n
 	totalValues = int(u)
 
-	firstValue, n = binary.Varint(src[i:])
+	if firstValue, n, err = decodeVarint(src[i:], "first value"); err != nil {
+		return
+	}
 	i += n
 
 	if numMiniBlocks == 0 {
 		err = fmt.Errorf("invalid number of mini block (%d)", numMiniBlocks)
 	} else if (blockSize <= 0) || (blockSize%128) != 0 {
 		err = fmt.Errorf("invalid block size is not a multiple of 128 (%d)", blockSize)
+	} else if blockSize > maxSupportedBlockSize {
+		err = fmt.Errorf("invalid block size is too large (%d)", blockSize)
 	} else if miniBlockSize := blockSize / numMiniBlocks; (numMiniBlocks <= 0) || (miniBlockSize%32) != 0 {
 		err = fmt.Errorf("invalid mini block size is not a multiple of 32 (%d)", miniBlockSize)
 	} else if totalValues < 0 {
 		err = fmt.Errorf("invalid total number of values is negative (%d)", totalValues)
+	} else if totalValues > math.MaxInt32 {
+		err = fmt.Errorf("too many values: %d", totalValues)
 	}
 
 	return blockSize, numMiniBlocks, totalValues, firstValue, src[i:], err
 }
 
-func decodeBinaryPackedBlock(src []byte, numMiniBlocks int) (minDelta int64, bitWidths, next []byte) {
-	minDelta, n := binary.Varint(src)
+func decodeBinaryPackedBlock(src []byte, numMiniBlocks int) (minDelta int64, bitWidths, next []byte, err error) {
+	minDelta, n, err := decodeVarint(src, "min delta")
+	if err != nil {
+		return 0, nil, src, err
+	}
 	src = src[n:]
 	if len(src) < numMiniBlocks {
 		bitWidths, next = src, nil
 	} else {
 		bitWidths, next = src[:numMiniBlocks], src[numMiniBlocks:]
 	}
-	return minDelta, bitWidths, next
+	return minDelta, bitWidths, next, nil
+}
+
+func decodeUvarint(buf []byte, what string) (u uint64, n int, err error) {
+	u, n = binary.Uvarint(buf)
+	if n == 0 {
+		return 0, 0, fmt.Errorf("decoding %s: %w", what, io.ErrUnexpectedEOF)
+	}
+	if n < 0 {
+		return 0, 0, fmt.Errorf("overflow decoding %s (read %d/%d bytes)", what, -n, len(buf))
+	}
+	return u, n, nil
+}
+
+func decodeVarint(buf []byte, what string) (v int64, n int, err error) {
+	v, n = binary.Varint(buf)
+	if n == 0 {
+		return 0, 0, fmt.Errorf("decoding %s: %w", what, io.ErrUnexpectedEOF)
+	}
+	if n < 0 {
+		return 0, 0, fmt.Errorf("overflow decoding %s (read %d/%d bytes)", what, -n, len(buf))
+	}
+	return v, n, nil
 }
