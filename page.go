@@ -569,26 +569,15 @@ func (r *repeatedPageReader) ReadValues(values []Value) (n int, err error) {
 }
 
 type byteArrayPage struct {
-	offsets     []uint32
 	values      []byte
+	numValues   int32
 	columnIndex int16
-}
-
-func makeByteArrayOffsets(numValues int32, values []byte) []uint32 {
-	offsets := make([]uint32, 0, numValues)
-	lastOffset := uint32(0)
-	plain.RangeByteArrays(values, func(value []byte) error {
-		offsets = append(offsets, lastOffset)
-		lastOffset += 4 + uint32(len(value))
-		return nil
-	})
-	return offsets
 }
 
 func newByteArrayPage(columnIndex int16, numValues int32, values []byte) *byteArrayPage {
 	return &byteArrayPage{
-		offsets:     makeByteArrayOffsets(numValues, values),
 		values:      values,
+		numValues:   numValues,
 		columnIndex: ^columnIndex,
 	}
 }
@@ -597,16 +586,11 @@ func (page *byteArrayPage) Column() int { return int(^page.columnIndex) }
 
 func (page *byteArrayPage) Dictionary() Dictionary { return nil }
 
-func (page *byteArrayPage) NumRows() int64 { return int64(len(page.offsets)) }
+func (page *byteArrayPage) NumRows() int64 { return int64(page.numValues) }
 
-func (page *byteArrayPage) NumValues() int64 { return int64(len(page.offsets)) }
+func (page *byteArrayPage) NumValues() int64 { return int64(page.numValues) }
 
 func (page *byteArrayPage) NumNulls() int64 { return 0 }
-
-func (page *byteArrayPage) append(value []byte) {
-	page.offsets = append(page.offsets, uint32(len(page.values)))
-	page.values = plain.AppendByteArray(page.values, value)
-}
 
 func (page *byteArrayPage) valueAt(offset uint32) []byte {
 	length := binary.LittleEndian.Uint32(page.values[offset:])
@@ -616,62 +600,70 @@ func (page *byteArrayPage) valueAt(offset uint32) []byte {
 }
 
 func (page *byteArrayPage) min() (min []byte) {
-	if len(page.offsets) > 0 {
-		min = page.valueAt(page.offsets[0])
+	if len(page.values) > 0 {
+		min = page.valueAt(0)
 
-		for _, offset := range page.offsets[1:] {
-			if value := page.valueAt(offset); string(value) < string(min) {
-				min = value
+		for i := 4 + len(min); i < len(page.values); {
+			v := page.valueAt(uint32(i))
+
+			if string(v) < string(min) {
+				min = v
 			}
+
+			i += 4
+			i += len(v)
 		}
 	}
 	return min
 }
 
 func (page *byteArrayPage) max() (max []byte) {
-	if len(page.offsets) > 0 {
-		max = page.valueAt(page.offsets[0])
+	if len(page.values) > 0 {
+		max = page.valueAt(0)
 
-		for _, offset := range page.offsets[1:] {
-			if value := page.valueAt(offset); string(value) > string(max) {
-				max = value
+		for i := 4 + len(max); i < len(page.values); {
+			v := page.valueAt(uint32(i))
+
+			if string(v) > string(max) {
+				max = v
 			}
+
+			i += 4
+			i += len(v)
 		}
 	}
 	return max
 }
 
 func (page *byteArrayPage) bounds() (min, max []byte) {
-	if len(page.offsets) > 0 {
-		min = page.valueAt(page.offsets[0])
+	if len(page.values) > 0 {
+		min = page.valueAt(0)
 		max = min
 
-		for _, offset := range page.offsets[1:] {
-			value := page.valueAt(offset)
+		for i := 4 + len(min); i < len(page.values); {
+			v := page.valueAt(uint32(i))
+
 			switch {
-			case string(value) < string(min):
-				min = value
-			case string(value) > string(max):
-				max = value
+			case string(v) < string(min):
+				min = v
+			case string(v) > string(max):
+				max = v
 			}
+
+			i += 4
+			i += len(v)
 		}
 	}
 	return min, max
 }
 
 func (page *byteArrayPage) Bounds() (min, max Value, ok bool) {
-	if ok = len(page.offsets) > 0; ok {
+	if ok = len(page.values) > 0; ok {
 		minBytes, maxBytes := page.bounds()
 		min = makeValueBytes(ByteArray, minBytes)
 		max = makeValueBytes(ByteArray, maxBytes)
 	}
 	return min, max, ok
-}
-
-func (page *byteArrayPage) cloneOffsets() []uint32 {
-	offsets := make([]uint32, len(page.offsets))
-	copy(offsets, page.offsets)
-	return offsets
 }
 
 func (page *byteArrayPage) cloneValues() []byte {
@@ -682,16 +674,33 @@ func (page *byteArrayPage) cloneValues() []byte {
 
 func (page *byteArrayPage) Clone() BufferedPage {
 	return &byteArrayPage{
-		offsets:     page.cloneOffsets(),
 		values:      page.cloneValues(),
+		numValues:   page.numValues,
 		columnIndex: page.columnIndex,
 	}
 }
 
 func (page *byteArrayPage) Slice(i, j int64) BufferedPage {
+	numValues := j - i
+
+	off0 := uint32(0)
+	for i > 0 {
+		off0 += binary.LittleEndian.Uint32(page.values[off0:])
+		off0 += plain.ByteArrayLengthSize
+		i--
+		j--
+	}
+
+	off1 := off0
+	for j > 0 {
+		off1 += binary.LittleEndian.Uint32(page.values[off1:])
+		off1 += plain.ByteArrayLengthSize
+		j--
+	}
+
 	return &byteArrayPage{
-		offsets:     page.offsets[i:j],
-		values:      page.values,
+		values:      page.values[off0:off1:off1],
+		numValues:   int32(numValues),
 		columnIndex: page.columnIndex,
 	}
 }
@@ -707,27 +716,7 @@ func (page *byteArrayPage) Values() ValueReader { return &byteArrayPageReader{pa
 func (page *byteArrayPage) Buffer() BufferedPage { return page }
 
 func (page *byteArrayPage) Encode(dst []byte, enc encoding.Encoding) ([]byte, error) {
-	values := page.values
-
-	switch {
-	case len(page.offsets) == 0:
-		values = nil
-
-	case bits.OrderOfUint32(page.offsets) < 1: // unordered?
-		values = make([]byte, 0, len(values)) // TODO: pool this buffer?
-
-		for _, offset := range page.offsets {
-			values = plain.AppendByteArray(values, page.valueAt(offset))
-		}
-
-	default:
-		i := page.offsets[0]
-		j := page.offsets[len(page.offsets)-1]
-		j += 4 + binary.LittleEndian.Uint32(values[j:])
-		values = values[i:j:j]
-	}
-
-	return enc.EncodeByteArray(dst, values)
+	return enc.EncodeByteArray(dst, page.values)
 }
 
 type byteArrayPageReader struct {
@@ -750,8 +739,8 @@ func (r *byteArrayPageReader) ReadByteArrays(values []byte) (int, error) {
 }
 
 func (r *byteArrayPageReader) readByteArrays(values []byte) (c, n int, err error) {
-	for r.offset < len(r.page.offsets) {
-		b := r.page.valueAt(r.page.offsets[r.offset])
+	for r.offset < len(r.page.values) {
+		b := r.page.valueAt(uint32(r.offset))
 		k := plain.ByteArrayLengthSize + len(b)
 		if k > (len(values) - n) {
 			break
@@ -759,10 +748,11 @@ func (r *byteArrayPageReader) readByteArrays(values []byte) (c, n int, err error
 		plain.PutByteArrayLength(values[n:], len(b))
 		n += plain.ByteArrayLengthSize
 		n += copy(values[n:], b)
-		r.offset++
+		r.offset += plain.ByteArrayLengthSize
+		r.offset += len(b)
 		c++
 	}
-	if r.offset == len(r.page.offsets) {
+	if r.offset == len(r.page.values) {
 		err = io.EOF
 	} else if n == 0 && len(values) > 0 {
 		err = io.ErrShortBuffer
@@ -771,13 +761,15 @@ func (r *byteArrayPageReader) readByteArrays(values []byte) (c, n int, err error
 }
 
 func (r *byteArrayPageReader) ReadValues(values []Value) (n int, err error) {
-	for n < len(values) && r.offset < len(r.page.offsets) {
-		values[n] = makeValueBytes(ByteArray, r.page.valueAt(r.page.offsets[r.offset]))
+	for n < len(values) && r.offset < len(r.page.values) {
+		value := r.page.valueAt(uint32(r.offset))
+		values[n] = makeValueBytes(ByteArray, value)
 		values[n].columnIndex = r.page.columnIndex
-		r.offset++
+		r.offset += plain.ByteArrayLengthSize
+		r.offset += len(value)
 		n++
 	}
-	if r.offset == len(r.page.offsets) {
+	if r.offset == len(r.page.values) {
 		err = io.EOF
 	}
 	return n, err
@@ -954,3 +946,91 @@ func (r *nullPageReader) ReadValues(values []Value) (n int, err error) {
 	}
 	return len(values), err
 }
+
+/*
+type bufferedPage struct {
+	class       pageClass
+	values      []byte
+	numValues   int32
+	columnIndex int16
+}
+
+func (p *bufferedPage) Column() int {
+	return int(^p.columnIndex)
+}
+
+func (p *bufferedPage) Dictionary() Dictionary {
+	return nil
+}
+
+func (p *bufferedPage) NumRows() int64 {
+	return int64(p.numValues)
+}
+
+func (p *bufferedPage) NumValues() int64 {
+	return int64(p.numValues)
+}
+
+func (p *bufferedPage) NumNulls() int64 {
+	return 0
+}
+
+func (p *bufferedPage) Bounds() (min, max Value, ok bool) {
+	return p.class.bounds(p.values)
+}
+
+func (p *bufferedPage) Size() int64 {
+	return int64(p.values)
+}
+
+func (p *bufferedPage) Values() ValueReader {
+	return p.class.values(p.values)
+}
+
+func (p *bufferedPage) Buffer() BufferedPage {
+	return p
+}
+
+func (p *bufferedPage) Clone() BufferedPage {
+	values := make([]byte, len(p.values))
+	copy(values, p.values)
+	return &bufferedPage{
+		values:      values,
+		numValues:   p.numValues,
+		columnIndex: p.columnIndex,
+	}
+}
+
+func (p *bufferedPage) Slice(i, j int64) BufferedPage {
+	return &bufferedPage{
+		values:      p.class.slice(p.values, i, j),
+		numValues:   int32(j - i),
+		columnIndex: p.columnIndex,
+	}
+}
+
+func (p *bufferedPage) RepetitionLevels() []int8 {
+	return nil
+}
+
+func (p *bufferedPage) DefinitionLevels() []int8 {
+	return nil
+}
+
+func (p *bufferedPage) Encode(dst []byte, enc encoding.Encoding) ([]byte, error) {
+	return p.class.encode(dst, p.values, enc)
+}
+
+type pageClass interface {
+	bounds(values []byte) (min, max Value, ok bool)
+	values(values []byte) ValueReader
+	slice(values []byte, i, j int) []byte
+	encode(dst, src []byte, enc encoding.Encoding) ([]byte, error)
+}
+
+type booleanPageClass struct{}
+
+func (booleanPageClass) bounds() (min, max Value, ok bool) {
+
+}
+*/

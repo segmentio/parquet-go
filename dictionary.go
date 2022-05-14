@@ -5,6 +5,7 @@ import (
 	"io"
 
 	"github.com/segmentio/parquet-go/encoding"
+	"github.com/segmentio/parquet-go/encoding/plain"
 	"github.com/segmentio/parquet-go/internal/bits"
 )
 
@@ -63,19 +64,30 @@ func dictCap(bufferSize, valueItemSize int) int {
 
 type byteArrayDictionary struct {
 	byteArrayPage
-	typ   Type
-	index map[string]int32
+	typ     Type
+	offsets []uint32
+	index   map[string]int32
 }
 
 func newByteArrayDictionary(typ Type, columnIndex int16, numValues int32, values []byte) *byteArrayDictionary {
-	return &byteArrayDictionary{
-		typ: typ,
+	d := &byteArrayDictionary{
+		typ:     typ,
+		offsets: make([]uint32, 0, numValues),
 		byteArrayPage: byteArrayPage{
-			offsets:     makeByteArrayOffsets(numValues, values),
 			values:      values,
+			numValues:   numValues,
 			columnIndex: ^columnIndex,
 		},
 	}
+
+	for i := 0; i < len(values); {
+		n := plain.ByteArrayLength(values[i:])
+		d.offsets = append(d.offsets, uint32(i))
+		i += plain.ByteArrayLengthSize
+		i += n
+	}
+
+	return d
 }
 
 func (d *byteArrayDictionary) Type() Type { return newIndexedType(d.typ, d) }
@@ -102,13 +114,21 @@ func (d *byteArrayDictionary) Insert(indexes []int32, values []Value) {
 		index, exists := d.index[string(value)]
 		if !exists {
 			index = int32(len(d.offsets))
-			d.append(value)
-			stringValue := bits.BytesToString(d.valueAt(d.offsets[index]))
+			value = d.append(value)
+			stringValue := bits.BytesToString(value)
 			d.index[stringValue] = index
 		}
 
 		indexes[i] = index
 	}
+}
+
+func (d *byteArrayDictionary) append(value []byte) []byte {
+	offset := len(d.values)
+	d.values = plain.AppendByteArray(d.values, value)
+	d.offsets = append(d.offsets, uint32(offset))
+	d.numValues++
+	return d.values[offset+plain.ByteArrayLengthSize : len(d.values) : len(d.values)]
 }
 
 func (d *byteArrayDictionary) Lookup(indexes []int32, values []Value) {
@@ -141,6 +161,7 @@ func (d *byteArrayDictionary) Bounds(indexes []int32) (min, max Value) {
 func (d *byteArrayDictionary) Reset() {
 	d.offsets = d.offsets[:0]
 	d.values = d.values[:0]
+	d.numValues = 0
 	d.index = nil
 }
 

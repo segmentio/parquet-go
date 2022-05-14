@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/segmentio/parquet-go/encoding/plain"
+	"github.com/segmentio/parquet-go/internal/bits"
 )
 
 // ColumnBuffer is an interface representing columns of a row group.
@@ -666,28 +667,36 @@ func repeatedRowsHaveBeenReordered(rows []region) bool {
 
 type byteArrayColumnBuffer struct {
 	byteArrayPage
-	typ Type
+	typ     Type
+	offsets []uint32
 }
 
 func newByteArrayColumnBuffer(typ Type, columnIndex int16, bufferSize int) *byteArrayColumnBuffer {
 	return &byteArrayColumnBuffer{
 		byteArrayPage: byteArrayPage{
-			offsets:     make([]uint32, 0, bufferSize/8),
 			values:      make([]byte, 0, bufferSize/2),
 			columnIndex: ^columnIndex,
 		},
-		typ: typ,
+		typ:     typ,
+		offsets: make([]uint32, 0, bufferSize/8),
 	}
+}
+
+func (col *byteArrayColumnBuffer) cloneOffsets() []uint32 {
+	offsets := make([]uint32, len(col.offsets))
+	copy(offsets, col.offsets)
+	return offsets
 }
 
 func (col *byteArrayColumnBuffer) Clone() ColumnBuffer {
 	return &byteArrayColumnBuffer{
 		byteArrayPage: byteArrayPage{
-			offsets:     col.cloneOffsets(),
 			values:      col.cloneValues(),
+			numValues:   col.numValues,
 			columnIndex: col.columnIndex,
 		},
-		typ: col.typ,
+		typ:     col.typ,
+		offsets: col.cloneOffsets(),
 	}
 }
 
@@ -707,10 +716,31 @@ func (col *byteArrayColumnBuffer) Dictionary() Dictionary { return nil }
 
 func (col *byteArrayColumnBuffer) Pages() Pages { return onePage(col.Page()) }
 
-func (col *byteArrayColumnBuffer) Page() BufferedPage { return &col.byteArrayPage }
+func (col *byteArrayColumnBuffer) Page() BufferedPage {
+	if len(col.offsets) > 0 && bits.OrderOfUint32(col.offsets) < 1 { // unordered?
+		values := make([]byte, 0, len(col.values)) // TODO: pool this buffer?
+
+		for _, offset := range col.offsets {
+			values = plain.AppendByteArray(values, col.valueAt(offset))
+		}
+
+		col.values = values
+		col.offsets = col.offsets[:0]
+
+		for i := 0; i < len(col.values); {
+			n := plain.ByteArrayLength(col.values[i:])
+			col.offsets = append(col.offsets, uint32(i))
+			i += plain.ByteArrayLengthSize
+			i += n
+		}
+	}
+	return &col.byteArrayPage
+}
 
 func (col *byteArrayColumnBuffer) Reset() {
-	col.offsets, col.values = col.offsets[:0], col.values[:0]
+	col.values = col.values[:0]
+	col.offsets = col.offsets[:0]
+	col.numValues = 0
 }
 
 func (col *byteArrayColumnBuffer) Cap() int { return cap(col.offsets) }
@@ -778,6 +808,13 @@ func (col *byteArrayColumnBuffer) ReadValuesAt(values []Value, offset int64) (n 
 		}
 		return n, err
 	}
+}
+
+func (col *byteArrayColumnBuffer) append(value []byte) {
+	offset := uint32(len(col.values))
+	col.values = plain.AppendByteArray(col.values, value)
+	col.offsets = append(col.offsets, offset)
+	col.numValues++
 }
 
 type fixedLenByteArrayColumnBuffer struct {
