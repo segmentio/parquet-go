@@ -512,7 +512,7 @@ func (p *dataPage) decode(typ Type, enc encoding.Encoding, data []byte) (err err
 	case Int96:
 		return p.decodeInt96Page(enc, data)
 	case Float:
-		return p.decodeFloatPage(enc, data)
+		p.values, err = enc.DecodeFloat(p.values, data)
 	case Double:
 		p.values, err = enc.DecodeDouble(p.values, data)
 	case ByteArray:
@@ -546,12 +546,6 @@ func (p *dataPage) decodeInt64Page(enc encoding.Encoding, data []byte) error {
 func (p *dataPage) decodeInt96Page(enc encoding.Encoding, data []byte) error {
 	values, err := enc.DecodeInt96(deprecated.BytesToInt96(p.values), data)
 	p.values = deprecated.Int96ToBytes(values)
-	return err
-}
-
-func (p *dataPage) decodeFloatPage(enc encoding.Encoding, data []byte) error {
-	values, err := enc.DecodeFloat(bits.BytesToFloat32(p.values), data)
-	p.values = bits.Float32ToBytes(values)
 	return err
 }
 

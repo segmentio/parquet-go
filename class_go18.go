@@ -126,7 +126,9 @@ var float32Class = class[float32]{
 	min:       bits.MinFloat32,
 	max:       bits.MaxFloat32,
 	bounds:    bits.MinMaxFloat32,
-	encode:    encoding.Encoding.EncodeFloat,
+	encode: func(enc encoding.Encoding, dst []byte, src []float32) ([]byte, error) {
+		return enc.EncodeFloat(dst, unsafecast.Slice[byte](src))
+	},
 }
 
 var float64Class = class[float64]{

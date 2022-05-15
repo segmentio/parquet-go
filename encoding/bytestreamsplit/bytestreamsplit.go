@@ -1,8 +1,6 @@
 package bytestreamsplit
 
 import (
-	"math"
-
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/format"
 	"github.com/segmentio/parquet-go/internal/bits"
@@ -22,25 +20,23 @@ func (e *Encoding) Encoding() format.Encoding {
 	return format.ByteStreamSplit
 }
 
-func (e *Encoding) EncodeFloat(dst []byte, src []float32) ([]byte, error) {
-	n := 4 * len(src)
-	if cap(dst) < n {
-		dst = make([]byte, n)
-	} else {
-		dst = dst[:n]
+func (e *Encoding) EncodeFloat(dst, src []byte) ([]byte, error) {
+	if (len(src) % 4) != 0 {
+		return dst[:0], encoding.ErrInvalidInputSize(e, "FLOAT", len(src))
 	}
 
-	b0 := dst[0*len(src) : 1*len(src)]
-	b1 := dst[1*len(src) : 2*len(src)]
-	b2 := dst[2*len(src) : 3*len(src)]
-	b3 := dst[3*len(src) : 4*len(src)]
+	dst = resize(dst, len(src))
+	n := len(src) / 4
+	b0 := dst[0*n : 1*n]
+	b1 := dst[1*n : 2*n]
+	b2 := dst[2*n : 3*n]
+	b3 := dst[3*n : 4*n]
 
-	for i, f := range src {
-		bits := math.Float32bits(f)
-		b0[i] = byte(bits)
-		b1[i] = byte(bits >> 8)
-		b2[i] = byte(bits >> 16)
-		b3[i] = byte(bits >> 24)
+	for i, v := range bits.BytesToUint32(src) {
+		b0[i] = byte(v >> 0)
+		b1[i] = byte(v >> 8)
+		b2[i] = byte(v >> 16)
+		b3[i] = byte(v >> 24)
 	}
 
 	return dst, nil
@@ -76,30 +72,24 @@ func (e *Encoding) EncodeDouble(dst, src []byte) ([]byte, error) {
 	return dst, nil
 }
 
-func (e *Encoding) DecodeFloat(dst []float32, src []byte) ([]float32, error) {
+func (e *Encoding) DecodeFloat(dst, src []byte) ([]byte, error) {
 	if (len(src) % 4) != 0 {
 		return dst[:0], encoding.ErrInvalidInputSize(e, "FLOAT", len(src))
 	}
 
+	dst = resize(dst, len(src))
 	n := len(src) / 4
-	if cap(dst) < n {
-		dst = make([]float32, n)
-	} else {
-		dst = dst[:n]
-	}
-
 	b0 := src[0*n : 1*n]
 	b1 := src[1*n : 2*n]
 	b2 := src[2*n : 3*n]
 	b3 := src[3*n : 4*n]
 
-	for i := range dst {
-		dst[i] = math.Float32frombits(
-			uint32(b0[i]) |
-				uint32(b1[i])<<8 |
-				uint32(b2[i])<<16 |
-				uint32(b3[i])<<24,
-		)
+	dst32 := bits.BytesToUint32(dst)
+	for i := range dst32 {
+		dst32[i] = uint32(b0[i]) |
+			uint32(b1[i])<<8 |
+			uint32(b2[i])<<16 |
+			uint32(b3[i])<<24
 	}
 
 	return dst, nil

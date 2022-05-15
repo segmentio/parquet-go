@@ -132,7 +132,7 @@ func (NotSupported) EncodeInt96(dst []byte, src []deprecated.Int96) ([]byte, err
 	return dst[:0], errNotSupported("INT96")
 }
 
-func (NotSupported) EncodeFloat(dst []byte, src []float32) ([]byte, error) {
+func (NotSupported) EncodeFloat(dst, src []byte) ([]byte, error) {
 	return dst[:0], errNotSupported("FLOAT")
 }
 
@@ -168,7 +168,7 @@ func (NotSupported) DecodeInt96(dst []deprecated.Int96, src []byte) ([]deprecate
 	return dst[:0], errNotSupported("INT96")
 }
 
-func (NotSupported) DecodeFloat(dst []float32, src []byte) ([]float32, error) {
+func (NotSupported) DecodeFloat(dst, src []byte) ([]byte, error) {
 	return dst[:0], errNotSupported("FLOAT")
 }
 

@@ -86,7 +86,7 @@ func TestSplitBlockFilter(t *testing.T) {
 			scenario: "FLOAT",
 			function: func(values []float32) bool {
 				filter := newFilter(len(values))
-				encoding.EncodeFloat(filter.Bytes(), values)
+				encoding.EncodeFloat(filter.Bytes(), bits.Float32ToBytes(values))
 				for _, v := range values {
 					if !check(filter, ValueOf(v)) {
 						return false

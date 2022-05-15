@@ -406,16 +406,17 @@ func testInt96Encoding(t *testing.T, e encoding.Encoding) {
 func testFloatEncoding(t *testing.T, e encoding.Encoding) {
 	testCanEncodeFloat(t, e)
 	buffer := []byte{}
-	values := []float32{}
+	values := []byte{}
 
 	for _, test := range floatTests {
 		t.Run("", func(t *testing.T) {
 			var err error
-			buffer, err = e.EncodeFloat(buffer, test)
+			var input = bits.Float32ToBytes(test)
+			buffer, err = e.EncodeFloat(buffer, input)
 			assertNoError(t, err)
 			values, err = e.DecodeFloat(values, buffer)
 			assertNoError(t, err)
-			assertDeepEqual(t, test, values)
+			assertDeepEqual(t, input, values)
 		})
 	}
 }
@@ -797,7 +798,7 @@ func benchmarkDecodeInt64(b *testing.B, e encoding.Encoding) {
 func benchmarkDecodeFloat(b *testing.B, e encoding.Encoding) {
 	testCanEncodeFloat(b, e)
 	values := generateFloatValues(benchmarkNumValues, newRand())
-	output := make([]float32, 0)
+	output := make([]byte, 0)
 	buffer, _ := e.EncodeFloat(nil, values)
 
 	benchmarkZeroAllocsPerRun(b, func() {
@@ -885,10 +886,10 @@ func generateInt64Values(n int, r *rand.Rand) []int64 {
 	return values
 }
 
-func generateFloatValues(n int, r *rand.Rand) []float32 {
-	values := make([]float32, n)
-	for i := range values {
-		values[i] = r.Float32()
+func generateFloatValues(n int, r *rand.Rand) []byte {
+	values := make([]byte, 4*n)
+	for i := 0; i < n; i++ {
+		binary.LittleEndian.PutUint32(values[i*4:], math.Float32bits(r.Float32()))
 	}
 	return values
 }

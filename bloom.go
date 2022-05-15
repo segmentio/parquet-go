@@ -164,8 +164,8 @@ func (e splitBlockEncoding) EncodeInt96(dst []byte, src []deprecated.Int96) ([]b
 	return dst, nil
 }
 
-func (splitBlockEncoding) EncodeFloat(dst []byte, src []float32) ([]byte, error) {
-	splitBlockEncodeUint32(bloom.MakeSplitBlockFilter(dst), bits.Float32ToUint32(src))
+func (splitBlockEncoding) EncodeFloat(dst, src []byte) ([]byte, error) {
+	splitBlockEncodeUint32(bloom.MakeSplitBlockFilter(dst), bits.BytesToUint32(src))
 	return dst, nil
 }
 
