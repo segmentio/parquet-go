@@ -859,7 +859,7 @@ func (c *writerColumn) flush() (err error) {
 	return err
 }
 
-func (c *writerColumn) flushFilterPages() (err error) {
+func (c *writerColumn) flushFilterPages() error {
 	if c.columnFilter != nil {
 		// If there is a dictionary, it contains all the values that we need to
 		// write to the filter.
@@ -867,7 +867,9 @@ func (c *writerColumn) flushFilterPages() (err error) {
 			if c.filter.bits == nil {
 				c.resizeBloomFilter(int64(dict.Len()))
 			}
-			return c.writePageToFilter(dict.Page())
+			if err := c.writePageToFilter(dict.Page()); err != nil {
+				return err
+			}
 		}
 
 		if len(c.filter.pages) > 0 {
@@ -1056,23 +1058,25 @@ func (c *writerColumn) writeBufferedPage(page BufferedPage) (int64, error) {
 		}
 	}
 
-	switch {
-	case len(c.filter.bits) > 0:
-		// When the writer knows the number of values in advance (e.g. when
-		// writing a full row group), the filter encoding is set and the page
-		// can be directly applied to the filter, which minimizes memory usage
-		// since there is no need to buffer the values in order to determine
-		// the size of the filter.
-		if err := c.writePageToFilter(page); err != nil {
-			return 0, err
+	if page.Dictionary() == nil {
+		switch {
+		case len(c.filter.bits) > 0:
+			// When the writer knows the number of values in advance (e.g. when
+			// writing a full row group), the filter encoding is set and the page
+			// can be directly applied to the filter, which minimizes memory usage
+			// since there is no need to buffer the values in order to determine
+			// the size of the filter.
+			if err := c.writePageToFilter(page); err != nil {
+				return 0, err
+			}
+		case c.columnFilter != nil:
+			// If the column uses a dictionary encoding, all possible values exist
+			// in the dictionary and there is no need to buffer the pages, but if
+			// the column is supposed to generate a filter and the number of values
+			// wasn't known, we must buffer all the pages in order to properly size
+			// the filter.
+			c.filter.pages = append(c.filter.pages, page.Clone())
 		}
-	case c.columnFilter != nil && c.dictionary == nil:
-		// If the column uses a dictionary encoding, all possible values exist
-		// in the dictionary and there is no need to buffer the pages, but if
-		// the column is supposed to generate a filter and the number of values
-		// wasn't known, we must buffer all the pages in order to properly size
-		// the filter.
-		c.filter.pages = append(c.filter.pages, page.Clone())
 	}
 
 	statistics := format.Statistics{}
@@ -1145,25 +1149,27 @@ func (c *writerColumn) writeBufferedPage(page BufferedPage) (int64, error) {
 }
 
 func (c *writerColumn) writeCompressedPage(page CompressedPage) (int64, error) {
-	switch {
-	case len(c.filter.bits) > 0:
-		// TODO: modify the Buffer method to accept some kind of buffer pool as
-		// argument so we can use a pre-allocated page buffer to load the page
-		// and reduce the memory footprint.
-		bufferedPage := page.Buffer()
-		// The compressed page must be decompressed here in order to generate
-		// the bloom filter. Note that we don't re-compress it which still saves
-		// most of the compute cost (compression algorithms are usually designed
-		// to make decompressing much cheaper than compressing since it happens
-		// more often).
-		if err := c.writePageToFilter(bufferedPage); err != nil {
-			return 0, err
+	if page.Dictionary() == nil {
+		switch {
+		case len(c.filter.bits) > 0:
+			// TODO: modify the Buffer method to accept some kind of buffer pool as
+			// argument so we can use a pre-allocated page buffer to load the page
+			// and reduce the memory footprint.
+			bufferedPage := page.Buffer()
+			// The compressed page must be decompressed here in order to generate
+			// the bloom filter. Note that we don't re-compress it which still saves
+			// most of the compute cost (compression algorithms are usually designed
+			// to make decompressing much cheaper than compressing since it happens
+			// more often).
+			if err := c.writePageToFilter(bufferedPage); err != nil {
+				return 0, err
+			}
+		case c.columnFilter != nil && c.dictionary == nil:
+			// When a column filter is configured but no page filter was allocated,
+			// we need to buffer the page in order to have access to the number of
+			// values and properly size the bloom filter when writing the row group.
+			c.filter.pages = append(c.filter.pages, page.Buffer())
 		}
-	case c.columnFilter != nil && c.dictionary == nil:
-		// When a column filter is configured but no page filter was allocated,
-		// we need to buffer the page in order to have access to the number of
-		// values and properly size the bloom filter when writing the row group.
-		c.filter.pages = append(c.filter.pages, page.Buffer())
 	}
 
 	pageHeader := &format.PageHeader{
