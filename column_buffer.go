@@ -227,7 +227,7 @@ func (col *optionalColumnBuffer) Reset() {
 }
 
 func (col *optionalColumnBuffer) Size() int64 {
-	return sizeOfInt32(col.rows) + sizeOfInt32(col.sortIndex) + sizeOfBytes(col.definitionLevels) + col.base.Size()
+	return sizeOfInt32(col.rows) + sizeOfInt32(col.sortIndex) + int64(len(col.definitionLevels)) + col.base.Size()
 }
 
 func (col *optionalColumnBuffer) Cap() int { return cap(col.rows) }
@@ -515,7 +515,7 @@ func (col *repeatedColumnBuffer) Reset() {
 }
 
 func (col *repeatedColumnBuffer) Size() int64 {
-	return sizeOfRegion(col.rows) + sizeOfBytes(col.repetitionLevels) + sizeOfBytes(col.definitionLevels) + col.base.Size()
+	return sizeOfRegion(col.rows) + int64(len(col.repetitionLevels)) + int64(len(col.definitionLevels)) + col.base.Size()
 }
 
 func (col *repeatedColumnBuffer) Cap() int { return cap(col.rows) }
