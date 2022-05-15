@@ -80,6 +80,14 @@ type BufferedPage interface {
 	RepetitionLevels() []byte
 	DefinitionLevels() []byte
 
+	// Returns the in-memory buffer holding the page values.
+	//
+	// The buffer has the page values serialized in the PLAIN encoding.
+	//
+	// The intent is for the returned value to be used as input parameter when
+	// calling the Encode method of the associated Type.
+	//Data() []byte
+
 	// Writes the page data to dst with the given encoding.
 	Encode(dst []byte, enc encoding.Encoding) ([]byte, error)
 }

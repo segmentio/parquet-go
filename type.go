@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/segmentio/parquet-go/deprecated"
+	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/format"
 	"github.com/segmentio/parquet-go/internal/bits"
 )
@@ -163,6 +164,18 @@ type Type interface {
 	// The method panics if the data is not a valid PLAIN encoded representation
 	// of the page values.
 	NewPage(columnIndex, numValues int, data []byte) Page
+
+	// Assuming the src buffer contains PLAIN encoded values of the type it is
+	// called on, applies the given encoding and produces the output to the dst
+	// buffer passed as first argument by dispatching the call to one of the
+	// encoding methods.
+	Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error)
+
+	// Assuming the src buffer contains values encoding in the given encoding,
+	// decodes the input and produces the PLAIN encoded values into the dst
+	// output buffer passed as first argument by dispatching the call to one
+	// of the encoding methods.
+	Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error)
 }
 
 // In the current parquet version supported by this library, only type-defined
@@ -405,6 +418,14 @@ func (t *stringType) GoType() reflect.Type {
 	return reflect.TypeOf("")
 }
 
+func (t *stringType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+	return enc.EncodeByteArray(dst, src)
+}
+
+func (t *stringType) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+	return enc.DecodeByteArray(dst, src)
+}
+
 // UUID constructs a leaf node of UUID logical type.
 //
 // https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#uuid
@@ -454,6 +475,14 @@ func (t *uuidType) NewPage(columnIndex, numValues int, data []byte) Page {
 
 func (t *uuidType) GoType() reflect.Type {
 	return reflect.TypeOf(uuid.UUID{})
+}
+
+func (t *uuidType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+	return enc.EncodeFixedLenByteArray(dst, src, 16)
+}
+
+func (t *uuidType) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+	return enc.DecodeFixedLenByteArray(dst, src, 16)
 }
 
 // Enum constructs a leaf node with a logical type representing enumerations.
@@ -509,6 +538,14 @@ func (t *enumType) GoType() reflect.Type {
 	return reflect.TypeOf("")
 }
 
+func (t *enumType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+	return enc.EncodeByteArray(dst, src)
+}
+
+func (t *enumType) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+	return enc.DecodeByteArray(dst, src)
+}
+
 // JSON constructs a leaf node of JSON logical type.
 //
 // https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#json
@@ -558,6 +595,14 @@ func (t *jsonType) NewPage(columnIndex, numValues int, data []byte) Page {
 	return newByteArrayPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
+func (t *jsonType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+	return enc.EncodeByteArray(dst, src)
+}
+
+func (t *jsonType) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+	return enc.DecodeByteArray(dst, src)
+}
+
 // BSON constructs a leaf node of BSON logical type.
 //
 // https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#bson
@@ -605,6 +650,14 @@ func (t *bsonType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 
 func (t *bsonType) NewPage(columnIndex, numValues int, data []byte) Page {
 	return newByteArrayPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data)
+}
+
+func (t *bsonType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+	return enc.EncodeByteArray(dst, src)
+}
+
+func (t *bsonType) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+	return enc.DecodeByteArray(dst, src)
 }
 
 // Date constructs a leaf node of DATE logical type.
@@ -829,6 +882,14 @@ func (t *listType) NewPage(int, int, []byte) Page {
 	panic("cannot create page from parquet LIST type")
 }
 
+func (t *listType) Encode(dst, _ []byte, _ encoding.Encoding) ([]byte, error) {
+	panic("cannot encode parquet LIST type")
+}
+
+func (t *listType) Decode(dst, _ []byte, _ encoding.Encoding) ([]byte, error) {
+	panic("cannot decode parquet LIST type")
+}
+
 // Map constructs a node of MAP logical type.
 //
 // https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#maps
@@ -883,6 +944,14 @@ func (t *mapType) NewPage(int, int, []byte) Page {
 	panic("cannot create page from parquet MAP type")
 }
 
+func (t *mapType) Encode(dst, _ []byte, _ encoding.Encoding) ([]byte, error) {
+	panic("cannot encode parquet MAP type")
+}
+
+func (t *mapType) Decode(dst, _ []byte, _ encoding.Encoding) ([]byte, error) {
+	panic("cannot decode parquet MAP type")
+}
+
 type nullType format.NullType
 
 func (t *nullType) String() string { return (*format.NullType)(t).String() }
@@ -919,6 +988,14 @@ func (t *nullType) NewPage(columnIndex, numValues int, _ []byte) Page {
 	return newNullPage(makeColumnIndex(columnIndex), makeNumValues(numValues))
 }
 
+func (t *nullType) Encode(dst, _ []byte, _ encoding.Encoding) ([]byte, error) {
+	return dst[:0], nil
+}
+
+func (t *nullType) Decode(dst, _ []byte, _ encoding.Encoding) ([]byte, error) {
+	return dst[:0], nil
+}
+
 type groupType struct{}
 
 func (groupType) String() string { return "group" }
@@ -945,6 +1022,14 @@ func (t groupType) NewColumnBuffer(int, int) ColumnBuffer {
 
 func (t groupType) NewPage(int, int, []byte) Page {
 	panic("cannot create page from parquet group")
+}
+
+func (groupType) Encode(_, _ []byte, _ encoding.Encoding) ([]byte, error) {
+	panic("cannot encode parquet group")
+}
+
+func (groupType) Decode(_, _ []byte, _ encoding.Encoding) ([]byte, error) {
+	panic("cannot decode parquet group")
 }
 
 func (groupType) Length() int { return 0 }

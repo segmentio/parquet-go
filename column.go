@@ -490,40 +490,6 @@ func (p *dataPage) decompress(codec compress.Codec, data []byte) (err error) {
 	return err
 }
 
-func (p *dataPage) decode(typ Type, enc encoding.Encoding, data []byte) (err error) {
-	// Note: I am not sold on this design, it parts ways from the way type
-	// specific behavior is implemented in other places based on the Type
-	// specializations.
-	//
-	// It was difficult to design an exported API that would optimize well
-	// for safety, ease of use, and performance. I decided that I was lacking
-	// enough information about how the code would be used to make the right
-	// call, so I resorted to an internal mechanism which does not require
-	// exporting new APIs. The current approach will be less disruptive to
-	// revisit this decision in the future if needed.
-	switch typ.Kind() {
-	case Boolean:
-		p.values, err = enc.DecodeBoolean(p.values, data)
-	case Int32:
-		p.values, err = enc.DecodeInt32(p.values, data)
-	case Int64:
-		p.values, err = enc.DecodeInt64(p.values, data)
-	case Int96:
-		p.values, err = enc.DecodeInt96(p.values, data)
-	case Float:
-		p.values, err = enc.DecodeFloat(p.values, data)
-	case Double:
-		p.values, err = enc.DecodeDouble(p.values, data)
-	case ByteArray:
-		p.values, err = enc.DecodeByteArray(p.values, data)
-	case FixedLenByteArray:
-		p.values, err = enc.DecodeFixedLenByteArray(p.values, data, typ.Length())
-	default:
-		p.values = p.values[:0]
-	}
-	return err
-}
-
 // DecodeDataPageV1 decodes a data page from the header, compressed data, and
 // optional dictionary passed as arguments.
 func (c *Column) DecodeDataPageV1(header DataPageHeaderV1, data []byte, dict Dictionary) (Page, error) {
@@ -622,7 +588,9 @@ func (c *Column) decodeDataPage(header DataPageHeader, numValues int64, page *da
 		pageType, encoding = Int32Type, &RLEDictionary
 	}
 
-	if err := page.decode(pageType, encoding, data); err != nil {
+	var err error
+	page.values, err = pageType.Decode(page.values, data, encoding)
+	if err != nil {
 		return nil, err
 	}
 
@@ -696,7 +664,10 @@ func (c *Column) decodeDictionary(header DictionaryPageHeader, page *dataPage, d
 	if encoding == format.PlainDictionary {
 		encoding = format.Plain
 	}
-	if err := page.decode(pageType, LookupEncoding(encoding), page.data); err != nil {
+
+	var err error
+	page.values, err = pageType.Decode(page.values, page.data, LookupEncoding(encoding))
+	if err != nil {
 		return nil, err
 	}
 

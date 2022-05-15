@@ -278,6 +278,14 @@ func (t *indexedType) NewPage(columnIndex, numValues int, data []byte) Page {
 	return newIndexedPage(t.dict, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
+func (t *indexedType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+	return enc.EncodeInt32(dst, src)
+}
+
+func (t *indexedType) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+	return enc.DecodeInt32(dst, src)
+}
+
 type indexedPage struct {
 	dict        Dictionary
 	values      []int32

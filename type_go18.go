@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/segmentio/parquet-go/deprecated"
+	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/format"
 )
 
@@ -56,6 +57,14 @@ func (t primitiveType[T]) NewPage(columnIndex, numValues int, data []byte) Page 
 	return newPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data, t.class)
 }
 
+func (t primitiveType[T]) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+	return t.class.encode2(enc, dst, src)
+}
+
+func (t primitiveType[T]) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+	return t.class.decode2(enc, dst, src)
+}
+
 type byteArrayType struct{}
 
 func (t byteArrayType) String() string { return "BYTE_ARRAY" }
@@ -94,6 +103,14 @@ func (t byteArrayType) NewPage(columnIndex, numValues int, data []byte) Page {
 	return newByteArrayPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
+func (t byteArrayType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+	return enc.EncodeByteArray(dst, src)
+}
+
+func (t byteArrayType) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+	return enc.DecodeByteArray(dst, src)
+}
+
 type fixedLenByteArrayType struct{ length int }
 
 func (t *fixedLenByteArrayType) String() string {
@@ -130,6 +147,14 @@ func (t *fixedLenByteArrayType) NewDictionary(columnIndex, numValues int, data [
 
 func (t fixedLenByteArrayType) NewPage(columnIndex, numValues int, data []byte) Page {
 	return newFixedLenByteArrayPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data, t.Length())
+}
+
+func (t fixedLenByteArrayType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+	return enc.EncodeFixedLenByteArray(dst, src, t.Length())
+}
+
+func (t fixedLenByteArrayType) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+	return enc.DecodeFixedLenByteArray(dst, src, t.Length())
 }
 
 // FixedLenByteArrayType constructs a type for fixed-length values of the given
@@ -200,6 +225,22 @@ func (t *intType) NewPage(columnIndex, numValues int, data []byte) Page {
 	}
 }
 
+func (t *intType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+	if t.BitWidth == 64 {
+		return enc.EncodeInt64(dst, src)
+	} else {
+		return enc.EncodeInt32(dst, src)
+	}
+}
+
+func (t *intType) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+	if t.BitWidth == 64 {
+		return enc.DecodeInt64(dst, src)
+	} else {
+		return enc.DecodeInt32(dst, src)
+	}
+}
+
 func (t *dateType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	return newColumnIndexer(&int32Class)
 }
@@ -214,6 +255,14 @@ func (t *dateType) NewDictionary(columnIndex, numValues int, data []byte) Dictio
 
 func (t *dateType) NewPage(columnIndex, numValues int, data []byte) Page {
 	return newPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data, &int32Class)
+}
+
+func (t *dateType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+	return enc.EncodeInt32(dst, src)
+}
+
+func (t *dateType) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+	return enc.DecodeInt32(dst, src)
 }
 
 func (t *timeType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
@@ -248,6 +297,22 @@ func (t *timeType) NewPage(columnIndex, numValues int, data []byte) Page {
 	}
 }
 
+func (t *timeType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+	if t.Unit.Millis != nil {
+		return enc.EncodeInt32(dst, src)
+	} else {
+		return enc.EncodeInt64(dst, src)
+	}
+}
+
+func (t *timeType) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+	if t.Unit.Millis != nil {
+		return enc.DecodeInt32(dst, src)
+	} else {
+		return enc.DecodeInt64(dst, src)
+	}
+}
+
 func (t *timestampType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 	return newColumnIndexer(&int64Class)
 }
@@ -262,4 +327,12 @@ func (t *timestampType) NewDictionary(columnIndex, numValues int, data []byte) D
 
 func (t *timestampType) NewPage(columnIndex, numValues int, data []byte) Page {
 	return newPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data, &int64Class)
+}
+
+func (t *timestampType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+	return enc.EncodeInt64(dst, src)
+}
+
+func (t *timestampType) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+	return enc.DecodeInt64(dst, src)
 }
