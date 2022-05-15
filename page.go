@@ -427,6 +427,437 @@ func (page *repeatedPage) Slice(i, j int64) BufferedPage {
 	)
 }
 
+func resize(data []byte, size int) []byte {
+	if len(data) < size {
+		if cap(data) < size {
+			tmp := make([]byte, size)
+			copy(tmp, data)
+			data = tmp
+		} else {
+			clear := data[len(data) : len(data)+size]
+			for i := range clear {
+				clear[i] = 0
+			}
+		}
+	}
+	return data[:size]
+}
+
+type booleanPage struct {
+	values      []bool
+	columnIndex int16
+}
+
+func newBooleanPage(columnIndex int16, numValues int32, values []byte) *booleanPage {
+	return &booleanPage{
+		values:      bits.BytesToBool(resize(values, int(numValues))),
+		columnIndex: ^columnIndex,
+	}
+}
+
+func (page *booleanPage) Column() int { return int(^page.columnIndex) }
+
+func (page *booleanPage) Dictionary() Dictionary { return nil }
+
+func (page *booleanPage) NumRows() int64 { return int64(len(page.values)) }
+
+func (page *booleanPage) NumValues() int64 { return int64(len(page.values)) }
+
+func (page *booleanPage) NumNulls() int64 { return 0 }
+
+func (page *booleanPage) Size() int64 { return int64(len(page.values)) }
+
+func (page *booleanPage) RepetitionLevels() []byte { return nil }
+
+func (page *booleanPage) DefinitionLevels() []byte { return nil }
+
+func (page *booleanPage) Data() []byte { return bits.BoolToBytes(page.values) }
+
+func (page *booleanPage) Values() ValueReader { return &booleanPageReader{page: page} }
+
+func (page *booleanPage) Buffer() BufferedPage { return page }
+
+func (page *booleanPage) min() bool {
+	for _, value := range page.values {
+		if !value {
+			return false
+		}
+	}
+	return len(page.values) > 0
+}
+
+func (page *booleanPage) max() bool {
+	for _, value := range page.values {
+		if value {
+			return true
+		}
+	}
+	return false
+}
+
+func (page *booleanPage) bounds() (min, max bool) {
+	hasFalse, hasTrue := false, false
+
+	for _, value := range page.values {
+		if value {
+			hasTrue = true
+		} else {
+			hasFalse = true
+		}
+		if hasTrue && hasFalse {
+			break
+		}
+	}
+
+	if !hasFalse {
+		min = true
+	}
+	if hasTrue {
+		max = true
+	}
+	return min, max
+}
+
+func (page *booleanPage) Bounds() (min, max Value, ok bool) {
+	if ok = len(page.values) > 0; ok {
+		minBool, maxBool := page.bounds()
+		min = makeValueBoolean(minBool)
+		max = makeValueBoolean(maxBool)
+	}
+	return min, max, ok
+}
+
+func (page *booleanPage) Clone() BufferedPage {
+	return &booleanPage{
+		values:      append([]bool{}, page.values...),
+		columnIndex: page.columnIndex,
+	}
+}
+
+func (page *booleanPage) Slice(i, j int64) BufferedPage {
+	return &booleanPage{
+		values:      page.values[i:j],
+		columnIndex: page.columnIndex,
+	}
+}
+
+type int32Page struct {
+	values      []int32
+	columnIndex int16
+}
+
+func newInt32Page(columnIndex int16, numValues int32, values []byte) *int32Page {
+	return &int32Page{
+		values:      bits.BytesToInt32(values)[:numValues],
+		columnIndex: ^columnIndex,
+	}
+}
+
+func (page *int32Page) Column() int { return int(^page.columnIndex) }
+
+func (page *int32Page) Dictionary() Dictionary { return nil }
+
+func (page *int32Page) NumRows() int64 { return int64(len(page.values)) }
+
+func (page *int32Page) NumValues() int64 { return int64(len(page.values)) }
+
+func (page *int32Page) NumNulls() int64 { return 0 }
+
+func (page *int32Page) Size() int64 { return 4 * int64(len(page.values)) }
+
+func (page *int32Page) RepetitionLevels() []byte { return nil }
+
+func (page *int32Page) DefinitionLevels() []byte { return nil }
+
+func (page *int32Page) Data() []byte { return bits.Int32ToBytes(page.values) }
+
+func (page *int32Page) Values() ValueReader { return &int32PageReader{page: page} }
+
+func (page *int32Page) Buffer() BufferedPage { return page }
+
+func (page *int32Page) min() int32 { return bits.MinInt32(page.values) }
+
+func (page *int32Page) max() int32 { return bits.MaxInt32(page.values) }
+
+func (page *int32Page) bounds() (min, max int32) { return bits.MinMaxInt32(page.values) }
+
+func (page *int32Page) Bounds() (min, max Value, ok bool) {
+	if ok = len(page.values) > 0; ok {
+		minInt32, maxInt32 := page.bounds()
+		min = makeValueInt32(minInt32)
+		max = makeValueInt32(maxInt32)
+	}
+	return min, max, ok
+}
+
+func (page *int32Page) Clone() BufferedPage {
+	return &int32Page{
+		values:      append([]int32{}, page.values...),
+		columnIndex: page.columnIndex,
+	}
+}
+
+func (page *int32Page) Slice(i, j int64) BufferedPage {
+	return &int32Page{
+		values:      page.values[i:j],
+		columnIndex: page.columnIndex,
+	}
+}
+
+type int64Page struct {
+	values      []int64
+	columnIndex int16
+}
+
+func newInt64Page(columnIndex int16, numValues int32, values []byte) *int64Page {
+	return &int64Page{
+		values:      bits.BytesToInt64(values)[:numValues],
+		columnIndex: ^columnIndex,
+	}
+}
+
+func (page *int64Page) Column() int { return int(^page.columnIndex) }
+
+func (page *int64Page) Dictionary() Dictionary { return nil }
+
+func (page *int64Page) NumRows() int64 { return int64(len(page.values)) }
+
+func (page *int64Page) NumValues() int64 { return int64(len(page.values)) }
+
+func (page *int64Page) NumNulls() int64 { return 0 }
+
+func (page *int64Page) Size() int64 { return 8 * int64(len(page.values)) }
+
+func (page *int64Page) RepetitionLevels() []byte { return nil }
+
+func (page *int64Page) DefinitionLevels() []byte { return nil }
+
+func (page *int64Page) Data() []byte { return bits.Int64ToBytes(page.values) }
+
+func (page *int64Page) Values() ValueReader { return &int64PageReader{page: page} }
+
+func (page *int64Page) Buffer() BufferedPage { return page }
+
+func (page *int64Page) min() int64 { return bits.MinInt64(page.values) }
+
+func (page *int64Page) max() int64 { return bits.MaxInt64(page.values) }
+
+func (page *int64Page) bounds() (min, max int64) { return bits.MinMaxInt64(page.values) }
+
+func (page *int64Page) Bounds() (min, max Value, ok bool) {
+	if ok = len(page.values) > 0; ok {
+		minInt64, maxInt64 := page.bounds()
+		min = makeValueInt64(minInt64)
+		max = makeValueInt64(maxInt64)
+	}
+	return min, max, ok
+}
+
+func (page *int64Page) Clone() BufferedPage {
+	return &int64Page{
+		values:      append([]int64{}, page.values...),
+		columnIndex: page.columnIndex,
+	}
+}
+
+func (page *int64Page) Slice(i, j int64) BufferedPage {
+	return &int64Page{
+		values:      page.values[i:j],
+		columnIndex: page.columnIndex,
+	}
+}
+
+type int96Page struct {
+	values      []deprecated.Int96
+	columnIndex int16
+}
+
+func newInt96Page(columnIndex int16, numValues int32, values []byte) *int96Page {
+	return &int96Page{
+		values:      deprecated.BytesToInt96(values)[:numValues],
+		columnIndex: ^columnIndex,
+	}
+}
+
+func (page *int96Page) Column() int { return int(^page.columnIndex) }
+
+func (page *int96Page) Dictionary() Dictionary { return nil }
+
+func (page *int96Page) NumRows() int64 { return int64(len(page.values)) }
+
+func (page *int96Page) NumValues() int64 { return int64(len(page.values)) }
+
+func (page *int96Page) NumNulls() int64 { return 0 }
+
+func (page *int96Page) Size() int64 { return 12 * int64(len(page.values)) }
+
+func (page *int96Page) RepetitionLevels() []byte { return nil }
+
+func (page *int96Page) DefinitionLevels() []byte { return nil }
+
+func (page *int96Page) Data() []byte { return deprecated.Int96ToBytes(page.values) }
+
+func (page *int96Page) Values() ValueReader { return &int96PageReader{page: page} }
+
+func (page *int96Page) Buffer() BufferedPage { return page }
+
+func (page *int96Page) min() deprecated.Int96 { return deprecated.MinInt96(page.values) }
+
+func (page *int96Page) max() deprecated.Int96 { return deprecated.MaxInt96(page.values) }
+
+func (page *int96Page) bounds() (min, max deprecated.Int96) {
+	return deprecated.MinMaxInt96(page.values)
+}
+
+func (page *int96Page) Bounds() (min, max Value, ok bool) {
+	if ok = len(page.values) > 0; ok {
+		minInt96, maxInt96 := page.bounds()
+		min = makeValueInt96(minInt96)
+		max = makeValueInt96(maxInt96)
+	}
+	return min, max, ok
+}
+
+func (page *int96Page) Clone() BufferedPage {
+	return &int96Page{
+		values:      append([]deprecated.Int96{}, page.values...),
+		columnIndex: page.columnIndex,
+	}
+}
+
+func (page *int96Page) Slice(i, j int64) BufferedPage {
+	return &int96Page{
+		values:      page.values[i:j],
+		columnIndex: page.columnIndex,
+	}
+}
+
+type floatPage struct {
+	values      []float32
+	columnIndex int16
+}
+
+func newFloatPage(columnIndex int16, numValues int32, values []byte) *floatPage {
+	return &floatPage{
+		values:      bits.BytesToFloat32(values)[:numValues],
+		columnIndex: ^columnIndex,
+	}
+}
+
+func (page *floatPage) Column() int { return int(^page.columnIndex) }
+
+func (page *floatPage) Dictionary() Dictionary { return nil }
+
+func (page *floatPage) NumRows() int64 { return int64(len(page.values)) }
+
+func (page *floatPage) NumValues() int64 { return int64(len(page.values)) }
+
+func (page *floatPage) NumNulls() int64 { return 0 }
+
+func (page *floatPage) Size() int64 { return 4 * int64(len(page.values)) }
+
+func (page *floatPage) RepetitionLevels() []byte { return nil }
+
+func (page *floatPage) DefinitionLevels() []byte { return nil }
+
+func (page *floatPage) Data() []byte { return bits.Float32ToBytes(page.values) }
+
+func (page *floatPage) Values() ValueReader { return &floatPageReader{page: page} }
+
+func (page *floatPage) Buffer() BufferedPage { return page }
+
+func (page *floatPage) min() float32 { return bits.MinFloat32(page.values) }
+
+func (page *floatPage) max() float32 { return bits.MaxFloat32(page.values) }
+
+func (page *floatPage) bounds() (min, max float32) { return bits.MinMaxFloat32(page.values) }
+
+func (page *floatPage) Bounds() (min, max Value, ok bool) {
+	if ok = len(page.values) > 0; ok {
+		minFloat32, maxFloat32 := page.bounds()
+		min = makeValueFloat(minFloat32)
+		max = makeValueFloat(maxFloat32)
+	}
+	return min, max, ok
+}
+
+func (page *floatPage) Clone() BufferedPage {
+	return &floatPage{
+		values:      append([]float32{}, page.values...),
+		columnIndex: page.columnIndex,
+	}
+}
+
+func (page *floatPage) Slice(i, j int64) BufferedPage {
+	return &floatPage{
+		values:      page.values[i:j],
+		columnIndex: page.columnIndex,
+	}
+}
+
+type doublePage struct {
+	values      []float64
+	columnIndex int16
+}
+
+func newDoublePage(columnIndex int16, numValues int32, values []byte) *doublePage {
+	return &doublePage{
+		values:      bits.BytesToFloat64(values)[:numValues],
+		columnIndex: ^columnIndex,
+	}
+}
+
+func (page *doublePage) Column() int { return int(^page.columnIndex) }
+
+func (page *doublePage) Dictionary() Dictionary { return nil }
+
+func (page *doublePage) NumRows() int64 { return int64(len(page.values)) }
+
+func (page *doublePage) NumValues() int64 { return int64(len(page.values)) }
+
+func (page *doublePage) NumNulls() int64 { return 0 }
+
+func (page *doublePage) Size() int64 { return 8 * int64(len(page.values)) }
+
+func (page *doublePage) RepetitionLevels() []byte { return nil }
+
+func (page *doublePage) DefinitionLevels() []byte { return nil }
+
+func (page *doublePage) Data() []byte { return bits.Float64ToBytes(page.values) }
+
+func (page *doublePage) Values() ValueReader { return &doublePageReader{page: page} }
+
+func (page *doublePage) Buffer() BufferedPage { return page }
+
+func (page *doublePage) min() float64 { return bits.MinFloat64(page.values) }
+
+func (page *doublePage) max() float64 { return bits.MaxFloat64(page.values) }
+
+func (page *doublePage) bounds() (min, max float64) { return bits.MinMaxFloat64(page.values) }
+
+func (page *doublePage) Bounds() (min, max Value, ok bool) {
+	if ok = len(page.values) > 0; ok {
+		minFloat64, maxFloat64 := page.bounds()
+		min = makeValueDouble(minFloat64)
+		max = makeValueDouble(maxFloat64)
+	}
+	return min, max, ok
+}
+
+func (page *doublePage) Clone() BufferedPage {
+	return &doublePage{
+		values:      append([]float64{}, page.values...),
+		columnIndex: page.columnIndex,
+	}
+}
+
+func (page *doublePage) Slice(i, j int64) BufferedPage {
+	return &doublePage{
+		values:      page.values[i:j],
+		columnIndex: page.columnIndex,
+	}
+}
+
 type byteArrayPage struct {
 	values      []byte
 	numValues   int32
@@ -653,6 +1084,132 @@ func (page *fixedLenByteArrayPage) Slice(i, j int64) BufferedPage {
 	return &fixedLenByteArrayPage{
 		data:        page.data[i*int64(page.size) : j*int64(page.size)],
 		size:        page.size,
+		columnIndex: page.columnIndex,
+	}
+}
+
+type uint32Page struct {
+	values      []uint32
+	columnIndex int16
+}
+
+func newUint32Page(columnIndex int16, numValues int32, values []byte) *uint32Page {
+	return &uint32Page{
+		values:      bits.BytesToUint32(values)[:numValues],
+		columnIndex: ^columnIndex,
+	}
+}
+
+func (page *uint32Page) Column() int { return int(^page.columnIndex) }
+
+func (page *uint32Page) Dictionary() Dictionary { return nil }
+
+func (page *uint32Page) NumRows() int64 { return int64(len(page.values)) }
+
+func (page *uint32Page) NumValues() int64 { return int64(len(page.values)) }
+
+func (page *uint32Page) NumNulls() int64 { return 0 }
+
+func (page *uint32Page) Size() int64 { return 4 * int64(len(page.values)) }
+
+func (page *uint32Page) RepetitionLevels() []byte { return nil }
+
+func (page *uint32Page) DefinitionLevels() []byte { return nil }
+
+func (page *uint32Page) Data() []byte { return bits.Uint32ToBytes(page.values) }
+
+func (page *uint32Page) Values() ValueReader { return &uint32PageReader{page: page} }
+
+func (page *uint32Page) Buffer() BufferedPage { return page }
+
+func (page *uint32Page) min() uint32 { return bits.MinUint32(page.values) }
+
+func (page *uint32Page) max() uint32 { return bits.MaxUint32(page.values) }
+
+func (page *uint32Page) bounds() (min, max uint32) { return bits.MinMaxUint32(page.values) }
+
+func (page *uint32Page) Bounds() (min, max Value, ok bool) {
+	if ok = len(page.values) > 0; ok {
+		minUint32, maxUint32 := page.bounds()
+		min = makeValueUint32(minUint32)
+		max = makeValueUint32(maxUint32)
+	}
+	return min, max, ok
+}
+
+func (page *uint32Page) Clone() BufferedPage {
+	return &uint32Page{
+		values:      append([]uint32{}, page.values...),
+		columnIndex: page.columnIndex,
+	}
+}
+
+func (page *uint32Page) Slice(i, j int64) BufferedPage {
+	return &uint32Page{
+		values:      page.values[i:j],
+		columnIndex: page.columnIndex,
+	}
+}
+
+type uint64Page struct {
+	values      []uint64
+	columnIndex int16
+}
+
+func newUint64Page(columnIndex int16, numValues int32, values []byte) *uint64Page {
+	return &uint64Page{
+		values:      bits.BytesToUint64(values)[:numValues],
+		columnIndex: ^columnIndex,
+	}
+}
+
+func (page *uint64Page) Column() int { return int(^page.columnIndex) }
+
+func (page *uint64Page) Dictionary() Dictionary { return nil }
+
+func (page *uint64Page) NumRows() int64 { return int64(len(page.values)) }
+
+func (page *uint64Page) NumValues() int64 { return int64(len(page.values)) }
+
+func (page *uint64Page) NumNulls() int64 { return 0 }
+
+func (page *uint64Page) Size() int64 { return 8 * int64(len(page.values)) }
+
+func (page *uint64Page) RepetitionLevels() []byte { return nil }
+
+func (page *uint64Page) DefinitionLevels() []byte { return nil }
+
+func (page *uint64Page) Data() []byte { return bits.Uint64ToBytes(page.values) }
+
+func (page *uint64Page) Values() ValueReader { return &uint64PageReader{page: page} }
+
+func (page *uint64Page) Buffer() BufferedPage { return page }
+
+func (page *uint64Page) min() uint64 { return bits.MinUint64(page.values) }
+
+func (page *uint64Page) max() uint64 { return bits.MaxUint64(page.values) }
+
+func (page *uint64Page) bounds() (min, max uint64) { return bits.MinMaxUint64(page.values) }
+
+func (page *uint64Page) Bounds() (min, max Value, ok bool) {
+	if ok = len(page.values) > 0; ok {
+		minUint64, maxUint64 := page.bounds()
+		min = makeValueUint64(minUint64)
+		max = makeValueUint64(maxUint64)
+	}
+	return min, max, ok
+}
+
+func (page *uint64Page) Clone() BufferedPage {
+	return &uint64Page{
+		values:      append([]uint64{}, page.values...),
+		columnIndex: page.columnIndex,
+	}
+}
+
+func (page *uint64Page) Slice(i, j int64) BufferedPage {
+	return &uint64Page{
+		values:      page.values[i:j],
 		columnIndex: page.columnIndex,
 	}
 }

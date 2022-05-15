@@ -3,7 +3,9 @@ package parquet
 import (
 	"io"
 
+	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding/plain"
+	"github.com/segmentio/parquet-go/internal/bits"
 )
 
 type optionalPageReader struct {
@@ -107,6 +109,197 @@ func (r *repeatedPageReader) ReadValues(values []Value) (n int, err error) {
 	return n, err
 }
 
+type booleanPageReader struct {
+	page   *booleanPage
+	offset int
+}
+
+func (r *booleanPageReader) Read(b []byte) (n int, err error) {
+	return r.ReadBooleans(bits.BytesToBool(b))
+}
+
+func (r *booleanPageReader) ReadBooleans(values []bool) (n int, err error) {
+	n = copy(values, r.page.values[r.offset:])
+	r.offset += n
+	if r.offset == len(r.page.values) {
+		err = io.EOF
+	}
+	return n, err
+}
+
+func (r *booleanPageReader) ReadValues(values []Value) (n int, err error) {
+	for n < len(values) && r.offset < len(r.page.values) {
+		values[n] = makeValueBoolean(r.page.values[r.offset])
+		values[n].columnIndex = r.page.columnIndex
+		r.offset++
+		n++
+	}
+	if r.offset == len(r.page.values) {
+		err = io.EOF
+	}
+	return n, err
+}
+
+type int32PageReader struct {
+	page   *int32Page
+	offset int
+}
+
+func (r *int32PageReader) Read(b []byte) (n int, err error) {
+	n, err = r.ReadInt32s(bits.BytesToInt32(b))
+	return 4 * n, err
+}
+
+func (r *int32PageReader) ReadInt32s(values []int32) (n int, err error) {
+	n = copy(values, r.page.values[r.offset:])
+	r.offset += n
+	if r.offset == len(r.page.values) {
+		err = io.EOF
+	}
+	return n, err
+}
+
+func (r *int32PageReader) ReadValues(values []Value) (n int, err error) {
+	for n < len(values) && r.offset < len(r.page.values) {
+		values[n] = makeValueInt32(r.page.values[r.offset])
+		values[n].columnIndex = r.page.columnIndex
+		r.offset++
+		n++
+	}
+	if r.offset == len(r.page.values) {
+		err = io.EOF
+	}
+	return n, err
+}
+
+type int64PageReader struct {
+	page   *int64Page
+	offset int
+}
+
+func (r *int64PageReader) Read(b []byte) (n int, err error) {
+	n, err = r.ReadInt64s(bits.BytesToInt64(b))
+	return 8 * n, err
+}
+
+func (r *int64PageReader) ReadInt64s(values []int64) (n int, err error) {
+	n = copy(values, r.page.values[r.offset:])
+	r.offset += n
+	if r.offset == len(r.page.values) {
+		err = io.EOF
+	}
+	return n, err
+}
+
+func (r *int64PageReader) ReadValues(values []Value) (n int, err error) {
+	for n < len(values) && r.offset < len(r.page.values) {
+		values[n] = makeValueInt64(r.page.values[r.offset])
+		values[n].columnIndex = r.page.columnIndex
+		r.offset++
+		n++
+	}
+	if r.offset == len(r.page.values) {
+		err = io.EOF
+	}
+	return n, err
+}
+
+type int96PageReader struct {
+	page   *int96Page
+	offset int
+}
+
+func (r *int96PageReader) Read(b []byte) (n int, err error) {
+	n, err = r.ReadInt96s(deprecated.BytesToInt96(b))
+	return 12 * n, err
+}
+
+func (r *int96PageReader) ReadInt96s(values []deprecated.Int96) (n int, err error) {
+	n = copy(values, r.page.values[r.offset:])
+	r.offset += n
+	if r.offset == len(r.page.values) {
+		err = io.EOF
+	}
+	return n, err
+}
+
+func (r *int96PageReader) ReadValues(values []Value) (n int, err error) {
+	for n < len(values) && r.offset < len(r.page.values) {
+		values[n] = makeValueInt96(r.page.values[r.offset])
+		values[n].columnIndex = r.page.columnIndex
+		r.offset++
+		n++
+	}
+	if r.offset == len(r.page.values) {
+		err = io.EOF
+	}
+	return n, err
+}
+
+type floatPageReader struct {
+	page   *floatPage
+	offset int
+}
+
+func (r *floatPageReader) Read(b []byte) (n int, err error) {
+	n, err = r.ReadFloats(bits.BytesToFloat32(b))
+	return 4 * n, err
+}
+
+func (r *floatPageReader) ReadFloats(values []float32) (n int, err error) {
+	n = copy(values, r.page.values[r.offset:])
+	r.offset += n
+	if r.offset == len(r.page.values) {
+		err = io.EOF
+	}
+	return n, err
+}
+
+func (r *floatPageReader) ReadValues(values []Value) (n int, err error) {
+	for n < len(values) && r.offset < len(r.page.values) {
+		values[n] = makeValueFloat(r.page.values[r.offset])
+		values[n].columnIndex = r.page.columnIndex
+		r.offset++
+		n++
+	}
+	if r.offset == len(r.page.values) {
+		err = io.EOF
+	}
+	return n, err
+}
+
+type doublePageReader struct {
+	page   *doublePage
+	offset int
+}
+
+func (r *doublePageReader) Read(b []byte) (n int, err error) {
+	n, err = r.ReadDoubles(bits.BytesToFloat64(b))
+	return 8 * n, err
+}
+
+func (r *doublePageReader) ReadDoubles(values []float64) (n int, err error) {
+	n = copy(values, r.page.values[r.offset:])
+	r.offset += n
+	if r.offset == len(r.page.values) {
+		err = io.EOF
+	}
+	return n, err
+}
+
+func (r *doublePageReader) ReadValues(values []Value) (n int, err error) {
+	for n < len(values) && r.offset < len(r.page.values) {
+		values[n] = makeValueDouble(r.page.values[r.offset])
+		values[n].columnIndex = r.page.columnIndex
+		r.offset++
+		n++
+	}
+	if r.offset == len(r.page.values) {
+		err = io.EOF
+	}
+	return n, err
+}
+
 type byteArrayPageReader struct {
 	page   *byteArrayPage
 	offset int
@@ -196,6 +389,70 @@ func (r *fixedLenByteArrayPageReader) ReadValues(values []Value) (n int, err err
 		n++
 	}
 	if r.offset == len(r.page.data) {
+		err = io.EOF
+	}
+	return n, err
+}
+
+type uint32PageReader struct {
+	page   *uint32Page
+	offset int
+}
+
+func (r *uint32PageReader) Read(b []byte) (n int, err error) {
+	n, err = r.ReadUint32s(bits.BytesToUint32(b))
+	return 4 * n, err
+}
+
+func (r *uint32PageReader) ReadUint32s(values []uint32) (n int, err error) {
+	n = copy(values, r.page.values[r.offset:])
+	r.offset += n
+	if r.offset == len(r.page.values) {
+		err = io.EOF
+	}
+	return n, err
+}
+
+func (r *uint32PageReader) ReadValues(values []Value) (n int, err error) {
+	for n < len(values) && r.offset < len(r.page.values) {
+		values[n] = makeValueUint32(r.page.values[r.offset])
+		values[n].columnIndex = r.page.columnIndex
+		r.offset++
+		n++
+	}
+	if r.offset == len(r.page.values) {
+		err = io.EOF
+	}
+	return n, err
+}
+
+type uint64PageReader struct {
+	page   *uint64Page
+	offset int
+}
+
+func (r *uint64PageReader) Read(b []byte) (n int, err error) {
+	n, err = r.ReadUint64s(bits.BytesToUint64(b))
+	return 8 * n, err
+}
+
+func (r *uint64PageReader) ReadUint64s(values []uint64) (n int, err error) {
+	n = copy(values, r.page.values[r.offset:])
+	r.offset += n
+	if r.offset == len(r.page.values) {
+		err = io.EOF
+	}
+	return n, err
+}
+
+func (r *uint64PageReader) ReadValues(values []Value) (n int, err error) {
+	for n < len(values) && r.offset < len(r.page.values) {
+		values[n] = makeValueUint64(r.page.values[r.offset])
+		values[n].columnIndex = r.page.columnIndex
+		r.offset++
+		n++
+	}
+	if r.offset == len(r.page.values) {
 		err = io.EOF
 	}
 	return n, err
