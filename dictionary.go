@@ -66,14 +66,13 @@ func dictCap(bufferSize, valueItemSize int) int {
 // The boolean dictionary always contains two values for true and false.
 type booleanDictionary struct {
 	booleanPage
-	typ   Type
 	index map[bool]int32
 }
 
 func newBooleanDictionary(typ Type, columnIndex int16, numValues int32, values []byte) *booleanDictionary {
 	return &booleanDictionary{
-		typ: typ,
 		booleanPage: booleanPage{
+			typ:         typ,
 			values:      bits.BytesToBool(values)[:numValues],
 			columnIndex: ^columnIndex,
 		},
@@ -148,14 +147,13 @@ func (d *booleanDictionary) Page() BufferedPage {
 
 type int32Dictionary struct {
 	int32Page
-	typ   Type
 	index map[int32]int32
 }
 
 func newInt32Dictionary(typ Type, columnIndex int16, numValues int32, values []byte) *int32Dictionary {
 	return &int32Dictionary{
-		typ: typ,
 		int32Page: int32Page{
+			typ:         typ,
 			values:      bits.BytesToInt32(values)[:numValues],
 			columnIndex: ^columnIndex,
 		},
@@ -230,14 +228,13 @@ func (d *int32Dictionary) Page() BufferedPage {
 
 type int64Dictionary struct {
 	int64Page
-	typ   Type
 	index map[int64]int32
 }
 
 func newInt64Dictionary(typ Type, columnIndex int16, numValues int32, values []byte) *int64Dictionary {
 	return &int64Dictionary{
-		typ: typ,
 		int64Page: int64Page{
+			typ:         typ,
 			values:      bits.BytesToInt64(values)[:numValues],
 			columnIndex: ^columnIndex,
 		},
@@ -312,14 +309,13 @@ func (d *int64Dictionary) Page() BufferedPage {
 
 type int96Dictionary struct {
 	int96Page
-	typ   Type
 	index map[deprecated.Int96]int32
 }
 
 func newInt96Dictionary(typ Type, columnIndex int16, numValues int32, values []byte) *int96Dictionary {
 	return &int96Dictionary{
-		typ: typ,
 		int96Page: int96Page{
+			typ:         typ,
 			values:      deprecated.BytesToInt96(values)[:numValues],
 			columnIndex: ^columnIndex,
 		},
@@ -394,14 +390,13 @@ func (d *int96Dictionary) Page() BufferedPage {
 
 type floatDictionary struct {
 	floatPage
-	typ   Type
 	index map[float32]int32
 }
 
 func newFloatDictionary(typ Type, columnIndex int16, numValues int32, values []byte) *floatDictionary {
 	return &floatDictionary{
-		typ: typ,
 		floatPage: floatPage{
+			typ:         typ,
 			values:      bits.BytesToFloat32(values)[:numValues],
 			columnIndex: ^columnIndex,
 		},
@@ -476,14 +471,13 @@ func (d *floatDictionary) Page() BufferedPage {
 
 type doubleDictionary struct {
 	doublePage
-	typ   Type
 	index map[float64]int32
 }
 
 func newDoubleDictionary(typ Type, columnIndex int16, numValues int32, values []byte) *doubleDictionary {
 	return &doubleDictionary{
-		typ: typ,
 		doublePage: doublePage{
+			typ:         typ,
 			values:      bits.BytesToFloat64(values)[:numValues],
 			columnIndex: ^columnIndex,
 		},
@@ -558,16 +552,15 @@ func (d *doubleDictionary) Page() BufferedPage {
 
 type byteArrayDictionary struct {
 	byteArrayPage
-	typ     Type
 	offsets []uint32
 	index   map[string]int32
 }
 
 func newByteArrayDictionary(typ Type, columnIndex int16, numValues int32, values []byte) *byteArrayDictionary {
 	d := &byteArrayDictionary{
-		typ:     typ,
 		offsets: make([]uint32, 0, numValues),
 		byteArrayPage: byteArrayPage{
+			typ:         typ,
 			values:      values,
 			numValues:   numValues,
 			columnIndex: ^columnIndex,
@@ -665,15 +658,14 @@ func (d *byteArrayDictionary) Page() BufferedPage {
 
 type fixedLenByteArrayDictionary struct {
 	fixedLenByteArrayPage
-	typ   Type
 	index map[string]int32
 }
 
 func newFixedLenByteArrayDictionary(typ Type, columnIndex int16, numValues int32, data []byte) *fixedLenByteArrayDictionary {
 	size := typ.Length()
 	return &fixedLenByteArrayDictionary{
-		typ: typ,
 		fixedLenByteArrayPage: fixedLenByteArrayPage{
+			typ:         typ,
 			size:        size,
 			data:        data,
 			columnIndex: ^columnIndex,
@@ -757,14 +749,13 @@ func (d *fixedLenByteArrayDictionary) Page() BufferedPage {
 
 type uint32Dictionary struct {
 	uint32Page
-	typ   Type
 	index map[uint32]int32
 }
 
 func newUint32Dictionary(typ Type, columnIndex int16, numValues int32, data []byte) *uint32Dictionary {
 	return &uint32Dictionary{
-		typ: typ,
 		uint32Page: uint32Page{
+			typ:         typ,
 			values:      bits.BytesToUint32(data)[:numValues],
 			columnIndex: ^columnIndex,
 		},
@@ -839,14 +830,13 @@ func (d *uint32Dictionary) Page() BufferedPage {
 
 type uint64Dictionary struct {
 	uint64Page
-	typ   Type
 	index map[uint64]int32
 }
 
 func newUint64Dictionary(typ Type, columnIndex int16, numValues int32, data []byte) *uint64Dictionary {
 	return &uint64Dictionary{
-		typ: typ,
 		uint64Page: uint64Page{
+			typ:         typ,
 			values:      bits.BytesToUint64(data),
 			columnIndex: ^columnIndex,
 		},
@@ -950,20 +940,16 @@ type indexedPage struct {
 	columnIndex int16
 }
 
-func newIndexedPage(dict Dictionary, columnIndex int16, numValues int32, data []byte) *indexedPage {
-	values := bits.BytesToInt32(data)
-	for len(values) < int(numValues) {
-		values = append(values, 0)
-	}
-	if len(values) > int(numValues) {
-		values = values[:numValues]
-	}
+func newIndexedPage(dict Dictionary, columnIndex int16, numValues int32, values []byte) *indexedPage {
+	values = resize(values, 4*int(numValues))
 	return &indexedPage{
 		dict:        dict,
-		values:      values,
+		values:      bits.BytesToInt32(values)[:numValues],
 		columnIndex: ^columnIndex,
 	}
 }
+
+func (page *indexedPage) Type() Type { return page.dict.Type() }
 
 func (page *indexedPage) Column() int { return int(^page.columnIndex) }
 
@@ -974,6 +960,18 @@ func (page *indexedPage) NumRows() int64 { return int64(len(page.values)) }
 func (page *indexedPage) NumValues() int64 { return int64(len(page.values)) }
 
 func (page *indexedPage) NumNulls() int64 { return 0 }
+
+func (page *indexedPage) Size() int64 { return sizeOfInt32(page.values) }
+
+func (page *indexedPage) RepetitionLevels() []byte { return nil }
+
+func (page *indexedPage) DefinitionLevels() []byte { return nil }
+
+func (page *indexedPage) Data() []byte { return bits.Int32ToBytes(page.values) }
+
+func (page *indexedPage) Values() ValueReader { return &indexedPageReader{page: page} }
+
+func (page *indexedPage) Buffer() BufferedPage { return page }
 
 func (page *indexedPage) Bounds() (min, max Value, ok bool) {
 	if ok = len(page.values) > 0; ok {
@@ -999,18 +997,6 @@ func (page *indexedPage) Slice(i, j int64) BufferedPage {
 		columnIndex: page.columnIndex,
 	}
 }
-
-func (page *indexedPage) Size() int64 { return sizeOfInt32(page.values) }
-
-func (page *indexedPage) RepetitionLevels() []byte { return nil }
-
-func (page *indexedPage) DefinitionLevels() []byte { return nil }
-
-func (page *indexedPage) Data() []byte { return bits.Int32ToBytes(page.values) }
-
-func (page *indexedPage) Values() ValueReader { return &indexedPageReader{page: page} }
-
-func (page *indexedPage) Buffer() BufferedPage { return page }
 
 type indexedPageReader struct {
 	page   *indexedPage

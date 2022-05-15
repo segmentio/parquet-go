@@ -19,6 +19,13 @@ import (
 //
 // https://github.com/apache/parquet-format#glossary
 type Page interface {
+	// Returns the type of values read from this page.
+	//
+	// The returned type can be used to encode the page data, in the case of
+	// an indexed page (which has a dictionary), the type is configured to
+	// encode the indexes stored in the page rather than the plain values.
+	Type() Type
+
 	// Returns the column index that this page belongs to.
 	Column() int
 
@@ -212,17 +219,20 @@ func forEachPageSlice(page BufferedPage, wantSize int64, do func(BufferedPage) e
 // as a way to ensure that it is not ignored due to being empty when written
 // to a file.
 type errorPage struct {
+	typ         Type
 	err         error
 	columnIndex int
 }
 
-func newErrorPage(columnIndex int, msg string, args ...interface{}) *errorPage {
+func newErrorPage(typ Type, columnIndex int, msg string, args ...interface{}) *errorPage {
 	return &errorPage{
+		typ:         typ,
 		err:         fmt.Errorf(msg, args...),
 		columnIndex: columnIndex,
 	}
 }
 
+func (page *errorPage) Type() Type                        { return page.typ }
 func (page *errorPage) Column() int                       { return page.columnIndex }
 func (page *errorPage) Dictionary() Dictionary            { return nil }
 func (page *errorPage) NumRows() int64                    { return 1 }
@@ -283,6 +293,8 @@ func newOptionalPage(base BufferedPage, maxDefinitionLevel byte, definitionLevel
 		definitionLevels:   definitionLevels,
 	}
 }
+
+func (page *optionalPage) Type() Type { return page.base.Type() }
 
 func (page *optionalPage) Column() int { return page.base.Column() }
 
@@ -345,6 +357,8 @@ func newRepeatedPage(base BufferedPage, maxRepetitionLevel, maxDefinitionLevel b
 		repetitionLevels:   repetitionLevels,
 	}
 }
+
+func (page *repeatedPage) Type() Type { return page.base.Type() }
 
 func (page *repeatedPage) Column() int { return page.base.Column() }
 
@@ -444,16 +458,20 @@ func resize(data []byte, size int) []byte {
 }
 
 type booleanPage struct {
+	typ         Type
 	values      []bool
 	columnIndex int16
 }
 
-func newBooleanPage(columnIndex int16, numValues int32, values []byte) *booleanPage {
+func newBooleanPage(typ Type, columnIndex int16, numValues int32, values []byte) *booleanPage {
 	return &booleanPage{
+		typ:         typ,
 		values:      bits.BytesToBool(resize(values, int(numValues))),
 		columnIndex: ^columnIndex,
 	}
 }
+
+func (page *booleanPage) Type() Type { return page.typ }
 
 func (page *booleanPage) Column() int { return int(^page.columnIndex) }
 
@@ -529,6 +547,7 @@ func (page *booleanPage) Bounds() (min, max Value, ok bool) {
 
 func (page *booleanPage) Clone() BufferedPage {
 	return &booleanPage{
+		typ:         page.typ,
 		values:      append([]bool{}, page.values...),
 		columnIndex: page.columnIndex,
 	}
@@ -536,22 +555,27 @@ func (page *booleanPage) Clone() BufferedPage {
 
 func (page *booleanPage) Slice(i, j int64) BufferedPage {
 	return &booleanPage{
+		typ:         page.typ,
 		values:      page.values[i:j],
 		columnIndex: page.columnIndex,
 	}
 }
 
 type int32Page struct {
+	typ         Type
 	values      []int32
 	columnIndex int16
 }
 
-func newInt32Page(columnIndex int16, numValues int32, values []byte) *int32Page {
+func newInt32Page(typ Type, columnIndex int16, numValues int32, values []byte) *int32Page {
 	return &int32Page{
+		typ:         typ,
 		values:      bits.BytesToInt32(values)[:numValues],
 		columnIndex: ^columnIndex,
 	}
 }
+
+func (page *int32Page) Type() Type { return page.typ }
 
 func (page *int32Page) Column() int { return int(^page.columnIndex) }
 
@@ -592,6 +616,7 @@ func (page *int32Page) Bounds() (min, max Value, ok bool) {
 
 func (page *int32Page) Clone() BufferedPage {
 	return &int32Page{
+		typ:         page.typ,
 		values:      append([]int32{}, page.values...),
 		columnIndex: page.columnIndex,
 	}
@@ -599,22 +624,27 @@ func (page *int32Page) Clone() BufferedPage {
 
 func (page *int32Page) Slice(i, j int64) BufferedPage {
 	return &int32Page{
+		typ:         page.typ,
 		values:      page.values[i:j],
 		columnIndex: page.columnIndex,
 	}
 }
 
 type int64Page struct {
+	typ         Type
 	values      []int64
 	columnIndex int16
 }
 
-func newInt64Page(columnIndex int16, numValues int32, values []byte) *int64Page {
+func newInt64Page(typ Type, columnIndex int16, numValues int32, values []byte) *int64Page {
 	return &int64Page{
+		typ:         typ,
 		values:      bits.BytesToInt64(values)[:numValues],
 		columnIndex: ^columnIndex,
 	}
 }
+
+func (page *int64Page) Type() Type { return page.typ }
 
 func (page *int64Page) Column() int { return int(^page.columnIndex) }
 
@@ -655,6 +685,7 @@ func (page *int64Page) Bounds() (min, max Value, ok bool) {
 
 func (page *int64Page) Clone() BufferedPage {
 	return &int64Page{
+		typ:         page.typ,
 		values:      append([]int64{}, page.values...),
 		columnIndex: page.columnIndex,
 	}
@@ -662,22 +693,27 @@ func (page *int64Page) Clone() BufferedPage {
 
 func (page *int64Page) Slice(i, j int64) BufferedPage {
 	return &int64Page{
+		typ:         page.typ,
 		values:      page.values[i:j],
 		columnIndex: page.columnIndex,
 	}
 }
 
 type int96Page struct {
+	typ         Type
 	values      []deprecated.Int96
 	columnIndex int16
 }
 
-func newInt96Page(columnIndex int16, numValues int32, values []byte) *int96Page {
+func newInt96Page(typ Type, columnIndex int16, numValues int32, values []byte) *int96Page {
 	return &int96Page{
+		typ:         typ,
 		values:      deprecated.BytesToInt96(values)[:numValues],
 		columnIndex: ^columnIndex,
 	}
 }
+
+func (page *int96Page) Type() Type { return page.typ }
 
 func (page *int96Page) Column() int { return int(^page.columnIndex) }
 
@@ -720,6 +756,7 @@ func (page *int96Page) Bounds() (min, max Value, ok bool) {
 
 func (page *int96Page) Clone() BufferedPage {
 	return &int96Page{
+		typ:         page.typ,
 		values:      append([]deprecated.Int96{}, page.values...),
 		columnIndex: page.columnIndex,
 	}
@@ -727,22 +764,27 @@ func (page *int96Page) Clone() BufferedPage {
 
 func (page *int96Page) Slice(i, j int64) BufferedPage {
 	return &int96Page{
+		typ:         page.typ,
 		values:      page.values[i:j],
 		columnIndex: page.columnIndex,
 	}
 }
 
 type floatPage struct {
+	typ         Type
 	values      []float32
 	columnIndex int16
 }
 
-func newFloatPage(columnIndex int16, numValues int32, values []byte) *floatPage {
+func newFloatPage(typ Type, columnIndex int16, numValues int32, values []byte) *floatPage {
 	return &floatPage{
+		typ:         typ,
 		values:      bits.BytesToFloat32(values)[:numValues],
 		columnIndex: ^columnIndex,
 	}
 }
+
+func (page *floatPage) Type() Type { return page.typ }
 
 func (page *floatPage) Column() int { return int(^page.columnIndex) }
 
@@ -783,6 +825,7 @@ func (page *floatPage) Bounds() (min, max Value, ok bool) {
 
 func (page *floatPage) Clone() BufferedPage {
 	return &floatPage{
+		typ:         page.typ,
 		values:      append([]float32{}, page.values...),
 		columnIndex: page.columnIndex,
 	}
@@ -790,22 +833,27 @@ func (page *floatPage) Clone() BufferedPage {
 
 func (page *floatPage) Slice(i, j int64) BufferedPage {
 	return &floatPage{
+		typ:         page.typ,
 		values:      page.values[i:j],
 		columnIndex: page.columnIndex,
 	}
 }
 
 type doublePage struct {
+	typ         Type
 	values      []float64
 	columnIndex int16
 }
 
-func newDoublePage(columnIndex int16, numValues int32, values []byte) *doublePage {
+func newDoublePage(typ Type, columnIndex int16, numValues int32, values []byte) *doublePage {
 	return &doublePage{
+		typ:         typ,
 		values:      bits.BytesToFloat64(values)[:numValues],
 		columnIndex: ^columnIndex,
 	}
 }
+
+func (page *doublePage) Type() Type { return page.typ }
 
 func (page *doublePage) Column() int { return int(^page.columnIndex) }
 
@@ -846,6 +894,7 @@ func (page *doublePage) Bounds() (min, max Value, ok bool) {
 
 func (page *doublePage) Clone() BufferedPage {
 	return &doublePage{
+		typ:         page.typ,
 		values:      append([]float64{}, page.values...),
 		columnIndex: page.columnIndex,
 	}
@@ -853,24 +902,29 @@ func (page *doublePage) Clone() BufferedPage {
 
 func (page *doublePage) Slice(i, j int64) BufferedPage {
 	return &doublePage{
+		typ:         page.typ,
 		values:      page.values[i:j],
 		columnIndex: page.columnIndex,
 	}
 }
 
 type byteArrayPage struct {
+	typ         Type
 	values      []byte
 	numValues   int32
 	columnIndex int16
 }
 
-func newByteArrayPage(columnIndex int16, numValues int32, values []byte) *byteArrayPage {
+func newByteArrayPage(typ Type, columnIndex int16, numValues int32, values []byte) *byteArrayPage {
 	return &byteArrayPage{
+		typ:         typ,
 		values:      values,
 		numValues:   numValues,
 		columnIndex: ^columnIndex,
 	}
 }
+
+func (page *byteArrayPage) Type() Type { return page.typ }
 
 func (page *byteArrayPage) Column() int { return int(^page.columnIndex) }
 
@@ -976,6 +1030,7 @@ func (page *byteArrayPage) cloneValues() []byte {
 
 func (page *byteArrayPage) Clone() BufferedPage {
 	return &byteArrayPage{
+		typ:         page.typ,
 		values:      page.cloneValues(),
 		numValues:   page.numValues,
 		columnIndex: page.columnIndex,
@@ -1001,6 +1056,7 @@ func (page *byteArrayPage) Slice(i, j int64) BufferedPage {
 	}
 
 	return &byteArrayPage{
+		typ:         page.typ,
 		values:      page.values[off0:off1:off1],
 		numValues:   int32(numValues),
 		columnIndex: page.columnIndex,
@@ -1008,12 +1064,14 @@ func (page *byteArrayPage) Slice(i, j int64) BufferedPage {
 }
 
 type fixedLenByteArrayPage struct {
+	typ         Type
 	data        []byte
 	size        int
 	columnIndex int16
 }
 
-func newFixedLenByteArrayPage(columnIndex int16, numValues int32, data []byte, size int) *fixedLenByteArrayPage {
+func newFixedLenByteArrayPage(typ Type, columnIndex int16, numValues int32, data []byte) *fixedLenByteArrayPage {
+	size := typ.Length()
 	if (len(data) % size) != 0 {
 		panic("cannot create fixed-length byte array page from input which is not a multiple of the type size")
 	}
@@ -1021,11 +1079,14 @@ func newFixedLenByteArrayPage(columnIndex int16, numValues int32, data []byte, s
 		panic(fmt.Errorf("number of values mismatch in numValues and data arguments: %d != %d", numValues, len(data)/size))
 	}
 	return &fixedLenByteArrayPage{
+		typ:         typ,
 		data:        data,
 		size:        size,
 		columnIndex: ^columnIndex,
 	}
 }
+
+func (page *fixedLenByteArrayPage) Type() Type { return page.typ }
 
 func (page *fixedLenByteArrayPage) Column() int { return int(^page.columnIndex) }
 
@@ -1074,6 +1135,7 @@ func (page *fixedLenByteArrayPage) Bounds() (min, max Value, ok bool) {
 
 func (page *fixedLenByteArrayPage) Clone() BufferedPage {
 	return &fixedLenByteArrayPage{
+		typ:         page.typ,
 		data:        append([]byte{}, page.data...),
 		size:        page.size,
 		columnIndex: page.columnIndex,
@@ -1082,6 +1144,7 @@ func (page *fixedLenByteArrayPage) Clone() BufferedPage {
 
 func (page *fixedLenByteArrayPage) Slice(i, j int64) BufferedPage {
 	return &fixedLenByteArrayPage{
+		typ:         page.typ,
 		data:        page.data[i*int64(page.size) : j*int64(page.size)],
 		size:        page.size,
 		columnIndex: page.columnIndex,
@@ -1089,16 +1152,20 @@ func (page *fixedLenByteArrayPage) Slice(i, j int64) BufferedPage {
 }
 
 type uint32Page struct {
+	typ         Type
 	values      []uint32
 	columnIndex int16
 }
 
-func newUint32Page(columnIndex int16, numValues int32, values []byte) *uint32Page {
+func newUint32Page(typ Type, columnIndex int16, numValues int32, values []byte) *uint32Page {
 	return &uint32Page{
+		typ:         typ,
 		values:      bits.BytesToUint32(values)[:numValues],
 		columnIndex: ^columnIndex,
 	}
 }
+
+func (page *uint32Page) Type() Type { return page.typ }
 
 func (page *uint32Page) Column() int { return int(^page.columnIndex) }
 
@@ -1139,6 +1206,7 @@ func (page *uint32Page) Bounds() (min, max Value, ok bool) {
 
 func (page *uint32Page) Clone() BufferedPage {
 	return &uint32Page{
+		typ:         page.typ,
 		values:      append([]uint32{}, page.values...),
 		columnIndex: page.columnIndex,
 	}
@@ -1146,22 +1214,27 @@ func (page *uint32Page) Clone() BufferedPage {
 
 func (page *uint32Page) Slice(i, j int64) BufferedPage {
 	return &uint32Page{
+		typ:         page.typ,
 		values:      page.values[i:j],
 		columnIndex: page.columnIndex,
 	}
 }
 
 type uint64Page struct {
+	typ         Type
 	values      []uint64
 	columnIndex int16
 }
 
-func newUint64Page(columnIndex int16, numValues int32, values []byte) *uint64Page {
+func newUint64Page(typ Type, columnIndex int16, numValues int32, values []byte) *uint64Page {
 	return &uint64Page{
+		typ:         typ,
 		values:      bits.BytesToUint64(values)[:numValues],
 		columnIndex: ^columnIndex,
 	}
 }
+
+func (page *uint64Page) Type() Type { return page.typ }
 
 func (page *uint64Page) Column() int { return int(^page.columnIndex) }
 
@@ -1202,6 +1275,7 @@ func (page *uint64Page) Bounds() (min, max Value, ok bool) {
 
 func (page *uint64Page) Clone() BufferedPage {
 	return &uint64Page{
+		typ:         page.typ,
 		values:      append([]uint64{}, page.values...),
 		columnIndex: page.columnIndex,
 	}
@@ -1209,38 +1283,42 @@ func (page *uint64Page) Clone() BufferedPage {
 
 func (page *uint64Page) Slice(i, j int64) BufferedPage {
 	return &uint64Page{
+		typ:         page.typ,
 		values:      page.values[i:j],
 		columnIndex: page.columnIndex,
 	}
 }
 
 type nullPage struct {
+	typ    Type
 	column int
 	count  int
 }
 
-func newNullPage(columnIndex int16, numValues int32) *nullPage {
+func newNullPage(typ Type, columnIndex int16, numValues int32) *nullPage {
 	return &nullPage{
+		typ:    typ,
 		column: int(columnIndex),
 		count:  int(numValues),
 	}
 }
 
-func (p *nullPage) Column() int                       { return p.column }
-func (p *nullPage) Dictionary() Dictionary            { return nil }
-func (p *nullPage) NumRows() int64                    { return int64(p.count) }
-func (p *nullPage) NumValues() int64                  { return int64(p.count) }
-func (p *nullPage) NumNulls() int64                   { return int64(p.count) }
-func (p *nullPage) Bounds() (min, max Value, ok bool) { return }
-func (p *nullPage) Size() int64                       { return 1 }
-func (p *nullPage) Values() ValueReader {
-	return &nullPageReader{column: p.column, remain: p.count}
+func (page *nullPage) Type() Type                        { return page.typ }
+func (page *nullPage) Column() int                       { return page.column }
+func (page *nullPage) Dictionary() Dictionary            { return nil }
+func (page *nullPage) NumRows() int64                    { return int64(page.count) }
+func (page *nullPage) NumValues() int64                  { return int64(page.count) }
+func (page *nullPage) NumNulls() int64                   { return int64(page.count) }
+func (page *nullPage) Bounds() (min, max Value, ok bool) { return }
+func (page *nullPage) Size() int64                       { return 1 }
+func (page *nullPage) Values() ValueReader {
+	return &nullPageReader{column: page.column, remain: page.count}
 }
-func (p *nullPage) Buffer() BufferedPage { return p }
-func (p *nullPage) Clone() BufferedPage  { return p }
-func (p *nullPage) Slice(i, j int64) BufferedPage {
-	return &nullPage{column: p.column, count: p.count - int(j-i)}
+func (page *nullPage) Buffer() BufferedPage { return page }
+func (page *nullPage) Clone() BufferedPage  { return page }
+func (page *nullPage) Slice(i, j int64) BufferedPage {
+	return &nullPage{column: page.column, count: page.count - int(j-i)}
 }
-func (p *nullPage) RepetitionLevels() []byte { return nil }
-func (p *nullPage) DefinitionLevels() []byte { return nil }
-func (p *nullPage) Data() []byte             { return nil }
+func (page *nullPage) RepetitionLevels() []byte { return nil }
+func (page *nullPage) DefinitionLevels() []byte { return nil }
+func (page *nullPage) Data() []byte             { return nil }
