@@ -6,7 +6,6 @@ import (
 	"io"
 	"math"
 	"math/rand"
-	"reflect"
 	"testing"
 
 	"github.com/segmentio/parquet-go/deprecated"
@@ -299,6 +298,8 @@ func setBitWidth(e encoding.Encoding, bitWidth int) {
 	}
 }
 
+type encodingFunc func(encoding.Encoding, []byte, []byte) ([]byte, error)
+
 func testBooleanEncoding(t *testing.T, e encoding.Encoding) {
 	testCanEncodeBoolean(t, e)
 	buffer := []byte{}
@@ -310,16 +311,10 @@ func testBooleanEncoding(t *testing.T, e encoding.Encoding) {
 			var err error
 			var input = bits.BoolToBytes(test)
 			buffer, err = e.EncodeBoolean(buffer, input)
-			if err != nil {
-				t.Fatal(err)
-			}
+			assertNoError(t, err)
 			values, err = e.DecodeBoolean(values, buffer)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if !reflect.DeepEqual(input, values[:len(test)]) {
-				t.Fatalf("values mismatch:\nwant = %+v\ngot  = %+v", test, values)
-			}
+			assertNoError(t, err)
+			assertBytesEqual(t, input, values[:len(test)])
 			// Boolean encodings may pad their output with up to 7 bits, so we
 			// count the distance from the last decoded value to the EOF error,
 			// and ensure that it's always smaller than 8.
@@ -344,7 +339,7 @@ func testLevelsEncoding(t *testing.T, e encoding.Encoding) {
 			assertNoError(t, err)
 			values, err = e.DecodeLevels(values, buffer)
 			assertNoError(t, err)
-			assertDeepEqual(t, test, values)
+			assertBytesEqual(t, test, values)
 		})
 	}
 }
@@ -364,7 +359,7 @@ func testInt32Encoding(t *testing.T, e encoding.Encoding) {
 			assertNoError(t, err)
 			values, err = e.DecodeInt32(values, buffer)
 			assertNoError(t, err)
-			assertDeepEqual(t, input, values)
+			assertBytesEqual(t, input, values)
 		})
 	}
 }
@@ -384,7 +379,7 @@ func testInt64Encoding(t *testing.T, e encoding.Encoding) {
 			assertNoError(t, err)
 			values, err = e.DecodeInt64(values, buffer)
 			assertNoError(t, err)
-			assertDeepEqual(t, input, values)
+			assertBytesEqual(t, input, values)
 		})
 	}
 }
@@ -402,7 +397,7 @@ func testInt96Encoding(t *testing.T, e encoding.Encoding) {
 			assertNoError(t, err)
 			values, err = e.DecodeInt96(values, buffer)
 			assertNoError(t, err)
-			assertDeepEqual(t, input, values)
+			assertBytesEqual(t, input, values)
 		})
 	}
 }
@@ -420,7 +415,7 @@ func testFloatEncoding(t *testing.T, e encoding.Encoding) {
 			assertNoError(t, err)
 			values, err = e.DecodeFloat(values, buffer)
 			assertNoError(t, err)
-			assertDeepEqual(t, input, values)
+			assertBytesEqual(t, input, values)
 		})
 	}
 }
@@ -438,7 +433,7 @@ func testDoubleEncoding(t *testing.T, e encoding.Encoding) {
 			assertNoError(t, err)
 			values, err = e.DecodeDouble(values, buffer)
 			assertNoError(t, err)
-			assertDeepEqual(t, input, values)
+			assertBytesEqual(t, input, values)
 		})
 	}
 }
@@ -462,7 +457,7 @@ func testByteArrayEncoding(t *testing.T, e encoding.Encoding) {
 			assertNoError(t, err)
 			values, err = e.DecodeByteArray(values, buffer)
 			assertNoError(t, err)
-			assertDeepEqual(t, byteArrays, values)
+			assertBytesEqual(t, byteArrays, values)
 		})
 	}
 }
@@ -479,7 +474,7 @@ func testFixedLenByteArrayEncoding(t *testing.T, e encoding.Encoding) {
 			assertNoError(t, err)
 			values, err = e.DecodeFixedLenByteArray(values, buffer, test.size)
 			assertNoError(t, err)
-			assertDeepEqual(t, test.data, values)
+			assertBytesEqual(t, test.data, values)
 		})
 	}
 }
@@ -527,15 +522,16 @@ func testCanEncode(t testing.TB, e encoding.Encoding, test func(encoding.Encodin
 }
 
 func assertNoError(t *testing.T, err error) {
+	t.Helper()
 	if err != nil {
-		t.Helper()
 		t.Fatal(err)
 	}
 }
 
-func assertDeepEqual(t *testing.T, want, got interface{}) {
-	if !reflect.DeepEqual(want, got) {
-		t.Fatalf("values mismatch:\nwant = %+v\ngot  = %+v", want, got)
+func assertBytesEqual(t *testing.T, want, got []byte) {
+	t.Helper()
+	if !bytes.Equal(want, got) {
+		t.Fatalf("values mismatch:\nwant = %q\ngot  = %q", want, got)
 	}
 }
 
