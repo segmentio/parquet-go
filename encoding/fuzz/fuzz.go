@@ -11,43 +11,21 @@ import (
 
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/encoding/plain"
-	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 func EncodeBoolean(f *testing.F, e encoding.Encoding) {
-	var err error
-	var buf = make([]byte, 64*1024)
-	var src = make([]byte, 64*1024)
-	var dst = make([]byte, 64*1024)
-
-	f.Fuzz(func(t *testing.T, input []byte) {
-		src = src[:0]
-		for _, c := range input {
-			src = append(src, (c & 1))
-		}
-		dst, err = e.EncodeBoolean(dst, src)
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		buf, err = e.DecodeBoolean(buf, dst)
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		if !bytes.Equal(unsafecast.Slice[byte](buf), unsafecast.Slice[byte](src)) {
-			t.Error("decoded output does not match the original input")
-			return
-		}
-		// Likely invalid inputs, look for panics.
-		buf, _ = e.DecodeBoolean(buf, input)
-	})
+	encode(f, e,
+		encoding.Encoding.EncodeBoolean,
+		encoding.Encoding.DecodeBoolean,
+		generatePlainBooleanList,
+	)
 }
 
 func EncodeLevels(f *testing.F, e encoding.Encoding) {
 	encode(f, e,
 		encoding.Encoding.EncodeLevels,
 		encoding.Encoding.DecodeLevels,
+		generatePlainValueList(1),
 	)
 }
 
@@ -55,6 +33,7 @@ func EncodeInt32(f *testing.F, e encoding.Encoding) {
 	encode(f, e,
 		encoding.Encoding.EncodeInt32,
 		encoding.Encoding.DecodeInt32,
+		generatePlainValueList(4),
 	)
 }
 
@@ -62,6 +41,7 @@ func EncodeInt64(f *testing.F, e encoding.Encoding) {
 	encode(f, e,
 		encoding.Encoding.EncodeInt64,
 		encoding.Encoding.DecodeInt64,
+		generatePlainValueList(8),
 	)
 }
 
@@ -69,6 +49,7 @@ func EncodeFloat(f *testing.F, e encoding.Encoding) {
 	encode(f, e,
 		encoding.Encoding.EncodeFloat,
 		encoding.Encoding.DecodeFloat,
+		generatePlainValueList(4),
 	)
 }
 
@@ -76,67 +57,61 @@ func EncodeDouble(f *testing.F, e encoding.Encoding) {
 	encode(f, e,
 		encoding.Encoding.EncodeDouble,
 		encoding.Encoding.DecodeDouble,
+		generatePlainValueList(8),
 	)
 }
 
 func EncodeByteArray(f *testing.F, e encoding.Encoding) {
+	encode(f, e,
+		encoding.Encoding.EncodeByteArray,
+		encoding.Encoding.DecodeByteArray,
+		generatePlainByteArrayList,
+	)
+}
+
+type encodingFunc func(enc encoding.Encoding, dst, src []byte) ([]byte, error)
+
+type generateFunc func(dst, src []byte, prng *rand.Rand) []byte
+
+func encode(f *testing.F, e encoding.Encoding, encode encodingFunc, decode encodingFunc, generate generateFunc) {
+	const bufferSize = 64 * 1024
 	var err error
-	var buf = make([]byte, 64*1024)
-	var dst = make([]byte, 64*1024)
-	var src = make([]byte, 64*1024)
+	var buf = make([]byte, bufferSize)
+	var src = make([]byte, bufferSize)
+	var dst = make([]byte, bufferSize)
 	var prng = rand.New(rand.NewSource(0))
 
 	f.Fuzz(func(t *testing.T, input []byte, seed int64) {
 		prng.Seed(seed)
-		src = generatePlainByteArrayList(src[:0], input, prng)
+		src = generate(src[:0], input, prng)
 
-		dst, err = e.EncodeByteArray(dst, src)
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		buf, err = e.DecodeByteArray(buf, dst)
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		if !bytes.Equal(buf, src) {
-			t.Error("decoded output does not match the original input")
-			return
-		}
-		// Likely invalid inputs, look for panics.
-		buf, _ = e.DecodeByteArray(buf, input)
-	})
-}
-
-type encodeFunc[T any] func(encoding.Encoding, []byte, []T) ([]byte, error)
-
-type decodeFunc[T any] func(encoding.Encoding, []T, []byte) ([]T, error)
-
-func encode[T any](f *testing.F, e encoding.Encoding, encode encodeFunc[T], decode decodeFunc[T]) {
-	var err error
-	var buf = make([]T, 16*1024)
-	var dst = make([]byte, 64*1024)
-
-	f.Fuzz(func(t *testing.T, input []byte) {
-		var src = unsafecast.Slice[T](input)
 		dst, err = encode(e, dst, src)
 		if err != nil {
 			t.Error(err)
 			return
 		}
+
 		buf, err = decode(e, buf, dst)
 		if err != nil {
 			t.Error(err)
 			return
 		}
-		if !bytes.Equal(unsafecast.Slice[byte](buf), unsafecast.Slice[byte](src)) {
+
+		if !bytes.Equal(buf, src) {
 			t.Error("decoded output does not match the original input")
 			return
 		}
+
 		// Likely invalid inputs, look for panics.
 		buf, _ = decode(e, buf, input)
 	})
+}
+
+func generatePlainBooleanList(dst, src []byte, _ *rand.Rand) []byte {
+	for _, c := range src {
+		dst = append(dst, (c & 1))
+	}
+	return dst
 }
 
 func generatePlainByteArrayList(dst, src []byte, prng *rand.Rand) []byte {
@@ -153,4 +128,11 @@ func generatePlainByteArrayList(dst, src []byte, prng *rand.Rand) []byte {
 	}
 
 	return dst
+}
+
+func generatePlainValueList(size int) func(dst, src []byte, _ *rand.Rand) []byte {
+	return func(dst, src []byte, _ *rand.Rand) []byte {
+		n := (len(src) / size) * size
+		return append(dst, src[:n]...)
+	}
 }
