@@ -22,7 +22,7 @@ func (e *Encoding) Encoding() format.Encoding {
 
 func (e *Encoding) EncodeFloat(dst, src []byte) ([]byte, error) {
 	if (len(src) % 4) != 0 {
-		return dst[:0], encoding.ErrInvalidInputSize(e, "FLOAT", len(src))
+		return dst[:0], encoding.ErrEncodeInvalidInputSize(e, "FLOAT", len(src))
 	}
 
 	dst = resize(dst, len(src))
@@ -44,7 +44,7 @@ func (e *Encoding) EncodeFloat(dst, src []byte) ([]byte, error) {
 
 func (e *Encoding) EncodeDouble(dst, src []byte) ([]byte, error) {
 	if (len(src) % 8) != 0 {
-		return dst[:0], encoding.ErrInvalidInputSize(e, "DOUBLE", len(src))
+		return dst[:0], encoding.ErrEncodeInvalidInputSize(e, "DOUBLE", len(src))
 	}
 
 	dst = resize(dst, len(src))
@@ -74,7 +74,7 @@ func (e *Encoding) EncodeDouble(dst, src []byte) ([]byte, error) {
 
 func (e *Encoding) DecodeFloat(dst, src []byte) ([]byte, error) {
 	if (len(src) % 4) != 0 {
-		return dst[:0], encoding.ErrInvalidInputSize(e, "FLOAT", len(src))
+		return dst[:0], encoding.ErrDecodeInvalidInputSize(e, "FLOAT", len(src))
 	}
 
 	dst = resize(dst, len(src))
@@ -97,7 +97,7 @@ func (e *Encoding) DecodeFloat(dst, src []byte) ([]byte, error) {
 
 func (e *Encoding) DecodeDouble(dst, src []byte) ([]byte, error) {
 	if (len(src) % 8) != 0 {
-		return dst[:0], encoding.ErrInvalidInputSize(e, "DOUBLE", len(src))
+		return dst[:0], encoding.ErrDecodeInvalidInputSize(e, "DOUBLE", len(src))
 	}
 
 	dst = resize(dst, len(src))

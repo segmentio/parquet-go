@@ -13,6 +13,11 @@ type int32Buffer struct {
 	values []int32
 }
 
+func (buf *int32Buffer) decode(src []byte) ([]byte, error) {
+	var binpack BinaryPackedEncoding
+	return binpack.decode(src, func(value int64) { buf.values = append(buf.values, int32(value)) })
+}
+
 var (
 	int32BufferPool sync.Pool // *int32Buffer
 	bytesBufferPool sync.Pool // *bytes.Buffer

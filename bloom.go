@@ -148,8 +148,8 @@ func (splitBlockEncoding) EncodeBoolean(dst []byte, src []bool) ([]byte, error) 
 	return dst, nil
 }
 
-func (splitBlockEncoding) EncodeInt32(dst []byte, src []int32) ([]byte, error) {
-	splitBlockEncodeUint32(bloom.MakeSplitBlockFilter(dst), bits.Int32ToUint32(src))
+func (splitBlockEncoding) EncodeInt32(dst, src []byte) ([]byte, error) {
+	splitBlockEncodeUint32(bloom.MakeSplitBlockFilter(dst), bits.BytesToUint32(src))
 	return dst, nil
 }
 

@@ -37,10 +37,20 @@ func Errorf(e Encoding, msg string, args ...interface{}) error {
 	return Error(e, fmt.Errorf(msg, args...))
 }
 
-// ErrInvalidInputSize constructs an error indicating that decoding failed due
-// to the size of the input.
-func ErrInvalidInputSize(e Encoding, typ string, size int) error {
-	return Errorf(e, "cannot decode %s from input of size %d: %w", typ, size, ErrInvalidArgument)
+// ErrEncodeInvalidInputSize constructs an error indicating that encoding failed
+// due to the size of the input.
+func ErrEncodeInvalidInputSize(e Encoding, typ string, size int) error {
+	return errInvalidInputSize(e, "encode", typ, size)
+}
+
+// ErrDecodeInvalidInputSize constructs an error indicating that decoding failed
+// due to the size of the input.
+func ErrDecodeInvalidInputSize(e Encoding, typ string, size int) error {
+	return errInvalidInputSize(e, "decode", typ, size)
+}
+
+func errInvalidInputSize(e Encoding, op, typ string, size int) error {
+	return Errorf(e, "cannot %s %s from input of size %d: %w", op, typ, size, ErrInvalidArgument)
 }
 
 // CanEncodeBoolean reports whether e can encode BOOLEAN values.
@@ -119,7 +129,7 @@ func (NotSupported) EncodeBoolean(dst []byte, src []bool) ([]byte, error) {
 	return dst[:0], errNotSupported("BOOLEAN")
 }
 
-func (NotSupported) EncodeInt32(dst []byte, src []int32) ([]byte, error) {
+func (NotSupported) EncodeInt32(dst, src []byte) ([]byte, error) {
 	return dst[:0], errNotSupported("INT32")
 }
 
@@ -155,7 +165,7 @@ func (NotSupported) DecodeBoolean(dst []bool, src []byte) ([]bool, error) {
 	return dst[:0], errNotSupported("BOOLEAN")
 }
 
-func (NotSupported) DecodeInt32(dst []int32, src []byte) ([]int32, error) {
+func (NotSupported) DecodeInt32(dst, src []byte) ([]byte, error) {
 	return dst[:0], errNotSupported("INT32")
 }
 

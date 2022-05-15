@@ -81,7 +81,9 @@ var int32Class = class[int32]{
 	min:       bits.MinInt32,
 	max:       bits.MaxInt32,
 	bounds:    bits.MinMaxInt32,
-	encode:    encoding.Encoding.EncodeInt32,
+	encode: func(enc encoding.Encoding, dst []byte, src []int32) ([]byte, error) {
+		return enc.EncodeInt32(dst, unsafecast.Slice[byte](src))
+	},
 }
 
 var int64Class = class[int64]{
@@ -165,7 +167,7 @@ var uint32Class = class[uint32]{
 	max:       bits.MaxUint32,
 	bounds:    bits.MinMaxUint32,
 	encode: func(enc encoding.Encoding, dst []byte, src []uint32) ([]byte, error) {
-		return enc.EncodeInt32(dst, unsafecast.Slice[int32](src))
+		return enc.EncodeInt32(dst, unsafecast.Slice[byte](src))
 	},
 }
 

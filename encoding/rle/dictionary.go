@@ -18,14 +18,18 @@ func (e *DictionaryEncoding) Encoding() format.Encoding {
 	return format.RLEDictionary
 }
 
-func (e *DictionaryEncoding) EncodeInt32(dst []byte, src []int32) ([]byte, error) {
-	bitWidth := bits.MaxLen32(src)
+func (e *DictionaryEncoding) EncodeInt32(dst, src []byte) ([]byte, error) {
+	if (len(src) % 4) != 0 {
+		return dst[:0], encoding.ErrEncodeInvalidInputSize(e, "INT32", len(src))
+	}
+	src32 := bits.BytesToInt32(src)
+	bitWidth := bits.MaxLen32(src32)
 	dst = append(dst[:0], byte(bitWidth))
-	dst, err := encodeInt32(dst, src, uint(bitWidth))
+	dst, err := encodeInt32(dst, src32, uint(bitWidth))
 	return dst, e.wrap(err)
 }
 
-func (e *DictionaryEncoding) DecodeInt32(dst []int32, src []byte) ([]int32, error) {
+func (e *DictionaryEncoding) DecodeInt32(dst, src []byte) ([]byte, error) {
 	if len(src) == 0 {
 		return dst[:0], nil
 	}

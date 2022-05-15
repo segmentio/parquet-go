@@ -351,18 +351,19 @@ func testLevelsEncoding(t *testing.T, e encoding.Encoding) {
 func testInt32Encoding(t *testing.T, e encoding.Encoding) {
 	testCanEncodeInt32(t, e)
 	buffer := []byte{}
-	values := []int32{}
+	values := []byte{}
 
 	for _, test := range int32Tests {
 		setBitWidth(e, bits.MaxLen32(test))
 
 		t.Run("", func(t *testing.T) {
 			var err error
-			buffer, err = e.EncodeInt32(buffer, test)
+			var input = bits.Int32ToBytes(test)
+			buffer, err = e.EncodeInt32(buffer, input)
 			assertNoError(t, err)
 			values, err = e.DecodeInt32(values, buffer)
 			assertNoError(t, err)
-			assertDeepEqual(t, test, values)
+			assertDeepEqual(t, input, values)
 		})
 	}
 }
@@ -623,7 +624,7 @@ func benchmarkEncodeInt32(b *testing.B, e encoding.Encoding) {
 	testCanEncodeInt32(b, e)
 	buffer := make([]byte, 0)
 	values := generateInt32Values(benchmarkNumValues, newRand())
-	setBitWidth(e, bits.MaxLen32(values))
+	setBitWidth(e, bits.MaxLen32(bits.BytesToInt32(values)))
 
 	benchmarkZeroAllocsPerRun(b, func() {
 		buffer, _ = e.EncodeInt32(buffer, values)
@@ -773,8 +774,8 @@ func benchmarkDecodeLevels(b *testing.B, e encoding.Encoding) {
 func benchmarkDecodeInt32(b *testing.B, e encoding.Encoding) {
 	testCanEncodeInt32(b, e)
 	values := generateInt32Values(benchmarkNumValues, newRand())
-	output := make([]int32, 0)
-	setBitWidth(e, bits.MaxLen32(values))
+	output := make([]byte, 0)
+	setBitWidth(e, bits.MaxLen32(bits.BytesToInt32(values)))
 	buffer, _ := e.EncodeInt32(nil, values)
 
 	benchmarkZeroAllocsPerRun(b, func() {
@@ -873,10 +874,10 @@ func generateLevelValues(n int, r *rand.Rand) []byte {
 	return values
 }
 
-func generateInt32Values(n int, r *rand.Rand) []int32 {
-	values := make([]int32, n)
-	for i := range values {
-		values[i] = r.Int31n(100)
+func generateInt32Values(n int, r *rand.Rand) []byte {
+	values := make([]byte, 4*n)
+	for i := 0; i < n; i++ {
+		binary.LittleEndian.PutUint32(values[i*4:], uint32(r.Int31n(100)))
 	}
 	return values
 }

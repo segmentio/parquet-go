@@ -345,7 +345,7 @@ func (page *indexedPage) Values() ValueReader { return &indexedPageReader{page: 
 func (page *indexedPage) Buffer() BufferedPage { return page }
 
 func (page *indexedPage) Encode(dst []byte, enc encoding.Encoding) ([]byte, error) {
-	return enc.EncodeInt32(dst, page.values)
+	return enc.EncodeInt32(dst, bits.Int32ToBytes(page.values))
 }
 
 type indexedPageReader struct {

@@ -12,7 +12,6 @@ import (
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/format"
-	"github.com/segmentio/parquet-go/internal/bits"
 )
 
 const (
@@ -81,34 +80,37 @@ func (e *Encoding) EncodeBoolean(dst []byte, src []bool) ([]byte, error) {
 	return dst, nil
 }
 
-func (e *Encoding) EncodeInt32(dst []byte, src []int32) ([]byte, error) {
-	return append(dst[:0], bits.Int32ToBytes(src)...), nil
+func (e *Encoding) EncodeInt32(dst, src []byte) ([]byte, error) {
+	if (len(src) % 4) != 0 {
+		return dst[:0], encoding.ErrEncodeInvalidInputSize(e, "INT32", len(src))
+	}
+	return append(dst[:0], src...), nil
 }
 
 func (e *Encoding) EncodeInt64(dst, src []byte) ([]byte, error) {
 	if (len(src) % 8) != 0 {
-		return dst[:0], encoding.ErrInvalidInputSize(e, "INT64", len(src))
+		return dst[:0], encoding.ErrEncodeInvalidInputSize(e, "INT64", len(src))
 	}
 	return append(dst[:0], src...), nil
 }
 
 func (e *Encoding) EncodeInt96(dst, src []byte) ([]byte, error) {
 	if (len(src) % 12) != 0 {
-		return dst[:0], encoding.ErrInvalidInputSize(e, "INT96", len(src))
+		return dst[:0], encoding.ErrEncodeInvalidInputSize(e, "INT96", len(src))
 	}
 	return append(dst[:0], src...), nil
 }
 
 func (e *Encoding) EncodeFloat(dst, src []byte) ([]byte, error) {
 	if (len(src) % 4) != 0 {
-		return dst[:0], encoding.ErrInvalidInputSize(e, "FLOAT", len(src))
+		return dst[:0], encoding.ErrEncodeInvalidInputSize(e, "FLOAT", len(src))
 	}
 	return append(dst[:0], src...), nil
 }
 
 func (e *Encoding) EncodeDouble(dst, src []byte) ([]byte, error) {
 	if (len(src) % 8) != 0 {
-		return dst[:0], encoding.ErrInvalidInputSize(e, "DOUBLE", len(src))
+		return dst[:0], encoding.ErrEncodeInvalidInputSize(e, "DOUBLE", len(src))
 	}
 	return append(dst[:0], src...), nil
 }
@@ -144,37 +146,37 @@ func (e *Encoding) DecodeBoolean(dst []bool, src []byte) ([]bool, error) {
 	return dst, nil
 }
 
-func (e *Encoding) DecodeInt32(dst []int32, src []byte) ([]int32, error) {
+func (e *Encoding) DecodeInt32(dst, src []byte) ([]byte, error) {
 	if (len(src) % 4) != 0 {
-		return dst[:0], encoding.ErrInvalidInputSize(e, "INT32", len(src))
+		return dst[:0], encoding.ErrDecodeInvalidInputSize(e, "INT32", len(src))
 	}
-	return append(dst[:0], bits.BytesToInt32(src)...), nil
+	return append(dst[:0], src...), nil
 }
 
 func (e *Encoding) DecodeInt64(dst, src []byte) ([]byte, error) {
 	if (len(src) % 8) != 0 {
-		return dst[:0], encoding.ErrInvalidInputSize(e, "INT64", len(src))
+		return dst[:0], encoding.ErrDecodeInvalidInputSize(e, "INT64", len(src))
 	}
 	return append(dst[:0], src...), nil
 }
 
 func (e *Encoding) DecodeInt96(dst, src []byte) ([]byte, error) {
 	if (len(src) % 12) != 0 {
-		return dst[:0], encoding.ErrInvalidInputSize(e, "INT96", len(src))
+		return dst[:0], encoding.ErrDecodeInvalidInputSize(e, "INT96", len(src))
 	}
 	return append(dst[:0], src...), nil
 }
 
 func (e *Encoding) DecodeFloat(dst, src []byte) ([]byte, error) {
 	if (len(src) % 4) != 0 {
-		return dst[:0], encoding.ErrInvalidInputSize(e, "FLOAT", len(src))
+		return dst[:0], encoding.ErrDecodeInvalidInputSize(e, "FLOAT", len(src))
 	}
 	return append(dst[:0], src...), nil
 }
 
 func (e *Encoding) DecodeDouble(dst, src []byte) ([]byte, error) {
 	if (len(src) % 8) != 0 {
-		return dst[:0], encoding.ErrInvalidInputSize(e, "DOUBLE", len(src))
+		return dst[:0], encoding.ErrDecodeInvalidInputSize(e, "DOUBLE", len(src))
 	}
 	return append(dst[:0], src...), nil
 }
@@ -191,7 +193,7 @@ func (e *Encoding) DecodeFixedLenByteArray(dst, src []byte, size int) ([]byte, e
 		return dst[:0], encoding.Error(e, encoding.ErrInvalidArgument)
 	}
 	if (len(src) % size) != 0 {
-		return dst[:0], encoding.ErrInvalidInputSize(e, "FIXED_LEN_BYTE_ARRAY", len(src))
+		return dst[:0], encoding.ErrDecodeInvalidInputSize(e, "FIXED_LEN_BYTE_ARRAY", len(src))
 	}
 	return append(dst[:0], src...), nil
 }

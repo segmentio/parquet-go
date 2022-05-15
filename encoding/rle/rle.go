@@ -54,8 +54,11 @@ func (e *Encoding) EncodeBoolean(dst []byte, src []bool) ([]byte, error) {
 	return dst, e.wrap(err)
 }
 
-func (e *Encoding) EncodeInt32(dst []byte, src []int32) ([]byte, error) {
-	dst, err := encodeInt32(dst[:0], src, uint(e.BitWidth))
+func (e *Encoding) EncodeInt32(dst, src []byte) ([]byte, error) {
+	if (len(src) % 4) != 0 {
+		return dst[:0], encoding.ErrEncodeInvalidInputSize(e, "INT32", len(src))
+	}
+	dst, err := encodeInt32(dst[:0], bits.BytesToInt32(src), uint(e.BitWidth))
 	return dst, e.wrap(err)
 }
 
@@ -81,7 +84,7 @@ func (e *Encoding) DecodeBoolean(dst []bool, src []byte) ([]bool, error) {
 	return bits.BytesToBool(bits.Int8ToBytes(buf)), e.wrap(err)
 }
 
-func (e *Encoding) DecodeInt32(dst []int32, src []byte) ([]int32, error) {
+func (e *Encoding) DecodeInt32(dst, src []byte) ([]byte, error) {
 	dst, err := decodeInt32(dst[:0], src, uint(e.BitWidth))
 	return dst, e.wrap(err)
 }
@@ -444,7 +447,7 @@ func decodeInt8(dst []int8, src []byte, bitWidth uint) ([]int8, error) {
 	return dst, nil
 }
 
-func decodeInt32(dst []int32, src []byte, bitWidth uint) ([]int32, error) {
+func decodeInt32(dst, src []byte, bitWidth uint) ([]byte, error) {
 	if bitWidth > 32 {
 		return dst, errDecodeInvalidBitWidth("INT32", bitWidth)
 	}
@@ -476,12 +479,10 @@ func decodeInt32(dst []int32, src []byte, bitWidth uint) ([]int32, error) {
 
 			bits := [4]byte{}
 			copy(bits[:], src[i:j])
-
-			word := binary.LittleEndian.Uint32(bits[:])
 			i = j
 
 			for count > 0 {
-				dst = append(dst, int32(word))
+				dst = append(dst, bits[:]...)
 				count--
 			}
 		} else {
@@ -499,7 +500,9 @@ func decodeInt32(dst []int32, src []byte, bitWidth uint) ([]int32, error) {
 					value |= uint64(b) << bitOffset
 
 					for bitOffset += 8; bitOffset >= bitWidth; {
-						dst = append(dst, int32(value&bitMask))
+						buf := [4]byte{}
+						binary.LittleEndian.PutUint32(buf[:], uint32(value&bitMask))
+						dst = append(dst, buf[:]...)
 						value >>= bitWidth
 						bitOffset -= bitWidth
 					}

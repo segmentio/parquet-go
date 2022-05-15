@@ -506,7 +506,7 @@ func (p *dataPage) decode(typ Type, enc encoding.Encoding, data []byte) (err err
 	case Boolean:
 		return p.decodeBooleanPage(enc, data)
 	case Int32:
-		return p.decodeInt32Page(enc, data)
+		p.values, err = enc.DecodeInt32(p.values, data)
 	case Int64:
 		p.values, err = enc.DecodeInt64(p.values, data)
 	case Int96:
@@ -528,12 +528,6 @@ func (p *dataPage) decode(typ Type, enc encoding.Encoding, data []byte) (err err
 func (p *dataPage) decodeBooleanPage(enc encoding.Encoding, data []byte) error {
 	values, err := enc.DecodeBoolean(bits.BytesToBool(p.values), data)
 	p.values = bits.BoolToBytes(values)
-	return err
-}
-
-func (p *dataPage) decodeInt32Page(enc encoding.Encoding, data []byte) error {
-	values, err := enc.DecodeInt32(bits.BytesToInt32(p.values), data)
-	p.values = bits.Int32ToBytes(values)
 	return err
 }
 

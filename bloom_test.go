@@ -44,7 +44,7 @@ func TestSplitBlockFilter(t *testing.T) {
 			scenario: "INT32",
 			function: func(values []int32) bool {
 				filter := newFilter(len(values))
-				encoding.EncodeInt32(filter.Bytes(), values)
+				encoding.EncodeInt32(filter.Bytes(), bits.Int32ToBytes(values))
 				for _, v := range values {
 					if !check(filter, ValueOf(v)) {
 						return false
