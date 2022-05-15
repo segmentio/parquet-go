@@ -44,10 +44,10 @@ func EncodeBoolean(f *testing.F, e encoding.Encoding) {
 	})
 }
 
-func EncodeInt8(f *testing.F, e encoding.Encoding) {
+func EncodeLevels(f *testing.F, e encoding.Encoding) {
 	encode(f, e,
-		encoding.Encoding.EncodeInt8,
-		encoding.Encoding.DecodeInt8,
+		encoding.Encoding.EncodeLevels,
+		encoding.Encoding.DecodeLevels,
 	)
 }
 

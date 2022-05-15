@@ -40,6 +40,11 @@ func (e *Encoding) Encoding() format.Encoding {
 	return format.RLE
 }
 
+func (e *Encoding) EncodeLevels(dst []byte, src []int8) ([]byte, error) {
+	dst, err := encodeInt8(dst[:0], src, uint(e.BitWidth))
+	return dst, e.wrap(err)
+}
+
 func (e *Encoding) EncodeBoolean(dst []byte, src []bool) ([]byte, error) {
 	// In the case of encoding a boolean values, the 4 bytes length of the
 	// output is expected by the parquet format. We add the bytes as placeholder
@@ -50,13 +55,13 @@ func (e *Encoding) EncodeBoolean(dst []byte, src []bool) ([]byte, error) {
 	return dst, e.wrap(err)
 }
 
-func (e *Encoding) EncodeInt8(dst []byte, src []int8) ([]byte, error) {
-	dst, err := encodeInt8(dst[:0], src, uint(e.BitWidth))
+func (e *Encoding) EncodeInt32(dst []byte, src []int32) ([]byte, error) {
+	dst, err := encodeInt32(dst[:0], src, uint(e.BitWidth))
 	return dst, e.wrap(err)
 }
 
-func (e *Encoding) EncodeInt32(dst []byte, src []int32) ([]byte, error) {
-	dst, err := encodeInt32(dst[:0], src, uint(e.BitWidth))
+func (e *Encoding) DecodeLevels(dst []int8, src []byte) ([]int8, error) {
+	dst, err := decodeInt8(dst[:0], src, uint(e.BitWidth))
 	return dst, e.wrap(err)
 }
 
@@ -75,11 +80,6 @@ func (e *Encoding) DecodeBoolean(dst []bool, src []byte) ([]bool, error) {
 	buf := bits.BytesToInt8(bits.BoolToBytes(dst))
 	buf, err := decodeInt8(buf[:0], src[:n], 1)
 	return bits.BytesToBool(bits.Int8ToBytes(buf)), e.wrap(err)
-}
-
-func (e *Encoding) DecodeInt8(dst []int8, src []byte) ([]int8, error) {
-	dst, err := decodeInt8(dst[:0], src, uint(e.BitWidth))
-	return dst, e.wrap(err)
 }
 
 func (e *Encoding) DecodeInt32(dst []int32, src []byte) ([]int32, error) {

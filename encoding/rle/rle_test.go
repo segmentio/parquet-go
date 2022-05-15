@@ -14,8 +14,8 @@ func FuzzEncodeBoolean(f *testing.F) {
 	fuzz.EncodeBoolean(f, &rle.Encoding{BitWidth: 1})
 }
 
-func FuzzEncodeInt8(f *testing.F) {
-	fuzz.EncodeInt8(f, &rle.Encoding{BitWidth: 8})
+func FuzzEncodeLevels(f *testing.F) {
+	fuzz.EncodeLevels(f, &rle.Encoding{BitWidth: 8})
 }
 
 func FuzzEncodeInt32(f *testing.F) {

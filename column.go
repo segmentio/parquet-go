@@ -712,7 +712,7 @@ func decodeLevels(enc encoding.Encoding, numValues int64, levels []int8, data []
 	if cap(levels) < int(numValues) {
 		levels = make([]int8, numValues)
 	}
-	levels, err := enc.DecodeInt8(levels, data)
+	levels, err := enc.DecodeLevels(levels, data)
 	if err == nil {
 		switch {
 		case len(levels) < int(numValues):

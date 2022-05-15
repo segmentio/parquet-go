@@ -20,6 +20,7 @@ const (
 )
 
 type Encoding struct {
+	encoding.NotSupported
 }
 
 func (e *Encoding) String() string {
@@ -80,10 +81,6 @@ func (e *Encoding) EncodeBoolean(dst []byte, src []bool) ([]byte, error) {
 	return dst, nil
 }
 
-func (e *Encoding) EncodeInt8(dst []byte, src []int8) ([]byte, error) {
-	return append(dst[:0], bits.Int8ToBytes(src)...), nil
-}
-
 func (e *Encoding) EncodeInt32(dst []byte, src []int32) ([]byte, error) {
 	return append(dst[:0], bits.Int32ToBytes(src)...), nil
 }
@@ -133,10 +130,6 @@ func (e *Encoding) DecodeBoolean(dst []bool, src []byte) ([]bool, error) {
 		)
 	}
 	return dst, nil
-}
-
-func (e *Encoding) DecodeInt8(dst []int8, src []byte) ([]int8, error) {
-	return append(dst[:0], bits.BytesToInt8(src)...), nil
 }
 
 func (e *Encoding) DecodeInt32(dst []int32, src []byte) ([]int32, error) {

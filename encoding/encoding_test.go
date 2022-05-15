@@ -53,7 +53,7 @@ var booleanTests = [...][]bool{
 	},
 }
 
-var int8Tests = [...][]int8{
+var levelsTests = [...][]int8{
 	{},
 	{0},
 	{1},
@@ -249,8 +249,8 @@ func testEncoding(t *testing.T, e encoding.Encoding) {
 		},
 
 		{
-			scenario: "int8",
-			function: testInt8Encoding,
+			scenario: "levels",
+			function: testLevelsEncoding,
 		},
 
 		{
@@ -328,19 +328,19 @@ func testBooleanEncoding(t *testing.T, e encoding.Encoding) {
 	}
 }
 
-func testInt8Encoding(t *testing.T, e encoding.Encoding) {
-	testCanEncodeInt8(t, e)
+func testLevelsEncoding(t *testing.T, e encoding.Encoding) {
+	testCanEncodeLevels(t, e)
 	buffer := []byte{}
 	values := []int8{}
 
-	for _, test := range int8Tests {
+	for _, test := range levelsTests {
 		setBitWidth(e, bits.MaxLen8(test))
 
 		t.Run("", func(t *testing.T) {
 			var err error
-			buffer, err = e.EncodeInt8(buffer, test)
+			buffer, err = e.EncodeLevels(buffer, test)
 			assertNoError(t, err)
-			values, err = e.DecodeInt8(values, buffer)
+			values, err = e.DecodeLevels(values, buffer)
 			assertNoError(t, err)
 			assertDeepEqual(t, test, values)
 		})
@@ -481,8 +481,8 @@ func testCanEncodeBoolean(t testing.TB, e encoding.Encoding) {
 	testCanEncode(t, e, encoding.CanEncodeBoolean)
 }
 
-func testCanEncodeInt8(t testing.TB, e encoding.Encoding) {
-	testCanEncode(t, e, encoding.CanEncodeInt8)
+func testCanEncodeLevels(t testing.TB, e encoding.Encoding) {
+	testCanEncode(t, e, encoding.CanEncodeLevels)
 }
 
 func testCanEncodeInt32(t testing.TB, e encoding.Encoding) {
@@ -555,8 +555,8 @@ func benchmarkEncode(b *testing.B, e encoding.Encoding) {
 			function: benchmarkEncodeBoolean,
 		},
 		{
-			scenario: "int8",
-			function: benchmarkEncodeInt8,
+			scenario: "levels",
+			function: benchmarkEncodeLevels,
 		},
 		{
 			scenario: "int32",
@@ -600,14 +600,14 @@ func benchmarkEncodeBoolean(b *testing.B, e encoding.Encoding) {
 	b.SetBytes(1 * int64(len(values)))
 }
 
-func benchmarkEncodeInt8(b *testing.B, e encoding.Encoding) {
-	testCanEncodeInt8(b, e)
+func benchmarkEncodeLevels(b *testing.B, e encoding.Encoding) {
+	testCanEncodeLevels(b, e)
 	buffer := make([]byte, 0)
 	values := generateInt8Values(benchmarkNumValues, newRand())
 	setBitWidth(e, bits.MaxLen8(values))
 
 	benchmarkZeroAllocsPerRun(b, func() {
-		buffer, _ = e.EncodeInt8(buffer, values)
+		buffer, _ = e.EncodeLevels(buffer, values)
 	})
 
 	b.SetBytes(1 * int64(len(values)))
@@ -704,8 +704,8 @@ func benchmarkDecode(b *testing.B, e encoding.Encoding) {
 			function: benchmarkDecodeBoolean,
 		},
 		{
-			scenario: "int8",
-			function: benchmarkDecodeInt8,
+			scenario: "levels",
+			function: benchmarkDecodeLevels,
 		},
 		{
 			scenario: "int32",
@@ -750,15 +750,15 @@ func benchmarkDecodeBoolean(b *testing.B, e encoding.Encoding) {
 	b.SetBytes(1 * int64(len(values)))
 }
 
-func benchmarkDecodeInt8(b *testing.B, e encoding.Encoding) {
-	testCanEncodeInt8(b, e)
+func benchmarkDecodeLevels(b *testing.B, e encoding.Encoding) {
+	testCanEncodeLevels(b, e)
 	values := generateInt8Values(benchmarkNumValues, newRand())
 	output := make([]int8, 0)
 	setBitWidth(e, bits.MaxLen8(values))
-	buffer, _ := e.EncodeInt8(nil, values)
+	buffer, _ := e.EncodeLevels(nil, values)
 
 	benchmarkZeroAllocsPerRun(b, func() {
-		output, _ = e.DecodeInt8(output, buffer)
+		output, _ = e.DecodeLevels(output, buffer)
 	})
 
 	b.SetBytes(1 * int64(len(values)))
