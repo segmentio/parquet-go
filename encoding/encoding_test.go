@@ -2,6 +2,7 @@ package encoding_test
 
 import (
 	"bytes"
+	"encoding/binary"
 	"io"
 	"math"
 	"math/rand"
@@ -422,16 +423,17 @@ func testFloatEncoding(t *testing.T, e encoding.Encoding) {
 func testDoubleEncoding(t *testing.T, e encoding.Encoding) {
 	testCanEncodeDouble(t, e)
 	buffer := []byte{}
-	values := []float64{}
+	values := []byte{}
 
 	for _, test := range doubleTests {
 		t.Run("", func(t *testing.T) {
 			var err error
-			buffer, err = e.EncodeDouble(buffer, test)
+			var input = bits.Float64ToBytes(test)
+			buffer, err = e.EncodeDouble(buffer, input)
 			assertNoError(t, err)
 			values, err = e.DecodeDouble(values, buffer)
 			assertNoError(t, err)
-			assertDeepEqual(t, test, values)
+			assertDeepEqual(t, input, values)
 		})
 	}
 }
@@ -808,7 +810,7 @@ func benchmarkDecodeFloat(b *testing.B, e encoding.Encoding) {
 func benchmarkDecodeDouble(b *testing.B, e encoding.Encoding) {
 	testCanEncodeDouble(b, e)
 	values := generateDoubleValues(benchmarkNumValues, newRand())
-	output := make([]float64, 0)
+	output := make([]byte, 0)
 	buffer, _ := e.EncodeDouble(nil, values)
 
 	benchmarkZeroAllocsPerRun(b, func() {
@@ -891,10 +893,10 @@ func generateFloatValues(n int, r *rand.Rand) []float32 {
 	return values
 }
 
-func generateDoubleValues(n int, r *rand.Rand) []float64 {
-	values := make([]float64, n)
-	for i := range values {
-		values[i] = r.Float64()
+func generateDoubleValues(n int, r *rand.Rand) []byte {
+	values := make([]byte, 8*n)
+	for i := 0; i < n; i++ {
+		binary.LittleEndian.PutUint64(values[i*8:], math.Float64bits(r.Float64()))
 	}
 	return values
 }

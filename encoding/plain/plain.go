@@ -97,8 +97,8 @@ func (e *Encoding) EncodeFloat(dst []byte, src []float32) ([]byte, error) {
 	return append(dst[:0], bits.Float32ToBytes(src)...), nil
 }
 
-func (e *Encoding) EncodeDouble(dst []byte, src []float64) ([]byte, error) {
-	return append(dst[:0], bits.Float64ToBytes(src)...), nil
+func (e *Encoding) EncodeDouble(dst, src []byte) ([]byte, error) {
+	return append(dst[:0], src...), nil
 }
 
 func (e *Encoding) EncodeByteArray(dst []byte, src []byte) ([]byte, error) {
@@ -160,11 +160,11 @@ func (e *Encoding) DecodeFloat(dst []float32, src []byte) ([]float32, error) {
 	return append(dst[:0], bits.BytesToFloat32(src)...), nil
 }
 
-func (e *Encoding) DecodeDouble(dst []float64, src []byte) ([]float64, error) {
+func (e *Encoding) DecodeDouble(dst, src []byte) ([]byte, error) {
 	if (len(src) % 8) != 0 {
 		return dst[:0], encoding.ErrInvalidInputSize(e, "DOUBLE", len(src))
 	}
-	return append(dst[:0], bits.BytesToFloat64(src)...), nil
+	return append(dst[:0], src...), nil
 }
 
 func (e *Encoding) DecodeByteArray(dst, src []byte) ([]byte, error) {

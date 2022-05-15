@@ -141,7 +141,9 @@ var float64Class = class[float64]{
 	min:       bits.MinFloat64,
 	max:       bits.MaxFloat64,
 	bounds:    bits.MinMaxFloat64,
-	encode:    encoding.Encoding.EncodeDouble,
+	encode: func(enc encoding.Encoding, dst []byte, src []float64) ([]byte, error) {
+		return enc.EncodeDouble(dst, unsafecast.Slice[byte](src))
+	},
 }
 
 var uint32Class = class[uint32]{

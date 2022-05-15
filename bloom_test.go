@@ -8,6 +8,7 @@ import (
 	"github.com/segmentio/parquet-go/bloom"
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding/plain"
+	"github.com/segmentio/parquet-go/internal/bits"
 )
 
 func TestSplitBlockFilter(t *testing.T) {
@@ -99,7 +100,7 @@ func TestSplitBlockFilter(t *testing.T) {
 			scenario: "DOUBLE",
 			function: func(values []float64) bool {
 				filter := newFilter(len(values))
-				encoding.EncodeDouble(filter.Bytes(), values)
+				encoding.EncodeDouble(filter.Bytes(), bits.Float64ToBytes(values))
 				for _, v := range values {
 					if !check(filter, ValueOf(v)) {
 						return false

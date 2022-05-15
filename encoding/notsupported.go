@@ -136,7 +136,7 @@ func (NotSupported) EncodeFloat(dst []byte, src []float32) ([]byte, error) {
 	return dst[:0], errNotSupported("FLOAT")
 }
 
-func (NotSupported) EncodeDouble(dst []byte, src []float64) ([]byte, error) {
+func (NotSupported) EncodeDouble(dst, src []byte) ([]byte, error) {
 	return dst[:0], errNotSupported("DOUBLE")
 }
 
@@ -172,7 +172,7 @@ func (NotSupported) DecodeFloat(dst []float32, src []byte) ([]float32, error) {
 	return dst[:0], errNotSupported("FLOAT")
 }
 
-func (NotSupported) DecodeDouble(dst []float64, src []byte) ([]float64, error) {
+func (NotSupported) DecodeDouble(dst, src []byte) ([]byte, error) {
 	return dst[:0], errNotSupported("DOUBLE")
 }
 

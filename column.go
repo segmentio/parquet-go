@@ -491,7 +491,7 @@ func (p *dataPage) decompress(codec compress.Codec, data []byte) (err error) {
 	return err
 }
 
-func (p *dataPage) decode(typ Type, enc encoding.Encoding, data []byte) error {
+func (p *dataPage) decode(typ Type, enc encoding.Encoding, data []byte) (err error) {
 	// Note: I am not sold on this design, it parts ways from the way type
 	// specific behavior is implemented in other places based on the Type
 	// specializations.
@@ -514,7 +514,7 @@ func (p *dataPage) decode(typ Type, enc encoding.Encoding, data []byte) error {
 	case Float:
 		return p.decodeFloatPage(enc, data)
 	case Double:
-		return p.decodeDoublePage(enc, data)
+		p.values, err = enc.DecodeDouble(p.values, data)
 	case ByteArray:
 		return p.decodeByteArrayPage(enc, data)
 	case FixedLenByteArray:
@@ -522,6 +522,7 @@ func (p *dataPage) decode(typ Type, enc encoding.Encoding, data []byte) error {
 	default:
 		return nil
 	}
+	return err
 }
 
 func (p *dataPage) decodeBooleanPage(enc encoding.Encoding, data []byte) error {
@@ -551,12 +552,6 @@ func (p *dataPage) decodeInt96Page(enc encoding.Encoding, data []byte) error {
 func (p *dataPage) decodeFloatPage(enc encoding.Encoding, data []byte) error {
 	values, err := enc.DecodeFloat(bits.BytesToFloat32(p.values), data)
 	p.values = bits.Float32ToBytes(values)
-	return err
-}
-
-func (p *dataPage) decodeDoublePage(enc encoding.Encoding, data []byte) error {
-	values, err := enc.DecodeDouble(bits.BytesToFloat64(p.values), data)
-	p.values = bits.Float64ToBytes(values)
 	return err
 }
 
