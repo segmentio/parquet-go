@@ -123,7 +123,7 @@ func (NotSupported) EncodeInt32(dst []byte, src []int32) ([]byte, error) {
 	return dst[:0], errNotSupported("INT32")
 }
 
-func (NotSupported) EncodeInt64(dst []byte, src []int64) ([]byte, error) {
+func (NotSupported) EncodeInt64(dst, src []byte) ([]byte, error) {
 	return dst[:0], errNotSupported("INT64")
 }
 
@@ -159,7 +159,7 @@ func (NotSupported) DecodeInt32(dst []int32, src []byte) ([]int32, error) {
 	return dst[:0], errNotSupported("INT32")
 }
 
-func (NotSupported) DecodeInt64(dst []int64, src []byte) ([]int64, error) {
+func (NotSupported) DecodeInt64(dst, src []byte) ([]byte, error) {
 	return dst[:0], errNotSupported("INT64")
 }
 

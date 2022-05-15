@@ -96,7 +96,9 @@ var int64Class = class[int64]{
 	min:       bits.MinInt64,
 	max:       bits.MaxInt64,
 	bounds:    bits.MinMaxInt64,
-	encode:    encoding.Encoding.EncodeInt64,
+	encode: func(enc encoding.Encoding, dst []byte, src []int64) ([]byte, error) {
+		return enc.EncodeInt64(dst, unsafecast.Slice[byte](src))
+	},
 }
 
 var int96Class = class[deprecated.Int96]{
@@ -180,6 +182,6 @@ var uint64Class = class[uint64]{
 	max:       bits.MaxUint64,
 	bounds:    bits.MinMaxUint64,
 	encode: func(enc encoding.Encoding, dst []byte, src []uint64) ([]byte, error) {
-		return enc.EncodeInt64(dst, unsafecast.Slice[int64](src))
+		return enc.EncodeInt64(dst, unsafecast.Slice[byte](src))
 	},
 }

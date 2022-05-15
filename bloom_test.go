@@ -58,7 +58,7 @@ func TestSplitBlockFilter(t *testing.T) {
 			scenario: "INT64",
 			function: func(values []int64) bool {
 				filter := newFilter(len(values))
-				encoding.EncodeInt64(filter.Bytes(), values)
+				encoding.EncodeInt64(filter.Bytes(), bits.Int64ToBytes(values))
 				for _, v := range values {
 					if !check(filter, ValueOf(v)) {
 						return false
@@ -163,8 +163,9 @@ func BenchmarkSplitBlockFilter(b *testing.B) {
 		v[i] = r.Int63()
 	}
 
+	v64 := bits.Int64ToBytes(v)
 	for i := 0; i < b.N; i++ {
-		e.EncodeInt64(f, v)
+		e.EncodeInt64(f, v64)
 	}
 
 	b.SetBytes(8 * N)

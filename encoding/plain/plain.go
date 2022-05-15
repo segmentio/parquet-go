@@ -85,8 +85,11 @@ func (e *Encoding) EncodeInt32(dst []byte, src []int32) ([]byte, error) {
 	return append(dst[:0], bits.Int32ToBytes(src)...), nil
 }
 
-func (e *Encoding) EncodeInt64(dst []byte, src []int64) ([]byte, error) {
-	return append(dst[:0], bits.Int64ToBytes(src)...), nil
+func (e *Encoding) EncodeInt64(dst, src []byte) ([]byte, error) {
+	if (len(src) % 8) != 0 {
+		return dst[:0], encoding.ErrInvalidInputSize(e, "INT64", len(src))
+	}
+	return append(dst[:0], src...), nil
 }
 
 func (e *Encoding) EncodeInt96(dst, src []byte) ([]byte, error) {
@@ -148,11 +151,11 @@ func (e *Encoding) DecodeInt32(dst []int32, src []byte) ([]int32, error) {
 	return append(dst[:0], bits.BytesToInt32(src)...), nil
 }
 
-func (e *Encoding) DecodeInt64(dst []int64, src []byte) ([]int64, error) {
+func (e *Encoding) DecodeInt64(dst, src []byte) ([]byte, error) {
 	if (len(src) % 8) != 0 {
 		return dst[:0], encoding.ErrInvalidInputSize(e, "INT64", len(src))
 	}
-	return append(dst[:0], bits.BytesToInt64(src)...), nil
+	return append(dst[:0], src...), nil
 }
 
 func (e *Encoding) DecodeInt96(dst, src []byte) ([]byte, error) {

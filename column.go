@@ -508,7 +508,7 @@ func (p *dataPage) decode(typ Type, enc encoding.Encoding, data []byte) (err err
 	case Int32:
 		return p.decodeInt32Page(enc, data)
 	case Int64:
-		return p.decodeInt64Page(enc, data)
+		p.values, err = enc.DecodeInt64(p.values, data)
 	case Int96:
 		p.values, err = enc.DecodeInt96(p.values, data)
 	case Float:
@@ -516,9 +516,9 @@ func (p *dataPage) decode(typ Type, enc encoding.Encoding, data []byte) (err err
 	case Double:
 		p.values, err = enc.DecodeDouble(p.values, data)
 	case ByteArray:
-		return p.decodeByteArrayPage(enc, data)
+		p.values, err = enc.DecodeByteArray(p.values, data)
 	case FixedLenByteArray:
-		return p.decodeFixedLenByteArrayPage(enc, data, typ.Length())
+		p.values, err = enc.DecodeFixedLenByteArray(p.values, data, typ.Length())
 	default:
 		p.values = p.values[:0]
 	}
@@ -534,22 +534,6 @@ func (p *dataPage) decodeBooleanPage(enc encoding.Encoding, data []byte) error {
 func (p *dataPage) decodeInt32Page(enc encoding.Encoding, data []byte) error {
 	values, err := enc.DecodeInt32(bits.BytesToInt32(p.values), data)
 	p.values = bits.Int32ToBytes(values)
-	return err
-}
-
-func (p *dataPage) decodeInt64Page(enc encoding.Encoding, data []byte) error {
-	values, err := enc.DecodeInt64(bits.BytesToInt64(p.values), data)
-	p.values = bits.Int64ToBytes(values)
-	return err
-}
-
-func (p *dataPage) decodeByteArrayPage(enc encoding.Encoding, data []byte) (err error) {
-	p.values, err = enc.DecodeByteArray(p.values, data)
-	return err
-}
-
-func (p *dataPage) decodeFixedLenByteArrayPage(enc encoding.Encoding, data []byte, size int) (err error) {
-	p.values, err = enc.DecodeFixedLenByteArray(p.values, data, size)
 	return err
 }
 

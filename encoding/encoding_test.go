@@ -370,18 +370,19 @@ func testInt32Encoding(t *testing.T, e encoding.Encoding) {
 func testInt64Encoding(t *testing.T, e encoding.Encoding) {
 	testCanEncodeInt64(t, e)
 	buffer := []byte{}
-	values := []int64{}
+	values := []byte{}
 
 	for _, test := range int64Tests {
 		setBitWidth(e, bits.MaxLen64(test))
 
 		t.Run("", func(t *testing.T) {
 			var err error
-			buffer, err = e.EncodeInt64(buffer, test)
+			var input = bits.Int64ToBytes(test)
+			buffer, err = e.EncodeInt64(buffer, input)
 			assertNoError(t, err)
 			values, err = e.DecodeInt64(values, buffer)
 			assertNoError(t, err)
-			assertDeepEqual(t, test, values)
+			assertDeepEqual(t, input, values)
 		})
 	}
 }
@@ -525,6 +526,7 @@ func testCanEncode(t testing.TB, e encoding.Encoding, test func(encoding.Encodin
 
 func assertNoError(t *testing.T, err error) {
 	if err != nil {
+		t.Helper()
 		t.Fatal(err)
 	}
 }
@@ -634,7 +636,7 @@ func benchmarkEncodeInt64(b *testing.B, e encoding.Encoding) {
 	testCanEncodeInt64(b, e)
 	buffer := make([]byte, 0)
 	values := generateInt64Values(benchmarkNumValues, newRand())
-	setBitWidth(e, bits.MaxLen64(values))
+	setBitWidth(e, bits.MaxLen64(bits.BytesToInt64(values)))
 
 	benchmarkZeroAllocsPerRun(b, func() {
 		buffer, _ = e.EncodeInt64(buffer, values)
@@ -785,8 +787,8 @@ func benchmarkDecodeInt32(b *testing.B, e encoding.Encoding) {
 func benchmarkDecodeInt64(b *testing.B, e encoding.Encoding) {
 	testCanEncodeInt64(b, e)
 	values := generateInt64Values(benchmarkNumValues, newRand())
-	output := make([]int64, 0)
-	setBitWidth(e, bits.MaxLen64(values))
+	output := make([]byte, 0)
+	setBitWidth(e, bits.MaxLen64(bits.BytesToInt64(values)))
 	buffer, _ := e.EncodeInt64(nil, values)
 
 	benchmarkZeroAllocsPerRun(b, func() {
@@ -879,10 +881,10 @@ func generateInt32Values(n int, r *rand.Rand) []int32 {
 	return values
 }
 
-func generateInt64Values(n int, r *rand.Rand) []int64 {
-	values := make([]int64, n)
-	for i := range values {
-		values[i] = r.Int63n(100)
+func generateInt64Values(n int, r *rand.Rand) []byte {
+	values := make([]byte, 8*n)
+	for i := 0; i < n; i++ {
+		binary.LittleEndian.PutUint64(values[i*8:], uint64(r.Int63n(100)))
 	}
 	return values
 }
