@@ -510,7 +510,7 @@ func (p *dataPage) decode(typ Type, enc encoding.Encoding, data []byte) (err err
 	case Int64:
 		return p.decodeInt64Page(enc, data)
 	case Int96:
-		return p.decodeInt96Page(enc, data)
+		p.values, err = enc.DecodeInt96(p.values, data)
 	case Float:
 		p.values, err = enc.DecodeFloat(p.values, data)
 	case Double:
@@ -520,7 +520,7 @@ func (p *dataPage) decode(typ Type, enc encoding.Encoding, data []byte) (err err
 	case FixedLenByteArray:
 		return p.decodeFixedLenByteArrayPage(enc, data, typ.Length())
 	default:
-		return nil
+		p.values = p.values[:0]
 	}
 	return err
 }
@@ -540,12 +540,6 @@ func (p *dataPage) decodeInt32Page(enc encoding.Encoding, data []byte) error {
 func (p *dataPage) decodeInt64Page(enc encoding.Encoding, data []byte) error {
 	values, err := enc.DecodeInt64(bits.BytesToInt64(p.values), data)
 	p.values = bits.Int64ToBytes(values)
-	return err
-}
-
-func (p *dataPage) decodeInt96Page(enc encoding.Encoding, data []byte) error {
-	values, err := enc.DecodeInt96(deprecated.BytesToInt96(p.values), data)
-	p.values = deprecated.Int96ToBytes(values)
 	return err
 }
 

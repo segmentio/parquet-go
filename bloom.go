@@ -5,7 +5,6 @@ import (
 
 	"github.com/segmentio/parquet-go/bloom"
 	"github.com/segmentio/parquet-go/bloom/xxhash"
-	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/encoding/plain"
 	"github.com/segmentio/parquet-go/format"
@@ -159,8 +158,8 @@ func (splitBlockEncoding) EncodeInt64(dst []byte, src []int64) ([]byte, error) {
 	return dst, nil
 }
 
-func (e splitBlockEncoding) EncodeInt96(dst []byte, src []deprecated.Int96) ([]byte, error) {
-	splitBlockEncodeFixedLenByteArray(bloom.MakeSplitBlockFilter(dst), deprecated.Int96ToBytes(src), 12)
+func (e splitBlockEncoding) EncodeInt96(dst, src []byte) ([]byte, error) {
+	splitBlockEncodeFixedLenByteArray(bloom.MakeSplitBlockFilter(dst), src, 12)
 	return dst, nil
 }
 

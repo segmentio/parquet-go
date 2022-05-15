@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/format"
 )
 
@@ -128,7 +127,7 @@ func (NotSupported) EncodeInt64(dst []byte, src []int64) ([]byte, error) {
 	return dst[:0], errNotSupported("INT64")
 }
 
-func (NotSupported) EncodeInt96(dst []byte, src []deprecated.Int96) ([]byte, error) {
+func (NotSupported) EncodeInt96(dst, src []byte) ([]byte, error) {
 	return dst[:0], errNotSupported("INT96")
 }
 
@@ -164,7 +163,7 @@ func (NotSupported) DecodeInt64(dst []int64, src []byte) ([]int64, error) {
 	return dst[:0], errNotSupported("INT64")
 }
 
-func (NotSupported) DecodeInt96(dst []deprecated.Int96, src []byte) ([]deprecated.Int96, error) {
+func (NotSupported) DecodeInt96(dst, src []byte) ([]byte, error) {
 	return dst[:0], errNotSupported("INT96")
 }
 

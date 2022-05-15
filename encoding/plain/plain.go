@@ -89,8 +89,11 @@ func (e *Encoding) EncodeInt64(dst []byte, src []int64) ([]byte, error) {
 	return append(dst[:0], bits.Int64ToBytes(src)...), nil
 }
 
-func (e *Encoding) EncodeInt96(dst []byte, src []deprecated.Int96) ([]byte, error) {
-	return append(dst[:0], deprecated.Int96ToBytes(src)...), nil
+func (e *Encoding) EncodeInt96(dst, src []byte) ([]byte, error) {
+	if (len(src) % 12) != 0 {
+		return dst[:0], encoding.ErrInvalidInputSize(e, "INT96", len(src))
+	}
+	return append(dst[:0], src...), nil
 }
 
 func (e *Encoding) EncodeFloat(dst, src []byte) ([]byte, error) {
@@ -152,11 +155,11 @@ func (e *Encoding) DecodeInt64(dst []int64, src []byte) ([]int64, error) {
 	return append(dst[:0], bits.BytesToInt64(src)...), nil
 }
 
-func (e *Encoding) DecodeInt96(dst []deprecated.Int96, src []byte) ([]deprecated.Int96, error) {
+func (e *Encoding) DecodeInt96(dst, src []byte) ([]byte, error) {
 	if (len(src) % 12) != 0 {
 		return dst[:0], encoding.ErrInvalidInputSize(e, "INT96", len(src))
 	}
-	return append(dst[:0], deprecated.BytesToInt96(src)...), nil
+	return append(dst[:0], src...), nil
 }
 
 func (e *Encoding) DecodeFloat(dst, src []byte) ([]byte, error) {

@@ -389,16 +389,17 @@ func testInt64Encoding(t *testing.T, e encoding.Encoding) {
 func testInt96Encoding(t *testing.T, e encoding.Encoding) {
 	testCanEncodeInt96(t, e)
 	buffer := []byte{}
-	values := []deprecated.Int96{}
+	values := []byte{}
 
 	for _, test := range int96Tests {
 		t.Run("", func(t *testing.T) {
 			var err error
-			buffer, err = e.EncodeInt96(buffer, test)
+			var input = deprecated.Int96ToBytes(test)
+			buffer, err = e.EncodeInt96(buffer, input)
 			assertNoError(t, err)
 			values, err = e.DecodeInt96(values, buffer)
 			assertNoError(t, err)
-			assertDeepEqual(t, test, values)
+			assertDeepEqual(t, input, values)
 		})
 	}
 }

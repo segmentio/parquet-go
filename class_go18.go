@@ -111,7 +111,9 @@ var int96Class = class[deprecated.Int96]{
 	min:       deprecated.MinInt96,
 	max:       deprecated.MaxInt96,
 	bounds:    deprecated.MinMaxInt96,
-	encode:    encoding.Encoding.EncodeInt96,
+	encode: func(enc encoding.Encoding, dst []byte, src []deprecated.Int96) ([]byte, error) {
+		return enc.EncodeInt96(dst, unsafecast.Slice[byte](src))
+	},
 }
 
 var float32Class = class[float32]{

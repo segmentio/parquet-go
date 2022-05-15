@@ -5,7 +5,6 @@ package encoding
 import (
 	"math"
 
-	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/format"
 )
 
@@ -34,7 +33,7 @@ type Encoding interface {
 	EncodeBoolean(dst []byte, src []bool) ([]byte, error)
 	EncodeInt32(dst []byte, src []int32) ([]byte, error)
 	EncodeInt64(dst []byte, src []int64) ([]byte, error)
-	EncodeInt96(dst []byte, src []deprecated.Int96) ([]byte, error)
+	EncodeInt96(dst, src []byte) ([]byte, error)
 	EncodeFloat(dst, src []byte) ([]byte, error)
 	EncodeDouble(dst, src []byte) ([]byte, error)
 	EncodeByteArray(dst, src []byte) ([]byte, error)
@@ -48,7 +47,7 @@ type Encoding interface {
 	DecodeBoolean(dst []bool, src []byte) ([]bool, error)
 	DecodeInt32(dst []int32, src []byte) ([]int32, error)
 	DecodeInt64(dst []int64, src []byte) ([]int64, error)
-	DecodeInt96(dst []deprecated.Int96, src []byte) ([]deprecated.Int96, error)
+	DecodeInt96(dst, src []byte) ([]byte, error)
 	DecodeFloat(dst, src []byte) ([]byte, error)
 	DecodeDouble(dst, src []byte) ([]byte, error)
 	DecodeByteArray(dst, src []byte) ([]byte, error)

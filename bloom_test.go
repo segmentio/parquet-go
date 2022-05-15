@@ -72,7 +72,7 @@ func TestSplitBlockFilter(t *testing.T) {
 			scenario: "INT96",
 			function: func(values []deprecated.Int96) bool {
 				filter := newFilter(len(values))
-				encoding.EncodeInt96(filter.Bytes(), values)
+				encoding.EncodeInt96(filter.Bytes(), deprecated.Int96ToBytes(values))
 				for _, v := range values {
 					if !check(filter, ValueOf(v)) {
 						return false
