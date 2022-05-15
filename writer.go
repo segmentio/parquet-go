@@ -302,6 +302,7 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 		c := &writerColumn{
 			buffers:            buffers,
 			pool:               config.ColumnPageBuffers,
+			valueType:          leaf.node.Type(),
 			columnPath:         leaf.path,
 			columnType:         columnType,
 			columnIndex:        columnType.NewColumnIndexer(config.ColumnIndexSizeLimit),
@@ -732,8 +733,8 @@ func (wb *writerBuffers) prependLevelsToDataPageV1(maxRepetitionLevel, maxDefini
 	}
 }
 
-func (wb *writerBuffers) encode(page BufferedPage, enc encoding.Encoding) (err error) {
-	wb.page, err = page.Encode(wb.page[:0], enc)
+func (wb *writerBuffers) encode(typ Type, page BufferedPage, enc encoding.Encoding) (err error) {
+	wb.page, err = typ.Encode(wb.page[:0], page.Data(), enc)
 	return err
 }
 
@@ -755,8 +756,9 @@ type writerColumn struct {
 	pool  PageBufferPool
 	pages []io.ReadWriter
 
-	columnPath   columnPath
+	valueType    Type
 	columnType   Type
+	columnPath   columnPath
 	columnIndex  ColumnIndexer
 	columnBuffer ColumnBuffer
 	columnFilter BloomFilterColumn
@@ -1044,7 +1046,13 @@ func (c *writerColumn) writeBufferedPage(page BufferedPage) (int64, error) {
 	if c.maxDefinitionLevel > 0 {
 		buf.encodeDefinitionLevels(page, c.maxDefinitionLevel)
 	}
-	if err := buf.encode(page, c.page.encoding); err != nil {
+
+	hasDict := page.Dictionary() != nil
+	pageType := c.columnType
+	if !hasDict {
+		pageType = c.valueType
+	}
+	if err := buf.encode(pageType, page, c.page.encoding); err != nil {
 		return 0, fmt.Errorf("encoding parquet data page: %w", err)
 	}
 	if c.dataPageType == format.DataPage {
@@ -1058,7 +1066,7 @@ func (c *writerColumn) writeBufferedPage(page BufferedPage) (int64, error) {
 		}
 	}
 
-	if page.Dictionary() == nil {
+	if !hasDict {
 		switch {
 		case len(c.filter.bits) > 0:
 			// When the writer knows the number of values in advance (e.g. when
@@ -1214,7 +1222,7 @@ func (c *writerColumn) writeDictionaryPage(output io.Writer, dict Dictionary) (e
 	buf := c.buffers
 	buf.reset()
 
-	if err := buf.encode(dict.Page(), &Plain); err != nil {
+	if err := buf.encode(c.valueType, dict.Page(), &Plain); err != nil {
 		return fmt.Errorf("writing parquet dictionary page: %w", err)
 	}
 
@@ -1253,7 +1261,7 @@ func (c *writerColumn) writeDictionaryPage(output io.Writer, dict Dictionary) (e
 }
 
 func (w *writerColumn) writePageToFilter(page BufferedPage) (err error) {
-	w.filter.bits, err = page.Encode(w.filter.bits, w.columnFilter.Encoding())
+	w.filter.bits, err = w.valueType.Encode(w.filter.bits, page.Data(), w.columnFilter.Encoding())
 	return err
 }
 

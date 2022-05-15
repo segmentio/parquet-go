@@ -8,7 +8,6 @@ import (
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/internal/bits"
-	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 type primitive interface {
@@ -51,10 +50,8 @@ type class[T primitive] struct {
 	min       func([]T) T
 	max       func([]T) T
 	bounds    func([]T) (T, T)
-	encode    func(encoding.Encoding, []byte, []T) ([]byte, error)
-
-	encode2 func(encoding.Encoding, []byte, []byte) ([]byte, error)
-	decode2 func(encoding.Encoding, []byte, []byte) ([]byte, error)
+	encode2   func(encoding.Encoding, []byte, []byte) ([]byte, error)
+	decode2   func(encoding.Encoding, []byte, []byte) ([]byte, error)
 }
 
 var boolClass = class[bool]{
@@ -69,11 +66,8 @@ var boolClass = class[bool]{
 	min:       bits.MinBool,
 	max:       bits.MaxBool,
 	bounds:    bits.MinMaxBool,
-	encode: func(enc encoding.Encoding, dst []byte, src []bool) ([]byte, error) {
-		return enc.EncodeBoolean(dst, unsafecast.Slice[byte](src))
-	},
-	encode2: encoding.Encoding.EncodeBoolean,
-	decode2: encoding.Encoding.DecodeBoolean,
+	encode2:   encoding.Encoding.EncodeBoolean,
+	decode2:   encoding.Encoding.DecodeBoolean,
 }
 
 var int32Class = class[int32]{
@@ -88,11 +82,8 @@ var int32Class = class[int32]{
 	min:       bits.MinInt32,
 	max:       bits.MaxInt32,
 	bounds:    bits.MinMaxInt32,
-	encode: func(enc encoding.Encoding, dst []byte, src []int32) ([]byte, error) {
-		return enc.EncodeInt32(dst, unsafecast.Slice[byte](src))
-	},
-	encode2: encoding.Encoding.EncodeInt32,
-	decode2: encoding.Encoding.DecodeInt32,
+	encode2:   encoding.Encoding.EncodeInt32,
+	decode2:   encoding.Encoding.DecodeInt32,
 }
 
 var int64Class = class[int64]{
@@ -107,11 +98,8 @@ var int64Class = class[int64]{
 	min:       bits.MinInt64,
 	max:       bits.MaxInt64,
 	bounds:    bits.MinMaxInt64,
-	encode: func(enc encoding.Encoding, dst []byte, src []int64) ([]byte, error) {
-		return enc.EncodeInt64(dst, unsafecast.Slice[byte](src))
-	},
-	encode2: encoding.Encoding.EncodeInt64,
-	decode2: encoding.Encoding.DecodeInt64,
+	encode2:   encoding.Encoding.EncodeInt64,
+	decode2:   encoding.Encoding.DecodeInt64,
 }
 
 var int96Class = class[deprecated.Int96]{
@@ -126,11 +114,8 @@ var int96Class = class[deprecated.Int96]{
 	min:       deprecated.MinInt96,
 	max:       deprecated.MaxInt96,
 	bounds:    deprecated.MinMaxInt96,
-	encode: func(enc encoding.Encoding, dst []byte, src []deprecated.Int96) ([]byte, error) {
-		return enc.EncodeInt96(dst, unsafecast.Slice[byte](src))
-	},
-	encode2: encoding.Encoding.EncodeInt96,
-	decode2: encoding.Encoding.DecodeInt96,
+	encode2:   encoding.Encoding.EncodeInt96,
+	decode2:   encoding.Encoding.DecodeInt96,
 }
 
 var float32Class = class[float32]{
@@ -145,11 +130,8 @@ var float32Class = class[float32]{
 	min:       bits.MinFloat32,
 	max:       bits.MaxFloat32,
 	bounds:    bits.MinMaxFloat32,
-	encode: func(enc encoding.Encoding, dst []byte, src []float32) ([]byte, error) {
-		return enc.EncodeFloat(dst, unsafecast.Slice[byte](src))
-	},
-	encode2: encoding.Encoding.EncodeFloat,
-	decode2: encoding.Encoding.DecodeFloat,
+	encode2:   encoding.Encoding.EncodeFloat,
+	decode2:   encoding.Encoding.DecodeFloat,
 }
 
 var float64Class = class[float64]{
@@ -164,11 +146,8 @@ var float64Class = class[float64]{
 	min:       bits.MinFloat64,
 	max:       bits.MaxFloat64,
 	bounds:    bits.MinMaxFloat64,
-	encode: func(enc encoding.Encoding, dst []byte, src []float64) ([]byte, error) {
-		return enc.EncodeDouble(dst, unsafecast.Slice[byte](src))
-	},
-	encode2: encoding.Encoding.EncodeDouble,
-	decode2: encoding.Encoding.DecodeDouble,
+	encode2:   encoding.Encoding.EncodeDouble,
+	decode2:   encoding.Encoding.DecodeDouble,
 }
 
 var uint32Class = class[uint32]{
@@ -183,11 +162,8 @@ var uint32Class = class[uint32]{
 	min:       bits.MinUint32,
 	max:       bits.MaxUint32,
 	bounds:    bits.MinMaxUint32,
-	encode: func(enc encoding.Encoding, dst []byte, src []uint32) ([]byte, error) {
-		return enc.EncodeInt32(dst, unsafecast.Slice[byte](src))
-	},
-	encode2: encoding.Encoding.EncodeInt32,
-	decode2: encoding.Encoding.DecodeInt32,
+	encode2:   encoding.Encoding.EncodeInt32,
+	decode2:   encoding.Encoding.DecodeInt32,
 }
 
 var uint64Class = class[uint64]{
@@ -202,9 +178,6 @@ var uint64Class = class[uint64]{
 	min:       bits.MinUint64,
 	max:       bits.MaxUint64,
 	bounds:    bits.MinMaxUint64,
-	encode: func(enc encoding.Encoding, dst []byte, src []uint64) ([]byte, error) {
-		return enc.EncodeInt64(dst, unsafecast.Slice[byte](src))
-	},
-	encode2: encoding.Encoding.EncodeInt64,
-	decode2: encoding.Encoding.DecodeInt64,
+	encode2:   encoding.Encoding.EncodeInt64,
+	decode2:   encoding.Encoding.DecodeInt64,
 }

@@ -6,7 +6,6 @@ import (
 	"io"
 
 	"github.com/segmentio/parquet-go/deprecated"
-	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/encoding/plain"
 	"github.com/segmentio/parquet-go/internal/bits"
 )
@@ -86,10 +85,10 @@ type BufferedPage interface {
 	//
 	// The intent is for the returned value to be used as input parameter when
 	// calling the Encode method of the associated Type.
-	//Data() []byte
-
-	// Writes the page data to dst with the given encoding.
-	Encode(dst []byte, enc encoding.Encoding) ([]byte, error)
+	//
+	// The returned slice may be the same across multiple calls to this method,
+	// applications must treat the content as immutable.
+	Data() []byte
 }
 
 // CompressedPage is an extension of the Page interface implemented by pages
@@ -226,20 +225,20 @@ func newErrorPage(columnIndex int, msg string, args ...interface{}) *errorPage {
 	}
 }
 
-func (page *errorPage) Column() int                                            { return page.columnIndex }
-func (page *errorPage) Dictionary() Dictionary                                 { return nil }
-func (page *errorPage) NumRows() int64                                         { return 1 }
-func (page *errorPage) NumValues() int64                                       { return 1 }
-func (page *errorPage) NumNulls() int64                                        { return 0 }
-func (page *errorPage) Bounds() (min, max Value, ok bool)                      { return }
-func (page *errorPage) Clone() BufferedPage                                    { return page }
-func (page *errorPage) Slice(i, j int64) BufferedPage                          { return page }
-func (page *errorPage) Size() int64                                            { return 1 }
-func (page *errorPage) RepetitionLevels() []byte                               { return nil }
-func (page *errorPage) DefinitionLevels() []byte                               { return nil }
-func (page *errorPage) Values() ValueReader                                    { return &errorValueReader{err: page.err} }
-func (page *errorPage) Buffer() BufferedPage                                   { return page }
-func (page *errorPage) Encode(dst []byte, _ encoding.Encoding) ([]byte, error) { return dst, page.err }
+func (page *errorPage) Column() int                       { return page.columnIndex }
+func (page *errorPage) Dictionary() Dictionary            { return nil }
+func (page *errorPage) NumRows() int64                    { return 1 }
+func (page *errorPage) NumValues() int64                  { return 1 }
+func (page *errorPage) NumNulls() int64                   { return 0 }
+func (page *errorPage) Bounds() (min, max Value, ok bool) { return }
+func (page *errorPage) Clone() BufferedPage               { return page }
+func (page *errorPage) Slice(i, j int64) BufferedPage     { return page }
+func (page *errorPage) Size() int64                       { return 1 }
+func (page *errorPage) RepetitionLevels() []byte          { return nil }
+func (page *errorPage) DefinitionLevels() []byte          { return nil }
+func (page *errorPage) Data() []byte                      { return nil }
+func (page *errorPage) Values() ValueReader               { return &errorValueReader{err: page.err} }
+func (page *errorPage) Buffer() BufferedPage              { return page }
 
 func errPageBoundsOutOfRange(i, j, n int64) error {
 	return fmt.Errorf("page bounds out of range [%d:%d]: with length %d", i, j, n)
@@ -341,16 +340,16 @@ func (page *optionalPage) DefinitionLevels() []byte {
 	return page.definitionLevels
 }
 
+func (page *optionalPage) Data() []byte {
+	return page.base.Data()
+}
+
 func (page *optionalPage) Values() ValueReader {
 	return &optionalPageReader{page: page}
 }
 
 func (page *optionalPage) Buffer() BufferedPage {
 	return page
-}
-
-func (page *optionalPage) Encode(dst []byte, enc encoding.Encoding) ([]byte, error) {
-	return page.base.Encode(dst, enc)
 }
 
 type optionalPageReader struct {
@@ -510,8 +509,8 @@ func (page *repeatedPage) DefinitionLevels() []byte {
 	return page.definitionLevels
 }
 
-func (page *repeatedPage) Encode(dst []byte, enc encoding.Encoding) ([]byte, error) {
-	return page.base.Encode(dst, enc)
+func (page *repeatedPage) Data() []byte {
+	return page.base.Data()
 }
 
 func (page *repeatedPage) Values() ValueReader {
@@ -716,13 +715,11 @@ func (page *byteArrayPage) RepetitionLevels() []byte { return nil }
 
 func (page *byteArrayPage) DefinitionLevels() []byte { return nil }
 
+func (page *byteArrayPage) Data() []byte { return page.values }
+
 func (page *byteArrayPage) Values() ValueReader { return &byteArrayPageReader{page: page} }
 
 func (page *byteArrayPage) Buffer() BufferedPage { return page }
-
-func (page *byteArrayPage) Encode(dst []byte, enc encoding.Encoding) ([]byte, error) {
-	return enc.EncodeByteArray(dst, page.values)
-}
 
 type byteArrayPageReader struct {
 	page   *byteArrayPage
@@ -853,15 +850,13 @@ func (page *fixedLenByteArrayPage) RepetitionLevels() []byte { return nil }
 
 func (page *fixedLenByteArrayPage) DefinitionLevels() []byte { return nil }
 
+func (page *fixedLenByteArrayPage) Data() []byte { return page.data }
+
 func (page *fixedLenByteArrayPage) Values() ValueReader {
 	return &fixedLenByteArrayPageReader{page: page}
 }
 
 func (page *fixedLenByteArrayPage) Buffer() BufferedPage { return page }
-
-func (page *fixedLenByteArrayPage) Encode(dst []byte, enc encoding.Encoding) ([]byte, error) {
-	return enc.EncodeFixedLenByteArray(dst, page.data, page.size)
-}
 
 type fixedLenByteArrayPageReader struct {
 	page   *fixedLenByteArrayPage
@@ -930,9 +925,7 @@ func (p *nullPage) Slice(i, j int64) BufferedPage {
 }
 func (p *nullPage) RepetitionLevels() []byte { return nil }
 func (p *nullPage) DefinitionLevels() []byte { return nil }
-func (p *nullPage) Encode(dst []byte, enc encoding.Encoding) ([]byte, error) {
-	return dst[:0], nil
-}
+func (p *nullPage) Data() []byte             { return nil }
 
 type nullPageReader struct {
 	column int
@@ -1020,10 +1013,6 @@ func (p *bufferedPage) RepetitionLevels() []byte {
 
 func (p *bufferedPage) DefinitionLevels() []byte {
 	return nil
-}
-
-func (p *bufferedPage) Encode(dst []byte, enc encoding.Encoding) ([]byte, error) {
-	return p.class.encode(dst, p.values, enc)
 }
 
 type pageClass interface {

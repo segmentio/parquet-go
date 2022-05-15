@@ -5,7 +5,6 @@ package parquet
 import (
 	"io"
 
-	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
@@ -78,13 +77,11 @@ func (p *page[T]) RepetitionLevels() []byte { return nil }
 
 func (p *page[T]) DefinitionLevels() []byte { return nil }
 
+func (p *page[T]) Data() []byte { return unsafecast.Slice[byte](p.values) }
+
 func (p *page[T]) Values() ValueReader { return &pageValueReader[T]{page: p} }
 
 func (p *page[T]) Buffer() BufferedPage { return p }
-
-func (p *page[T]) Encode(dst []byte, enc encoding.Encoding) ([]byte, error) {
-	return p.class.encode(enc, dst, p.values)
-}
 
 type pageValueReader[T primitive] struct {
 	page   *page[T]
