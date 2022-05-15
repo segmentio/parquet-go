@@ -16,14 +16,14 @@ import (
 
 func EncodeBoolean(f *testing.F, e encoding.Encoding) {
 	var err error
-	var buf = make([]bool, 64*1024)
-	var src = make([]bool, 64*1024)
+	var buf = make([]byte, 64*1024)
+	var src = make([]byte, 64*1024)
 	var dst = make([]byte, 64*1024)
 
 	f.Fuzz(func(t *testing.T, input []byte) {
 		src = src[:0]
 		for _, c := range input {
-			src = append(src, (c&1) == 1)
+			src = append(src, (c & 1))
 		}
 		dst, err = e.EncodeBoolean(dst, src)
 		if err != nil {

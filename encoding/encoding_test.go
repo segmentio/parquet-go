@@ -302,13 +302,14 @@ func setBitWidth(e encoding.Encoding, bitWidth int) {
 func testBooleanEncoding(t *testing.T, e encoding.Encoding) {
 	testCanEncodeBoolean(t, e)
 	buffer := []byte{}
-	values := []bool{}
+	values := []byte{}
 	setBitWidth(e, 1)
 
 	for _, test := range booleanTests {
 		t.Run("", func(t *testing.T) {
 			var err error
-			buffer, err = e.EncodeBoolean(buffer, test)
+			var input = bits.BoolToBytes(test)
+			buffer, err = e.EncodeBoolean(buffer, input)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -316,7 +317,7 @@ func testBooleanEncoding(t *testing.T, e encoding.Encoding) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !reflect.DeepEqual(test, values[:len(test)]) {
+			if !reflect.DeepEqual(input, values[:len(test)]) {
 				t.Fatalf("values mismatch:\nwant = %+v\ngot  = %+v", test, values)
 			}
 			// Boolean encodings may pad their output with up to 7 bits, so we
@@ -746,7 +747,7 @@ func benchmarkDecode(b *testing.B, e encoding.Encoding) {
 func benchmarkDecodeBoolean(b *testing.B, e encoding.Encoding) {
 	testCanEncodeBoolean(b, e)
 	values := generateBooleanValues(benchmarkNumValues, newRand())
-	output := make([]bool, 0)
+	output := make([]byte, 0)
 	setBitWidth(e, 1)
 	buffer, _ := e.EncodeBoolean(nil, values)
 
@@ -858,10 +859,10 @@ func benchmarkZeroAllocsPerRun(b *testing.B, f func()) {
 	}
 }
 
-func generateBooleanValues(n int, r *rand.Rand) []bool {
-	values := make([]bool, n)
+func generateBooleanValues(n int, r *rand.Rand) []byte {
+	values := make([]byte, n)
 	for i := range values {
-		values[i] = r.Float64() > 0.5
+		values[i] = byte(r.Intn(1))
 	}
 	return values
 }

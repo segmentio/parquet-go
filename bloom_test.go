@@ -30,7 +30,7 @@ func TestSplitBlockFilter(t *testing.T) {
 			scenario: "BOOLEAN",
 			function: func(values []bool) bool {
 				filter := newFilter(len(values))
-				encoding.EncodeBoolean(filter.Bytes(), values)
+				encoding.EncodeBoolean(filter.Bytes(), bits.BoolToBytes(values))
 				for _, v := range values {
 					if !check(filter, ValueOf(v)) {
 						return false

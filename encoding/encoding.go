@@ -30,7 +30,7 @@ type Encoding interface {
 	// The source are expected to be encoded using the PLAIN encoding, and
 	// therefore the methods act as conversions into the target encoding.
 	EncodeLevels(dst, src []byte) ([]byte, error)
-	EncodeBoolean(dst []byte, src []bool) ([]byte, error)
+	EncodeBoolean(dst, src []byte) ([]byte, error)
 	EncodeInt32(dst, src []byte) ([]byte, error)
 	EncodeInt64(dst, src []byte) ([]byte, error)
 	EncodeInt96(dst, src []byte) ([]byte, error)
@@ -44,7 +44,7 @@ type Encoding interface {
 	//
 	// Values are written in the destination buffer in the PLAIN encoding.
 	DecodeLevels(dst, src []byte) ([]byte, error)
-	DecodeBoolean(dst []bool, src []byte) ([]bool, error)
+	DecodeBoolean(dst, src []byte) ([]byte, error)
 	DecodeInt32(dst, src []byte) ([]byte, error)
 	DecodeInt64(dst, src []byte) ([]byte, error)
 	DecodeInt96(dst, src []byte) ([]byte, error)

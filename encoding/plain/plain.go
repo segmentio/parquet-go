@@ -30,7 +30,7 @@ func (e *Encoding) Encoding() format.Encoding {
 	return format.Plain
 }
 
-func (e *Encoding) EncodeBoolean(dst []byte, src []bool) ([]byte, error) {
+func (e *Encoding) EncodeBoolean(dst, src []byte) ([]byte, error) {
 	dst = dst[:0]
 	b := byte(0)
 	i := 0
@@ -38,28 +38,28 @@ func (e *Encoding) EncodeBoolean(dst []byte, src []bool) ([]byte, error) {
 
 	for i < n {
 		b = 0
-		if src[i+7] {
+		if src[i+7] != 0 {
 			b |= 1 << 7
 		}
-		if src[i+6] {
+		if src[i+6] != 0 {
 			b |= 1 << 6
 		}
-		if src[i+5] {
+		if src[i+5] != 0 {
 			b |= 1 << 5
 		}
-		if src[i+4] {
+		if src[i+4] != 0 {
 			b |= 1 << 4
 		}
-		if src[i+3] {
+		if src[i+3] != 0 {
 			b |= 1 << 3
 		}
-		if src[i+2] {
+		if src[i+2] != 0 {
 			b |= 1 << 2
 		}
-		if src[i+1] {
+		if src[i+1] != 0 {
 			b |= 1 << 1
 		}
-		if src[i+0] {
+		if src[i+0] != 0 {
 			b |= 1 << 0
 		}
 		dst = append(dst, b)
@@ -69,7 +69,7 @@ func (e *Encoding) EncodeBoolean(dst []byte, src []bool) ([]byte, error) {
 	if i < len(src) {
 		b = 0
 		for j := uint(0); i < len(src); j++ {
-			if src[i] {
+			if src[i] != 0 {
 				b |= 1 << j
 			}
 			i++
@@ -129,18 +129,18 @@ func (e *Encoding) EncodeFixedLenByteArray(dst, src []byte, size int) ([]byte, e
 	return append(dst[:0], src...), nil
 }
 
-func (e *Encoding) DecodeBoolean(dst []bool, src []byte) ([]bool, error) {
+func (e *Encoding) DecodeBoolean(dst, src []byte) ([]byte, error) {
 	dst = dst[:0]
 	for _, b := range src {
 		dst = append(dst,
-			((b>>0)&1) != 0,
-			((b>>1)&1) != 0,
-			((b>>2)&1) != 0,
-			((b>>3)&1) != 0,
-			((b>>4)&1) != 0,
-			((b>>5)&1) != 0,
-			((b>>6)&1) != 0,
-			((b>>7)&1) != 0,
+			((b >> 0) & 1),
+			((b >> 1) & 1),
+			((b >> 2) & 1),
+			((b >> 3) & 1),
+			((b >> 4) & 1),
+			((b >> 5) & 1),
+			((b >> 6) & 1),
+			((b >> 7) & 1),
 		)
 	}
 	return dst, nil

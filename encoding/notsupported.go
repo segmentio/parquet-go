@@ -125,7 +125,7 @@ func (NotSupported) EncodeLevels(dst, src []byte) ([]byte, error) {
 	return dst[:0], errNotSupported("LEVELS")
 }
 
-func (NotSupported) EncodeBoolean(dst []byte, src []bool) ([]byte, error) {
+func (NotSupported) EncodeBoolean(dst, src []byte) ([]byte, error) {
 	return dst[:0], errNotSupported("BOOLEAN")
 }
 
@@ -161,7 +161,7 @@ func (NotSupported) DecodeLevels(dst, src []byte) ([]byte, error) {
 	return dst[:0], errNotSupported("LEVELS")
 }
 
-func (NotSupported) DecodeBoolean(dst []bool, src []byte) ([]bool, error) {
+func (NotSupported) DecodeBoolean(dst, src []byte) ([]byte, error) {
 	return dst[:0], errNotSupported("BOOLEAN")
 }
 

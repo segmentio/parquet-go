@@ -10,7 +10,6 @@ import (
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/format"
-	"github.com/segmentio/parquet-go/internal/bits"
 )
 
 // Column represents a column in a parquet file.
@@ -504,7 +503,7 @@ func (p *dataPage) decode(typ Type, enc encoding.Encoding, data []byte) (err err
 	// revisit this decision in the future if needed.
 	switch typ.Kind() {
 	case Boolean:
-		return p.decodeBooleanPage(enc, data)
+		p.values, err = enc.DecodeBoolean(p.values, data)
 	case Int32:
 		p.values, err = enc.DecodeInt32(p.values, data)
 	case Int64:
@@ -522,12 +521,6 @@ func (p *dataPage) decode(typ Type, enc encoding.Encoding, data []byte) (err err
 	default:
 		p.values = p.values[:0]
 	}
-	return err
-}
-
-func (p *dataPage) decodeBooleanPage(enc encoding.Encoding, data []byte) error {
-	values, err := enc.DecodeBoolean(bits.BytesToBool(p.values), data)
-	p.values = bits.BoolToBytes(values)
 	return err
 }
 

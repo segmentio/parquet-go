@@ -143,8 +143,8 @@ type splitBlockEncoding struct {
 	encoding.NotSupported
 }
 
-func (splitBlockEncoding) EncodeBoolean(dst []byte, src []bool) ([]byte, error) {
-	splitBlockEncodeUint8(bloom.MakeSplitBlockFilter(dst), bits.BoolToBytes(src))
+func (splitBlockEncoding) EncodeBoolean(dst, src []byte) ([]byte, error) {
+	splitBlockEncodeUint8(bloom.MakeSplitBlockFilter(dst), src)
 	return dst, nil
 }
 

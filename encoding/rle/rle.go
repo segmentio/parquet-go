@@ -40,16 +40,16 @@ func (e *Encoding) Encoding() format.Encoding {
 }
 
 func (e *Encoding) EncodeLevels(dst, src []byte) ([]byte, error) {
-	dst, err := encodeLevels(dst[:0], src, uint(e.BitWidth))
+	dst, err := encodeBytes(dst[:0], src, uint(e.BitWidth))
 	return dst, e.wrap(err)
 }
 
-func (e *Encoding) EncodeBoolean(dst []byte, src []bool) ([]byte, error) {
+func (e *Encoding) EncodeBoolean(dst, src []byte) ([]byte, error) {
 	// In the case of encoding a boolean values, the 4 bytes length of the
 	// output is expected by the parquet format. We add the bytes as placeholder
 	// before appending the encoded data.
 	dst = append(dst[:0], 0, 0, 0, 0)
-	dst, err := encodeInt8(dst, bits.BytesToInt8(bits.BoolToBytes(src)), 1)
+	dst, err := encodeBytes(dst, src, 1)
 	binary.LittleEndian.PutUint32(dst, uint32(len(dst))-4)
 	return dst, e.wrap(err)
 }
@@ -63,11 +63,11 @@ func (e *Encoding) EncodeInt32(dst, src []byte) ([]byte, error) {
 }
 
 func (e *Encoding) DecodeLevels(dst, src []byte) ([]byte, error) {
-	dst, err := decodeLevels(dst[:0], src, uint(e.BitWidth))
+	dst, err := decodeBytes(dst[:0], src, uint(e.BitWidth))
 	return dst, e.wrap(err)
 }
 
-func (e *Encoding) DecodeBoolean(dst []bool, src []byte) ([]bool, error) {
+func (e *Encoding) DecodeBoolean(dst, src []byte) ([]byte, error) {
 	if len(src) == 4 {
 		return dst[:0], nil
 	}
@@ -79,9 +79,8 @@ func (e *Encoding) DecodeBoolean(dst []bool, src []byte) ([]bool, error) {
 	if n > len(src) {
 		return dst[:0], fmt.Errorf("input shorter than length prefix: %d < %d: %w", len(src), n, io.ErrUnexpectedEOF)
 	}
-	buf := bits.BytesToInt8(bits.BoolToBytes(dst))
-	buf, err := decodeInt8(buf[:0], src[:n], 1)
-	return bits.BytesToBool(bits.Int8ToBytes(buf)), e.wrap(err)
+	dst, err := decodeBytes(dst[:0], src[:n], 1)
+	return dst, e.wrap(err)
 }
 
 func (e *Encoding) DecodeInt32(dst, src []byte) ([]byte, error) {
@@ -96,83 +95,12 @@ func (e *Encoding) wrap(err error) error {
 	return err
 }
 
-func encodeLevels(dst, src []byte, bitWidth uint) ([]byte, error) {
+func encodeBytes(dst, src []byte, bitWidth uint) ([]byte, error) {
 	if bitWidth > 8 {
 		return dst, errEncodeInvalidBitWidth("INT8", bitWidth)
 	}
 	if bitWidth == 0 {
 		if !isZero(src) {
-			return dst, errEncodeInvalidBitWidth("INT8", bitWidth)
-		}
-		return appendUvarint(dst, uint64(len(src))<<1), nil
-	}
-
-	bitMask := uint64(1<<bitWidth) - 1
-	byteCount := bits.ByteCount(8 * bitWidth)
-
-	if len(src) >= 8 {
-		words := unsafe.Slice((*uint64)(unsafe.Pointer(&src[0])), len(src)/8)
-
-		for i := 0; i < len(words); {
-			j := i
-			pattern := broadcast8x8(words[i] & 0xFF)
-
-			for j < len(words) && words[j] == pattern {
-				j++
-			}
-
-			if i < j {
-				dst = appendUvarint(dst, uint64(8*(j-i))<<1)
-				dst = append(dst, byte(pattern))
-			} else {
-				j++
-
-				for j < len(words) && words[j] != broadcast8x8(words[j-1]) {
-					j++
-				}
-
-				dst = appendUvarint(dst, uint64(j-i)<<1|1)
-
-				for _, word := range words[i:j] {
-					word = (word & bitMask) |
-						(((word >> 8) & bitMask) << (1 * bitWidth)) |
-						(((word >> 16) & bitMask) << (2 * bitWidth)) |
-						(((word >> 24) & bitMask) << (3 * bitWidth)) |
-						(((word >> 32) & bitMask) << (4 * bitWidth)) |
-						(((word >> 40) & bitMask) << (5 * bitWidth)) |
-						(((word >> 48) & bitMask) << (6 * bitWidth)) |
-						(((word >> 56) & bitMask) << (7 * bitWidth))
-					bits := [8]byte{}
-					binary.LittleEndian.PutUint64(bits[:], word)
-					dst = append(dst, bits[:byteCount]...)
-				}
-			}
-
-			i = j
-		}
-	}
-
-	for i := (len(src) / 8) * 8; i < len(src); {
-		j := i + 1
-
-		for j < len(src) && src[i] == src[j] {
-			j++
-		}
-
-		dst = appendUvarint(dst, uint64(j-i)<<1)
-		dst = append(dst, byte(src[i]))
-		i = j
-	}
-
-	return dst, nil
-}
-
-func encodeInt8(dst []byte, src []int8, bitWidth uint) ([]byte, error) {
-	if bitWidth > 8 {
-		return dst, errEncodeInvalidBitWidth("INT8", bitWidth)
-	}
-	if bitWidth == 0 {
-		if !isZeroInt8(src) {
 			return dst, errEncodeInvalidBitWidth("INT8", bitWidth)
 		}
 		return appendUvarint(dst, uint64(len(src))<<1), nil
@@ -311,7 +239,7 @@ func encodeInt32(dst []byte, src []int32, bitWidth uint) ([]byte, error) {
 	return dst, nil
 }
 
-func decodeLevels(dst, src []byte, bitWidth uint) ([]byte, error) {
+func decodeBytes(dst, src []byte, bitWidth uint) ([]byte, error) {
 	if bitWidth > 8 {
 		return dst, errDecodeInvalidBitWidth("INT8", bitWidth)
 	}
@@ -369,74 +297,6 @@ func decodeLevels(dst, src []byte, bitWidth uint) ([]byte, error) {
 					byte((word>>(5*bitWidth))&bitMask),
 					byte((word>>(6*bitWidth))&bitMask),
 					byte((word>>(7*bitWidth))&bitMask),
-				)
-
-				i = j
-			}
-		}
-	}
-
-	return dst, nil
-}
-
-func decodeInt8(dst []int8, src []byte, bitWidth uint) ([]int8, error) {
-	if bitWidth > 8 {
-		return dst, errDecodeInvalidBitWidth("INT8", bitWidth)
-	}
-
-	bitMask := uint64(1<<bitWidth) - 1
-	byteCount := bits.ByteCount(8 * bitWidth)
-
-	for i := 0; i < len(src); {
-		u, n := binary.Uvarint(src[i:])
-		if n == 0 {
-			return dst, fmt.Errorf("decoding run-length block header: %w", io.ErrUnexpectedEOF)
-		}
-		if n < 0 {
-			return dst, fmt.Errorf("overflow after decoding %d/%d bytes of run-length block header", -n+i, len(src))
-		}
-		i += n
-
-		count, bitpack := uint(u>>1), (u&1) != 0
-		if count > maxSupportedValueCount {
-			return dst, fmt.Errorf("decoded run-length block cannot have more than %d values", maxSupportedValueCount)
-		}
-		if !bitpack {
-			if bitWidth != 0 && (i+1) > len(src) {
-				return dst, fmt.Errorf("decoding run-length block of %d values: %w", count, io.ErrUnexpectedEOF)
-			}
-
-			word := int8(0)
-			if bitWidth != 0 {
-				word = int8(src[i])
-				i++
-			}
-
-			for count > 0 {
-				dst = append(dst, word)
-				count--
-			}
-		} else {
-			for n := uint(0); n < count; n++ {
-				j := i + byteCount
-
-				if j > len(src) {
-					return dst, fmt.Errorf("decoding bit-packed block of %d values: %w", 8*count, io.ErrUnexpectedEOF)
-				}
-
-				bits := [8]byte{}
-				copy(bits[:], src[i:j])
-				word := binary.LittleEndian.Uint64(bits[:])
-
-				dst = append(dst,
-					int8((word>>(0*bitWidth))&bitMask),
-					int8((word>>(1*bitWidth))&bitMask),
-					int8((word>>(2*bitWidth))&bitMask),
-					int8((word>>(3*bitWidth))&bitMask),
-					int8((word>>(4*bitWidth))&bitMask),
-					int8((word>>(5*bitWidth))&bitMask),
-					int8((word>>(6*bitWidth))&bitMask),
-					int8((word>>(7*bitWidth))&bitMask),
 				)
 
 				i = j

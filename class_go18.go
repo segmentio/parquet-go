@@ -66,7 +66,9 @@ var boolClass = class[bool]{
 	min:       bits.MinBool,
 	max:       bits.MaxBool,
 	bounds:    bits.MinMaxBool,
-	encode:    encoding.Encoding.EncodeBoolean,
+	encode: func(enc encoding.Encoding, dst []byte, src []bool) ([]byte, error) {
+		return enc.EncodeBoolean(dst, unsafecast.Slice[byte](src))
+	},
 }
 
 var int32Class = class[int32]{
