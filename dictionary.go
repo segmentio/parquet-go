@@ -336,9 +336,9 @@ func (page *indexedPage) Slice(i, j int64) BufferedPage {
 
 func (page *indexedPage) Size() int64 { return sizeOfInt32(page.values) }
 
-func (page *indexedPage) RepetitionLevels() []int8 { return nil }
+func (page *indexedPage) RepetitionLevels() []byte { return nil }
 
-func (page *indexedPage) DefinitionLevels() []int8 { return nil }
+func (page *indexedPage) DefinitionLevels() []byte { return nil }
 
 func (page *indexedPage) Values() ValueReader { return &indexedPageReader{page: page} }
 

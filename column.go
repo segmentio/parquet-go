@@ -33,8 +33,8 @@ type Column struct {
 	compression compress.Codec
 
 	depth              int8
-	maxRepetitionLevel int8
-	maxDefinitionLevel int8
+	maxRepetitionLevel byte
+	maxDefinitionLevel byte
 	index              int16
 }
 
@@ -228,8 +228,8 @@ func (c *Column) setLevels(depth, repetition, definition, index int) (int, error
 	}
 
 	c.depth = int8(depth)
-	c.maxRepetitionLevel = int8(repetition)
-	c.maxDefinitionLevel = int8(definition)
+	c.maxRepetitionLevel = byte(repetition)
+	c.maxDefinitionLevel = byte(definition)
 	depth++
 
 	if len(c.columns) > 0 {
@@ -478,8 +478,8 @@ type dictPage struct {
 }
 
 type dataPage struct {
-	repetitionLevels []int8
-	definitionLevels []int8
+	repetitionLevels []byte
+	definitionLevels []byte
 	data             []byte
 	values           []byte
 	dictionary       Dictionary
@@ -687,7 +687,7 @@ func (c *Column) decodeDataPage(header DataPageHeader, numValues int64, page *da
 	return newPage, nil
 }
 
-func decodeLevelsV1(enc encoding.Encoding, numValues int64, levels []int8, data []byte) ([]int8, []byte, error) {
+func decodeLevelsV1(enc encoding.Encoding, numValues int64, levels, data []byte) ([]byte, []byte, error) {
 	if len(data) < 4 {
 		return nil, data, io.ErrUnexpectedEOF
 	}
@@ -700,7 +700,7 @@ func decodeLevelsV1(enc encoding.Encoding, numValues int64, levels []int8, data 
 	return levels, data[j:], err
 }
 
-func decodeLevelsV2(enc encoding.Encoding, numValues int64, levels []int8, data []byte, length int64) ([]int8, []byte, error) {
+func decodeLevelsV2(enc encoding.Encoding, numValues int64, levels, data []byte, length int64) ([]byte, []byte, error) {
 	if length > int64(len(data)) {
 		return nil, data, io.ErrUnexpectedEOF
 	}
@@ -708,9 +708,9 @@ func decodeLevelsV2(enc encoding.Encoding, numValues int64, levels []int8, data 
 	return levels, data[length:], err
 }
 
-func decodeLevels(enc encoding.Encoding, numValues int64, levels []int8, data []byte) ([]int8, error) {
+func decodeLevels(enc encoding.Encoding, numValues int64, levels, data []byte) ([]byte, error) {
 	if cap(levels) < int(numValues) {
-		levels = make([]int8, numValues)
+		levels = make([]byte, numValues)
 	}
 	levels, err := enc.DecodeLevels(levels, data)
 	if err == nil {

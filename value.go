@@ -34,8 +34,8 @@ type Value struct {
 	// type
 	kind int8 // XOR(Kind) so the zero-value is <null>
 	// levels
-	definitionLevel int8
-	repetitionLevel int8
+	definitionLevel byte
+	repetitionLevel byte
 	columnIndex     int16 // XOR so the zero-value is -1
 }
 

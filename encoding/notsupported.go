@@ -50,7 +50,7 @@ func CanEncodeBoolean(e Encoding) bool {
 	return !errors.Is(err, ErrNotSupported)
 }
 
-// CanEncodeInt8 reports whether e can encode INT8 values.
+// CanEncodeInt8 reports whether e can encode LEVELS values.
 func CanEncodeLevels(e Encoding) bool {
 	_, err := e.EncodeLevels(nil, nil)
 	return !errors.Is(err, ErrNotSupported)
@@ -112,8 +112,8 @@ func (NotSupported) Encoding() format.Encoding {
 	return -1
 }
 
-func (NotSupported) EncodeLevels(dst []byte, src []int8) ([]byte, error) {
-	return dst[:0], errNotSupported("INT8")
+func (NotSupported) EncodeLevels(dst, src []byte) ([]byte, error) {
+	return dst[:0], errNotSupported("LEVELS")
 }
 
 func (NotSupported) EncodeBoolean(dst []byte, src []bool) ([]byte, error) {
@@ -148,8 +148,8 @@ func (NotSupported) EncodeFixedLenByteArray(dst, src []byte, size int) ([]byte, 
 	return dst[:0], errNotSupported("FIXED_LEN_BYTE_ARRAY")
 }
 
-func (NotSupported) DecodeLevels(dst []int8, src []byte) ([]int8, error) {
-	return dst[:0], errNotSupported("INT8")
+func (NotSupported) DecodeLevels(dst, src []byte) ([]byte, error) {
+	return dst[:0], errNotSupported("LEVELS")
 }
 
 func (NotSupported) DecodeBoolean(dst []bool, src []byte) ([]bool, error) {

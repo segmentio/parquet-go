@@ -238,9 +238,9 @@ func (r *columnChunkReader) writeRowsTo(w pageAndValueWriter, limit int64) (numR
 	return numRows, nil
 }
 
-type columnReadRowFunc func(Row, int8, []columnChunkReader) (Row, error)
+type columnReadRowFunc func(Row, byte, []columnChunkReader) (Row, error)
 
-func columnReadRowFuncOf(node Node, columnIndex int, repetitionDepth int8) (int, columnReadRowFunc) {
+func columnReadRowFuncOf(node Node, columnIndex int, repetitionDepth byte) (int, columnReadRowFunc) {
 	var read columnReadRowFunc
 
 	if node.Repeated() {
@@ -261,8 +261,8 @@ func columnReadRowFuncOf(node Node, columnIndex int, repetitionDepth int8) (int,
 }
 
 //go:noinline
-func columnReadRowFuncOfRepeated(read columnReadRowFunc, repetitionDepth int8) columnReadRowFunc {
-	return func(row Row, repetitionLevel int8, columns []columnChunkReader) (Row, error) {
+func columnReadRowFuncOfRepeated(read columnReadRowFunc, repetitionDepth byte) columnReadRowFunc {
+	return func(row Row, repetitionLevel byte, columns []columnChunkReader) (Row, error) {
 		var err error
 
 		for {
@@ -281,7 +281,7 @@ func columnReadRowFuncOfRepeated(read columnReadRowFunc, repetitionDepth int8) c
 }
 
 //go:noinline
-func columnReadRowFuncOfGroup(node Node, columnIndex int, repetitionDepth int8) (int, columnReadRowFunc) {
+func columnReadRowFuncOfGroup(node Node, columnIndex int, repetitionDepth byte) (int, columnReadRowFunc) {
 	fields := node.Fields()
 	if len(fields) == 1 {
 		// Small optimization for a somewhat common case of groups with a single
@@ -296,7 +296,7 @@ func columnReadRowFuncOfGroup(node Node, columnIndex int, repetitionDepth int8) 
 		columnIndex, group[i] = columnReadRowFuncOf(fields[i], columnIndex, repetitionDepth)
 	}
 
-	return columnIndex, func(row Row, repetitionLevel int8, columns []columnChunkReader) (Row, error) {
+	return columnIndex, func(row Row, repetitionLevel byte, columns []columnChunkReader) (Row, error) {
 		var err error
 
 		for _, read := range group {
@@ -310,11 +310,11 @@ func columnReadRowFuncOfGroup(node Node, columnIndex int, repetitionDepth int8) 
 }
 
 //go:noinline
-func columnReadRowFuncOfLeaf(columnIndex int, repetitionDepth int8) (int, columnReadRowFunc) {
+func columnReadRowFuncOfLeaf(columnIndex int, repetitionDepth byte) (int, columnReadRowFunc) {
 	var read columnReadRowFunc
 
 	if repetitionDepth == 0 {
-		read = func(row Row, _ int8, columns []columnChunkReader) (Row, error) {
+		read = func(row Row, _ byte, columns []columnChunkReader) (Row, error) {
 			col := &columns[columnIndex]
 
 			for {
@@ -329,7 +329,7 @@ func columnReadRowFuncOfLeaf(columnIndex int, repetitionDepth int8) (int, column
 			}
 		}
 	} else {
-		read = func(row Row, repetitionLevel int8, columns []columnChunkReader) (Row, error) {
+		read = func(row Row, repetitionLevel byte, columns []columnChunkReader) (Row, error) {
 			col := &columns[columnIndex]
 
 			for {

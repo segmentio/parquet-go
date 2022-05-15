@@ -74,9 +74,9 @@ func (p *page[T]) Slice(i, j int64) BufferedPage {
 
 func (p *page[T]) Size() int64 { return int64(len(p.values)) * int64(sizeof[T]()) }
 
-func (p *page[T]) RepetitionLevels() []int8 { return nil }
+func (p *page[T]) RepetitionLevels() []byte { return nil }
 
-func (p *page[T]) DefinitionLevels() []int8 { return nil }
+func (p *page[T]) DefinitionLevels() []byte { return nil }
 
 func (p *page[T]) Values() ValueReader { return &pageValueReader[T]{page: p} }
 

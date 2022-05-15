@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
+	"math/bits"
 	"sort"
 
 	"github.com/segmentio/encoding/thrift"
@@ -14,7 +15,6 @@ import (
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/encoding/plain"
 	"github.com/segmentio/parquet-go/format"
-	"github.com/segmentio/parquet-go/internal/bits"
 )
 
 // A Writer uses a parquet schema and sequence of Go values to produce a parquet
@@ -689,21 +689,21 @@ func (wb *writerBuffers) reset() {
 	wb.page = wb.page[:0]
 }
 
-func (wb *writerBuffers) encodeRepetitionLevels(page BufferedPage, maxRepetitionLevel int8) (err error) {
+func (wb *writerBuffers) encodeRepetitionLevels(page BufferedPage, maxRepetitionLevel byte) (err error) {
 	bitWidth := bits.Len8(maxRepetitionLevel)
 	encoding := &levelEncodings[bitWidth-1]
 	wb.repetitions, err = encoding.EncodeLevels(wb.repetitions[:0], page.RepetitionLevels())
 	return err
 }
 
-func (wb *writerBuffers) encodeDefinitionLevels(page BufferedPage, maxDefinitionLevel int8) (err error) {
+func (wb *writerBuffers) encodeDefinitionLevels(page BufferedPage, maxDefinitionLevel byte) (err error) {
 	bitWidth := bits.Len8(maxDefinitionLevel)
 	encoding := &levelEncodings[bitWidth-1]
 	wb.definitions, err = encoding.EncodeLevels(wb.definitions[:0], page.DefinitionLevels())
 	return err
 }
 
-func (wb *writerBuffers) prependLevelsToDataPageV1(maxRepetitionLevel, maxDefinitionLevel int8) {
+func (wb *writerBuffers) prependLevelsToDataPageV1(maxRepetitionLevel, maxDefinitionLevel byte) {
 	hasRepetitionLevels := maxRepetitionLevel > 0
 	hasDefinitionLevels := maxDefinitionLevel > 0
 
@@ -764,8 +764,8 @@ type writerColumn struct {
 	dictionary   Dictionary
 
 	dataPageType       format.PageType
-	maxRepetitionLevel int8
-	maxDefinitionLevel int8
+	maxRepetitionLevel byte
+	maxDefinitionLevel byte
 
 	buffers *writerBuffers
 

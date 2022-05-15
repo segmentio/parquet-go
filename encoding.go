@@ -1,13 +1,14 @@
 package parquet
 
 import (
+	"math/bits"
+
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/encoding/bytestreamsplit"
 	"github.com/segmentio/parquet-go/encoding/delta"
 	"github.com/segmentio/parquet-go/encoding/plain"
 	"github.com/segmentio/parquet-go/encoding/rle"
 	"github.com/segmentio/parquet-go/format"
-	"github.com/segmentio/parquet-go/internal/bits"
 )
 
 var (
@@ -87,7 +88,7 @@ func LookupEncoding(enc format.Encoding) encoding.Encoding {
 	return encoding.NotSupported{}
 }
 
-func lookupLevelEncoding(enc format.Encoding, max int8) encoding.Encoding {
+func lookupLevelEncoding(enc format.Encoding, max byte) encoding.Encoding {
 	switch enc {
 	case format.RLE:
 		return &levelEncodings[bits.Len8(max)-1]

@@ -77,8 +77,8 @@ type BufferedPage interface {
 	//
 	// The returned slices may be empty when the page has no repetition or
 	// definition levels.
-	RepetitionLevels() []int8
-	DefinitionLevels() []int8
+	RepetitionLevels() []byte
+	DefinitionLevels() []byte
 
 	// Writes the page data to dst with the given encoding.
 	Encode(dst []byte, enc encoding.Encoding) ([]byte, error)
@@ -165,8 +165,6 @@ func sizeOfBytes(data []byte) int64 { return 1 * int64(len(data)) }
 
 func sizeOfBool(data []bool) int64 { return 1 * int64(len(data)) }
 
-func sizeOfInt8(data []int8) int64 { return 1 * int64(len(data)) }
-
 func sizeOfInt32(data []int32) int64 { return 4 * int64(len(data)) }
 
 func sizeOfInt64(data []int64) int64 { return 8 * int64(len(data)) }
@@ -220,41 +218,40 @@ func newErrorPage(columnIndex int, msg string, args ...interface{}) *errorPage {
 	}
 }
 
-func (page *errorPage) Column() int                                             { return page.columnIndex }
-func (page *errorPage) Dictionary() Dictionary                                  { return nil }
-func (page *errorPage) NumRows() int64                                          { return 1 }
-func (page *errorPage) NumValues() int64                                        { return 1 }
-func (page *errorPage) NumNulls() int64                                         { return 0 }
-func (page *errorPage) Bounds() (min, max Value, ok bool)                       { return }
-func (page *errorPage) Clone() BufferedPage                                     { return page }
-func (page *errorPage) Slice(i, j int64) BufferedPage                           { return page }
-func (page *errorPage) Size() int64                                             { return 1 }
-func (page *errorPage) RepetitionLevels() []int8                                { return nil }
-func (page *errorPage) DefinitionLevels() []int8                                { return nil }
-func (page *errorPage) Values() ValueReader                                     { return &errorValueReader{err: page.err} }
-func (page *errorPage) Buffer() BufferedPage                                    { return page }
-func (page *errorPage) Encode(dst []byte, _ encoding.Encoding) ([]byte, error)  { return dst, page.err }
-func (page *errorPage) Decode(_, _ []int8, _ []byte, _ encoding.Encoding) error { return page.err }
+func (page *errorPage) Column() int                                            { return page.columnIndex }
+func (page *errorPage) Dictionary() Dictionary                                 { return nil }
+func (page *errorPage) NumRows() int64                                         { return 1 }
+func (page *errorPage) NumValues() int64                                       { return 1 }
+func (page *errorPage) NumNulls() int64                                        { return 0 }
+func (page *errorPage) Bounds() (min, max Value, ok bool)                      { return }
+func (page *errorPage) Clone() BufferedPage                                    { return page }
+func (page *errorPage) Slice(i, j int64) BufferedPage                          { return page }
+func (page *errorPage) Size() int64                                            { return 1 }
+func (page *errorPage) RepetitionLevels() []byte                               { return nil }
+func (page *errorPage) DefinitionLevels() []byte                               { return nil }
+func (page *errorPage) Values() ValueReader                                    { return &errorValueReader{err: page.err} }
+func (page *errorPage) Buffer() BufferedPage                                   { return page }
+func (page *errorPage) Encode(dst []byte, _ encoding.Encoding) ([]byte, error) { return dst, page.err }
 
 func errPageBoundsOutOfRange(i, j, n int64) error {
 	return fmt.Errorf("page bounds out of range [%d:%d]: with length %d", i, j, n)
 }
 
-func countLevelsEqual(levels []int8, value int8) int {
-	return bits.CountByte(bits.Int8ToBytes(levels), byte(value))
+func countLevelsEqual(levels []byte, value byte) int {
+	return bits.CountByte(levels, value)
 }
 
-func countLevelsNotEqual(levels []int8, value int8) int {
+func countLevelsNotEqual(levels []byte, value byte) int {
 	return len(levels) - countLevelsEqual(levels, value)
 }
 
-func appendLevel(levels []int8, value int8, count int) []int8 {
+func appendLevel(levels []byte, value byte, count int) []byte {
 	if count > 0 {
 		i := len(levels)
 		j := len(levels) + 1
 
 		if n := len(levels) + count; cap(levels) < n {
-			newLevels := make([]int8, n)
+			newLevels := make([]byte, n)
 			copy(newLevels, levels)
 			levels = newLevels
 		} else {
@@ -270,11 +267,11 @@ func appendLevel(levels []int8, value int8, count int) []int8 {
 
 type optionalPage struct {
 	base               BufferedPage
-	maxDefinitionLevel int8
-	definitionLevels   []int8
+	maxDefinitionLevel byte
+	definitionLevels   []byte
 }
 
-func newOptionalPage(base BufferedPage, maxDefinitionLevel int8, definitionLevels []int8) *optionalPage {
+func newOptionalPage(base BufferedPage, maxDefinitionLevel byte, definitionLevels []byte) *optionalPage {
 	return &optionalPage{
 		base:               base,
 		maxDefinitionLevel: maxDefinitionLevel,
@@ -310,7 +307,7 @@ func (page *optionalPage) Clone() BufferedPage {
 	return newOptionalPage(
 		page.base.Clone(),
 		page.maxDefinitionLevel,
-		append([]int8{}, page.definitionLevels...),
+		append([]byte{}, page.definitionLevels...),
 	)
 }
 
@@ -325,14 +322,14 @@ func (page *optionalPage) Slice(i, j int64) BufferedPage {
 }
 
 func (page *optionalPage) Size() int64 {
-	return page.base.Size() + sizeOfInt8(page.definitionLevels)
+	return page.base.Size() + sizeOfBytes(page.definitionLevels)
 }
 
-func (page *optionalPage) RepetitionLevels() []int8 {
+func (page *optionalPage) RepetitionLevels() []byte {
 	return nil
 }
 
-func (page *optionalPage) DefinitionLevels() []int8 {
+func (page *optionalPage) DefinitionLevels() []byte {
 	return page.definitionLevels
 }
 
@@ -400,13 +397,13 @@ func (r *optionalPageReader) ReadValues(values []Value) (n int, err error) {
 
 type repeatedPage struct {
 	base               BufferedPage
-	maxRepetitionLevel int8
-	maxDefinitionLevel int8
-	definitionLevels   []int8
-	repetitionLevels   []int8
+	maxRepetitionLevel byte
+	maxDefinitionLevel byte
+	definitionLevels   []byte
+	repetitionLevels   []byte
 }
 
-func newRepeatedPage(base BufferedPage, maxRepetitionLevel, maxDefinitionLevel int8, repetitionLevels, definitionLevels []int8) *repeatedPage {
+func newRepeatedPage(base BufferedPage, maxRepetitionLevel, maxDefinitionLevel byte, repetitionLevels, definitionLevels []byte) *repeatedPage {
 	return &repeatedPage{
 		base:               base,
 		maxRepetitionLevel: maxRepetitionLevel,
@@ -445,8 +442,8 @@ func (page *repeatedPage) Clone() BufferedPage {
 		page.base.Clone(),
 		page.maxRepetitionLevel,
 		page.maxDefinitionLevel,
-		append([]int8{}, page.repetitionLevels...),
-		append([]int8{}, page.definitionLevels...),
+		append([]byte{}, page.repetitionLevels...),
+		append([]byte{}, page.definitionLevels...),
 	)
 }
 
@@ -494,14 +491,14 @@ func (page *repeatedPage) Slice(i, j int64) BufferedPage {
 }
 
 func (page *repeatedPage) Size() int64 {
-	return sizeOfInt8(page.repetitionLevels) + sizeOfInt8(page.definitionLevels) + page.base.Size()
+	return sizeOfBytes(page.repetitionLevels) + sizeOfBytes(page.definitionLevels) + page.base.Size()
 }
 
-func (page *repeatedPage) RepetitionLevels() []int8 {
+func (page *repeatedPage) RepetitionLevels() []byte {
 	return page.repetitionLevels
 }
 
-func (page *repeatedPage) DefinitionLevels() []int8 {
+func (page *repeatedPage) DefinitionLevels() []byte {
 	return page.definitionLevels
 }
 
@@ -707,9 +704,9 @@ func (page *byteArrayPage) Slice(i, j int64) BufferedPage {
 
 func (page *byteArrayPage) Size() int64 { return int64(len(page.values)) }
 
-func (page *byteArrayPage) RepetitionLevels() []int8 { return nil }
+func (page *byteArrayPage) RepetitionLevels() []byte { return nil }
 
-func (page *byteArrayPage) DefinitionLevels() []int8 { return nil }
+func (page *byteArrayPage) DefinitionLevels() []byte { return nil }
 
 func (page *byteArrayPage) Values() ValueReader { return &byteArrayPageReader{page: page} }
 
@@ -844,9 +841,9 @@ func (page *fixedLenByteArrayPage) Slice(i, j int64) BufferedPage {
 
 func (page *fixedLenByteArrayPage) Size() int64 { return sizeOfBytes(page.data) }
 
-func (page *fixedLenByteArrayPage) RepetitionLevels() []int8 { return nil }
+func (page *fixedLenByteArrayPage) RepetitionLevels() []byte { return nil }
 
-func (page *fixedLenByteArrayPage) DefinitionLevels() []int8 { return nil }
+func (page *fixedLenByteArrayPage) DefinitionLevels() []byte { return nil }
 
 func (page *fixedLenByteArrayPage) Values() ValueReader {
 	return &fixedLenByteArrayPageReader{page: page}
@@ -923,8 +920,8 @@ func (p *nullPage) Clone() BufferedPage  { return p }
 func (p *nullPage) Slice(i, j int64) BufferedPage {
 	return &nullPage{column: p.column, count: p.count - int(j-i)}
 }
-func (p *nullPage) RepetitionLevels() []int8 { return nil }
-func (p *nullPage) DefinitionLevels() []int8 { return nil }
+func (p *nullPage) RepetitionLevels() []byte { return nil }
+func (p *nullPage) DefinitionLevels() []byte { return nil }
 func (p *nullPage) Encode(dst []byte, enc encoding.Encoding) ([]byte, error) {
 	return dst[:0], nil
 }
@@ -1009,11 +1006,11 @@ func (p *bufferedPage) Slice(i, j int64) BufferedPage {
 	}
 }
 
-func (p *bufferedPage) RepetitionLevels() []int8 {
+func (p *bufferedPage) RepetitionLevels() []byte {
 	return nil
 }
 
-func (p *bufferedPage) DefinitionLevels() []int8 {
+func (p *bufferedPage) DefinitionLevels() []byte {
 	return nil
 }
 

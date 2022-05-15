@@ -105,9 +105,9 @@ func (page *booleanPage) Slice(i, j int64) BufferedPage {
 
 func (page *booleanPage) Size() int64 { return sizeOfBool(page.values) }
 
-func (page *booleanPage) RepetitionLevels() []int8 { return nil }
+func (page *booleanPage) RepetitionLevels() []byte { return nil }
 
-func (page *booleanPage) DefinitionLevels() []int8 { return nil }
+func (page *booleanPage) DefinitionLevels() []byte { return nil }
 
 func (page *booleanPage) Values() ValueReader { return &booleanPageReader{page: page} }
 
@@ -208,9 +208,9 @@ func (page *int32Page) Slice(i, j int64) BufferedPage {
 
 func (page *int32Page) Size() int64 { return sizeOfInt32(page.values) }
 
-func (page *int32Page) RepetitionLevels() []int8 { return nil }
+func (page *int32Page) RepetitionLevels() []byte { return nil }
 
-func (page *int32Page) DefinitionLevels() []int8 { return nil }
+func (page *int32Page) DefinitionLevels() []byte { return nil }
 
 func (page *int32Page) Values() ValueReader { return &int32PageReader{page: page} }
 
@@ -312,9 +312,9 @@ func (page *int64Page) Slice(i, j int64) BufferedPage {
 
 func (page *int64Page) Size() int64 { return sizeOfInt64(page.values) }
 
-func (page *int64Page) RepetitionLevels() []int8 { return nil }
+func (page *int64Page) RepetitionLevels() []byte { return nil }
 
-func (page *int64Page) DefinitionLevels() []int8 { return nil }
+func (page *int64Page) DefinitionLevels() []byte { return nil }
 
 func (page *int64Page) Values() ValueReader { return &int64PageReader{page: page} }
 
@@ -418,9 +418,9 @@ func (page *int96Page) Slice(i, j int64) BufferedPage {
 
 func (page *int96Page) Size() int64 { return sizeOfInt96(page.values) }
 
-func (page *int96Page) RepetitionLevels() []int8 { return nil }
+func (page *int96Page) RepetitionLevels() []byte { return nil }
 
-func (page *int96Page) DefinitionLevels() []int8 { return nil }
+func (page *int96Page) DefinitionLevels() []byte { return nil }
 
 func (page *int96Page) Values() ValueReader { return &int96PageReader{page: page} }
 
@@ -522,9 +522,9 @@ func (page *floatPage) Slice(i, j int64) BufferedPage {
 
 func (page *floatPage) Size() int64 { return sizeOfFloat32(page.values) }
 
-func (page *floatPage) RepetitionLevels() []int8 { return nil }
+func (page *floatPage) RepetitionLevels() []byte { return nil }
 
-func (page *floatPage) DefinitionLevels() []int8 { return nil }
+func (page *floatPage) DefinitionLevels() []byte { return nil }
 
 func (page *floatPage) Values() ValueReader { return &floatPageReader{page: page} }
 
@@ -626,9 +626,9 @@ func (page *doublePage) Slice(i, j int64) BufferedPage {
 
 func (page *doublePage) Size() int64 { return sizeOfFloat64(page.values) }
 
-func (page *doublePage) RepetitionLevels() []int8 { return nil }
+func (page *doublePage) RepetitionLevels() []byte { return nil }
 
-func (page *doublePage) DefinitionLevels() []int8 { return nil }
+func (page *doublePage) DefinitionLevels() []byte { return nil }
 
 func (page *doublePage) Values() ValueReader { return &doublePageReader{page: page} }
 

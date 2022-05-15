@@ -58,7 +58,7 @@ type ColumnBuffer interface {
 	Size() int64
 }
 
-func columnIndexOfNullable(base ColumnBuffer, maxDefinitionLevel int8, definitionLevels []int8) ColumnIndex {
+func columnIndexOfNullable(base ColumnBuffer, maxDefinitionLevel byte, definitionLevels []byte) ColumnIndex {
 	return &nullableColumnIndex{
 		ColumnIndex:        base.ColumnIndex(),
 		maxDefinitionLevel: maxDefinitionLevel,
@@ -68,8 +68,8 @@ func columnIndexOfNullable(base ColumnBuffer, maxDefinitionLevel int8, definitio
 
 type nullableColumnIndex struct {
 	ColumnIndex
-	maxDefinitionLevel int8
-	definitionLevels   []int8
+	maxDefinitionLevel byte
+	definitionLevels   []byte
 }
 
 func (index *nullableColumnIndex) NullPage(i int) bool {
@@ -80,9 +80,9 @@ func (index *nullableColumnIndex) NullCount(i int) int64 {
 	return int64(countLevelsNotEqual(index.definitionLevels, index.maxDefinitionLevel))
 }
 
-type nullOrdering func(column ColumnBuffer, i, j int, maxDefinitionLevel, definitionLevel1, definitionLevel2 int8) bool
+type nullOrdering func(column ColumnBuffer, i, j int, maxDefinitionLevel, definitionLevel1, definitionLevel2 byte) bool
 
-func nullsGoFirst(column ColumnBuffer, i, j int, maxDefinitionLevel, definitionLevel1, definitionLevel2 int8) bool {
+func nullsGoFirst(column ColumnBuffer, i, j int, maxDefinitionLevel, definitionLevel1, definitionLevel2 byte) bool {
 	if definitionLevel1 != maxDefinitionLevel {
 		return definitionLevel2 == maxDefinitionLevel
 	} else {
@@ -90,7 +90,7 @@ func nullsGoFirst(column ColumnBuffer, i, j int, maxDefinitionLevel, definitionL
 	}
 }
 
-func nullsGoLast(column ColumnBuffer, i, j int, maxDefinitionLevel, definitionLevel1, definitionLevel2 int8) bool {
+func nullsGoLast(column ColumnBuffer, i, j int, maxDefinitionLevel, definitionLevel1, definitionLevel2 byte) bool {
 	return definitionLevel1 == maxDefinitionLevel && (definitionLevel2 != maxDefinitionLevel || column.Less(i, j))
 }
 
@@ -116,20 +116,20 @@ func (col *reversedColumnBuffer) Less(i, j int) bool { return col.ColumnBuffer.L
 // column or one of its parent(s) are marked optional.
 type optionalColumnBuffer struct {
 	base               ColumnBuffer
-	maxDefinitionLevel int8
+	maxDefinitionLevel byte
 	rows               []int32
 	sortIndex          []int32
-	definitionLevels   []int8
+	definitionLevels   []byte
 	nullOrdering       nullOrdering
 }
 
-func newOptionalColumnBuffer(base ColumnBuffer, maxDefinitionLevel int8, nullOrdering nullOrdering) *optionalColumnBuffer {
+func newOptionalColumnBuffer(base ColumnBuffer, maxDefinitionLevel byte, nullOrdering nullOrdering) *optionalColumnBuffer {
 	n := base.Cap()
 	return &optionalColumnBuffer{
 		base:               base,
 		maxDefinitionLevel: maxDefinitionLevel,
 		rows:               make([]int32, 0, n),
-		definitionLevels:   make([]int8, 0, n),
+		definitionLevels:   make([]byte, 0, n),
 		nullOrdering:       nullOrdering,
 	}
 }
@@ -139,7 +139,7 @@ func (col *optionalColumnBuffer) Clone() ColumnBuffer {
 		base:               col.base.Clone(),
 		maxDefinitionLevel: col.maxDefinitionLevel,
 		rows:               append([]int32{}, col.rows...),
-		definitionLevels:   append([]int8{}, col.definitionLevels...),
+		definitionLevels:   append([]byte{}, col.definitionLevels...),
 		nullOrdering:       col.nullOrdering,
 	}
 }
@@ -227,7 +227,7 @@ func (col *optionalColumnBuffer) Reset() {
 }
 
 func (col *optionalColumnBuffer) Size() int64 {
-	return sizeOfInt32(col.rows) + sizeOfInt32(col.sortIndex) + sizeOfInt8(col.definitionLevels) + col.base.Size()
+	return sizeOfInt32(col.rows) + sizeOfInt32(col.sortIndex) + sizeOfBytes(col.definitionLevels) + col.base.Size()
 }
 
 func (col *optionalColumnBuffer) Cap() int { return cap(col.rows) }
@@ -362,11 +362,11 @@ func (col *optionalColumnBuffer) Values() ValueReader {
 // are marked repeated.
 type repeatedColumnBuffer struct {
 	base               ColumnBuffer
-	maxRepetitionLevel int8
-	maxDefinitionLevel int8
+	maxRepetitionLevel byte
+	maxDefinitionLevel byte
 	rows               []region
-	repetitionLevels   []int8
-	definitionLevels   []int8
+	repetitionLevels   []byte
+	definitionLevels   []byte
 	buffer             []Value
 	reordering         *repeatedColumnBuffer
 	nullOrdering       nullOrdering
@@ -382,15 +382,15 @@ type region struct {
 
 func sizeOfRegion(regions []region) int64 { return 8 * int64(len(regions)) }
 
-func newRepeatedColumnBuffer(base ColumnBuffer, maxRepetitionLevel, maxDefinitionLevel int8, nullOrdering nullOrdering) *repeatedColumnBuffer {
+func newRepeatedColumnBuffer(base ColumnBuffer, maxRepetitionLevel, maxDefinitionLevel byte, nullOrdering nullOrdering) *repeatedColumnBuffer {
 	n := base.Cap()
 	return &repeatedColumnBuffer{
 		base:               base,
 		maxRepetitionLevel: maxRepetitionLevel,
 		maxDefinitionLevel: maxDefinitionLevel,
 		rows:               make([]region, 0, n/8),
-		repetitionLevels:   make([]int8, 0, n),
-		definitionLevels:   make([]int8, 0, n),
+		repetitionLevels:   make([]byte, 0, n),
+		definitionLevels:   make([]byte, 0, n),
 		nullOrdering:       nullOrdering,
 	}
 }
@@ -401,8 +401,8 @@ func (col *repeatedColumnBuffer) Clone() ColumnBuffer {
 		maxRepetitionLevel: col.maxRepetitionLevel,
 		maxDefinitionLevel: col.maxDefinitionLevel,
 		rows:               append([]region{}, col.rows...),
-		repetitionLevels:   append([]int8{}, col.repetitionLevels...),
-		definitionLevels:   append([]int8{}, col.definitionLevels...),
+		repetitionLevels:   append([]byte{}, col.repetitionLevels...),
+		definitionLevels:   append([]byte{}, col.definitionLevels...),
 		nullOrdering:       col.nullOrdering,
 	}
 }
@@ -515,7 +515,7 @@ func (col *repeatedColumnBuffer) Reset() {
 }
 
 func (col *repeatedColumnBuffer) Size() int64 {
-	return sizeOfRegion(col.rows) + sizeOfInt8(col.repetitionLevels) + sizeOfInt8(col.definitionLevels) + col.base.Size()
+	return sizeOfRegion(col.rows) + sizeOfBytes(col.repetitionLevels) + sizeOfBytes(col.definitionLevels) + col.base.Size()
 }
 
 func (col *repeatedColumnBuffer) Cap() int { return cap(col.rows) }

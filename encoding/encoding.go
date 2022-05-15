@@ -34,7 +34,7 @@ type Encoding interface {
 	//
 	// When encoding fixed-length byte array values, each value is expected to
 	// be found back-to-back in chunks of the given size.
-	EncodeLevels(dst []byte, src []int8) ([]byte, error)
+	EncodeLevels(dst, src []byte) ([]byte, error)
 	EncodeBoolean(dst []byte, src []bool) ([]byte, error)
 	EncodeInt32(dst []byte, src []int32) ([]byte, error)
 	EncodeInt64(dst []byte, src []int64) ([]byte, error)
@@ -52,7 +52,7 @@ type Encoding interface {
 	//
 	// When encoding fixed-length byte array values, each value is written
 	// back-to-back in chunks of the given size to the output buffer.
-	DecodeLevels(dst []int8, src []byte) ([]int8, error)
+	DecodeLevels(dst, src []byte) ([]byte, error)
 	DecodeBoolean(dst []bool, src []byte) ([]bool, error)
 	DecodeInt32(dst []int32, src []byte) ([]int32, error)
 	DecodeInt64(dst []int64, src []byte) ([]int64, error)

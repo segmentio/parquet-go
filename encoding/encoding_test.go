@@ -53,7 +53,7 @@ var booleanTests = [...][]bool{
 	},
 }
 
-var levelsTests = [...][]int8{
+var levelsTests = [...][]byte{
 	{},
 	{0},
 	{1},
@@ -331,10 +331,10 @@ func testBooleanEncoding(t *testing.T, e encoding.Encoding) {
 func testLevelsEncoding(t *testing.T, e encoding.Encoding) {
 	testCanEncodeLevels(t, e)
 	buffer := []byte{}
-	values := []int8{}
+	values := []byte{}
 
 	for _, test := range levelsTests {
-		setBitWidth(e, bits.MaxLen8(test))
+		setBitWidth(e, bits.MaxLen8(bits.BytesToInt8(test)))
 
 		t.Run("", func(t *testing.T) {
 			var err error
@@ -603,8 +603,8 @@ func benchmarkEncodeBoolean(b *testing.B, e encoding.Encoding) {
 func benchmarkEncodeLevels(b *testing.B, e encoding.Encoding) {
 	testCanEncodeLevels(b, e)
 	buffer := make([]byte, 0)
-	values := generateInt8Values(benchmarkNumValues, newRand())
-	setBitWidth(e, bits.MaxLen8(values))
+	values := generateLevelValues(benchmarkNumValues, newRand())
+	setBitWidth(e, bits.MaxLen8(bits.BytesToInt8(values)))
 
 	benchmarkZeroAllocsPerRun(b, func() {
 		buffer, _ = e.EncodeLevels(buffer, values)
@@ -752,9 +752,9 @@ func benchmarkDecodeBoolean(b *testing.B, e encoding.Encoding) {
 
 func benchmarkDecodeLevels(b *testing.B, e encoding.Encoding) {
 	testCanEncodeLevels(b, e)
-	values := generateInt8Values(benchmarkNumValues, newRand())
-	output := make([]int8, 0)
-	setBitWidth(e, bits.MaxLen8(values))
+	values := generateLevelValues(benchmarkNumValues, newRand())
+	output := make([]byte, 0)
+	setBitWidth(e, bits.MaxLen8(bits.BytesToInt8(values)))
 	buffer, _ := e.EncodeLevels(nil, values)
 
 	benchmarkZeroAllocsPerRun(b, func() {
@@ -859,10 +859,10 @@ func generateBooleanValues(n int, r *rand.Rand) []bool {
 	return values
 }
 
-func generateInt8Values(n int, r *rand.Rand) []int8 {
-	values := make([]int8, n)
+func generateLevelValues(n int, r *rand.Rand) []byte {
+	values := make([]byte, n)
 	for i := range values {
-		values[i] = int8(r.Intn(6))
+		values[i] = byte(r.Intn(6))
 	}
 	return values
 }
