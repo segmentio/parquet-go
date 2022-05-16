@@ -441,32 +441,19 @@ func (page *repeatedPage) Slice(i, j int64) BufferedPage {
 	)
 }
 
-func resize(data []byte, size int) []byte {
-	if len(data) < size {
-		if cap(data) < size {
-			tmp := make([]byte, size)
-			copy(tmp, data)
-			data = tmp
-		} else {
-			clear := data[len(data) : len(data)+size]
-			for i := range clear {
-				clear[i] = 0
-			}
-		}
-	}
-	return data[:size]
-}
-
 type booleanPage struct {
 	typ         Type
-	values      []bool
+	values      []byte
+	offset      int32
+	numValues   int32
 	columnIndex int16
 }
 
 func newBooleanPage(typ Type, columnIndex int16, numValues int32, values []byte) *booleanPage {
 	return &booleanPage{
 		typ:         typ,
-		values:      bits.BytesToBool(resize(values, int(numValues))),
+		values:      values[:bits.ByteCount(uint(numValues))],
+		numValues:   numValues,
 		columnIndex: ^columnIndex,
 	}
 }
@@ -477,9 +464,9 @@ func (page *booleanPage) Column() int { return int(^page.columnIndex) }
 
 func (page *booleanPage) Dictionary() Dictionary { return nil }
 
-func (page *booleanPage) NumRows() int64 { return int64(len(page.values)) }
+func (page *booleanPage) NumRows() int64 { return int64(page.numValues) }
 
-func (page *booleanPage) NumValues() int64 { return int64(len(page.values)) }
+func (page *booleanPage) NumValues() int64 { return int64(page.numValues) }
 
 func (page *booleanPage) NumNulls() int64 { return 0 }
 
@@ -489,24 +476,30 @@ func (page *booleanPage) RepetitionLevels() []byte { return nil }
 
 func (page *booleanPage) DefinitionLevels() []byte { return nil }
 
-func (page *booleanPage) Data() []byte { return bits.BoolToBytes(page.values) }
+func (page *booleanPage) Data() []byte { return page.values }
 
 func (page *booleanPage) Values() ValueReader { return &booleanPageReader{page: page} }
 
 func (page *booleanPage) Buffer() BufferedPage { return page }
 
+func (page *booleanPage) valueAt(i int) bool {
+	j := uint32(int(page.offset)+i) / 8
+	k := uint32(int(page.offset)+i) % 8
+	return ((page.values[j] >> k) & 1) != 0
+}
+
 func (page *booleanPage) min() bool {
-	for _, value := range page.values {
-		if !value {
+	for i := 0; i < int(page.numValues); i++ {
+		if !page.valueAt(i) {
 			return false
 		}
 	}
-	return len(page.values) > 0
+	return page.numValues > 0
 }
 
 func (page *booleanPage) max() bool {
-	for _, value := range page.values {
-		if value {
+	for i := 0; i < int(page.numValues); i++ {
+		if page.valueAt(i) {
 			return true
 		}
 	}
@@ -516,8 +509,9 @@ func (page *booleanPage) max() bool {
 func (page *booleanPage) bounds() (min, max bool) {
 	hasFalse, hasTrue := false, false
 
-	for _, value := range page.values {
-		if value {
+	for i := 0; i < int(page.numValues); i++ {
+		v := page.valueAt(i)
+		if v {
 			hasTrue = true
 		} else {
 			hasFalse = true
@@ -527,17 +521,13 @@ func (page *booleanPage) bounds() (min, max bool) {
 		}
 	}
 
-	if !hasFalse {
-		min = true
-	}
-	if hasTrue {
-		max = true
-	}
+	min = !hasFalse
+	max = hasTrue
 	return min, max
 }
 
 func (page *booleanPage) Bounds() (min, max Value, ok bool) {
-	if ok = len(page.values) > 0; ok {
+	if ok = page.numValues > 0; ok {
 		minBool, maxBool := page.bounds()
 		min = makeValueBoolean(minBool)
 		max = makeValueBoolean(maxBool)
@@ -548,15 +538,26 @@ func (page *booleanPage) Bounds() (min, max Value, ok bool) {
 func (page *booleanPage) Clone() BufferedPage {
 	return &booleanPage{
 		typ:         page.typ,
-		values:      append([]bool{}, page.values...),
+		values:      append([]byte{}, page.values...),
+		offset:      page.offset,
+		numValues:   page.numValues,
 		columnIndex: page.columnIndex,
 	}
 }
 
 func (page *booleanPage) Slice(i, j int64) BufferedPage {
+	off := i / 8
+	end := j / 8
+
+	if (j % 8) != 0 {
+		end++
+	}
+
 	return &booleanPage{
 		typ:         page.typ,
-		values:      page.values[i:j],
+		values:      page.values[off:end],
+		offset:      int32(i % 8),
+		numValues:   int32(j - i),
 		columnIndex: page.columnIndex,
 	}
 }

@@ -49,7 +49,7 @@ func (e *Encoding) EncodeBoolean(dst, src []byte) ([]byte, error) {
 	// output is expected by the parquet format. We add the bytes as placeholder
 	// before appending the encoded data.
 	dst = append(dst[:0], 0, 0, 0, 0)
-	dst, err := encodeBytes(dst, src, 1)
+	dst, err := encodeBits(dst, src)
 	binary.LittleEndian.PutUint32(dst, uint32(len(dst))-4)
 	return dst, e.wrap(err)
 }
@@ -79,7 +79,7 @@ func (e *Encoding) DecodeBoolean(dst, src []byte) ([]byte, error) {
 	if n > len(src) {
 		return dst[:0], fmt.Errorf("input shorter than length prefix: %d < %d: %w", len(src), n, io.ErrUnexpectedEOF)
 	}
-	dst, err := decodeBytes(dst[:0], src[:n], 1)
+	dst, err := decodeBits(dst[:0], src[:n])
 	return dst, e.wrap(err)
 }
 
@@ -93,6 +93,53 @@ func (e *Encoding) wrap(err error) error {
 		err = encoding.Error(e, err)
 	}
 	return err
+}
+
+func encodeBits(dst, src []byte) ([]byte, error) {
+	if isZero(src) || isOnes(src) {
+		dst = appendUvarint(dst, uint64(8*len(src))<<1)
+		if len(src) > 0 {
+			dst = append(dst, src[0])
+		}
+		return dst, nil
+	}
+
+	for i := 0; i < len(src); {
+		j := i + 1
+
+		// Look for contiguous sections of 8 bits, all zeros or ones; these
+		// are run-length encoded as it only takes 2 or 3 bytes to store these
+		// sequences.
+		if src[i] == 0 || src[i] == 0xFF {
+			for j < len(src) && src[i] == src[j] {
+				j++
+			}
+
+			if n := j - i; n > 1 {
+				dst = appendUvarint(dst, uint64(8*n)<<1)
+				dst = append(dst, src[i])
+				i = j
+				continue
+			}
+		}
+
+		// Sequences of bits that are neither all zeroes or ones are bit-packed,
+		// which is a simple copy of the input to the output preceeded with the
+		// bit-pack header.
+		for j < len(src) && (src[j-1] != src[j] || (src[j] != 0 && src[j] == 0xFF)) {
+			j++
+		}
+
+		n := j - i
+		if n > 1 && j < len(src) {
+			j--
+		}
+
+		dst = appendUvarint(dst, uint64(n)<<1|1)
+		dst = append(dst, src[i:j]...)
+		i = j
+	}
+	return dst, nil
 }
 
 func encodeBytes(dst, src []byte, bitWidth uint) ([]byte, error) {
@@ -236,6 +283,46 @@ func encodeInt32(dst []byte, src []int32, bitWidth uint) ([]byte, error) {
 		i = j
 	}
 
+	return dst, nil
+}
+
+func decodeBits(dst, src []byte) ([]byte, error) {
+	for i := 0; i < len(src); {
+		u, n := binary.Uvarint(src[i:])
+		if n == 0 {
+			return dst, fmt.Errorf("decoding run-length block header: %w", io.ErrUnexpectedEOF)
+		}
+		if n < 0 {
+			return dst, fmt.Errorf("overflow after decoding %d/%d bytes of run-length block header", -n+i, len(src))
+		}
+		i += n
+
+		count, bitpack := uint(u>>1), (u&1) != 0
+		if count > maxSupportedValueCount {
+			return dst, fmt.Errorf("decoded run-length block cannot have more than %d values", maxSupportedValueCount)
+		}
+		if !bitpack {
+			word := byte(0)
+			if i < len(src) {
+				word = src[i]
+				i++
+			}
+
+			for n := uint(0); n < count; n += 8 {
+				dst = append(dst, word)
+			}
+		} else {
+			n := int(count)
+			j := i + n
+
+			if j > len(src) {
+				return dst, fmt.Errorf("decoding bit-packed block of %d values: %w", n, io.ErrUnexpectedEOF)
+			}
+
+			dst = append(dst, src[i:j]...)
+			i = j
+		}
+	}
 	return dst, nil
 }
 
@@ -406,6 +493,10 @@ func broadcast8x8(v uint64) uint64 {
 
 func broadcast32x8(v int32) [8]int32 {
 	return [8]int32{v, v, v, v, v, v, v, v}
+}
+
+func isOnes(data []byte) bool {
+	return bits.CountByte(data, 0xFF) == len(data)
 }
 
 func isZero(data []byte) bool {

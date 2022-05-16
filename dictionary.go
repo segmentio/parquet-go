@@ -68,7 +68,8 @@ func newBooleanDictionary(typ Type, columnIndex int16, numValues int32, values [
 	return &booleanDictionary{
 		booleanPage: booleanPage{
 			typ:         typ,
-			values:      bits.BytesToBool(values)[:numValues],
+			values:      values[:bits.ByteCount(uint(numValues))],
+			numValues:   numValues,
 			columnIndex: ^columnIndex,
 		},
 	}
@@ -76,17 +77,17 @@ func newBooleanDictionary(typ Type, columnIndex int16, numValues int32, values [
 
 func (d *booleanDictionary) Type() Type { return newIndexedType(d.typ, d) }
 
-func (d *booleanDictionary) Len() int { return len(d.values) }
+func (d *booleanDictionary) Len() int { return int(d.numValues) }
 
-func (d *booleanDictionary) Index(i int32) Value { return makeValueBoolean(d.values[i]) }
+func (d *booleanDictionary) Index(i int32) Value { return makeValueBoolean(d.valueAt(int(i))) }
 
 func (d *booleanDictionary) Insert(indexes []int32, values []Value) {
 	_ = indexes[:len(values)]
 
 	if d.index == nil {
 		d.index = make(map[bool]int32, cap(d.values))
-		for i, v := range d.values {
-			d.index[v] = int32(i)
+		for i := 0; i < int(d.numValues); i++ {
+			d.index[d.valueAt(i)] = int32(i)
 		}
 	}
 
@@ -95,9 +96,10 @@ func (d *booleanDictionary) Insert(indexes []int32, values []Value) {
 
 		index, exists := d.index[value]
 		if !exists {
-			index = int32(len(d.values))
-			d.values = append(d.values, value)
+			index = d.numValues
+			d.values = plain.AppendBoolean(d.values, int(index), value)
 			d.index[value] = index
+			d.numValues++
 		}
 
 		indexes[i] = index
@@ -112,27 +114,30 @@ func (d *booleanDictionary) Lookup(indexes []int32, values []Value) {
 
 func (d *booleanDictionary) Bounds(indexes []int32) (min, max Value) {
 	if len(indexes) > 0 {
-		minValue := d.values[indexes[0]]
-		maxValue := minValue
+		hasFalse, hasTrue := false, false
 
-		for _, i := range indexes[1:] {
-			value := d.values[i]
-			switch {
-			case compareBool(value, minValue) < 0:
-				minValue = value
-			case compareBool(value, maxValue) > 0:
-				maxValue = value
+		for _, i := range indexes {
+			v := d.valueAt(int(i))
+			if v {
+				hasTrue = true
+			} else {
+				hasFalse = true
+			}
+			if hasTrue && hasFalse {
+				break
 			}
 		}
 
-		min = makeValueBoolean(minValue)
-		max = makeValueBoolean(maxValue)
+		min = makeValueBoolean(!hasFalse)
+		max = makeValueBoolean(hasTrue)
 	}
 	return min, max
 }
 
 func (d *booleanDictionary) Reset() {
 	d.values = d.values[:0]
+	d.offset = 0
+	d.numValues = 0
 	d.index = nil
 }
 
@@ -934,7 +939,25 @@ type indexedPage struct {
 }
 
 func newIndexedPage(typ *indexedType, columnIndex int16, numValues int32, values []byte) *indexedPage {
-	values = resize(values, 4*int(numValues))
+	// RLE encoded values that contains dictionary indexes in data pages are
+	// sometimes truncated when they contain only zeros. We account for this
+	// special case here and extend the values buffer if it is shorter than
+	// needed to hold `numValues`.
+	size := 4 * int(numValues)
+
+	if len(values) < size {
+		if cap(values) < size {
+			tmp := make([]byte, size)
+			copy(tmp, values)
+			values = tmp
+		} else {
+			clear := values[len(values) : len(values)+size]
+			for i := range clear {
+				clear[i] = 0
+			}
+		}
+	}
+
 	return &indexedPage{
 		typ:         typ,
 		values:      bits.BytesToInt32(values)[:numValues],
