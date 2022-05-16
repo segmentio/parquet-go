@@ -585,7 +585,8 @@ func (c *Column) decodeDataPage(header DataPageHeader, numValues int64, page *da
 		// on data page headers to indicate that the page contains indexes into
 		// the dictionary page, but the page is still encoded using the RLE
 		// encoding in this case, so we convert it to RLE_DICTIONARY.
-		pageType, encoding = Int32Type, &RLEDictionary
+		encoding = &RLEDictionary
+		pageType = indexedPageType{newIndexedType(pageType, page.dictionary)}
 	}
 
 	var err error
@@ -594,13 +595,7 @@ func (c *Column) decodeDataPage(header DataPageHeader, numValues int64, page *da
 		return nil, err
 	}
 
-	var newPage Page
-	if page.dictionary != nil {
-		indexedType := newIndexedType(pageType, page.dictionary)
-		newPage = newIndexedPage(indexedType, int16(c.index), int32(numValues), page.values)
-	} else {
-		newPage = pageType.NewPage(c.Index(), int(numValues), page.values)
-	}
+	newPage := pageType.NewPage(c.Index(), int(numValues), page.values)
 	switch {
 	case c.maxRepetitionLevel > 0:
 		newPage = newRepeatedPage(newPage.Buffer(), c.maxRepetitionLevel, c.maxDefinitionLevel, page.repetitionLevels, page.definitionLevels)
