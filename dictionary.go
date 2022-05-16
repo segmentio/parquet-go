@@ -960,7 +960,7 @@ func newIndexedPage(typ *indexedType, columnIndex int16, numValues int32, values
 
 	return &indexedPage{
 		typ:         typ,
-		values:      bits.BytesToInt32(values)[:numValues],
+		values:      bits.BytesToInt32(values[:size]),
 		columnIndex: ^columnIndex,
 	}
 }
