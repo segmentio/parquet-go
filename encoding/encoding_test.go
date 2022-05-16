@@ -304,23 +304,25 @@ func testBooleanEncoding(t *testing.T, e encoding.Encoding) {
 	testCanEncodeBoolean(t, e)
 	buffer := []byte{}
 	values := []byte{}
+	input := []byte{}
 	setBitWidth(e, 1)
 
 	for _, test := range booleanTests {
 		t.Run("", func(t *testing.T) {
 			var err error
-			var input = bits.BoolToBytes(test)
+
+			input = input[:0]
+			count := 0
+			for _, value := range test {
+				input = plain.AppendBoolean(input, count, value)
+				count++
+			}
+
 			buffer, err = e.EncodeBoolean(buffer, input)
 			assertNoError(t, err)
 			values, err = e.DecodeBoolean(values, buffer)
 			assertNoError(t, err)
-			assertBytesEqual(t, input, values[:len(test)])
-			// Boolean encodings may pad their output with up to 7 bits, so we
-			// count the distance from the last decoded value to the EOF error,
-			// and ensure that it's always smaller than 8.
-			if extra := len(values) - len(test); extra > 7 {
-				t.Fatal("nil error returned for more than 7 tailing bits")
-			}
+			assertBytesEqual(t, input, values)
 		})
 	}
 }
@@ -856,10 +858,8 @@ func benchmarkZeroAllocsPerRun(b *testing.B, f func()) {
 }
 
 func generateBooleanValues(n int, r *rand.Rand) []byte {
-	values := make([]byte, n)
-	for i := range values {
-		values[i] = byte(r.Intn(1))
-	}
+	values := make([]byte, n/8+1)
+	io.ReadFull(r, values)
 	return values
 }
 

@@ -31,53 +31,7 @@ func (e *Encoding) Encoding() format.Encoding {
 }
 
 func (e *Encoding) EncodeBoolean(dst, src []byte) ([]byte, error) {
-	dst = dst[:0]
-	b := byte(0)
-	i := 0
-	n := (len(src) / 8) * 8
-
-	for i < n {
-		b = 0
-		if src[i+7] != 0 {
-			b |= 1 << 7
-		}
-		if src[i+6] != 0 {
-			b |= 1 << 6
-		}
-		if src[i+5] != 0 {
-			b |= 1 << 5
-		}
-		if src[i+4] != 0 {
-			b |= 1 << 4
-		}
-		if src[i+3] != 0 {
-			b |= 1 << 3
-		}
-		if src[i+2] != 0 {
-			b |= 1 << 2
-		}
-		if src[i+1] != 0 {
-			b |= 1 << 1
-		}
-		if src[i+0] != 0 {
-			b |= 1 << 0
-		}
-		dst = append(dst, b)
-		i += 8
-	}
-
-	if i < len(src) {
-		b = 0
-		for j := uint(0); i < len(src); j++ {
-			if src[i] != 0 {
-				b |= 1 << j
-			}
-			i++
-		}
-		dst = append(dst, b)
-	}
-
-	return dst, nil
+	return append(dst[:0], src...), nil
 }
 
 func (e *Encoding) EncodeInt32(dst, src []byte) ([]byte, error) {
@@ -130,20 +84,7 @@ func (e *Encoding) EncodeFixedLenByteArray(dst, src []byte, size int) ([]byte, e
 }
 
 func (e *Encoding) DecodeBoolean(dst, src []byte) ([]byte, error) {
-	dst = dst[:0]
-	for _, b := range src {
-		dst = append(dst,
-			((b >> 0) & 1),
-			((b >> 1) & 1),
-			((b >> 2) & 1),
-			((b >> 3) & 1),
-			((b >> 4) & 1),
-			((b >> 5) & 1),
-			((b >> 6) & 1),
-			((b >> 7) & 1),
-		)
-	}
-	return dst, nil
+	return append(dst[:0], src...), nil
 }
 
 func (e *Encoding) DecodeInt32(dst, src []byte) ([]byte, error) {
@@ -198,7 +139,7 @@ func (e *Encoding) DecodeFixedLenByteArray(dst, src []byte, size int) ([]byte, e
 	return append(dst[:0], src...), nil
 }
 
-func Boolean(v bool) []byte { return AppendBoolean(nil, v) }
+func Boolean(v bool) []byte { return AppendBoolean(nil, 0, v) }
 
 func Int32(v int32) []byte { return AppendInt32(nil, v) }
 
@@ -212,12 +153,25 @@ func Double(v float64) []byte { return AppendDouble(nil, v) }
 
 func ByteArray(v []byte) []byte { return AppendByteArray(nil, v) }
 
-func AppendBoolean(b []byte, v bool) []byte {
-	if v {
-		b = append(b, 1)
+func AppendBoolean(b []byte, n int, v bool) []byte {
+	i := n / 8
+	j := n % 8
+
+	if cap(b) > i {
+		b = b[:i+1]
 	} else {
-		b = append(b, 0)
+		tmp := make([]byte, i+1, 2*(i+1))
+		copy(tmp, b)
+		b = tmp
 	}
+
+	k := uint(j)
+	x := byte(0)
+	if v {
+		x = 1
+	}
+
+	b[i] = (b[i] & ^(1 << k)) | (x << k)
 	return b
 }
 

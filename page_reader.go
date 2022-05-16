@@ -114,27 +114,26 @@ type booleanPageReader struct {
 	offset int
 }
 
-func (r *booleanPageReader) Read(b []byte) (n int, err error) {
-	return r.ReadBooleans(bits.BytesToBool(b))
-}
-
 func (r *booleanPageReader) ReadBooleans(values []bool) (n int, err error) {
-	n = copy(values, r.page.values[r.offset:])
-	r.offset += n
-	if r.offset == len(r.page.values) {
+	for n < len(values) && r.offset < int(r.page.numValues) {
+		values[n] = r.page.valueAt(r.offset)
+		r.offset++
+		n++
+	}
+	if r.offset == int(r.page.numValues) {
 		err = io.EOF
 	}
 	return n, err
 }
 
 func (r *booleanPageReader) ReadValues(values []Value) (n int, err error) {
-	for n < len(values) && r.offset < len(r.page.values) {
-		values[n] = makeValueBoolean(r.page.values[r.offset])
+	for n < len(values) && r.offset < int(r.page.numValues) {
+		values[n] = makeValueBoolean(r.page.valueAt(r.offset))
 		values[n].columnIndex = r.page.columnIndex
 		r.offset++
 		n++
 	}
-	if r.offset == len(r.page.values) {
+	if r.offset == int(r.page.numValues) {
 		err = io.EOF
 	}
 	return n, err

@@ -684,7 +684,7 @@ func newBooleanColumnBuffer(typ Type, columnIndex int16, bufferSize int) *boolea
 	return &booleanColumnBuffer{
 		booleanPage: booleanPage{
 			typ:         typ,
-			values:      make([]bool, 0, bufferSize),
+			bits:        make([]byte, 0, bufferSize),
 			columnIndex: ^columnIndex,
 		},
 	}
@@ -694,7 +694,9 @@ func (col *booleanColumnBuffer) Clone() ColumnBuffer {
 	return &booleanColumnBuffer{
 		booleanPage: booleanPage{
 			typ:         col.typ,
-			values:      append([]bool{}, col.values...),
+			bits:        append([]byte{}, col.bits...),
+			offset:      col.offset,
+			numValues:   col.numValues,
 			columnIndex: col.columnIndex,
 		},
 	}
@@ -716,46 +718,73 @@ func (col *booleanColumnBuffer) Pages() Pages { return onePage(col.Page()) }
 
 func (col *booleanColumnBuffer) Page() BufferedPage { return &col.booleanPage }
 
-func (col *booleanColumnBuffer) Reset() { col.values = col.values[:0] }
+func (col *booleanColumnBuffer) Reset() {
+	col.bits = col.bits[:0]
+	col.offset = 0
+	col.numValues = 0
+}
 
-func (col *booleanColumnBuffer) Cap() int { return cap(col.values) }
+func (col *booleanColumnBuffer) Cap() int { return 8 * cap(col.bits) }
 
-func (col *booleanColumnBuffer) Len() int { return len(col.values) }
+func (col *booleanColumnBuffer) Len() int { return int(col.numValues) }
 
 func (col *booleanColumnBuffer) Less(i, j int) bool {
-	return col.values[i] != col.values[j] && !col.values[i]
+	a := col.valueAt(i)
+	b := col.valueAt(j)
+	return a != b && !a
+}
+
+func (col *booleanColumnBuffer) valueAt(i int) bool {
+	j := uint32(i) / 8
+	k := uint32(i) % 8
+	return ((col.bits[j] >> k) & 1) != 0
+}
+
+func (col *booleanColumnBuffer) setValueAt(i int, v bool) {
+	// `offset` is always zero in the page of a column buffer
+	j := uint32(i) / 8
+	k := uint32(i) % 8
+	x := byte(0)
+	if v {
+		x = 1
+	}
+	col.bits[j] = (col.bits[j] & ^(1 << k)) | (x << k)
 }
 
 func (col *booleanColumnBuffer) Swap(i, j int) {
-	col.values[i], col.values[j] = col.values[j], col.values[i]
-}
-
-func (col *booleanColumnBuffer) Write(b []byte) (int, error) {
-	return col.WriteBooleans(bits.BytesToBool(b))
+	a := col.valueAt(i)
+	b := col.valueAt(j)
+	col.setValueAt(i, b)
+	col.setValueAt(j, a)
 }
 
 func (col *booleanColumnBuffer) WriteBooleans(values []bool) (int, error) {
-	col.values = append(col.values, values...)
+	col.writeValues(len(values), func(i int) bool { return values[i] })
 	return len(values), nil
 }
 
 func (col *booleanColumnBuffer) WriteValues(values []Value) (int, error) {
-	for _, v := range values {
-		col.values = append(col.values, v.Boolean())
-	}
+	col.writeValues(len(values), func(i int) bool { return values[i].Boolean() })
 	return len(values), nil
+}
+
+func (col *booleanColumnBuffer) writeValues(n int, f func(int) bool) {
+	for i := 0; i < n; i++ {
+		col.bits = plain.AppendBoolean(col.bits, int(col.numValues), f(i))
+		col.numValues++
+	}
 }
 
 func (col *booleanColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int, err error) {
 	i := int(offset)
 	switch {
 	case i < 0:
-		return 0, errRowIndexOutOfBounds(offset, int64(len(col.values)))
-	case i >= len(col.values):
+		return 0, errRowIndexOutOfBounds(offset, int64(col.numValues))
+	case i >= int(col.numValues):
 		return 0, io.EOF
 	default:
-		for n < len(values) && i < len(col.values) {
-			values[n] = makeValueBoolean(col.values[i])
+		for n < len(values) && i < int(col.numValues) {
+			values[n] = makeValueBoolean(col.valueAt(i))
 			values[n].columnIndex = col.columnIndex
 			n++
 			i++
