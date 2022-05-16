@@ -124,7 +124,7 @@ func encodeBits(dst, src []byte) ([]byte, error) {
 		}
 
 		// Sequences of bits that are neither all zeroes or ones are bit-packed,
-		// which is a simple copy of the input to the output preceeded with the
+		// which is a simple copy of the input to the output preceded with the
 		// bit-pack header.
 		for j < len(src) && (src[j-1] != src[j] || (src[j] != 0 && src[j] == 0xFF)) {
 			j++
