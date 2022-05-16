@@ -69,7 +69,7 @@ func TestRepeatedUUIDSortFunc(t *testing.T) {
 
 	// a and b are equal up until the third element, then a ends so a < b.
 	f := parquet.SortFuncOf(
-		s.ChildByName("list").Type(),
+		s.Fields()[0].Type(),
 		parquet.SortDescending(false),
 		parquet.SortNullsFirst(true),
 		parquet.SortMaxDefinitionLevel(1),

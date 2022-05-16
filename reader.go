@@ -80,19 +80,15 @@ func NewReader(input io.ReaderAt, options ...ReaderOption) *Reader {
 		file: reader{schema: schema},
 	}
 
-	switch n := f.NumRowGroups(); n {
+	switch rowGroups := f.RowGroups(); len(rowGroups) {
 	case 0:
 		r.file.rowGroup = newEmptyRowGroup(schema)
 	case 1:
-		r.file.rowGroup = f.RowGroup(0)
+		r.file.rowGroup = rowGroups[0]
 	default:
-		rowGroups := make([]RowGroup, n)
-		for i := range rowGroups {
-			rowGroups[i] = f.RowGroup(i)
-		}
 		// TODO: should we attempt to merge the row groups via MergeRowGroups
 		// to preserve the global order of sorting columns within the file?
-		r.file.rowGroup = concat(schema, rowGroups)
+		r.file.rowGroup = MultiRowGroup(rowGroups...)
 	}
 
 	if c.Schema != nil {
@@ -183,7 +179,7 @@ func (r *Reader) Read(row interface{}) (err error) {
 	}
 
 	if err := r.read.SeekToRow(r.rowIndex); err != nil {
-		return err
+		return fmt.Errorf("seeking reader to row %d: %w", r.rowIndex, err)
 	}
 
 	r.values, err = r.read.ReadRow(r.values[:0])

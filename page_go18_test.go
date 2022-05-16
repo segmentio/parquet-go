@@ -13,7 +13,7 @@ import (
 	"github.com/segmentio/parquet-go"
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding/plain"
-	"github.com/segmentio/parquet-go/internal/cast"
+	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 func TestPage(t *testing.T) {
@@ -63,12 +63,12 @@ func testPageOf[T plain.Type](t *testing.T) {
 					0: randValue[T](r),
 					1: randValue[T](r),
 				}
-				n, err := w.(io.Writer).Write(cast.SliceToBytes(values))
+				n, err := w.(io.Writer).Write(unsafecast.SliceToBytes(values))
 				return values[:n/sizeof], err
 			},
 			read: func(r parquet.ValueReader) ([]T, error) {
 				values := make([]T, 2)
-				n, err := r.(io.Reader).Read(cast.SliceToBytes(values))
+				n, err := r.(io.Reader).Read(unsafecast.SliceToBytes(values))
 				return values[:n/sizeof], err
 			},
 		})
@@ -183,7 +183,7 @@ func testPage[T any](t *testing.T, schema *parquet.Schema, test pageTest[T]) {
 
 func testBufferPage[T any](t *testing.T, schema *parquet.Schema, test pageTest[T]) {
 	buffer := parquet.NewBuffer(schema)
-	column := buffer.ColumnBuffer(0)
+	column := buffer.ColumnBuffers()[0]
 
 	w, err := test.write(column)
 	if err != nil {
@@ -201,7 +201,7 @@ func testBufferPage[T any](t *testing.T, schema *parquet.Schema, test pageTest[T
 
 func testFilePage[T any](t *testing.T, schema *parquet.Schema, test pageTest[T]) {
 	buffer := parquet.NewBuffer(schema)
-	column := buffer.ColumnBuffer(0)
+	column := buffer.ColumnBuffers()[0]
 
 	w, err := test.write(column)
 	if err != nil {
@@ -227,7 +227,7 @@ func testFilePage[T any](t *testing.T, schema *parquet.Schema, test pageTest[T])
 		t.Fatal("opening parquet file:", err)
 	}
 
-	p, err := f.RowGroup(0).Column(0).Pages().ReadPage()
+	p, err := f.RowGroups()[0].ColumnChunks()[0].Pages().ReadPage()
 	if err != nil {
 		t.Fatal("reading parquet page:", err)
 	}

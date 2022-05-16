@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/segmentio/parquet-go/internal/cast"
+	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 type columnBuffer[T primitive] struct {
@@ -76,7 +76,7 @@ func (col *columnBuffer[T]) Write(b []byte) (int, error) {
 	if (len(b) % sizeof[T]()) != 0 {
 		return 0, fmt.Errorf("cannot write %s values from input of size %d", col.class.name, len(b))
 	}
-	n, err := col.WriteRequired(cast.BytesToSlice[T](b))
+	n, err := col.WriteRequired(unsafecast.BytesToSlice[T](b))
 	return sizeof[T]() * n, err
 }
 
@@ -93,26 +93,23 @@ func (col *columnBuffer[T]) WriteValues(values []Value) (int, error) {
 	return len(values), nil
 }
 
-func (col *columnBuffer[T]) WriteRow(row Row) error {
-	if len(row) == 0 {
-		return errRowHasTooFewValues(int64(len(row)))
-	}
-	if len(row) > 1 {
-		return errRowHasTooManyValues(int64(len(row)))
-	}
-	col.values = append(col.values, col.class.value(row[0]))
-	return nil
-}
-
-func (col *columnBuffer[T]) ReadRowAt(row Row, index int64) (Row, error) {
+func (col *columnBuffer[T]) ReadValuesAt(values []Value, offset int64) (n int, err error) {
+	i := int(offset)
 	switch {
-	case index < 0:
-		return row, errRowIndexOutOfBounds(index, int64(len(col.values)))
-	case index >= int64(len(col.values)):
-		return row, io.EOF
+	case i < 0:
+		return 0, errRowIndexOutOfBounds(offset, int64(len(col.values)))
+	case i >= len(col.values):
+		return 0, io.EOF
 	default:
-		v := col.class.makeValue(col.values[index])
-		v.columnIndex = col.columnIndex
-		return append(row, v), nil
+		for n < len(values) && i < len(col.values) {
+			values[n] = col.class.makeValue(col.values[i])
+			values[n].columnIndex = col.columnIndex
+			n++
+			i++
+		}
+		if n < len(values) {
+			err = io.EOF
+		}
+		return n, err
 	}
 }

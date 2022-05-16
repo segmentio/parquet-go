@@ -247,7 +247,7 @@ func columnReadRowFuncOf(node Node, columnIndex int, repetitionDepth int8) (int,
 		repetitionDepth++
 	}
 
-	if isLeaf(node) {
+	if node.Leaf() {
 		columnIndex, read = columnReadRowFuncOfLeaf(columnIndex, repetitionDepth)
 	} else {
 		columnIndex, read = columnReadRowFuncOfGroup(node, columnIndex, repetitionDepth)
@@ -282,18 +282,18 @@ func columnReadRowFuncOfRepeated(read columnReadRowFunc, repetitionDepth int8) c
 
 //go:noinline
 func columnReadRowFuncOfGroup(node Node, columnIndex int, repetitionDepth int8) (int, columnReadRowFunc) {
-	names := node.ChildNames()
-	if len(names) == 1 {
+	fields := node.Fields()
+	if len(fields) == 1 {
 		// Small optimization for a somewhat common case of groups with a single
 		// column (like nested list elements for example); there is no need to
 		// loop over the group of a single element, we can simply skip to calling
 		// the inner read function.
-		return columnReadRowFuncOf(node.ChildByName(names[0]), columnIndex, repetitionDepth)
+		return columnReadRowFuncOf(fields[0], columnIndex, repetitionDepth)
 	}
 
-	group := make([]columnReadRowFunc, len(names))
-	for i, name := range names {
-		columnIndex, group[i] = columnReadRowFuncOf(node.ChildByName(name), columnIndex, repetitionDepth)
+	group := make([]columnReadRowFunc, len(fields))
+	for i := range group {
+		columnIndex, group[i] = columnReadRowFuncOf(fields[i], columnIndex, repetitionDepth)
 	}
 
 	return columnIndex, func(row Row, repetitionLevel int8, columns []columnChunkReader) (Row, error) {

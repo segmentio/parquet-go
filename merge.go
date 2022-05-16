@@ -7,7 +7,7 @@ import (
 )
 
 type mergedRowGroup struct {
-	concatenatedRowGroup
+	multiRowGroup
 	sorting   []SortingColumn
 	sortFuncs []columnSortFunc
 }
@@ -234,6 +234,7 @@ func (cur *bufferedRowGroupCursor) nextRowValuesOf(values []Value, columnIndex i
 	return append(values, cur.columns[columnIndex]...)
 }
 
+/*
 type optimizedRowGroupCursor struct{ *rowGroupRowReader }
 
 func (cur optimizedRowGroupCursor) readRow(row Row) (Row, error) { return cur.ReadRow(row) }
@@ -260,6 +261,7 @@ func (cur optimizedRowGroupCursor) nextRowValuesOf(values []Value, columnIndex i
 	}
 	return values
 }
+*/
 
 var (
 	_ RowReaderWithSchema = (*mergedRowGroupRowReader)(nil)

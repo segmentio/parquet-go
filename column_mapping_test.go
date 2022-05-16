@@ -2,11 +2,12 @@ package parquet_test
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/segmentio/parquet-go"
 )
 
-func ExampleColumnMapping() {
+func ExampleSchema_Lookup() {
 	schema := parquet.SchemaOf(struct {
 		FirstName  string `parquet:"first_name"`
 		LastName   string `parquet:"last_name"`
@@ -16,14 +17,14 @@ func ExampleColumnMapping() {
 		} `parquet:"attributes"`
 	}{})
 
-	mapping := parquet.ColumnMappingOf(schema)
-	fmt.Println(mapping)
+	for _, path := range schema.Columns() {
+		leaf, _ := schema.Lookup(path...)
+		fmt.Printf("%d => %q\n", leaf.ColumnIndex, strings.Join(path, "."))
+	}
 
 	// Output:
-	// {
-	//    0 => "attributes.name"
-	//    1 => "attributes.value"
-	//    2 => "first_name"
-	//    3 => "last_name"
-	// }
+	// 0 => "first_name"
+	// 1 => "last_name"
+	// 2 => "attributes.name"
+	// 3 => "attributes.value"
 }

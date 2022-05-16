@@ -23,10 +23,6 @@ type PageHeader interface {
 type DataPageHeader interface {
 	PageHeader
 
-	// Returns whether the page is compressed, according to the codec given as
-	// argument and details stored in the page header.
-	IsCompressed(format.CompressionCodec) bool
-
 	// Returns the encoding of the repetition level section.
 	RepetitionLevelEncoding() format.Encoding
 
@@ -96,10 +92,6 @@ func (v1 DataPageHeaderV1) NumValues() int64 {
 	return int64(v1.header.NumValues)
 }
 
-func (v1 DataPageHeaderV1) IsCompressed(codec format.CompressionCodec) bool {
-	return codec != format.Uncompressed
-}
-
 func (v1 DataPageHeaderV1) RepetitionLevelEncoding() format.Encoding {
 	return v1.header.RepetitionLevelEncoding
 }
@@ -152,10 +144,6 @@ func (v2 DataPageHeaderV2) NumRows() int64 {
 	return int64(v2.header.NumRows)
 }
 
-func (v2 DataPageHeaderV2) IsCompressed(codec format.CompressionCodec) bool {
-	return codec != format.Uncompressed && (v2.header.IsCompressed == nil || *v2.header.IsCompressed)
-}
-
 func (v2 DataPageHeaderV2) RepetitionLevelsByteLength() int64 {
 	return int64(v2.header.RepetitionLevelsByteLength)
 }
@@ -192,12 +180,17 @@ func (v2 DataPageHeaderV2) MaxValue() []byte {
 	return v2.header.Statistics.MaxValue
 }
 
+func (v2 DataPageHeaderV2) IsCompressed() bool {
+	return v2.header.IsCompressed == nil || *v2.header.IsCompressed
+}
+
 func (v2 DataPageHeaderV2) String() string {
-	return fmt.Sprintf("DATA_PAGE_HEADER_V2{NumValues=%d,NumNulls=%d,NumRows=%d,Encoding=%s}",
+	return fmt.Sprintf("DATA_PAGE_HEADER_V2{NumValues=%d,NumNulls=%d,NumRows=%d,Encoding=%s,IsCompressed=%t}",
 		v2.header.NumValues,
 		v2.header.NumNulls,
 		v2.header.NumRows,
-		v2.header.Encoding)
+		v2.header.Encoding,
+		v2.IsCompressed())
 }
 
 type unknownPageHeader struct {

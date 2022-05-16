@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"testing"
 	"testing/quick"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/segmentio/parquet-go"
@@ -64,14 +65,14 @@ type decimalColumn struct {
 }
 
 type addressBook struct {
-	Owner             utf8string
-	OwnerPhoneNumbers []utf8string
+	Owner             utf8string   `parquet:",plain"`
+	OwnerPhoneNumbers []utf8string `parquet:",plain"`
 	Contacts          []contact
 }
 
 type contact struct {
-	Name        utf8string
-	PhoneNumber utf8string
+	Name        utf8string `parquet:",plain"`
+	PhoneNumber utf8string `parquet:",plain"`
 }
 
 type listColumn2 struct {
@@ -112,8 +113,12 @@ func (utf8string) Generate(rand *rand.Rand, size int) reflect.Value {
 }
 
 func rowsOf(numRows int, model interface{}) rows {
-	typ := reflect.TypeOf(model)
 	prng := rand.New(rand.NewSource(0))
+	return randomRowsOf(prng, numRows, model)
+}
+
+func randomRowsOf(prng *rand.Rand, numRows int, model interface{}) rows {
+	typ := reflect.TypeOf(model)
 	rows := make(rows, numRows)
 	for i := range rows {
 		v, ok := quick.Value(typ, prng)
@@ -294,15 +299,18 @@ func TestReader(t *testing.T) {
 	}
 }
 
-func BenchmarkReader(b *testing.B) {
+const (
+	benchmarkReaderNumRows = 10e3
+)
+
+func BenchmarkReaderReadType(b *testing.B) {
 	buf := new(bytes.Buffer)
 	file := bytes.NewReader(nil)
 
 	for _, test := range readerTests {
 		b.Run(test.scenario, func(b *testing.B) {
-			const N = 100
 			defer buf.Reset()
-			rows := rowsOf(N, test.model)
+			rows := rowsOf(benchmarkReaderNumRows, test.model)
 
 			if err := writeParquetFile(buf, rows); err != nil {
 				b.Fatal(err)
@@ -318,9 +326,11 @@ func BenchmarkReader(b *testing.B) {
 			rowZero := reflect.Zero(rowType)
 			rowValue := rowPtr.Elem()
 
-			b.ResetTimer()
 			r := parquet.NewReader(f)
 			p := rowPtr.Interface()
+
+			b.ResetTimer()
+			start := time.Now()
 
 			for i := 0; i < b.N; i++ {
 				if err := r.Read(p); err != nil {
@@ -333,7 +343,51 @@ func BenchmarkReader(b *testing.B) {
 				rowValue.Set(rowZero)
 			}
 
-			b.SetBytes(int64(math.Ceil(float64(file.Size()) / N)))
+			seconds := time.Since(start).Seconds()
+			b.ReportMetric(float64(b.N)/seconds, "row/s")
+			b.SetBytes(int64(math.Ceil(float64(file.Size()) / benchmarkReaderNumRows)))
+		})
+	}
+}
+
+func BenchmarkReaderReadRow(b *testing.B) {
+	buf := new(bytes.Buffer)
+	file := bytes.NewReader(nil)
+
+	for _, test := range readerTests {
+		b.Run(test.scenario, func(b *testing.B) {
+			defer buf.Reset()
+			rows := rowsOf(benchmarkReaderNumRows, test.model)
+
+			if err := writeParquetFile(buf, rows); err != nil {
+				b.Fatal(err)
+			}
+			file.Reset(buf.Bytes())
+			f, err := parquet.OpenFile(file, file.Size())
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			r := parquet.NewReader(f)
+			rowbuf := make(parquet.Row, 0, 16)
+
+			b.ResetTimer()
+			start := time.Now()
+
+			for i := 0; i < b.N; i++ {
+				var err error
+				if rowbuf, err = r.ReadRow(rowbuf[:0]); err != nil {
+					if err == io.EOF {
+						r.Reset()
+					} else {
+						b.Fatalf("%d/%d: %v", i, b.N, err)
+					}
+				}
+			}
+
+			seconds := time.Since(start).Seconds()
+			b.ReportMetric(float64(b.N)/seconds, "row/s")
+			b.SetBytes(int64(math.Ceil(float64(file.Size()) / benchmarkReaderNumRows)))
 		})
 	}
 }

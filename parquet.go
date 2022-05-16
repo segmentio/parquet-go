@@ -4,7 +4,7 @@
 // of Parquet's qualities as a storage format, see this blog post:
 // https://blog.twitter.com/engineering/en_us/a/2013/dremel-made-simple-with-parquet
 //
-// Or see the Parquet documentation: https://parquet.apache.org/documentation/latest/
+// Or see the Parquet documentation: https://parquet.apache.org/docs/
 package parquet
 
 func atLeastOne(size int) int {
@@ -16,4 +16,18 @@ func atLeast(size, least int) int {
 		return least
 	}
 	return size
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

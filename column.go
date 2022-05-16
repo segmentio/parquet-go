@@ -1,15 +1,16 @@
 package parquet
 
 import (
+	"encoding/binary"
 	"fmt"
 	"io"
 	"reflect"
-	"sort"
 
 	"github.com/segmentio/parquet-go/compress"
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/format"
+	"github.com/segmentio/parquet-go/internal/bits"
 )
 
 // Column represents a column in a parquet file.
@@ -24,13 +25,12 @@ type Column struct {
 	schema      *format.SchemaElement
 	order       *format.ColumnOrder
 	path        columnPath
-	names       []string
 	columns     []*Column
 	chunks      []*format.ColumnChunk
 	columnIndex []*format.ColumnIndex
 	offsetIndex []*format.OffsetIndex
-	encoding    []encoding.Encoding
-	compression []compress.Codec
+	encoding    encoding.Encoding
+	compression compress.Codec
 
 	depth              int8
 	maxRepetitionLevel int8
@@ -52,49 +52,23 @@ func (c *Column) Repeated() bool { return schemaRepetitionTypeOf(c.schema) == fo
 // Required returns true if the column is required.
 func (c *Column) Required() bool { return schemaRepetitionTypeOf(c.schema) == format.Required }
 
-// NumChildren returns the number of child columns.
-//
-// This method contributes to satisfying the Node interface.
-func (c *Column) NumChildren() int { return len(c.columns) }
+// Leaf returns true if c is a leaf column.
+func (c *Column) Leaf() bool { return c.index >= 0 }
 
-// ChildNames returns the names of child columns.
-//
-// This method contributes to satisfying the Node interface.
-func (c *Column) ChildNames() []string { return c.names }
-
-// Children returns the children of c.
-//
-// The method returns a reference to an internal field of c that the application
-// must treat as a read-only value.
-func (c *Column) Children() []*Column { return c.columns }
-
-// ChildByName returns a Node value representing the child column matching the
-// name passed as argument.
-//
-// This method contributes to satisfying the Node interface.
-func (c *Column) ChildByName(name string) Node {
-	if child := c.Column(name); child != nil {
-		return child
+// Fields returns the list of fields on the column.
+func (c *Column) Fields() []Field {
+	fields := make([]Field, len(c.columns))
+	for i, column := range c.columns {
+		fields[i] = column
 	}
-	return nil
-}
-
-// ChildByIndex returns a Node value representing the child column at the given
-// index.
-//
-// This method contributes to satisfying the IndexedNode interface.
-func (c *Column) ChildByIndex(index int) Node {
-	if index >= 0 && index < len(c.columns) {
-		return c.columns[index]
-	}
-	return nil
+	return fields
 }
 
 // Encoding returns the encodings used by this column.
-func (c *Column) Encoding() []encoding.Encoding { return c.encoding }
+func (c *Column) Encoding() encoding.Encoding { return c.encoding }
 
 // Compression returns the compression codecs used by this column.
-func (c *Column) Compression() []compress.Codec { return c.compression }
+func (c *Column) Compression() compress.Codec { return c.compression }
 
 // Path of the column in the parquet schema.
 func (c *Column) Path() []string { return c.path }
@@ -110,11 +84,10 @@ func (c *Column) Columns() []*Column { return c.columns }
 
 // Column returns the child column matching the given name.
 func (c *Column) Column(name string) *Column {
-	i := sort.Search(len(c.columns), func(i int) bool {
-		return c.columns[i].Name() >= name
-	})
-	if i < len(c.columns) && c.columns[i].Name() == name {
-		return c.columns[i]
+	for _, child := range c.columns {
+		if child.Name() == name {
+			return child
+		}
 	}
 	return nil
 }
@@ -128,7 +101,7 @@ func (c *Column) Pages() Pages {
 		pages: make([]filePages, len(c.file.rowGroups)),
 	}
 	for i := range r.pages {
-		c.file.rowGroups[i].columns[c.index].setPagesOn(&r.pages[i])
+		r.pages[i].init(c.file.rowGroups[i].(*fileRowGroup).columns[c.index].(*fileColumnChunk))
 	}
 	return r
 }
@@ -154,8 +127,8 @@ func (r *columnPages) ReadPage() (Page, error) {
 func (r *columnPages) SeekToRow(rowIndex int64) error {
 	r.index = 0
 
-	for r.index < len(r.pages) && r.pages[r.index].column.rowGroup.NumRows >= rowIndex {
-		rowIndex -= r.pages[r.index].column.rowGroup.NumRows
+	for r.index < len(r.pages) && r.pages[r.index].chunk.rowGroup.NumRows >= rowIndex {
+		rowIndex -= r.pages[r.index].chunk.rowGroup.NumRows
 		r.index++
 	}
 
@@ -188,22 +161,14 @@ func (c *Column) MaxDefinitionLevel() int { return int(c.maxDefinitionLevel) }
 // column index, the method returns -1 when called on non-leaf columns.
 func (c *Column) Index() int { return int(c.index) }
 
-// ValueByName returns the sub-value with the given name in base.
-func (c *Column) ValueByName(base reflect.Value, name string) reflect.Value {
-	if len(c.columns) == 0 { // leaf?
-		panic("cannot call ValueByName on leaf column")
-	}
-	return base.MapIndex(reflect.ValueOf(name))
-}
-
-// ValueByIndex returns the sub-value in base for the child column at the given
-// index.
-func (c *Column) ValueByIndex(base reflect.Value, index int) reflect.Value {
-	return c.ValueByName(base, c.columns[index].Name())
-}
-
 // GoType returns the Go type that best represents the parquet column.
 func (c *Column) GoType() reflect.Type { return goTypeOf(c) }
+
+// Value returns the sub-value in base for the child column at the given
+// index.
+func (c *Column) Value(base reflect.Value) reflect.Value {
+	return base.MapIndex(reflect.ValueOf(&c.schema.Name).Elem())
+}
 
 // String returns a human-readable string representation of the column.
 func (c *Column) String() string { return c.path.String() + ": " + sprint(c.Name(), c) }
@@ -340,26 +305,29 @@ func (cl *columnLoader) open(file *File, path []string) (*Column, error) {
 			}
 		}
 
-		c.encoding = make([]encoding.Encoding, 0, len(c.chunks))
-		for _, chunk := range c.chunks {
-			for _, encoding := range chunk.MetaData.Encoding {
-				c.encoding = append(c.encoding, LookupEncoding(encoding))
+		if len(c.chunks) > 0 {
+			// Pick the encoding and compression codec of the first chunk.
+			//
+			// Technically each column chunk may use a different compression
+			// codec, and each page of the column chunk might have a different
+			// encoding. Exposing these details does not provide a lot of value
+			// to the end user.
+			//
+			// Programs that wish to determine the encoding and compression of
+			// each page of the column should iterate through the pages and read
+			// the page headers to determine which compression and encodings are
+			// applied.
+			for _, encoding := range c.chunks[0].MetaData.Encoding {
+				c.encoding = LookupEncoding(encoding)
+				break
 			}
+			c.compression = LookupCompressionCodec(c.chunks[0].MetaData.Codec)
 		}
-		sortEncodings(c.encoding)
-		c.encoding = dedupeSortedEncodings(c.encoding)
 
-		c.compression = make([]compress.Codec, len(c.chunks))
-		for i, chunk := range c.chunks {
-			c.compression[i] = LookupCompressionCodec(chunk.MetaData.Codec)
-		}
-		sortCodecs(c.compression)
-		c.compression = dedupeSortedCodecs(c.compression)
 		return c, nil
 	}
 
 	c.typ = &groupType{}
-	c.names = make([]string, numChildren)
 	c.columns = make([]*Column, numChildren)
 
 	for i := range c.columns {
@@ -375,55 +343,7 @@ func (cl *columnLoader) open(file *File, path []string) (*Column, error) {
 		}
 	}
 
-	for i, col := range c.columns {
-		c.names[i] = col.Name()
-	}
-
-	c.encoding = mergeColumnEncoding(c.columns)
-	c.compression = mergeColumnCompression(c.columns)
-	sort.Sort(columnsByName{c})
 	return c, nil
-}
-
-func mergeColumnEncoding(columns []*Column) []encoding.Encoding {
-	index := make(map[format.Encoding]encoding.Encoding)
-	for _, col := range columns {
-		for _, e := range col.encoding {
-			index[e.Encoding()] = e
-		}
-	}
-	merged := make([]encoding.Encoding, 0, len(index))
-	for _, encoding := range index {
-		merged = append(merged, encoding)
-	}
-	sortEncodings(merged)
-	return merged
-}
-
-func mergeColumnCompression(columns []*Column) []compress.Codec {
-	index := make(map[format.CompressionCodec]compress.Codec)
-	for _, col := range columns {
-		for _, c := range col.compression {
-			index[c.CompressionCodec()] = c
-		}
-	}
-	merged := make([]compress.Codec, 0, len(index))
-	for _, codec := range index {
-		merged = append(merged, codec)
-	}
-	sortCodecs(merged)
-	return merged
-}
-
-type columnsByName struct{ *Column }
-
-func (c columnsByName) Len() int { return len(c.names) }
-
-func (c columnsByName) Less(i, j int) bool { return c.names[i] < c.names[j] }
-
-func (c columnsByName) Swap(i, j int) {
-	c.names[i], c.names[j] = c.names[j], c.names[i]
-	c.columns[i], c.columns[j] = c.columns[j], c.columns[i]
 }
 
 func schemaElementTypeOf(s *format.SchemaElement) Type {
@@ -553,7 +473,283 @@ func schemaRepetitionTypeOf(s *format.SchemaElement) format.FieldRepetitionType 
 	return format.Required
 }
 
+type dictPage struct {
+	values []byte
+}
+
+type dataPage struct {
+	repetitionLevels []int8
+	definitionLevels []int8
+	data             []byte
+	values           []byte
+	dictionary       Dictionary
+}
+
+func (p *dataPage) decompress(codec compress.Codec, data []byte) (err error) {
+	p.values, err = codec.Decode(p.values, data)
+	p.data, p.values = p.values, p.data[:0]
+	return err
+}
+
+func (p *dataPage) decode(typ Type, enc encoding.Encoding, data []byte) error {
+	// Note: I am not sold on this design, it parts ways from the way type
+	// specific behavior is implemented in other places based on the Type
+	// specializations.
+	//
+	// It was difficult to design an exported API that would optimize well
+	// for safety, ease of use, and performance. I decided that I was lacking
+	// enough information about how the code would be used to make the right
+	// call, so I resorted to an internal mechanism which does not require
+	// exporting new APIs. The current approach will be less disruptive to
+	// revisit this decision in the future if needed.
+	switch typ.Kind() {
+	case Boolean:
+		return p.decodeBooleanPage(enc, data)
+	case Int32:
+		return p.decodeInt32Page(enc, data)
+	case Int64:
+		return p.decodeInt64Page(enc, data)
+	case Int96:
+		return p.decodeInt96Page(enc, data)
+	case Float:
+		return p.decodeFloatPage(enc, data)
+	case Double:
+		return p.decodeDoublePage(enc, data)
+	case ByteArray:
+		return p.decodeByteArrayPage(enc, data)
+	case FixedLenByteArray:
+		return p.decodeFixedLenByteArrayPage(enc, data, typ.Length())
+	default:
+		return nil
+	}
+}
+
+func (p *dataPage) decodeBooleanPage(enc encoding.Encoding, data []byte) error {
+	values, err := enc.DecodeBoolean(bits.BytesToBool(p.values), data)
+	p.values = bits.BoolToBytes(values)
+	return err
+}
+
+func (p *dataPage) decodeInt32Page(enc encoding.Encoding, data []byte) error {
+	values, err := enc.DecodeInt32(bits.BytesToInt32(p.values), data)
+	p.values = bits.Int32ToBytes(values)
+	return err
+}
+
+func (p *dataPage) decodeInt64Page(enc encoding.Encoding, data []byte) error {
+	values, err := enc.DecodeInt64(bits.BytesToInt64(p.values), data)
+	p.values = bits.Int64ToBytes(values)
+	return err
+}
+
+func (p *dataPage) decodeInt96Page(enc encoding.Encoding, data []byte) error {
+	values, err := enc.DecodeInt96(deprecated.BytesToInt96(p.values), data)
+	p.values = deprecated.Int96ToBytes(values)
+	return err
+}
+
+func (p *dataPage) decodeFloatPage(enc encoding.Encoding, data []byte) error {
+	values, err := enc.DecodeFloat(bits.BytesToFloat32(p.values), data)
+	p.values = bits.Float32ToBytes(values)
+	return err
+}
+
+func (p *dataPage) decodeDoublePage(enc encoding.Encoding, data []byte) error {
+	values, err := enc.DecodeDouble(bits.BytesToFloat64(p.values), data)
+	p.values = bits.Float64ToBytes(values)
+	return err
+}
+
+func (p *dataPage) decodeByteArrayPage(enc encoding.Encoding, data []byte) (err error) {
+	p.values, err = enc.DecodeByteArray(p.values, data)
+	return err
+}
+
+func (p *dataPage) decodeFixedLenByteArrayPage(enc encoding.Encoding, data []byte, size int) (err error) {
+	p.values, err = enc.DecodeFixedLenByteArray(p.values, data, size)
+	return err
+}
+
+// DecodeDataPageV1 decodes a data page from the header, compressed data, and
+// optional dictionary passed as arguments.
+func (c *Column) DecodeDataPageV1(header DataPageHeaderV1, data []byte, dict Dictionary) (Page, error) {
+	return c.decodeDataPageV1(header, &dataPage{data: data, dictionary: dict})
+}
+
+func (c *Column) decodeDataPageV1(header DataPageHeaderV1, page *dataPage) (Page, error) {
+	var err error
+
+	if isCompressed(c.compression) {
+		if err := page.decompress(c.compression, page.data); err != nil {
+			return nil, fmt.Errorf("decompressing data page v1: %w", err)
+		}
+	}
+
+	numValues := header.NumValues()
+	data := page.data
+	page.repetitionLevels = page.repetitionLevels[:0]
+	page.definitionLevels = page.definitionLevels[:0]
+
+	if c.maxRepetitionLevel > 0 {
+		encoding := lookupLevelEncoding(header.RepetitionLevelEncoding(), c.maxRepetitionLevel)
+		page.repetitionLevels, data, err = decodeLevelsV1(encoding, numValues, page.repetitionLevels, data)
+		if err != nil {
+			return nil, fmt.Errorf("decoding repetition levels of data page v1: %w", err)
+		}
+	}
+
+	if c.maxDefinitionLevel > 0 {
+		encoding := lookupLevelEncoding(header.DefinitionLevelEncoding(), c.maxDefinitionLevel)
+		page.definitionLevels, data, err = decodeLevelsV1(encoding, numValues, page.definitionLevels, data)
+		if err != nil {
+			return nil, fmt.Errorf("decoding definition levels of data page v1: %w", err)
+		}
+
+		// Data pages v1 did not embed the number of null values,
+		// so we have to compute it from the definition levels.
+		numValues -= int64(countLevelsNotEqual(page.definitionLevels, c.maxDefinitionLevel))
+	}
+
+	return c.decodeDataPage(header, numValues, page, data)
+}
+
+// DecodeDataPageV2 decodes a data page from the header, compressed data, and
+// optional dictionary passed as arguments.
+func (c *Column) DecodeDataPageV2(header DataPageHeaderV2, data []byte, dict Dictionary) (Page, error) {
+	return c.decodeDataPageV2(header, &dataPage{data: data, dictionary: dict})
+}
+
+func (c *Column) decodeDataPageV2(header DataPageHeaderV2, page *dataPage) (Page, error) {
+	var numValues = header.NumValues()
+	var err error
+	var data = page.data
+	page.repetitionLevels = page.repetitionLevels[:0]
+	page.definitionLevels = page.definitionLevels[:0]
+	//fmt.Printf("PAGE: %q\n", data)
+
+	if c.maxRepetitionLevel > 0 {
+		encoding := lookupLevelEncoding(header.RepetitionLevelEncoding(), c.maxRepetitionLevel)
+		length := header.RepetitionLevelsByteLength()
+		page.repetitionLevels, data, err = decodeLevelsV2(encoding, numValues, page.repetitionLevels, data, length)
+		if err != nil {
+			return nil, fmt.Errorf("decoding repetition levels of data page v2: %w", io.ErrUnexpectedEOF)
+		}
+	}
+
+	if c.maxDefinitionLevel > 0 {
+		encoding := lookupLevelEncoding(header.DefinitionLevelEncoding(), c.maxDefinitionLevel)
+		length := header.DefinitionLevelsByteLength()
+		page.definitionLevels, data, err = decodeLevelsV2(encoding, numValues, page.definitionLevels, data, length)
+		if err != nil {
+			return nil, fmt.Errorf("decoding definition levels of data page v2: %w", io.ErrUnexpectedEOF)
+		}
+	}
+
+	if isCompressed(c.compression) && header.IsCompressed() {
+		if err := page.decompress(c.compression, data); err != nil {
+			return nil, fmt.Errorf("decompressing data page v2: %w", err)
+		}
+		data = page.data
+	}
+
+	numValues -= header.NumNulls()
+	return c.decodeDataPage(header, numValues, page, data)
+}
+
+func (c *Column) decodeDataPage(header DataPageHeader, numValues int64, page *dataPage, data []byte) (Page, error) {
+	encoding := LookupEncoding(header.Encoding())
+	pageType := c.Type()
+
+	if isDictionaryEncoding(encoding) {
+		// In some legacy configurations, the PLAIN_DICTIONARY encoding is used
+		// on data page headers to indicate that the page contains indexes into
+		// the dictionary page, but the page is still encoded using the RLE
+		// encoding in this case, so we convert it to RLE_DICTIONARY.
+		pageType, encoding = Int32Type, &RLEDictionary
+	}
+
+	if err := page.decode(pageType, encoding, data); err != nil {
+		return nil, err
+	}
+
+	var newPage Page
+	if page.dictionary != nil {
+		newPage = newIndexedPage(page.dictionary, int16(c.index), int32(numValues), page.values)
+	} else {
+		newPage = pageType.NewPage(c.Index(), int(numValues), page.values)
+	}
+	switch {
+	case c.maxRepetitionLevel > 0:
+		newPage = newRepeatedPage(newPage.Buffer(), c.maxRepetitionLevel, c.maxDefinitionLevel, page.repetitionLevels, page.definitionLevels)
+	case c.maxDefinitionLevel > 0:
+		newPage = newOptionalPage(newPage.Buffer(), c.maxDefinitionLevel, page.definitionLevels)
+	}
+	return newPage, nil
+}
+
+func decodeLevelsV1(enc encoding.Encoding, numValues int64, levels []int8, data []byte) ([]int8, []byte, error) {
+	if len(data) < 4 {
+		return nil, data, io.ErrUnexpectedEOF
+	}
+	i := 4
+	j := 4 + int(binary.LittleEndian.Uint32(data))
+	if j > len(data) {
+		return nil, data, io.ErrUnexpectedEOF
+	}
+	levels, err := decodeLevels(enc, numValues, levels, data[i:j])
+	return levels, data[j:], err
+}
+
+func decodeLevelsV2(enc encoding.Encoding, numValues int64, levels []int8, data []byte, length int64) ([]int8, []byte, error) {
+	if length > int64(len(data)) {
+		return nil, data, io.ErrUnexpectedEOF
+	}
+	levels, err := decodeLevels(enc, numValues, levels, data[:length])
+	return levels, data[length:], err
+}
+
+func decodeLevels(enc encoding.Encoding, numValues int64, levels []int8, data []byte) ([]int8, error) {
+	if cap(levels) < int(numValues) {
+		levels = make([]int8, numValues)
+	}
+	levels, err := enc.DecodeInt8(levels, data)
+	if err == nil {
+		switch {
+		case len(levels) < int(numValues):
+			err = fmt.Errorf("decoding level expected %d values but got only %d", numValues, len(levels))
+		case len(levels) > int(numValues):
+			levels = levels[:numValues]
+		}
+	}
+	return levels, err
+}
+
+// DecodeDictionary decodes a data page from the header and compressed data
+// passed as arguments.
+func (c *Column) DecodeDictionary(header DictionaryPageHeader, data []byte) (Dictionary, error) {
+	return c.decodeDictionary(header, &dataPage{data: data}, &dictPage{})
+}
+
+func (c *Column) decodeDictionary(header DictionaryPageHeader, page *dataPage, dict *dictPage) (Dictionary, error) {
+	if isCompressed(c.compression) {
+		if err := page.decompress(c.compression, page.data); err != nil {
+			return nil, fmt.Errorf("decompressing dictionary page: %w", err)
+		}
+	}
+
+	pageType := c.Type()
+	encoding := header.Encoding()
+	if encoding == format.PlainDictionary {
+		encoding = format.Plain
+	}
+	if err := page.decode(pageType, LookupEncoding(encoding), page.data); err != nil {
+		return nil, err
+	}
+
+	dict.values = append(dict.values[:0], page.values...)
+	return pageType.NewDictionary(int(c.index), int(header.NumValues()), dict.values), nil
+}
+
 var (
-	_ Node        = (*Column)(nil)
-	_ IndexedNode = (*Column)(nil)
+	_ Node = (*Column)(nil)
 )

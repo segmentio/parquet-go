@@ -4,9 +4,8 @@ package parquet
 
 import (
 	"fmt"
-	"io"
 
-	"github.com/segmentio/parquet-go/encoding"
+	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 type dictionary[T primitive] struct {
@@ -15,47 +14,18 @@ type dictionary[T primitive] struct {
 	index map[T]int32
 }
 
-func newDictionary[T primitive](typ Type, columnIndex int16, bufferSize int, class *class[T]) *dictionary[T] {
+func newDictionary[T primitive](typ Type, columnIndex int16, numValues int32, data []byte, class *class[T]) *dictionary[T] {
+	values := unsafecast.Slice[T](data)
+	if len(values) != int(numValues) {
+		panic(fmt.Errorf("number of values mismatch in numValues and data arguments: %d != %d", numValues, len(values)))
+	}
 	return &dictionary[T]{
 		typ: typ,
 		page: page[T]{
 			class:       class,
-			values:      make([]T, 0, dictCap(bufferSize, sizeof[T]())),
-			columnIndex: columnIndex,
+			values:      values,
+			columnIndex: ^columnIndex,
 		},
-	}
-}
-
-func readDictionary[T primitive](typ Type, columnIndex int16, numValues int, decoder encoding.Decoder, class *class[T]) (*dictionary[T], error) {
-	d := &dictionary[T]{
-		typ: typ,
-		page: page[T]{
-			class:       class,
-			values:      make([]T, 0, atLeastOne(numValues)),
-			columnIndex: columnIndex,
-		},
-	}
-
-	for {
-		if len(d.values) == cap(d.values) {
-			newValues := make([]T, len(d.values), 2*cap(d.values))
-			copy(newValues, d.values)
-			d.values = newValues
-		}
-
-		n, err := d.class.decode(decoder, d.values[len(d.values):cap(d.values)])
-		if n > 0 {
-			d.values = d.values[:len(d.values)+n]
-		}
-
-		if err != nil {
-			if err == io.EOF {
-				err = nil
-			} else {
-				err = fmt.Errorf("reading parquet dictionary of %s values: %w", d.class.name, err)
-			}
-			return d, err
-		}
 	}
 }
 

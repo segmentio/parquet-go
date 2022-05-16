@@ -12,8 +12,11 @@ jobs:
         tags:
         - ''
         - purego
+        label:
+        - [self-hosted, linux, arm64, segment]
+        - ubuntu-latest
 
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.label }}
 
     steps:
     - uses: actions/checkout@v2

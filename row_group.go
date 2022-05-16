@@ -15,17 +15,19 @@ type RowGroup interface {
 	// Returns the number of rows in the group.
 	NumRows() int64
 
-	// Returns the number of leaf columns in the group.
-	NumColumns() int
-
-	// Returns the leaf column at the given index in the group.
+	// Returns the list of column chunks in this row group. The chunks are
+	// ordered in the order of leaf columns from the row group's schema.
 	//
 	// If the underlying implementation is not read-only, the returned
 	// parquet.ColumnChunk may implement other interfaces: for example,
 	// parquet.ColumnBuffer if the chunk is backed by an in-memory buffer,
 	// or typed writer interfaces like parquet.Int32Writer depending on the
 	// underlying type of values that can be written to the chunk.
-	Column(int) ColumnChunk
+	//
+	// As an optimization, the row group may return the same slice across
+	// multiple calls to this method. Applications should treat the returned
+	// slice as read-only.
+	ColumnChunks() []ColumnChunk
 
 	// Returns the schema of rows in the group.
 	Schema() *Schema
@@ -194,7 +196,7 @@ func MergeRowGroups(rowGroups []RowGroup, options ...RowGroupOption) (RowGroup, 
 		// merger which simply concatenates rows from each of the row groups.
 		// This is preferable because it makes the output deterministic, the
 		// heap merge may otherwise reorder rows across groups.
-		return &m.concatenatedRowGroup, nil
+		return &m.multiRowGroup, nil
 	}
 
 	for _, rowGroup := range m.rowGroups {
@@ -232,8 +234,7 @@ type rowGroup struct {
 }
 
 func (r *rowGroup) NumRows() int64                  { return r.numRows }
-func (r *rowGroup) NumColumns() int                 { return len(r.columns) }
-func (r *rowGroup) Column(i int) ColumnChunk        { return r.columns[i] }
+func (r *rowGroup) ColumnChunks() []ColumnChunk     { return r.columns }
 func (r *rowGroup) SortingColumns() []SortingColumn { return r.sorting }
 func (r *rowGroup) Schema() *Schema                 { return r.schema }
 func (r *rowGroup) Rows() Rows                      { return &rowGroupRowReader{rowGroup: r} }
@@ -251,14 +252,14 @@ type rowGroupRowReader struct {
 
 func (r *rowGroupRowReader) init(rowGroup RowGroup) error {
 	const columnBufferSize = defaultValueBufferSize
-	numColumns := rowGroup.NumColumns()
-	buffer := make([]Value, columnBufferSize*numColumns)
+	columns := rowGroup.ColumnChunks()
+	buffer := make([]Value, columnBufferSize*len(columns))
 
 	r.schema = rowGroup.Schema()
-	r.columns = make([]columnChunkReader, numColumns)
+	r.columns = make([]columnChunkReader, len(columns))
 
-	for i := 0; i < numColumns; i++ {
-		r.columns[i].column = rowGroup.Column(i)
+	for i, column := range columns {
+		r.columns[i].column = column
 		r.columns[i].buffer = buffer[:0:columnBufferSize]
 		buffer = buffer[columnBufferSize:]
 	}
@@ -316,7 +317,19 @@ func (r *rowGroupRowReader) WriteRowsTo(w RowWriter) (int64, error) {
 	defer func() { r.rowGroup, r.seek = nil, 0 }()
 	rowGroup := r.rowGroup
 	if r.seek > 0 {
-		rowGroup = &seekRowGroup{base: rowGroup, seek: r.seek}
+		columns := rowGroup.ColumnChunks()
+		seekRowGroup := &seekRowGroup{
+			base:    rowGroup,
+			seek:    r.seek,
+			columns: make([]ColumnChunk, len(columns)),
+		}
+		seekColumnChunks := make([]seekColumnChunk, len(columns))
+		for i := range seekColumnChunks {
+			seekColumnChunks[i].base = columns[i]
+			seekColumnChunks[i].seek = r.seek
+			seekRowGroup.columns[i] = &seekColumnChunks[i]
+		}
+		rowGroup = seekRowGroup
 	}
 
 	switch dst := w.(type) {
@@ -324,8 +337,8 @@ func (r *rowGroupRowReader) WriteRowsTo(w RowWriter) (int64, error) {
 		return dst.WriteRowGroup(rowGroup)
 
 	case PageWriter:
-		for i, n := 0, rowGroup.NumColumns(); i < n; i++ {
-			_, err := CopyPages(dst, rowGroup.Column(i).Pages())
+		for _, column := range rowGroup.ColumnChunks() {
+			_, err := CopyPages(dst, column.Pages())
 			if err != nil {
 				return 0, err
 			}
@@ -352,20 +365,17 @@ func (r *rowGroupRowReader) writeRowsTo(w pageAndValueWriter, limit int64) (numR
 }
 
 type seekRowGroup struct {
-	base RowGroup
-	seek int64
+	base    RowGroup
+	seek    int64
+	columns []ColumnChunk
 }
 
 func (g *seekRowGroup) NumRows() int64 {
 	return g.base.NumRows() - g.seek
 }
 
-func (g *seekRowGroup) NumColumns() int {
-	return g.base.NumColumns()
-}
-
-func (g *seekRowGroup) Column(i int) ColumnChunk {
-	return &seekColumnChunk{base: g.base.Column(i), seek: g.seek}
+func (g *seekRowGroup) ColumnChunks() []ColumnChunk {
+	return g.columns
 }
 
 func (g *seekRowGroup) Schema() *Schema {
@@ -419,26 +429,29 @@ func (c *seekColumnChunk) NumValues() int64 {
 
 type emptyRowGroup struct {
 	schema  *Schema
-	columns []emptyColumnChunk
+	columns []ColumnChunk
 }
 
 func newEmptyRowGroup(schema *Schema) *emptyRowGroup {
-	g := &emptyRowGroup{
+	columns := schema.Columns()
+	rowGroup := &emptyRowGroup{
 		schema:  schema,
-		columns: make([]emptyColumnChunk, numLeafColumnsOf(schema)),
+		columns: make([]ColumnChunk, len(columns)),
 	}
-	forEachLeafColumnOf(schema, func(leaf leafColumn) {
-		g.columns[leaf.columnIndex].typ = leaf.node.Type()
-		g.columns[leaf.columnIndex].column = leaf.columnIndex
-	})
-	return g
+	emptyColumnChunks := make([]emptyColumnChunk, len(columns))
+	for i, column := range schema.Columns() {
+		leaf, _ := schema.Lookup(column...)
+		emptyColumnChunks[i].typ = leaf.Node.Type()
+		emptyColumnChunks[i].column = int16(leaf.ColumnIndex)
+		rowGroup.columns[i] = &emptyColumnChunks[i]
+	}
+	return rowGroup
 }
 
 func (g *emptyRowGroup) NumRows() int64                  { return 0 }
-func (g *emptyRowGroup) NumColumns() int                 { return len(g.columns) }
-func (g *emptyRowGroup) Column(i int) ColumnChunk        { return &g.columns[i] }
-func (g *emptyRowGroup) SortingColumns() []SortingColumn { return nil }
+func (g *emptyRowGroup) ColumnChunks() []ColumnChunk     { return g.columns }
 func (g *emptyRowGroup) Schema() *Schema                 { return g.schema }
+func (g *emptyRowGroup) SortingColumns() []SortingColumn { return nil }
 func (g *emptyRowGroup) Rows() Rows                      { return emptyRowReader{g.schema} }
 
 type emptyColumnChunk struct {

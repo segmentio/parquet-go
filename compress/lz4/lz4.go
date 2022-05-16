@@ -2,20 +2,8 @@
 package lz4
 
 import (
-	"io"
-
 	"github.com/pierrec/lz4/v4"
-	"github.com/segmentio/parquet-go/compress"
 	"github.com/segmentio/parquet-go/format"
-)
-
-type BlockSize = lz4.BlockSize
-
-const (
-	Block64Kb  = lz4.Block64Kb
-	Block256Kb = lz4.Block256Kb
-	Block1Mb   = lz4.Block1Mb
-	Block4Mb   = lz4.Block4Mb
 )
 
 type Level = lz4.CompressionLevel
@@ -34,15 +22,11 @@ const (
 )
 
 const (
-	DefaultBlockSize   = Block4Mb
-	DefaultLevel       = Fast
-	DefaultConcurrency = 1
+	DefaultLevel = Fast
 )
 
 type Codec struct {
-	BlockSize   BlockSize
-	Level       Level
-	Concurrency int
+	Level Level
 }
 
 func (c *Codec) String() string {
@@ -53,56 +37,47 @@ func (c *Codec) CompressionCodec() format.CompressionCodec {
 	return format.Lz4Raw
 }
 
-func (c *Codec) NewReader(r io.Reader) (compress.Reader, error) {
-	lzr := lz4.NewReader(r)
-	err := lzr.Apply(
-		lz4.ConcurrencyOption(c.concurrency()),
-	)
-	if err != nil {
-		return nil, err
+func (c *Codec) Encode(dst, src []byte) ([]byte, error) {
+	dst = reserveAtLeast(dst, len(src)/4)
+
+	compressor := lz4.CompressorHC{Level: c.Level}
+	for {
+		n, err := compressor.CompressBlock(src, dst)
+		if err != nil { // see Decode for details about error handling
+			dst = make([]byte, 2*len(dst))
+		} else {
+			return dst[:n], nil
+		}
 	}
-	return reader{lzr}, nil
 }
 
-func (c *Codec) NewWriter(w io.Writer) (compress.Writer, error) {
-	lzw := lz4.NewWriter(w)
-	err := lzw.Apply(
-		lz4.BlockChecksumOption(false),
-		lz4.ChecksumOption(false),
-		lz4.BlockSizeOption(c.blockSize()),
-		lz4.CompressionLevelOption(c.level()),
-		lz4.ConcurrencyOption(c.concurrency()),
-	)
-	if err != nil {
-		return nil, err
+func (c *Codec) Decode(dst, src []byte) ([]byte, error) {
+	// 3x seems like a common compression ratio, so we optimistically size the
+	// output buffer to that size. Feel free to change the value if you observe
+	// different behaviors.
+	dst = reserveAtLeast(dst, 3*len(src))
+
+	for {
+		n, err := lz4.UncompressBlock(src, dst)
+		// The lz4 package does not expose the error values, they are declared
+		// in internal/lz4errors. Based on what I read of the implementation,
+		// the only condition where this function errors is if the output buffer
+		// was too short.
+		//
+		// https://github.com/pierrec/lz4/blob/a5532e5996ee86d17f8ce2694c08fb5bf3c6b471/internal/lz4block/block.go#L45-L53
+		if err != nil {
+			dst = make([]byte, 2*len(dst))
+		} else {
+			return dst[:n], nil
+		}
 	}
-	return writer{lzw}, nil
 }
 
-func (c *Codec) concurrency() int {
-	if c.Concurrency != 0 {
-		return c.Concurrency
+func reserveAtLeast(b []byte, n int) []byte {
+	if cap(b) < n {
+		b = make([]byte, n)
+	} else {
+		b = b[:cap(b)]
 	}
-	return DefaultConcurrency
+	return b
 }
-
-func (c *Codec) blockSize() BlockSize {
-	if c.BlockSize != 0 {
-		return c.BlockSize
-	}
-	return DefaultBlockSize
-}
-
-func (c *Codec) level() Level {
-	// zero == Fast
-	return c.Level
-}
-
-type reader struct{ *lz4.Reader }
-
-func (r reader) Close() error             { return nil }
-func (r reader) Reset(rr io.Reader) error { r.Reader.Reset(rr); return nil }
-
-type writer struct{ *lz4.Writer }
-
-func (w writer) Reset(ww io.Writer) error { w.Writer.Reset(ww); return nil }

@@ -3,20 +3,24 @@ package parquet_test
 import (
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/segmentio/parquet-go"
 )
 
-var fixtureFiles = [...]string{
-	"fixtures/file.parquet",
-	"fixtures/small.parquet",
-	"fixtures/trace.snappy.parquet",
+var testdataFiles []string
+
+func init() {
+	entries, _ := os.ReadDir("testdata")
+	for _, e := range entries {
+		testdataFiles = append(testdataFiles, filepath.Join("testdata", e.Name()))
+	}
 }
 
 func TestOpenFile(t *testing.T) {
-	for _, path := range fixtureFiles {
+	for _, path := range testdataFiles {
 		t.Run(path, func(t *testing.T) {
 			f, err := os.Open(path)
 			if err != nil {
@@ -38,8 +42,9 @@ func TestOpenFile(t *testing.T) {
 				t.Errorf("file size mismatch: want=%d got=%d", s.Size(), size)
 			}
 
+			root := p.Root()
 			b := new(strings.Builder)
-			parquet.Print(b, "File", p.Root())
+			parquet.PrintSchema(b, root.Name(), root)
 			t.Log(b)
 
 			printColumns(t, p.Root(), "")
@@ -48,17 +53,62 @@ func TestOpenFile(t *testing.T) {
 }
 
 func printColumns(t *testing.T, col *parquet.Column, indent string) {
-	t.Logf("%s%s", indent, strings.Join(col.Path(), "."))
+	if t.Failed() {
+		return
+	}
+
+	path := strings.Join(col.Path(), ".")
+	if col.Leaf() {
+		t.Logf("%s%s %v %v", indent, path, col.Encoding(), col.Compression())
+	} else {
+		t.Logf("%s%s", indent, path)
+	}
 	indent += ". "
 
+	buffer := make([]parquet.Value, 42)
 	pages := col.Pages()
 	for {
-		_, err := pages.ReadPage()
+		p, err := pages.ReadPage()
 		if err != nil {
 			if err != io.EOF {
 				t.Error(err)
 			}
 			break
+		}
+
+		values := p.Values()
+		numValues := int64(0)
+		nullCount := int64(0)
+
+		for {
+			n, err := values.ReadValues(buffer)
+			for _, v := range buffer[:n] {
+				if v.Column() != col.Index() {
+					t.Errorf("value read from page of column %d says it belongs to column %d", col.Index(), v.Column())
+					return
+				}
+				if v.IsNull() {
+					nullCount++
+				}
+			}
+			numValues += int64(n)
+			if err != nil {
+				if err != io.EOF {
+					t.Error(err)
+					return
+				}
+				break
+			}
+		}
+
+		if numValues != p.NumValues() {
+			t.Errorf("page of column %d declared %d values but %d were read", col.Index(), p.NumValues(), numValues)
+			return
+		}
+
+		if nullCount != p.NumNulls() {
+			t.Errorf("page of column %d declared %d nulls but %d were read", col.Index(), p.NumNulls(), nullCount)
+			return
 		}
 	}
 

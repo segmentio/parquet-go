@@ -4,7 +4,7 @@ package parquet
 
 import (
 	"github.com/segmentio/parquet-go/format"
-	"github.com/segmentio/parquet-go/internal/cast"
+	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 type columnIndex[T primitive] struct{ page *page[T] }
@@ -44,8 +44,8 @@ func (i *columnIndexer[T]) IndexPage(numValues, numNulls int64, min, max Value) 
 }
 
 func (i *columnIndexer[T]) ColumnIndex() format.ColumnIndex {
-	minValues := splitFixedLenByteArrayList(sizeof[T](), cast.SliceToBytes(i.minValues))
-	maxValues := splitFixedLenByteArrayList(sizeof[T](), cast.SliceToBytes(i.maxValues))
+	minValues := splitFixedLenByteArrays(unsafecast.SliceToBytes(i.minValues), sizeof[T]())
+	maxValues := splitFixedLenByteArrays(unsafecast.SliceToBytes(i.maxValues), sizeof[T]())
 	minOrder := i.class.order(i.minValues)
 	maxOrder := i.class.order(i.maxValues)
 	return format.ColumnIndex{

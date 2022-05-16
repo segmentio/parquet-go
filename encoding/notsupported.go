@@ -3,7 +3,6 @@ package encoding
 import (
 	"errors"
 	"fmt"
-	"io"
 
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/format"
@@ -18,160 +17,177 @@ var (
 	// returned by encoders and decoders.
 	ErrNotSupported = errors.New("encoding not supported")
 
-	// ErrInvalidArguments is an error returned when arguments passed to the
-	// encoding functions are incorrect and will lead to an expected failure.
+	// ErrInvalidArgument is an error returned one or more arguments passed to
+	// the encoding functions are incorrect.
 	//
 	// As with ErrNotSupported, this error may be wrapped with specific
 	// information about the problem and applications are expected to use
 	// errors.Is for comparisons.
-	ErrInvalidArguments = errors.New("invalid encoding arguments")
+	ErrInvalidArgument = errors.New("invalid argument")
 )
+
+// Error constructs an error which wraps err and indicates that it originated
+// from the given encoding.
+func Error(e Encoding, err error) error {
+	return fmt.Errorf("%s: %w", e, err)
+}
+
+// Errorf is like Error but constructs the error message from the given format
+// and arguments.
+func Errorf(e Encoding, msg string, args ...interface{}) error {
+	return Error(e, fmt.Errorf(msg, args...))
+}
+
+// ErrInvalidInputSize constructs an error indicating that decoding failed due
+// to the size of the input.
+func ErrInvalidInputSize(e Encoding, typ string, size int) error {
+	return Errorf(e, "cannot decode %s from input of size %d: %w", typ, size, ErrInvalidArgument)
+}
+
+// CanEncodeBoolean reports whether e can encode BOOLEAN values.
+func CanEncodeBoolean(e Encoding) bool {
+	_, err := e.EncodeBoolean(nil, nil)
+	return !errors.Is(err, ErrNotSupported)
+}
+
+// CanEncodeInt8 reports whether e can encode INT8 values.
+func CanEncodeInt8(e Encoding) bool {
+	_, err := e.EncodeInt8(nil, nil)
+	return !errors.Is(err, ErrNotSupported)
+}
+
+// CanEncodeInt32 reports whether e can encode INT32 values.
+func CanEncodeInt32(e Encoding) bool {
+	_, err := e.EncodeInt32(nil, nil)
+	return !errors.Is(err, ErrNotSupported)
+}
+
+// CanEncodeInt64 reports whether e can encode INT64 values.
+func CanEncodeInt64(e Encoding) bool {
+	_, err := e.EncodeInt64(nil, nil)
+	return !errors.Is(err, ErrNotSupported)
+}
+
+// CanEncodeInt96 reports whether e can encode INT96 values.
+func CanEncodeInt96(e Encoding) bool {
+	_, err := e.EncodeInt96(nil, nil)
+	return !errors.Is(err, ErrNotSupported)
+}
+
+// CanEncodeFloat reports whether e can encode FLOAT values.
+func CanEncodeFloat(e Encoding) bool {
+	_, err := e.EncodeFloat(nil, nil)
+	return !errors.Is(err, ErrNotSupported)
+}
+
+// CanEncodeDouble reports whether e can encode DOUBLE values.
+func CanEncodeDouble(e Encoding) bool {
+	_, err := e.EncodeDouble(nil, nil)
+	return !errors.Is(err, ErrNotSupported)
+}
+
+// CanEncodeByteArray reports whether e can encode BYTE_ARRAY values.
+func CanEncodeByteArray(e Encoding) bool {
+	_, err := e.EncodeByteArray(nil, nil)
+	return !errors.Is(err, ErrNotSupported)
+}
+
+// CanEncodeFixedLenByteArray reports whether e can encode
+// FIXED_LEN_BYTE_ARRAY values.
+func CanEncodeFixedLenByteArray(e Encoding) bool {
+	_, err := e.EncodeFixedLenByteArray(nil, nil, 1)
+	return !errors.Is(err, ErrNotSupported)
+}
 
 // NotSupported is a type satisfying the Encoding interface which does not
 // support encoding nor decoding any value types.
 type NotSupported struct {
 }
 
-func (NotSupported) Encoding() format.Encoding {
-	return -1
-}
-
-func (NotSupported) CanEncode(format.Type) bool {
-	return false
-}
-
-func (NotSupported) NewDecoder(io.Reader) Decoder {
-	return NotSupportedDecoder{}
-}
-
-func (NotSupported) NewEncoder(io.Writer) Encoder {
-	return NotSupportedEncoder{}
-}
-
 func (NotSupported) String() string {
 	return "NOT_SUPPORTED"
 }
 
-// NotSupportedDecoder is an implementation of the Decoder interface which does
-// not support decoding any value types.
-//
-// Many parquet encodings only support decoding a subset of the parquet types,
-// they can embed this type to default to not supporting any decoding, then
-// override specific Decode* methods to provide implementations for the types
-// they do support.
-type NotSupportedDecoder struct {
-}
-
-func (NotSupportedDecoder) Encoding() format.Encoding {
+func (NotSupported) Encoding() format.Encoding {
 	return -1
 }
 
-func (NotSupportedDecoder) Reset(io.Reader) {
+func (NotSupported) EncodeBoolean(dst []byte, src []bool) ([]byte, error) {
+	return dst[:0], errNotSupported("BOOLEAN")
 }
 
-func (NotSupportedDecoder) DecodeBoolean([]bool) (int, error) {
-	return 0, errNotSupported("BOOLEAN")
+func (NotSupported) EncodeInt8(dst []byte, src []int8) ([]byte, error) {
+	return dst[:0], errNotSupported("INT8")
 }
 
-func (NotSupportedDecoder) DecodeInt8([]int8) (int, error) {
-	return 0, errNotSupported("INT8")
+func (NotSupported) EncodeInt32(dst []byte, src []int32) ([]byte, error) {
+	return dst[:0], errNotSupported("INT32")
 }
 
-func (NotSupportedDecoder) DecodeInt16([]int16) (int, error) {
-	return 0, errNotSupported("INT16")
+func (NotSupported) EncodeInt64(dst []byte, src []int64) ([]byte, error) {
+	return dst[:0], errNotSupported("INT64")
 }
 
-func (NotSupportedDecoder) DecodeInt32([]int32) (int, error) {
-	return 0, errNotSupported("INT32")
+func (NotSupported) EncodeInt96(dst []byte, src []deprecated.Int96) ([]byte, error) {
+	return dst[:0], errNotSupported("INT96")
 }
 
-func (NotSupportedDecoder) DecodeInt64([]int64) (int, error) {
-	return 0, errNotSupported("INT64")
+func (NotSupported) EncodeFloat(dst []byte, src []float32) ([]byte, error) {
+	return dst[:0], errNotSupported("FLOAT")
 }
 
-func (NotSupportedDecoder) DecodeInt96([]deprecated.Int96) (int, error) {
-	return 0, errNotSupported("INT96")
+func (NotSupported) EncodeDouble(dst []byte, src []float64) ([]byte, error) {
+	return dst[:0], errNotSupported("DOUBLE")
 }
 
-func (NotSupportedDecoder) DecodeFloat([]float32) (int, error) {
-	return 0, errNotSupported("FLOAT")
+func (NotSupported) EncodeByteArray(dst, src []byte) ([]byte, error) {
+	return dst[:0], errNotSupported("BYTE_ARRAY")
 }
 
-func (NotSupportedDecoder) DecodeDouble([]float64) (int, error) {
-	return 0, errNotSupported("DOUBLE")
+func (NotSupported) EncodeFixedLenByteArray(dst, src []byte, size int) ([]byte, error) {
+	return dst[:0], errNotSupported("FIXED_LEN_BYTE_ARRAY")
 }
 
-func (NotSupportedDecoder) DecodeByteArray(*ByteArrayList) (int, error) {
-	return 0, errNotSupported("BYTE_ARRAY")
+func (NotSupported) DecodeBoolean(dst []bool, src []byte) ([]bool, error) {
+	return dst[:0], errNotSupported("BOOLEAN")
 }
 
-func (NotSupportedDecoder) DecodeFixedLenByteArray(size int, data []byte) (int, error) {
-	return 0, errNotSupported("FIXED_LEN_BYTE_ARRAY")
+func (NotSupported) DecodeInt8(dst []int8, src []byte) ([]int8, error) {
+	return dst[:0], errNotSupported("INT8")
 }
 
-func (NotSupportedDecoder) SetBitWidth(int) {
+func (NotSupported) DecodeInt32(dst []int32, src []byte) ([]int32, error) {
+	return dst[:0], errNotSupported("INT32")
 }
 
-// NotSupportedEncoder is an implementation of the Encoder interface which does
-// not support encoding any value types.
-//
-// Many parquet encodings only support encoding a subset of the parquet types,
-// they can embed this type to default to not supporting any encoding, then
-// override specific Encode* methods to provide implementations for the types
-// they do support.
-type NotSupportedEncoder struct {
+func (NotSupported) DecodeInt64(dst []int64, src []byte) ([]int64, error) {
+	return dst[:0], errNotSupported("INT64")
 }
 
-func (NotSupportedEncoder) Encoding() format.Encoding {
-	return -1
+func (NotSupported) DecodeInt96(dst []deprecated.Int96, src []byte) ([]deprecated.Int96, error) {
+	return dst[:0], errNotSupported("INT96")
 }
 
-func (NotSupportedEncoder) Reset(io.Writer) {
+func (NotSupported) DecodeFloat(dst []float32, src []byte) ([]float32, error) {
+	return dst[:0], errNotSupported("FLOAT")
 }
 
-func (NotSupportedEncoder) EncodeBoolean([]bool) error {
-	return errNotSupported("BOOLEAN")
+func (NotSupported) DecodeDouble(dst []float64, src []byte) ([]float64, error) {
+	return dst[:0], errNotSupported("DOUBLE")
 }
 
-func (NotSupportedEncoder) EncodeInt8([]int8) error {
-	return errNotSupported("INT8")
+func (NotSupported) DecodeByteArray(dst, src []byte) ([]byte, error) {
+	return dst[:0], errNotSupported("BYTE_ARRAY")
 }
 
-func (NotSupportedEncoder) EncodeInt16([]int16) error {
-	return errNotSupported("INT16")
-}
-
-func (NotSupportedEncoder) EncodeInt32([]int32) error {
-	return errNotSupported("INT32")
-}
-
-func (NotSupportedEncoder) EncodeInt64([]int64) error {
-	return errNotSupported("INT64")
-}
-
-func (NotSupportedEncoder) EncodeInt96([]deprecated.Int96) error {
-	return errNotSupported("INT96")
-}
-
-func (NotSupportedEncoder) EncodeFloat([]float32) error {
-	return errNotSupported("FLOAT")
-}
-
-func (NotSupportedEncoder) EncodeDouble([]float64) error {
-	return errNotSupported("DOUBLE")
-}
-
-func (NotSupportedEncoder) EncodeByteArray(ByteArrayList) error {
-	return errNotSupported("BYTE_ARRAY")
-}
-
-func (NotSupportedEncoder) EncodeFixedLenByteArray(int, []byte) error {
-	return errNotSupported("FIXED_LEN_BYTE_ARRAY")
-}
-
-func (NotSupportedEncoder) SetBitWidth(int) {
+func (NotSupported) DecodeFixedLenByteArray(dst, src []byte, size int) ([]byte, error) {
+	return dst[:0], errNotSupported("FIXED_LEN_BYTE_ARRAY")
 }
 
 func errNotSupported(typ string) error {
 	return fmt.Errorf("%w for type %s", ErrNotSupported, typ)
 }
+
+var (
+	_ Encoding = NotSupported{}
+)

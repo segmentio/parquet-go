@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/segmentio/parquet-go/compress"
 )
 
 const (
@@ -11,6 +13,7 @@ const (
 	DefaultColumnIndexSizeLimit = 16
 	DefaultColumnBufferSize     = 1 * 1024 * 1024
 	DefaultPageBufferSize       = 1 * 1024 * 1024
+	DefaultWriteBufferSize      = 32 * 1024
 	DefaultDataPageVersion      = 2
 	DefaultDataPageStatistics   = false
 	DefaultSkipPageIndex        = false
@@ -138,12 +141,14 @@ type WriterConfig struct {
 	ColumnIndexSizeLimit int
 	PageBufferPool       PageBufferPool
 	PageBufferSize       int
+	WriteBufferSize      int
 	DataPageVersion      int
 	DataPageStatistics   bool
 	KeyValueMetadata     map[string]string
 	Schema               *Schema
 	SortingColumns       []SortingColumn
 	BloomFilters         []BloomFilterColumn
+	Compression          compress.Codec
 }
 
 // DefaultWriterConfig returns a new WriterConfig value initialized with the
@@ -154,6 +159,7 @@ func DefaultWriterConfig() *WriterConfig {
 		ColumnPageBuffers:    &defaultPageBufferPool,
 		ColumnIndexSizeLimit: DefaultColumnIndexSizeLimit,
 		PageBufferSize:       DefaultPageBufferSize,
+		WriteBufferSize:      DefaultWriteBufferSize,
 		DataPageVersion:      DefaultDataPageVersion,
 		DataPageStatistics:   DefaultDataPageStatistics,
 	}
@@ -193,12 +199,14 @@ func (c *WriterConfig) ConfigureWriter(config *WriterConfig) {
 		ColumnPageBuffers:    coalescePageBufferPool(c.ColumnPageBuffers, config.ColumnPageBuffers),
 		ColumnIndexSizeLimit: coalesceInt(c.ColumnIndexSizeLimit, config.ColumnIndexSizeLimit),
 		PageBufferSize:       coalesceInt(c.PageBufferSize, config.PageBufferSize),
+		WriteBufferSize:      coalesceInt(c.WriteBufferSize, config.WriteBufferSize),
 		DataPageVersion:      coalesceInt(c.DataPageVersion, config.DataPageVersion),
 		DataPageStatistics:   config.DataPageStatistics,
 		KeyValueMetadata:     keyValueMetadata,
 		Schema:               coalesceSchema(c.Schema, config.Schema),
 		SortingColumns:       coalesceSortingColumns(c.SortingColumns, config.SortingColumns),
 		BloomFilters:         coalesceBloomFilters(c.BloomFilters, config.BloomFilters),
+		Compression:          coalesceCompression(c.Compression, config.Compression),
 	}
 }
 
@@ -293,14 +301,24 @@ type RowGroupOption interface {
 	ConfigureRowGroup(*RowGroupConfig)
 }
 
-// SkipPageIndex is a file configuration option which when set to true, prevents
-// automatically reading the page index when opening a parquet file. This is
+// SkipPageIndex is a file configuration option which prevents automatically
+// reading the page index when opening a parquet file, when set to true. This is
 // useful as an optimization when programs know that they will not need to
 // consume the page index.
 //
 // Defaults to false.
 func SkipPageIndex(skip bool) FileOption {
 	return fileOption(func(config *FileConfig) { config.SkipPageIndex = skip })
+}
+
+// SkipBloomFilters is a file configuration option which prevents automatically
+// reading the bloom filters when opening a parquet file, when set to true.
+// This is useful as an optimization when programs know that they will not need
+// to consume the bloom filters.
+//
+// Defaults to false.
+func SkipBloomFilters(skip bool) FileOption {
+	return fileOption(func(config *FileConfig) { config.SkipBloomFilters = skip })
 }
 
 // PageBufferSize configures the size of column page buffers on parquet writers.
@@ -314,6 +332,16 @@ func SkipPageIndex(skip bool) FileOption {
 // Defaults to 1 MiB.
 func PageBufferSize(size int) WriterOption {
 	return writerOption(func(config *WriterConfig) { config.PageBufferSize = size })
+}
+
+// WriteBufferSize configures the size of the write buffer.
+//
+// Setting the writer buffer size to zero deactivates buffering, all writes are
+// immediately sent to the output io.Writer.
+//
+// Defaults to 32 KiB.
+func WriteBufferSize(size int) WriterOption {
+	return writerOption(func(config *WriterConfig) { config.WriteBufferSize = size })
 }
 
 // CreatedBy creates a configuration option which sets the name of the
@@ -393,6 +421,12 @@ func KeyValueMetadata(key, value string) WriterOption {
 func BloomFilters(filters ...BloomFilterColumn) WriterOption {
 	filters = append([]BloomFilterColumn{}, filters...)
 	return writerOption(func(config *WriterConfig) { config.BloomFilters = filters })
+}
+
+// Compression creates a configuration option which sets the default compression
+// codec used by a writer for columns where none were defined.
+func Compression(codec compress.Codec) WriterOption {
+	return writerOption(func(config *WriterConfig) { config.Compression = codec })
 }
 
 // ColumnBufferSize creates a configuration option which defines the size of
@@ -501,6 +535,13 @@ func coalesceBloomFilters(f1, f2 []BloomFilterColumn) []BloomFilterColumn {
 		return f1
 	}
 	return f2
+}
+
+func coalesceCompression(c1, c2 compress.Codec) compress.Codec {
+	if c1 != nil {
+		return c1
+	}
+	return c2
 }
 
 func validatePositiveInt(optionName string, optionValue int) error {

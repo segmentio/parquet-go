@@ -1,7 +1,7 @@
 package parquet
 
 import (
-	"github.com/segmentio/parquet-go/encoding"
+	"github.com/segmentio/parquet-go/encoding/plain"
 	"github.com/segmentio/parquet-go/format"
 	"github.com/segmentio/parquet-go/internal/bits"
 )
@@ -209,8 +209,8 @@ func (i *baseColumnIndexer) columnIndex(minValues, maxValues [][]byte, minOrder,
 type byteArrayColumnIndexer struct {
 	baseColumnIndexer
 	sizeLimit int
-	minValues encoding.ByteArrayList
-	maxValues encoding.ByteArrayList
+	minValues []byte
+	maxValues []byte
 }
 
 func newByteArrayColumnIndexer(sizeLimit int) *byteArrayColumnIndexer {
@@ -219,93 +219,31 @@ func newByteArrayColumnIndexer(sizeLimit int) *byteArrayColumnIndexer {
 
 func (i *byteArrayColumnIndexer) Reset() {
 	i.reset()
-	i.minValues.Reset()
-	i.maxValues.Reset()
+	i.minValues = i.minValues[:0]
+	i.maxValues = i.maxValues[:0]
 }
 
 func (i *byteArrayColumnIndexer) IndexPage(numValues, numNulls int64, min, max Value) {
 	i.observe(numValues, numNulls)
-	i.minValues.Push(min.ByteArray())
-	i.maxValues.Push(max.ByteArray())
+	minValue := min.ByteArray()
+	maxValue := max.ByteArray()
+	if i.sizeLimit > 0 {
+		minValue = truncateLargeMinByteArrayValue(minValue, i.sizeLimit)
+		maxValue = truncateLargeMaxByteArrayValue(maxValue, i.sizeLimit)
+	}
+	i.minValues = plain.AppendByteArray(i.minValues, minValue)
+	i.maxValues = plain.AppendByteArray(i.maxValues, maxValue)
 }
 
 func (i *byteArrayColumnIndexer) ColumnIndex() format.ColumnIndex {
-	minValues := i.minValues.Split()
-	maxValues := i.maxValues.Split()
-	if i.sizeLimit > 0 {
-		truncateLargeMinByteArrayValues(minValues, i.sizeLimit)
-		truncateLargeMaxByteArrayValues(maxValues, i.sizeLimit)
-	}
+	minValues := splitByteArrays(i.minValues)
+	maxValues := splitByteArrays(i.maxValues)
 	return i.columnIndex(
 		minValues,
 		maxValues,
 		bits.OrderOfBytes(minValues),
 		bits.OrderOfBytes(maxValues),
 	)
-}
-
-func truncateLargeMinByteArrayValues(values [][]byte, sizeLimit int) {
-	for i, v := range values {
-		if len(v) > sizeLimit {
-			values[i] = v[:sizeLimit]
-		}
-	}
-}
-
-func truncateLargeMaxByteArrayValues(values [][]byte, sizeLimit int) {
-	if !hasLongerValuesThanSizeLimit(values, sizeLimit) {
-		return
-	}
-
-	// Rather than allocating a new byte slice for each value that exceeds the
-	// limit, a single buffer is allocated to hold all the values. This makes
-	// the GC cost of this function a constant rather than being linear to the
-	// number of values in the input slice.
-	b := make([]byte, len(values)*sizeLimit)
-
-	for i, v := range values {
-		if len(v) > sizeLimit {
-			// If v is the max value we cannot truncate it since there are no
-			// shorter byte sequence with a greater value. This condition should
-			// never occur unless the input was especially constructed to trigger
-			// it.
-			if !isMaxByteArrayValue(v) {
-				j := (i + 0) * sizeLimit
-				k := (i + 1) * sizeLimit
-				x := b[j:k:k]
-				copy(x, v)
-				values[i] = nextByteArrayValue(x)
-			}
-		}
-	}
-}
-
-func hasLongerValuesThanSizeLimit(values [][]byte, sizeLimit int) bool {
-	for _, v := range values {
-		if len(v) > sizeLimit {
-			return true
-		}
-	}
-	return false
-}
-
-func isMaxByteArrayValue(value []byte) bool {
-	for i := range value {
-		if value[i] != 0xFF {
-			return false
-		}
-	}
-	return true
-}
-
-func nextByteArrayValue(value []byte) []byte {
-	for i := len(value) - 1; i > 0; i-- {
-		if value[i]++; value[i] != 0 {
-			break
-		}
-		// Overflow: increment the next byte
-	}
-	return value
 }
 
 type fixedLenByteArrayColumnIndexer struct {
@@ -336,11 +274,15 @@ func (i *fixedLenByteArrayColumnIndexer) IndexPage(numValues, numNulls int64, mi
 }
 
 func (i *fixedLenByteArrayColumnIndexer) ColumnIndex() format.ColumnIndex {
-	minValues := splitFixedLenByteArrayList(i.size, i.minValues)
-	maxValues := splitFixedLenByteArrayList(i.size, i.maxValues)
-	if i.sizeLimit > 0 && i.sizeLimit < i.size {
-		truncateLargeMinByteArrayValues(minValues, i.sizeLimit)
-		truncateLargeMaxByteArrayValues(maxValues, i.sizeLimit)
+	minValues := splitFixedLenByteArrays(i.minValues, i.size)
+	maxValues := splitFixedLenByteArrays(i.maxValues, i.size)
+	if sizeLimit := i.sizeLimit; sizeLimit > 0 {
+		for i, v := range minValues {
+			minValues[i] = truncateLargeMinByteArrayValue(v, sizeLimit)
+		}
+		for i, v := range maxValues {
+			maxValues[i] = truncateLargeMaxByteArrayValue(v, sizeLimit)
+		}
 	}
 	return i.columnIndex(
 		minValues,
@@ -350,7 +292,47 @@ func (i *fixedLenByteArrayColumnIndexer) ColumnIndex() format.ColumnIndex {
 	)
 }
 
-func splitFixedLenByteArrayList(size int, data []byte) [][]byte {
+func truncateLargeMinByteArrayValue(value []byte, sizeLimit int) []byte {
+	if len(value) > sizeLimit {
+		value = value[:sizeLimit]
+	}
+	return value
+}
+
+func truncateLargeMaxByteArrayValue(value []byte, sizeLimit int) []byte {
+	if len(value) > sizeLimit && !isMaxByteArrayValue(value) {
+		value = value[:sizeLimit]
+	}
+	return value
+}
+
+func isMaxByteArrayValue(value []byte) bool {
+	for i := range value {
+		if value[i] != 0xFF {
+			return false
+		}
+	}
+	return true
+}
+
+func splitByteArrays(data []byte) [][]byte {
+	length := 0
+	plain.RangeByteArrays(data, func([]byte) error {
+		length++
+		return nil
+	})
+	buffer := make([]byte, 0, len(data)-(4*length))
+	values := make([][]byte, 0, length)
+	plain.RangeByteArrays(data, func(value []byte) error {
+		offset := len(buffer)
+		buffer = append(buffer, value...)
+		values = append(values, buffer[offset:])
+		return nil
+	})
+	return values
+}
+
+func splitFixedLenByteArrays(data []byte, size int) [][]byte {
 	data = copyBytes(data)
 	values := make([][]byte, len(data)/size)
 	for i := range values {
