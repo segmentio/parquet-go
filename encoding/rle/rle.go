@@ -132,6 +132,7 @@ func encodeBits(dst, src []byte) ([]byte, error) {
 
 		n := j - i
 		if n > 1 && j < len(src) {
+			n--
 			j--
 		}
 
