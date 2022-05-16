@@ -108,10 +108,7 @@ func encode(f *testing.F, e encoding.Encoding, encode encodingFunc, decode encod
 }
 
 func generatePlainBooleanList(dst, src []byte, _ *rand.Rand) []byte {
-	for _, c := range src {
-		dst = append(dst, (c & 1))
-	}
-	return dst
+	return append(dst, src...)
 }
 
 func generatePlainByteArrayList(dst, src []byte, prng *rand.Rand) []byte {

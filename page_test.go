@@ -1,5 +1,3 @@
-//go:build !go1.18
-
 package parquet_test
 
 import (
@@ -27,22 +25,6 @@ func TestPage(t *testing.T) {
 
 func testPageBoolean(t *testing.T) {
 	schema := parquet.SchemaOf(struct{ Value bool }{})
-
-	t.Run("io", func(t *testing.T) {
-		testBufferPage(t, schema, pageTest{
-			write: func(w parquet.ValueWriter) (interface{}, error) {
-				values := []bool{false, true}
-				n, err := w.(io.Writer).Write(bits.BoolToBytes(values))
-				return values[:n], err
-			},
-
-			read: func(r parquet.ValueReader) (interface{}, error) {
-				values := make([]bool, 2)
-				n, err := r.(io.Reader).Read(bits.BoolToBytes(values))
-				return values[:n], err
-			},
-		})
-	})
 
 	t.Run("parquet", func(t *testing.T) {
 		testPage(t, schema, pageTest{
