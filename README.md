@@ -414,6 +414,59 @@ Reading arrays of typed values is often preferable when performing aggregations
 on the values as this model offers a more compact representation of the values
 in memory, and pairs well with the use of optimizations like SIMD vectorization.
 
+#### A. Caching parquet file metadata
+
+In certain cases, we may require caching parquet metadata for quick access.
+This can be achieved by using custom options on the File reader/writer to
+retrieve handlers for accessing data from a secondary storage.
+
+```
+// Option to apply filepath to column chunk configuration
+type ApplyColumnChunkFilePath struct {
+	filepath string
+}
+
+func (a *ApplyColumnChunkFilePath) ConfigureWriter(wc *pq.WriterConfig) {
+	wc.ColumnChunkFilePath = a.filepath
+}
+
+var _ WriterOption = (*ApplyColumnChunkFilePath)(nil)
+
+w := NewWriter(file, ..., &ApplyColumnChunkFilePath{filepath: "foobar"})
+
+```
+
+```
+// Custom reader can be used to fetch data from a secondary backend
+type CustomIOReader struct {
+    ...
+}
+
+func (c *CustomIOReader) ReadAt(p []byte, off int64) (int, error) {
+    // custom reader implementation
+}
+
+var _ io.ReaderAt = (*CustomIOReader)(nil)
+
+// Option to provide a way to get io reader given filepath
+type ApplyCustomIOReader struct {
+	reader CustomIOReader
+}
+
+func (a *ApplyCustomIOReader) ConfigureFile(fc *FileConfig) {
+    // callback function to fetch handlers to read data from secondary backend
+	fc.GetIOReaderFromPath = func(filepath string) io.ReaderAt {
+        ...
+        return &a.reader
+	}
+}
+
+var _ FileOption = (*ApplyCustomIOReader)(nil)
+
+f, _ = OpenFile(file, ..., &ApplyCustomIOReader{reader: CustomIOReader{ioRWFromBackendRW: *remoteFile}})
+
+```
+
 ### Optimizing Writes
 
 Applications that deal with columnar storage are sometimes designed to work with

@@ -18,11 +18,6 @@ const (
 	defaultLevelBufferSize = 1024
 )
 
-type ReaderAtSeeker interface {
-	io.ReaderAt
-	io.Seeker
-}
-
 // File represents a parquet file. The layout of a Parquet file can be found
 // here: https://github.com/apache/parquet-format#file-format
 type File struct {
