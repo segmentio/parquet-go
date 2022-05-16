@@ -58,23 +58,18 @@ type Dictionary interface {
 	Page() BufferedPage
 }
 
-func dictCap(bufferSize, valueItemSize int) int {
-	indexItemSize := 4 + valueItemSize + mapSizeOverheadPerItem
-	return atLeastOne(bufferSize / (valueItemSize + indexItemSize))
-}
-
 // The boolean dictionary always contains two values for true and false.
 type booleanDictionary struct {
 	booleanPage
-	typ   Type
 	index map[bool]int32
 }
 
 func newBooleanDictionary(typ Type, columnIndex int16, numValues int32, values []byte) *booleanDictionary {
 	return &booleanDictionary{
-		typ: typ,
 		booleanPage: booleanPage{
-			values:      bits.BytesToBool(values)[:numValues],
+			typ:         typ,
+			bits:        values[:bits.ByteCount(uint(numValues))],
+			numValues:   numValues,
 			columnIndex: ^columnIndex,
 		},
 	}
@@ -82,17 +77,17 @@ func newBooleanDictionary(typ Type, columnIndex int16, numValues int32, values [
 
 func (d *booleanDictionary) Type() Type { return newIndexedType(d.typ, d) }
 
-func (d *booleanDictionary) Len() int { return len(d.values) }
+func (d *booleanDictionary) Len() int { return int(d.numValues) }
 
-func (d *booleanDictionary) Index(i int32) Value { return makeValueBoolean(d.values[i]) }
+func (d *booleanDictionary) Index(i int32) Value { return makeValueBoolean(d.valueAt(int(i))) }
 
 func (d *booleanDictionary) Insert(indexes []int32, values []Value) {
 	_ = indexes[:len(values)]
 
 	if d.index == nil {
-		d.index = make(map[bool]int32, cap(d.values))
-		for i, v := range d.values {
-			d.index[v] = int32(i)
+		d.index = make(map[bool]int32, cap(d.bits))
+		for i := 0; i < int(d.numValues); i++ {
+			d.index[d.valueAt(i)] = int32(i)
 		}
 	}
 
@@ -101,9 +96,10 @@ func (d *booleanDictionary) Insert(indexes []int32, values []Value) {
 
 		index, exists := d.index[value]
 		if !exists {
-			index = int32(len(d.values))
-			d.values = append(d.values, value)
+			index = d.numValues
+			d.bits = plain.AppendBoolean(d.bits, int(index), value)
 			d.index[value] = index
+			d.numValues++
 		}
 
 		indexes[i] = index
@@ -118,27 +114,30 @@ func (d *booleanDictionary) Lookup(indexes []int32, values []Value) {
 
 func (d *booleanDictionary) Bounds(indexes []int32) (min, max Value) {
 	if len(indexes) > 0 {
-		minValue := d.values[indexes[0]]
-		maxValue := minValue
+		hasFalse, hasTrue := false, false
 
-		for _, i := range indexes[1:] {
-			value := d.values[i]
-			switch {
-			case compareBool(value, minValue) < 0:
-				minValue = value
-			case compareBool(value, maxValue) > 0:
-				maxValue = value
+		for _, i := range indexes {
+			v := d.valueAt(int(i))
+			if v {
+				hasTrue = true
+			} else {
+				hasFalse = true
+			}
+			if hasTrue && hasFalse {
+				break
 			}
 		}
 
-		min = makeValueBoolean(minValue)
-		max = makeValueBoolean(maxValue)
+		min = makeValueBoolean(!hasFalse)
+		max = makeValueBoolean(hasTrue)
 	}
 	return min, max
 }
 
 func (d *booleanDictionary) Reset() {
-	d.values = d.values[:0]
+	d.bits = d.bits[:0]
+	d.offset = 0
+	d.numValues = 0
 	d.index = nil
 }
 
@@ -148,14 +147,13 @@ func (d *booleanDictionary) Page() BufferedPage {
 
 type int32Dictionary struct {
 	int32Page
-	typ   Type
 	index map[int32]int32
 }
 
 func newInt32Dictionary(typ Type, columnIndex int16, numValues int32, values []byte) *int32Dictionary {
 	return &int32Dictionary{
-		typ: typ,
 		int32Page: int32Page{
+			typ:         typ,
 			values:      bits.BytesToInt32(values)[:numValues],
 			columnIndex: ^columnIndex,
 		},
@@ -230,14 +228,13 @@ func (d *int32Dictionary) Page() BufferedPage {
 
 type int64Dictionary struct {
 	int64Page
-	typ   Type
 	index map[int64]int32
 }
 
 func newInt64Dictionary(typ Type, columnIndex int16, numValues int32, values []byte) *int64Dictionary {
 	return &int64Dictionary{
-		typ: typ,
 		int64Page: int64Page{
+			typ:         typ,
 			values:      bits.BytesToInt64(values)[:numValues],
 			columnIndex: ^columnIndex,
 		},
@@ -312,14 +309,13 @@ func (d *int64Dictionary) Page() BufferedPage {
 
 type int96Dictionary struct {
 	int96Page
-	typ   Type
 	index map[deprecated.Int96]int32
 }
 
 func newInt96Dictionary(typ Type, columnIndex int16, numValues int32, values []byte) *int96Dictionary {
 	return &int96Dictionary{
-		typ: typ,
 		int96Page: int96Page{
+			typ:         typ,
 			values:      deprecated.BytesToInt96(values)[:numValues],
 			columnIndex: ^columnIndex,
 		},
@@ -394,14 +390,13 @@ func (d *int96Dictionary) Page() BufferedPage {
 
 type floatDictionary struct {
 	floatPage
-	typ   Type
 	index map[float32]int32
 }
 
 func newFloatDictionary(typ Type, columnIndex int16, numValues int32, values []byte) *floatDictionary {
 	return &floatDictionary{
-		typ: typ,
 		floatPage: floatPage{
+			typ:         typ,
 			values:      bits.BytesToFloat32(values)[:numValues],
 			columnIndex: ^columnIndex,
 		},
@@ -476,14 +471,13 @@ func (d *floatDictionary) Page() BufferedPage {
 
 type doubleDictionary struct {
 	doublePage
-	typ   Type
 	index map[float64]int32
 }
 
 func newDoubleDictionary(typ Type, columnIndex int16, numValues int32, values []byte) *doubleDictionary {
 	return &doubleDictionary{
-		typ: typ,
 		doublePage: doublePage{
+			typ:         typ,
 			values:      bits.BytesToFloat64(values)[:numValues],
 			columnIndex: ^columnIndex,
 		},
@@ -558,16 +552,15 @@ func (d *doubleDictionary) Page() BufferedPage {
 
 type byteArrayDictionary struct {
 	byteArrayPage
-	typ     Type
 	offsets []uint32
 	index   map[string]int32
 }
 
 func newByteArrayDictionary(typ Type, columnIndex int16, numValues int32, values []byte) *byteArrayDictionary {
 	d := &byteArrayDictionary{
-		typ:     typ,
 		offsets: make([]uint32, 0, numValues),
 		byteArrayPage: byteArrayPage{
+			typ:         typ,
 			values:      values,
 			numValues:   numValues,
 			columnIndex: ^columnIndex,
@@ -665,15 +658,14 @@ func (d *byteArrayDictionary) Page() BufferedPage {
 
 type fixedLenByteArrayDictionary struct {
 	fixedLenByteArrayPage
-	typ   Type
 	index map[string]int32
 }
 
 func newFixedLenByteArrayDictionary(typ Type, columnIndex int16, numValues int32, data []byte) *fixedLenByteArrayDictionary {
 	size := typ.Length()
 	return &fixedLenByteArrayDictionary{
-		typ: typ,
 		fixedLenByteArrayPage: fixedLenByteArrayPage{
+			typ:         typ,
 			size:        size,
 			data:        data,
 			columnIndex: ^columnIndex,
@@ -757,14 +749,13 @@ func (d *fixedLenByteArrayDictionary) Page() BufferedPage {
 
 type uint32Dictionary struct {
 	uint32Page
-	typ   Type
 	index map[uint32]int32
 }
 
 func newUint32Dictionary(typ Type, columnIndex int16, numValues int32, data []byte) *uint32Dictionary {
 	return &uint32Dictionary{
-		typ: typ,
 		uint32Page: uint32Page{
+			typ:         typ,
 			values:      bits.BytesToUint32(data)[:numValues],
 			columnIndex: ^columnIndex,
 		},
@@ -839,14 +830,13 @@ func (d *uint32Dictionary) Page() BufferedPage {
 
 type uint64Dictionary struct {
 	uint64Page
-	typ   Type
 	index map[uint64]int32
 }
 
 func newUint64Dictionary(typ Type, columnIndex int16, numValues int32, data []byte) *uint64Dictionary {
 	return &uint64Dictionary{
-		typ: typ,
 		uint64Page: uint64Page{
+			typ:         typ,
 			values:      bits.BytesToUint64(data),
 			columnIndex: ^columnIndex,
 		},
@@ -919,6 +909,9 @@ func (d *uint64Dictionary) Page() BufferedPage {
 	return &d.uint64Page
 }
 
+// indexedType is a wrapper around a Type value which overrides object
+// constructors to use indexed versions referencing values in the dictionary
+// instead of storing plain values.
 type indexedType struct {
 	Type
 	dict Dictionary
@@ -929,76 +922,60 @@ func newIndexedType(typ Type, dict Dictionary) *indexedType {
 }
 
 func (t *indexedType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
-	return newIndexedColumnBuffer(t.dict, t, makeColumnIndex(columnIndex), bufferSize)
+	return newIndexedColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t *indexedType) NewPage(columnIndex, numValues int, data []byte) Page {
-	return newIndexedPage(t.dict, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
+	return newIndexedPage(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
-func (t *indexedType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
-	return enc.EncodeInt32(dst, src)
-}
-
-func (t *indexedType) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
-	return enc.DecodeInt32(dst, src)
-}
-
+// indexedPage is an implementation of the BufferedPage interface which stores
+// indexes instead of plain value. The indexes reference the values in a
+// dictionary that the page was created for.
 type indexedPage struct {
-	dict        Dictionary
+	typ         *indexedType
 	values      []int32
 	columnIndex int16
 }
 
-func newIndexedPage(dict Dictionary, columnIndex int16, numValues int32, data []byte) *indexedPage {
-	values := bits.BytesToInt32(data)
-	for len(values) < int(numValues) {
-		values = append(values, 0)
+func newIndexedPage(typ *indexedType, columnIndex int16, numValues int32, values []byte) *indexedPage {
+	// RLE encoded values that contain dictionary indexes in data pages are
+	// sometimes truncated when they contain only zeros. We account for this
+	// special case here and extend the values buffer if it is shorter than
+	// needed to hold `numValues`.
+	size := 4 * int(numValues)
+
+	if len(values) < size {
+		if cap(values) < size {
+			tmp := make([]byte, size)
+			copy(tmp, values)
+			values = tmp
+		} else {
+			clear := values[len(values) : len(values)+size]
+			for i := range clear {
+				clear[i] = 0
+			}
+		}
 	}
-	if len(values) > int(numValues) {
-		values = values[:numValues]
-	}
+
 	return &indexedPage{
-		dict:        dict,
-		values:      values,
+		typ:         typ,
+		values:      bits.BytesToInt32(values[:size]),
 		columnIndex: ^columnIndex,
 	}
 }
 
+func (page *indexedPage) Type() Type { return indexedPageType{page.typ} }
+
 func (page *indexedPage) Column() int { return int(^page.columnIndex) }
 
-func (page *indexedPage) Dictionary() Dictionary { return page.dict }
+func (page *indexedPage) Dictionary() Dictionary { return page.typ.dict }
 
 func (page *indexedPage) NumRows() int64 { return int64(len(page.values)) }
 
 func (page *indexedPage) NumValues() int64 { return int64(len(page.values)) }
 
 func (page *indexedPage) NumNulls() int64 { return 0 }
-
-func (page *indexedPage) Bounds() (min, max Value, ok bool) {
-	if ok = len(page.values) > 0; ok {
-		min, max = page.dict.Bounds(page.values)
-		min.columnIndex = page.columnIndex
-		max.columnIndex = page.columnIndex
-	}
-	return min, max, ok
-}
-
-func (page *indexedPage) Clone() BufferedPage {
-	return &indexedPage{
-		dict:        page.dict,
-		values:      append([]int32{}, page.values...),
-		columnIndex: page.columnIndex,
-	}
-}
-
-func (page *indexedPage) Slice(i, j int64) BufferedPage {
-	return &indexedPage{
-		dict:        page.dict,
-		values:      page.values[i:j],
-		columnIndex: page.columnIndex,
-	}
-}
 
 func (page *indexedPage) Size() int64 { return sizeOfInt32(page.values) }
 
@@ -1012,6 +989,45 @@ func (page *indexedPage) Values() ValueReader { return &indexedPageReader{page: 
 
 func (page *indexedPage) Buffer() BufferedPage { return page }
 
+func (page *indexedPage) Bounds() (min, max Value, ok bool) {
+	if ok = len(page.values) > 0; ok {
+		min, max = page.typ.dict.Bounds(page.values)
+		min.columnIndex = page.columnIndex
+		max.columnIndex = page.columnIndex
+	}
+	return min, max, ok
+}
+
+func (page *indexedPage) Clone() BufferedPage {
+	return &indexedPage{
+		typ:         page.typ,
+		values:      append([]int32{}, page.values...),
+		columnIndex: page.columnIndex,
+	}
+}
+
+func (page *indexedPage) Slice(i, j int64) BufferedPage {
+	return &indexedPage{
+		typ:         page.typ,
+		values:      page.values[i:j],
+		columnIndex: page.columnIndex,
+	}
+}
+
+// indexedPageType is an adapter for the indexedType returned when accessing
+// the type of an indexedPage value. It overrides the Encode/Decode methods to
+// account for the fact that an indexed page is holding indexes of values into
+// its dictionary instead of plain values.
+type indexedPageType struct{ *indexedType }
+
+func (t indexedPageType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+	return enc.EncodeInt32(dst, src)
+}
+
+func (t indexedPageType) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+	return enc.DecodeInt32(dst, src)
+}
+
 type indexedPageReader struct {
 	page   *indexedPage
 	offset int
@@ -1020,7 +1036,7 @@ type indexedPageReader struct {
 func (r *indexedPageReader) ReadValues(values []Value) (n int, err error) {
 	var v Value
 	for n < len(values) && r.offset < len(r.page.values) {
-		v = r.page.dict.Index(r.page.values[r.offset])
+		v = r.page.typ.dict.Index(r.page.values[r.offset])
 		v.columnIndex = r.page.columnIndex
 		values[n] = v
 		r.offset++
@@ -1033,34 +1049,29 @@ func (r *indexedPageReader) ReadValues(values []Value) (n int, err error) {
 	return n, err
 }
 
-type indexedColumnBuffer struct {
-	indexedPage
-	typ Type
-}
+// indexedCoumnBuffer is an implementation of the ColumnBuffer interface which
+// builds a page of indexes into a parent dictionary when values are written.
+type indexedColumnBuffer struct{ indexedPage }
 
-func newIndexedColumnBuffer(dict Dictionary, typ Type, columnIndex int16, bufferSize int) *indexedColumnBuffer {
+func newIndexedColumnBuffer(typ *indexedType, columnIndex int16, bufferSize int) *indexedColumnBuffer {
 	return &indexedColumnBuffer{
 		indexedPage: indexedPage{
-			dict:        dict,
+			typ:         typ,
 			values:      make([]int32, 0, bufferSize/4),
 			columnIndex: ^columnIndex,
 		},
-		typ: typ,
 	}
 }
 
 func (col *indexedColumnBuffer) Clone() ColumnBuffer {
 	return &indexedColumnBuffer{
 		indexedPage: indexedPage{
-			dict:        col.dict,
+			typ:         col.typ,
 			values:      append([]int32{}, col.values...),
 			columnIndex: col.columnIndex,
 		},
-		typ: col.typ,
 	}
 }
-
-func (col *indexedColumnBuffer) Type() Type { return col.typ }
 
 func (col *indexedColumnBuffer) ColumnIndex() ColumnIndex { return indexedColumnIndex{col} }
 
@@ -1068,7 +1079,7 @@ func (col *indexedColumnBuffer) OffsetIndex() OffsetIndex { return indexedOffset
 
 func (col *indexedColumnBuffer) BloomFilter() BloomFilter { return nil }
 
-func (col *indexedColumnBuffer) Dictionary() Dictionary { return col.dict }
+func (col *indexedColumnBuffer) Dictionary() Dictionary { return col.typ.dict }
 
 func (col *indexedColumnBuffer) Pages() Pages { return onePage(col.Page()) }
 
@@ -1081,8 +1092,8 @@ func (col *indexedColumnBuffer) Cap() int { return cap(col.values) }
 func (col *indexedColumnBuffer) Len() int { return len(col.values) }
 
 func (col *indexedColumnBuffer) Less(i, j int) bool {
-	u := col.dict.Index(col.values[i])
-	v := col.dict.Index(col.values[j])
+	u := col.typ.dict.Index(col.values[i])
+	v := col.typ.dict.Index(col.values[j])
 	return col.typ.Compare(u, v) < 0
 }
 
@@ -1102,7 +1113,7 @@ func (col *indexedColumnBuffer) WriteValues(values []Value) (int, error) {
 		col.values = colValues
 	}
 
-	col.dict.Insert(col.values[i:], values)
+	col.typ.dict.Insert(col.values[i:], values)
 	return len(values), nil
 }
 
@@ -1115,7 +1126,7 @@ func (col *indexedColumnBuffer) ReadValuesAt(values []Value, offset int64) (n in
 		return 0, io.EOF
 	default:
 		for n < len(values) && i < len(col.values) {
-			values[n] = col.dict.Index(col.values[i])
+			values[n] = col.typ.dict.Index(col.values[i])
 			values[n].columnIndex = col.columnIndex
 			n++
 			i++
@@ -1134,7 +1145,7 @@ func (col *indexedColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {
 	case index >= int64(len(col.values)):
 		return row, io.EOF
 	default:
-		v := col.dict.Index(col.values[index])
+		v := col.typ.dict.Index(col.values[index])
 		v.columnIndex = col.columnIndex
 		return append(row, v), nil
 	}

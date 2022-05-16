@@ -254,7 +254,7 @@ func (t booleanType) NewDictionary(columnIndex, numValues int, data []byte) Dict
 }
 
 func (t booleanType) NewPage(columnIndex, numValues int, data []byte) Page {
-	return newBooleanPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data)
+	return newBooleanPage(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
 func (t booleanType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
@@ -289,7 +289,7 @@ func (t int32Type) NewDictionary(columnIndex, numValues int, data []byte) Dictio
 }
 
 func (t int32Type) NewPage(columnIndex, numValues int, data []byte) Page {
-	return newInt32Page(makeColumnIndex(columnIndex), makeNumValues(numValues), data)
+	return newInt32Page(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
 func (t int32Type) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
@@ -324,7 +324,7 @@ func (t int64Type) NewDictionary(columnIndex, numValues int, data []byte) Dictio
 }
 
 func (t int64Type) NewPage(columnIndex, numValues int, data []byte) Page {
-	return newInt64Page(makeColumnIndex(columnIndex), makeNumValues(numValues), data)
+	return newInt64Page(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
 func (t int64Type) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
@@ -360,7 +360,7 @@ func (t int96Type) NewDictionary(columnIndex, numValues int, data []byte) Dictio
 }
 
 func (t int96Type) NewPage(columnIndex, numValues int, data []byte) Page {
-	return newInt96Page(makeColumnIndex(columnIndex), makeNumValues(numValues), data)
+	return newInt96Page(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
 func (t int96Type) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
@@ -395,7 +395,7 @@ func (t floatType) NewDictionary(columnIndex, numValues int, data []byte) Dictio
 }
 
 func (t floatType) NewPage(columnIndex, numValues int, data []byte) Page {
-	return newFloatPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data)
+	return newFloatPage(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
 func (t floatType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
@@ -430,7 +430,7 @@ func (t doubleType) NewDictionary(columnIndex, numValues int, data []byte) Dicti
 }
 
 func (t doubleType) NewPage(columnIndex, numValues int, data []byte) Page {
-	return newDoublePage(makeColumnIndex(columnIndex), makeNumValues(numValues), data)
+	return newDoublePage(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
 func (t doubleType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
@@ -465,7 +465,7 @@ func (t byteArrayType) NewDictionary(columnIndex, numValues int, data []byte) Di
 }
 
 func (t byteArrayType) NewPage(columnIndex, numValues int, data []byte) Page {
-	return newByteArrayPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data)
+	return newByteArrayPage(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
 func (t byteArrayType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
@@ -511,7 +511,7 @@ func (t fixedLenByteArrayType) NewDictionary(columnIndex, numValues int, data []
 }
 
 func (t fixedLenByteArrayType) NewPage(columnIndex, numValues int, data []byte) Page {
-	return newFixedLenByteArrayPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data, t.Length())
+	return newFixedLenByteArrayPage(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
 func (t fixedLenByteArrayType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
@@ -684,15 +684,15 @@ func (t *intType) NewDictionary(columnIndex, numValues int, data []byte) Diction
 func (t *intType) NewPage(columnIndex, numValues int, data []byte) Page {
 	if t.IsSigned {
 		if t.BitWidth == 64 {
-			return newInt64Page(makeColumnIndex(columnIndex), makeNumValues(numValues), data)
+			return newInt64Page(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 		} else {
-			return newInt32Page(makeColumnIndex(columnIndex), makeNumValues(numValues), data)
+			return newInt32Page(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 		}
 	} else {
 		if t.BitWidth == 64 {
-			return newUint64Page(makeColumnIndex(columnIndex), makeNumValues(numValues), data)
+			return newUint64Page(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 		} else {
-			return newUint32Page(makeColumnIndex(columnIndex), makeNumValues(numValues), data)
+			return newUint32Page(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 		}
 	}
 }
@@ -799,7 +799,7 @@ func (t *stringType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 }
 
 func (t *stringType) NewPage(columnIndex, numValues int, data []byte) Page {
-	return newByteArrayPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data)
+	return newByteArrayPage(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
 func (t *stringType) GoType() reflect.Type {
@@ -858,7 +858,7 @@ func (t *uuidType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 }
 
 func (t *uuidType) NewPage(columnIndex, numValues int, data []byte) Page {
-	return newFixedLenByteArrayPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data, 16)
+	return newFixedLenByteArrayPage(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
 func (t *uuidType) GoType() reflect.Type {
@@ -919,7 +919,7 @@ func (t *enumType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 }
 
 func (t *enumType) NewPage(columnIndex, numValues int, data []byte) Page {
-	return newByteArrayPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data)
+	return newByteArrayPage(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
 func (t *enumType) GoType() reflect.Type {
@@ -980,7 +980,7 @@ func (t *jsonType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 }
 
 func (t *jsonType) NewPage(columnIndex, numValues int, data []byte) Page {
-	return newByteArrayPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data)
+	return newByteArrayPage(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
 func (t *jsonType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
@@ -1037,7 +1037,7 @@ func (t *bsonType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 }
 
 func (t *bsonType) NewPage(columnIndex, numValues int, data []byte) Page {
-	return newByteArrayPage(makeColumnIndex(columnIndex), makeNumValues(numValues), data)
+	return newByteArrayPage(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
 func (t *bsonType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
@@ -1090,7 +1090,7 @@ func (t *dateType) NewDictionary(columnIndex, numValues int, data []byte) Dictio
 }
 
 func (t *dateType) NewPage(columnIndex, numValues int, data []byte) Page {
-	return newInt32Page(makeColumnIndex(columnIndex), makeNumValues(numValues), data)
+	return newInt32Page(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
 func (t *dateType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
@@ -1210,7 +1210,7 @@ func (t *timeType) ConvertedType() *deprecated.ConvertedType {
 }
 
 func (t *timeType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
-	if t.Unit.Millis != nil {
+	if t.useInt32() {
 		return newInt32ColumnIndexer()
 	} else {
 		return newInt64ColumnIndexer()
@@ -1218,7 +1218,7 @@ func (t *timeType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
 }
 
 func (t *timeType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
-	if t.Unit.Millis != nil {
+	if t.useInt32() {
 		return newInt32ColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 	} else {
 		return newInt64ColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
@@ -1226,7 +1226,7 @@ func (t *timeType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 }
 
 func (t *timeType) NewDictionary(columnIndex, numValues int, data []byte) Dictionary {
-	if t.Unit.Millis != nil {
+	if t.useInt32() {
 		return newInt32Dictionary(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 	} else {
 		return newInt64Dictionary(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
@@ -1234,15 +1234,15 @@ func (t *timeType) NewDictionary(columnIndex, numValues int, data []byte) Dictio
 }
 
 func (t *timeType) NewPage(columnIndex, numValues int, data []byte) Page {
-	if t.Unit.Millis != nil {
-		return newInt32Page(makeColumnIndex(columnIndex), makeNumValues(numValues), data)
+	if t.useInt32() {
+		return newInt32Page(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 	} else {
-		return newInt64Page(makeColumnIndex(columnIndex), makeNumValues(numValues), data)
+		return newInt64Page(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 	}
 }
 
 func (t *timeType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
-	if t.Unit.Millis != nil {
+	if t.useInt32() {
 		return enc.EncodeInt32(dst, src)
 	} else {
 		return enc.EncodeInt64(dst, src)
@@ -1250,7 +1250,7 @@ func (t *timeType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error
 }
 
 func (t *timeType) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
-	if t.Unit.Millis != nil {
+	if t.useInt32() {
 		return enc.DecodeInt32(dst, src)
 	} else {
 		return enc.DecodeInt64(dst, src)
@@ -1306,7 +1306,7 @@ func (t *timestampType) NewDictionary(columnIndex, numValues int, data []byte) D
 }
 
 func (t *timestampType) NewPage(columnIndex, numValues int, data []byte) Page {
-	return newInt64Page(makeColumnIndex(columnIndex), makeNumValues(numValues), data)
+	return newInt64Page(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
 func (t *timestampType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
@@ -1469,7 +1469,7 @@ func (t *nullType) NewColumnBuffer(int, int) ColumnBuffer {
 }
 
 func (t *nullType) NewPage(columnIndex, numValues int, _ []byte) Page {
-	return newNullPage(makeColumnIndex(columnIndex), makeNumValues(numValues))
+	return newNullPage(t, makeColumnIndex(columnIndex), makeNumValues(numValues))
 }
 
 func (t *nullType) Encode(dst, _ []byte, _ encoding.Encoding) ([]byte, error) {

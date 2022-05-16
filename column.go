@@ -596,7 +596,8 @@ func (c *Column) decodeDataPage(header DataPageHeader, numValues int64, page *da
 
 	var newPage Page
 	if page.dictionary != nil {
-		newPage = newIndexedPage(page.dictionary, int16(c.index), int32(numValues), page.values)
+		indexedType := newIndexedType(pageType, page.dictionary)
+		newPage = newIndexedPage(indexedType, int16(c.index), int32(numValues), page.values)
 	} else {
 		newPage = pageType.NewPage(c.Index(), int(numValues), page.values)
 	}
