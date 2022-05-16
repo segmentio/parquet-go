@@ -925,7 +925,7 @@ func (t *indexedType) NewPage(columnIndex, numValues int, data []byte) Page {
 }
 
 // indexedPage is an implementation of the BufferedPage interface which stores
-// indexes instead of plain value. The indexes reference the value values in a
+// indexes instead of plain value. The indexes reference the values in a
 // dictionary that the page was created for.
 type indexedPage struct {
 	typ         *indexedType
