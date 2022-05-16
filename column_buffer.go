@@ -684,7 +684,7 @@ func newBooleanColumnBuffer(typ Type, columnIndex int16, bufferSize int) *boolea
 	return &booleanColumnBuffer{
 		booleanPage: booleanPage{
 			typ:         typ,
-			values:      make([]byte, 0, bufferSize),
+			bits:        make([]byte, 0, bufferSize),
 			columnIndex: ^columnIndex,
 		},
 	}
@@ -694,7 +694,7 @@ func (col *booleanColumnBuffer) Clone() ColumnBuffer {
 	return &booleanColumnBuffer{
 		booleanPage: booleanPage{
 			typ:         col.typ,
-			values:      append([]byte{}, col.values...),
+			bits:        append([]byte{}, col.bits...),
 			offset:      col.offset,
 			numValues:   col.numValues,
 			columnIndex: col.columnIndex,
@@ -719,12 +719,12 @@ func (col *booleanColumnBuffer) Pages() Pages { return onePage(col.Page()) }
 func (col *booleanColumnBuffer) Page() BufferedPage { return &col.booleanPage }
 
 func (col *booleanColumnBuffer) Reset() {
-	col.values = col.values[:0]
+	col.bits = col.bits[:0]
 	col.offset = 0
 	col.numValues = 0
 }
 
-func (col *booleanColumnBuffer) Cap() int { return 8 * cap(col.values) }
+func (col *booleanColumnBuffer) Cap() int { return 8 * cap(col.bits) }
 
 func (col *booleanColumnBuffer) Len() int { return int(col.numValues) }
 
@@ -737,7 +737,7 @@ func (col *booleanColumnBuffer) Less(i, j int) bool {
 func (col *booleanColumnBuffer) valueAt(i int) bool {
 	j := uint32(i) / 8
 	k := uint32(i) % 8
-	return ((col.values[j] >> k) & 1) != 0
+	return ((col.bits[j] >> k) & 1) != 0
 }
 
 func (col *booleanColumnBuffer) setValueAt(i int, v bool) {
@@ -748,7 +748,7 @@ func (col *booleanColumnBuffer) setValueAt(i int, v bool) {
 	if v {
 		x = 1
 	}
-	col.values[j] = (col.values[j] & ^(1 << k)) | (x << k)
+	col.bits[j] = (col.bits[j] & ^(1 << k)) | (x << k)
 }
 
 func (col *booleanColumnBuffer) Swap(i, j int) {
@@ -770,7 +770,7 @@ func (col *booleanColumnBuffer) WriteValues(values []Value) (int, error) {
 
 func (col *booleanColumnBuffer) writeValues(n int, f func(int) bool) {
 	for i := 0; i < n; i++ {
-		col.values = plain.AppendBoolean(col.values, int(col.numValues), f(i))
+		col.bits = plain.AppendBoolean(col.bits, int(col.numValues), f(i))
 		col.numValues++
 	}
 }

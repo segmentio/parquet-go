@@ -443,7 +443,7 @@ func (page *repeatedPage) Slice(i, j int64) BufferedPage {
 
 type booleanPage struct {
 	typ         Type
-	values      []byte
+	bits        []byte
 	offset      int32
 	numValues   int32
 	columnIndex int16
@@ -452,7 +452,7 @@ type booleanPage struct {
 func newBooleanPage(typ Type, columnIndex int16, numValues int32, values []byte) *booleanPage {
 	return &booleanPage{
 		typ:         typ,
-		values:      values[:bits.ByteCount(uint(numValues))],
+		bits:        values[:bits.ByteCount(uint(numValues))],
 		numValues:   numValues,
 		columnIndex: ^columnIndex,
 	}
@@ -470,13 +470,13 @@ func (page *booleanPage) NumValues() int64 { return int64(page.numValues) }
 
 func (page *booleanPage) NumNulls() int64 { return 0 }
 
-func (page *booleanPage) Size() int64 { return int64(len(page.values)) }
+func (page *booleanPage) Size() int64 { return int64(len(page.bits)) }
 
 func (page *booleanPage) RepetitionLevels() []byte { return nil }
 
 func (page *booleanPage) DefinitionLevels() []byte { return nil }
 
-func (page *booleanPage) Data() []byte { return page.values }
+func (page *booleanPage) Data() []byte { return page.bits }
 
 func (page *booleanPage) Values() ValueReader { return &booleanPageReader{page: page} }
 
@@ -485,7 +485,7 @@ func (page *booleanPage) Buffer() BufferedPage { return page }
 func (page *booleanPage) valueAt(i int) bool {
 	j := uint32(int(page.offset)+i) / 8
 	k := uint32(int(page.offset)+i) % 8
-	return ((page.values[j] >> k) & 1) != 0
+	return ((page.bits[j] >> k) & 1) != 0
 }
 
 func (page *booleanPage) min() bool {
@@ -538,7 +538,7 @@ func (page *booleanPage) Bounds() (min, max Value, ok bool) {
 func (page *booleanPage) Clone() BufferedPage {
 	return &booleanPage{
 		typ:         page.typ,
-		values:      append([]byte{}, page.values...),
+		bits:        append([]byte{}, page.bits...),
 		offset:      page.offset,
 		numValues:   page.numValues,
 		columnIndex: page.columnIndex,
@@ -555,7 +555,7 @@ func (page *booleanPage) Slice(i, j int64) BufferedPage {
 
 	return &booleanPage{
 		typ:         page.typ,
-		values:      page.values[off:end],
+		bits:        page.bits[off:end],
 		offset:      int32(i % 8),
 		numValues:   int32(j - i),
 		columnIndex: page.columnIndex,

@@ -68,7 +68,7 @@ func newBooleanDictionary(typ Type, columnIndex int16, numValues int32, values [
 	return &booleanDictionary{
 		booleanPage: booleanPage{
 			typ:         typ,
-			values:      values[:bits.ByteCount(uint(numValues))],
+			bits:        values[:bits.ByteCount(uint(numValues))],
 			numValues:   numValues,
 			columnIndex: ^columnIndex,
 		},
@@ -85,7 +85,7 @@ func (d *booleanDictionary) Insert(indexes []int32, values []Value) {
 	_ = indexes[:len(values)]
 
 	if d.index == nil {
-		d.index = make(map[bool]int32, cap(d.values))
+		d.index = make(map[bool]int32, cap(d.bits))
 		for i := 0; i < int(d.numValues); i++ {
 			d.index[d.valueAt(i)] = int32(i)
 		}
@@ -97,7 +97,7 @@ func (d *booleanDictionary) Insert(indexes []int32, values []Value) {
 		index, exists := d.index[value]
 		if !exists {
 			index = d.numValues
-			d.values = plain.AppendBoolean(d.values, int(index), value)
+			d.bits = plain.AppendBoolean(d.bits, int(index), value)
 			d.index[value] = index
 			d.numValues++
 		}
@@ -135,7 +135,7 @@ func (d *booleanDictionary) Bounds(indexes []int32) (min, max Value) {
 }
 
 func (d *booleanDictionary) Reset() {
-	d.values = d.values[:0]
+	d.bits = d.bits[:0]
 	d.offset = 0
 	d.numValues = 0
 	d.index = nil
