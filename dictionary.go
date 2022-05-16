@@ -939,7 +939,7 @@ type indexedPage struct {
 }
 
 func newIndexedPage(typ *indexedType, columnIndex int16, numValues int32, values []byte) *indexedPage {
-	// RLE encoded values that contains dictionary indexes in data pages are
+	// RLE encoded values that contain dictionary indexes in data pages are
 	// sometimes truncated when they contain only zeros. We account for this
 	// special case here and extend the values buffer if it is shorter than
 	// needed to hold `numValues`.
