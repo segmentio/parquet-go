@@ -48,7 +48,7 @@ type ValueReader interface {
 }
 
 // ValueReaderAt is an interface implemented by types that support reading
-// vlaues at offsets specified by the application.
+// values at offsets specified by the application.
 type ValueReaderAt interface {
 	ReadValuesAt([]Value, int64) (int, error)
 }
@@ -813,7 +813,7 @@ type BooleanWriter interface {
 	// Write boolean values.
 	//
 	// The method returns the number of values written, and any error that
-	// occured while writing the values.
+	// occurred while writing the values.
 	WriteBooleans(values []bool) (int, error)
 }
 
@@ -832,7 +832,7 @@ type Int32Writer interface {
 	// Write 32 bits signed integer values.
 	//
 	// The method returns the number of values written, and any error that
-	// occured while writing the values.
+	// occurred while writing the values.
 	WriteInt32s(values []int32) (int, error)
 }
 
@@ -851,7 +851,7 @@ type Int64Writer interface {
 	// Write 64 bits signed integer values.
 	//
 	// The method returns the number of values written, and any error that
-	// occured while writing the values.
+	// occurred while writing the values.
 	WriteInt64s(values []int64) (int, error)
 }
 
@@ -870,7 +870,7 @@ type Int96Writer interface {
 	// Write 96 bits signed integer values.
 	//
 	// The method returns the number of values written, and any error that
-	// occured while writing the values.
+	// occurred while writing the values.
 	WriteInt96s(values []deprecated.Int96) (int, error)
 }
 
@@ -890,7 +890,7 @@ type FloatWriter interface {
 	// Write single-precision floating point values.
 	//
 	// The method returns the number of values written, and any error that
-	// occured while writing the values.
+	// occurred while writing the values.
 	WriteFloats(values []float32) (int, error)
 }
 
@@ -910,7 +910,7 @@ type DoubleWriter interface {
 	// Write double-precision floating point values.
 	//
 	// The method returns the number of values written, and any error that
-	// occured while writing the values.
+	// occurred while writing the values.
 	WriteDoubles(values []float64) (int, error)
 }
 
@@ -939,7 +939,7 @@ type ByteArrayWriter interface {
 	// integer length.
 	//
 	// The method returns the number of values written to the underlying column
-	// (not the number of bytes), or any error that occured while attempting to
+	// (not the number of bytes), or any error that occurred while attempting to
 	// write the values.
 	WriteByteArrays(values []byte) (int, error)
 }

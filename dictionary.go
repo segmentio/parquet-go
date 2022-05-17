@@ -1048,7 +1048,7 @@ func (r *indexedPageValues) ReadValues(values []Value) (n int, err error) {
 	return n, err
 }
 
-// indexedCoumnBuffer is an implementation of the ColumnBuffer interface which
+// indexedColumnBuffer is an implementation of the ColumnBuffer interface which
 // builds a page of indexes into a parent dictionary when values are written.
 type indexedColumnBuffer struct{ indexedPage }
 
