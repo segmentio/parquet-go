@@ -691,14 +691,14 @@ func (wb *writerBuffers) reset() {
 
 func (wb *writerBuffers) encodeRepetitionLevels(page BufferedPage, maxRepetitionLevel byte) (err error) {
 	bitWidth := bits.Len8(maxRepetitionLevel)
-	encoding := &levelEncodings[bitWidth-1]
+	encoding := &levelEncodingsRLE[bitWidth-1]
 	wb.repetitions, err = encoding.EncodeLevels(wb.repetitions[:0], page.RepetitionLevels())
 	return err
 }
 
 func (wb *writerBuffers) encodeDefinitionLevels(page BufferedPage, maxDefinitionLevel byte) (err error) {
 	bitWidth := bits.Len8(maxDefinitionLevel)
-	encoding := &levelEncodings[bitWidth-1]
+	encoding := &levelEncodingsRLE[bitWidth-1]
 	wb.definitions, err = encoding.EncodeLevels(wb.definitions[:0], page.DefinitionLevels())
 	return err
 }

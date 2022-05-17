@@ -10,6 +10,7 @@ import (
 
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
+	"github.com/segmentio/parquet-go/encoding/bitpacked"
 	"github.com/segmentio/parquet-go/encoding/bytestreamsplit"
 	"github.com/segmentio/parquet-go/encoding/delta"
 	"github.com/segmentio/parquet-go/encoding/plain"
@@ -187,54 +188,21 @@ var fixedLenByteArrayTests = [...]struct {
 	{size: 8, data: []byte("ABCDEFGH")},
 }
 
-var encodings = [...]struct {
-	scenario string
-	encoding encoding.Encoding
-}{
-	{
-		scenario: "PLAIN",
-		encoding: new(plain.Encoding),
-	},
-
-	{
-		scenario: "RLE",
-		encoding: new(rle.Encoding),
-	},
-
-	{
-		scenario: "PLAIN_DICTIONARY",
-		encoding: new(plain.DictionaryEncoding),
-	},
-
-	{
-		scenario: "RLE_DICTIONARY",
-		encoding: new(rle.DictionaryEncoding),
-	},
-
-	{
-		scenario: "DELTA_BINARY_PACKED",
-		encoding: new(delta.BinaryPackedEncoding),
-	},
-
-	{
-		scenario: "DELTA_LENGTH_BYTE_ARRAY",
-		encoding: new(delta.LengthByteArrayEncoding),
-	},
-
-	{
-		scenario: "DELTA_BYTE_ARRAY",
-		encoding: new(delta.ByteArrayEncoding),
-	},
-
-	{
-		scenario: "BYTE_STREAM_SPLIT",
-		encoding: new(bytestreamsplit.Encoding),
-	},
+var encodings = [...]encoding.Encoding{
+	new(plain.Encoding),
+	new(rle.Encoding),
+	new(bitpacked.Encoding),
+	new(plain.DictionaryEncoding),
+	new(rle.DictionaryEncoding),
+	new(delta.BinaryPackedEncoding),
+	new(delta.LengthByteArrayEncoding),
+	new(delta.ByteArrayEncoding),
+	new(bytestreamsplit.Encoding),
 }
 
 func TestEncoding(t *testing.T) {
-	for _, test := range encodings {
-		t.Run(test.scenario, func(t *testing.T) { testEncoding(t, test.encoding) })
+	for _, encoding := range encodings {
+		t.Run(encoding.String(), func(t *testing.T) { testEncoding(t, encoding) })
 	}
 }
 
@@ -292,9 +260,12 @@ func testEncoding(t *testing.T, e encoding.Encoding) {
 	}
 }
 
-func setBitWidth(e encoding.Encoding, bitWidth int) {
-	if r, ok := e.(*rle.Encoding); ok {
-		r.BitWidth = bitWidth
+func setBitWidth(enc encoding.Encoding, bitWidth int) {
+	switch e := enc.(type) {
+	case *rle.Encoding:
+		e.BitWidth = bitWidth
+	case *bitpacked.Encoding:
+		e.BitWidth = bitWidth
 	}
 }
 
@@ -341,7 +312,7 @@ func testLevelsEncoding(t *testing.T, e encoding.Encoding) {
 			assertNoError(t, err)
 			values, err = e.DecodeLevels(values, buffer)
 			assertNoError(t, err)
-			assertBytesEqual(t, test, values)
+			assertBytesEqual(t, test, values[:len(test)])
 		})
 	}
 }
@@ -546,8 +517,8 @@ func newRand() *rand.Rand {
 }
 
 func BenchmarkEncode(b *testing.B) {
-	for _, test := range encodings {
-		b.Run(test.scenario, func(b *testing.B) { benchmarkEncode(b, test.encoding) })
+	for _, encoding := range encodings {
+		b.Run(encoding.String(), func(b *testing.B) { benchmarkEncode(b, encoding) })
 	}
 }
 
@@ -695,8 +666,8 @@ func benchmarkEncodeFixedLenByteArray(b *testing.B, e encoding.Encoding) {
 }
 
 func BenchmarkDecode(b *testing.B) {
-	for _, test := range encodings {
-		b.Run(test.scenario, func(b *testing.B) { benchmarkDecode(b, test.encoding) })
+	for _, encoding := range encodings {
+		b.Run(encoding.String(), func(b *testing.B) { benchmarkDecode(b, encoding) })
 	}
 }
 
