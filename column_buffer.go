@@ -228,7 +228,7 @@ func (col *optionalColumnBuffer) Reset() {
 }
 
 func (col *optionalColumnBuffer) Size() int64 {
-	return sizeOfInt32(col.rows) + sizeOfInt32(col.sortIndex) + int64(len(col.definitionLevels)) + col.base.Size()
+	return int64(4*len(col.rows)+4*len(col.sortIndex)+len(col.definitionLevels)) + col.base.Size()
 }
 
 func (col *optionalColumnBuffer) Cap() int { return cap(col.rows) }

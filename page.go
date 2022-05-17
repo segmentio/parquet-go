@@ -175,18 +175,6 @@ func CopyPages(dst PageWriter, src PageReader) (numValues int64, err error) {
 	}
 }
 
-func sizeOfBool(data []bool) int64 { return 1 * int64(len(data)) }
-
-func sizeOfInt32(data []int32) int64 { return 4 * int64(len(data)) }
-
-func sizeOfInt64(data []int64) int64 { return 8 * int64(len(data)) }
-
-func sizeOfInt96(data []deprecated.Int96) int64 { return 12 * int64(len(data)) }
-
-func sizeOfFloat32(data []float32) int64 { return 4 * int64(len(data)) }
-
-func sizeOfFloat64(data []float64) int64 { return 8 * int64(len(data)) }
-
 func forEachPageSlice(page BufferedPage, wantSize int64, do func(BufferedPage) error) error {
 	numRows := page.NumRows()
 	if numRows == 0 {

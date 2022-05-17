@@ -977,7 +977,7 @@ func (page *indexedPage) NumValues() int64 { return int64(len(page.values)) }
 
 func (page *indexedPage) NumNulls() int64 { return 0 }
 
-func (page *indexedPage) Size() int64 { return sizeOfInt32(page.values) }
+func (page *indexedPage) Size() int64 { return 4 * int64(len(page.values)) }
 
 func (page *indexedPage) RepetitionLevels() []byte { return nil }
 
