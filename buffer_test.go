@@ -356,9 +356,7 @@ func TestBufferGenerateBloomFilters(t *testing.T) {
 		for i := range rows {
 			buffer.Write(&rows[i])
 		}
-		bufferRows := buffer.Rows()
-		_, err := parquet.CopyRows(writer, bufferRows)
-		bufferRows.Close()
+		_, err := copyRowsAndClose(writer, buffer.Rows())
 		if err != nil {
 			t.Error(err)
 			return false

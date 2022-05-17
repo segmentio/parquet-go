@@ -232,7 +232,9 @@ func (buf *Buffer) WriteRowGroup(rowGroup RowGroup) (int64, error) {
 		return 0, ErrRowGroupSortingColumnsMismatch
 	}
 	n := buf.NumRows()
-	_, err := CopyRows(bufferWriter{buf}, rowGroup.Rows())
+	r := rowGroup.Rows()
+	defer r.Close()
+	_, err := CopyRows(bufferWriter{buf}, r)
 	return buf.NumRows() - n, err
 }
 

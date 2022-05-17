@@ -274,11 +274,22 @@ func (r *reader) init(schema *Schema, rowGroup RowGroup) {
 }
 
 func (r *reader) Reset() {
+	r.rowIndex = 0
+
+	if rows, _ := r.rows.(*rowGroupRows); rows != nil {
+		// This optimization works for the common case where the underlying type
+		// of the Rows instance is rowGroupRows, which should be true in most
+		// cases since even external implementations of the RowGroup interface
+		// can constructs values of this type via the NewRowGroupRowReader
+		// function.
+		rows.reset()
+		return
+	}
+
 	if r.rows != nil {
 		r.rows.Close()
+		r.rows = nil
 	}
-	r.rows = nil // TODO: can we make the RowReader reusable?
-	r.rowIndex = 0
 }
 
 func (r *reader) ReadRow(row Row) (Row, error) {

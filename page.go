@@ -59,7 +59,7 @@ type Page interface {
 	// like parquet.Int32Reader. Applications should use type assertions on
 	// the returned reader to determine whether those optimizations are
 	// available.
-	Values() PageValues
+	Values() ValueReader
 
 	// Buffer returns the page as a BufferedPage, which may be the page itself
 	// if it was already buffered.
@@ -145,20 +145,9 @@ type Pages interface {
 	io.Closer
 }
 
-// PageValues represents a closeable sequence of values read from a page.
-type PageValues interface {
-	ValueReader
-	io.Closer
-}
-
 func copyPagesAndClose(w PageWriter, r Pages) (int64, error) {
 	defer r.Close()
 	return CopyPages(w, r)
-}
-
-func copyPageValuesAndClose(w ValueWriter, r PageValues) (int64, error) {
-	defer r.Close()
-	return CopyValues(w, r)
 }
 
 type singlePage struct {
@@ -274,7 +263,7 @@ func (page *errorPage) Size() int64                       { return 1 }
 func (page *errorPage) RepetitionLevels() []byte          { return nil }
 func (page *errorPage) DefinitionLevels() []byte          { return nil }
 func (page *errorPage) Data() []byte                      { return nil }
-func (page *errorPage) Values() PageValues                { return errorPageValues{page: page} }
+func (page *errorPage) Values() ValueReader               { return errorPageValues{page: page} }
 func (page *errorPage) Buffer() BufferedPage              { return page }
 
 type errorPageValues struct{ page *errorPage }
@@ -352,7 +341,7 @@ func (page *optionalPage) DefinitionLevels() []byte { return page.definitionLeve
 
 func (page *optionalPage) Data() []byte { return page.base.Data() }
 
-func (page *optionalPage) Values() PageValues {
+func (page *optionalPage) Values() ValueReader {
 	return &optionalPageValues{
 		page:   page,
 		values: page.base.Values(),
@@ -423,7 +412,7 @@ func (page *repeatedPage) DefinitionLevels() []byte { return page.definitionLeve
 
 func (page *repeatedPage) Data() []byte { return page.base.Data() }
 
-func (page *repeatedPage) Values() PageValues {
+func (page *repeatedPage) Values() ValueReader {
 	return &repeatedPageValues{
 		page:   page,
 		values: page.base.Values(),
@@ -522,7 +511,7 @@ func (page *booleanPage) DefinitionLevels() []byte { return nil }
 
 func (page *booleanPage) Data() []byte { return page.bits }
 
-func (page *booleanPage) Values() PageValues { return &booleanPageValues{page: page} }
+func (page *booleanPage) Values() ValueReader { return &booleanPageValues{page: page} }
 
 func (page *booleanPage) Buffer() BufferedPage { return page }
 
@@ -640,7 +629,7 @@ func (page *int32Page) DefinitionLevels() []byte { return nil }
 
 func (page *int32Page) Data() []byte { return bits.Int32ToBytes(page.values) }
 
-func (page *int32Page) Values() PageValues { return &int32PageValues{page: page} }
+func (page *int32Page) Values() ValueReader { return &int32PageValues{page: page} }
 
 func (page *int32Page) Buffer() BufferedPage { return page }
 
@@ -709,7 +698,7 @@ func (page *int64Page) DefinitionLevels() []byte { return nil }
 
 func (page *int64Page) Data() []byte { return bits.Int64ToBytes(page.values) }
 
-func (page *int64Page) Values() PageValues { return &int64PageValues{page: page} }
+func (page *int64Page) Values() ValueReader { return &int64PageValues{page: page} }
 
 func (page *int64Page) Buffer() BufferedPage { return page }
 
@@ -778,7 +767,7 @@ func (page *int96Page) DefinitionLevels() []byte { return nil }
 
 func (page *int96Page) Data() []byte { return deprecated.Int96ToBytes(page.values) }
 
-func (page *int96Page) Values() PageValues { return &int96PageValues{page: page} }
+func (page *int96Page) Values() ValueReader { return &int96PageValues{page: page} }
 
 func (page *int96Page) Buffer() BufferedPage { return page }
 
@@ -849,7 +838,7 @@ func (page *floatPage) DefinitionLevels() []byte { return nil }
 
 func (page *floatPage) Data() []byte { return bits.Float32ToBytes(page.values) }
 
-func (page *floatPage) Values() PageValues { return &floatPageValues{page: page} }
+func (page *floatPage) Values() ValueReader { return &floatPageValues{page: page} }
 
 func (page *floatPage) Buffer() BufferedPage { return page }
 
@@ -918,7 +907,7 @@ func (page *doublePage) DefinitionLevels() []byte { return nil }
 
 func (page *doublePage) Data() []byte { return bits.Float64ToBytes(page.values) }
 
-func (page *doublePage) Values() PageValues { return &doublePageValues{page: page} }
+func (page *doublePage) Values() ValueReader { return &doublePageValues{page: page} }
 
 func (page *doublePage) Buffer() BufferedPage { return page }
 
@@ -989,7 +978,7 @@ func (page *byteArrayPage) DefinitionLevels() []byte { return nil }
 
 func (page *byteArrayPage) Data() []byte { return page.values }
 
-func (page *byteArrayPage) Values() PageValues { return &byteArrayPageValues{page: page} }
+func (page *byteArrayPage) Values() ValueReader { return &byteArrayPageValues{page: page} }
 
 func (page *byteArrayPage) Buffer() BufferedPage { return page }
 
@@ -1151,7 +1140,7 @@ func (page *fixedLenByteArrayPage) DefinitionLevels() []byte { return nil }
 
 func (page *fixedLenByteArrayPage) Data() []byte { return page.data }
 
-func (page *fixedLenByteArrayPage) Values() PageValues {
+func (page *fixedLenByteArrayPage) Values() ValueReader {
 	return &fixedLenByteArrayPageValues{page: page}
 }
 
@@ -1230,7 +1219,7 @@ func (page *uint32Page) DefinitionLevels() []byte { return nil }
 
 func (page *uint32Page) Data() []byte { return bits.Uint32ToBytes(page.values) }
 
-func (page *uint32Page) Values() PageValues { return &uint32PageValues{page: page} }
+func (page *uint32Page) Values() ValueReader { return &uint32PageValues{page: page} }
 
 func (page *uint32Page) Buffer() BufferedPage { return page }
 
@@ -1299,7 +1288,7 @@ func (page *uint64Page) DefinitionLevels() []byte { return nil }
 
 func (page *uint64Page) Data() []byte { return bits.Uint64ToBytes(page.values) }
 
-func (page *uint64Page) Values() PageValues { return &uint64PageValues{page: page} }
+func (page *uint64Page) Values() ValueReader { return &uint64PageValues{page: page} }
 
 func (page *uint64Page) Buffer() BufferedPage { return page }
 
@@ -1356,7 +1345,7 @@ func (page *nullPage) NumValues() int64                  { return int64(page.cou
 func (page *nullPage) NumNulls() int64                   { return int64(page.count) }
 func (page *nullPage) Bounds() (min, max Value, ok bool) { return }
 func (page *nullPage) Size() int64                       { return 1 }
-func (page *nullPage) Values() PageValues {
+func (page *nullPage) Values() ValueReader {
 	return &nullPageValues{column: page.column, remain: page.count}
 }
 func (page *nullPage) Buffer() BufferedPage { return page }

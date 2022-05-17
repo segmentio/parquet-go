@@ -46,39 +46,27 @@ type columnChunkReader struct {
 	buffer []Value     // buffer holding values read from the pages
 	// The rest of the fields are used to manage the state of the reader as it
 	// consumes values from the underlying pages.
-	offset int        // offset of the next value in the buffer
-	page   Page       // current page where values are being read from
-	pages  Pages      // reader of column pages
-	values PageValues // reader for values from the current page
+	offset int         // offset of the next value in the buffer
+	page   Page        // current page where values are being read from
+	reader Pages       // reader of column pages
+	values ValueReader // reader for values from the current page
 }
 
 func (r *columnChunkReader) buffered() int {
 	return len(r.buffer) - r.offset
 }
 
-func (r *columnChunkReader) close() error {
-	var lastErr error
-
-	if r.values != nil {
-		if err := r.values.Close(); err != nil {
-			lastErr = err
-		}
+func (r *columnChunkReader) close() (err error) {
+	if r.reader != nil {
+		err = r.reader.Close()
 	}
-
-	if r.pages != nil {
-		if err := r.pages.Close(); err != nil {
-			lastErr = err
-		}
-	}
-
 	clearValues(r.buffer)
-	r.column = nil
 	r.buffer = r.buffer[:0]
 	r.offset = 0
 	r.page = nil
-	r.pages = nil
+	r.reader = nil
 	r.values = nil
-	return lastErr
+	return err
 }
 
 func (r *columnChunkReader) seekToRow(rowIndex int64) error {
@@ -91,16 +79,16 @@ func (r *columnChunkReader) seekToRow(rowIndex int64) error {
 	r.page = nil
 	r.values = nil
 
-	if r.pages == nil {
+	if r.reader == nil {
 		if r.column != nil {
-			r.pages = r.column.Pages()
+			r.reader = r.column.Pages()
 		}
 	}
 
-	if r.pages != nil {
-		if err := r.pages.SeekToRow(rowIndex); err != nil {
-			r.pages.Close()
-			r.pages = nil
+	if r.reader != nil {
+		if err := r.reader.SeekToRow(rowIndex); err != nil {
+			r.reader.Close()
+			r.reader = nil
 			r.column = nil
 			return err
 		}
@@ -112,14 +100,14 @@ func (r *columnChunkReader) readPage() (err error) {
 	if r.page != nil {
 		return nil
 	}
-	if r.pages == nil {
+	if r.reader == nil {
 		if r.column == nil {
 			return io.EOF
 		}
-		r.pages = r.column.Pages()
+		r.reader = r.column.Pages()
 	}
 	for {
-		p, err := r.pages.ReadPage()
+		p, err := r.reader.ReadPage()
 		if err != nil {
 			return err
 		}
@@ -154,7 +142,6 @@ func (r *columnChunkReader) readValuesFromCurrentPage() error {
 	}
 	n, err := r.values.ReadValues(r.buffer[:cap(r.buffer)])
 	if errors.Is(err, io.EOF) {
-		err = r.values.Close()
 		r.page, r.values = nil, nil
 	}
 	if n > 0 {
@@ -219,7 +206,7 @@ func (r *columnChunkReader) writeRowsTo(w pageAndValueWriter, limit int64) (numR
 		r.offset = 0
 
 		for numRows < limit {
-			p, err := r.pages.ReadPage()
+			p, err := r.reader.ReadPage()
 			if err != nil {
 				return numRows, err
 			}
@@ -241,9 +228,6 @@ func (r *columnChunkReader) writeRowsTo(w pageAndValueWriter, limit int64) (numR
 					break
 				}
 				if errors.Is(err, io.EOF) {
-					if err := r.values.Close(); err != nil {
-						return numRows, err
-					}
 					// The page contained no values? Unclear if this is valid but
 					// we can handle it by reading the next page.
 					r.values = nil

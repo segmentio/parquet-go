@@ -38,8 +38,7 @@ func forEachLeafColumn(col *parquet.Column, do func(*parquet.Column) error) erro
 	return nil
 }
 
-func forEachPage(pages parquet.Pages, do func(parquet.Page) error) error {
-	defer pages.Close()
+func forEachPage(pages parquet.PageReader, do func(parquet.Page) error) error {
 	for {
 		p, err := pages.ReadPage()
 		if err != nil {
@@ -54,8 +53,7 @@ func forEachPage(pages parquet.Pages, do func(parquet.Page) error) error {
 	}
 }
 
-func forEachPageValue(values parquet.PageValues, do func(parquet.Value) error) error {
-	defer values.Close()
+func forEachValue(values parquet.ValueReader, do func(parquet.Value) error) error {
 	buffer := [3]parquet.Value{}
 	for {
 		n, err := values.ReadValues(buffer[:])
@@ -75,13 +73,15 @@ func forEachPageValue(values parquet.PageValues, do func(parquet.Value) error) e
 
 func forEachColumnPage(col *parquet.Column, do func(*parquet.Column, parquet.Page) error) error {
 	return forEachLeafColumn(col, func(leaf *parquet.Column) error {
-		return forEachPage(leaf.Pages(), func(page parquet.Page) error { return do(leaf, page) })
+		pages := leaf.Pages()
+		defer pages.Close()
+		return forEachPage(pages, func(page parquet.Page) error { return do(leaf, page) })
 	})
 }
 
 func forEachColumnValue(col *parquet.Column, do func(*parquet.Column, parquet.Value) error) error {
 	return forEachColumnPage(col, func(leaf *parquet.Column, page parquet.Page) error {
-		return forEachPageValue(page.Values(), func(value parquet.Value) error { return do(leaf, value) })
+		return forEachValue(page.Values(), func(value parquet.Value) error { return do(leaf, value) })
 	})
 }
 
@@ -128,7 +128,7 @@ func writeParquetFileWithBuffer(w io.Writer, rows rows, options ...parquet.Write
 	}
 
 	writer := parquet.NewWriter(w, options...)
-	numRows, err := parquet.CopyRows(writer, buffer.Rows())
+	numRows, err := copyRowsAndClose(writer, buffer.Rows())
 	if err != nil {
 		return err
 	}
@@ -198,4 +198,9 @@ func randValueFuncOf(t parquet.Type) func(*rand.Rand) parquet.Value {
 	default:
 		panic("NOT IMPLEMENTED")
 	}
+}
+
+func copyRowsAndClose(w parquet.RowWriter, r parquet.Rows) (int64, error) {
+	defer r.Close()
+	return parquet.CopyRows(w, r)
 }

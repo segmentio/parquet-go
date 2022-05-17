@@ -52,6 +52,11 @@ type RowGroup interface {
 
 // Rows is an interface implemented by row readers returned by calling the Rows
 // method of RowGroup instances.
+//
+// Applications should call Close when they are done using a Rows instance in
+// order to release the underlying resources held by the row sequence.
+//
+// After calling Close, all attempts to read more rows will return io.EOF.
 type Rows interface {
 	RowReaderWithSchema
 	RowSeeker
@@ -269,6 +274,16 @@ func (r *rowGroupRows) init(rowGroup RowGroup) error {
 		return r.SeekToRow(r.seek)
 	}
 	return nil
+}
+
+func (r *rowGroupRows) reset() {
+	for i := range r.columns {
+		// Ignore errors because we are resetting the reader, if the error
+		// persists we will see it on the next read, and otherwise we can
+		// read back from the beginning.
+		r.columns[i].close()
+	}
+	r.seek = 0
 }
 
 func (r *rowGroupRows) Close() error {

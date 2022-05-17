@@ -10,7 +10,7 @@ import (
 
 type optionalPageValues struct {
 	page   *optionalPage
-	values PageValues
+	values ValueReader
 	offset int
 }
 
@@ -55,14 +55,9 @@ func (r *optionalPageValues) ReadValues(values []Value) (n int, err error) {
 	return n, err
 }
 
-func (r *optionalPageValues) Close() error {
-	r.offset = len(r.page.definitionLevels)
-	return r.values.Close()
-}
-
 type repeatedPageValues struct {
 	page   *repeatedPage
-	values PageValues
+	values ValueReader
 	offset int
 }
 
@@ -108,11 +103,6 @@ func (r *repeatedPageValues) ReadValues(values []Value) (n int, err error) {
 	return n, err
 }
 
-func (r *repeatedPageValues) Close() error {
-	r.offset = len(r.page.definitionLevels)
-	return r.values.Close()
-}
-
 type booleanPageValues struct {
 	page   *booleanPage
 	offset int
@@ -141,11 +131,6 @@ func (r *booleanPageValues) ReadValues(values []Value) (n int, err error) {
 		err = io.EOF
 	}
 	return n, err
-}
-
-func (r *booleanPageValues) Close() error {
-	r.offset = int(r.page.numValues)
-	return nil
 }
 
 type int32PageValues struct {
@@ -180,11 +165,6 @@ func (r *int32PageValues) ReadValues(values []Value) (n int, err error) {
 	return n, err
 }
 
-func (r *int32PageValues) Close() error {
-	r.offset = len(r.page.values)
-	return nil
-}
-
 type int64PageValues struct {
 	page   *int64Page
 	offset int
@@ -215,11 +195,6 @@ func (r *int64PageValues) ReadValues(values []Value) (n int, err error) {
 		err = io.EOF
 	}
 	return n, err
-}
-
-func (r *int64PageValues) Close() error {
-	r.offset = len(r.page.values)
-	return nil
 }
 
 type int96PageValues struct {
@@ -254,11 +229,6 @@ func (r *int96PageValues) ReadValues(values []Value) (n int, err error) {
 	return n, err
 }
 
-func (r *int96PageValues) Close() error {
-	r.offset = len(r.page.values)
-	return nil
-}
-
 type floatPageValues struct {
 	page   *floatPage
 	offset int
@@ -291,11 +261,6 @@ func (r *floatPageValues) ReadValues(values []Value) (n int, err error) {
 	return n, err
 }
 
-func (r *floatPageValues) Close() error {
-	r.offset = len(r.page.values)
-	return nil
-}
-
 type doublePageValues struct {
 	page   *doublePage
 	offset int
@@ -326,11 +291,6 @@ func (r *doublePageValues) ReadValues(values []Value) (n int, err error) {
 		err = io.EOF
 	}
 	return n, err
-}
-
-func (r *doublePageValues) Close() error {
-	r.offset = len(r.page.values)
-	return nil
 }
 
 type byteArrayPageValues struct {
@@ -389,11 +349,6 @@ func (r *byteArrayPageValues) ReadValues(values []Value) (n int, err error) {
 	return n, err
 }
 
-func (r *byteArrayPageValues) Close() error {
-	r.offset = len(r.page.values)
-	return nil
-}
-
 type fixedLenByteArrayPageValues struct {
 	page   *fixedLenByteArrayPage
 	offset int
@@ -432,11 +387,6 @@ func (r *fixedLenByteArrayPageValues) ReadValues(values []Value) (n int, err err
 	return n, err
 }
 
-func (r *fixedLenByteArrayPageValues) Close() error {
-	r.offset = len(r.page.data)
-	return nil
-}
-
 type uint32PageValues struct {
 	page   *uint32Page
 	offset int
@@ -467,11 +417,6 @@ func (r *uint32PageValues) ReadValues(values []Value) (n int, err error) {
 		err = io.EOF
 	}
 	return n, err
-}
-
-func (r *uint32PageValues) Close() error {
-	r.offset = len(r.page.values)
-	return nil
 }
 
 type uint64PageValues struct {
@@ -506,11 +451,6 @@ func (r *uint64PageValues) ReadValues(values []Value) (n int, err error) {
 	return n, err
 }
 
-func (r *uint64PageValues) Close() error {
-	r.offset = len(r.page.values)
-	return nil
-}
-
 type nullPageValues struct {
 	column int
 	remain int
@@ -527,9 +467,4 @@ func (r *nullPageValues) ReadValues(values []Value) (n int, err error) {
 		err = io.EOF
 	}
 	return len(values), err
-}
-
-func (r *nullPageValues) Close() error {
-	r.remain = 0
-	return nil
 }

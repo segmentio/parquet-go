@@ -227,6 +227,7 @@ func PrintRowGroup(w io.Writer, rowGroup RowGroup) error {
 	cells := make([]string, 0, len(columns))
 	parts := make([]string, 0)
 	rows := rowGroup.Rows()
+	defer rows.Close()
 	for {
 		if row, err = rows.ReadRow(row[:0]); err != nil {
 			if !errors.Is(err, io.EOF) {

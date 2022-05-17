@@ -403,6 +403,7 @@ func TestOptionalPageTrailingNulls(t *testing.T) {
 
 	resultRows := []parquet.Row{}
 	reader := buffer.Rows()
+	defer reader.Close()
 	for {
 		row, err := reader.ReadRow(nil)
 		if err != nil {
@@ -427,7 +428,10 @@ func TestOptionalPagePreserveIndex(t *testing.T) {
 		t.Fatal("writing row:", err)
 	}
 
-	row, err := buffer.Rows().ReadRow(nil)
+	rows := buffer.Rows()
+	defer rows.Close()
+
+	row, err := rows.ReadRow(nil)
 	if err != nil {
 		t.Fatal("reading rows:", err)
 	}
@@ -461,6 +465,7 @@ func TestRepeatedPageTrailingNulls(t *testing.T) {
 
 	resultRows := []parquet.Row{}
 	reader := buf.Rows()
+	defer reader.Close()
 	for {
 		row, err := reader.ReadRow(nil)
 		if err != nil {

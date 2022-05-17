@@ -985,7 +985,7 @@ func (page *indexedPage) DefinitionLevels() []byte { return nil }
 
 func (page *indexedPage) Data() []byte { return bits.Int32ToBytes(page.values) }
 
-func (page *indexedPage) Values() PageValues { return &indexedPageValues{page: page} }
+func (page *indexedPage) Values() ValueReader { return &indexedPageValues{page: page} }
 
 func (page *indexedPage) Buffer() BufferedPage { return page }
 
@@ -1046,11 +1046,6 @@ func (r *indexedPageValues) ReadValues(values []Value) (n int, err error) {
 		err = io.EOF
 	}
 	return n, err
-}
-
-func (r *indexedPageValues) Close() error {
-	r.offset = len(r.page.values)
-	return nil
 }
 
 // indexedCoumnBuffer is an implementation of the ColumnBuffer interface which

@@ -146,7 +146,10 @@ func checkColumnChunkColumnIndex(columnChunk parquet.ColumnChunk) error {
 	numPages := columnIndex.NumPages()
 	pagesRead := 0
 	stats := newColumnStats(columnType)
-	err := forEachPage(columnChunk.Pages(), func(page parquet.Page) error {
+	pages := columnChunk.Pages()
+	defer pages.Close()
+
+	err := forEachPage(pages, func(page parquet.Page) error {
 		pageMin, pageMax, hasBounds := page.Bounds()
 		if !hasBounds {
 			return fmt.Errorf("page bounds are missing")
@@ -163,7 +166,7 @@ func checkColumnChunkColumnIndex(columnChunk parquet.ColumnChunk) error {
 
 		numNulls := int64(0)
 		numValues := int64(0)
-		err := forEachPageValue(page.Values(), func(value parquet.Value) error {
+		err := forEachValue(page.Values(), func(value parquet.Value) error {
 			stats.observe(value)
 			if value.IsNull() {
 				numNulls++
@@ -230,7 +233,10 @@ func checkColumnChunkOffsetIndex(columnChunk parquet.ColumnChunk) error {
 	pagesRead := 0
 	rowIndex := int64(0)
 
-	err := forEachPage(columnChunk.Pages(), func(page parquet.Page) error {
+	pages := columnChunk.Pages()
+	defer pages.Close()
+
+	err := forEachPage(pages, func(page parquet.Page) error {
 		if firstRowIndex := offsetIndex.FirstRowIndex(pagesRead); firstRowIndex != rowIndex {
 			return fmt.Errorf("row number mismatch: index=%d page=%d", firstRowIndex, rowIndex)
 		}
