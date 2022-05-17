@@ -232,7 +232,9 @@ func (buf *Buffer) WriteRowGroup(rowGroup RowGroup) (int64, error) {
 		return 0, ErrRowGroupSortingColumnsMismatch
 	}
 	n := buf.NumRows()
-	_, err := CopyRows(bufferWriter{buf}, rowGroup.Rows())
+	r := rowGroup.Rows()
+	defer r.Close()
+	_, err := CopyRows(bufferWriter{buf}, r)
 	return buf.NumRows() - n, err
 }
 
@@ -240,7 +242,7 @@ func (buf *Buffer) WriteRowGroup(rowGroup RowGroup) (int64, error) {
 //
 // The buffer and the returned reader share memory. Mutating the buffer
 // concurrently to reading rows may result in non-deterministic behavior.
-func (buf *Buffer) Rows() Rows { return &rowGroupRowReader{rowGroup: buf} }
+func (buf *Buffer) Rows() Rows { return &rowGroupRows{rowGroup: buf} }
 
 // bufferWriter is an adapter for Buffer which implements both RowWriter and
 // PageWriter to enable optimizations in CopyRows for types that support writing

@@ -110,39 +110,53 @@ type columnPages struct {
 	index int
 }
 
-func (r *columnPages) ReadPage() (Page, error) {
+func (c *columnPages) ReadPage() (Page, error) {
 	for {
-		if r.index >= len(r.pages) {
+		if c.index >= len(c.pages) {
 			return nil, io.EOF
 		}
-		p, err := r.pages[r.index].ReadPage()
+		p, err := c.pages[c.index].ReadPage()
 		if err == nil || err != io.EOF {
 			return p, err
 		}
-		r.index++
+		c.index++
 	}
 }
 
-func (r *columnPages) SeekToRow(rowIndex int64) error {
-	r.index = 0
+func (c *columnPages) SeekToRow(rowIndex int64) error {
+	c.index = 0
 
-	for r.index < len(r.pages) && r.pages[r.index].chunk.rowGroup.NumRows >= rowIndex {
-		rowIndex -= r.pages[r.index].chunk.rowGroup.NumRows
-		r.index++
+	for c.index < len(c.pages) && c.pages[c.index].chunk.rowGroup.NumRows >= rowIndex {
+		rowIndex -= c.pages[c.index].chunk.rowGroup.NumRows
+		c.index++
 	}
 
-	if r.index < len(r.pages) {
-		if err := r.pages[r.index].SeekToRow(rowIndex); err != nil {
+	if c.index < len(c.pages) {
+		if err := c.pages[c.index].SeekToRow(rowIndex); err != nil {
 			return err
 		}
-		for i := range r.pages[r.index:] {
-			p := &r.pages[r.index+i]
+		for i := range c.pages[c.index:] {
+			p := &c.pages[c.index+i]
 			if err := p.SeekToRow(0); err != nil {
 				return err
 			}
 		}
 	}
 	return nil
+}
+
+func (c *columnPages) Close() error {
+	var lastErr error
+
+	for i := range c.pages {
+		if err := c.pages[i].Close(); err != nil {
+			lastErr = err
+		}
+	}
+
+	c.pages = nil
+	c.index = 0
+	return lastErr
 }
 
 // Depth returns the position of the column relative to the root.
@@ -476,12 +490,24 @@ type dictPage struct {
 	values []byte
 }
 
+func (p *dictPage) reset() {
+	p.values = p.values[:0]
+}
+
 type dataPage struct {
 	repetitionLevels []byte
 	definitionLevels []byte
 	data             []byte
 	values           []byte
 	dictionary       Dictionary
+}
+
+func (p *dataPage) reset() {
+	p.repetitionLevels = p.repetitionLevels[:0]
+	p.definitionLevels = p.definitionLevels[:0]
+	p.data = p.data[:0]
+	p.values = p.values[:0]
+	p.dictionary = nil
 }
 
 func (p *dataPage) decompress(codec compress.Codec, data []byte) (err error) {

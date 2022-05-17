@@ -73,7 +73,9 @@ func forEachValue(values parquet.ValueReader, do func(parquet.Value) error) erro
 
 func forEachColumnPage(col *parquet.Column, do func(*parquet.Column, parquet.Page) error) error {
 	return forEachLeafColumn(col, func(leaf *parquet.Column) error {
-		return forEachPage(leaf.Pages(), func(page parquet.Page) error { return do(leaf, page) })
+		pages := leaf.Pages()
+		defer pages.Close()
+		return forEachPage(pages, func(page parquet.Page) error { return do(leaf, page) })
 	})
 }
 
@@ -126,7 +128,7 @@ func writeParquetFileWithBuffer(w io.Writer, rows rows, options ...parquet.Write
 	}
 
 	writer := parquet.NewWriter(w, options...)
-	numRows, err := parquet.CopyRows(writer, buffer.Rows())
+	numRows, err := copyRowsAndClose(writer, buffer.Rows())
 	if err != nil {
 		return err
 	}
@@ -196,4 +198,9 @@ func randValueFuncOf(t parquet.Type) func(*rand.Rand) parquet.Value {
 	default:
 		panic("NOT IMPLEMENTED")
 	}
+}
+
+func copyRowsAndClose(w parquet.RowWriter, r parquet.Rows) (int64, error) {
+	defer r.Close()
+	return parquet.CopyRows(w, r)
 }

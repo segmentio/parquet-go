@@ -345,10 +345,6 @@ func (col *optionalColumnBuffer) ReadValuesAt(values []Value, offset int64) (int
 	return int(length), nil
 }
 
-func (col *optionalColumnBuffer) Values() ValueReader {
-	return &optionalPageReader{page: col.Page().(*optionalPage)}
-}
-
 // repeatedColumnBuffer is an implementation of the ColumnBuffer interface used
 // as a wrapper to an underlying ColumnBuffer to manage the creation of
 // repetition levels, definition levels, and map rows to the region of the
@@ -629,10 +625,6 @@ func (col *repeatedColumnBuffer) writeRow(row []Value) error {
 func (col *repeatedColumnBuffer) ReadValuesAt(values []Value, offset int64) (int, error) {
 	// TODO:
 	panic("NOT IMPLEMENTED")
-}
-
-func (col *repeatedColumnBuffer) Values() ValueReader {
-	return &repeatedPageReader{page: col.Page().(*repeatedPage)}
 }
 
 func optionalRowsHaveBeenReordered(rows []int32) bool {

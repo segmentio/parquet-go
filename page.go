@@ -119,6 +119,15 @@ type CompressedPage interface {
 // PageReader is an interface implemented by types that support producing a
 // sequence of pages.
 type PageReader interface {
+	// Reads and returns the next page from the sequence. When all pages have
+	// been read, or if the sequence was closed, the method returns io.EOF.
+	//
+	// The returned page and other objects derived from it remain valid until
+	// the next call to ReadPage, or until the sequence is closed. The page
+	// reader may use this property to optimize resource management by reusing
+	// memory across pages. Applications that need to acquire ownership of the
+	// returned page must clone by calling page.Buffer().Clone() to create a
+	// copy in memory.
 	ReadPage() (Page, error)
 }
 
@@ -128,25 +137,46 @@ type PageWriter interface {
 	WritePage(Page) (int64, error)
 }
 
+// Pages is an interface implemented by page readers returned by calling the
+// Pages method of ColumnChunk instances.
+type Pages interface {
+	PageReader
+	RowSeeker
+	io.Closer
+}
+
+func copyPagesAndClose(w PageWriter, r Pages) (int64, error) {
+	defer r.Close()
+	return CopyPages(w, r)
+}
+
 type singlePage struct {
 	page Page
 	seek int64
 }
 
 func (r *singlePage) ReadPage() (Page, error) {
-	if numRows := r.page.NumRows(); r.seek < numRows {
-		seek := r.seek
-		r.seek = numRows
-		if seek > 0 {
-			return r.page.Buffer().Slice(seek, numRows), nil
+	if r.page != nil {
+		if numRows := r.page.NumRows(); r.seek < numRows {
+			seek := r.seek
+			r.seek = numRows
+			if seek > 0 {
+				return r.page.Buffer().Slice(seek, numRows), nil
+			}
+			return r.page, nil
 		}
-		return r.page, nil
 	}
 	return nil, io.EOF
 }
 
 func (r *singlePage) SeekToRow(rowIndex int64) error {
 	r.seek = rowIndex
+	return nil
+}
+
+func (r *singlePage) Close() error {
+	r.page = nil
+	r.seek = 0
 	return nil
 }
 
@@ -233,8 +263,13 @@ func (page *errorPage) Size() int64                       { return 1 }
 func (page *errorPage) RepetitionLevels() []byte          { return nil }
 func (page *errorPage) DefinitionLevels() []byte          { return nil }
 func (page *errorPage) Data() []byte                      { return nil }
-func (page *errorPage) Values() ValueReader               { return &errorValueReader{err: page.err} }
+func (page *errorPage) Values() ValueReader               { return errorPageValues{page: page} }
 func (page *errorPage) Buffer() BufferedPage              { return page }
+
+type errorPageValues struct{ page *errorPage }
+
+func (r errorPageValues) ReadValues([]Value) (int, error) { return 0, r.page.err }
+func (r errorPageValues) Close() error                    { return nil }
 
 func errPageBoundsOutOfRange(i, j, n int64) error {
 	return fmt.Errorf("page bounds out of range [%d:%d]: with length %d", i, j, n)
@@ -306,7 +341,12 @@ func (page *optionalPage) DefinitionLevels() []byte { return page.definitionLeve
 
 func (page *optionalPage) Data() []byte { return page.base.Data() }
 
-func (page *optionalPage) Values() ValueReader { return &optionalPageReader{page: page} }
+func (page *optionalPage) Values() ValueReader {
+	return &optionalPageValues{
+		page:   page,
+		values: page.base.Values(),
+	}
+}
 
 func (page *optionalPage) Buffer() BufferedPage { return page }
 
@@ -372,7 +412,12 @@ func (page *repeatedPage) DefinitionLevels() []byte { return page.definitionLeve
 
 func (page *repeatedPage) Data() []byte { return page.base.Data() }
 
-func (page *repeatedPage) Values() ValueReader { return &repeatedPageReader{page: page} }
+func (page *repeatedPage) Values() ValueReader {
+	return &repeatedPageValues{
+		page:   page,
+		values: page.base.Values(),
+	}
+}
 
 func (page *repeatedPage) Buffer() BufferedPage { return page }
 
@@ -466,7 +511,7 @@ func (page *booleanPage) DefinitionLevels() []byte { return nil }
 
 func (page *booleanPage) Data() []byte { return page.bits }
 
-func (page *booleanPage) Values() ValueReader { return &booleanPageReader{page: page} }
+func (page *booleanPage) Values() ValueReader { return &booleanPageValues{page: page} }
 
 func (page *booleanPage) Buffer() BufferedPage { return page }
 
@@ -584,7 +629,7 @@ func (page *int32Page) DefinitionLevels() []byte { return nil }
 
 func (page *int32Page) Data() []byte { return bits.Int32ToBytes(page.values) }
 
-func (page *int32Page) Values() ValueReader { return &int32PageReader{page: page} }
+func (page *int32Page) Values() ValueReader { return &int32PageValues{page: page} }
 
 func (page *int32Page) Buffer() BufferedPage { return page }
 
@@ -653,7 +698,7 @@ func (page *int64Page) DefinitionLevels() []byte { return nil }
 
 func (page *int64Page) Data() []byte { return bits.Int64ToBytes(page.values) }
 
-func (page *int64Page) Values() ValueReader { return &int64PageReader{page: page} }
+func (page *int64Page) Values() ValueReader { return &int64PageValues{page: page} }
 
 func (page *int64Page) Buffer() BufferedPage { return page }
 
@@ -722,7 +767,7 @@ func (page *int96Page) DefinitionLevels() []byte { return nil }
 
 func (page *int96Page) Data() []byte { return deprecated.Int96ToBytes(page.values) }
 
-func (page *int96Page) Values() ValueReader { return &int96PageReader{page: page} }
+func (page *int96Page) Values() ValueReader { return &int96PageValues{page: page} }
 
 func (page *int96Page) Buffer() BufferedPage { return page }
 
@@ -793,7 +838,7 @@ func (page *floatPage) DefinitionLevels() []byte { return nil }
 
 func (page *floatPage) Data() []byte { return bits.Float32ToBytes(page.values) }
 
-func (page *floatPage) Values() ValueReader { return &floatPageReader{page: page} }
+func (page *floatPage) Values() ValueReader { return &floatPageValues{page: page} }
 
 func (page *floatPage) Buffer() BufferedPage { return page }
 
@@ -862,7 +907,7 @@ func (page *doublePage) DefinitionLevels() []byte { return nil }
 
 func (page *doublePage) Data() []byte { return bits.Float64ToBytes(page.values) }
 
-func (page *doublePage) Values() ValueReader { return &doublePageReader{page: page} }
+func (page *doublePage) Values() ValueReader { return &doublePageValues{page: page} }
 
 func (page *doublePage) Buffer() BufferedPage { return page }
 
@@ -933,7 +978,7 @@ func (page *byteArrayPage) DefinitionLevels() []byte { return nil }
 
 func (page *byteArrayPage) Data() []byte { return page.values }
 
-func (page *byteArrayPage) Values() ValueReader { return &byteArrayPageReader{page: page} }
+func (page *byteArrayPage) Values() ValueReader { return &byteArrayPageValues{page: page} }
 
 func (page *byteArrayPage) Buffer() BufferedPage { return page }
 
@@ -1096,7 +1141,7 @@ func (page *fixedLenByteArrayPage) DefinitionLevels() []byte { return nil }
 func (page *fixedLenByteArrayPage) Data() []byte { return page.data }
 
 func (page *fixedLenByteArrayPage) Values() ValueReader {
-	return &fixedLenByteArrayPageReader{page: page}
+	return &fixedLenByteArrayPageValues{page: page}
 }
 
 func (page *fixedLenByteArrayPage) Buffer() BufferedPage { return page }
@@ -1174,7 +1219,7 @@ func (page *uint32Page) DefinitionLevels() []byte { return nil }
 
 func (page *uint32Page) Data() []byte { return bits.Uint32ToBytes(page.values) }
 
-func (page *uint32Page) Values() ValueReader { return &uint32PageReader{page: page} }
+func (page *uint32Page) Values() ValueReader { return &uint32PageValues{page: page} }
 
 func (page *uint32Page) Buffer() BufferedPage { return page }
 
@@ -1243,7 +1288,7 @@ func (page *uint64Page) DefinitionLevels() []byte { return nil }
 
 func (page *uint64Page) Data() []byte { return bits.Uint64ToBytes(page.values) }
 
-func (page *uint64Page) Values() ValueReader { return &uint64PageReader{page: page} }
+func (page *uint64Page) Values() ValueReader { return &uint64PageValues{page: page} }
 
 func (page *uint64Page) Buffer() BufferedPage { return page }
 
@@ -1301,7 +1346,7 @@ func (page *nullPage) NumNulls() int64                   { return int64(page.cou
 func (page *nullPage) Bounds() (min, max Value, ok bool) { return }
 func (page *nullPage) Size() int64                       { return 1 }
 func (page *nullPage) Values() ValueReader {
-	return &nullPageReader{column: page.column, remain: page.count}
+	return &nullPageValues{column: page.column, remain: page.count}
 }
 func (page *nullPage) Buffer() BufferedPage { return page }
 func (page *nullPage) Clone() BufferedPage  { return page }

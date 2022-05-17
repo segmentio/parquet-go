@@ -1,6 +1,7 @@
 package parquet
 
 import (
+	"errors"
 	"io"
 )
 
@@ -34,13 +35,6 @@ type ColumnChunk interface {
 	NumValues() int64
 }
 
-// Pages is an interface implemented by page readers returned by calling the
-// Pages method of ColumnChunk instances.
-type Pages interface {
-	PageReader
-	RowSeeker
-}
-
 type pageAndValueWriter interface {
 	PageWriter
 	ValueWriter
@@ -62,6 +56,19 @@ func (r *columnChunkReader) buffered() int {
 	return len(r.buffer) - r.offset
 }
 
+func (r *columnChunkReader) close() (err error) {
+	if r.reader != nil {
+		err = r.reader.Close()
+	}
+	clearValues(r.buffer)
+	r.buffer = r.buffer[:0]
+	r.offset = 0
+	r.page = nil
+	r.reader = nil
+	r.values = nil
+	return err
+}
+
 func (r *columnChunkReader) seekToRow(rowIndex int64) error {
 	// TODO: there are a few optimizations we can make here:
 	// * is the row buffered already? => advance the offset
@@ -80,6 +87,7 @@ func (r *columnChunkReader) seekToRow(rowIndex int64) error {
 
 	if r.reader != nil {
 		if err := r.reader.SeekToRow(rowIndex); err != nil {
+			r.reader.Close()
 			r.reader = nil
 			r.column = nil
 			return err
@@ -113,7 +121,7 @@ func (r *columnChunkReader) readPage() (err error) {
 func (r *columnChunkReader) readValues() error {
 	for {
 		err := r.readValuesFromCurrentPage()
-		if err == nil || err != io.EOF {
+		if err == nil || !errors.Is(err, io.EOF) {
 			return err
 		}
 		if err := r.readPage(); err != nil {
@@ -133,7 +141,7 @@ func (r *columnChunkReader) readValuesFromCurrentPage() error {
 		r.values = r.page.Values()
 	}
 	n, err := r.values.ReadValues(r.buffer[:cap(r.buffer)])
-	if err != nil && err == io.EOF {
+	if errors.Is(err, io.EOF) {
 		r.page, r.values = nil, nil
 	}
 	if n > 0 {
@@ -219,7 +227,7 @@ func (r *columnChunkReader) writeRowsTo(w pageAndValueWriter, limit int64) (numR
 					// buffered values to the output.
 					break
 				}
-				if err == io.EOF {
+				if errors.Is(err, io.EOF) {
 					// The page contained no values? Unclear if this is valid but
 					// we can handle it by reading the next page.
 					r.values = nil

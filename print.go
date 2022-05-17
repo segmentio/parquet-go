@@ -227,6 +227,7 @@ func PrintRowGroup(w io.Writer, rowGroup RowGroup) error {
 	cells := make([]string, 0, len(columns))
 	parts := make([]string, 0)
 	rows := rowGroup.Rows()
+	defer rows.Close()
 	for {
 		if row, err = rows.ReadRow(row[:0]); err != nil {
 			if !errors.Is(err, io.EOF) {
@@ -282,6 +283,7 @@ func PrintColumnChunk(w io.Writer, columnChunk ColumnChunk) error {
 	pages := columnChunk.Pages()
 	numPages, numValues := int64(0), int64(0)
 
+	defer pages.Close()
 	for {
 		p, err := pages.ReadPage()
 		if err != nil {

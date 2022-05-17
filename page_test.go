@@ -357,7 +357,10 @@ func testFilePage(t *testing.T, schema *parquet.Schema, test pageTest) {
 		t.Fatal("opening parquet file:", err)
 	}
 
-	p, err := f.RowGroups()[0].ColumnChunks()[0].Pages().ReadPage()
+	pages := f.RowGroups()[0].ColumnChunks()[0].Pages()
+	defer pages.Close()
+
+	p, err := pages.ReadPage()
 	if err != nil {
 		t.Fatal("reading parquet page:", err)
 	}
@@ -400,6 +403,7 @@ func TestOptionalPageTrailingNulls(t *testing.T) {
 
 	resultRows := []parquet.Row{}
 	reader := buffer.Rows()
+	defer reader.Close()
 	for {
 		row, err := reader.ReadRow(nil)
 		if err != nil {
@@ -424,7 +428,10 @@ func TestOptionalPagePreserveIndex(t *testing.T) {
 		t.Fatal("writing row:", err)
 	}
 
-	row, err := buffer.Rows().ReadRow(nil)
+	rows := buffer.Rows()
+	defer rows.Close()
+
+	row, err := rows.ReadRow(nil)
 	if err != nil {
 		t.Fatal("reading rows:", err)
 	}
@@ -458,6 +465,7 @@ func TestRepeatedPageTrailingNulls(t *testing.T) {
 
 	resultRows := []parquet.Row{}
 	reader := buf.Rows()
+	defer reader.Close()
 	for {
 		row, err := reader.ReadRow(nil)
 		if err != nil {

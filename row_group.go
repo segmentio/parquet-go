@@ -52,9 +52,15 @@ type RowGroup interface {
 
 // Rows is an interface implemented by row readers returned by calling the Rows
 // method of RowGroup instances.
+//
+// Applications should call Close when they are done using a Rows instance in
+// order to release the underlying resources held by the row sequence.
+//
+// After calling Close, all attempts to read more rows will return io.EOF.
 type Rows interface {
 	RowReaderWithSchema
 	RowSeeker
+	io.Closer
 }
 
 // RowGroupReader is an interface implemented by types that expose sequences of
@@ -237,20 +243,20 @@ func (r *rowGroup) NumRows() int64                  { return r.numRows }
 func (r *rowGroup) ColumnChunks() []ColumnChunk     { return r.columns }
 func (r *rowGroup) SortingColumns() []SortingColumn { return r.sorting }
 func (r *rowGroup) Schema() *Schema                 { return r.schema }
-func (r *rowGroup) Rows() Rows                      { return &rowGroupRowReader{rowGroup: r} }
+func (r *rowGroup) Rows() Rows                      { return &rowGroupRows{rowGroup: r} }
 
 func NewRowGroupRowReader(rowGroup RowGroup) Rows {
-	return &rowGroupRowReader{rowGroup: rowGroup}
+	return &rowGroupRows{rowGroup: rowGroup}
 }
 
-type rowGroupRowReader struct {
+type rowGroupRows struct {
 	rowGroup RowGroup
 	schema   *Schema
 	columns  []columnChunkReader
 	seek     int64
 }
 
-func (r *rowGroupRowReader) init(rowGroup RowGroup) error {
+func (r *rowGroupRows) init(rowGroup RowGroup) error {
 	const columnBufferSize = defaultValueBufferSize
 	columns := rowGroup.ColumnChunks()
 	buffer := make([]Value, columnBufferSize*len(columns))
@@ -270,7 +276,28 @@ func (r *rowGroupRowReader) init(rowGroup RowGroup) error {
 	return nil
 }
 
-func (r *rowGroupRowReader) Schema() *Schema {
+func (r *rowGroupRows) reset() {
+	for i := range r.columns {
+		// Ignore errors because we are resetting the reader, if the error
+		// persists we will see it on the next read, and otherwise we can
+		// read back from the beginning.
+		r.columns[i].close()
+	}
+	r.seek = 0
+}
+
+func (r *rowGroupRows) Close() error {
+	var lastErr error
+	for i := range r.columns {
+		if err := r.columns[i].close(); err != nil {
+			lastErr = err
+		}
+	}
+	r.rowGroup = nil
+	return lastErr
+}
+
+func (r *rowGroupRows) Schema() *Schema {
 	switch {
 	case r.schema != nil:
 		return r.schema
@@ -281,7 +308,7 @@ func (r *rowGroupRowReader) Schema() *Schema {
 	}
 }
 
-func (r *rowGroupRowReader) SeekToRow(rowIndex int64) error {
+func (r *rowGroupRows) SeekToRow(rowIndex int64) error {
 	for i := range r.columns {
 		if err := r.columns[i].seekToRow(rowIndex); err != nil {
 			return err
@@ -291,7 +318,7 @@ func (r *rowGroupRowReader) SeekToRow(rowIndex int64) error {
 	return nil
 }
 
-func (r *rowGroupRowReader) ReadRow(row Row) (Row, error) {
+func (r *rowGroupRows) ReadRow(row Row) (Row, error) {
 	if r.rowGroup != nil {
 		err := r.init(r.rowGroup)
 		r.rowGroup = nil
@@ -310,7 +337,7 @@ func (r *rowGroupRowReader) ReadRow(row Row) (Row, error) {
 	return row, err
 }
 
-func (r *rowGroupRowReader) WriteRowsTo(w RowWriter) (int64, error) {
+func (r *rowGroupRows) WriteRowsTo(w RowWriter) (int64, error) {
 	if r.rowGroup == nil {
 		return CopyRows(w, struct{ RowReaderWithSchema }{r})
 	}
@@ -338,7 +365,7 @@ func (r *rowGroupRowReader) WriteRowsTo(w RowWriter) (int64, error) {
 
 	case PageWriter:
 		for _, column := range rowGroup.ColumnChunks() {
-			_, err := CopyPages(dst, column.Pages())
+			_, err := copyPagesAndClose(dst, column.Pages())
 			if err != nil {
 				return 0, err
 			}
@@ -349,7 +376,7 @@ func (r *rowGroupRowReader) WriteRowsTo(w RowWriter) (int64, error) {
 	return CopyRows(w, struct{ RowReaderWithSchema }{r})
 }
 
-func (r *rowGroupRowReader) writeRowsTo(w pageAndValueWriter, limit int64) (numRows int64, err error) {
+func (r *rowGroupRows) writeRowsTo(w pageAndValueWriter, limit int64) (numRows int64, err error) {
 	for i := range r.columns {
 		n, err := r.columns[i].writeRowsTo(w, limit)
 		if err != nil {
@@ -452,7 +479,7 @@ func (g *emptyRowGroup) NumRows() int64                  { return 0 }
 func (g *emptyRowGroup) ColumnChunks() []ColumnChunk     { return g.columns }
 func (g *emptyRowGroup) Schema() *Schema                 { return g.schema }
 func (g *emptyRowGroup) SortingColumns() []SortingColumn { return nil }
-func (g *emptyRowGroup) Rows() Rows                      { return emptyRowReader{g.schema} }
+func (g *emptyRowGroup) Rows() Rows                      { return emptyRows{g.schema} }
 
 type emptyColumnChunk struct {
 	typ    Type
@@ -473,22 +500,24 @@ func (emptyBloomFilter) ReadAt([]byte, int64) (int, error) { return 0, io.EOF }
 func (emptyBloomFilter) Size() int64                       { return 0 }
 func (emptyBloomFilter) Check(Value) (bool, error)         { return false, nil }
 
-type emptyRowReader struct{ schema *Schema }
+type emptyRows struct{ schema *Schema }
 
-func (r emptyRowReader) Schema() *Schema                      { return r.schema }
-func (r emptyRowReader) ReadRow(row Row) (Row, error)         { return row, io.EOF }
-func (r emptyRowReader) SeekToRow(int64) error                { return nil }
-func (r emptyRowReader) WriteRowsTo(RowWriter) (int64, error) { return 0, nil }
+func (r emptyRows) Close() error                         { return nil }
+func (r emptyRows) Schema() *Schema                      { return r.schema }
+func (r emptyRows) ReadRow(row Row) (Row, error)         { return row, io.EOF }
+func (r emptyRows) SeekToRow(int64) error                { return nil }
+func (r emptyRows) WriteRowsTo(RowWriter) (int64, error) { return 0, nil }
 
 type emptyPages struct{}
 
 func (emptyPages) ReadPage() (Page, error) { return nil, io.EOF }
 func (emptyPages) SeekToRow(int64) error   { return nil }
+func (emptyPages) Close() error            { return nil }
 
 var (
-	_ RowReaderWithSchema = (*rowGroupRowReader)(nil)
-	_ RowWriterTo         = (*rowGroupRowReader)(nil)
+	_ RowReaderWithSchema = (*rowGroupRows)(nil)
+	_ RowWriterTo         = (*rowGroupRows)(nil)
 
-	_ RowReaderWithSchema = emptyRowReader{}
-	_ RowWriterTo         = emptyRowReader{}
+	_ RowReaderWithSchema = emptyRows{}
+	_ RowWriterTo         = emptyRows{}
 )

@@ -67,6 +67,7 @@ func printColumns(t *testing.T, col *parquet.Column, indent string) {
 
 	buffer := make([]parquet.Value, 42)
 	pages := col.Pages()
+	defer pages.Close()
 	for {
 		p, err := pages.ReadPage()
 		if err != nil {
