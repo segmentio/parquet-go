@@ -2,8 +2,10 @@ package parquet_test
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"math"
+	"math/rand"
 	"reflect"
 	"sort"
 	"testing"
@@ -497,6 +499,86 @@ func TestBufferRoundtripNestedRepeatedPointer(t *testing.T) {
 		}
 		if !reflect.DeepEqual(*o, objs[i]) {
 			t.Errorf("points mismatch at row index %d: want=%v got=%v", i, objs[i], o)
+		}
+	}
+}
+
+type benchmarkBufferRowType struct {
+	ID    [16]byte `parquet:"id,uuid"`
+	Value float64  `parquet:"value"`
+}
+
+const (
+	benchmarkBufferNumRows     = 10_000
+	benchmarkBufferRowsPerStep = 100
+)
+
+func generateBenchmarkBufferRows(n int) (*parquet.Schema, []parquet.Row) {
+	model := new(benchmarkBufferRowType)
+	schema := parquet.SchemaOf(model)
+	prng := rand.New(rand.NewSource(0))
+	rows := make([]parquet.Row, n)
+
+	for i := range rows {
+		io.ReadFull(prng, model.ID[:])
+		model.Value = prng.Float64()
+		rows[i] = make(parquet.Row, 0, 2)
+		rows[i] = schema.Deconstruct(rows[i], model)
+	}
+
+	return schema, rows
+}
+
+func BenchmarkBufferReadRows100x(b *testing.B) {
+	schema, rows := generateBenchmarkBufferRows(benchmarkBufferNumRows)
+	buffer := parquet.NewBuffer(schema)
+
+	for _, row := range rows {
+		err := buffer.WriteRow(row)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+
+	b.ResetTimer()
+	bufferRows := buffer.Rows()
+	defer bufferRows.Close()
+
+	for i := 0; i < b.N; i++ {
+		var err error
+
+		for j := 0; j < benchmarkBufferRowsPerStep; j++ {
+			rows[j], err = bufferRows.ReadRow(rows[j][:0])
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					err = bufferRows.SeekToRow(0)
+				}
+				if err != nil {
+					b.Fatal(err)
+				}
+			}
+		}
+	}
+}
+
+func BenchmarkBufferWriteRows100x(b *testing.B) {
+	schema, rows := generateBenchmarkBufferRows(benchmarkBufferNumRows)
+	buffer := parquet.NewBuffer(schema)
+
+	b.ResetTimer()
+	for i, j := 0, 0; i < b.N; i++ {
+		for _, row := range rows[j : j+benchmarkBufferRowsPerStep] {
+			err := buffer.WriteRow(row)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+
+		j += benchmarkBufferRowsPerStep
+		j %= benchmarkBufferNumRows
+
+		if j == 0 {
+			buffer.Reset()
 		}
 	}
 }
