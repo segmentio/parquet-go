@@ -134,7 +134,8 @@ func (w *Writer) Write(row interface{}) error {
 		clearValues(w.values)
 	}()
 	w.values = w.schema.Deconstruct(w.values[:0], row)
-	return w.WriteRow(w.values)
+	_, err := w.WriteRows([]Row{w.values})
+	return err
 }
 
 // WriteRow is called to write another row to the parquet file.
@@ -144,7 +145,9 @@ func (w *Writer) Write(row interface{}) error {
 //
 // The row is expected to contain values for each column of the writer's schema,
 // in the order produced by the parquet.(*Schema).Deconstruct method.
-func (w *Writer) WriteRow(row Row) error { return w.writer.WriteRow(row) }
+func (w *Writer) WriteRows(rows []Row) (int, error) {
+	return w.writer.WriteRows(rows)
+}
 
 // WriteRowGroup writes a row group to the parquet file.
 //
@@ -626,19 +629,30 @@ func (w *writer) writeRowGroup(rowGroupSchema *Schema, rowGroupSortingColumns []
 	return numRows, nil
 }
 
-func (w *writer) WriteRow(row Row) error {
-	for i := range row {
-		c := w.columns[row[i].Column()]
-		if err := c.insert(c, row[i:i+1]); err != nil {
-			return err
+func (w *writer) WriteRows(rows []Row) (int, error) {
+	// TODO: if an error occurs in this method the writer may be left in an
+	// partially functional state. Applications are not expected to continue
+	// using the writer after getting an error, but maybe we could ensure that
+	// we are preventing further use as well?
+	for _, row := range rows {
+		for i := range row {
+			// TODO: instead of calling insert repeatedly we could detect
+			// sequences of repeated values here and make a single insert
+			// (e.g. contiguous values for the same column).
+			c := w.columns[row[i].Column()]
+			if err := c.insert(c, row[i:i+1]); err != nil {
+				return 0, err
+			}
 		}
 	}
+
 	for _, c := range w.columns {
 		if err := c.commit(c); err != nil {
-			return err
+			return 0, err
 		}
 	}
-	return nil
+
+	return len(rows), nil
 }
 
 // The WriteValues method is intended to work in pair with WritePage to allow

@@ -79,7 +79,7 @@ type RowReadSeeker interface {
 
 // RowWriter writes parquet rows to an underlying medium.
 type RowWriter interface {
-	WriteRow(Row) error
+	WriteRows([]Row) (int, error)
 }
 
 // RowWriterTo writes parquet rows to a writer.
@@ -189,7 +189,7 @@ func copyRows(dst RowWriter, src RowReader, buf []Value) (written int64, ret []V
 			}
 			return written, buf, err
 		}
-		if err = dst.WriteRow(buf); err != nil {
+		if _, err = dst.WriteRows([]Row{buf}); err != nil {
 			return written, buf, err
 		}
 		written++

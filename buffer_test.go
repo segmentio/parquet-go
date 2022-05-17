@@ -246,7 +246,8 @@ func testBuffer(t *testing.T, node parquet.Node, buffer *parquet.Buffer, encodin
 	}
 
 	for i := range batch {
-		if err := buffer.WriteRow(batch[i : i+1]); err != nil {
+		_, err := buffer.WriteRows([]parquet.Row{batch[i : i+1]})
+		if err != nil {
 			t.Fatalf("writing value to row group: %v", err)
 		}
 	}
@@ -534,9 +535,9 @@ func BenchmarkBufferReadRows100x(b *testing.B) {
 	schema, rows := generateBenchmarkBufferRows(benchmarkBufferNumRows)
 	buffer := parquet.NewBuffer(schema)
 
-	for _, row := range rows {
-		err := buffer.WriteRow(row)
-		if err != nil {
+	for i := 0; i < len(rows); i += benchmarkBufferRowsPerStep {
+		j := i + benchmarkBufferRowsPerStep
+		if _, err := buffer.WriteRows(rows[i:j]); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -576,11 +577,9 @@ func BenchmarkBufferWriteRows100x(b *testing.B) {
 	start := time.Now()
 
 	for i, j := 0, 0; i < b.N; i++ {
-		for _, row := range rows[j : j+benchmarkBufferRowsPerStep] {
-			err := buffer.WriteRow(row)
-			if err != nil {
-				b.Fatal(err)
-			}
+		_, err := buffer.WriteRows(rows[j : j+benchmarkBufferRowsPerStep])
+		if err != nil {
+			b.Fatal(err)
 		}
 
 		j += benchmarkBufferRowsPerStep

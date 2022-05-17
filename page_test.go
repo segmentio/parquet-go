@@ -396,7 +396,8 @@ func TestOptionalPageTrailingNulls(t *testing.T) {
 	}}
 
 	for _, row := range rows {
-		if err := buffer.WriteRow(schema.Deconstruct(nil, row)); err != nil {
+		_, err := buffer.WriteRows([]parquet.Row{schema.Deconstruct(nil, row)})
+		if err != nil {
 			t.Fatal("writing row:", err)
 		}
 	}
@@ -424,7 +425,10 @@ func TestOptionalPagePreserveIndex(t *testing.T) {
 	schema := parquet.SchemaOf(&testStruct{})
 	buffer := parquet.NewBuffer(schema)
 
-	if err := buffer.WriteRow(schema.Deconstruct(nil, &testStruct{Value: nil})); err != nil {
+	_, err := buffer.WriteRows([]parquet.Row{
+		schema.Deconstruct(nil, &testStruct{Value: nil}),
+	})
+	if err != nil {
 		t.Fatal("writing row:", err)
 	}
 
@@ -457,7 +461,7 @@ func TestRepeatedPageTrailingNulls(t *testing.T) {
 	buf := parquet.NewBuffer(s)
 	for _, rec := range records {
 		row := s.Deconstruct(nil, rec)
-		err := buf.WriteRow(row)
+		_, err := buf.WriteRows([]parquet.Row{row})
 		if err != nil {
 			t.Fatal(err)
 		}
