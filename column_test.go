@@ -163,7 +163,7 @@ func checkColumnChunkColumnIndex(columnChunk parquet.ColumnChunk) error {
 
 		numNulls := int64(0)
 		numValues := int64(0)
-		err := forEachValue(page.Values(), func(value parquet.Value) error {
+		err := forEachPageValue(page.Values(), func(value parquet.Value) error {
 			stats.observe(value)
 			if value.IsNull() {
 				numNulls++

@@ -38,7 +38,8 @@ func forEachLeafColumn(col *parquet.Column, do func(*parquet.Column) error) erro
 	return nil
 }
 
-func forEachPage(pages parquet.PageReader, do func(parquet.Page) error) error {
+func forEachPage(pages parquet.Pages, do func(parquet.Page) error) error {
+	defer pages.Close()
 	for {
 		p, err := pages.ReadPage()
 		if err != nil {
@@ -53,7 +54,8 @@ func forEachPage(pages parquet.PageReader, do func(parquet.Page) error) error {
 	}
 }
 
-func forEachValue(values parquet.ValueReader, do func(parquet.Value) error) error {
+func forEachPageValue(values parquet.PageValues, do func(parquet.Value) error) error {
+	defer values.Close()
 	buffer := [3]parquet.Value{}
 	for {
 		n, err := values.ReadValues(buffer[:])
@@ -79,7 +81,7 @@ func forEachColumnPage(col *parquet.Column, do func(*parquet.Column, parquet.Pag
 
 func forEachColumnValue(col *parquet.Column, do func(*parquet.Column, parquet.Value) error) error {
 	return forEachColumnPage(col, func(leaf *parquet.Column, page parquet.Page) error {
-		return forEachValue(page.Values(), func(value parquet.Value) error { return do(leaf, value) })
+		return forEachPageValue(page.Values(), func(value parquet.Value) error { return do(leaf, value) })
 	})
 }
 

@@ -282,6 +282,7 @@ func PrintColumnChunk(w io.Writer, columnChunk ColumnChunk) error {
 	pages := columnChunk.Pages()
 	numPages, numValues := int64(0), int64(0)
 
+	defer pages.Close()
 	for {
 		p, err := pages.ReadPage()
 		if err != nil {

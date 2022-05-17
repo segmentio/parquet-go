@@ -47,6 +47,8 @@ type ValueReader interface {
 	ReadValues([]Value) (int, error)
 }
 
+// ValueReaderAt is an interface implemented by types that support reading
+// vlaues at offsets specified by the application.
 type ValueReaderAt interface {
 	ReadValuesAt([]Value, int64) (int, error)
 }
@@ -795,10 +797,6 @@ func clearValues(values []Value) {
 		values[i] = Value{}
 	}
 }
-
-type errorValueReader struct{ err error }
-
-func (r *errorValueReader) ReadValues([]Value) (int, error) { return 0, r.err }
 
 // BooleanReader is an interface implemented by ValueReader instances which
 // expose the content of a column of boolean values.

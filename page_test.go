@@ -357,7 +357,10 @@ func testFilePage(t *testing.T, schema *parquet.Schema, test pageTest) {
 		t.Fatal("opening parquet file:", err)
 	}
 
-	p, err := f.RowGroups()[0].ColumnChunks()[0].Pages().ReadPage()
+	pages := f.RowGroups()[0].ColumnChunks()[0].Pages()
+	defer pages.Close()
+
+	p, err := pages.ReadPage()
 	if err != nil {
 		t.Fatal("reading parquet page:", err)
 	}

@@ -1,6 +1,7 @@
 package parquet
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"reflect"
@@ -179,6 +180,9 @@ func (r *Reader) Read(row interface{}) (err error) {
 	}
 
 	if err := r.read.SeekToRow(r.rowIndex); err != nil {
+		if errors.Is(err, io.ErrClosedPipe) {
+			return io.EOF
+		}
 		return fmt.Errorf("seeking reader to row %d: %w", r.rowIndex, err)
 	}
 
@@ -240,6 +244,17 @@ func (r *Reader) SeekToRow(rowIndex int64) error {
 	return nil
 }
 
+// Close closes the reader, preventing more rows from being read.
+func (r *Reader) Close() error {
+	if err := r.read.Close(); err != nil {
+		return err
+	}
+	if err := r.file.Close(); err != nil {
+		return err
+	}
+	return nil
+}
+
 // reader is a subtype used in the implementation of Reader to support the two
 // use cases of either reading rows calling the ReadRow method (where full rows
 // are read from the underlying parquet file), or calling the Read method to
@@ -259,11 +274,17 @@ func (r *reader) init(schema *Schema, rowGroup RowGroup) {
 }
 
 func (r *reader) Reset() {
+	if r.rows != nil {
+		r.rows.Close()
+	}
 	r.rows = nil // TODO: can we make the RowReader reusable?
 	r.rowIndex = 0
 }
 
 func (r *reader) ReadRow(row Row) (Row, error) {
+	if r.rowGroup == nil {
+		return row, io.EOF
+	}
 	if r.rows == nil {
 		r.rows = r.rowGroup.Rows()
 		if r.rowIndex > 0 {
@@ -283,6 +304,9 @@ func (r *reader) ReadRow(row Row) (Row, error) {
 }
 
 func (r *reader) SeekToRow(rowIndex int64) error {
+	if r.rowGroup == nil {
+		return io.ErrClosedPipe
+	}
 	if rowIndex != r.rowIndex {
 		if r.rows != nil {
 			if err := r.rows.SeekToRow(rowIndex); err != nil {
@@ -292,6 +316,14 @@ func (r *reader) SeekToRow(rowIndex int64) error {
 		r.rowIndex = rowIndex
 	}
 	return nil
+}
+
+func (r *reader) Close() (err error) {
+	r.rowGroup = nil
+	if r.rows != nil {
+		err = r.rows.Close()
+	}
+	return err
 }
 
 var (
