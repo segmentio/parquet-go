@@ -45,6 +45,11 @@ func (row Row) startsWith(columnIndex int16) bool {
 // RowSeeker is an interface implemented by readers of parquet rows which can be
 // positioned at a specific row index.
 type RowSeeker interface {
+	// Positions the stream on the given row index.
+	//
+	// Some implementations of the interface may only allow seeking forward.
+	//
+	// The method returns io.ErrClosedPipe if the stream had already been closed.
 	SeekToRow(int64) error
 }
 

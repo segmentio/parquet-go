@@ -7,6 +7,7 @@ import (
 	"hash/crc32"
 	"io"
 	"sort"
+	"sync"
 
 	"github.com/segmentio/encoding/thrift"
 	"github.com/segmentio/parquet-go/format"
@@ -427,8 +428,8 @@ type filePages struct {
 	chunk    *fileColumnChunk
 	dictPage *dictPage
 	dataPage *dataPage
-	section  *io.SectionReader
 	rbuf     *bufio.Reader
+	section  io.SectionReader
 
 	protocol thrift.CompactProtocol
 	decoder  thrift.Decoder
@@ -441,16 +442,18 @@ type filePages struct {
 }
 
 func (f *filePages) init(c *fileColumnChunk) {
-	f.dataPage = new(dataPage)
+	f.dataPage = acquireDataPage()
 	f.chunk = c
 	f.baseOffset = c.chunk.MetaData.DataPageOffset
 	f.dataOffset = f.baseOffset
+
 	if c.chunk.MetaData.DictionaryPageOffset != 0 {
 		f.baseOffset = c.chunk.MetaData.DictionaryPageOffset
 		f.dictOffset = f.baseOffset
 	}
-	f.section = io.NewSectionReader(c.file, f.baseOffset, c.chunk.MetaData.TotalCompressedSize)
-	f.rbuf = bufio.NewReaderSize(f.section, defaultReadBufferSize)
+
+	f.section = *io.NewSectionReader(c.file, f.baseOffset, c.chunk.MetaData.TotalCompressedSize)
+	f.rbuf = acquireReadBuffer(&f.section)
 	f.decoder.Reset(f.protocol.NewReader(f.rbuf))
 }
 
@@ -530,7 +533,10 @@ func (f *filePages) ReadPage() (Page, error) {
 			} else if f.index > 0 {
 				err = ErrUnexpectedDictionaryPage
 			} else {
-				f.dictPage = new(dictPage)
+				f.dictPage, _ = dictPagePool.Get().(*dictPage)
+				if f.dictPage == nil {
+					f.dictPage = new(dictPage)
+				}
 				f.dataPage.dictionary, err = column.decodeDictionary(
 					DictionaryPageHeader{header.DictionaryPageHeader},
 					f.dataPage,
@@ -592,15 +598,18 @@ func (f *filePages) SeekToRow(rowIndex int64) (err error) {
 		f.skip = rowIndex - pages[index].FirstRowIndex
 		f.index = index
 	}
-	f.rbuf.Reset(f.section)
+	f.rbuf.Reset(&f.section)
 	return err
 }
 
 func (f *filePages) Close() error {
+	releaseDictPage(f.dictPage)
+	releaseDataPage(f.dataPage)
+	releaseReadBuffer(f.rbuf)
 	f.chunk = nil
 	f.dictPage = nil
 	f.dataPage = nil
-	f.section = nil
+	f.section = io.SectionReader{}
 	f.rbuf = nil
 	f.baseOffset = 0
 	f.dataOffset = 0
@@ -612,4 +621,57 @@ func (f *filePages) Close() error {
 
 func (f *filePages) columnPath() columnPath {
 	return columnPath(f.chunk.column.Path())
+}
+
+var (
+	dictPagePool   sync.Pool // *dictPage
+	dataPagePool   sync.Pool // *dataPage
+	readBufferPool sync.Pool // *bufio.Reader
+)
+
+func acquireDictPage() *dictPage {
+	p, _ := dictPagePool.Get().(*dictPage)
+	if p == nil {
+		p = new(dictPage)
+	}
+	return p
+}
+
+func releaseDictPage(p *dictPage) {
+	if p != nil {
+		p.reset()
+		dictPagePool.Put(p)
+	}
+}
+
+func acquireDataPage() *dataPage {
+	p, _ := dataPagePool.Get().(*dataPage)
+	if p == nil {
+		p = new(dataPage)
+	}
+	return p
+}
+
+func releaseDataPage(p *dataPage) {
+	if p != nil {
+		p.reset()
+		dataPagePool.Put(p)
+	}
+}
+
+func acquireReadBuffer(r io.Reader) *bufio.Reader {
+	b, _ := readBufferPool.Get().(*bufio.Reader)
+	if b == nil {
+		b = bufio.NewReaderSize(r, defaultReadBufferSize)
+	} else {
+		b.Reset(r)
+	}
+	return b
+}
+
+func releaseReadBuffer(b *bufio.Reader) {
+	if b != nil {
+		b.Reset(nil)
+		readBufferPool.Put(b)
+	}
 }

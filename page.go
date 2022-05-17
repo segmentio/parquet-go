@@ -119,6 +119,15 @@ type CompressedPage interface {
 // PageReader is an interface implemented by types that support producing a
 // sequence of pages.
 type PageReader interface {
+	// Reads and returns the next page from the sequence. When all pages have
+	// been read, or if the sequence was closed, the method returns io.EOF.
+	//
+	// The returned page and other objects derived from it remain valid until
+	// the next call to ReadPage, or until the sequence is closed. The page
+	// reader may use this property to optimize resource management by reusing
+	// memory across pages. Applications that need to acquire ownership of the
+	// returned page must clone by calling page.Buffer().Clone() to create a
+	// copy in memory.
 	ReadPage() (Page, error)
 }
 

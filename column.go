@@ -490,12 +490,24 @@ type dictPage struct {
 	values []byte
 }
 
+func (p *dictPage) reset() {
+	p.values = p.values[:0]
+}
+
 type dataPage struct {
 	repetitionLevels []byte
 	definitionLevels []byte
 	data             []byte
 	values           []byte
 	dictionary       Dictionary
+}
+
+func (p *dataPage) reset() {
+	p.repetitionLevels = p.repetitionLevels[:0]
+	p.definitionLevels = p.definitionLevels[:0]
+	p.data = p.data[:0]
+	p.values = p.values[:0]
+	p.dictionary = nil
 }
 
 func (p *dataPage) decompress(codec compress.Codec, data []byte) (err error) {
