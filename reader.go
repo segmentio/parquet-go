@@ -283,7 +283,7 @@ func (r *reader) Reset() {
 		// This optimization works for the common case where the underlying type
 		// of the Rows instance is rowGroupRows, which should be true in most
 		// cases since even external implementations of the RowGroup interface
-		// can constructs values of this type via the NewRowGroupRowReader
+		// can construct values of this type via the NewRowGroupRowReader
 		// function.
 		rows.reset()
 		return
