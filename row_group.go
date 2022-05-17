@@ -318,23 +318,28 @@ func (r *rowGroupRows) SeekToRow(rowIndex int64) error {
 	return nil
 }
 
-func (r *rowGroupRows) ReadRow(row Row) (Row, error) {
+func (r *rowGroupRows) ReadRows(rows []Row) (int, error) {
 	if r.rowGroup != nil {
 		err := r.init(r.rowGroup)
 		r.rowGroup = nil
 		if err != nil {
-			return row, err
+			return 0, err
 		}
 	}
 	if r.schema == nil {
-		return row, io.EOF
+		return 0, io.EOF
 	}
-	n := len(row)
-	row, err := r.schema.readRow(row, 0, r.columns)
-	if err == nil && len(row) == n {
-		err = io.EOF
+	for n, row := range rows {
+		row, err := r.schema.readRow(row[:0], 0, r.columns)
+		rows[n] = row
+		if err == nil && len(row) == 0 {
+			err = io.EOF
+		}
+		if err != nil {
+			return n, err
+		}
 	}
-	return row, err
+	return len(rows), nil
 }
 
 func (r *rowGroupRows) WriteRowsTo(w RowWriter) (int64, error) {
@@ -504,7 +509,7 @@ type emptyRows struct{ schema *Schema }
 
 func (r emptyRows) Close() error                         { return nil }
 func (r emptyRows) Schema() *Schema                      { return r.schema }
-func (r emptyRows) ReadRow(row Row) (Row, error)         { return row, io.EOF }
+func (r emptyRows) ReadRows([]Row) (int, error)          { return 0, io.EOF }
 func (r emptyRows) SeekToRow(int64) error                { return nil }
 func (r emptyRows) WriteRowsTo(RowWriter) (int64, error) { return 0, nil }
 

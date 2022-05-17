@@ -395,16 +395,27 @@ type convertedRows struct {
 	conv Conversion
 }
 
-func (c *convertedRows) ReadRow(row Row) (Row, error) {
+func (c *convertedRows) ReadRows(rows []Row) (int, error) {
+	maxRowLen := 0
 	defer func() {
-		clearValues(c.buf)
+		clearValues(c.buf[:maxRowLen])
 	}()
-	var err error
-	c.buf, err = c.rows.ReadRow(c.buf[:0])
-	if err != nil {
-		return row, err
+
+	n, err := c.rows.ReadRows(rows)
+
+	for i, row := range rows[:n] {
+		var err error
+		c.buf, err = c.conv.Convert(c.buf[:0], row)
+		if len(c.buf) > maxRowLen {
+			maxRowLen = len(c.buf)
+		}
+		if err != nil {
+			return i, err
+		}
+		rows[i] = append(row[:0], c.buf...)
 	}
-	return c.conv.Convert(row, c.buf)
+
+	return n, err
 }
 
 func (c *convertedRows) Schema() *Schema {

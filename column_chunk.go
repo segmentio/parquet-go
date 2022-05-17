@@ -360,7 +360,3 @@ func columnReadRowFuncOfLeaf(columnIndex int, repetitionDepth byte) (int, column
 
 	return columnIndex + 1, read
 }
-
-var (
-	_ RowReaderWithSchema = (*Reader)(nil)
-)

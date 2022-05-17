@@ -549,17 +549,13 @@ func BenchmarkBufferReadRows100x(b *testing.B) {
 	defer bufferRows.Close()
 
 	for i := 0; i < b.N; i++ {
-		var err error
-
-		for j := 0; j < benchmarkBufferRowsPerStep; j++ {
-			rows[j], err = bufferRows.ReadRow(rows[j][:0])
+		_, err := bufferRows.ReadRows(rows[:benchmarkBufferRowsPerStep])
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				err = bufferRows.SeekToRow(0)
+			}
 			if err != nil {
-				if errors.Is(err, io.EOF) {
-					err = bufferRows.SeekToRow(0)
-				}
-				if err != nil {
-					b.Fatal(err)
-				}
+				b.Fatal(err)
 			}
 		}
 	}

@@ -221,45 +221,48 @@ func PrintRowGroup(w io.Writer, rowGroup RowGroup) error {
 		}
 	}
 
-	var row = make(Row, 0, len(columns))
-	var err error
-
+	rowbuf := make([]Row, defaultRowBufferSize)
 	cells := make([]string, 0, len(columns))
 	parts := make([]string, 0)
 	rows := rowGroup.Rows()
 	defer rows.Close()
+
 	for {
-		if row, err = rows.ReadRow(row[:0]); err != nil {
-			if !errors.Is(err, io.EOF) {
-				return err
-			}
-			break
-		}
+		n, err := rows.ReadRows(rowbuf)
 
-		cells = cells[:0]
+		for _, row := range rowbuf[:n] {
+			cells = cells[:0]
 
-		for i := 0; i < len(row); {
-			j := i + 1
+			for i := 0; i < len(row); {
+				j := i + 1
 
-			for j < len(row) && row[j].Column() == row[i].Column() {
-				j++
-			}
-
-			if (j - i) == 1 {
-				cells = append(cells, row[i].String())
-			} else {
-				parts = parts[:0]
-				for k := i; k < j; k++ {
-					parts = append(parts, row[k].String())
+				for j < len(row) && row[j].Column() == row[i].Column() {
+					j++
 				}
-				alignment[len(cells)] = tablewriter.ALIGN_LEFT
-				cells = append(cells, strings.Join(parts, ","))
+
+				if (j - i) == 1 {
+					cells = append(cells, row[i].String())
+				} else {
+					parts = parts[:0]
+					for k := i; k < j; k++ {
+						parts = append(parts, row[k].String())
+					}
+					alignment[len(cells)] = tablewriter.ALIGN_LEFT
+					cells = append(cells, strings.Join(parts, ","))
+				}
+
+				i = j
 			}
 
-			i = j
+			tw.Append(cells)
 		}
 
-		tw.Append(cells)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return err
+		}
 	}
 
 	tw.SetAutoFormatHeaders(false)

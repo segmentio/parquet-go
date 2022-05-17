@@ -369,14 +369,14 @@ func BenchmarkReaderReadRow(b *testing.B) {
 			}
 
 			r := parquet.NewReader(f)
-			rowbuf := make(parquet.Row, 0, 16)
+			rowbuf := make([]parquet.Row, 0, 16)
 
 			b.ResetTimer()
 			start := time.Now()
 
 			for i := 0; i < b.N; i++ {
-				var err error
-				if rowbuf, err = r.ReadRow(rowbuf[:0]); err != nil {
+				_, err := r.ReadRows(rowbuf)
+				if err != nil {
 					if err == io.EOF {
 						r.Reset()
 					} else {

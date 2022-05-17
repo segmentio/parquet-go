@@ -72,23 +72,21 @@ func testSeekToRow(t *testing.T, newRowGroup func([]Person) parquet.RowGroup) {
 		}
 		rowGroup := newRowGroup(people)
 		rows := rowGroup.Rows()
-		rbuf := parquet.Row{}
+		rbuf := make([]parquet.Row, 1)
 		pers := Person{}
 		schema := parquet.SchemaOf(&pers)
 		defer rows.Close()
 
 		for i := range people {
-			err := rows.SeekToRow(int64(i))
-			if err != nil {
+			if err := rows.SeekToRow(int64(i)); err != nil {
 				t.Errorf("seeking to row %d: %+v", i, err)
 				return false
 			}
-			rbuf, err = rows.ReadRow(rbuf[:0])
-			if err != nil {
+			if _, err := rows.ReadRows(rbuf); err != nil {
 				t.Errorf("reading row %d: %+v", i, err)
 				return false
 			}
-			if err := schema.Reconstruct(&pers, rbuf); err != nil {
+			if err := schema.Reconstruct(&pers, rbuf[0]); err != nil {
 				t.Errorf("deconstructing row %d: %+v", i, err)
 				return false
 			}
@@ -371,8 +369,13 @@ func TestMergeRowGroups(t *testing.T) {
 					// directly to the buffer by calling WriteRowsTo/WriteRowGroup.
 					mergedCopy := parquet.NewBuffer(options...)
 
-					if _, err := copyRowsAndClose(mergedCopy, merged.Rows()); err != nil {
+					totalRows := test.output.NumRows()
+					numRows, err := copyRowsAndClose(mergedCopy, merged.Rows())
+					if err != nil {
 						t.Fatal(err)
+					}
+					if numRows != totalRows {
+						t.Fatalf("wrong number of rows copied: want=%d got=%d", totalRows, numRows)
 					}
 
 					for _, merge := range []struct {
@@ -385,36 +388,34 @@ func TestMergeRowGroups(t *testing.T) {
 						t.Run(merge.scenario, func(t *testing.T) {
 							var expectedRows = test.output.Rows()
 							var mergedRows = merge.rowGroup.Rows()
-							var row1 parquet.Row
-							var row2 parquet.Row
-							var err1 error
-							var err2 error
+							var row1 = make([]parquet.Row, 1)
+							var row2 = make([]parquet.Row, 1)
 							var numRows int64
 
 							defer expectedRows.Close()
 							defer mergedRows.Close()
 
 							for {
-								row1, err1 = expectedRows.ReadRow(row1[:0])
-								row2, err2 = mergedRows.ReadRow(row2[:0])
+								_, err1 := expectedRows.ReadRows(row1)
+								_, err2 := mergedRows.ReadRows(row2)
 
 								if err1 != err2 {
-									t.Fatalf("errors mismatched while comparing row %+v: want=%v got=%v", row1, err1, err2)
+									t.Fatalf("errors mismatched while comparing row %d/%d: want=%v got=%v", numRows, totalRows, err1, err2)
 								}
 
 								if err1 != nil {
 									break
 								}
 
-								if !row1.Equal(row2) {
-									t.Errorf("row at index %d mismatch: want=%+v got=%+v", numRows, row1, row2)
+								if !row1[0].Equal(row2[0]) {
+									t.Errorf("row at index %d/%d mismatch: want=%+v got=%+v", numRows, totalRows, row1[0], row2[0])
 								}
 
 								numRows++
 							}
 
-							if numRows != test.output.NumRows() {
-								t.Errorf("expected to read %d rows but %d were found", test.output.NumRows(), numRows)
+							if numRows != totalRows {
+								t.Errorf("expected to read %d rows but %d were found", totalRows, numRows)
 							}
 						})
 					}

@@ -45,7 +45,7 @@ type Writer struct {
 	config *WriterConfig
 	schema *Schema
 	writer *writer
-	values []Value
+	buffer [defaultRowBufferSize]Row
 }
 
 // NewWriter constructs a parquet writer writing a file to the given io.Writer.
@@ -131,10 +131,10 @@ func (w *Writer) Write(row interface{}) error {
 		w.configure(SchemaOf(row))
 	}
 	defer func() {
-		clearValues(w.values)
+		clearValues(w.buffer[1])
 	}()
-	w.values = w.schema.Deconstruct(w.values[:0], row)
-	_, err := w.WriteRows([]Row{w.values})
+	w.buffer[0] = w.schema.Deconstruct(w.buffer[0][:0], row)
+	_, err := w.WriteRows(w.buffer[:1])
 	return err
 }
 
@@ -188,8 +188,12 @@ func (w *Writer) ReadRowsFrom(rows RowReader) (written int64, err error) {
 			w.configure(r.Schema())
 		}
 	}
-	written, w.values, err = copyRows(w.writer, rows, w.values[:0])
-	return written, err
+	defer func() {
+		for _, row := range w.buffer {
+			clearValues(row)
+		}
+	}()
+	return copyRows(w.writer, rows, w.buffer[:])
 }
 
 // Schema returns the schema of rows written by w.
