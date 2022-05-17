@@ -571,7 +571,6 @@ func (c *Column) decodeDataPageV2(header DataPageHeaderV2, page *dataPage) (Page
 	var data = page.data
 	page.repetitionLevels = page.repetitionLevels[:0]
 	page.definitionLevels = page.definitionLevels[:0]
-	//fmt.Printf("PAGE: %q\n", data)
 
 	if c.maxRepetitionLevel > 0 {
 		encoding := lookupLevelEncoding(header.RepetitionLevelEncoding(), c.maxRepetitionLevel)
