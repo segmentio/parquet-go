@@ -10,6 +10,7 @@ import (
 	"sort"
 	"testing"
 	"testing/quick"
+	"time"
 
 	"github.com/segmentio/parquet-go"
 	"github.com/segmentio/parquet-go/encoding"
@@ -541,6 +542,8 @@ func BenchmarkBufferReadRows100x(b *testing.B) {
 	}
 
 	b.ResetTimer()
+	start := time.Now()
+
 	bufferRows := buffer.Rows()
 	defer bufferRows.Close()
 
@@ -559,6 +562,10 @@ func BenchmarkBufferReadRows100x(b *testing.B) {
 			}
 		}
 	}
+
+	numRows := b.N * benchmarkBufferRowsPerStep
+	seconds := time.Since(start).Seconds()
+	b.ReportMetric(float64(numRows)/seconds, "row/s")
 }
 
 func BenchmarkBufferWriteRows100x(b *testing.B) {
@@ -566,6 +573,8 @@ func BenchmarkBufferWriteRows100x(b *testing.B) {
 	buffer := parquet.NewBuffer(schema)
 
 	b.ResetTimer()
+	start := time.Now()
+
 	for i, j := 0, 0; i < b.N; i++ {
 		for _, row := range rows[j : j+benchmarkBufferRowsPerStep] {
 			err := buffer.WriteRow(row)
@@ -581,4 +590,8 @@ func BenchmarkBufferWriteRows100x(b *testing.B) {
 			buffer.Reset()
 		}
 	}
+
+	numRows := b.N * benchmarkBufferRowsPerStep
+	seconds := time.Since(start).Seconds()
+	b.ReportMetric(float64(numRows)/seconds, "row/s")
 }
