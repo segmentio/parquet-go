@@ -24,6 +24,9 @@ import (
 //		}
 //		rows = append(rows, row)
 //	}
+//	if err := reader.Close(); err != nil {
+//		...
+//	}
 //
 //
 type Reader struct {
