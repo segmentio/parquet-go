@@ -22,7 +22,7 @@ type Schema struct {
 	root        Node
 	deconstruct deconstructFunc
 	reconstruct reconstructFunc
-	readRow     columnReadRowFunc
+	readRows    columnReadRowsFunc
 	mapping     columnMapping
 	columns     [][]string
 }
@@ -103,7 +103,7 @@ func NewSchema(name string, root Node) *Schema {
 		root:        root,
 		deconstruct: makeDeconstructFunc(root),
 		reconstruct: makeReconstructFunc(root),
-		readRow:     makeColumnReadRowFunc(root),
+		readRows:    makeColumnReadRowsFunc(root),
 		mapping:     mapping,
 		columns:     columns,
 	}
@@ -136,9 +136,9 @@ func makeReconstructFunc(node Node) (reconstruct reconstructFunc) {
 	return reconstruct
 }
 
-func makeColumnReadRowFunc(node Node) columnReadRowFunc {
-	_, readRow := columnReadRowFuncOf(node, 0, 0)
-	return readRow
+func makeColumnReadRowsFunc(node Node) columnReadRowsFunc {
+	_, readRows := columnReadRowsFuncOf(node, 0, 0)
+	return readRows
 }
 
 // ConfigureRowGroup satisfies the RowGroupOption interface, allowing Schema

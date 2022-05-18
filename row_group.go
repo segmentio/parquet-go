@@ -329,20 +329,11 @@ func (r *rowGroupRows) ReadRows(rows []Row) (int, error) {
 		return 0, io.EOF
 	}
 
-	schema := r.rowGroup.Schema()
-
-	for n, row := range rows {
-		row, err := schema.readRow(row[:0], 0, r.columns)
-		rows[n] = row
-		if err == nil && len(row) == 0 {
-			err = io.EOF
-		}
-		if err != nil {
-			return n, err
-		}
+	for i := range rows {
+		rows[i] = rows[i][:0]
 	}
 
-	return len(rows), nil
+	return r.rowGroup.Schema().readRows(rows, 0, r.columns)
 }
 
 /*
