@@ -68,7 +68,7 @@ type RowReader interface {
 	// number of rows and a non-nil error (including io.EOF).
 	//
 	// The buffer of rows passed as argument will be used to store values of
-	// each row read from the reader. If the rows are no nil, the backing array
+	// each row read from the reader. If the rows are not nil, the backing array
 	// of the slices will be used as an optimization to avoid re-allocating new
 	// arrays.
 	ReadRows([]Row) (int, error)
