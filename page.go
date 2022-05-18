@@ -286,9 +286,9 @@ func countLevelsNotEqual(levels []byte, value byte) int {
 func appendLevel(levels []byte, value byte, count int) []byte {
 	if count > 0 {
 		i := len(levels)
-		j := len(levels) + 1
+		n := len(levels) + count
 
-		if n := len(levels) + count; cap(levels) < n {
+		if cap(levels) < n {
 			newLevels := make([]byte, n)
 			copy(newLevels, levels)
 			levels = newLevels
@@ -296,8 +296,9 @@ func appendLevel(levels []byte, value byte, count int) []byte {
 			levels = levels[:n]
 		}
 
-		for levels[i] = value; j < len(levels); j *= 2 {
-			copy(levels[j:], levels[i:j])
+		fill := levels[i:]
+		for i := range fill {
+			fill[i] = value
 		}
 	}
 	return levels

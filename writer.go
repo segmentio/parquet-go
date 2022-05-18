@@ -204,6 +204,7 @@ func (w *Writer) Schema() *Schema { return w.schema }
 type writer struct {
 	buffer *bufio.Writer
 	writer offsetTrackingWriter
+	values [][]Value
 
 	createdBy string
 	metadata  []format.KeyValue
@@ -354,6 +355,16 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 			}
 		}
 	})
+
+	// Pre-allocate the backing array so that in most cases where the rows
+	// contain a single value we will hit collocated memory areas when writing
+	// rows to the writer. This won't benefit repeated columns much but in that
+	// case we would just waste a bit of memory which we can afford.
+	values := make([]Value, len(w.columns))
+	w.values = make([][]Value, len(w.columns))
+	for i := range values {
+		w.values[i] = values[i : i : i+1]
+	}
 
 	w.columnChunk = make([]format.ColumnChunk, len(w.columns))
 	w.columnIndex = make([]format.ColumnIndex, len(w.columns))
@@ -626,9 +637,9 @@ func (w *writer) writeRowGroup(rowGroupSchema *Schema, rowGroupSortingColumns []
 
 func (w *writer) WriteRows(rows []Row) (int, error) {
 	defer func() {
-		for _, c := range w.columns {
-			clearValues(c.values)
-			c.values = c.values[:0]
+		for i, values := range w.values {
+			clearValues(values)
+			w.values[i] = values[:0]
 		}
 	}()
 
@@ -638,14 +649,16 @@ func (w *writer) WriteRows(rows []Row) (int, error) {
 	// we are preventing further use as well?
 	for _, row := range rows {
 		for _, value := range row {
-			c := w.columns[value.Column()]
-			c.values = append(c.values, value)
+			columnIndex := value.Column()
+			w.values[columnIndex] = append(w.values[columnIndex], value)
 		}
 	}
 
-	for _, c := range w.columns {
-		if err := c.writeRows(c.values); err != nil {
-			return 0, err
+	for i, values := range w.values {
+		if len(values) > 0 {
+			if err := w.columns[i].writeRows(values); err != nil {
+				return 0, err
+			}
 		}
 	}
 
@@ -761,8 +774,6 @@ func (wb *writerBuffers) swapPageAndScratchBuffers() {
 }
 
 type writerColumn struct {
-	values []Value
-
 	pool  PageBufferPool
 	pages []io.ReadWriter
 

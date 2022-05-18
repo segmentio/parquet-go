@@ -77,11 +77,16 @@ func (r *columnChunkReader) readValues() error {
 		return nil
 	}
 	if r.values == nil {
-		p, err := r.reader.ReadPage()
-		if err != nil {
-			return err
+		for {
+			p, err := r.reader.ReadPage()
+			if err != nil {
+				return err
+			}
+			if p.NumValues() > 0 {
+				r.values = p.Values()
+				break
+			}
 		}
-		r.values = p.Values()
 	}
 	n, err := r.values.ReadValues(r.buffer[:cap(r.buffer)])
 	if errors.Is(err, io.EOF) {
