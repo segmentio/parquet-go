@@ -452,7 +452,10 @@ func TestBufferRoundtripNestedRepeated(t *testing.T) {
 	for i := 0; ; i++ {
 		o := new(A)
 		err := r.Read(o)
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
+			if i < len(objs) {
+				t.Errorf("too few rows were read: %d<%d", i, len(objs))
+			}
 			break
 		}
 		if !reflect.DeepEqual(*o, objs[i]) {

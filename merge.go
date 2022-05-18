@@ -54,8 +54,7 @@ func (r *mergedRowGroupRows) init(m *mergedRowGroup) {
 			// declared in this package; we may want to define an API to allow
 			// applications to participate in it.
 			if rd, ok := cursors[i].reader.(*rowGroupRows); ok {
-				rd.init(rd.rowGroup)
-				rd.rowGroup = nil
+				rd.init()
 				// TODO: this optimization is disabled for now, there are
 				// remaining blockers:
 				//

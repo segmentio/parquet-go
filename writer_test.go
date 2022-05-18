@@ -599,7 +599,8 @@ func TestWriterRepeatedUUIDDict(t *testing.T) {
 	rowbuf := make([]parquet.Row, 1)
 	rows := f.RowGroups()[0].Rows()
 	defer rows.Close()
-	if _, err := rows.ReadRows(rowbuf); err != nil {
+	n, err := rows.ReadRows(rowbuf)
+	if n == 0 {
 		t.Fatalf("reading row from parquet file: %v", err)
 	}
 	if len(rowbuf[0]) != 1 {
