@@ -22,7 +22,7 @@ type Schema struct {
 	root        Node
 	deconstruct deconstructFunc
 	reconstruct reconstructFunc
-	readRows    columnReadRowsFunc
+	readRows    readRowsFunc
 	mapping     columnMapping
 	columns     [][]string
 }
@@ -103,7 +103,7 @@ func NewSchema(name string, root Node) *Schema {
 		root:        root,
 		deconstruct: makeDeconstructFunc(root),
 		reconstruct: makeReconstructFunc(root),
-		readRows:    makeColumnReadRowsFunc(root),
+		readRows:    makeReadRowsFunc(root),
 		mapping:     mapping,
 		columns:     columns,
 	}
@@ -136,8 +136,8 @@ func makeReconstructFunc(node Node) (reconstruct reconstructFunc) {
 	return reconstruct
 }
 
-func makeColumnReadRowsFunc(node Node) columnReadRowsFunc {
-	_, readRows := columnReadRowsFuncOf(node, 0, 0)
+func makeReadRowsFunc(node Node) readRowsFunc {
+	_, readRows := readRowsFuncOf(node, 0, 0)
 	return readRows
 }
 

@@ -191,30 +191,30 @@ func (r *columnChunkReader) writeRowsTo(w pageAndValueWriter, limit int64) (numR
 }
 */
 
-type columnReadRowsFunc func([]Row, byte, []columnChunkReader) (int, error)
+type readRowsFunc func([]Row, byte, []columnChunkReader) (int, error)
 
-func columnReadRowsFuncOf(node Node, columnIndex int, repetitionDepth byte) (int, columnReadRowsFunc) {
-	var read columnReadRowsFunc
+func readRowsFuncOf(node Node, columnIndex int, repetitionDepth byte) (int, readRowsFunc) {
+	var read readRowsFunc
 
 	if node.Repeated() {
 		repetitionDepth++
 	}
 
 	if node.Leaf() {
-		columnIndex, read = columnReadRowsFuncOfLeaf(columnIndex, repetitionDepth)
+		columnIndex, read = readRowsFuncOfLeaf(columnIndex, repetitionDepth)
 	} else {
-		columnIndex, read = columnReadRowsFuncOfGroup(node, columnIndex, repetitionDepth)
+		columnIndex, read = readRowsFuncOfGroup(node, columnIndex, repetitionDepth)
 	}
 
 	if node.Repeated() {
-		read = columnReadRowsFuncOfRepeated(read, repetitionDepth)
+		read = readRowsFuncOfRepeated(read, repetitionDepth)
 	}
 
 	return columnIndex, read
 }
 
 //go:noinline
-func columnReadRowsFuncOfRepeated(read columnReadRowsFunc, repetitionDepth byte) columnReadRowsFunc {
+func readRowsFuncOfRepeated(read readRowsFunc, repetitionDepth byte) readRowsFunc {
 	return func(rows []Row, repetitionLevel byte, columns []columnChunkReader) (int, error) {
 		for i := range rows {
 			// Repeated columns have variable number of values, we must process
@@ -265,7 +265,7 @@ func columnReadRowsFuncOfRepeated(read columnReadRowsFunc, repetitionDepth byte)
 }
 
 //go:noinline
-func columnReadRowsFuncOfGroup(node Node, columnIndex int, repetitionDepth byte) (int, columnReadRowsFunc) {
+func readRowsFuncOfGroup(node Node, columnIndex int, repetitionDepth byte) (int, readRowsFunc) {
 	fields := node.Fields()
 
 	if len(fields) == 0 {
@@ -279,12 +279,12 @@ func columnReadRowsFuncOfGroup(node Node, columnIndex int, repetitionDepth byte)
 		// column (like nested list elements for example); there is no need to
 		// loop over the group of a single element, we can simply skip to calling
 		// the inner read function.
-		return columnReadRowsFuncOf(fields[0], columnIndex, repetitionDepth)
+		return readRowsFuncOf(fields[0], columnIndex, repetitionDepth)
 	}
 
-	group := make([]columnReadRowsFunc, len(fields))
+	group := make([]readRowsFunc, len(fields))
 	for i := range group {
-		columnIndex, group[i] = columnReadRowsFuncOf(fields[i], columnIndex, repetitionDepth)
+		columnIndex, group[i] = readRowsFuncOf(fields[i], columnIndex, repetitionDepth)
 	}
 
 	return columnIndex, func(rows []Row, repetitionLevel byte, columns []columnChunkReader) (int, error) {
@@ -311,8 +311,8 @@ func columnReadRowsFuncOfGroup(node Node, columnIndex int, repetitionDepth byte)
 }
 
 //go:noinline
-func columnReadRowsFuncOfLeaf(columnIndex int, repetitionDepth byte) (int, columnReadRowsFunc) {
-	var read columnReadRowsFunc
+func readRowsFuncOfLeaf(columnIndex int, repetitionDepth byte) (int, readRowsFunc) {
+	var read readRowsFunc
 
 	if repetitionDepth == 0 {
 		read = func(rows []Row, _ byte, columns []columnChunkReader) (int, error) {
