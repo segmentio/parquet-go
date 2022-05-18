@@ -187,11 +187,12 @@ func (buf *Buffer) Write(row interface{}) error {
 		clearValues(buf.rowbuf)
 	}()
 	buf.rowbuf = buf.schema.Deconstruct(buf.rowbuf[:0], row)
-	return buf.WriteRow(buf.rowbuf)
+	_, err := buf.WriteRows([]Row{buf.rowbuf})
+	return err
 }
 
-// WriteRow writes a parquet row to the buffer.
-func (buf *Buffer) WriteRow(row Row) error {
+// WriteRows writes parquet rows to the buffer.
+func (buf *Buffer) WriteRows(rows []Row) (int, error) {
 	defer func() {
 		for i, colbuf := range buf.colbuf {
 			clearValues(colbuf)
@@ -200,21 +201,27 @@ func (buf *Buffer) WriteRow(row Row) error {
 	}()
 
 	if buf.schema == nil {
-		return ErrRowGroupSchemaMissing
+		return 0, ErrRowGroupSchemaMissing
 	}
 
-	for _, value := range row {
-		columnIndex := value.Column()
-		buf.colbuf[columnIndex] = append(buf.colbuf[columnIndex], value)
+	for _, row := range rows {
+		for _, value := range row {
+			columnIndex := value.Column()
+			buf.colbuf[columnIndex] = append(buf.colbuf[columnIndex], value)
+		}
 	}
 
 	for columnIndex, values := range buf.colbuf {
 		if _, err := buf.columns[columnIndex].WriteValues(values); err != nil {
-			return err
+			// TOOD: an error at this stage will leave the buffer in an invalid
+			// state since the row was partially written. Applications are not
+			// expected to continue using the buffer after getting an error,
+			// maybe we can enforce it?
+			return 0, err
 		}
 	}
 
-	return nil
+	return len(rows), nil
 }
 
 // WriteRowGroup satisfies the RowGroupWriter interface.
@@ -249,8 +256,8 @@ func (buf *Buffer) Rows() Rows { return &rowGroupRows{rowGroup: buf} }
 // rows by copying whole pages instead of calling WriteRow repeatedly.
 type bufferWriter struct{ buf *Buffer }
 
-func (w bufferWriter) WriteRow(row Row) error {
-	return w.buf.WriteRow(row)
+func (w bufferWriter) WriteRows(rows []Row) (int, error) {
+	return w.buf.WriteRows(rows)
 }
 
 func (w bufferWriter) WriteValues(values []Value) (int, error) {

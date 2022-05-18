@@ -27,7 +27,7 @@ func TestOptionalDictWriteRowGroup(t *testing.T) {
 	buf := parquet.NewBuffer(s)
 	for _, rec := range records {
 		row := s.Deconstruct(nil, rec)
-		err := buf.WriteRow(row)
+		_, err := buf.WriteRows([]parquet.Row{row})
 		if err != nil {
 			t.Fatal(err)
 		}

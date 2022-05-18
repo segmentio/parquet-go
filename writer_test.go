@@ -584,11 +584,9 @@ func TestWriterRepeatedUUIDDict(t *testing.T) {
 	schema := parquet.SchemaOf(&records[0])
 	b := bytes.NewBuffer(nil)
 	w := parquet.NewWriter(b, schema)
-	err := w.Write(records[0])
-	if err != nil {
+	if err := w.Write(records[0]); err != nil {
 		t.Fatal(err)
 	}
-
 	if err := w.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -598,15 +596,17 @@ func TestWriterRepeatedUUIDDict(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	rowbuf := make([]parquet.Row, 1)
 	rows := f.RowGroups()[0].Rows()
-	row, err := rows.ReadRow(nil)
-	if err != nil {
+	defer rows.Close()
+	n, err := rows.ReadRows(rowbuf)
+	if n == 0 {
 		t.Fatalf("reading row from parquet file: %v", err)
 	}
-	if len(row) != 1 {
-		t.Errorf("expected 1 value in row, got %d", len(row))
+	if len(rowbuf[0]) != 1 {
+		t.Errorf("expected 1 value in row, got %d", len(rowbuf[0]))
 	}
-	if !bytes.Equal(inputID[:], row[0].Bytes()) {
-		t.Errorf("expected to get UUID %q back out, got %q", inputID, row[0].Bytes())
+	if !bytes.Equal(inputID[:], rowbuf[0][0].Bytes()) {
+		t.Errorf("expected to get UUID %q back out, got %q", inputID, rowbuf[0][0].Bytes())
 	}
 }

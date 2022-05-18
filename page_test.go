@@ -396,23 +396,25 @@ func TestOptionalPageTrailingNulls(t *testing.T) {
 	}}
 
 	for _, row := range rows {
-		if err := buffer.WriteRow(schema.Deconstruct(nil, row)); err != nil {
+		_, err := buffer.WriteRows([]parquet.Row{schema.Deconstruct(nil, row)})
+		if err != nil {
 			t.Fatal("writing row:", err)
 		}
 	}
 
-	resultRows := []parquet.Row{}
+	resultRows := make([]parquet.Row, 0, len(rows))
+	bufferRows := make([]parquet.Row, 10)
 	reader := buffer.Rows()
 	defer reader.Close()
 	for {
-		row, err := reader.ReadRow(nil)
+		n, err := reader.ReadRows(bufferRows)
+		resultRows = append(resultRows, bufferRows[:n]...)
 		if err != nil {
 			if err == io.EOF {
 				break
 			}
 			t.Fatal("reading rows:", err)
 		}
-		resultRows = append(resultRows, row)
 	}
 
 	if len(resultRows) != len(rows) {
@@ -424,20 +426,26 @@ func TestOptionalPagePreserveIndex(t *testing.T) {
 	schema := parquet.SchemaOf(&testStruct{})
 	buffer := parquet.NewBuffer(schema)
 
-	if err := buffer.WriteRow(schema.Deconstruct(nil, &testStruct{Value: nil})); err != nil {
+	_, err := buffer.WriteRows([]parquet.Row{
+		schema.Deconstruct(nil, &testStruct{Value: nil}),
+	})
+	if err != nil {
 		t.Fatal("writing row:", err)
 	}
 
 	rows := buffer.Rows()
 	defer rows.Close()
 
-	row, err := rows.ReadRow(nil)
-	if err != nil {
+	rowbuf := make([]parquet.Row, 2)
+	n, err := rows.ReadRows(rowbuf)
+	if err != io.EOF {
 		t.Fatal("reading rows:", err)
 	}
-
-	if row[0].Column() != 0 {
-		t.Errorf("wrong index: got=%d want=%d", row[0].Column(), 0)
+	if n != 1 {
+		t.Fatal("wrong number of rows returned:", n)
+	}
+	if rowbuf[0][0].Column() != 0 {
+		t.Errorf("wrong index: got=%d want=%d", rowbuf[0][0].Column(), 0)
 	}
 }
 
@@ -457,27 +465,22 @@ func TestRepeatedPageTrailingNulls(t *testing.T) {
 	buf := parquet.NewBuffer(s)
 	for _, rec := range records {
 		row := s.Deconstruct(nil, rec)
-		err := buf.WriteRow(row)
+		_, err := buf.WriteRows([]parquet.Row{row})
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	resultRows := []parquet.Row{}
+	rows := make([]parquet.Row, len(records)+1)
 	reader := buf.Rows()
 	defer reader.Close()
-	for {
-		row, err := reader.ReadRow(nil)
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			t.Fatal("reading rows:", err)
-		}
-		resultRows = append(resultRows, row)
+
+	n, err := reader.ReadRows(rows)
+	if err != io.EOF {
+		t.Fatal("reading rows:", err)
 	}
 
-	if len(resultRows) != len(records) {
-		t.Errorf("wrong number of rows read: got=%d want=%d", len(resultRows), len(records))
+	if n != len(records) {
+		t.Errorf("wrong number of rows read: got=%d want=%d", n, len(records))
 	}
 }

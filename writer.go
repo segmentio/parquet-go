@@ -45,7 +45,7 @@ type Writer struct {
 	config *WriterConfig
 	schema *Schema
 	writer *writer
-	values []Value
+	buffer [defaultRowBufferSize]Row
 }
 
 // NewWriter constructs a parquet writer writing a file to the given io.Writer.
@@ -131,10 +131,11 @@ func (w *Writer) Write(row interface{}) error {
 		w.configure(SchemaOf(row))
 	}
 	defer func() {
-		clearValues(w.values)
+		clearValues(w.buffer[1])
 	}()
-	w.values = w.schema.Deconstruct(w.values[:0], row)
-	return w.WriteRow(w.values)
+	w.buffer[0] = w.schema.Deconstruct(w.buffer[0][:0], row)
+	_, err := w.WriteRows(w.buffer[:1])
+	return err
 }
 
 // WriteRow is called to write another row to the parquet file.
@@ -144,7 +145,9 @@ func (w *Writer) Write(row interface{}) error {
 //
 // The row is expected to contain values for each column of the writer's schema,
 // in the order produced by the parquet.(*Schema).Deconstruct method.
-func (w *Writer) WriteRow(row Row) error { return w.writer.WriteRow(row) }
+func (w *Writer) WriteRows(rows []Row) (int, error) {
+	return w.writer.WriteRows(rows)
+}
 
 // WriteRowGroup writes a row group to the parquet file.
 //
@@ -185,8 +188,12 @@ func (w *Writer) ReadRowsFrom(rows RowReader) (written int64, err error) {
 			w.configure(r.Schema())
 		}
 	}
-	written, w.values, err = copyRows(w.writer, rows, w.values[:0])
-	return written, err
+	defer func() {
+		for _, row := range w.buffer {
+			clearValues(row)
+		}
+	}()
+	return copyRows(w.writer, rows, w.buffer[:])
 }
 
 // Schema returns the schema of rows written by w.
@@ -324,15 +331,6 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 		}
 
 		c.header.encoder.Reset(c.header.protocol.NewWriter(&buffers.header))
-
-		if leaf.maxRepetitionLevel > 0 {
-			c.insert = (*writerColumn).insertRepeated
-			c.commit = (*writerColumn).commitRepeated
-			c.values = make([]Value, 0, 10)
-		} else {
-			c.insert = (*writerColumn).writeRow
-			c.commit = func(*writerColumn) error { return nil }
-		}
 
 		if leaf.maxDefinitionLevel > 0 {
 			c.encodings = addEncoding(c.encodings, format.RLE)
@@ -626,19 +624,32 @@ func (w *writer) writeRowGroup(rowGroupSchema *Schema, rowGroupSortingColumns []
 	return numRows, nil
 }
 
-func (w *writer) WriteRow(row Row) error {
-	for i := range row {
-		c := w.columns[row[i].Column()]
-		if err := c.insert(c, row[i:i+1]); err != nil {
-			return err
+func (w *writer) WriteRows(rows []Row) (int, error) {
+	defer func() {
+		for _, c := range w.columns {
+			clearValues(c.values)
+			c.values = c.values[:0]
+		}
+	}()
+
+	// TODO: if an error occurs in this method the writer may be left in an
+	// partially functional state. Applications are not expected to continue
+	// using the writer after getting an error, but maybe we could ensure that
+	// we are preventing further use as well?
+	for _, row := range rows {
+		for _, value := range row {
+			c := w.columns[value.Column()]
+			c.values = append(c.values, value)
 		}
 	}
+
 	for _, c := range w.columns {
-		if err := c.commit(c); err != nil {
-			return err
+		if err := c.writeRows(c.values); err != nil {
+			return 0, err
 		}
 	}
-	return nil
+
+	return len(rows), nil
 }
 
 // The WriteValues method is intended to work in pair with WritePage to allow
@@ -750,8 +761,6 @@ func (wb *writerBuffers) swapPageAndScratchBuffers() {
 }
 
 type writerColumn struct {
-	insert func(*writerColumn, []Value) error
-	commit func(*writerColumn) error
 	values []Value
 
 	pool  PageBufferPool
@@ -903,19 +912,6 @@ func (c *writerColumn) resizeBloomFilter(numValues int64) {
 	}
 }
 
-func (c *writerColumn) insertRepeated(row []Value) error {
-	c.values = append(c.values, row...)
-	return nil
-}
-
-func (c *writerColumn) commitRepeated() error {
-	defer func() {
-		clearValues(c.values)
-		c.values = c.values[:0]
-	}()
-	return c.writeRow(c.values)
-}
-
 func (c *writerColumn) newColumnBuffer() ColumnBuffer {
 	column := c.columnType.NewColumnBuffer(int(c.bufferIndex), int(c.bufferSize))
 	switch {
@@ -927,7 +923,7 @@ func (c *writerColumn) newColumnBuffer() ColumnBuffer {
 	return column
 }
 
-func (c *writerColumn) writeRow(row []Value) error {
+func (c *writerColumn) writeRows(rows []Value) error {
 	if c.columnBuffer == nil {
 		// Lazily create the row group column so we don't need to allocate it if
 		// rows are not written individually to the column.
@@ -935,16 +931,16 @@ func (c *writerColumn) writeRow(row []Value) error {
 		c.maxValues = int32(c.columnBuffer.Cap())
 	}
 
-	if c.numValues > 0 && c.numValues > (c.maxValues-int32(len(row))) {
+	if c.numValues > 0 && c.numValues > (c.maxValues-int32(len(rows))) {
 		if err := c.flush(); err != nil {
 			return err
 		}
 	}
 
-	if _, err := c.columnBuffer.WriteValues(row); err != nil {
+	if _, err := c.columnBuffer.WriteValues(rows); err != nil {
 		return err
 	}
-	c.numValues += int32(len(row))
+	c.numValues += int32(len(rows))
 	return nil
 }
 

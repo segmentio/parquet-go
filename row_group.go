@@ -251,92 +251,92 @@ func NewRowGroupRowReader(rowGroup RowGroup) Rows {
 
 type rowGroupRows struct {
 	rowGroup RowGroup
-	schema   *Schema
 	columns  []columnChunkReader
 	seek     int64
+	inited   bool
+	closed   bool
 }
 
-func (r *rowGroupRows) init(rowGroup RowGroup) error {
+func (r *rowGroupRows) init() {
 	const columnBufferSize = defaultValueBufferSize
-	columns := rowGroup.ColumnChunks()
+	columns := r.rowGroup.ColumnChunks()
 	buffer := make([]Value, columnBufferSize*len(columns))
-
-	r.schema = rowGroup.Schema()
 	r.columns = make([]columnChunkReader, len(columns))
 
 	for i, column := range columns {
-		r.columns[i].column = column
 		r.columns[i].buffer = buffer[:0:columnBufferSize]
+		r.columns[i].reader = column.Pages()
 		buffer = buffer[columnBufferSize:]
 	}
 
-	if r.seek > 0 {
-		return r.SeekToRow(r.seek)
-	}
-	return nil
+	r.inited = true
 }
 
-func (r *rowGroupRows) reset() {
+func (r *rowGroupRows) Reset() {
 	for i := range r.columns {
 		// Ignore errors because we are resetting the reader, if the error
 		// persists we will see it on the next read, and otherwise we can
 		// read back from the beginning.
-		r.columns[i].close()
+		r.columns[i].seekToRow(0)
 	}
 	r.seek = 0
 }
 
 func (r *rowGroupRows) Close() error {
 	var lastErr error
+
 	for i := range r.columns {
 		if err := r.columns[i].close(); err != nil {
 			lastErr = err
 		}
 	}
-	r.rowGroup = nil
+
+	r.inited = true
+	r.closed = true
 	return lastErr
 }
 
 func (r *rowGroupRows) Schema() *Schema {
-	switch {
-	case r.schema != nil:
-		return r.schema
-	case r.rowGroup != nil:
-		return r.rowGroup.Schema()
-	default:
-		return nil
-	}
+	return r.rowGroup.Schema()
 }
 
 func (r *rowGroupRows) SeekToRow(rowIndex int64) error {
+	if r.closed {
+		return io.ErrClosedPipe
+	}
+
 	for i := range r.columns {
 		if err := r.columns[i].seekToRow(rowIndex); err != nil {
 			return err
 		}
 	}
+
 	r.seek = rowIndex
 	return nil
 }
 
-func (r *rowGroupRows) ReadRow(row Row) (Row, error) {
-	if r.rowGroup != nil {
-		err := r.init(r.rowGroup)
-		r.rowGroup = nil
-		if err != nil {
-			return row, err
+func (r *rowGroupRows) ReadRows(rows []Row) (int, error) {
+	if !r.inited {
+		r.init()
+		if r.seek > 0 {
+			if err := r.SeekToRow(r.seek); err != nil {
+				return 0, err
+			}
 		}
 	}
-	if r.schema == nil {
-		return row, io.EOF
+
+	if r.closed {
+		return 0, io.EOF
 	}
-	n := len(row)
-	row, err := r.schema.readRow(row, 0, r.columns)
-	if err == nil && len(row) == n {
-		err = io.EOF
+
+	for i := range rows {
+		rows[i] = rows[i][:0]
 	}
-	return row, err
+
+	return r.rowGroup.Schema().readRows(rows, 0, r.columns)
 }
 
+/*
 func (r *rowGroupRows) WriteRowsTo(w RowWriter) (int64, error) {
 	if r.rowGroup == nil {
 		return CopyRows(w, struct{ RowReaderWithSchema }{r})
@@ -390,6 +390,7 @@ func (r *rowGroupRows) writeRowsTo(w pageAndValueWriter, limit int64) (numRows i
 	}
 	return numRows, nil
 }
+*/
 
 type seekRowGroup struct {
 	base    RowGroup
@@ -504,7 +505,7 @@ type emptyRows struct{ schema *Schema }
 
 func (r emptyRows) Close() error                         { return nil }
 func (r emptyRows) Schema() *Schema                      { return r.schema }
-func (r emptyRows) ReadRow(row Row) (Row, error)         { return row, io.EOF }
+func (r emptyRows) ReadRows([]Row) (int, error)          { return 0, io.EOF }
 func (r emptyRows) SeekToRow(int64) error                { return nil }
 func (r emptyRows) WriteRowsTo(RowWriter) (int64, error) { return 0, nil }
 
@@ -516,7 +517,7 @@ func (emptyPages) Close() error            { return nil }
 
 var (
 	_ RowReaderWithSchema = (*rowGroupRows)(nil)
-	_ RowWriterTo         = (*rowGroupRows)(nil)
+	//_ RowWriterTo         = (*rowGroupRows)(nil)
 
 	_ RowReaderWithSchema = emptyRows{}
 	_ RowWriterTo         = emptyRows{}

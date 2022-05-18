@@ -34,7 +34,7 @@ type Reader struct {
 	file     reader
 	read     reader
 	rowIndex int64
-	values   []Value
+	values   [1]Row
 }
 
 // NewReader constructs a parquet reader reading rows from the given
@@ -166,14 +166,14 @@ func (r *Reader) Reset() {
 	r.file.Reset()
 	r.read.Reset()
 	r.rowIndex = 0
-	clearValues(r.values)
+	clearValues(r.values[0])
 }
 
 // Read reads the next row from r. The type of the row must match the schema
 // of the underlying parquet file or an error will be returned.
 //
 // The method returns io.EOF when no more rows can be read from r.
-func (r *Reader) Read(row interface{}) (err error) {
+func (r *Reader) Read(row interface{}) error {
 	if rowType := dereference(reflect.TypeOf(row)); rowType.Kind() == reflect.Struct {
 		if r.seen != rowType {
 			if err := r.updateReadSchema(rowType); err != nil {
@@ -189,13 +189,13 @@ func (r *Reader) Read(row interface{}) (err error) {
 		return fmt.Errorf("seeking reader to row %d: %w", r.rowIndex, err)
 	}
 
-	r.values, err = r.read.ReadRow(r.values[:0])
-	if err != nil {
+	n, err := r.read.ReadRows(r.values[:])
+	if n == 0 {
 		return err
 	}
 
 	r.rowIndex++
-	return r.read.schema.Reconstruct(row, r.values)
+	return r.read.schema.Reconstruct(row, r.values[0])
 }
 
 func (r *Reader) updateReadSchema(rowType reflect.Type) error {
@@ -215,21 +215,19 @@ func (r *Reader) updateReadSchema(rowType reflect.Type) error {
 	return nil
 }
 
-// ReadRow reads the next row from r and appends in to the given Row buffer.
+// ReadRows reads the next rows from r into the given Row buffer.
 //
 // The returned values are laid out in the order expected by the
 // parquet.(*Schema).Reconstruct method.
 //
 // The method returns io.EOF when no more rows can be read from r.
-func (r *Reader) ReadRow(row Row) (Row, error) {
+func (r *Reader) ReadRows(rows []Row) (int, error) {
 	if err := r.file.SeekToRow(r.rowIndex); err != nil {
-		return row, err
+		return 0, err
 	}
-	row, err := r.file.ReadRow(row)
-	if err == nil {
-		r.rowIndex++
-	}
-	return row, err
+	n, err := r.file.ReadRows(rows)
+	r.rowIndex += int64(n)
+	return n, err
 }
 
 // Schema returns the schema of rows read by r.
@@ -279,13 +277,16 @@ func (r *reader) init(schema *Schema, rowGroup RowGroup) {
 func (r *reader) Reset() {
 	r.rowIndex = 0
 
-	if rows, _ := r.rows.(*rowGroupRows); rows != nil {
+	if rows, ok := r.rows.(interface{ Reset() }); ok {
 		// This optimization works for the common case where the underlying type
 		// of the Rows instance is rowGroupRows, which should be true in most
 		// cases since even external implementations of the RowGroup interface
 		// can construct values of this type via the NewRowGroupRowReader
 		// function.
-		rows.reset()
+		//
+		// Foreign implementations of the Rows interface may also define a Reset
+		// method in order to participate in this optimization.
+		rows.Reset()
 		return
 	}
 
@@ -295,26 +296,21 @@ func (r *reader) Reset() {
 	}
 }
 
-func (r *reader) ReadRow(row Row) (Row, error) {
+func (r *reader) ReadRows(rows []Row) (int, error) {
 	if r.rowGroup == nil {
-		return row, io.EOF
+		return 0, io.EOF
 	}
 	if r.rows == nil {
 		r.rows = r.rowGroup.Rows()
 		if r.rowIndex > 0 {
 			if err := r.rows.SeekToRow(r.rowIndex); err != nil {
-				return row, err
+				return 0, err
 			}
 		}
 	}
-	n := len(row)
-	row, err := r.rows.ReadRow(row)
-	if err == nil && len(row) == n {
-		err = io.EOF
-	} else {
-		r.rowIndex++
-	}
-	return row, err
+	n, err := r.rows.ReadRows(rows)
+	r.rowIndex += int64(n)
+	return n, err
 }
 
 func (r *reader) SeekToRow(rowIndex int64) error {
@@ -341,7 +337,8 @@ func (r *reader) Close() (err error) {
 }
 
 var (
-	_ Rows      = (*Reader)(nil)
-	_ RowReader = (*reader)(nil)
-	_ RowSeeker = (*reader)(nil)
+	_ Rows                = (*Reader)(nil)
+	_ RowReader           = (*reader)(nil)
+	_ RowSeeker           = (*reader)(nil)
+	_ RowReaderWithSchema = (*Reader)(nil)
 )
