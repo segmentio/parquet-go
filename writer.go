@@ -332,15 +332,6 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 
 		c.header.encoder.Reset(c.header.protocol.NewWriter(&buffers.header))
 
-		if leaf.maxRepetitionLevel > 0 {
-			c.insert = (*writerColumn).insertRepeated
-			c.commit = (*writerColumn).commitRepeated
-			c.values = make([]Value, 0, 10)
-		} else {
-			c.insert = (*writerColumn).writeRow
-			c.commit = func(*writerColumn) error { return nil }
-		}
-
 		if leaf.maxDefinitionLevel > 0 {
 			c.encodings = addEncoding(c.encodings, format.RLE)
 		}
@@ -634,24 +625,26 @@ func (w *writer) writeRowGroup(rowGroupSchema *Schema, rowGroupSortingColumns []
 }
 
 func (w *writer) WriteRows(rows []Row) (int, error) {
+	defer func() {
+		for _, c := range w.columns {
+			clearValues(c.values)
+			c.values = c.values[:0]
+		}
+	}()
+
 	// TODO: if an error occurs in this method the writer may be left in an
 	// partially functional state. Applications are not expected to continue
 	// using the writer after getting an error, but maybe we could ensure that
 	// we are preventing further use as well?
 	for _, row := range rows {
-		for i := range row {
-			// TODO: instead of calling insert repeatedly we could detect
-			// sequences of repeated values here and make a single insert
-			// (e.g. contiguous values for the same column).
-			c := w.columns[row[i].Column()]
-			if err := c.insert(c, row[i:i+1]); err != nil {
-				return 0, err
-			}
+		for _, value := range row {
+			c := w.columns[value.Column()]
+			c.values = append(c.values, value)
 		}
 	}
 
 	for _, c := range w.columns {
-		if err := c.commit(c); err != nil {
+		if err := c.writeRows(c.values); err != nil {
 			return 0, err
 		}
 	}
@@ -768,8 +761,6 @@ func (wb *writerBuffers) swapPageAndScratchBuffers() {
 }
 
 type writerColumn struct {
-	insert func(*writerColumn, []Value) error
-	commit func(*writerColumn) error
 	values []Value
 
 	pool  PageBufferPool
@@ -921,19 +912,6 @@ func (c *writerColumn) resizeBloomFilter(numValues int64) {
 	}
 }
 
-func (c *writerColumn) insertRepeated(row []Value) error {
-	c.values = append(c.values, row...)
-	return nil
-}
-
-func (c *writerColumn) commitRepeated() error {
-	defer func() {
-		clearValues(c.values)
-		c.values = c.values[:0]
-	}()
-	return c.writeRow(c.values)
-}
-
 func (c *writerColumn) newColumnBuffer() ColumnBuffer {
 	column := c.columnType.NewColumnBuffer(int(c.bufferIndex), int(c.bufferSize))
 	switch {
@@ -945,7 +923,7 @@ func (c *writerColumn) newColumnBuffer() ColumnBuffer {
 	return column
 }
 
-func (c *writerColumn) writeRow(row []Value) error {
+func (c *writerColumn) writeRows(rows []Value) error {
 	if c.columnBuffer == nil {
 		// Lazily create the row group column so we don't need to allocate it if
 		// rows are not written individually to the column.
@@ -953,16 +931,16 @@ func (c *writerColumn) writeRow(row []Value) error {
 		c.maxValues = int32(c.columnBuffer.Cap())
 	}
 
-	if c.numValues > 0 && c.numValues > (c.maxValues-int32(len(row))) {
+	if c.numValues > 0 && c.numValues > (c.maxValues-int32(len(rows))) {
 		if err := c.flush(); err != nil {
 			return err
 		}
 	}
 
-	if _, err := c.columnBuffer.WriteValues(row); err != nil {
+	if _, err := c.columnBuffer.WriteValues(rows); err != nil {
 		return err
 	}
-	c.numValues += int32(len(row))
+	c.numValues += int32(len(rows))
 	return nil
 }
 
