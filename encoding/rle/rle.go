@@ -6,7 +6,6 @@
 package rle
 
 import (
-	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -40,27 +39,35 @@ func (e *Encoding) Encoding() format.Encoding {
 	return format.RLE
 }
 
-func (e *Encoding) EncodeBoolean(dst []byte, src []bool) ([]byte, error) {
+func (e *Encoding) EncodeLevels(dst, src []byte) ([]byte, error) {
+	dst, err := encodeBytes(dst[:0], src, uint(e.BitWidth))
+	return dst, e.wrap(err)
+}
+
+func (e *Encoding) EncodeBoolean(dst, src []byte) ([]byte, error) {
 	// In the case of encoding a boolean values, the 4 bytes length of the
 	// output is expected by the parquet format. We add the bytes as placeholder
 	// before appending the encoded data.
 	dst = append(dst[:0], 0, 0, 0, 0)
-	dst, err := encodeInt8(dst, bits.BytesToInt8(bits.BoolToBytes(src)), 1)
+	dst, err := encodeBits(dst, src)
 	binary.LittleEndian.PutUint32(dst, uint32(len(dst))-4)
 	return dst, e.wrap(err)
 }
 
-func (e *Encoding) EncodeInt8(dst []byte, src []int8) ([]byte, error) {
-	dst, err := encodeInt8(dst[:0], src, uint(e.BitWidth))
+func (e *Encoding) EncodeInt32(dst, src []byte) ([]byte, error) {
+	if (len(src) % 4) != 0 {
+		return dst[:0], encoding.ErrEncodeInvalidInputSize(e, "INT32", len(src))
+	}
+	dst, err := encodeInt32(dst[:0], bits.BytesToInt32(src), uint(e.BitWidth))
 	return dst, e.wrap(err)
 }
 
-func (e *Encoding) EncodeInt32(dst []byte, src []int32) ([]byte, error) {
-	dst, err := encodeInt32(dst[:0], src, uint(e.BitWidth))
+func (e *Encoding) DecodeLevels(dst, src []byte) ([]byte, error) {
+	dst, err := decodeBytes(dst[:0], src, uint(e.BitWidth))
 	return dst, e.wrap(err)
 }
 
-func (e *Encoding) DecodeBoolean(dst []bool, src []byte) ([]bool, error) {
+func (e *Encoding) DecodeBoolean(dst, src []byte) ([]byte, error) {
 	if len(src) == 4 {
 		return dst[:0], nil
 	}
@@ -72,17 +79,11 @@ func (e *Encoding) DecodeBoolean(dst []bool, src []byte) ([]bool, error) {
 	if n > len(src) {
 		return dst[:0], fmt.Errorf("input shorter than length prefix: %d < %d: %w", len(src), n, io.ErrUnexpectedEOF)
 	}
-	buf := bits.BytesToInt8(bits.BoolToBytes(dst))
-	buf, err := decodeInt8(buf[:0], src[:n], 1)
-	return bits.BytesToBool(bits.Int8ToBytes(buf)), e.wrap(err)
-}
-
-func (e *Encoding) DecodeInt8(dst []int8, src []byte) ([]int8, error) {
-	dst, err := decodeInt8(dst[:0], src, uint(e.BitWidth))
+	dst, err := decodeBits(dst[:0], src[:n])
 	return dst, e.wrap(err)
 }
 
-func (e *Encoding) DecodeInt32(dst []int32, src []byte) ([]int32, error) {
+func (e *Encoding) DecodeInt32(dst, src []byte) ([]byte, error) {
 	dst, err := decodeInt32(dst[:0], src, uint(e.BitWidth))
 	return dst, e.wrap(err)
 }
@@ -94,12 +95,60 @@ func (e *Encoding) wrap(err error) error {
 	return err
 }
 
-func encodeInt8(dst []byte, src []int8, bitWidth uint) ([]byte, error) {
+func encodeBits(dst, src []byte) ([]byte, error) {
+	if isZero(src) || isOnes(src) {
+		dst = appendUvarint(dst, uint64(8*len(src))<<1)
+		if len(src) > 0 {
+			dst = append(dst, src[0])
+		}
+		return dst, nil
+	}
+
+	for i := 0; i < len(src); {
+		j := i + 1
+
+		// Look for contiguous sections of 8 bits, all zeros or ones; these
+		// are run-length encoded as it only takes 2 or 3 bytes to store these
+		// sequences.
+		if src[i] == 0 || src[i] == 0xFF {
+			for j < len(src) && src[i] == src[j] {
+				j++
+			}
+
+			if n := j - i; n > 1 {
+				dst = appendUvarint(dst, uint64(8*n)<<1)
+				dst = append(dst, src[i])
+				i = j
+				continue
+			}
+		}
+
+		// Sequences of bits that are neither all zeroes or ones are bit-packed,
+		// which is a simple copy of the input to the output preceded with the
+		// bit-pack header.
+		for j < len(src) && (src[j-1] != src[j] || (src[j] != 0 && src[j] == 0xFF)) {
+			j++
+		}
+
+		n := j - i
+		if n > 1 && j < len(src) {
+			n--
+			j--
+		}
+
+		dst = appendUvarint(dst, uint64(n)<<1|1)
+		dst = append(dst, src[i:j]...)
+		i = j
+	}
+	return dst, nil
+}
+
+func encodeBytes(dst, src []byte, bitWidth uint) ([]byte, error) {
 	if bitWidth > 8 {
 		return dst, errEncodeInvalidBitWidth("INT8", bitWidth)
 	}
 	if bitWidth == 0 {
-		if !isZeroInt8(src) {
+		if !isZero(src) {
 			return dst, errEncodeInvalidBitWidth("INT8", bitWidth)
 		}
 		return appendUvarint(dst, uint64(len(src))<<1), nil
@@ -238,7 +287,47 @@ func encodeInt32(dst []byte, src []int32, bitWidth uint) ([]byte, error) {
 	return dst, nil
 }
 
-func decodeInt8(dst []int8, src []byte, bitWidth uint) ([]int8, error) {
+func decodeBits(dst, src []byte) ([]byte, error) {
+	for i := 0; i < len(src); {
+		u, n := binary.Uvarint(src[i:])
+		if n == 0 {
+			return dst, fmt.Errorf("decoding run-length block header: %w", io.ErrUnexpectedEOF)
+		}
+		if n < 0 {
+			return dst, fmt.Errorf("overflow after decoding %d/%d bytes of run-length block header", -n+i, len(src))
+		}
+		i += n
+
+		count, bitpack := uint(u>>1), (u&1) != 0
+		if count > maxSupportedValueCount {
+			return dst, fmt.Errorf("decoded run-length block cannot have more than %d values", maxSupportedValueCount)
+		}
+		if !bitpack {
+			word := byte(0)
+			if i < len(src) {
+				word = src[i]
+				i++
+			}
+
+			for n := uint(0); n < count; n += 8 {
+				dst = append(dst, word)
+			}
+		} else {
+			n := int(count)
+			j := i + n
+
+			if j > len(src) {
+				return dst, fmt.Errorf("decoding bit-packed block of %d values: %w", n, io.ErrUnexpectedEOF)
+			}
+
+			dst = append(dst, src[i:j]...)
+			i = j
+		}
+	}
+	return dst, nil
+}
+
+func decodeBytes(dst, src []byte, bitWidth uint) ([]byte, error) {
 	if bitWidth > 8 {
 		return dst, errDecodeInvalidBitWidth("INT8", bitWidth)
 	}
@@ -265,9 +354,9 @@ func decodeInt8(dst []int8, src []byte, bitWidth uint) ([]int8, error) {
 				return dst, fmt.Errorf("decoding run-length block of %d values: %w", count, io.ErrUnexpectedEOF)
 			}
 
-			word := int8(0)
+			word := byte(0)
 			if bitWidth != 0 {
-				word = int8(src[i])
+				word = src[i]
 				i++
 			}
 
@@ -288,14 +377,14 @@ func decodeInt8(dst []int8, src []byte, bitWidth uint) ([]int8, error) {
 				word := binary.LittleEndian.Uint64(bits[:])
 
 				dst = append(dst,
-					int8((word>>(0*bitWidth))&bitMask),
-					int8((word>>(1*bitWidth))&bitMask),
-					int8((word>>(2*bitWidth))&bitMask),
-					int8((word>>(3*bitWidth))&bitMask),
-					int8((word>>(4*bitWidth))&bitMask),
-					int8((word>>(5*bitWidth))&bitMask),
-					int8((word>>(6*bitWidth))&bitMask),
-					int8((word>>(7*bitWidth))&bitMask),
+					byte((word>>(0*bitWidth))&bitMask),
+					byte((word>>(1*bitWidth))&bitMask),
+					byte((word>>(2*bitWidth))&bitMask),
+					byte((word>>(3*bitWidth))&bitMask),
+					byte((word>>(4*bitWidth))&bitMask),
+					byte((word>>(5*bitWidth))&bitMask),
+					byte((word>>(6*bitWidth))&bitMask),
+					byte((word>>(7*bitWidth))&bitMask),
 				)
 
 				i = j
@@ -306,7 +395,7 @@ func decodeInt8(dst []int8, src []byte, bitWidth uint) ([]int8, error) {
 	return dst, nil
 }
 
-func decodeInt32(dst []int32, src []byte, bitWidth uint) ([]int32, error) {
+func decodeInt32(dst, src []byte, bitWidth uint) ([]byte, error) {
 	if bitWidth > 32 {
 		return dst, errDecodeInvalidBitWidth("INT32", bitWidth)
 	}
@@ -338,12 +427,10 @@ func decodeInt32(dst []int32, src []byte, bitWidth uint) ([]int32, error) {
 
 			bits := [4]byte{}
 			copy(bits[:], src[i:j])
-
-			word := binary.LittleEndian.Uint32(bits[:])
 			i = j
 
 			for count > 0 {
-				dst = append(dst, int32(word))
+				dst = append(dst, bits[:]...)
 				count--
 			}
 		} else {
@@ -361,7 +448,9 @@ func decodeInt32(dst []int32, src []byte, bitWidth uint) ([]int32, error) {
 					value |= uint64(b) << bitOffset
 
 					for bitOffset += 8; bitOffset >= bitWidth; {
-						dst = append(dst, int32(value&bitMask))
+						buf := [4]byte{}
+						binary.LittleEndian.PutUint32(buf[:], uint32(value&bitMask))
+						dst = append(dst, buf[:]...)
 						value >>= bitWidth
 						bitOffset -= bitWidth
 					}
@@ -407,10 +496,18 @@ func broadcast32x8(v int32) [8]int32 {
 	return [8]int32{v, v, v, v, v, v, v, v}
 }
 
+func isOnes(data []byte) bool {
+	return bits.CountByte(data, 0xFF) == len(data)
+}
+
+func isZero(data []byte) bool {
+	return bits.CountByte(data, 0) == len(data)
+}
+
 func isZeroInt8(data []int8) bool {
-	return bytes.Count(bits.Int8ToBytes(data), []byte{0}) == len(data)
+	return isZero(bits.Int8ToBytes(data))
 }
 
 func isZeroInt32(data []int32) bool {
-	return bytes.Count(bits.Int32ToBytes(data), []byte{0}) == (4 * len(data))
+	return isZero(bits.Int32ToBytes(data))
 }

@@ -34,12 +34,18 @@ func (e *BinaryPackedEncoding) Encoding() format.Encoding {
 	return format.DeltaBinaryPacked
 }
 
-func (e *BinaryPackedEncoding) EncodeInt32(dst []byte, src []int32) ([]byte, error) {
-	return e.encodeInt32(dst[:0], src)
+func (e *BinaryPackedEncoding) EncodeInt32(dst, src []byte) ([]byte, error) {
+	if (len(src) % 4) != 0 {
+		return dst[:0], encoding.ErrEncodeInvalidInputSize(e, "INT64", len(src))
+	}
+	return e.encodeInt32(dst[:0], bits.BytesToInt32(src))
 }
 
-func (e *BinaryPackedEncoding) EncodeInt64(dst []byte, src []int64) ([]byte, error) {
-	return e.encodeInt64(dst[:0], src)
+func (e *BinaryPackedEncoding) EncodeInt64(dst, src []byte) ([]byte, error) {
+	if (len(src) % 8) != 0 {
+		return dst[:0], encoding.ErrEncodeInvalidInputSize(e, "INT64", len(src))
+	}
+	return e.encodeInt64(dst[:0], bits.BytesToInt64(src))
 }
 
 func (e *BinaryPackedEncoding) encodeInt32(dst []byte, src []int32) ([]byte, error) {
@@ -130,23 +136,31 @@ func (e *BinaryPackedEncoding) encode(dst []byte, totalValues int, valueAt func(
 	return dst, nil
 }
 
-func (e *BinaryPackedEncoding) DecodeInt32(dst []int32, src []byte) ([]int32, error) {
+func (e *BinaryPackedEncoding) DecodeInt32(dst, src []byte) ([]byte, error) {
 	dst, _, err := e.decodeInt32(dst[:0], src)
 	return dst, e.wrap(err)
 }
 
-func (e *BinaryPackedEncoding) DecodeInt64(dst []int64, src []byte) ([]int64, error) {
+func (e *BinaryPackedEncoding) DecodeInt64(dst, src []byte) ([]byte, error) {
 	dst, _, err := e.decodeInt64(dst[:0], src)
 	return dst, e.wrap(err)
 }
 
-func (e *BinaryPackedEncoding) decodeInt32(dst []int32, src []byte) ([]int32, []byte, error) {
-	src, err := e.decode(src, func(value int64) { dst = append(dst, int32(value)) })
+func (e *BinaryPackedEncoding) decodeInt32(dst, src []byte) ([]byte, []byte, error) {
+	src, err := e.decode(src, func(value int64) {
+		buf := [4]byte{}
+		binary.LittleEndian.PutUint32(buf[:], uint32(value))
+		dst = append(dst, buf[:]...)
+	})
 	return dst, src, err
 }
 
-func (e *BinaryPackedEncoding) decodeInt64(dst []int64, src []byte) ([]int64, []byte, error) {
-	src, err := e.decode(src, func(value int64) { dst = append(dst, value) })
+func (e *BinaryPackedEncoding) decodeInt64(dst, src []byte) ([]byte, []byte, error) {
+	src, err := e.decode(src, func(value int64) {
+		buf := [8]byte{}
+		binary.LittleEndian.PutUint64(buf[:], uint64(value))
+		dst = append(dst, buf[:]...)
+	})
 	return dst, src, err
 }
 

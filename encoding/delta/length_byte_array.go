@@ -60,9 +60,8 @@ func (e *LengthByteArrayEncoding) decodeByteArray(dst, src []byte) ([]byte, erro
 	length := getInt32Buffer()
 	defer putInt32Buffer(length)
 
-	var binpack BinaryPackedEncoding
 	var err error
-	length.values, src, err = binpack.decodeInt32(length.values, src)
+	src, err = length.decode(src)
 	if err != nil {
 		return dst, err
 	}

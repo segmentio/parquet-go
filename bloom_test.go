@@ -8,6 +8,7 @@ import (
 	"github.com/segmentio/parquet-go/bloom"
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding/plain"
+	"github.com/segmentio/parquet-go/internal/bits"
 )
 
 func TestSplitBlockFilter(t *testing.T) {
@@ -29,7 +30,7 @@ func TestSplitBlockFilter(t *testing.T) {
 			scenario: "BOOLEAN",
 			function: func(values []bool) bool {
 				filter := newFilter(len(values))
-				encoding.EncodeBoolean(filter.Bytes(), values)
+				encoding.EncodeBoolean(filter.Bytes(), bits.BoolToBytes(values))
 				for _, v := range values {
 					if !check(filter, ValueOf(v)) {
 						return false
@@ -43,7 +44,7 @@ func TestSplitBlockFilter(t *testing.T) {
 			scenario: "INT32",
 			function: func(values []int32) bool {
 				filter := newFilter(len(values))
-				encoding.EncodeInt32(filter.Bytes(), values)
+				encoding.EncodeInt32(filter.Bytes(), bits.Int32ToBytes(values))
 				for _, v := range values {
 					if !check(filter, ValueOf(v)) {
 						return false
@@ -57,7 +58,7 @@ func TestSplitBlockFilter(t *testing.T) {
 			scenario: "INT64",
 			function: func(values []int64) bool {
 				filter := newFilter(len(values))
-				encoding.EncodeInt64(filter.Bytes(), values)
+				encoding.EncodeInt64(filter.Bytes(), bits.Int64ToBytes(values))
 				for _, v := range values {
 					if !check(filter, ValueOf(v)) {
 						return false
@@ -71,7 +72,7 @@ func TestSplitBlockFilter(t *testing.T) {
 			scenario: "INT96",
 			function: func(values []deprecated.Int96) bool {
 				filter := newFilter(len(values))
-				encoding.EncodeInt96(filter.Bytes(), values)
+				encoding.EncodeInt96(filter.Bytes(), deprecated.Int96ToBytes(values))
 				for _, v := range values {
 					if !check(filter, ValueOf(v)) {
 						return false
@@ -85,7 +86,7 @@ func TestSplitBlockFilter(t *testing.T) {
 			scenario: "FLOAT",
 			function: func(values []float32) bool {
 				filter := newFilter(len(values))
-				encoding.EncodeFloat(filter.Bytes(), values)
+				encoding.EncodeFloat(filter.Bytes(), bits.Float32ToBytes(values))
 				for _, v := range values {
 					if !check(filter, ValueOf(v)) {
 						return false
@@ -99,7 +100,7 @@ func TestSplitBlockFilter(t *testing.T) {
 			scenario: "DOUBLE",
 			function: func(values []float64) bool {
 				filter := newFilter(len(values))
-				encoding.EncodeDouble(filter.Bytes(), values)
+				encoding.EncodeDouble(filter.Bytes(), bits.Float64ToBytes(values))
 				for _, v := range values {
 					if !check(filter, ValueOf(v)) {
 						return false
@@ -162,8 +163,9 @@ func BenchmarkSplitBlockFilter(b *testing.B) {
 		v[i] = r.Int63()
 	}
 
+	v64 := bits.Int64ToBytes(v)
 	for i := 0; i < b.N; i++ {
-		e.EncodeInt64(f, v)
+		e.EncodeInt64(f, v64)
 	}
 
 	b.SetBytes(8 * N)

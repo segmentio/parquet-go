@@ -1,6 +1,8 @@
 package parquet
 
-import "errors"
+import (
+	"errors"
+)
 
 var (
 	// ErrCorrupted is an error returned by the Err method of ColumnPages

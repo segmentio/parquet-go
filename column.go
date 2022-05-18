@@ -10,7 +10,6 @@ import (
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/format"
-	"github.com/segmentio/parquet-go/internal/bits"
 )
 
 // Column represents a column in a parquet file.
@@ -33,8 +32,8 @@ type Column struct {
 	compression compress.Codec
 
 	depth              int8
-	maxRepetitionLevel int8
-	maxDefinitionLevel int8
+	maxRepetitionLevel byte
+	maxDefinitionLevel byte
 	index              int16
 }
 
@@ -111,39 +110,53 @@ type columnPages struct {
 	index int
 }
 
-func (r *columnPages) ReadPage() (Page, error) {
+func (c *columnPages) ReadPage() (Page, error) {
 	for {
-		if r.index >= len(r.pages) {
+		if c.index >= len(c.pages) {
 			return nil, io.EOF
 		}
-		p, err := r.pages[r.index].ReadPage()
+		p, err := c.pages[c.index].ReadPage()
 		if err == nil || err != io.EOF {
 			return p, err
 		}
-		r.index++
+		c.index++
 	}
 }
 
-func (r *columnPages) SeekToRow(rowIndex int64) error {
-	r.index = 0
+func (c *columnPages) SeekToRow(rowIndex int64) error {
+	c.index = 0
 
-	for r.index < len(r.pages) && r.pages[r.index].chunk.rowGroup.NumRows >= rowIndex {
-		rowIndex -= r.pages[r.index].chunk.rowGroup.NumRows
-		r.index++
+	for c.index < len(c.pages) && c.pages[c.index].chunk.rowGroup.NumRows >= rowIndex {
+		rowIndex -= c.pages[c.index].chunk.rowGroup.NumRows
+		c.index++
 	}
 
-	if r.index < len(r.pages) {
-		if err := r.pages[r.index].SeekToRow(rowIndex); err != nil {
+	if c.index < len(c.pages) {
+		if err := c.pages[c.index].SeekToRow(rowIndex); err != nil {
 			return err
 		}
-		for i := range r.pages[r.index:] {
-			p := &r.pages[r.index+i]
+		for i := range c.pages[c.index:] {
+			p := &c.pages[c.index+i]
 			if err := p.SeekToRow(0); err != nil {
 				return err
 			}
 		}
 	}
 	return nil
+}
+
+func (c *columnPages) Close() error {
+	var lastErr error
+
+	for i := range c.pages {
+		if err := c.pages[i].Close(); err != nil {
+			lastErr = err
+		}
+	}
+
+	c.pages = nil
+	c.index = 0
+	return lastErr
 }
 
 // Depth returns the position of the column relative to the root.
@@ -228,8 +241,8 @@ func (c *Column) setLevels(depth, repetition, definition, index int) (int, error
 	}
 
 	c.depth = int8(depth)
-	c.maxRepetitionLevel = int8(repetition)
-	c.maxDefinitionLevel = int8(definition)
+	c.maxRepetitionLevel = byte(repetition)
+	c.maxDefinitionLevel = byte(definition)
 	depth++
 
 	if len(c.columns) > 0 {
@@ -477,96 +490,29 @@ type dictPage struct {
 	values []byte
 }
 
+func (p *dictPage) reset() {
+	p.values = p.values[:0]
+}
+
 type dataPage struct {
-	repetitionLevels []int8
-	definitionLevels []int8
+	repetitionLevels []byte
+	definitionLevels []byte
 	data             []byte
 	values           []byte
 	dictionary       Dictionary
 }
 
+func (p *dataPage) reset() {
+	p.repetitionLevels = p.repetitionLevels[:0]
+	p.definitionLevels = p.definitionLevels[:0]
+	p.data = p.data[:0]
+	p.values = p.values[:0]
+	p.dictionary = nil
+}
+
 func (p *dataPage) decompress(codec compress.Codec, data []byte) (err error) {
 	p.values, err = codec.Decode(p.values, data)
 	p.data, p.values = p.values, p.data[:0]
-	return err
-}
-
-func (p *dataPage) decode(typ Type, enc encoding.Encoding, data []byte) error {
-	// Note: I am not sold on this design, it parts ways from the way type
-	// specific behavior is implemented in other places based on the Type
-	// specializations.
-	//
-	// It was difficult to design an exported API that would optimize well
-	// for safety, ease of use, and performance. I decided that I was lacking
-	// enough information about how the code would be used to make the right
-	// call, so I resorted to an internal mechanism which does not require
-	// exporting new APIs. The current approach will be less disruptive to
-	// revisit this decision in the future if needed.
-	switch typ.Kind() {
-	case Boolean:
-		return p.decodeBooleanPage(enc, data)
-	case Int32:
-		return p.decodeInt32Page(enc, data)
-	case Int64:
-		return p.decodeInt64Page(enc, data)
-	case Int96:
-		return p.decodeInt96Page(enc, data)
-	case Float:
-		return p.decodeFloatPage(enc, data)
-	case Double:
-		return p.decodeDoublePage(enc, data)
-	case ByteArray:
-		return p.decodeByteArrayPage(enc, data)
-	case FixedLenByteArray:
-		return p.decodeFixedLenByteArrayPage(enc, data, typ.Length())
-	default:
-		return nil
-	}
-}
-
-func (p *dataPage) decodeBooleanPage(enc encoding.Encoding, data []byte) error {
-	values, err := enc.DecodeBoolean(bits.BytesToBool(p.values), data)
-	p.values = bits.BoolToBytes(values)
-	return err
-}
-
-func (p *dataPage) decodeInt32Page(enc encoding.Encoding, data []byte) error {
-	values, err := enc.DecodeInt32(bits.BytesToInt32(p.values), data)
-	p.values = bits.Int32ToBytes(values)
-	return err
-}
-
-func (p *dataPage) decodeInt64Page(enc encoding.Encoding, data []byte) error {
-	values, err := enc.DecodeInt64(bits.BytesToInt64(p.values), data)
-	p.values = bits.Int64ToBytes(values)
-	return err
-}
-
-func (p *dataPage) decodeInt96Page(enc encoding.Encoding, data []byte) error {
-	values, err := enc.DecodeInt96(deprecated.BytesToInt96(p.values), data)
-	p.values = deprecated.Int96ToBytes(values)
-	return err
-}
-
-func (p *dataPage) decodeFloatPage(enc encoding.Encoding, data []byte) error {
-	values, err := enc.DecodeFloat(bits.BytesToFloat32(p.values), data)
-	p.values = bits.Float32ToBytes(values)
-	return err
-}
-
-func (p *dataPage) decodeDoublePage(enc encoding.Encoding, data []byte) error {
-	values, err := enc.DecodeDouble(bits.BytesToFloat64(p.values), data)
-	p.values = bits.Float64ToBytes(values)
-	return err
-}
-
-func (p *dataPage) decodeByteArrayPage(enc encoding.Encoding, data []byte) (err error) {
-	p.values, err = enc.DecodeByteArray(p.values, data)
-	return err
-}
-
-func (p *dataPage) decodeFixedLenByteArrayPage(enc encoding.Encoding, data []byte, size int) (err error) {
-	p.values, err = enc.DecodeFixedLenByteArray(p.values, data, size)
 	return err
 }
 
@@ -625,7 +571,6 @@ func (c *Column) decodeDataPageV2(header DataPageHeaderV2, page *dataPage) (Page
 	var data = page.data
 	page.repetitionLevels = page.repetitionLevels[:0]
 	page.definitionLevels = page.definitionLevels[:0]
-	//fmt.Printf("PAGE: %q\n", data)
 
 	if c.maxRepetitionLevel > 0 {
 		encoding := lookupLevelEncoding(header.RepetitionLevelEncoding(), c.maxRepetitionLevel)
@@ -665,19 +610,17 @@ func (c *Column) decodeDataPage(header DataPageHeader, numValues int64, page *da
 		// on data page headers to indicate that the page contains indexes into
 		// the dictionary page, but the page is still encoded using the RLE
 		// encoding in this case, so we convert it to RLE_DICTIONARY.
-		pageType, encoding = Int32Type, &RLEDictionary
+		encoding = &RLEDictionary
+		pageType = indexedPageType{newIndexedType(pageType, page.dictionary)}
 	}
 
-	if err := page.decode(pageType, encoding, data); err != nil {
+	var err error
+	page.values, err = pageType.Decode(page.values, data, encoding)
+	if err != nil {
 		return nil, err
 	}
 
-	var newPage Page
-	if page.dictionary != nil {
-		newPage = newIndexedPage(page.dictionary, int16(c.index), int32(numValues), page.values)
-	} else {
-		newPage = pageType.NewPage(c.Index(), int(numValues), page.values)
-	}
+	newPage := pageType.NewPage(c.Index(), int(numValues), page.values)
 	switch {
 	case c.maxRepetitionLevel > 0:
 		newPage = newRepeatedPage(newPage.Buffer(), c.maxRepetitionLevel, c.maxDefinitionLevel, page.repetitionLevels, page.definitionLevels)
@@ -687,7 +630,7 @@ func (c *Column) decodeDataPage(header DataPageHeader, numValues int64, page *da
 	return newPage, nil
 }
 
-func decodeLevelsV1(enc encoding.Encoding, numValues int64, levels []int8, data []byte) ([]int8, []byte, error) {
+func decodeLevelsV1(enc encoding.Encoding, numValues int64, levels, data []byte) ([]byte, []byte, error) {
 	if len(data) < 4 {
 		return nil, data, io.ErrUnexpectedEOF
 	}
@@ -700,7 +643,7 @@ func decodeLevelsV1(enc encoding.Encoding, numValues int64, levels []int8, data 
 	return levels, data[j:], err
 }
 
-func decodeLevelsV2(enc encoding.Encoding, numValues int64, levels []int8, data []byte, length int64) ([]int8, []byte, error) {
+func decodeLevelsV2(enc encoding.Encoding, numValues int64, levels, data []byte, length int64) ([]byte, []byte, error) {
 	if length > int64(len(data)) {
 		return nil, data, io.ErrUnexpectedEOF
 	}
@@ -708,11 +651,11 @@ func decodeLevelsV2(enc encoding.Encoding, numValues int64, levels []int8, data 
 	return levels, data[length:], err
 }
 
-func decodeLevels(enc encoding.Encoding, numValues int64, levels []int8, data []byte) ([]int8, error) {
+func decodeLevels(enc encoding.Encoding, numValues int64, levels, data []byte) ([]byte, error) {
 	if cap(levels) < int(numValues) {
-		levels = make([]int8, numValues)
+		levels = make([]byte, numValues)
 	}
-	levels, err := enc.DecodeInt8(levels, data)
+	levels, err := enc.DecodeLevels(levels, data)
 	if err == nil {
 		switch {
 		case len(levels) < int(numValues):
@@ -742,7 +685,10 @@ func (c *Column) decodeDictionary(header DictionaryPageHeader, page *dataPage, d
 	if encoding == format.PlainDictionary {
 		encoding = format.Plain
 	}
-	if err := page.decode(pageType, LookupEncoding(encoding), page.data); err != nil {
+
+	var err error
+	page.values, err = pageType.Decode(page.values, page.data, LookupEncoding(encoding))
+	if err != nil {
 		return nil, err
 	}
 

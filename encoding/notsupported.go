@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/format"
 )
 
@@ -38,10 +37,20 @@ func Errorf(e Encoding, msg string, args ...interface{}) error {
 	return Error(e, fmt.Errorf(msg, args...))
 }
 
-// ErrInvalidInputSize constructs an error indicating that decoding failed due
-// to the size of the input.
-func ErrInvalidInputSize(e Encoding, typ string, size int) error {
-	return Errorf(e, "cannot decode %s from input of size %d: %w", typ, size, ErrInvalidArgument)
+// ErrEncodeInvalidInputSize constructs an error indicating that encoding failed
+// due to the size of the input.
+func ErrEncodeInvalidInputSize(e Encoding, typ string, size int) error {
+	return errInvalidInputSize(e, "encode", typ, size)
+}
+
+// ErrDecodeInvalidInputSize constructs an error indicating that decoding failed
+// due to the size of the input.
+func ErrDecodeInvalidInputSize(e Encoding, typ string, size int) error {
+	return errInvalidInputSize(e, "decode", typ, size)
+}
+
+func errInvalidInputSize(e Encoding, op, typ string, size int) error {
+	return Errorf(e, "cannot %s %s from input of size %d: %w", op, typ, size, ErrInvalidArgument)
 }
 
 // CanEncodeBoolean reports whether e can encode BOOLEAN values.
@@ -50,9 +59,9 @@ func CanEncodeBoolean(e Encoding) bool {
 	return !errors.Is(err, ErrNotSupported)
 }
 
-// CanEncodeInt8 reports whether e can encode INT8 values.
-func CanEncodeInt8(e Encoding) bool {
-	_, err := e.EncodeInt8(nil, nil)
+// CanEncodeInt8 reports whether e can encode LEVELS values.
+func CanEncodeLevels(e Encoding) bool {
+	_, err := e.EncodeLevels(nil, nil)
 	return !errors.Is(err, ErrNotSupported)
 }
 
@@ -112,31 +121,31 @@ func (NotSupported) Encoding() format.Encoding {
 	return -1
 }
 
-func (NotSupported) EncodeBoolean(dst []byte, src []bool) ([]byte, error) {
+func (NotSupported) EncodeLevels(dst, src []byte) ([]byte, error) {
+	return dst[:0], errNotSupported("LEVELS")
+}
+
+func (NotSupported) EncodeBoolean(dst, src []byte) ([]byte, error) {
 	return dst[:0], errNotSupported("BOOLEAN")
 }
 
-func (NotSupported) EncodeInt8(dst []byte, src []int8) ([]byte, error) {
-	return dst[:0], errNotSupported("INT8")
-}
-
-func (NotSupported) EncodeInt32(dst []byte, src []int32) ([]byte, error) {
+func (NotSupported) EncodeInt32(dst, src []byte) ([]byte, error) {
 	return dst[:0], errNotSupported("INT32")
 }
 
-func (NotSupported) EncodeInt64(dst []byte, src []int64) ([]byte, error) {
+func (NotSupported) EncodeInt64(dst, src []byte) ([]byte, error) {
 	return dst[:0], errNotSupported("INT64")
 }
 
-func (NotSupported) EncodeInt96(dst []byte, src []deprecated.Int96) ([]byte, error) {
+func (NotSupported) EncodeInt96(dst, src []byte) ([]byte, error) {
 	return dst[:0], errNotSupported("INT96")
 }
 
-func (NotSupported) EncodeFloat(dst []byte, src []float32) ([]byte, error) {
+func (NotSupported) EncodeFloat(dst, src []byte) ([]byte, error) {
 	return dst[:0], errNotSupported("FLOAT")
 }
 
-func (NotSupported) EncodeDouble(dst []byte, src []float64) ([]byte, error) {
+func (NotSupported) EncodeDouble(dst, src []byte) ([]byte, error) {
 	return dst[:0], errNotSupported("DOUBLE")
 }
 
@@ -148,31 +157,31 @@ func (NotSupported) EncodeFixedLenByteArray(dst, src []byte, size int) ([]byte, 
 	return dst[:0], errNotSupported("FIXED_LEN_BYTE_ARRAY")
 }
 
-func (NotSupported) DecodeBoolean(dst []bool, src []byte) ([]bool, error) {
+func (NotSupported) DecodeLevels(dst, src []byte) ([]byte, error) {
+	return dst[:0], errNotSupported("LEVELS")
+}
+
+func (NotSupported) DecodeBoolean(dst, src []byte) ([]byte, error) {
 	return dst[:0], errNotSupported("BOOLEAN")
 }
 
-func (NotSupported) DecodeInt8(dst []int8, src []byte) ([]int8, error) {
-	return dst[:0], errNotSupported("INT8")
-}
-
-func (NotSupported) DecodeInt32(dst []int32, src []byte) ([]int32, error) {
+func (NotSupported) DecodeInt32(dst, src []byte) ([]byte, error) {
 	return dst[:0], errNotSupported("INT32")
 }
 
-func (NotSupported) DecodeInt64(dst []int64, src []byte) ([]int64, error) {
+func (NotSupported) DecodeInt64(dst, src []byte) ([]byte, error) {
 	return dst[:0], errNotSupported("INT64")
 }
 
-func (NotSupported) DecodeInt96(dst []deprecated.Int96, src []byte) ([]deprecated.Int96, error) {
+func (NotSupported) DecodeInt96(dst, src []byte) ([]byte, error) {
 	return dst[:0], errNotSupported("INT96")
 }
 
-func (NotSupported) DecodeFloat(dst []float32, src []byte) ([]float32, error) {
+func (NotSupported) DecodeFloat(dst, src []byte) ([]byte, error) {
 	return dst[:0], errNotSupported("FLOAT")
 }
 
-func (NotSupported) DecodeDouble(dst []float64, src []byte) ([]float64, error) {
+func (NotSupported) DecodeDouble(dst, src []byte) ([]byte, error) {
 	return dst[:0], errNotSupported("DOUBLE")
 }
 

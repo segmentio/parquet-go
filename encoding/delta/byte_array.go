@@ -55,7 +55,7 @@ func (e *ByteArrayEncoding) EncodeFixedLenByteArray(dst, src []byte, size int) (
 		return dst[:0], encoding.Error(e, encoding.ErrInvalidArgument)
 	}
 	if (len(src) % size) != 0 {
-		return dst[:0], encoding.ErrInvalidInputSize(e, "FIXED_LEN_BYTE_ARRAY", len(src))
+		return dst[:0], encoding.ErrEncodeInvalidInputSize(e, "FIXED_LEN_BYTE_ARRAY", len(src))
 	}
 	return e.encode(dst[:0], len(src)/size, func(i int) []byte {
 		j := (i + 0) * size
@@ -136,13 +136,12 @@ func (e *ByteArrayEncoding) decode(src []byte, observe func([]byte) error) error
 	length := getInt32Buffer()
 	defer putInt32Buffer(length)
 
-	var binpack BinaryPackedEncoding
 	var err error
-	prefix.values, src, err = binpack.decodeInt32(prefix.values, src)
+	src, err = prefix.decode(src)
 	if err != nil {
 		return err
 	}
-	length.values, src, err = binpack.decodeInt32(length.values, src)
+	src, err = length.decode(src)
 	if err != nil {
 		return err
 	}

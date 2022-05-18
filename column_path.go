@@ -53,8 +53,8 @@ func stringsAreOrdered(strings1, strings2 []string) bool {
 type leafColumn struct {
 	node               Node
 	path               columnPath
-	maxRepetitionLevel int8
-	maxDefinitionLevel int8
+	maxRepetitionLevel byte
+	maxDefinitionLevel byte
 	columnIndex        int16
 }
 
