@@ -276,13 +276,16 @@ func (r *reader) init(schema *Schema, rowGroup RowGroup) {
 func (r *reader) Reset() {
 	r.rowIndex = 0
 
-	if rows, _ := r.rows.(*rowGroupRows); rows != nil {
+	if rows, ok := r.rows.(interface{ Reset() }); ok {
 		// This optimization works for the common case where the underlying type
 		// of the Rows instance is rowGroupRows, which should be true in most
 		// cases since even external implementations of the RowGroup interface
 		// can construct values of this type via the NewRowGroupRowReader
 		// function.
-		rows.reset()
+		//
+		// Foreign implementations of the Rows interface may also define a Reset
+		// method in order to participate in this optimization.
+		rows.Reset()
 		return
 	}
 
