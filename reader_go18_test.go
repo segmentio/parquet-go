@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"math/rand"
 	"reflect"
 	"testing"
 	"testing/quick"
@@ -34,6 +35,7 @@ func TestGenericReader(t *testing.T) {
 }
 
 func testGenericReader[Row any](t *testing.T) {
+	var prng = rand.New(rand.NewSource(2))
 	var model Row
 	t.Run(reflect.TypeOf(model).Name(), func(t *testing.T) {
 		f := func(rows []Row) bool {
@@ -68,7 +70,7 @@ func testGenericReader[Row any](t *testing.T) {
 			}
 			return true
 		}
-		if err := quick.Check(f, nil); err != nil {
+		if err := quick.Check(f, &quick.Config{Rand: prng}); err != nil {
 			t.Error(err)
 		}
 	})
