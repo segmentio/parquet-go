@@ -6,6 +6,8 @@ import (
 	"io"
 	"math/rand"
 	"reflect"
+	"testing"
+	"time"
 
 	"github.com/segmentio/parquet-go"
 	"github.com/segmentio/parquet-go/deprecated"
@@ -203,4 +205,18 @@ func randValueFuncOf(t parquet.Type) func(*rand.Rand) parquet.Value {
 func copyRowsAndClose(w parquet.RowWriter, r parquet.Rows) (int64, error) {
 	defer r.Close()
 	return parquet.CopyRows(w, r)
+}
+
+func benchmarkRowsPerSecond(b *testing.B, f func() int) {
+	b.ResetTimer()
+	start := time.Now()
+	numRows := int64(0)
+
+	for i := 0; i < b.N; i++ {
+		n := f()
+		numRows += int64(n)
+	}
+
+	seconds := time.Since(start).Seconds()
+	b.ReportMetric(float64(numRows)/seconds, "row/s")
 }

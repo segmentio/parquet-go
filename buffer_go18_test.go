@@ -69,3 +69,55 @@ func testGenericBuffer[Row any](t *testing.T) {
 		}
 	})
 }
+
+func BenchmarkGenericBuffer(b *testing.B) {
+	data := make([]byte, 16*benchmarkReaderNumRows)
+	prng := rand.New(rand.NewSource(0))
+	prng.Read(data)
+
+	values := make([]uuidColumn, benchmarkReaderNumRows)
+	for i := range values {
+		j := (i + 0) * 16
+		k := (i + 1) * 16
+		copy(values[i].Value[:], data[j:k])
+	}
+
+	b.Run("go1.17", func(b *testing.B) {
+		buffer := parquet.NewBuffer(parquet.SchemaOf(uuidColumn{}))
+		i := 0
+		benchmarkRowsPerSecond(b, func() int {
+			for j := 0; j < benchmarkBufferRowsPerStep; j++ {
+				if err := buffer.Write(&values[i]); err != nil {
+					b.Fatal(err)
+				}
+			}
+
+			i += benchmarkBufferRowsPerStep
+			i %= benchmarkBufferNumRows
+
+			if i == 0 {
+				buffer.Reset()
+			}
+			return benchmarkBufferRowsPerStep
+		})
+	})
+
+	b.Run("go1.18", func(b *testing.B) {
+		buffer := parquet.NewGenericBuffer[uuidColumn]()
+		i := 0
+		benchmarkRowsPerSecond(b, func() int {
+			n, err := buffer.Write(values[i : i+benchmarkBufferRowsPerStep])
+			if err != nil {
+				b.Fatal(err)
+			}
+
+			i += benchmarkBufferRowsPerStep
+			i %= benchmarkBufferNumRows
+
+			if i == 0 {
+				buffer.Reset()
+			}
+			return n
+		})
+	})
+}

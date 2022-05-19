@@ -61,6 +61,10 @@ func (buf *GenericBuffer[T]) Swap(i, j int) {
 	buf.base.Swap(i, j)
 }
 
+func (buf *GenericBuffer[T]) Reset() {
+	buf.base.Reset()
+}
+
 func (buf *GenericBuffer[T]) Write(rows []T) (int, error) {
 	return buf.write(buf, rows)
 }

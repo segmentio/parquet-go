@@ -107,7 +107,6 @@ func (r *GenericReader[T]) readRows(rows []T) (int, error) {
 	} else {
 		r.base.rowbuf = r.base.rowbuf[:len(rows)]
 	}
-	defer clearRows(r.base.rowbuf)
 
 	n, err := r.base.ReadRows(r.base.rowbuf)
 	if n > 0 {

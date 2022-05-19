@@ -10,7 +10,6 @@ import (
 	"sort"
 	"testing"
 	"testing/quick"
-	"time"
 
 	"github.com/segmentio/parquet-go"
 	"github.com/segmentio/parquet-go/encoding"
@@ -545,14 +544,11 @@ func BenchmarkBufferReadRows100x(b *testing.B) {
 		}
 	}
 
-	b.ResetTimer()
-	start := time.Now()
-
 	bufferRows := buffer.Rows()
 	defer bufferRows.Close()
 
-	for i := 0; i < b.N; i++ {
-		_, err := bufferRows.ReadRows(rows[:benchmarkBufferRowsPerStep])
+	benchmarkRowsPerSecond(b, func() int {
+		n, err := bufferRows.ReadRows(rows[:benchmarkBufferRowsPerStep])
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				err = bufferRows.SeekToRow(0)
@@ -561,35 +557,27 @@ func BenchmarkBufferReadRows100x(b *testing.B) {
 				b.Fatal(err)
 			}
 		}
-	}
-
-	numRows := b.N * benchmarkBufferRowsPerStep
-	seconds := time.Since(start).Seconds()
-	b.ReportMetric(float64(numRows)/seconds, "row/s")
+		return n
+	})
 }
 
 func BenchmarkBufferWriteRows100x(b *testing.B) {
 	schema, rows := generateBenchmarkBufferRows(benchmarkBufferNumRows)
 	buffer := parquet.NewBuffer(schema)
 
-	b.ResetTimer()
-	start := time.Now()
-
-	for i, j := 0, 0; i < b.N; i++ {
-		_, err := buffer.WriteRows(rows[j : j+benchmarkBufferRowsPerStep])
+	i := 0
+	benchmarkRowsPerSecond(b, func() int {
+		n, err := buffer.WriteRows(rows[i : i+benchmarkBufferRowsPerStep])
 		if err != nil {
 			b.Fatal(err)
 		}
 
-		j += benchmarkBufferRowsPerStep
-		j %= benchmarkBufferNumRows
+		i += benchmarkBufferRowsPerStep
+		i %= benchmarkBufferNumRows
 
-		if j == 0 {
+		if i == 0 {
 			buffer.Reset()
 		}
-	}
-
-	numRows := b.N * benchmarkBufferRowsPerStep
-	seconds := time.Since(start).Seconds()
-	b.ReportMetric(float64(numRows)/seconds, "row/s")
+		return n
+	})
 }

@@ -75,3 +75,51 @@ func testGenericReader[Row any](t *testing.T) {
 		}
 	})
 }
+
+func BenchmarkGenericReader(b *testing.B) {
+	data := make([]byte, 16*benchmarkReaderNumRows)
+	prng := rand.New(rand.NewSource(0))
+	prng.Read(data)
+
+	values := make([]uuidColumn, benchmarkReaderNumRows)
+	for i := range values {
+		j := (i + 0) * 16
+		k := (i + 1) * 16
+		copy(values[i].Value[:], data[j:k])
+	}
+
+	rowbuf := make([]uuidColumn, benchmarkReaderRowsPerStep)
+	buffer := parquet.NewGenericBuffer[uuidColumn]()
+	buffer.Write(values)
+
+	b.Run("go1.17", func(b *testing.B) {
+		reader := parquet.NewRowGroupReader(buffer)
+		benchmarkRowsPerSecond(b, func() int {
+			for i := range rowbuf {
+				if err := reader.Read(&rowbuf[i]); err != nil {
+					if err != io.EOF {
+						b.Fatal(err)
+					} else {
+						reader.Reset()
+					}
+				}
+			}
+			return len(rowbuf)
+		})
+	})
+
+	b.Run("go1.18", func(b *testing.B) {
+		reader := parquet.NewGenericRowGroupReader[uuidColumn](buffer)
+		benchmarkRowsPerSecond(b, func() int {
+			n, err := reader.Read(rowbuf)
+			if err != nil {
+				if err != io.EOF {
+					b.Fatal(err)
+				} else {
+					reader.Reset()
+				}
+			}
+			return n
+		})
+	})
+}
