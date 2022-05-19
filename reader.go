@@ -61,38 +61,21 @@ type Reader struct {
 //	}
 //
 func NewReader(input io.ReaderAt, options ...ReaderOption) *Reader {
-	f, _ := input.(*File)
-	if f == nil {
-		n, err := sizeOf(input)
-		if err != nil {
-			panic(err)
-		}
-		if f, err = OpenFile(input, n); err != nil {
-			panic(err)
-		}
-	}
-
 	c, err := NewReaderConfig(options...)
 	if err != nil {
 		panic(err)
 	}
 
-	column := f.Root()
-	schema := NewSchema(column.Name(), column)
-
-	r := &Reader{
-		file: reader{schema: schema},
+	f, err := openFile(input)
+	if err != nil {
+		panic(err)
 	}
 
-	switch rowGroups := f.RowGroups(); len(rowGroups) {
-	case 0:
-		r.file.rowGroup = newEmptyRowGroup(schema)
-	case 1:
-		r.file.rowGroup = rowGroups[0]
-	default:
-		// TODO: should we attempt to merge the row groups via MergeRowGroups
-		// to preserve the global order of sorting columns within the file?
-		r.file.rowGroup = MultiRowGroup(rowGroups...)
+	r := &Reader{
+		file: reader{
+			schema:   f.schema,
+			rowGroup: fileRowGroupOf(f),
+		},
 	}
 
 	if c.Schema != nil {
@@ -102,6 +85,31 @@ func NewReader(input io.ReaderAt, options ...ReaderOption) *Reader {
 
 	r.read.init(r.file.schema, r.file.rowGroup)
 	return r
+}
+
+func openFile(input io.ReaderAt) (*File, error) {
+	f, _ := input.(*File)
+	if f != nil {
+		return f, nil
+	}
+	n, err := sizeOf(input)
+	if err != nil {
+		return nil, err
+	}
+	return OpenFile(input, n)
+}
+
+func fileRowGroupOf(f *File) RowGroup {
+	switch rowGroups := f.RowGroups(); len(rowGroups) {
+	case 0:
+		return newEmptyRowGroup(f.Schema())
+	case 1:
+		return rowGroups[0]
+	default:
+		// TODO: should we attempt to merge the row groups via MergeRowGroups
+		// to preserve the global order of sorting columns within the file?
+		return MultiRowGroup(rowGroups...)
+	}
 }
 
 // NewRowGroupReader constructs a new Reader which reads rows from the RowGroup
@@ -338,7 +346,8 @@ func (r *reader) Close() (err error) {
 
 var (
 	_ Rows                = (*Reader)(nil)
-	_ RowReader           = (*reader)(nil)
-	_ RowSeeker           = (*reader)(nil)
 	_ RowReaderWithSchema = (*Reader)(nil)
+
+	_ RowReader = (*reader)(nil)
+	_ RowSeeker = (*reader)(nil)
 )

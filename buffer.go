@@ -12,7 +12,7 @@ import (
 type Buffer struct {
 	config  *RowGroupConfig
 	schema  *Schema
-	rowbuf  []Value
+	rowbuf  []Row
 	colbuf  [][]Value
 	chunks  []ColumnChunk
 	columns []ColumnBuffer
@@ -93,7 +93,7 @@ func (buf *Buffer) configure(schema *Schema) {
 	})
 
 	buf.schema = schema
-	buf.rowbuf = make([]Value, 0, 10)
+	buf.rowbuf = make([]Row, 0, 1)
 	buf.colbuf = make([][]Value, len(buf.columns))
 	buf.chunks = make([]ColumnChunk, len(buf.columns))
 
@@ -183,11 +183,12 @@ func (buf *Buffer) Write(row interface{}) error {
 	if buf.schema == nil {
 		buf.configure(SchemaOf(row))
 	}
-	defer func() {
-		clearValues(buf.rowbuf)
-	}()
-	buf.rowbuf = buf.schema.Deconstruct(buf.rowbuf[:0], row)
-	_, err := buf.WriteRows([]Row{buf.rowbuf})
+
+	buf.rowbuf = buf.rowbuf[:1]
+	defer clearRows(buf.rowbuf)
+
+	buf.rowbuf[0] = buf.schema.Deconstruct(buf.rowbuf[0], row)
+	_, err := buf.WriteRows(buf.rowbuf)
 	return err
 }
 
