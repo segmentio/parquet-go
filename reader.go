@@ -34,7 +34,7 @@ type Reader struct {
 	file     reader
 	read     reader
 	rowIndex int64
-	values   [1]Row
+	rowbuf   []Row
 }
 
 // NewReader constructs a parquet reader reading rows from the given
@@ -174,7 +174,7 @@ func (r *Reader) Reset() {
 	r.file.Reset()
 	r.read.Reset()
 	r.rowIndex = 0
-	clearValues(r.values[0])
+	clearRows(r.rowbuf)
 }
 
 // Read reads the next row from r. The type of the row must match the schema
@@ -197,13 +197,19 @@ func (r *Reader) Read(row interface{}) error {
 		return fmt.Errorf("seeking reader to row %d: %w", r.rowIndex, err)
 	}
 
-	n, err := r.read.ReadRows(r.values[:])
+	if cap(r.rowbuf) == 0 {
+		r.rowbuf = make([]Row, 1)
+	} else {
+		r.rowbuf = r.rowbuf[:1]
+	}
+
+	n, err := r.read.ReadRows(r.rowbuf[:])
 	if n == 0 {
 		return err
 	}
 
 	r.rowIndex++
-	return r.read.schema.Reconstruct(row, r.values[0])
+	return r.read.schema.Reconstruct(row, r.rowbuf[0])
 }
 
 func (r *Reader) updateReadSchema(rowType reflect.Type) error {
