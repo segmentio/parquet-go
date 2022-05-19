@@ -30,7 +30,10 @@ func NewGenericBuffer[T any](options ...RowGroupOption) *GenericBuffer[T] {
 	}
 	buf.base.configure(config.Schema)
 	buf.write = bufferFuncOf[T](config.Schema)
-	buf.columns = columnBufferWriter{columns: buf.base.columns}
+	buf.columns = columnBufferWriter{
+		columns: buf.base.columns,
+		values:  make([]Value, 0, defaultValueBufferSize),
+	}
 	return buf
 }
 
@@ -44,10 +47,13 @@ func bufferFuncOf[T any](schema *Schema) bufferFunc[T] {
 	case reflect.Struct:
 		size := t.Size()
 		writeRows := writeRowsFuncOf(t, schema, nil)
-		return func(buf *GenericBuffer[T], rows []T) (int, error) {
+		return func(buf *GenericBuffer[T], rows []T) (n int, err error) {
 			defer buf.columns.clear()
-			err := writeRows(&buf.columns, makeArray(rows), size, 0, columnLevels{})
-			return len(rows), err
+			err = writeRows(&buf.columns, makeArray(rows), size, 0, columnLevels{})
+			if err == nil {
+				n = len(rows)
+			}
+			return n, err
 		}
 
 	default:

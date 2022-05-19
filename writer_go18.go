@@ -48,6 +48,8 @@ type GenericWriter[T any] struct {
 	// the NewGenericWriter function based on the type T and the underlying
 	// schema of the parquet file.
 	write writeFunc[T]
+	// This field is used to leverage the optimized writeRowsFunc algorithms.
+	buffers columnBufferWriter
 }
 
 // NewGenericWriter is like NewWriter but returns a GenericWriter[T] suited to
@@ -84,6 +86,38 @@ func NewGenericWriter[T any](output io.Writer, options ...WriterOption) *Generic
 	}
 }
 
+type writeFunc[T any] func(*GenericWriter[T], []T) (int, error)
+
+func writeFuncOf[T any](schema *Schema) writeFunc[T] {
+	var model T
+
+	switch t := reflect.TypeOf(model); t.Kind() {
+	case reflect.Interface, reflect.Map:
+		return (*GenericWriter[T]).writeRows
+
+	case reflect.Struct:
+		size := t.Size()
+		writeRows := writeRowsFuncOf(t, schema, nil)
+		return func(w *GenericWriter[T], rows []T) (n int, err error) {
+			defer w.buffers.clear()
+			err = writeRows(&w.buffers, makeArray(rows), size, 0, columnLevels{})
+			if err == nil {
+				n = len(rows)
+			}
+			return n, err
+		}
+
+	default:
+		panic("cannot create writer for values of type " + t.String())
+	}
+}
+
+func writeFuncOfStruct[T any](t reflect.Type, schema *Schema) writeFunc[T] {
+	return func(w *GenericWriter[T], rows []T) (int, error) {
+		return w.writeRows(rows)
+	}
+}
+
 func (w *GenericWriter[T]) Close() error {
 	return w.base.Close()
 }
@@ -97,7 +131,37 @@ func (w *GenericWriter[T]) Reset(output io.Writer) {
 }
 
 func (w *GenericWriter[T]) Write(rows []T) (int, error) {
-	return w.write(w, rows)
+	if w.buffers.columns == nil {
+		w.buffers = columnBufferWriter{
+			columns: make([]ColumnBuffer, len(w.base.writer.columns)),
+			values:  make([]Value, 0, defaultValueBufferSize),
+		}
+
+		for i, c := range w.base.writer.columns {
+			// These fields are usually lazily initialized when writing rows,
+			// we need them to exist now tho.
+			c.columnBuffer = c.newColumnBuffer()
+			c.maxValues = int32(c.columnBuffer.Cap())
+			w.buffers.columns[i] = c.columnBuffer
+		}
+	}
+
+	n, err := w.write(w, rows)
+	if err != nil {
+		return n, err
+	}
+
+	for _, c := range w.base.writer.columns {
+		c.numValues = int32(c.columnBuffer.NumValues())
+
+		if c.numValues > 0 && c.numValues >= c.maxValues {
+			if err := c.flush(); err != nil {
+				return 0, err
+			}
+		}
+	}
+
+	return n, nil
 }
 
 func (w *GenericWriter[T]) WriteRows(rows []Row) (int, error) {
@@ -145,23 +209,3 @@ var (
 	_ RowReaderFrom       = (*GenericWriter[map[struct{}]struct{}])(nil)
 	_ RowGroupWriter      = (*GenericWriter[map[struct{}]struct{}])(nil)
 )
-
-type writeFunc[T any] func(*GenericWriter[T], []T) (int, error)
-
-func writeFuncOf[T any](schema *Schema) writeFunc[T] {
-	var model T
-	switch t := reflect.TypeOf(model); t.Kind() {
-	case reflect.Interface, reflect.Map:
-		return (*GenericWriter[T]).writeRows
-	case reflect.Struct:
-		return writeFuncOfStruct[T](t, schema)
-	default:
-		panic("cannot create writer for values of type " + t.String())
-	}
-}
-
-func writeFuncOfStruct[T any](t reflect.Type, schema *Schema) writeFunc[T] {
-	return func(w *GenericWriter[T], rows []T) (int, error) {
-		return w.writeRows(rows)
-	}
-}
