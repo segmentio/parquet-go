@@ -16,24 +16,61 @@ func NewGenericReader[T any](input io.ReaderAt, options ...ReaderOption) *Generi
 		panic(err)
 	}
 
+	if c.Schema == nil {
+		var model T
+		c.Schema = schemaOf(reflect.TypeOf(model))
+	}
+
 	f, err := openFile(input)
 	if err != nil {
 		panic(err)
 	}
 
-	_ = f
-	_ = c
-	return nil
+	r := &GenericReader[T]{
+		base: Reader{
+			file: reader{
+				schema:   c.Schema,
+				rowGroup: fileRowGroupOf(f),
+			},
+		},
+	}
+
+	if !nodesAreEqual(c.Schema, f.schema) {
+		r.base.file.rowGroup = convertRowGroupTo(r.base.file.rowGroup, c.Schema)
+	}
+
+	r.base.read.init(r.base.file.schema, r.base.file.rowGroup)
+	r.read = readFuncOf[T](r.base.file.schema)
+	return r
 }
 
-func NewGenericRowGroupReader[T any](input io.ReaderAt, options ...ReaderOption) *GenericReader[T] {
+func NewGenericRowGroupReader[T any](rowGroup RowGroup, options ...ReaderOption) *GenericReader[T] {
 	c, err := NewReaderConfig(options...)
 	if err != nil {
 		panic(err)
 	}
 
-	_ = c
-	return nil
+	if c.Schema == nil {
+		var model T
+		c.Schema = schemaOf(reflect.TypeOf(model))
+	}
+
+	r := &GenericReader[T]{
+		base: Reader{
+			file: reader{
+				schema:   c.Schema,
+				rowGroup: rowGroup,
+			},
+		},
+	}
+
+	if !nodesAreEqual(c.Schema, rowGroup.Schema()) {
+		r.base.file.rowGroup = convertRowGroupTo(r.base.file.rowGroup, c.Schema)
+	}
+
+	r.base.read.init(r.base.file.schema, r.base.file.rowGroup)
+	r.read = readFuncOf[T](r.base.file.schema)
+	return r
 }
 
 func (r *GenericReader[T]) Reset() {
