@@ -6,9 +6,12 @@ import (
 )
 
 type GenericBuffer[T any] struct {
-	base  Buffer
-	write bufferFunc[T]
+	base    Buffer
+	write   bufferFunc[T]
+	columns columnBufferWriter
 }
+
+type bufferFunc[T any] func(*GenericBuffer[T], []T) (int, error)
 
 func NewGenericBuffer[T any](options ...RowGroupOption) *GenericBuffer[T] {
 	config, err := NewRowGroupConfig(options...)
@@ -16,9 +19,10 @@ func NewGenericBuffer[T any](options ...RowGroupOption) *GenericBuffer[T] {
 		panic(err)
 	}
 
+	var model T
+	var t = reflect.TypeOf(model)
 	if config.Schema == nil {
-		var model T
-		config.Schema = schemaOf(reflect.TypeOf(model))
+		config.Schema = schemaOf(t)
 	}
 
 	buf := &GenericBuffer[T]{
@@ -26,7 +30,29 @@ func NewGenericBuffer[T any](options ...RowGroupOption) *GenericBuffer[T] {
 	}
 	buf.base.configure(config.Schema)
 	buf.write = bufferFuncOf[T](config.Schema)
+	buf.columns = columnBufferWriter{columns: buf.base.columns}
 	return buf
+}
+
+func bufferFuncOf[T any](schema *Schema) bufferFunc[T] {
+	var model T
+
+	switch t := reflect.TypeOf(model); t.Kind() {
+	case reflect.Interface, reflect.Map:
+		return (*GenericBuffer[T]).writeRows
+
+	case reflect.Struct:
+		size := t.Size()
+		writeRows := writeRowsFuncOf(t, schema, nil)
+		return func(buf *GenericBuffer[T], rows []T) (int, error) {
+			defer buf.columns.clear()
+			err := writeRows(&buf.columns, makeArray(rows), size, 0, columnLevels{})
+			return len(rows), err
+		}
+
+	default:
+		panic("cannot create buffer for values of type " + t.String())
+	}
 }
 
 func (buf *GenericBuffer[T]) Size() int64 {
@@ -66,6 +92,9 @@ func (buf *GenericBuffer[T]) Reset() {
 }
 
 func (buf *GenericBuffer[T]) Write(rows []T) (int, error) {
+	if len(rows) == 0 {
+		return 0, nil
+	}
 	return buf.write(buf, rows)
 }
 
@@ -114,23 +143,3 @@ var (
 	_ RowGroupWriter = (*GenericBuffer[map[struct{}]struct{}])(nil)
 	_ sort.Interface = (*GenericBuffer[map[struct{}]struct{}])(nil)
 )
-
-type bufferFunc[T any] func(*GenericBuffer[T], []T) (int, error)
-
-func bufferFuncOf[T any](schema *Schema) bufferFunc[T] {
-	var model T
-	switch t := reflect.TypeOf(model); t.Kind() {
-	case reflect.Interface, reflect.Map:
-		return (*GenericBuffer[T]).writeRows
-	case reflect.Struct:
-		return bufferFuncOfStruct[T](t, schema)
-	default:
-		panic("cannot create buffer for values of type " + t.String())
-	}
-}
-
-func bufferFuncOfStruct[T any](t reflect.Type, schema *Schema) bufferFunc[T] {
-	return func(buf *GenericBuffer[T], rows []T) (int, error) {
-		return buf.writeRows(rows)
-	}
-}

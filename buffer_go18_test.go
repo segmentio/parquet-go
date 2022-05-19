@@ -2,6 +2,7 @@ package parquet_test
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"math/rand"
 	"reflect"
@@ -41,25 +42,8 @@ func testGenericBuffer[Row any](t *testing.T) {
 			if len(rows) == 0 {
 				return true // TODO: fix support for parquet files with zero rows
 			}
-			buffer := parquet.NewGenericBuffer[Row]()
-			_, err := buffer.Write(rows)
-			if err != nil {
+			if err := testGenericBufferRows(t, rows); err != nil {
 				t.Error(err)
-				return false
-			}
-			reader := parquet.NewGenericRowGroupReader[Row](buffer)
-			result := make([]Row, len(rows))
-			n, err := reader.Read(result)
-			if err != nil && !errors.Is(err, io.EOF) {
-				t.Error(err)
-				return false
-			}
-			if n < len(rows) {
-				t.Errorf("not enough values were read: want=%d got=%d", len(rows), n)
-				return false
-			}
-			if !reflect.DeepEqual(rows, result) {
-				t.Errorf("rows mismatch:\nwant: %+v\ngot:  %+v", rows, result)
 				return false
 			}
 			return true
@@ -70,20 +54,42 @@ func testGenericBuffer[Row any](t *testing.T) {
 	})
 }
 
+func testGenericBufferRows[Row any](t *testing.T, rows []Row) error {
+	buffer := parquet.NewGenericBuffer[Row]()
+	_, err := buffer.Write(rows)
+	if err != nil {
+		return err
+	}
+	reader := parquet.NewGenericRowGroupReader[Row](buffer)
+	result := make([]Row, len(rows))
+	n, err := reader.Read(result)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return err
+	}
+	if n < len(rows) {
+		return fmt.Errorf("not enough values were read: want=%d got=%d", len(rows), n)
+	}
+	if !reflect.DeepEqual(rows, result) {
+		return fmt.Errorf("rows mismatch:\nwant: %+v\ngot:  %+v", rows, result)
+	}
+	return nil
+}
+
 func BenchmarkGenericBuffer(b *testing.B) {
 	data := make([]byte, 16*benchmarkReaderNumRows)
 	prng := rand.New(rand.NewSource(0))
 	prng.Read(data)
 
-	values := make([]uuidColumn, benchmarkReaderNumRows)
+	values := make([]benchmarkBufferRowType, benchmarkReaderNumRows)
 	for i := range values {
 		j := (i + 0) * 16
 		k := (i + 1) * 16
-		copy(values[i].Value[:], data[j:k])
+		copy(values[i].ID[:], data[j:k])
+		values[i].Value = prng.Float64()
 	}
 
 	b.Run("go1.17", func(b *testing.B) {
-		buffer := parquet.NewBuffer(parquet.SchemaOf(uuidColumn{}))
+		buffer := parquet.NewBuffer(parquet.SchemaOf(values[0]))
 		i := 0
 		benchmarkRowsPerSecond(b, func() int {
 			for j := 0; j < benchmarkBufferRowsPerStep; j++ {
@@ -103,7 +109,7 @@ func BenchmarkGenericBuffer(b *testing.B) {
 	})
 
 	b.Run("go1.18", func(b *testing.B) {
-		buffer := parquet.NewGenericBuffer[uuidColumn]()
+		buffer := parquet.NewGenericBuffer[benchmarkBufferRowType]()
 		i := 0
 		benchmarkRowsPerSecond(b, func() int {
 			n, err := buffer.Write(values[i : i+benchmarkBufferRowsPerStep])

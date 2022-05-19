@@ -65,3 +65,12 @@ func BytesToSlice[T any](data []byte) []T {
 func BytesToString(data []byte) string {
 	return *(*string)(unsafe.Pointer(&data))
 }
+
+// StringToBytes applies the inverse conversion of BytesToString.
+func StringToBytes(data string) []byte {
+	return *(*[]byte)(unsafe.Pointer(&slice{
+		ptr: *(*unsafe.Pointer)(unsafe.Pointer(&data)),
+		len: len(data),
+		cap: len(data),
+	}))
+}

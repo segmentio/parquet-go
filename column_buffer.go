@@ -762,9 +762,13 @@ func (col *booleanColumnBuffer) WriteValues(values []Value) (int, error) {
 
 func (col *booleanColumnBuffer) writeValues(n int, f func(int) bool) {
 	for i := 0; i < n; i++ {
-		col.bits = plain.AppendBoolean(col.bits, int(col.numValues), f(i))
-		col.numValues++
+		col.writeValue(f(i))
 	}
+}
+
+func (col *booleanColumnBuffer) writeValue(v bool) {
+	col.bits = plain.AppendBoolean(col.bits, int(col.numValues), v)
+	col.numValues++
 }
 
 func (col *booleanColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int, err error) {
