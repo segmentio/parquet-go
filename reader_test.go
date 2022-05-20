@@ -298,11 +298,6 @@ func TestReader(t *testing.T) {
 	}
 }
 
-const (
-	benchmarkReaderNumRows     = benchmarkBufferNumRows
-	benchmarkReaderRowsPerStep = benchmarkBufferRowsPerStep
-)
-
 func BenchmarkReaderReadType(b *testing.B) {
 	buf := new(bytes.Buffer)
 	file := bytes.NewReader(nil)
@@ -310,7 +305,7 @@ func BenchmarkReaderReadType(b *testing.B) {
 	for _, test := range readerTests {
 		b.Run(test.scenario, func(b *testing.B) {
 			defer buf.Reset()
-			rows := rowsOf(benchmarkReaderNumRows, test.model)
+			rows := rowsOf(benchmarkNumRows, test.model)
 
 			if err := writeParquetFile(buf, rows); err != nil {
 				b.Fatal(err)
@@ -330,20 +325,20 @@ func BenchmarkReaderReadType(b *testing.B) {
 			p := rowPtr.Interface()
 
 			benchmarkRowsPerSecond(b, func() (n int) {
-				if err := r.Read(p); err != nil {
-					if err == io.EOF {
-						r.Reset()
-					} else {
-						b.Fatal(err)
+				for i := 0; i < benchmarkRowsPerStep; i++ {
+					if err := r.Read(p); err != nil {
+						if err == io.EOF {
+							r.Reset()
+						} else {
+							b.Fatal(err)
+						}
 					}
-				} else {
-					n = 1
 				}
 				rowValue.Set(rowZero)
-				return n
+				return benchmarkRowsPerStep
 			})
 
-			b.SetBytes(int64(math.Ceil(float64(file.Size()) / benchmarkReaderNumRows)))
+			b.SetBytes(int64(math.Ceil(benchmarkRowsPerStep * float64(file.Size()) / benchmarkNumRows)))
 		})
 	}
 }
@@ -355,7 +350,7 @@ func BenchmarkReaderReadRow(b *testing.B) {
 	for _, test := range readerTests {
 		b.Run(test.scenario, func(b *testing.B) {
 			defer buf.Reset()
-			rows := rowsOf(benchmarkReaderNumRows, test.model)
+			rows := rowsOf(benchmarkNumRows, test.model)
 
 			if err := writeParquetFile(buf, rows); err != nil {
 				b.Fatal(err)
@@ -367,7 +362,7 @@ func BenchmarkReaderReadRow(b *testing.B) {
 			}
 
 			r := parquet.NewReader(f)
-			rowbuf := make([]parquet.Row, 0, 16)
+			rowbuf := make([]parquet.Row, benchmarkRowsPerStep)
 
 			benchmarkRowsPerSecond(b, func() int {
 				n, err := r.ReadRows(rowbuf)
@@ -381,7 +376,7 @@ func BenchmarkReaderReadRow(b *testing.B) {
 				return n
 			})
 
-			b.SetBytes(int64(math.Ceil(float64(file.Size()) / benchmarkReaderNumRows)))
+			b.SetBytes(int64(math.Ceil(benchmarkRowsPerStep * float64(file.Size()) / benchmarkNumRows)))
 		})
 	}
 }

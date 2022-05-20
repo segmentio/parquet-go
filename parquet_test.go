@@ -13,6 +13,16 @@ import (
 	"github.com/segmentio/parquet-go/deprecated"
 )
 
+const (
+	benchmarkNumRows     = 10_000
+	benchmarkRowsPerStep = 100
+)
+
+type benchmarkRowType struct {
+	ID    [16]byte `parquet:"id,uuid"`
+	Value float64  `parquet:"value"`
+}
+
 type Contact struct {
 	Name        string `parquet:"name"`
 	PhoneNumber string `parquet:"phoneNumber,optional,zstd"`

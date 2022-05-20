@@ -77,19 +77,20 @@ func testGenericReader[Row any](t *testing.T) {
 }
 
 func BenchmarkGenericReader(b *testing.B) {
-	data := make([]byte, 16*benchmarkReaderNumRows)
+	data := make([]byte, 16*benchmarkNumRows)
 	prng := rand.New(rand.NewSource(0))
 	prng.Read(data)
 
-	values := make([]uuidColumn, benchmarkReaderNumRows)
+	values := make([]benchmarkRowType, benchmarkNumRows)
 	for i := range values {
 		j := (i + 0) * 16
 		k := (i + 1) * 16
-		copy(values[i].Value[:], data[j:k])
+		copy(values[i].ID[:], data[j:k])
+		values[i].Value = prng.Float64()
 	}
 
-	rowbuf := make([]uuidColumn, benchmarkReaderRowsPerStep)
-	buffer := parquet.NewGenericBuffer[uuidColumn]()
+	rowbuf := make([]benchmarkRowType, benchmarkRowsPerStep)
+	buffer := parquet.NewGenericBuffer[benchmarkRowType]()
 	buffer.Write(values)
 
 	b.Run("go1.17", func(b *testing.B) {
@@ -109,7 +110,7 @@ func BenchmarkGenericReader(b *testing.B) {
 	})
 
 	b.Run("go1.18", func(b *testing.B) {
-		reader := parquet.NewGenericRowGroupReader[uuidColumn](buffer)
+		reader := parquet.NewGenericRowGroupReader[benchmarkRowType](buffer)
 		benchmarkRowsPerSecond(b, func() int {
 			n, err := reader.Read(rowbuf)
 			if err != nil {

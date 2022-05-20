@@ -16,7 +16,7 @@ import (
 
 const (
 	numRowGroups = 3
-	rowsPerGroup = benchmarkReaderNumRows
+	rowsPerGroup = benchmarkNumRows
 )
 
 func BenchmarkMergeRowGroups(b *testing.B) {
@@ -46,11 +46,11 @@ func BenchmarkMergeRowGroups(b *testing.B) {
 					start := time.Now()
 
 					rows := mergedRowGroup.Rows()
-					rbuf := make([]parquet.Row, 20)
+					rbuf := make([]parquet.Row, benchmarkRowsPerStep)
 					defer func() { rows.Close() }()
 
-					for i := 0; i < b.N; i++ {
-						_, err := rows.ReadRows(rbuf)
+					benchmarkRowsPerSecond(b, func() int {
+						n, err := rows.ReadRows(rbuf)
 						if err != nil {
 							if !errors.Is(err, io.EOF) {
 								b.Fatal(err)
@@ -58,7 +58,8 @@ func BenchmarkMergeRowGroups(b *testing.B) {
 							rows.Close()
 							rows = mergedRowGroup.Rows()
 						}
-					}
+						return n
+					})
 
 					seconds := time.Since(start).Seconds()
 					b.ReportMetric(float64(b.N)/seconds, "row/s")
@@ -117,11 +118,11 @@ func BenchmarkMergeFiles(b *testing.B) {
 					start := time.Now()
 
 					rows := mergedRowGroup.Rows()
-					rbuf := make([]parquet.Row, 0, 20)
+					rbuf := make([]parquet.Row, benchmarkRowsPerStep)
 					defer func() { rows.Close() }()
 
-					for i := 0; i < b.N; i++ {
-						_, err := rows.ReadRows(rbuf)
+					benchmarkRowsPerSecond(b, func() int {
+						n, err := rows.ReadRows(rbuf)
 						if err != nil {
 							if !errors.Is(err, io.EOF) {
 								b.Fatal(err)
@@ -129,7 +130,8 @@ func BenchmarkMergeFiles(b *testing.B) {
 							rows.Close()
 							rows = mergedRowGroup.Rows()
 						}
-					}
+						return n
+					})
 
 					totalSize := int64(0)
 					for _, f := range files[:n] {
@@ -138,7 +140,7 @@ func BenchmarkMergeFiles(b *testing.B) {
 
 					seconds := time.Since(start).Seconds()
 					b.ReportMetric(float64(b.N)/seconds, "row/s")
-					b.SetBytes(int64(math.Ceil(float64(totalSize) / benchmarkReaderNumRows)))
+					b.SetBytes(int64(math.Ceil(float64(totalSize) / benchmarkNumRows)))
 				})
 			}
 		})

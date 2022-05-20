@@ -507,18 +507,8 @@ func TestBufferRoundtripNestedRepeatedPointer(t *testing.T) {
 	}
 }
 
-type benchmarkBufferRowType struct {
-	ID    [16]byte `parquet:"id,uuid"`
-	Value float64  `parquet:"value"`
-}
-
-const (
-	benchmarkBufferNumRows     = 10_000
-	benchmarkBufferRowsPerStep = 100
-)
-
 func generateBenchmarkBufferRows(n int) (*parquet.Schema, []parquet.Row) {
-	model := new(benchmarkBufferRowType)
+	model := new(benchmarkRowType)
 	schema := parquet.SchemaOf(model)
 	prng := rand.New(rand.NewSource(0))
 	rows := make([]parquet.Row, n)
@@ -534,11 +524,11 @@ func generateBenchmarkBufferRows(n int) (*parquet.Schema, []parquet.Row) {
 }
 
 func BenchmarkBufferReadRows100x(b *testing.B) {
-	schema, rows := generateBenchmarkBufferRows(benchmarkBufferNumRows)
+	schema, rows := generateBenchmarkBufferRows(benchmarkNumRows)
 	buffer := parquet.NewBuffer(schema)
 
-	for i := 0; i < len(rows); i += benchmarkBufferRowsPerStep {
-		j := i + benchmarkBufferRowsPerStep
+	for i := 0; i < len(rows); i += benchmarkRowsPerStep {
+		j := i + benchmarkRowsPerStep
 		if _, err := buffer.WriteRows(rows[i:j]); err != nil {
 			b.Fatal(err)
 		}
@@ -548,7 +538,7 @@ func BenchmarkBufferReadRows100x(b *testing.B) {
 	defer bufferRows.Close()
 
 	benchmarkRowsPerSecond(b, func() int {
-		n, err := bufferRows.ReadRows(rows[:benchmarkBufferRowsPerStep])
+		n, err := bufferRows.ReadRows(rows[:benchmarkRowsPerStep])
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				err = bufferRows.SeekToRow(0)
@@ -562,18 +552,18 @@ func BenchmarkBufferReadRows100x(b *testing.B) {
 }
 
 func BenchmarkBufferWriteRows100x(b *testing.B) {
-	schema, rows := generateBenchmarkBufferRows(benchmarkBufferNumRows)
+	schema, rows := generateBenchmarkBufferRows(benchmarkNumRows)
 	buffer := parquet.NewBuffer(schema)
 
 	i := 0
 	benchmarkRowsPerSecond(b, func() int {
-		n, err := buffer.WriteRows(rows[i : i+benchmarkBufferRowsPerStep])
+		n, err := buffer.WriteRows(rows[i : i+benchmarkRowsPerStep])
 		if err != nil {
 			b.Fatal(err)
 		}
 
-		i += benchmarkBufferRowsPerStep
-		i %= benchmarkBufferNumRows
+		i += benchmarkRowsPerStep
+		i %= benchmarkNumRows
 
 		if i == 0 {
 			buffer.Reset()

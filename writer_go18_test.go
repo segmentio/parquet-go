@@ -9,11 +9,11 @@ import (
 )
 
 func BenchmarkGenericWriter(b *testing.B) {
-	data := make([]byte, 16*benchmarkReaderNumRows)
+	data := make([]byte, 16*benchmarkNumRows)
 	prng := rand.New(rand.NewSource(0))
 	prng.Read(data)
 
-	values := make([]benchmarkBufferRowType, benchmarkReaderNumRows)
+	values := make([]benchmarkRowType, benchmarkNumRows)
 	for i := range values {
 		j := (i + 0) * 16
 		k := (i + 1) * 16
@@ -25,34 +25,34 @@ func BenchmarkGenericWriter(b *testing.B) {
 		writer := parquet.NewWriter(io.Discard, parquet.SchemaOf(values[0]))
 		i := 0
 		benchmarkRowsPerSecond(b, func() int {
-			for j := 0; j < benchmarkBufferRowsPerStep; j++ {
+			for j := 0; j < benchmarkRowsPerStep; j++ {
 				if err := writer.Write(&values[i]); err != nil {
 					b.Fatal(err)
 				}
 			}
 
-			i += benchmarkBufferRowsPerStep
-			i %= benchmarkBufferNumRows
+			i += benchmarkRowsPerStep
+			i %= benchmarkNumRows
 
 			if i == 0 {
 				writer.Close()
 				writer.Reset(io.Discard)
 			}
-			return benchmarkBufferRowsPerStep
+			return benchmarkRowsPerStep
 		})
 	})
 
 	b.Run("go1.18", func(b *testing.B) {
-		writer := parquet.NewGenericWriter[benchmarkBufferRowType](io.Discard)
+		writer := parquet.NewGenericWriter[benchmarkRowType](io.Discard)
 		i := 0
 		benchmarkRowsPerSecond(b, func() int {
-			n, err := writer.Write(values[i : i+benchmarkBufferRowsPerStep])
+			n, err := writer.Write(values[i : i+benchmarkRowsPerStep])
 			if err != nil {
 				b.Fatal(err)
 			}
 
-			i += benchmarkBufferRowsPerStep
-			i %= benchmarkBufferNumRows
+			i += benchmarkRowsPerStep
+			i %= benchmarkNumRows
 
 			if i == 0 {
 				writer.Close()
