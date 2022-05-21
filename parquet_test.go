@@ -6,9 +6,11 @@ import (
 	"io"
 	"math/rand"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/segmentio/parquet-go"
 	"github.com/segmentio/parquet-go/deprecated"
 )
@@ -21,6 +23,170 @@ const (
 type benchmarkRowType struct {
 	ID    [16]byte `parquet:"id,uuid"`
 	Value float64  `parquet:"value"`
+}
+
+func (row benchmarkRowType) generate(prng *rand.Rand) benchmarkRowType {
+	prng.Read(row.ID[:])
+	row.Value = prng.Float64()
+	return row
+}
+
+type booleanColumn struct {
+	Value bool
+}
+
+func (row booleanColumn) generate(prng *rand.Rand) booleanColumn {
+	return booleanColumn{Value: prng.Int()%2 == 0}
+}
+
+type int32Column struct {
+	Value int32
+}
+
+func (row int32Column) generate(prng *rand.Rand) int32Column {
+	return int32Column{Value: prng.Int31n(100)}
+}
+
+type int64Column struct {
+	Value int64
+}
+
+func (row int64Column) generate(prng *rand.Rand) int64Column {
+	return int64Column{Value: prng.Int63n(100)}
+}
+
+type int96Column struct {
+	Value deprecated.Int96
+}
+
+func (row int96Column) generate(prng *rand.Rand) int96Column {
+	row.Value[0] = prng.Uint32()
+	row.Value[1] = prng.Uint32()
+	row.Value[2] = prng.Uint32()
+	return row
+}
+
+type floatColumn struct {
+	Value float32
+}
+
+func (row floatColumn) generate(prng *rand.Rand) floatColumn {
+	return floatColumn{Value: prng.Float32()}
+}
+
+type doubleColumn struct {
+	Value float64
+}
+
+func (row doubleColumn) generate(prng *rand.Rand) doubleColumn {
+	return doubleColumn{Value: prng.Float64()}
+}
+
+type byteArrayColumn struct {
+	Value []byte
+}
+
+func (row byteArrayColumn) generate(prng *rand.Rand) byteArrayColumn {
+	row.Value = make([]byte, prng.Intn(10))
+	prng.Read(row.Value)
+	return row
+}
+
+type fixedLenByteArrayColumn struct {
+	Value [10]byte
+}
+
+func (row fixedLenByteArrayColumn) generate(prng *rand.Rand) fixedLenByteArrayColumn {
+	prng.Read(row.Value[:])
+	return row
+}
+
+type stringColumn struct {
+	Value string
+}
+
+func (row stringColumn) generate(prng *rand.Rand) stringColumn {
+	return stringColumn{Value: randString(prng, 10)}
+}
+
+type indexedStringColumn struct {
+	Value string `parquet:",dict"`
+}
+
+func (row indexedStringColumn) generate(prng *rand.Rand) indexedStringColumn {
+	return indexedStringColumn{Value: randString(prng, 10)}
+}
+
+type uuidColumn struct {
+	Value uuid.UUID `parquet:",delta"`
+}
+
+func (row uuidColumn) generate(prng *rand.Rand) uuidColumn {
+	prng.Read(row.Value[:])
+	return row
+}
+
+type decimalColumn struct {
+	Value int64 `parquet:",decimal(0:3)"`
+}
+
+func (row decimalColumn) generate(prng *rand.Rand) decimalColumn {
+	return decimalColumn{Value: prng.Int63()}
+}
+
+type addressBook struct {
+	Owner             utf8string   `parquet:",plain"`
+	OwnerPhoneNumbers []utf8string `parquet:",plain"`
+	Contacts          []contact
+}
+
+type contact struct {
+	Name        utf8string `parquet:",plain"`
+	PhoneNumber utf8string `parquet:",plain"`
+}
+
+func (row contact) generate(prng *rand.Rand) contact {
+	return contact{
+		Name:        utf8string(randString(prng, 16)),
+		PhoneNumber: utf8string(randString(prng, 10)),
+	}
+}
+
+type listColumn2 struct {
+	Value utf8string `parquet:",optional"`
+}
+
+type listColumn1 struct {
+	List2 []listColumn2 `parquet:",list"`
+}
+
+type listColumn0 struct {
+	List1 []listColumn1 `parquet:",list"`
+}
+
+type nestedListColumn1 struct {
+	Level3 []utf8string `parquet:"level3"`
+}
+
+type nestedListColumn struct {
+	Level1 []nestedListColumn1 `parquet:"level1"`
+	Level2 []utf8string        `parquet:"level2"`
+}
+
+type utf8string string
+
+func (utf8string) Generate(rand *rand.Rand, size int) reflect.Value {
+	const characters = "abcdefghijklmnopqrstuvwxyz1234567890"
+	const maxSize = 10
+	if size > maxSize {
+		size = maxSize
+	}
+	n := rand.Intn(size)
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = characters[rand.Intn(len(characters))]
+	}
+	return reflect.ValueOf(utf8string(b))
 }
 
 type Contact struct {
@@ -229,4 +395,13 @@ func benchmarkRowsPerSecond(b *testing.B, f func() int) {
 
 	seconds := time.Since(start).Seconds()
 	b.ReportMetric(float64(numRows)/seconds, "row/s")
+}
+
+func randString(r *rand.Rand, n int) string {
+	const characters = "1234567890qwertyuiopasdfghjklzxcvbnm"
+	b := new(strings.Builder)
+	for i := 0; i < n; i++ {
+		b.WriteByte(characters[r.Intn(len(characters))])
+	}
+	return b.String()
 }

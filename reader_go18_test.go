@@ -85,50 +85,63 @@ func testGenericReaderRows[Row any](rows []Row) error {
 }
 
 func BenchmarkGenericReader(b *testing.B) {
-	data := make([]byte, 16*benchmarkNumRows)
-	prng := rand.New(rand.NewSource(0))
-	prng.Read(data)
+	benchmarkGenericReader[benchmarkRowType](b)
+	benchmarkGenericReader[booleanColumn](b)
+	benchmarkGenericReader[int32Column](b)
+	benchmarkGenericReader[int64Column](b)
+	benchmarkGenericReader[floatColumn](b)
+	benchmarkGenericReader[doubleColumn](b)
+	benchmarkGenericReader[byteArrayColumn](b)
+	benchmarkGenericReader[fixedLenByteArrayColumn](b)
+	benchmarkGenericReader[stringColumn](b)
+	benchmarkGenericReader[indexedStringColumn](b)
+	benchmarkGenericReader[uuidColumn](b)
+	benchmarkGenericReader[decimalColumn](b)
+	benchmarkGenericReader[contact](b)
+}
 
-	values := make([]benchmarkRowType, benchmarkNumRows)
-	for i := range values {
-		j := (i + 0) * 16
-		k := (i + 1) * 16
-		copy(values[i].ID[:], data[j:k])
-		values[i].Value = prng.Float64()
-	}
+func benchmarkGenericReader[Row generator[Row]](b *testing.B) {
+	var model Row
+	b.Run(reflect.TypeOf(model).Name(), func(b *testing.B) {
+		prng := rand.New(rand.NewSource(0))
+		rows := make([]Row, benchmarkNumRows)
+		for i := range rows {
+			rows[i] = rows[i].generate(prng)
+		}
 
-	rowbuf := make([]benchmarkRowType, benchmarkRowsPerStep)
-	buffer := parquet.NewGenericBuffer[benchmarkRowType]()
-	buffer.Write(values)
+		rowbuf := make([]Row, benchmarkRowsPerStep)
+		buffer := parquet.NewGenericBuffer[Row]()
+		buffer.Write(rows)
 
-	b.Run("go1.17", func(b *testing.B) {
-		reader := parquet.NewRowGroupReader(buffer)
-		benchmarkRowsPerSecond(b, func() int {
-			for i := range rowbuf {
-				if err := reader.Read(&rowbuf[i]); err != nil {
+		b.Run("go1.17", func(b *testing.B) {
+			reader := parquet.NewRowGroupReader(buffer)
+			benchmarkRowsPerSecond(b, func() int {
+				for i := range rowbuf {
+					if err := reader.Read(&rowbuf[i]); err != nil {
+						if err != io.EOF {
+							b.Fatal(err)
+						} else {
+							reader.Reset()
+						}
+					}
+				}
+				return len(rowbuf)
+			})
+		})
+
+		b.Run("go1.18", func(b *testing.B) {
+			reader := parquet.NewGenericRowGroupReader[Row](buffer)
+			benchmarkRowsPerSecond(b, func() int {
+				n, err := reader.Read(rowbuf)
+				if err != nil {
 					if err != io.EOF {
 						b.Fatal(err)
 					} else {
 						reader.Reset()
 					}
 				}
-			}
-			return len(rowbuf)
-		})
-	})
-
-	b.Run("go1.18", func(b *testing.B) {
-		reader := parquet.NewGenericRowGroupReader[benchmarkRowType](buffer)
-		benchmarkRowsPerSecond(b, func() int {
-			n, err := reader.Read(rowbuf)
-			if err != nil {
-				if err != io.EOF {
-					b.Fatal(err)
-				} else {
-					reader.Reset()
-				}
-			}
-			return n
+				return n
+			})
 		})
 	})
 }
