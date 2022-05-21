@@ -70,9 +70,8 @@ func NewGenericWriter[T any](output io.Writer, options ...WriterOption) *Generic
 		panic(err)
 	}
 
-	var model T
-	var schema = schemaOf(reflect.TypeOf(model))
-
+	t := typeOf[T]()
+	schema := schemaOf(dereference(t))
 	if config.Schema == nil {
 		config.Schema = schema
 	}
@@ -84,39 +83,38 @@ func NewGenericWriter[T any](output io.Writer, options ...WriterOption) *Generic
 			schema: schema,
 			writer: newWriter(output, config),
 		},
-		write: writeFuncOf[T](config.Schema),
+		write: writeFuncOf[T](t, config.Schema),
 	}
 }
 
 type writeFunc[T any] func(*GenericWriter[T], []T) (int, error)
 
-func writeFuncOf[T any](schema *Schema) writeFunc[T] {
-	var model T
-
-	switch t := reflect.TypeOf(model); t.Kind() {
+func writeFuncOf[T any](t reflect.Type, schema *Schema) writeFunc[T] {
+	switch t.Kind() {
 	case reflect.Interface, reflect.Map:
 		return (*GenericWriter[T]).writeRows
 
 	case reflect.Struct:
-		size := t.Size()
-		writeRows := writeRowsFuncOf(t, schema, nil)
-		return func(w *GenericWriter[T], rows []T) (n int, err error) {
-			defer w.buffers.clear()
-			err = writeRows(&w.buffers, makeArray(rows), size, 0, columnLevels{})
-			if err == nil {
-				n = len(rows)
-			}
-			return n, err
-		}
+		return makeWriteFunc[T](t, schema)
 
-	default:
-		panic("cannot create writer for values of type " + t.String())
+	case reflect.Pointer:
+		if e := t.Elem(); e.Kind() == reflect.Struct {
+			return makeWriteFunc[T](t, schema)
+		}
 	}
+	panic("cannot create writer for values of type " + t.String())
 }
 
-func writeFuncOfStruct[T any](t reflect.Type, schema *Schema) writeFunc[T] {
-	return func(w *GenericWriter[T], rows []T) (int, error) {
-		return w.writeRows(rows)
+func makeWriteFunc[T any](t reflect.Type, schema *Schema) writeFunc[T] {
+	size := t.Size()
+	writeRows := writeRowsFuncOf(t, schema, nil)
+	return func(w *GenericWriter[T], rows []T) (n int, err error) {
+		defer w.buffers.clear()
+		err = writeRows(&w.buffers, makeArray(rows), size, 0, columnLevels{})
+		if err == nil {
+			n = len(rows)
+		}
+		return n, err
 	}
 }
 

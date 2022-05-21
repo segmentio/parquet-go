@@ -373,7 +373,7 @@ func deconstructFuncOfOptional(columnIndex int16, node Node) (int16, deconstruct
 			if value.IsZero() {
 				value = reflect.Value{}
 			} else {
-				if value.Kind() == reflect.Ptr {
+				if value.Kind() == reflect.Pointer {
 					value = value.Elem()
 				}
 				levels.definitionLevel++
@@ -525,7 +525,7 @@ func reconstructFuncOfOptional(columnIndex int16, node Node) (int16, reconstruct
 			return row[rowLength:], nil
 		}
 
-		if value.Kind() == reflect.Ptr {
+		if value.Kind() == reflect.Pointer {
 			if value.IsNil() {
 				value.Set(reflect.New(value.Type().Elem()))
 			}

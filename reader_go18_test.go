@@ -5,6 +5,7 @@ package parquet_test
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"math/rand"
 	"reflect"
@@ -34,6 +35,7 @@ func TestGenericReader(t *testing.T) {
 	testGenericReader[listColumn0](t)
 	testGenericReader[nestedListColumn1](t)
 	testGenericReader[nestedListColumn](t)
+	testGenericReader[*contact](t)
 }
 
 func testGenericReader[Row any](t *testing.T) {
@@ -44,30 +46,8 @@ func testGenericReader[Row any](t *testing.T) {
 			if len(rows) == 0 {
 				return true // TODO: fix support for parquet files with zero rows
 			}
-			buffer := new(bytes.Buffer)
-			writer := parquet.NewGenericWriter[Row](buffer)
-			_, err := writer.Write(rows)
-			if err != nil {
+			if err := testGenericReaderRows(rows); err != nil {
 				t.Error(err)
-				return false
-			}
-			if err := writer.Close(); err != nil {
-				t.Error(err)
-				return false
-			}
-			reader := parquet.NewGenericReader[Row](bytes.NewReader(buffer.Bytes()))
-			result := make([]Row, len(rows))
-			n, err := reader.Read(result)
-			if err != nil && !errors.Is(err, io.EOF) {
-				t.Error(err)
-				return false
-			}
-			if n < len(rows) {
-				t.Errorf("not enough values were read: want=%d got=%d", len(rows), n)
-				return false
-			}
-			if !reflect.DeepEqual(rows, result) {
-				t.Errorf("rows mismatch:\nwant: %+v\ngot:  %+v", rows, result)
 				return false
 			}
 			return true
@@ -76,6 +56,32 @@ func testGenericReader[Row any](t *testing.T) {
 			t.Error(err)
 		}
 	})
+}
+
+func testGenericReaderRows[Row any](rows []Row) error {
+	setNullPointers(rows)
+	buffer := new(bytes.Buffer)
+	writer := parquet.NewGenericWriter[Row](buffer)
+	_, err := writer.Write(rows)
+	if err != nil {
+		return err
+	}
+	if err := writer.Close(); err != nil {
+		return err
+	}
+	reader := parquet.NewGenericReader[Row](bytes.NewReader(buffer.Bytes()))
+	result := make([]Row, len(rows))
+	n, err := reader.Read(result)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return err
+	}
+	if n < len(rows) {
+		return fmt.Errorf("not enough values were read: want=%d got=%d", len(rows), n)
+	}
+	if !reflect.DeepEqual(rows, result) {
+		return fmt.Errorf("rows mismatch:\nwant: %+v\ngot:  %+v", rows, result)
+	}
+	return nil
 }
 
 func BenchmarkGenericReader(b *testing.B) {

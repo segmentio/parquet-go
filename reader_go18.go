@@ -32,9 +32,9 @@ func NewGenericReader[T any](input io.ReaderAt, options ...ReaderOption) *Generi
 		panic(err)
 	}
 
+	t := typeOf[T]()
 	if c.Schema == nil {
-		var model T
-		c.Schema = schemaOf(reflect.TypeOf(model))
+		c.Schema = schemaOf(dereference(t))
 	}
 
 	f, err := openFile(input)
@@ -56,7 +56,7 @@ func NewGenericReader[T any](input io.ReaderAt, options ...ReaderOption) *Generi
 	}
 
 	r.base.read.init(r.base.file.schema, r.base.file.rowGroup)
-	r.read = readFuncOf[T](r.base.file.schema)
+	r.read = readFuncOf[T](t, r.base.file.schema)
 	return r
 }
 
@@ -66,9 +66,9 @@ func NewGenericRowGroupReader[T any](rowGroup RowGroup, options ...ReaderOption)
 		panic(err)
 	}
 
+	t := typeOf[T]()
 	if c.Schema == nil {
-		var model T
-		c.Schema = schemaOf(reflect.TypeOf(model))
+		c.Schema = schemaOf(dereference(t))
 	}
 
 	r := &GenericReader[T]{
@@ -85,7 +85,7 @@ func NewGenericRowGroupReader[T any](rowGroup RowGroup, options ...ReaderOption)
 	}
 
 	r.base.read.init(r.base.file.schema, r.base.file.rowGroup)
-	r.read = readFuncOf[T](r.base.file.schema)
+	r.read = readFuncOf[T](t, r.base.file.schema)
 	return r
 }
 
@@ -150,20 +150,18 @@ var (
 
 type readFunc[T any] func(*GenericReader[T], []T) (int, error)
 
-func readFuncOf[T any](schema *Schema) readFunc[T] {
-	var model T
-	switch t := reflect.TypeOf(model); t.Kind() {
+func readFuncOf[T any](t reflect.Type, schema *Schema) readFunc[T] {
+	switch t.Kind() {
 	case reflect.Interface, reflect.Map:
 		return (*GenericReader[T]).readRows
-	case reflect.Struct:
-		return readFuncOfStruct[T](t, schema)
-	default:
-		panic("cannot create reader for values of type " + t.String())
-	}
-}
 
-func readFuncOfStruct[T any](t reflect.Type, schema *Schema) readFunc[T] {
-	return func(w *GenericReader[T], rows []T) (int, error) {
-		return w.readRows(rows)
+	case reflect.Struct:
+		return (*GenericReader[T]).readRows
+
+	case reflect.Pointer:
+		if e := t.Elem(); e.Kind() == reflect.Struct {
+			return (*GenericReader[T]).readRows
+		}
 	}
+	panic("cannot create reader for values of type " + t.String())
 }

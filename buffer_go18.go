@@ -33,17 +33,16 @@ func NewGenericBuffer[T any](options ...RowGroupOption) *GenericBuffer[T] {
 		panic(err)
 	}
 
-	var model T
-	var t = reflect.TypeOf(model)
+	t := typeOf[T]()
 	if config.Schema == nil {
-		config.Schema = schemaOf(t)
+		config.Schema = schemaOf(dereference(t))
 	}
 
 	buf := &GenericBuffer[T]{
 		base: Buffer{config: config},
 	}
 	buf.base.configure(config.Schema)
-	buf.write = bufferFuncOf[T](config.Schema)
+	buf.write = bufferFuncOf[T](t, config.Schema)
 	buf.columns = columnBufferWriter{
 		columns: buf.base.columns,
 		values:  make([]Value, 0, defaultValueBufferSize),
@@ -51,29 +50,39 @@ func NewGenericBuffer[T any](options ...RowGroupOption) *GenericBuffer[T] {
 	return buf
 }
 
+func typeOf[T any]() reflect.Type {
+	var v T
+	return reflect.TypeOf(v)
+}
+
 type bufferFunc[T any] func(*GenericBuffer[T], []T) (int, error)
 
-func bufferFuncOf[T any](schema *Schema) bufferFunc[T] {
-	var model T
-
-	switch t := reflect.TypeOf(model); t.Kind() {
+func bufferFuncOf[T any](t reflect.Type, schema *Schema) bufferFunc[T] {
+	switch t.Kind() {
 	case reflect.Interface, reflect.Map:
 		return (*GenericBuffer[T]).writeRows
 
 	case reflect.Struct:
-		size := t.Size()
-		writeRows := writeRowsFuncOf(t, schema, nil)
-		return func(buf *GenericBuffer[T], rows []T) (n int, err error) {
-			defer buf.columns.clear()
-			err = writeRows(&buf.columns, makeArray(rows), size, 0, columnLevels{})
-			if err == nil {
-				n = len(rows)
-			}
-			return n, err
-		}
+		return makeBufferFunc[T](t, schema)
 
-	default:
-		panic("cannot create buffer for values of type " + t.String())
+	case reflect.Pointer:
+		if e := t.Elem(); e.Kind() == reflect.Struct {
+			return makeBufferFunc[T](t, schema)
+		}
+	}
+	panic("cannot create buffer for values of type " + t.String())
+}
+
+func makeBufferFunc[T any](t reflect.Type, schema *Schema) bufferFunc[T] {
+	size := t.Size()
+	writeRows := writeRowsFuncOf(t, schema, nil)
+	return func(buf *GenericBuffer[T], rows []T) (n int, err error) {
+		defer buf.columns.clear()
+		err = writeRows(&buf.columns, makeArray(rows), size, 0, columnLevels{})
+		if err == nil {
+			n = len(rows)
+		}
+		return n, err
 	}
 }
 

@@ -34,6 +34,7 @@ func TestGenericBuffer(t *testing.T) {
 	testGenericBuffer[listColumn0](t)
 	testGenericBuffer[nestedListColumn1](t)
 	testGenericBuffer[nestedListColumn](t)
+	testGenericBuffer[*contact](t)
 }
 
 func testGenericBuffer[Row any](t *testing.T) {
@@ -44,7 +45,7 @@ func testGenericBuffer[Row any](t *testing.T) {
 			if len(rows) == 0 {
 				return true // TODO: fix support for parquet files with zero rows
 			}
-			if err := testGenericBufferRows(t, rows); err != nil {
+			if err := testGenericBufferRows(rows); err != nil {
 				t.Error(err)
 				return false
 			}
@@ -56,7 +57,8 @@ func testGenericBuffer[Row any](t *testing.T) {
 	})
 }
 
-func testGenericBufferRows[Row any](t *testing.T, rows []Row) error {
+func testGenericBufferRows[Row any](rows []Row) error {
+	setNullPointers(rows)
 	buffer := parquet.NewGenericBuffer[Row]()
 	_, err := buffer.Write(rows)
 	if err != nil {
@@ -72,9 +74,20 @@ func testGenericBufferRows[Row any](t *testing.T, rows []Row) error {
 		return fmt.Errorf("not enough values were read: want=%d got=%d", len(rows), n)
 	}
 	if !reflect.DeepEqual(rows, result) {
-		return fmt.Errorf("rows mismatch:\nwant: %+v\ngot:  %+v", rows, result)
+		return fmt.Errorf("rows mismatch:\nwant: %#v\ngot:  %#v", rows, result)
 	}
 	return nil
+}
+
+func setNullPointers[Row any](rows []Row) {
+	if len(rows) > 0 && reflect.TypeOf(rows[0]).Kind() == reflect.Pointer {
+		for i := range rows {
+			v := reflect.ValueOf(&rows[i]).Elem()
+			if v.IsNil() {
+				v.Set(reflect.New(v.Type().Elem()))
+			}
+		}
+	}
 }
 
 func BenchmarkGenericBuffer(b *testing.B) {

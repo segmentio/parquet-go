@@ -110,7 +110,7 @@ func NewSchema(name string, root Node) *Schema {
 }
 
 func dereference(t reflect.Type) reflect.Type {
-	if t.Kind() == reflect.Ptr {
+	for t.Kind() == reflect.Ptr {
 		t = t.Elem()
 	}
 	return t
@@ -196,12 +196,12 @@ func (s *Schema) GoType() reflect.Type { return s.root.GoType() }
 // parquet schema.
 func (s *Schema) Deconstruct(row Row, value interface{}) Row {
 	v := reflect.ValueOf(value)
-	if v.Kind() == reflect.Ptr {
+	for v.Kind() == reflect.Pointer {
 		if v.IsNil() {
 			v = reflect.Value{}
-		} else {
-			v = v.Elem()
+			break
 		}
+		v = v.Elem()
 	}
 	if s.deconstruct != nil {
 		row = s.deconstruct(row, levels{}, v)
@@ -221,15 +221,21 @@ func (s *Schema) Reconstruct(value interface{}, row Row) error {
 	if !v.IsValid() {
 		panic("cannot reconstruct row into go value of type <nil>")
 	}
-	if v.Kind() != reflect.Ptr {
+	if v.Kind() != reflect.Pointer {
 		panic("cannot reconstruct row into go value of non-pointer type " + v.Type().String())
 	}
 	if v.IsNil() {
 		panic("cannot reconstruct row into nil pointer of type " + v.Type().String())
 	}
+	for v.Kind() == reflect.Pointer {
+		if v.IsNil() {
+			v.Set(reflect.New(v.Type().Elem()))
+		}
+		v = v.Elem()
+	}
 	var err error
 	if s.reconstruct != nil {
-		row, err = s.reconstruct(v.Elem(), levels{}, row)
+		row, err = s.reconstruct(v, levels{}, row)
 		if len(row) > 0 && err == nil {
 			err = fmt.Errorf("%d values remain unused after reconstructing go value of type %s from parquet row", len(row), v.Type())
 		}
@@ -354,7 +360,7 @@ func (s *structNode) Fields() []Field {
 // reflect.Value if one of the fields was a nil pointer instead of panicking.
 func fieldByIndex(v reflect.Value, index []int) reflect.Value {
 	for _, i := range index {
-		if v = v.Field(i); v.Kind() == reflect.Ptr {
+		if v = v.Field(i); v.Kind() == reflect.Pointer {
 			if v.IsNil() {
 				v = reflect.Value{}
 				break
@@ -633,7 +639,7 @@ func nodeOf(t reflect.Type) Node {
 	case reflect.String:
 		n = String()
 
-	case reflect.Ptr:
+	case reflect.Pointer:
 		n = Optional(nodeOf(t.Elem()))
 
 	case reflect.Slice:
