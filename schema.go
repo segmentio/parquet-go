@@ -196,7 +196,7 @@ func (s *Schema) GoType() reflect.Type { return s.root.GoType() }
 // parquet schema.
 func (s *Schema) Deconstruct(row Row, value interface{}) Row {
 	v := reflect.ValueOf(value)
-	for v.Kind() == reflect.Pointer {
+	for v.Kind() == reflect.Ptr {
 		if v.IsNil() {
 			v = reflect.Value{}
 			break
@@ -221,13 +221,13 @@ func (s *Schema) Reconstruct(value interface{}, row Row) error {
 	if !v.IsValid() {
 		panic("cannot reconstruct row into go value of type <nil>")
 	}
-	if v.Kind() != reflect.Pointer {
+	if v.Kind() != reflect.Ptr {
 		panic("cannot reconstruct row into go value of non-pointer type " + v.Type().String())
 	}
 	if v.IsNil() {
 		panic("cannot reconstruct row into nil pointer of type " + v.Type().String())
 	}
-	for v.Kind() == reflect.Pointer {
+	for v.Kind() == reflect.Ptr {
 		if v.IsNil() {
 			v.Set(reflect.New(v.Type().Elem()))
 		}
@@ -360,7 +360,7 @@ func (s *structNode) Fields() []Field {
 // reflect.Value if one of the fields was a nil pointer instead of panicking.
 func fieldByIndex(v reflect.Value, index []int) reflect.Value {
 	for _, i := range index {
-		if v = v.Field(i); v.Kind() == reflect.Pointer {
+		if v = v.Field(i); v.Kind() == reflect.Ptr {
 			if v.IsNil() {
 				v = reflect.Value{}
 				break
@@ -639,7 +639,7 @@ func nodeOf(t reflect.Type) Node {
 	case reflect.String:
 		n = String()
 
-	case reflect.Pointer:
+	case reflect.Ptr:
 		n = Optional(nodeOf(t.Elem()))
 
 	case reflect.Slice:
