@@ -7,11 +7,25 @@ import (
 	"reflect"
 )
 
+// GenericReader is similar to a Reader but uses a type parameter to define the
+// Go type representing the schema of rows being read.
+//
+// See GenericWriter for details about the benefits over the classic Reader API.
 type GenericReader[T any] struct {
 	base Reader
 	read readFunc[T]
 }
 
+// NewGenericReader is like NewReader but returns GenericReader[T] suited to write
+// rows of Go type T.
+//
+// The type parameter T should be a map, struct, or any. Any other types will
+// cause a panic at runtime. Type checking is a lot more effective when the
+// generic parameter is a struct type, using map and interface types is somewhat
+// similar to using a Writer.
+//
+// If the option list may explicitly declare a schema, it must be compatible
+// with the schema generated from T.
 func NewGenericReader[T any](input io.ReaderAt, options ...ReaderOption) *GenericReader[T] {
 	c, err := NewReaderConfig(options...)
 	if err != nil {

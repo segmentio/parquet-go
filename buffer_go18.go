@@ -7,14 +7,26 @@ import (
 	"sort"
 )
 
+// GenericBuffer is similar to a Buffer but uses a type parameter to define the
+// Go type representing the schema of rows in the buffer.
+//
+// See GenericWriter for details about the benefits over the classic Buffer API.
 type GenericBuffer[T any] struct {
 	base    Buffer
 	write   bufferFunc[T]
 	columns columnBufferWriter
 }
 
-type bufferFunc[T any] func(*GenericBuffer[T], []T) (int, error)
-
+// NewGenericBuffer is like NewBuffer but returns GenericBuffer[T] suited to write
+// rows of Go type T.
+//
+// The type parameter T should be a map, struct, or any. Any other types will
+// cause a panic at runtime. Type checking is a lot more effective when the
+// generic parameter is a struct type, using map and interface types is somewhat
+// similar to using a Writer.
+//
+// If the option list may explicitly declare a schema, it must be compatible
+// with the schema generated from T.
 func NewGenericBuffer[T any](options ...RowGroupOption) *GenericBuffer[T] {
 	config, err := NewRowGroupConfig(options...)
 	if err != nil {
@@ -38,6 +50,8 @@ func NewGenericBuffer[T any](options ...RowGroupOption) *GenericBuffer[T] {
 	}
 	return buf
 }
+
+type bufferFunc[T any] func(*GenericBuffer[T], []T) (int, error)
 
 func bufferFuncOf[T any](schema *Schema) bufferFunc[T] {
 	var model T

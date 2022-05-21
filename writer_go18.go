@@ -8,7 +8,7 @@ import (
 )
 
 // GenericWriter is similar to a Writer but uses a type parameter to define the
-// Go type representing the rows being written.
+// Go type representing the schema of rows being written.
 //
 // Using this type over Writer has multiple advantages:
 //
