@@ -101,9 +101,15 @@ func (e *ByteArrayEncoding) encode(dst []byte, numValues int, valueAt func(int) 
 
 func (e *ByteArrayEncoding) DecodeByteArray(dst, src []byte) ([]byte, error) {
 	dst = dst[:0]
-	err := e.decode(src, func(value []byte) error {
-		dst = plain.AppendByteArray(dst, value)
-		return nil
+	err := e.decode(src, func(prefix, suffix []byte) ([]byte, error) {
+		n := len(prefix) + len(suffix)
+		b := [4]byte{}
+		plain.PutByteArrayLength(b[:], n)
+		dst = append(dst, b[:]...)
+		i := len(dst)
+		dst = append(dst, prefix...)
+		dst = append(dst, suffix...)
+		return dst[i:len(dst):len(dst)], nil
 	})
 	if err != nil {
 		err = encoding.Error(e, err)
@@ -116,12 +122,15 @@ func (e *ByteArrayEncoding) DecodeFixedLenByteArray(dst, src []byte, size int) (
 		return dst[:0], encoding.Error(e, encoding.ErrInvalidArgument)
 	}
 	dst = dst[:0]
-	err := e.decode(src, func(value []byte) error {
-		if len(value) != size {
-			return fmt.Errorf("cannot decode value of size %d into fixed-length byte array of size %d", len(value), size)
+	err := e.decode(src, func(prefix, suffix []byte) ([]byte, error) {
+		n := len(prefix) + len(suffix)
+		if n != size {
+			return nil, fmt.Errorf("cannot decode value of size %d into fixed-length byte array of size %d", n, size)
 		}
-		dst = append(dst, value...)
-		return nil
+		i := len(dst)
+		dst = append(dst, prefix...)
+		dst = append(dst, suffix...)
+		return dst[i:len(dst):len(dst)], nil
 	})
 	if err != nil {
 		err = encoding.Error(e, err)
@@ -129,7 +138,7 @@ func (e *ByteArrayEncoding) DecodeFixedLenByteArray(dst, src []byte, size int) (
 	return dst, err
 }
 
-func (e *ByteArrayEncoding) decode(src []byte, observe func([]byte) error) error {
+func (e *ByteArrayEncoding) decode(src []byte, observe func(prefix, suffix []byte) ([]byte, error)) error {
 	prefix := getInt32Buffer()
 	defer putInt32Buffer(prefix)
 
@@ -149,9 +158,7 @@ func (e *ByteArrayEncoding) decode(src []byte, observe func([]byte) error) error
 		return fmt.Errorf("number of prefix and lengths mismatch: %d != %d", len(prefix.values), len(length.values))
 	}
 
-	value := getBytesBuffer()
-	defer putBytesBuffer(value)
-
+	var lastValue []byte
 	for i, n := range length.values {
 		if int(n) < 0 {
 			return fmt.Errorf("invalid negative value length: %d", n)
@@ -164,15 +171,15 @@ func (e *ByteArrayEncoding) decode(src []byte, observe func([]byte) error) error
 		if int(p) < 0 {
 			return fmt.Errorf("invalid negative prefix length: %d", p)
 		}
-		if int(p) > value.Len() {
-			return fmt.Errorf("prefix length %d is larger than the last value of size %d", p, value.Len())
+		if int(p) > len(lastValue) {
+			return fmt.Errorf("prefix length %d is larger than the last value of size %d", p, len(lastValue))
 		}
 
-		value.Truncate(int(p))
-		value.Write(src[:n])
-		src = src[n:]
+		prefix := lastValue[:p:p]
+		suffix := src[:n:n]
+		src = src[n:len(src):len(src)]
 
-		if err := observe(value.Bytes()); err != nil {
+		if lastValue, err = observe(prefix, suffix); err != nil {
 			return err
 		}
 	}
