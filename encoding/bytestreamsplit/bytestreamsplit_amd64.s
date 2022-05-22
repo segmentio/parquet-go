@@ -2,17 +2,35 @@
 
 #include "textflag.h"
 
-GLOBL offsets<>(SB), RODATA|NOPTR, $16
-DATA offsets<>+0(SB)/4, $0x00000000
-DATA offsets<>+4(SB)/4, $0x00000001
-DATA offsets<>+8(SB)/4, $0x00000002
-DATA offsets<>+12(SB)/4, $0x00000003
+GLOBL scale<>(SB), RODATA|NOPTR, $32
+DATA scale<>+0(SB)/4, $0x00000000
+DATA scale<>+4(SB)/4, $0x00000001
+DATA scale<>+8(SB)/4, $0x00000002
+DATA scale<>+12(SB)/4, $0x00000003
+DATA scale<>+16(SB)/4, $0x00000000
+DATA scale<>+20(SB)/4, $0x00000001
+DATA scale<>+24(SB)/4, $0x00000002
+DATA scale<>+28(SB)/4, $0x00000003
 
-GLOBL shuffle4x4<>(SB), RODATA|NOPTR, $16
-DATA shuffle4x4<>+0(SB)/4, $0x0C080400
-DATA shuffle4x4<>+4(SB)/4, $0x0D090501
-DATA shuffle4x4<>+8(SB)/4, $0x0E0A0602
-DATA shuffle4x4<>+12(SB)/4, $0x0F0B0703
+GLOBL offset<>(SB), RODATA|NOPTR, $32
+DATA offset<>+0(SB)/4, $0
+DATA offset<>+4(SB)/4, $0
+DATA offset<>+8(SB)/4, $0
+DATA offset<>+12(SB)/4, $0
+DATA offset<>+16(SB)/4, $4
+DATA offset<>+20(SB)/4, $4
+DATA offset<>+24(SB)/4, $4
+DATA offset<>+28(SB)/4, $4
+
+GLOBL shuffle8x4<>(SB), RODATA|NOPTR, $32
+DATA shuffle8x4<>+0(SB)/4, $0x0C080400
+DATA shuffle8x4<>+4(SB)/4, $0x0D090501
+DATA shuffle8x4<>+8(SB)/4, $0x0E0A0602
+DATA shuffle8x4<>+12(SB)/4, $0x0F0B0703
+DATA shuffle8x4<>+16(SB)/4, $0x0C080400
+DATA shuffle8x4<>+20(SB)/4, $0x0D090501
+DATA shuffle8x4<>+24(SB)/4, $0x0E0A0602
+DATA shuffle8x4<>+28(SB)/4, $0x0F0B0703
 
 // func encodeFloat(dst, src []byte)
 TEXT ·encodeFloat(SB), NOSPLIT, $0-48
@@ -30,28 +48,29 @@ TEXT ·encodeFloat(SB), NOSPLIT, $0-48
     CMPB ·hasAVX512(SB), $0
     JE loop1x4
 
-    CMPQ BX, $4
+    CMPQ BX, $8
     JB loop1x4
 
     MOVQ CX, DI
-    SHRQ $4, DI
-    SHLQ $4, DI
+    SHRQ $5, DI
+    SHLQ $5, DI
 
-    VMOVDQU32 shuffle4x4<>(SB), X0
-    VPBROADCASTD BX, X2
-    VPMULLD offsets<>(SB), X2, X2
-loop4x4:
+    VMOVDQU32 shuffle8x4<>(SB), Y0
+    VPBROADCASTD BX, Y2
+    VPMULLD scale<>(SB), Y2, Y2
+    VPADDD offset<>(SB), Y2, Y2
+loop8x4:
     KXORQ K1, K1, K1
     KNOTQ K1, K1
 
-    VMOVDQU32 (AX), X1
-    VPSHUFB X0, X1, X1
-    VPSCATTERDD X1, K1, (DX)(X2*1)
+    VMOVDQU32 (AX), Y1
+    VPSHUFB Y0, Y1, Y1
+    VPSCATTERDD Y1, K1, (DX)(Y2*1)
 
-    ADDQ $16, AX
-    ADDQ $4, DX
+    ADDQ $32, AX
+    ADDQ $8, DX
     CMPQ AX, DI
-    JNE loop4x4
+    JNE loop8x4
     VZEROUPPER
 
     CMPQ AX, CX
