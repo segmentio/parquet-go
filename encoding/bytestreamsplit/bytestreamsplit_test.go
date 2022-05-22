@@ -8,6 +8,7 @@ import (
 
 	"github.com/segmentio/parquet-go/encoding/bytestreamsplit"
 	"github.com/segmentio/parquet-go/encoding/fuzz"
+	"github.com/segmentio/parquet-go/encoding/test"
 )
 
 func FuzzEncodeFloat(f *testing.F) {
@@ -16,4 +17,8 @@ func FuzzEncodeFloat(f *testing.F) {
 
 func FuzzEncodeDouble(f *testing.F) {
 	fuzz.EncodeDouble(f, new(bytestreamsplit.Encoding))
+}
+
+func TestEncodeFloat(t *testing.T) {
+	test.EncodeFloat(t, new(bytestreamsplit.Encoding), 4)
 }

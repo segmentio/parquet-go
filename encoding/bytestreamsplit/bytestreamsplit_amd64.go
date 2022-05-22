@@ -2,7 +2,14 @@
 
 package bytestreamsplit
 
-import "github.com/segmentio/parquet-go/internal/bits"
+import (
+	"github.com/segmentio/parquet-go/internal/bits"
+	"golang.org/x/sys/cpu"
+)
+
+var hasAVX512 = cpu.X86.HasAVX512 &&
+	cpu.X86.HasAVX512F &&
+	cpu.X86.HasAVX512VL
 
 //go:noescape
 func encodeFloat(dst, src []byte)
