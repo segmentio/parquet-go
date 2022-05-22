@@ -106,7 +106,7 @@ type stringColumn struct {
 }
 
 func (row stringColumn) generate(prng *rand.Rand) stringColumn {
-	return stringColumn{Value: randString(prng, 10)}
+	return stringColumn{Value: generateString(prng, 10)}
 }
 
 type indexedStringColumn struct {
@@ -114,7 +114,7 @@ type indexedStringColumn struct {
 }
 
 func (row indexedStringColumn) generate(prng *rand.Rand) indexedStringColumn {
-	return indexedStringColumn{Value: randString(prng, 10)}
+	return indexedStringColumn{Value: generateString(prng, 10)}
 }
 
 type uuidColumn struct {
@@ -134,6 +134,19 @@ func (row decimalColumn) generate(prng *rand.Rand) decimalColumn {
 	return decimalColumn{Value: prng.Int63()}
 }
 
+type mapColumn struct {
+	Value map[utf8string]int
+}
+
+func (row mapColumn) generate(prng *rand.Rand) mapColumn {
+	n := prng.Intn(10)
+	row.Value = make(map[utf8string]int, n)
+	for i := 0; i < n; i++ {
+		row.Value[utf8string(generateString(prng, 8))] = prng.Intn(100)
+	}
+	return row
+}
+
 type addressBook struct {
 	Owner             utf8string   `parquet:",plain"`
 	OwnerPhoneNumbers []utf8string `parquet:",plain"`
@@ -147,8 +160,8 @@ type contact struct {
 
 func (row contact) generate(prng *rand.Rand) contact {
 	return contact{
-		Name:        utf8string(randString(prng, 16)),
-		PhoneNumber: utf8string(randString(prng, 10)),
+		Name:        utf8string(generateString(prng, 16)),
+		PhoneNumber: utf8string(generateString(prng, 10)),
 	}
 }
 
@@ -397,7 +410,7 @@ func benchmarkRowsPerSecond(b *testing.B, f func() int) {
 	b.ReportMetric(float64(numRows)/seconds, "row/s")
 }
 
-func randString(r *rand.Rand, n int) string {
+func generateString(r *rand.Rand, n int) string {
 	const characters = "1234567890qwertyuiopasdfghjklzxcvbnm"
 	b := new(strings.Builder)
 	for i := 0; i < n; i++ {

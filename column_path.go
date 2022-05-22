@@ -4,8 +4,8 @@ import "strings"
 
 type columnPath []string
 
-func (path columnPath) append(name string) columnPath {
-	return append(path[:len(path):len(path)], name)
+func (path columnPath) append(names ...string) columnPath {
+	return append(path[:len(path):len(path)], names...)
 }
 
 func (path columnPath) equal(other columnPath) bool {

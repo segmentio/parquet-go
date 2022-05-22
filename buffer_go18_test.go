@@ -26,6 +26,7 @@ func TestGenericBuffer(t *testing.T) {
 	testGenericBuffer[stringColumn](t)
 	testGenericBuffer[indexedStringColumn](t)
 	testGenericBuffer[uuidColumn](t)
+	testGenericBuffer[mapColumn](t)
 	testGenericBuffer[decimalColumn](t)
 	testGenericBuffer[addressBook](t)
 	testGenericBuffer[contact](t)
@@ -106,6 +107,7 @@ func BenchmarkGenericBuffer(b *testing.B) {
 	benchmarkGenericBuffer[stringColumn](b)
 	benchmarkGenericBuffer[indexedStringColumn](b)
 	benchmarkGenericBuffer[uuidColumn](b)
+	benchmarkGenericBuffer[mapColumn](b)
 	benchmarkGenericBuffer[decimalColumn](b)
 	benchmarkGenericBuffer[contact](b)
 }

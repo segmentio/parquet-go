@@ -27,6 +27,7 @@ func TestGenericReader(t *testing.T) {
 	testGenericReader[stringColumn](t)
 	testGenericReader[indexedStringColumn](t)
 	testGenericReader[uuidColumn](t)
+	testGenericReader[mapColumn](t)
 	testGenericReader[decimalColumn](t)
 	testGenericReader[addressBook](t)
 	testGenericReader[contact](t)
@@ -96,6 +97,7 @@ func BenchmarkGenericReader(b *testing.B) {
 	benchmarkGenericReader[stringColumn](b)
 	benchmarkGenericReader[indexedStringColumn](b)
 	benchmarkGenericReader[uuidColumn](b)
+	benchmarkGenericReader[mapColumn](b)
 	benchmarkGenericReader[decimalColumn](b)
 	benchmarkGenericReader[contact](b)
 }
