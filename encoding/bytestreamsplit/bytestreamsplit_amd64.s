@@ -2,25 +2,25 @@
 
 #include "textflag.h"
 
-GLOBL scale<>(SB), RODATA|NOPTR, $32
-DATA scale<>+0(SB)/4, $0x00000000
-DATA scale<>+4(SB)/4, $0x00000001
-DATA scale<>+8(SB)/4, $0x00000002
-DATA scale<>+12(SB)/4, $0x00000003
-DATA scale<>+16(SB)/4, $0x00000000
-DATA scale<>+20(SB)/4, $0x00000001
-DATA scale<>+24(SB)/4, $0x00000002
-DATA scale<>+28(SB)/4, $0x00000003
+GLOBL scale8x4<>(SB), RODATA|NOPTR, $32
+DATA scale8x4<>+0(SB)/4, $0x00000000
+DATA scale8x4<>+4(SB)/4, $0x00000001
+DATA scale8x4<>+8(SB)/4, $0x00000002
+DATA scale8x4<>+12(SB)/4, $0x00000003
+DATA scale8x4<>+16(SB)/4, $0x00000000
+DATA scale8x4<>+20(SB)/4, $0x00000001
+DATA scale8x4<>+24(SB)/4, $0x00000002
+DATA scale8x4<>+28(SB)/4, $0x00000003
 
-GLOBL offset<>(SB), RODATA|NOPTR, $32
-DATA offset<>+0(SB)/4, $0
-DATA offset<>+4(SB)/4, $0
-DATA offset<>+8(SB)/4, $0
-DATA offset<>+12(SB)/4, $0
-DATA offset<>+16(SB)/4, $4
-DATA offset<>+20(SB)/4, $4
-DATA offset<>+24(SB)/4, $4
-DATA offset<>+28(SB)/4, $4
+GLOBL offset8x4<>(SB), RODATA|NOPTR, $32
+DATA offset8x4<>+0(SB)/4, $0
+DATA offset8x4<>+4(SB)/4, $0
+DATA offset8x4<>+8(SB)/4, $0
+DATA offset8x4<>+12(SB)/4, $0
+DATA offset8x4<>+16(SB)/4, $4
+DATA offset8x4<>+20(SB)/4, $4
+DATA offset8x4<>+24(SB)/4, $4
+DATA offset8x4<>+28(SB)/4, $4
 
 GLOBL shuffle8x4<>(SB), RODATA|NOPTR, $32
 DATA shuffle8x4<>+0(SB)/4, $0x0C080400
@@ -57,8 +57,8 @@ TEXT ·encodeFloat(SB), NOSPLIT, $0-48
 
     VMOVDQU32 shuffle8x4<>(SB), Y0
     VPBROADCASTD BX, Y2
-    VPMULLD scale<>(SB), Y2, Y2
-    VPADDD offset<>(SB), Y2, Y2
+    VPMULLD scale8x4<>(SB), Y2, Y2
+    VPADDD offset8x4<>(SB), Y2, Y2
 loop8x4:
     KXORQ K1, K1, K1
     KNOTQ K1, K1
