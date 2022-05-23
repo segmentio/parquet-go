@@ -206,3 +206,105 @@ loop1x8:
     JB loop1x8
 done:
     RET
+
+// func decodeFloat(dst, src []byte)
+TEXT ·decodeFloat(SB), NOSPLIT, $0-48
+    MOVQ dst_base+0(FP), AX
+    MOVQ dst_len+8(FP), BX
+    MOVQ src_base+24(FP), DX
+
+    MOVQ AX, CX
+    ADDQ BX, CX // end
+    SHRQ $2, BX // len
+
+    CMPQ BX, $0
+    JE done
+
+loop1x4:
+    MOVQ DX, DI
+    MOVBLZX (DI), R8
+    ADDQ BX, DI
+    MOVBLZX (DI), R9
+    ADDQ BX, DI
+    MOVBLZX (DI), R10
+    ADDQ BX, DI
+    MOVBLZX (DI), R11
+
+    SHLL $8, R9
+    SHLL $16, R10
+    SHLL $24, R11
+
+    ORL R9, R8
+    ORL R10, R8
+    ORL R11, R8
+
+    MOVL R8, (AX)
+
+    ADDQ $4, AX
+    INCQ DX
+    CMPQ AX, CX
+    JB loop1x4
+done:
+    RET
+
+// func decodeDouble(dst, src []byte)
+TEXT ·decodeDouble(SB), NOSPLIT, $0-48
+    MOVQ dst_base+0(FP), AX
+    MOVQ dst_len+8(FP), BX
+    MOVQ src_base+24(FP), DX
+
+    MOVQ AX, CX
+    ADDQ BX, CX
+    SHRQ $3, BX
+
+    CMPQ BX, $0
+    JE done
+
+loop1x8:
+    MOVQ DX, DI
+    XORQ R12, R12
+
+    MOVBQZX (DI), R8
+    ADDQ BX, DI
+    MOVBQZX (DI), R9
+    ADDQ BX, DI
+    MOVBQZX (DI), R10
+    ADDQ BX, DI
+    MOVBQZX (DI), R11
+    ADDQ BX, DI
+
+    SHLQ $8, R9
+    SHLQ $16, R10
+    SHLQ $24, R11
+
+    ORQ R8, R12
+    ORQ R9, R12
+    ORQ R10, R12
+    ORQ R11, R12
+
+    MOVBQZX (DI), R8
+    ADDQ BX, DI
+    MOVBQZX (DI), R9
+    ADDQ BX, DI
+    MOVBQZX (DI), R10
+    ADDQ BX, DI
+    MOVBQZX (DI), R11
+
+    SHLQ $32, R8
+    SHLQ $40, R9
+    SHLQ $48, R10
+    SHLQ $56, R11
+
+    ORQ R8, R12
+    ORQ R9, R12
+    ORQ R10, R12
+    ORQ R11, R12
+
+    MOVQ R12, (AX)
+
+    ADDQ $8, AX
+    INCQ DX
+    CMPQ AX, CX
+    JB loop1x8
+done:
+    RET
