@@ -45,7 +45,7 @@ func encode[T comparable](t *testing.T, enc encoding.Encoding, min, max int, enc
 
 			res, err := decode(enc, nil, buf)
 			if err != nil {
-				t.Fatal("decoding %d values: %v", k, err)
+				t.Fatalf("decoding %d values: %v", k, err)
 			}
 
 			if err := assertEqual(src, unsafecast.Slice[T](res)); err != nil {
