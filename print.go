@@ -223,7 +223,6 @@ func PrintRowGroup(w io.Writer, rowGroup RowGroup) error {
 
 	rowbuf := make([]Row, defaultRowBufferSize)
 	cells := make([]string, 0, len(columns))
-	parts := make([]string, 0)
 	rows := rowGroup.Rows()
 	defer rows.Close()
 
@@ -233,25 +232,19 @@ func PrintRowGroup(w io.Writer, rowGroup RowGroup) error {
 		for _, row := range rowbuf[:n] {
 			cells = cells[:0]
 
-			for i := 0; i < len(row); {
-				j := i + 1
+			for _, value := range row {
+				columnIndex := value.Column()
 
-				for j < len(row) && row[j].Column() == row[i].Column() {
-					j++
+				for len(cells) <= columnIndex {
+					cells = append(cells, "")
 				}
 
-				if (j - i) == 1 {
-					cells = append(cells, row[i].String())
+				if cells[columnIndex] == "" {
+					cells[columnIndex] = value.String()
 				} else {
-					parts = parts[:0]
-					for k := i; k < j; k++ {
-						parts = append(parts, row[k].String())
-					}
-					alignment[len(cells)] = tablewriter.ALIGN_LEFT
-					cells = append(cells, strings.Join(parts, ","))
+					cells[columnIndex] += "," + value.String()
+					alignment[columnIndex] = tablewriter.ALIGN_LEFT
 				}
-
-				i = j
 			}
 
 			tw.Append(cells)
