@@ -2,36 +2,6 @@
 
 #include "textflag.h"
 
-GLOBL scale8x4<>(SB), RODATA|NOPTR, $32
-DATA scale8x4<>+0(SB)/4, $0
-DATA scale8x4<>+4(SB)/4, $1
-DATA scale8x4<>+8(SB)/4, $2
-DATA scale8x4<>+12(SB)/4, $3
-DATA scale8x4<>+16(SB)/4, $0
-DATA scale8x4<>+20(SB)/4, $1
-DATA scale8x4<>+24(SB)/4, $2
-DATA scale8x4<>+28(SB)/4, $3
-
-GLOBL offset8x4<>(SB), RODATA|NOPTR, $32
-DATA offset8x4<>+0(SB)/4, $0
-DATA offset8x4<>+4(SB)/4, $0
-DATA offset8x4<>+8(SB)/4, $0
-DATA offset8x4<>+12(SB)/4, $0
-DATA offset8x4<>+16(SB)/4, $4
-DATA offset8x4<>+20(SB)/4, $4
-DATA offset8x4<>+24(SB)/4, $4
-DATA offset8x4<>+28(SB)/4, $4
-
-GLOBL shuffle8x4<>(SB), RODATA|NOPTR, $32
-DATA shuffle8x4<>+0(SB)/4, $0x0C080400
-DATA shuffle8x4<>+4(SB)/4, $0x0D090501
-DATA shuffle8x4<>+8(SB)/4, $0x0E0A0602
-DATA shuffle8x4<>+12(SB)/4, $0x0F0B0703
-DATA shuffle8x4<>+16(SB)/4, $0x0C080400
-DATA shuffle8x4<>+20(SB)/4, $0x0D090501
-DATA shuffle8x4<>+24(SB)/4, $0x0E0A0602
-DATA shuffle8x4<>+28(SB)/4, $0x0F0B0703
-
 // func encodeFloat(dst, src []byte)
 TEXT ·encodeFloat(SB), NOSPLIT, $0-48
     MOVQ src_base+24(FP), AX
@@ -101,26 +71,6 @@ loop1x4:
     JB loop1x4
 done:
     RET
-
-GLOBL scale8x8<>(SB), RODATA|NOPTR, $64
-DATA scale8x8<>+0(SB)/8, $0
-DATA scale8x8<>+8(SB)/8, $1
-DATA scale8x8<>+16(SB)/8, $2
-DATA scale8x8<>+24(SB)/8, $3
-DATA scale8x8<>+32(SB)/8, $4
-DATA scale8x8<>+40(SB)/8, $5
-DATA scale8x8<>+48(SB)/8, $6
-DATA scale8x8<>+56(SB)/8, $7
-
-GLOBL shuffle8x8<>(SB), RODATA|NOPTR, $64
-DATA shuffle8x8<>+0(SB)/8,  $0x3830282018100800
-DATA shuffle8x8<>+8(SB)/8,  $0x3931292119110901
-DATA shuffle8x8<>+16(SB)/8, $0x3A322A221A120A02
-DATA shuffle8x8<>+24(SB)/8, $0x3B332B231B130B03
-DATA shuffle8x8<>+32(SB)/8, $0x3C342C241C140C04
-DATA shuffle8x8<>+40(SB)/8, $0x3D352D251D150D05
-DATA shuffle8x8<>+48(SB)/8, $0x3E362E261E160E06
-DATA shuffle8x8<>+56(SB)/8, $0x3F372F271F170F07
 
 // func encodeDouble(dst, src []byte)
 TEXT ·encodeDouble(SB), NOSPLIT, $0-48
@@ -220,6 +170,35 @@ TEXT ·decodeFloat(SB), NOSPLIT, $0-48
     CMPQ BX, $0
     JE done
 
+    CMPQ BX, $4
+    JB loop1x4
+
+    MOVQ CX, DI
+    SUBQ AX, DI
+    SHRQ $4, DI
+    SHLQ $4, DI
+    ADDQ AX, DI
+
+    MOVQ $0xFFFFFFFF, SI
+    VMOVDQU shuffle8x4<>(SB), X0
+    VPBROADCASTD BX, X2
+    VPBROADCASTD SI, X3
+    VPMULLD scale8x4<>(SB), X2, X2
+    VMOVDQU X3, X4
+loop4x4:
+    VPGATHERDD X4, (DX)(X2*1), X1
+    VPSHUFB X0, X1, X1
+    VMOVDQU X1, (AX)
+    VMOVDQU X3, X4
+
+    ADDQ $16, AX
+    ADDQ $4, DX
+    CMPQ AX, DI
+    JNE loop4x4
+    VZEROUPPER
+
+    CMPQ AX, CX
+    JE done
 loop1x4:
     MOVQ DX, DI
     MOVBLZX (DI), R8
@@ -308,3 +287,53 @@ loop1x8:
     JB loop1x8
 done:
     RET
+
+GLOBL scale8x4<>(SB), RODATA|NOPTR, $32
+DATA scale8x4<>+0(SB)/4, $0
+DATA scale8x4<>+4(SB)/4, $1
+DATA scale8x4<>+8(SB)/4, $2
+DATA scale8x4<>+12(SB)/4, $3
+DATA scale8x4<>+16(SB)/4, $0
+DATA scale8x4<>+20(SB)/4, $1
+DATA scale8x4<>+24(SB)/4, $2
+DATA scale8x4<>+28(SB)/4, $3
+
+GLOBL offset8x4<>(SB), RODATA|NOPTR, $32
+DATA offset8x4<>+0(SB)/4, $0
+DATA offset8x4<>+4(SB)/4, $0
+DATA offset8x4<>+8(SB)/4, $0
+DATA offset8x4<>+12(SB)/4, $0
+DATA offset8x4<>+16(SB)/4, $4
+DATA offset8x4<>+20(SB)/4, $4
+DATA offset8x4<>+24(SB)/4, $4
+DATA offset8x4<>+28(SB)/4, $4
+
+GLOBL shuffle8x4<>(SB), RODATA|NOPTR, $32
+DATA shuffle8x4<>+0(SB)/4, $0x0C080400
+DATA shuffle8x4<>+4(SB)/4, $0x0D090501
+DATA shuffle8x4<>+8(SB)/4, $0x0E0A0602
+DATA shuffle8x4<>+12(SB)/4, $0x0F0B0703
+DATA shuffle8x4<>+16(SB)/4, $0x0C080400
+DATA shuffle8x4<>+20(SB)/4, $0x0D090501
+DATA shuffle8x4<>+24(SB)/4, $0x0E0A0602
+DATA shuffle8x4<>+28(SB)/4, $0x0F0B0703
+
+GLOBL scale8x8<>(SB), RODATA|NOPTR, $64
+DATA scale8x8<>+0(SB)/8, $0
+DATA scale8x8<>+8(SB)/8, $1
+DATA scale8x8<>+16(SB)/8, $2
+DATA scale8x8<>+24(SB)/8, $3
+DATA scale8x8<>+32(SB)/8, $4
+DATA scale8x8<>+40(SB)/8, $5
+DATA scale8x8<>+48(SB)/8, $6
+DATA scale8x8<>+56(SB)/8, $7
+
+GLOBL shuffle8x8<>(SB), RODATA|NOPTR, $64
+DATA shuffle8x8<>+0(SB)/8,  $0x3830282018100800
+DATA shuffle8x8<>+8(SB)/8,  $0x3931292119110901
+DATA shuffle8x8<>+16(SB)/8, $0x3A322A221A120A02
+DATA shuffle8x8<>+24(SB)/8, $0x3B332B231B130B03
+DATA shuffle8x8<>+32(SB)/8, $0x3C342C241C140C04
+DATA shuffle8x8<>+40(SB)/8, $0x3D352D251D150D05
+DATA shuffle8x8<>+48(SB)/8, $0x3E362E261E160E06
+DATA shuffle8x8<>+56(SB)/8, $0x3F372F271F170F07
