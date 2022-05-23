@@ -7,35 +7,20 @@ import (
 	"golang.org/x/sys/cpu"
 )
 
-var hasAVX512 = cpu.X86.HasAVX512 &&
+var encodeFloatHasAVX512 = cpu.X86.HasAVX512 &&
 	cpu.X86.HasAVX512F &&
 	cpu.X86.HasAVX512VL
+
+var encodeDoubleHasAVX512 = cpu.X86.HasAVX512 &&
+	cpu.X86.HasAVX512F &&
+	cpu.X86.HasAVX512VL &&
+	cpu.X86.HasAVX512VBMI
 
 //go:noescape
 func encodeFloat(dst, src []byte)
 
-func encodeDouble(dst, src []byte) {
-	n := len(src) / 8
-	b0 := dst[0*n : 1*n]
-	b1 := dst[1*n : 2*n]
-	b2 := dst[2*n : 3*n]
-	b3 := dst[3*n : 4*n]
-	b4 := dst[4*n : 5*n]
-	b5 := dst[5*n : 6*n]
-	b6 := dst[6*n : 7*n]
-	b7 := dst[7*n : 8*n]
-
-	for i, v := range bits.BytesToUint64(src) {
-		b0[i] = byte(v >> 0)
-		b1[i] = byte(v >> 8)
-		b2[i] = byte(v >> 16)
-		b3[i] = byte(v >> 24)
-		b4[i] = byte(v >> 32)
-		b5[i] = byte(v >> 40)
-		b6[i] = byte(v >> 48)
-		b7[i] = byte(v >> 56)
-	}
-}
+//go:noescape
+func encodeDouble(dst, src []byte)
 
 func decodeFloat(dst, src []byte) {
 	n := len(src) / 4

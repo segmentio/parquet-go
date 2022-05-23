@@ -20,5 +20,9 @@ func FuzzEncodeDouble(f *testing.F) {
 }
 
 func TestEncodeFloat(t *testing.T) {
-	test.EncodeFloat(t, new(bytestreamsplit.Encoding), 8)
+	test.EncodeFloat(t, new(bytestreamsplit.Encoding), 0, 100)
+}
+
+func TestEncodeDouble(t *testing.T) {
+	test.EncodeDouble(t, new(bytestreamsplit.Encoding), 0, 100)
 }
