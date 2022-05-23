@@ -170,31 +170,32 @@ TEXT ·decodeFloat(SB), NOSPLIT, $0-48
     CMPQ BX, $0
     JE done
 
-    CMPQ BX, $4
+    CMPQ BX, $8
     JB loop1x4
 
     MOVQ CX, DI
     SUBQ AX, DI
-    SHRQ $4, DI
-    SHLQ $4, DI
+    SHRQ $5, DI
+    SHLQ $5, DI
     ADDQ AX, DI
 
     MOVQ $0xFFFFFFFF, SI
-    VMOVDQU shuffle8x4<>(SB), X0
-    VPBROADCASTD BX, X2
-    VPBROADCASTD SI, X3
-    VPMULLD scale8x4<>(SB), X2, X2
-    VMOVDQU X3, X4
-loop4x4:
-    VPGATHERDD X4, (DX)(X2*1), X1
-    VPSHUFB X0, X1, X1
-    VMOVDQU X1, (AX)
-    VMOVDQU X3, X4
+    VMOVDQU shuffle8x4<>(SB), Y0
+    VPBROADCASTD BX, Y2
+    VPBROADCASTD SI, Y3
+    VPMULLD scale8x4<>(SB), Y2, Y2
+    VPADDD offset8x4<>(SB), Y2, Y2
+    VMOVDQU Y3, Y4
+loop8x4:
+    VPGATHERDD Y4, (DX)(Y2*1), Y1
+    VPSHUFB Y0, Y1, Y1
+    VMOVDQU Y1, (AX)
+    VMOVDQU Y3, Y4
 
-    ADDQ $16, AX
-    ADDQ $4, DX
+    ADDQ $32, AX
+    ADDQ $8, DX
     CMPQ AX, DI
-    JNE loop4x4
+    JNE loop8x4
     VZEROUPPER
 
     CMPQ AX, CX
