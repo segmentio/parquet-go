@@ -170,6 +170,9 @@ TEXT ·decodeFloat(SB), NOSPLIT, $0-48
     CMPQ BX, $0
     JE done
 
+    CMPB ·decodeFloatHasAVX2(SB), $0
+    JE loop1x4
+
     CMPQ BX, $8
     JB loop1x4
 
@@ -240,6 +243,37 @@ TEXT ·decodeDouble(SB), NOSPLIT, $0-48
     CMPQ BX, $0
     JE done
 
+    CMPB ·decodeDoubleHasAVX512(SB), $0
+    JE loop1x8
+
+    CMPQ BX, $8
+    JB loop1x8
+
+    MOVQ CX, DI
+    SUBQ AX, DI
+    SHRQ $6, DI
+    SHLQ $6, DI
+    ADDQ AX, DI
+
+    VMOVDQU64 shuffle8x8<>(SB), Z0
+    VPBROADCASTQ BX, Z2
+    VPMULLQ scale8x8<>(SB), Z2, Z2
+loop8x8:
+    KXORQ K1, K1, K1
+    KNOTQ K1, K1
+
+    VPGATHERQQ (DX)(Z2*1), K1, Z1
+    VPERMB Z1, Z0, Z1
+    VMOVDQU64 Z1, (AX)
+
+    ADDQ $64, AX
+    ADDQ $8, DX
+    CMPQ AX, DI
+    JNE loop8x8
+    VZEROUPPER
+
+    CMPQ AX, CX
+    JE done
 loop1x8:
     MOVQ DX, DI
     XORQ R12, R12

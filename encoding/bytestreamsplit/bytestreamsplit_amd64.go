@@ -13,7 +13,13 @@ var encodeFloatHasAVX512 = cpu.X86.HasAVX512 &&
 var encodeDoubleHasAVX512 = cpu.X86.HasAVX512 &&
 	cpu.X86.HasAVX512F &&
 	cpu.X86.HasAVX512VL &&
-	cpu.X86.HasAVX512VBMI
+	cpu.X86.HasAVX512VBMI // VPERMB
+
+var decodeFloatHasAVX2 = cpu.X86.HasAVX2
+
+var decodeDoubleHasAVX512 = cpu.X86.HasAVX512 &&
+	cpu.X86.HasAVX512F &&
+	cpu.X86.HasAVX512VL
 
 //go:noescape
 func encodeFloat(dst, src []byte)
