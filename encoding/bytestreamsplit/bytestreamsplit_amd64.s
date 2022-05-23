@@ -183,9 +183,11 @@ TEXT ·decodeFloat(SB), NOSPLIT, $0-48
     ADDQ AX, DI
 
     MOVQ $0xFFFFFFFF, SI
+    MOVQ BX, X5
+    MOVQ SI, X6
     VMOVDQU shuffle8x4<>(SB), Y0
-    VPBROADCASTD BX, Y2
-    VPBROADCASTD SI, Y3
+    VPBROADCASTD X5, Y2
+    VPBROADCASTD X6, Y3
     VPMULLD scale8x4<>(SB), Y2, Y2
     VPADDD offset8x4<>(SB), Y2, Y2
     VMOVDQU Y3, Y4
