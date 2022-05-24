@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"unsafe"
 
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding/plain"
@@ -57,6 +58,15 @@ type ColumnBuffer interface {
 
 	// Returns the size of the column buffer in bytes.
 	Size() int64
+}
+
+type array struct {
+	ptr unsafe.Pointer
+	len int
+}
+
+func (a array) index(i int, size, offset uintptr) unsafe.Pointer {
+	return unsafe.Add(a.ptr, uintptr(i)*size+offset)
 }
 
 func columnIndexOfNullable(base ColumnBuffer, maxDefinitionLevel byte, definitionLevels []byte) ColumnIndex {
@@ -751,24 +761,82 @@ func (col *booleanColumnBuffer) Swap(i, j int) {
 }
 
 func (col *booleanColumnBuffer) WriteBooleans(values []bool) (int, error) {
-	col.writeValues(len(values), func(i int) bool { return values[i] })
-	return len(values), nil
+	rows := array{
+		ptr: *(*unsafe.Pointer)(unsafe.Pointer(&values)),
+		len: len(values),
+	}
+	col.writeValues(rows, 1, 0)
+	return rows.len, nil
 }
 
 func (col *booleanColumnBuffer) WriteValues(values []Value) (int, error) {
-	col.writeValues(len(values), func(i int) bool { return values[i].Boolean() })
-	return len(values), nil
-}
-
-func (col *booleanColumnBuffer) writeValues(n int, f func(int) bool) {
-	for i := 0; i < n; i++ {
-		col.writeValue(f(i))
+	rows := array{
+		ptr: *(*unsafe.Pointer)(unsafe.Pointer(&values)),
+		len: len(values),
 	}
+	col.writeValues(rows, unsafe.Sizeof(Value{}), 8)
+	return rows.len, nil
 }
 
-func (col *booleanColumnBuffer) writeValue(v bool) {
-	col.bits = plain.AppendBoolean(col.bits, int(col.numValues), v)
-	col.numValues++
+func (col *booleanColumnBuffer) writeValues(rows array, size, offset uintptr) {
+	numBytes := bits.ByteCount(uint(col.numValues) + uint(rows.len))
+	col.bits = resize(col.bits, numBytes)
+	i := 0
+	r := 8 - (int(col.numValues) % 8)
+
+	if r < rows.len {
+		// First we attempt to write enough bits to align the number of values
+		// in the column buffer on 8 bytes. After this loop the next bit should
+		// be written at the zero'th index of a byte of the buffer.
+		for i < r {
+			x := uint(col.numValues) / 8
+			y := uint(col.numValues) % 8
+			b := *(*byte)(rows.index(i, size, offset))
+			col.bits[x] |= (b & 1) << y
+			col.numValues++
+			i++
+		}
+
+		if n := rows.len - i; n >= 8 {
+			// At this stage, we know that that we have at least 8 bits to write
+			// and the bits will be aligned on the address of a byte in the
+			// output buffer. We can work on 8 values per loop iterations,
+			// packing them into a single byte and writing it to the output
+			// buffer. This effectively reduces by 87.5% the number of memory
+			// stores that the program needs to perform to generate the values.
+			for j := i + (n/8)*8; i < j; i += 8 {
+				b0 := *(*byte)(rows.index(i+0, size, offset))
+				b1 := *(*byte)(rows.index(i+1, size, offset))
+				b2 := *(*byte)(rows.index(i+2, size, offset))
+				b3 := *(*byte)(rows.index(i+3, size, offset))
+				b4 := *(*byte)(rows.index(i+4, size, offset))
+				b5 := *(*byte)(rows.index(i+5, size, offset))
+				b6 := *(*byte)(rows.index(i+6, size, offset))
+				b7 := *(*byte)(rows.index(i+7, size, offset))
+
+				col.bits[col.numValues/8] = (b0 & 1) |
+					((b1 & 1) << 1) |
+					((b2 & 1) << 2) |
+					((b3 & 1) << 3) |
+					((b4 & 1) << 4) |
+					((b5 & 1) << 5) |
+					((b6 & 1) << 6) |
+					((b7 & 1) << 7)
+				col.numValues += 8
+			}
+		}
+	}
+
+	for i < rows.len {
+		x := uint(col.numValues) / 8
+		y := uint(col.numValues) % 8
+		b := *(*byte)(rows.index(i, size, offset))
+		col.bits[x] |= (b & 1) << y
+		col.numValues++
+		i++
+	}
+
+	col.bits = col.bits[:bits.ByteCount(uint(col.numValues))]
 }
 
 func (col *booleanColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int, err error) {
@@ -790,6 +858,9 @@ func (col *booleanColumnBuffer) ReadValuesAt(values []Value, offset int64) (n in
 		}
 		return n, err
 	}
+}
+
+func writeValuesBoolean(dst []byte, rows array, size, offset uintptr, bitOffset uint) {
 }
 
 type int32ColumnBuffer struct{ int32Page }

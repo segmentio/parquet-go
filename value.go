@@ -367,6 +367,9 @@ func (v Value) Kind() Kind { return ^Kind(v.kind) }
 // IsNull returns true if v is the null value.
 func (v Value) IsNull() bool { return v.kind == 0 }
 
+// Byte returns v as a byte, which may truncate the underlying byte.
+func (v Value) Byte() byte { return byte(v.u64) }
+
 // Boolean returns v as a bool, assuming the underlying type is BOOLEAN.
 func (v Value) Boolean() bool { return v.u64 != 0 }
 

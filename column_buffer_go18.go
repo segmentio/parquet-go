@@ -11,15 +11,6 @@ import (
 	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
-type array struct {
-	ptr unsafe.Pointer
-	len int
-}
-
-func (a array) index(i int, size, offset uintptr) unsafe.Pointer {
-	return unsafe.Add(a.ptr, uintptr(i)*size+offset)
-}
-
 func makeArray[T any](s []T) array {
 	return array{
 		ptr: *(*unsafe.Pointer)(unsafe.Pointer(&s)),
@@ -619,11 +610,7 @@ func (w *columnBufferWriter) writeRowsBool(rows array, size, offset uintptr, lev
 
 	switch c := w.columns[levels.columnIndex].(type) {
 	case *booleanColumnBuffer:
-		for i := 0; i < rows.len; i++ {
-			p := rows.index(i, size, offset)
-			c.writeValue(*(*bool)(p))
-		}
-
+		c.writeValues(rows, size, offset)
 	default:
 		w.reset()
 		for i := 0; i < rows.len; i++ {
