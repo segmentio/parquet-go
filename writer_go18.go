@@ -17,7 +17,7 @@ import (
 //   method accepts an argument of type interface{}, which delays type checking
 //   until runtime. The parquet.GenericWriter[T].Write method ensures at
 //   compile time that the values it receives will be of type T, reducing the
-//   risk of introducing bugs.
+//   risk of introducing errors.
 //
 // - Since type information is known at compile time, the implementation of
 //   parquet.GenericWriter[T] can make safe assumptions, removing the need for
