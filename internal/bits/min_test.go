@@ -3,6 +3,7 @@ package bits_test
 import (
 	"bytes"
 	"math/rand"
+	"reflect"
 	"testing"
 
 	"github.com/segmentio/parquet-go/internal/bits"
@@ -40,16 +41,18 @@ func FuzzMinBool(f *testing.F) {
 	f.Fuzz(func(t *testing.T, input []byte, size int) {
 		values := fuzzing.MakeRandBoolean(input, size)
 
-		expected := true
+		var expected bool
 		for i := range values {
 			if !values[i] {
 				expected = false
 				break
 			}
+			expected = true
 		}
 
-		if bits.MinBool(values) != expected {
+		if r := bits.MinBool(values); !reflect.DeepEqual(r, expected) {
 			t.Logf("expected: %t", expected)
+			t.Logf("got: %t", r)
 			t.Logf("values: %v", values)
 			t.Error("unexpected min value")
 		}

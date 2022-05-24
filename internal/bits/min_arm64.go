@@ -6,8 +6,8 @@ package bits
 func minBool(data []bool) bool
 
 ////go:noescape
-//func minInt32(data []int32) int32
-//
+func minInt32(data []int32) int32
+
 ////go:noescape
 //func minInt64(data []int64) int64
 //

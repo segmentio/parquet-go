@@ -10,7 +10,7 @@ import (
 
 //func minBool(data []bool) bool { return boolEqualAll(data, true) }
 
-func minInt32(data []int32) int32 { return min(data) }
+//func minInt32(data []int32) int32 { return min(data) }
 
 func minInt64(data []int64) int64 { return min(data) }
 

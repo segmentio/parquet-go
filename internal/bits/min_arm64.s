@@ -52,3 +52,29 @@ loop128:
     ADD $128, R0, R0
     SUB $128, R1, R1
     B loop128
+
+// func minInt32(data []int32) int32
+TEXT ·minInt32(SB), NOSPLIT, $0-28
+    MOVD data_base+0(FP), R0 // data base
+    MOVD data_len+8(FP), R1 // length of data
+    MOVD $ret+24(FP), R2 // address for result
+
+    MOVD ZR, R3
+    MOVD $0x7FFFFFFF, R4
+    MOVD ZR, R6
+    MOVW$4, R7
+
+loop:
+    MOVW (R6)(R0), R5
+    CMP R5, R4
+    CSEL LT, R4, R5, R4
+
+    ADD $1, R3
+    MUL R7, R3, R6
+
+    CMP R3, R1
+    BNE loop
+
+done:
+    MOVW R4, (R2)
+    RET
