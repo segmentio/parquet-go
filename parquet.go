@@ -31,12 +31,3 @@ func max(a, b int) int {
 	}
 	return b
 }
-
-func resize(buf []byte, size int) []byte {
-	if cap(buf) < size {
-		tmp := make([]byte, len(buf), 2*size)
-		copy(tmp, buf)
-		buf = tmp
-	}
-	return buf[:size]
-}

@@ -633,17 +633,9 @@ func (w *columnBufferWriter) writeRowsInt(rows array, size, offset uintptr, leve
 
 	switch c := w.columns[levels.columnIndex].(type) {
 	case *int64ColumnBuffer:
-		for i := 0; i < rows.len; i++ {
-			p := rows.index(i, size, offset)
-			c.values = append(c.values, int64(*(*int)(p)))
-		}
-
+		c.writeValues(rows, size, offset)
 	case *uint64ColumnBuffer:
-		for i := 0; i < rows.len; i++ {
-			p := rows.index(i, size, offset)
-			c.values = append(c.values, uint64(*(*uint)(p)))
-		}
-
+		c.writeValues(rows, size, offset)
 	default:
 		w.reset()
 		for i := 0; i < rows.len; i++ {
@@ -666,17 +658,9 @@ func (w *columnBufferWriter) writeRowsInt8(rows array, size, offset uintptr, lev
 
 	switch c := w.columns[levels.columnIndex].(type) {
 	case *int32ColumnBuffer:
-		for i := 0; i < rows.len; i++ {
-			p := rows.index(i, size, offset)
-			c.values = append(c.values, int32(*(*int8)(p)))
-		}
-
+		c.writeValues(rows, size, offset)
 	case *uint32ColumnBuffer:
-		for i := 0; i < rows.len; i++ {
-			p := rows.index(i, size, offset)
-			c.values = append(c.values, uint32(*(*uint8)(p)))
-		}
-
+		c.writeValues(rows, size, offset)
 	default:
 		w.reset()
 		for i := 0; i < rows.len; i++ {
@@ -699,17 +683,9 @@ func (w *columnBufferWriter) writeRowsInt16(rows array, size, offset uintptr, le
 
 	switch c := w.columns[levels.columnIndex].(type) {
 	case *int32ColumnBuffer:
-		for i := 0; i < rows.len; i++ {
-			p := rows.index(i, size, offset)
-			c.values = append(c.values, int32(*(*int16)(p)))
-		}
-
+		c.writeValues(rows, size, offset)
 	case *uint32ColumnBuffer:
-		for i := 0; i < rows.len; i++ {
-			p := rows.index(i, size, offset)
-			c.values = append(c.values, uint32(*(*uint16)(p)))
-		}
-
+		c.writeValues(rows, size, offset)
 	default:
 		w.reset()
 		for i := 0; i < rows.len; i++ {
@@ -732,17 +708,9 @@ func (w *columnBufferWriter) writeRowsInt32(rows array, size, offset uintptr, le
 
 	switch c := w.columns[levels.columnIndex].(type) {
 	case *int32ColumnBuffer:
-		for i := 0; i < rows.len; i++ {
-			p := rows.index(i, size, offset)
-			c.values = append(c.values, *(*int32)(p))
-		}
-
+		c.writeValues(rows, size, offset)
 	case *uint32ColumnBuffer:
-		for i := 0; i < rows.len; i++ {
-			p := rows.index(i, size, offset)
-			c.values = append(c.values, *(*uint32)(p))
-		}
-
+		c.writeValues(rows, size, offset)
 	default:
 		w.reset()
 		for i := 0; i < rows.len; i++ {
@@ -765,17 +733,9 @@ func (w *columnBufferWriter) writeRowsInt64(rows array, size, offset uintptr, le
 
 	switch c := w.columns[levels.columnIndex].(type) {
 	case *int64ColumnBuffer:
-		for i := 0; i < rows.len; i++ {
-			p := rows.index(i, size, offset)
-			c.values = append(c.values, *(*int64)(p))
-		}
-
+		c.writeValues(rows, size, offset)
 	case *uint64ColumnBuffer:
-		for i := 0; i < rows.len; i++ {
-			p := rows.index(i, size, offset)
-			c.values = append(c.values, *(*uint64)(p))
-		}
-
+		c.writeValues(rows, size, offset)
 	default:
 		w.reset()
 		for i := 0; i < rows.len; i++ {
@@ -798,11 +758,7 @@ func (w *columnBufferWriter) writeRowsInt96(rows array, size, offset uintptr, le
 
 	switch c := w.columns[levels.columnIndex].(type) {
 	case *int96ColumnBuffer:
-		for i := 0; i < rows.len; i++ {
-			p := rows.index(i, size, offset)
-			c.values = append(c.values, *(*deprecated.Int96)(p))
-		}
-
+		c.writeValues(rows, size, offset)
 	default:
 		w.reset()
 		for i := 0; i < rows.len; i++ {
@@ -825,11 +781,7 @@ func (w *columnBufferWriter) writeRowsFloat32(rows array, size, offset uintptr, 
 
 	switch c := w.columns[levels.columnIndex].(type) {
 	case *floatColumnBuffer:
-		for i := 0; i < rows.len; i++ {
-			p := rows.index(i, size, offset)
-			c.values = append(c.values, *(*float32)(p))
-		}
-
+		c.writeValues(rows, size, offset)
 	default:
 		w.reset()
 		for i := 0; i < rows.len; i++ {
@@ -852,11 +804,7 @@ func (w *columnBufferWriter) writeRowsFloat64(rows array, size, offset uintptr, 
 
 	switch c := w.columns[levels.columnIndex].(type) {
 	case *doubleColumnBuffer:
-		for i := 0; i < rows.len; i++ {
-			p := rows.index(i, size, offset)
-			c.values = append(c.values, *(*float64)(p))
-		}
-
+		c.writeValues(rows, size, offset)
 	default:
 		w.reset()
 		for i := 0; i < rows.len; i++ {
