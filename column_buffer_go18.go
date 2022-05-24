@@ -363,7 +363,7 @@ func writeRowsFuncOfOptional(t reflect.Type, schema *Schema, path columnPath, wr
 		// sent to a single call to writeRows to be written to the underlying
 		// buffer since they share the same definition level.
 		//
-		// This optimization is defeated by inputs alterning null and non-null
+		// This optimization is defeated by inputs alternating null and non-null
 		// sequences of single values, we do not expect this condition to be a
 		// common case.
 		for i := 0; i < rows.len; {
