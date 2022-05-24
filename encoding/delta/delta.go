@@ -1,7 +1,6 @@
 package delta
 
 import (
-	"bytes"
 	"sync"
 )
 
@@ -20,7 +19,6 @@ func (buf *int32Buffer) decode(src []byte) ([]byte, error) {
 
 var (
 	int32BufferPool sync.Pool // *int32Buffer
-	bytesBufferPool sync.Pool // *bytes.Buffer
 )
 
 func getInt32Buffer() *int32Buffer {
@@ -37,18 +35,4 @@ func getInt32Buffer() *int32Buffer {
 
 func putInt32Buffer(b *int32Buffer) {
 	int32BufferPool.Put(b)
-}
-
-func getBytesBuffer() *bytes.Buffer {
-	b, _ := bytesBufferPool.Get().(*bytes.Buffer)
-	if b != nil {
-		b.Reset()
-	} else {
-		b = new(bytes.Buffer)
-	}
-	return b
-}
-
-func putBytesBuffer(b *bytes.Buffer) {
-	bytesBufferPool.Put(b)
 }
