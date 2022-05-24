@@ -1628,8 +1628,8 @@ func (col *fixedLenByteArrayColumnBuffer) writeValues(rows array, size, offset u
 }
 
 func (col *fixedLenByteArrayColumnBuffer) writeValues128(rows array, size, offset uintptr) {
-	c := 16 * col.Cap()
-	n := 16 * (col.Len() + rows.len)
+	c := cap(col.data)
+	n := len(col.data) + (16 * rows.len)
 	if c < n {
 		col.data = append(make([]byte, 0, max(n, 2*c)), col.data...)
 	}
