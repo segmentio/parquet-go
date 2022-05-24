@@ -78,6 +78,13 @@ type timeseries struct {
 	Value     float64 `parquet:"value"`
 }
 
+type event struct {
+	Name     string  `parquet:"name,dict"`
+	Type     string  `parquet:"-"`
+	Value    float64 `parquet:"value"`
+	Category string  `parquet:"-"`
+}
+
 var writerTests = []struct {
 	scenario string
 	version  int
@@ -277,10 +284,10 @@ value 10: R:0 D:0 V:10.0
 		dump: `row group 0
 --------------------------------------------------------------------------------
 owner:              BINARY ZSTD DO:0 FPO:4 SZ:66/57/0.86 VC:2 ENC:DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column]
-ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:70 SZ:162/112/0.69 VC:3 ENC:DELTA_LENGTH_BYTE_ARRAY,RLE ST:[no stats for this column]
+ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:70 SZ:162/112/0.69 VC:3 ENC:RLE,DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column]
 contacts:
-.name:              BINARY UNCOMPRESSED DO:0 FPO:232 SZ:116/116/1.00 VC:3 ENC:DELTA_LENGTH_BYTE_ARRAY,RLE ST:[no stats for this column]
-.phoneNumber:       BINARY ZSTD DO:0 FPO:348 SZ:113/95/0.84 VC:3 ENC:DELTA_LENGTH_BYTE_ARRAY,RLE ST:[no stats for this column]
+.name:              BINARY UNCOMPRESSED DO:0 FPO:232 SZ:116/116/1.00 VC:3 ENC:RLE,DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column]
+.phoneNumber:       BINARY ZSTD DO:0 FPO:348 SZ:113/95/0.84 VC:3 ENC:RLE,DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column]
 
     owner TV=2 RL=0 DL=0
     ----------------------------------------------------------------------------
@@ -359,10 +366,10 @@ value 3: R:0 D:0 V:<null>
 		dump: `row group 0
 --------------------------------------------------------------------------------
 owner:              BINARY ZSTD DO:0 FPO:4 SZ:71/62/0.87 VC:2 ENC:DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column]
-ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:75 SZ:156/106/0.68 VC:3 ENC:DELTA_LENGTH_BYTE_ARRAY,RLE ST:[no stats for this column]
+ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:75 SZ:156/106/0.68 VC:3 ENC:RLE,DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column]
 contacts:
-.name:              BINARY UNCOMPRESSED DO:0 FPO:231 SZ:110/110/1.00 VC:3 ENC:DELTA_LENGTH_BYTE_ARRAY,RLE ST:[no stats for this column]
-.phoneNumber:       BINARY ZSTD DO:0 FPO:341 SZ:108/90/0.83 VC:3 ENC:DELTA_LENGTH_BYTE_ARRAY,RLE ST:[no stats for this column]
+.name:              BINARY UNCOMPRESSED DO:0 FPO:231 SZ:110/110/1.00 VC:3 ENC:RLE,DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column]
+.phoneNumber:       BINARY ZSTD DO:0 FPO:341 SZ:108/90/0.83 VC:3 ENC:RLE,DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column]
 
     owner TV=2 RL=0 DL=0
     ----------------------------------------------------------------------------
@@ -409,6 +416,40 @@ BINARY contacts.phoneNumber
 value 1: R:0 D:2 V:555 987 6543
 value 2: R:1 D:1 V:<null>
 value 3: R:0 D:0 V:<null>
+`,
+	},
+
+	{
+		scenario: "omit `-` fields",
+		version:  v1,
+		rows: []interface{}{
+			&event{Name: "customer1", Type: "request", Value: 42.0},
+			&event{Name: "customer2", Type: "access", Value: 1.0},
+		},
+		dump: `row group 0
+--------------------------------------------------------------------------------
+name:   BINARY UNCOMPRESSED DO:4 FPO:49 SZ:73/73/1.00 VC:2 ENC:PLAIN,RLE_DICTIONARY ST:[no stats for this column]
+value:  DOUBLE UNCOMPRESSED DO:0 FPO:77 SZ:39/39/1.00 VC:2 ENC:PLAIN ST:[no stats for this column]
+
+    name TV=2 RL=0 DL=0 DS: 2 DE:PLAIN
+    ----------------------------------------------------------------------------
+    page 0:                  DLE:RLE RLE:RLE VLE:RLE_DICTIONARY ST:[no stats for this column] CRC:[verified] SZ:5 VC:2
+
+    value TV=2 RL=0 DL=0
+    ----------------------------------------------------------------------------
+    page 0:                  DLE:RLE RLE:RLE VLE:PLAIN ST:[no stats for this column] CRC:[verified] SZ:16 VC:2
+
+BINARY name
+--------------------------------------------------------------------------------
+*** row group 1 of 1, values 1 to 2 ***
+value 1: R:0 D:0 V:customer1
+value 2: R:0 D:0 V:customer2
+
+DOUBLE value
+--------------------------------------------------------------------------------
+*** row group 1 of 1, values 1 to 2 ***
+value 1: R:0 D:0 V:42.0
+value 2: R:0 D:0 V:1.0
 `,
 	},
 }

@@ -297,6 +297,7 @@ func structNodeOf(t reflect.Type) *structNode {
 
 func structFieldsOf(t reflect.Type) []reflect.StructField {
 	fields := appendStructFields(t, nil, nil, 0)
+	omitIdx := []int{}
 
 	for i := range fields {
 		f := &fields[i]
@@ -306,7 +307,19 @@ func structFieldsOf(t reflect.Type) []reflect.StructField {
 			if name != "" {
 				f.Name = name
 			}
+
+			if name == "-" {
+				omitIdx = append(omitIdx, i)
+			}
+
+			if name == "-," {
+				f.Name = "-"
+			}
 		}
+	}
+
+	for i := len(omitIdx) - 1; i >= 0; i-- {
+		fields = append(fields[:omitIdx[i]], fields[omitIdx[i]+1:]...)
 	}
 
 	return fields
@@ -391,7 +404,6 @@ func (f *structField) Value(base reflect.Value) reflect.Value {
 			return fieldByIndex(base, f.index)
 		}
 	}
-	return reflect.Value{}
 }
 
 func structFieldString(f reflect.StructField) string {
@@ -673,6 +685,10 @@ func split(s string) (head, tail string) {
 		head = s
 	} else {
 		head, tail = s[:i], s[i+1:]
+
+		if head == "-" && s[len(s)-1] == ',' {
+			head = "-,"
+		}
 	}
 	return
 }
