@@ -765,7 +765,7 @@ func (col *booleanColumnBuffer) WriteBooleans(values []bool) (int, error) {
 		ptr: *(*unsafe.Pointer)(unsafe.Pointer(&values)),
 		len: len(values),
 	}
-	col.writeValues(rows, 1, 0)
+	col.writeValues(rows, unsafe.Sizeof(false), 0)
 	return rows.len, nil
 }
 
