@@ -252,7 +252,8 @@ type columnBufferWriter struct {
 	maxLen  int            // max number of values written to the temp buffer
 }
 
-// writeRowsFunc is the type of functions
+// writeRowsFunc is the type of functions that apply rows to a set of column
+// buffers.
 //
 // - w is the columnBufferWriter holding the column buffers where the rows are
 //   written.
