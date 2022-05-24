@@ -573,9 +573,9 @@ func (f *filePages) readDataPageV2(header *format.PageHeader) (Page, error) {
 		return nil, ErrMissingPageHeader
 	}
 	if isDictionaryFormat(header.DataPageHeaderV2.Encoding) && f.dataPage.dictionary == nil {
-		// If the program seeked to a row passed the first page,
-		// the dictionary page may not have been seen, in which
-		// case we have to lazily load it despite
+		// If the program seeked to a row passed the first page, the dictionary
+		// page may not have been seen, in which case we have to lazily load it
+		// from the beginning of column chunk.
 		if err := f.readDictionary(); err != nil {
 			return nil, err
 		}
