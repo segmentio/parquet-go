@@ -774,7 +774,8 @@ func (col *booleanColumnBuffer) WriteValues(values []Value) (int, error) {
 		ptr: *(*unsafe.Pointer)(unsafe.Pointer(&values)),
 		len: len(values),
 	}
-	col.writeValues(rows, unsafe.Sizeof(Value{}), 8)
+	var value Value
+	col.writeValues(rows, unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
 	return rows.len, nil
 }
 
@@ -784,18 +785,20 @@ func (col *booleanColumnBuffer) writeValues(rows array, size, offset uintptr) {
 	i := 0
 	r := 8 - (int(col.numValues) % 8)
 
-	if r < rows.len {
+	if r <= rows.len {
 		// First we attempt to write enough bits to align the number of values
-		// in the column buffer on 8 bytes. After this loop the next bit should
+		// in the column buffer on 8 bytes. After this step the next bit should
 		// be written at the zero'th index of a byte of the buffer.
+		var b byte
 		for i < r {
-			x := uint(col.numValues) / 8
-			y := uint(col.numValues) % 8
-			b := *(*byte)(rows.index(i, size, offset))
-			col.bits[x] |= (b & 1) << y
-			col.numValues++
+			v := *(*byte)(rows.index(i, size, offset))
+			b |= (v & 1) << uint(i)
 			i++
 		}
+		x := uint(col.numValues) / 8
+		y := uint(col.numValues) % 8
+		col.bits[x] |= (b << y) | (col.bits[x] & ^(0xFF << y))
+		col.numValues += int32(i)
 
 		if n := rows.len - i; n >= 8 {
 			// At this stage, we know that that we have at least 8 bits to write
@@ -831,7 +834,7 @@ func (col *booleanColumnBuffer) writeValues(rows array, size, offset uintptr) {
 		x := uint(col.numValues) / 8
 		y := uint(col.numValues) % 8
 		b := *(*byte)(rows.index(i, size, offset))
-		col.bits[x] |= (b & 1) << y
+		col.bits[x] = ((b & 1) << y) | (col.bits[x] & ^(1 << y))
 		col.numValues++
 		i++
 	}
