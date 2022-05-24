@@ -806,7 +806,7 @@ func (col *booleanColumnBuffer) writeValues(rows array, size, offset uintptr) {
 		if n := rows.len - i; n >= 8 {
 			// At this stage, we know that that we have at least 8 bits to write
 			// and the bits will be aligned on the address of a byte in the
-			// output buffer. We can work on 8 values per loop iterations,
+			// output buffer. We can work on 8 values per loop iteration,
 			// packing them into a single byte and writing it to the output
 			// buffer. This effectively reduces by 87.5% the number of memory
 			// stores that the program needs to perform to generate the values.
