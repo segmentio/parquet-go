@@ -209,11 +209,7 @@ func copyRows(dst RowWriter, src RowReader, buf []Row) (written int64, err error
 		buf = make([]Row, defaultRowBufferSize)
 	}
 
-	defer func() {
-		for _, row := range buf {
-			clearValues(row)
-		}
-	}()
+	defer clearRows(buf)
 
 	for {
 		rn, err := src.ReadRows(buf)
@@ -237,6 +233,13 @@ func copyRows(dst RowWriter, src RowReader, buf []Row) (written int64, err error
 		if rn == 0 {
 			return written, io.ErrNoProgress
 		}
+	}
+}
+
+func clearRows(rows []Row) {
+	for i, values := range rows {
+		clearValues(values)
+		rows[i] = values[:0]
 	}
 }
 

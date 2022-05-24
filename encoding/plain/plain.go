@@ -208,11 +208,18 @@ func AppendDouble(b []byte, v float64) []byte {
 }
 
 func AppendByteArray(b, v []byte) []byte {
-	i := len(b)
-	j := i + 4
-	b = append(b, 0, 0, 0, 0)
+	length := [ByteArrayLengthSize]byte{}
+	PutByteArrayLength(length[:], len(v))
+	b = append(b, length[:]...)
 	b = append(b, v...)
-	PutByteArrayLength(b[i:j:j], len(v))
+	return b
+}
+
+func AppendByteArrayString(b []byte, v string) []byte {
+	length := [ByteArrayLengthSize]byte{}
+	PutByteArrayLength(length[:], len(v))
+	b = append(b, length[:]...)
+	b = append(b, v...)
 	return b
 }
 

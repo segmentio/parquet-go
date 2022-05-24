@@ -9,108 +9,9 @@ import (
 	"reflect"
 	"testing"
 	"testing/quick"
-	"time"
 
-	"github.com/google/uuid"
 	"github.com/segmentio/parquet-go"
-	"github.com/segmentio/parquet-go/deprecated"
 )
-
-type booleanColumn struct {
-	Value bool
-}
-
-type int32Column struct {
-	Value int32
-}
-
-type int64Column struct {
-	Value int64
-}
-
-type int96Column struct {
-	Value deprecated.Int96
-}
-
-type floatColumn struct {
-	Value float32
-}
-
-type doubleColumn struct {
-	Value float64
-}
-
-type byteArrayColumn struct {
-	Value []byte
-}
-
-type fixedLenByteArrayColumn struct {
-	Value [10]byte
-}
-
-type stringColumn struct {
-	Value string
-}
-
-type indexedStringColumn struct {
-	Value string `parquet:",dict"`
-}
-
-type uuidColumn struct {
-	Value uuid.UUID `parquet:",delta"`
-}
-
-type decimalColumn struct {
-	Value int64 `parquet:",decimal(0:3)"`
-}
-
-type addressBook struct {
-	Owner             utf8string   `parquet:",plain"`
-	OwnerPhoneNumbers []utf8string `parquet:",plain"`
-	Contacts          []contact
-}
-
-type contact struct {
-	Name        utf8string `parquet:",plain"`
-	PhoneNumber utf8string `parquet:",plain"`
-}
-
-type listColumn2 struct {
-	Value utf8string `parquet:",optional"`
-}
-
-type listColumn1 struct {
-	List2 []listColumn2 `parquet:",list"`
-}
-
-type listColumn0 struct {
-	List1 []listColumn1 `parquet:",list"`
-}
-
-type nestedListColumn1 struct {
-	Level3 []utf8string `parquet:"level3"`
-}
-
-type nestedListColumn struct {
-	Level1 []nestedListColumn1 `parquet:"level1"`
-	Level2 []utf8string        `parquet:"level2"`
-}
-
-type utf8string string
-
-func (utf8string) Generate(rand *rand.Rand, size int) reflect.Value {
-	const characters = "abcdefghijklmnopqrstuvwxyz1234567890"
-	const maxSize = 10
-	if size > maxSize {
-		size = maxSize
-	}
-	n := rand.Intn(size)
-	b := make([]byte, n)
-	for i := range b {
-		b[i] = characters[rand.Intn(len(characters))]
-	}
-	return reflect.ValueOf(utf8string(b))
-}
 
 func rowsOf(numRows int, model interface{}) rows {
 	prng := rand.New(rand.NewSource(0))
@@ -299,10 +200,6 @@ func TestReader(t *testing.T) {
 	}
 }
 
-const (
-	benchmarkReaderNumRows = 10e3
-)
-
 func BenchmarkReaderReadType(b *testing.B) {
 	buf := new(bytes.Buffer)
 	file := bytes.NewReader(nil)
@@ -310,7 +207,7 @@ func BenchmarkReaderReadType(b *testing.B) {
 	for _, test := range readerTests {
 		b.Run(test.scenario, func(b *testing.B) {
 			defer buf.Reset()
-			rows := rowsOf(benchmarkReaderNumRows, test.model)
+			rows := rowsOf(benchmarkNumRows, test.model)
 
 			if err := writeParquetFile(buf, rows); err != nil {
 				b.Fatal(err)
@@ -329,23 +226,21 @@ func BenchmarkReaderReadType(b *testing.B) {
 			r := parquet.NewReader(f)
 			p := rowPtr.Interface()
 
-			b.ResetTimer()
-			start := time.Now()
-
-			for i := 0; i < b.N; i++ {
-				if err := r.Read(p); err != nil {
-					if err == io.EOF {
-						r.Reset()
-					} else {
-						b.Fatalf("%d/%d: %v", i, b.N, err)
+			benchmarkRowsPerSecond(b, func() (n int) {
+				for i := 0; i < benchmarkRowsPerStep; i++ {
+					if err := r.Read(p); err != nil {
+						if err == io.EOF {
+							r.Reset()
+						} else {
+							b.Fatal(err)
+						}
 					}
 				}
 				rowValue.Set(rowZero)
-			}
+				return benchmarkRowsPerStep
+			})
 
-			seconds := time.Since(start).Seconds()
-			b.ReportMetric(float64(b.N)/seconds, "row/s")
-			b.SetBytes(int64(math.Ceil(float64(file.Size()) / benchmarkReaderNumRows)))
+			b.SetBytes(int64(math.Ceil(benchmarkRowsPerStep * float64(file.Size()) / benchmarkNumRows)))
 		})
 	}
 }
@@ -357,7 +252,7 @@ func BenchmarkReaderReadRow(b *testing.B) {
 	for _, test := range readerTests {
 		b.Run(test.scenario, func(b *testing.B) {
 			defer buf.Reset()
-			rows := rowsOf(benchmarkReaderNumRows, test.model)
+			rows := rowsOf(benchmarkNumRows, test.model)
 
 			if err := writeParquetFile(buf, rows); err != nil {
 				b.Fatal(err)
@@ -369,25 +264,21 @@ func BenchmarkReaderReadRow(b *testing.B) {
 			}
 
 			r := parquet.NewReader(f)
-			rowbuf := make([]parquet.Row, 0, 16)
+			rowbuf := make([]parquet.Row, benchmarkRowsPerStep)
 
-			b.ResetTimer()
-			start := time.Now()
-
-			for i := 0; i < b.N; i++ {
-				_, err := r.ReadRows(rowbuf)
+			benchmarkRowsPerSecond(b, func() int {
+				n, err := r.ReadRows(rowbuf)
 				if err != nil {
 					if err == io.EOF {
 						r.Reset()
 					} else {
-						b.Fatalf("%d/%d: %v", i, b.N, err)
+						b.Fatal(err)
 					}
 				}
-			}
+				return n
+			})
 
-			seconds := time.Since(start).Seconds()
-			b.ReportMetric(float64(b.N)/seconds, "row/s")
-			b.SetBytes(int64(math.Ceil(float64(file.Size()) / benchmarkReaderNumRows)))
+			b.SetBytes(int64(math.Ceil(benchmarkRowsPerStep * float64(file.Size()) / benchmarkNumRows)))
 		})
 	}
 }

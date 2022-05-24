@@ -45,7 +45,7 @@ type Writer struct {
 	config *WriterConfig
 	schema *Schema
 	writer *writer
-	buffer [defaultRowBufferSize]Row
+	rowbuf []Row
 }
 
 // NewWriter constructs a parquet writer writing a file to the given io.Writer.
@@ -130,15 +130,18 @@ func (w *Writer) Write(row interface{}) error {
 	if w.schema == nil {
 		w.configure(SchemaOf(row))
 	}
-	defer func() {
-		clearValues(w.buffer[1])
-	}()
-	w.buffer[0] = w.schema.Deconstruct(w.buffer[0][:0], row)
-	_, err := w.WriteRows(w.buffer[:1])
+	if cap(w.rowbuf) == 0 {
+		w.rowbuf = make([]Row, 1)
+	} else {
+		w.rowbuf = w.rowbuf[:1]
+	}
+	defer clearRows(w.rowbuf)
+	w.rowbuf[0] = w.schema.Deconstruct(w.rowbuf[0][:0], row)
+	_, err := w.WriteRows(w.rowbuf)
 	return err
 }
 
-// WriteRow is called to write another row to the parquet file.
+// WriteRows is called to write rows to the parquet file.
 //
 // The Writer must have been given a schema when NewWriter was called, otherwise
 // the structure of the parquet file cannot be determined from the row only.
@@ -188,12 +191,12 @@ func (w *Writer) ReadRowsFrom(rows RowReader) (written int64, err error) {
 			w.configure(r.Schema())
 		}
 	}
-	defer func() {
-		for _, row := range w.buffer {
-			clearValues(row)
-		}
-	}()
-	return copyRows(w.writer, rows, w.buffer[:])
+	if cap(w.rowbuf) < defaultRowBufferSize {
+		w.rowbuf = make([]Row, defaultRowBufferSize)
+	} else {
+		w.rowbuf = w.rowbuf[:cap(w.rowbuf)]
+	}
+	return copyRows(w.writer, rows, w.rowbuf)
 }
 
 // Schema returns the schema of rows written by w.
