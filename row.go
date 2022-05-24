@@ -571,7 +571,7 @@ func reconstructFuncOfRepeated(columnIndex int16, node Node) (int16, reconstruct
 
 func reconstructRepeated(columnIndex, rowLength int16, levels levels, row Row, do func(levels, Row) (Row, error)) (Row, error) {
 	if !row.startsWith(columnIndex) {
-		return row, fmt.Errorf("row is missing repeated column %d", columnIndex)
+		return row, fmt.Errorf("row is missing repeated column %d: %+v", columnIndex, row)
 	}
 	if len(row) < int(rowLength) {
 		return row, fmt.Errorf("expected repeated column %d to have at least %d values but got %d", columnIndex, rowLength, len(row))
