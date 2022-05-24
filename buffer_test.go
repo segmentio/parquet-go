@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"reflect"
 	"sort"
+	"strconv"
 	"testing"
 	"testing/quick"
 	"time"
@@ -505,6 +506,50 @@ func TestBufferRoundtripNestedRepeatedPointer(t *testing.T) {
 		if !reflect.DeepEqual(*o, objs[i]) {
 			t.Errorf("points mismatch at row index %d: want=%v got=%v", i, objs[i], o)
 		}
+	}
+}
+
+func TestBufferSeekToRow(t *testing.T) {
+	type B struct {
+		I int
+		C []string
+	}
+	type A struct {
+		B []B
+	}
+
+	buffer := parquet.NewBuffer()
+	var objs []A
+	for i := 0; i < 2; i++ {
+		o := A{
+			B: []B{
+				{I: i, C: []string{"foo", strconv.Itoa(i)}},
+				{I: i + 1, C: []string{"bar", strconv.Itoa(i + 1)}},
+			},
+		}
+		buffer.Write(&o)
+		objs = append(objs, o)
+	}
+
+	buf := new(bytes.Buffer)
+	w := parquet.NewWriter(buf)
+	w.WriteRowGroup(buffer)
+	w.Flush()
+	w.Close()
+
+	file := bytes.NewReader(buf.Bytes())
+	r := parquet.NewReader(file)
+
+	i := 1
+	o := new(A)
+	if err := r.SeekToRow(int64(i)); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Read(o); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(*o, objs[i]) {
+		t.Errorf("points mismatch at row index %d: want=%v got=%v", i, objs[i], o)
 	}
 }
 

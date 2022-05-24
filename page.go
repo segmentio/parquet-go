@@ -444,27 +444,35 @@ func (page *repeatedPage) Slice(i, j int64) BufferedPage {
 		panic(errPageBoundsOutOfRange(i, j, numRows))
 	}
 
-	rowIndex0 := int64(0)
-	rowIndex1 := int64(len(page.repetitionLevels))
-	rowIndex2 := int64(len(page.repetitionLevels))
+	rowIndex0 := 0
+	rowIndex1 := len(page.repetitionLevels)
+	rowIndex2 := len(page.repetitionLevels)
 
 	for k, def := range page.repetitionLevels {
-		if def != page.maxRepetitionLevel {
-			if rowIndex0 == i {
-				rowIndex1 = int64(k)
-			}
-			if rowIndex0 == j {
-				rowIndex2 = int64(k)
+		if def == 0 {
+			if rowIndex0 == int(i) {
+				rowIndex1 = k
+				break
 			}
 			rowIndex0++
 		}
 	}
 
-	numNulls1 := int64(countLevelsNotEqual(page.definitionLevels[:rowIndex1], page.maxDefinitionLevel))
-	numNulls2 := int64(countLevelsNotEqual(page.definitionLevels[rowIndex1:rowIndex2], page.maxDefinitionLevel))
+	for k, def := range page.repetitionLevels[rowIndex1:] {
+		if def == 0 {
+			if rowIndex0 == int(j) {
+				rowIndex2 = rowIndex1 + k
+				break
+			}
+			rowIndex0++
+		}
+	}
 
-	i = rowIndex1 - numNulls1
-	j = rowIndex2 - (numNulls1 + numNulls2)
+	numNulls1 := countLevelsNotEqual(page.definitionLevels[:rowIndex1], page.maxDefinitionLevel)
+	numNulls2 := countLevelsNotEqual(page.definitionLevels[rowIndex1:rowIndex2], page.maxDefinitionLevel)
+
+	i = int64(rowIndex1 - numNulls1)
+	j = int64(rowIndex2 - (numNulls1 + numNulls2))
 
 	return newRepeatedPage(
 		page.base.Slice(i, j),
