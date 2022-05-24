@@ -939,14 +939,9 @@ func (col *int32ColumnBuffer) writeValues(rows array, size, offset uintptr) {
 	if n := len(col.values) + rows.len; n > cap(col.values) {
 		col.values = append(make([]int32, 0, max(n, 2*cap(col.values))), col.values...)
 	}
-
 	n := len(col.values)
 	col.values = col.values[:n+rows.len]
-
-	values := col.values[n:]
-	for i := range values {
-		values[i] = *(*int32)(rows.index(i, size, offset))
-	}
+	writeValuesInt32(col.values[n:], rows, size, offset)
 }
 
 func (col *int32ColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int, err error) {
