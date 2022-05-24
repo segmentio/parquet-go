@@ -17,7 +17,7 @@ type GenericBuffer[T any] struct {
 	columns columnBufferWriter
 }
 
-// NewGenericBuffer is like NewBuffer but returns GenericBuffer[T] suited to write
+// NewGenericBuffer is like NewBuffer but returns a GenericBuffer[T] suited to write
 // rows of Go type T.
 //
 // The type parameter T should be a map, struct, or any. Any other types will

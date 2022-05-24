@@ -8,17 +8,7 @@ import (
 	"unsafe"
 
 	"github.com/segmentio/parquet-go/deprecated"
-	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
-
-type array struct {
-	ptr unsafe.Pointer
-	len int
-}
-
-func (a array) index(i int, size, offset uintptr) unsafe.Pointer {
-	return unsafe.Add(a.ptr, uintptr(i)*size+offset)
-}
 
 func makeArray[T any](s []T) array {
 	return array{
@@ -364,7 +354,7 @@ func writeRowsFuncOfOptional(t reflect.Type, schema *Schema, path columnPath, wr
 		// sent to a single call to writeRows to be written to the underlying
 		// buffer since they share the same definition level.
 		//
-		// This optimization is defeated by inputs alterning null and non-null
+		// This optimization is defeated by inputs alternating null and non-null
 		// sequences of single values, we do not expect this condition to be a
 		// common case.
 		for i := 0; i < rows.len; {
@@ -620,11 +610,7 @@ func (w *columnBufferWriter) writeRowsBool(rows array, size, offset uintptr, lev
 
 	switch c := w.columns[levels.columnIndex].(type) {
 	case *booleanColumnBuffer:
-		for i := 0; i < rows.len; i++ {
-			p := rows.index(i, size, offset)
-			c.writeValue(*(*bool)(p))
-		}
-
+		c.writeValues(rows, size, offset)
 	default:
 		w.reset()
 		for i := 0; i < rows.len; i++ {
@@ -647,17 +633,9 @@ func (w *columnBufferWriter) writeRowsInt(rows array, size, offset uintptr, leve
 
 	switch c := w.columns[levels.columnIndex].(type) {
 	case *int64ColumnBuffer:
-		for i := 0; i < rows.len; i++ {
-			p := rows.index(i, size, offset)
-			c.values = append(c.values, int64(*(*int)(p)))
-		}
-
+		c.writeValues(rows, size, offset)
 	case *uint64ColumnBuffer:
-		for i := 0; i < rows.len; i++ {
-			p := rows.index(i, size, offset)
-			c.values = append(c.values, uint64(*(*uint)(p)))
-		}
-
+		c.writeValues(rows, size, offset)
 	default:
 		w.reset()
 		for i := 0; i < rows.len; i++ {
@@ -680,17 +658,9 @@ func (w *columnBufferWriter) writeRowsInt8(rows array, size, offset uintptr, lev
 
 	switch c := w.columns[levels.columnIndex].(type) {
 	case *int32ColumnBuffer:
-		for i := 0; i < rows.len; i++ {
-			p := rows.index(i, size, offset)
-			c.values = append(c.values, int32(*(*int8)(p)))
-		}
-
+		c.writeValues(rows, size, offset)
 	case *uint32ColumnBuffer:
-		for i := 0; i < rows.len; i++ {
-			p := rows.index(i, size, offset)
-			c.values = append(c.values, uint32(*(*uint8)(p)))
-		}
-
+		c.writeValues(rows, size, offset)
 	default:
 		w.reset()
 		for i := 0; i < rows.len; i++ {
@@ -713,17 +683,9 @@ func (w *columnBufferWriter) writeRowsInt16(rows array, size, offset uintptr, le
 
 	switch c := w.columns[levels.columnIndex].(type) {
 	case *int32ColumnBuffer:
-		for i := 0; i < rows.len; i++ {
-			p := rows.index(i, size, offset)
-			c.values = append(c.values, int32(*(*int16)(p)))
-		}
-
+		c.writeValues(rows, size, offset)
 	case *uint32ColumnBuffer:
-		for i := 0; i < rows.len; i++ {
-			p := rows.index(i, size, offset)
-			c.values = append(c.values, uint32(*(*uint16)(p)))
-		}
-
+		c.writeValues(rows, size, offset)
 	default:
 		w.reset()
 		for i := 0; i < rows.len; i++ {
@@ -746,17 +708,9 @@ func (w *columnBufferWriter) writeRowsInt32(rows array, size, offset uintptr, le
 
 	switch c := w.columns[levels.columnIndex].(type) {
 	case *int32ColumnBuffer:
-		for i := 0; i < rows.len; i++ {
-			p := rows.index(i, size, offset)
-			c.values = append(c.values, *(*int32)(p))
-		}
-
+		c.writeValues(rows, size, offset)
 	case *uint32ColumnBuffer:
-		for i := 0; i < rows.len; i++ {
-			p := rows.index(i, size, offset)
-			c.values = append(c.values, *(*uint32)(p))
-		}
-
+		c.writeValues(rows, size, offset)
 	default:
 		w.reset()
 		for i := 0; i < rows.len; i++ {
@@ -779,17 +733,9 @@ func (w *columnBufferWriter) writeRowsInt64(rows array, size, offset uintptr, le
 
 	switch c := w.columns[levels.columnIndex].(type) {
 	case *int64ColumnBuffer:
-		for i := 0; i < rows.len; i++ {
-			p := rows.index(i, size, offset)
-			c.values = append(c.values, *(*int64)(p))
-		}
-
+		c.writeValues(rows, size, offset)
 	case *uint64ColumnBuffer:
-		for i := 0; i < rows.len; i++ {
-			p := rows.index(i, size, offset)
-			c.values = append(c.values, *(*uint64)(p))
-		}
-
+		c.writeValues(rows, size, offset)
 	default:
 		w.reset()
 		for i := 0; i < rows.len; i++ {
@@ -812,11 +758,7 @@ func (w *columnBufferWriter) writeRowsInt96(rows array, size, offset uintptr, le
 
 	switch c := w.columns[levels.columnIndex].(type) {
 	case *int96ColumnBuffer:
-		for i := 0; i < rows.len; i++ {
-			p := rows.index(i, size, offset)
-			c.values = append(c.values, *(*deprecated.Int96)(p))
-		}
-
+		c.writeValues(rows, size, offset)
 	default:
 		w.reset()
 		for i := 0; i < rows.len; i++ {
@@ -839,11 +781,7 @@ func (w *columnBufferWriter) writeRowsFloat32(rows array, size, offset uintptr, 
 
 	switch c := w.columns[levels.columnIndex].(type) {
 	case *floatColumnBuffer:
-		for i := 0; i < rows.len; i++ {
-			p := rows.index(i, size, offset)
-			c.values = append(c.values, *(*float32)(p))
-		}
-
+		c.writeValues(rows, size, offset)
 	default:
 		w.reset()
 		for i := 0; i < rows.len; i++ {
@@ -866,11 +804,7 @@ func (w *columnBufferWriter) writeRowsFloat64(rows array, size, offset uintptr, 
 
 	switch c := w.columns[levels.columnIndex].(type) {
 	case *doubleColumnBuffer:
-		for i := 0; i < rows.len; i++ {
-			p := rows.index(i, size, offset)
-			c.values = append(c.values, *(*float64)(p))
-		}
-
+		c.writeValues(rows, size, offset)
 	default:
 		w.reset()
 		for i := 0; i < rows.len; i++ {
@@ -893,12 +827,7 @@ func (w *columnBufferWriter) writeRowsString(rows array, size, offset uintptr, l
 
 	switch c := w.columns[levels.columnIndex].(type) {
 	case *byteArrayColumnBuffer:
-		for i := 0; i < rows.len; i++ {
-			p := rows.index(i, size, offset)
-			c.append(unsafecast.StringToBytes(*(*string)(p)))
-		}
-		return nil
-
+		c.writeValues(rows, size, offset)
 	default:
 		w.reset()
 		for i := 0; i < rows.len; i++ {
@@ -921,14 +850,7 @@ func (w *columnBufferWriter) writeRowsUUID(rows array, size, offset uintptr, lev
 
 	switch c := w.columns[levels.columnIndex].(type) {
 	case *fixedLenByteArrayColumnBuffer:
-		uuids := unsafecast.Slice[[16]byte](c.data)
-		for i := 0; i < rows.len; i++ {
-			p := rows.index(i, size, offset)
-			uuids = append(uuids, *(*[16]byte)(p))
-		}
-		c.data = unsafecast.Slice[byte](uuids)
-		return nil
-
+		c.writeValues128(rows, size, offset)
 	default:
 		w.reset()
 		for i := 0; i < rows.len; i++ {
@@ -951,12 +873,7 @@ func (w *columnBufferWriter) writeRowsArray(rows array, size, offset uintptr, le
 
 	switch c := w.columns[levels.columnIndex].(type) {
 	case *fixedLenByteArrayColumnBuffer:
-		for i := 0; i < rows.len; i++ {
-			p := rows.index(i, size, offset)
-			c.data = append(c.data, unsafe.Slice((*byte)(p), len)...)
-		}
-		return nil
-
+		c.writeValues(rows, size, offset)
 	default:
 		w.reset()
 		for i := 0; i < rows.len; i++ {

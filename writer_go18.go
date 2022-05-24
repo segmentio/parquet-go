@@ -15,19 +15,19 @@ import (
 // - By leveraging type information, the Go compiler can provide greater
 //   guarantees that the code is correct. For example, the parquet.Writer.Write
 //   method accepts an argument of type interface{}, which delays type checking
-//   at the runtime. The parquet.GenericWriter[T].Write method ensures at
+//   until runtime. The parquet.GenericWriter[T].Write method ensures at
 //   compile time that the values it receives will be of type T, reducing the
-//   risk of introducing bugs.
+//   risk of introducing errors.
 //
 // - Since type information is known at compile time, the implementation of
 //   parquet.GenericWriter[T] can make safe assumptions, removing the need for
-//   runtime validation of how the parameters passed to its methods.
+//   runtime validation of how the parameters are passed to its methods.
 //   Optimizations relying on type information are more effective, some of the
 //   writer's state can be precomputed at initialization, which was not possible
 //   with parquet.Writer.
 //
 // - The parquet.GenericWriter[T].Write method uses a data-oriented design,
-//   accepting an slice of instead of a single value, creating more
+//   accepting an slice of T instead of a single value, creating more
 //   opportunities to amortize the runtime cost of abstractions.
 //   This optimization is not available for parquet.Writer because its Write
 //   method's argument would be of type []interface{}, which would require
