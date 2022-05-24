@@ -510,17 +510,6 @@ func (p *dataPage) reset() {
 	p.dictionary = nil
 }
 
-func (p *dataPage) resize(compressedPageSize, uncompressedPageSize int) {
-	if cap(p.data) < compressedPageSize {
-		p.data = make([]byte, compressedPageSize)
-	} else {
-		p.data = p.data[:compressedPageSize]
-	}
-	if cap(p.values) < uncompressedPageSize {
-		p.values = make([]byte, 0, uncompressedPageSize)
-	}
-}
-
 func (p *dataPage) decompress(codec compress.Codec, data []byte) (err error) {
 	p.values, err = codec.Decode(p.values, data)
 	p.data, p.values = p.values, p.data[:0]

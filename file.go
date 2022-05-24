@@ -467,16 +467,7 @@ func (f *filePages) ReadPage() (Page, error) {
 		if err := f.decoder.Decode(header); err != nil {
 			return nil, err
 		}
-
-		f.dataPage.resize(
-			int(header.CompressedPageSize),
-			int(header.UncompressedPageSize),
-		)
-
-		if _, err := io.ReadFull(f.rbuf, f.dataPage.data); err != nil {
-			return nil, err
-		}
-		if err := f.verifyPageChecksum(header, f.dataPage.data); err != nil {
+		if err := f.readPage(header, f.dataPage, f.rbuf); err != nil {
 			return nil, err
 		}
 
@@ -525,11 +516,11 @@ func (f *filePages) ReadPage() (Page, error) {
 }
 
 func (f *filePages) readDictionary() error {
-	section := io.NewSectionReader(f.chunk.file, f.baseOffset, f.chunk.chunk.MetaData.TotalCompressedSize)
-	buffer := acquireReadBuffer(section)
-	defer releaseReadBuffer(buffer)
+	chunk := io.NewSectionReader(f.chunk.file, f.baseOffset, f.chunk.chunk.MetaData.TotalCompressedSize)
+	rbuf := acquireReadBuffer(chunk)
+	defer releaseReadBuffer(rbuf)
 
-	decoder := thrift.NewDecoder(f.protocol.NewReader(buffer))
+	decoder := thrift.NewDecoder(f.protocol.NewReader(rbuf))
 	header := new(format.PageHeader)
 
 	if err := decoder.Decode(header); err != nil {
@@ -539,17 +530,10 @@ func (f *filePages) readDictionary() error {
 	page := acquireDataPage()
 	defer releaseDataPage(page)
 
-	page.resize(
-		int(header.CompressedPageSize),
-		int(header.UncompressedPageSize),
-	)
+	if err := f.readPage(header, page, rbuf); err != nil {
+		return err
+	}
 
-	if _, err := io.ReadFull(buffer, page.data); err != nil {
-		return err
-	}
-	if err := f.verifyPageChecksum(header, page.data); err != nil {
-		return err
-	}
 	return f.readDictionaryPage(header, page)
 }
 
@@ -599,10 +583,25 @@ func (f *filePages) readDataPageV2(header *format.PageHeader) (Page, error) {
 	return f.chunk.column.decodeDataPageV2(DataPageHeaderV2{header.DataPageHeaderV2}, f.dataPage)
 }
 
-func (f *filePages) verifyPageChecksum(header *format.PageHeader, buffer []byte) error {
+func (f *filePages) readPage(header *format.PageHeader, page *dataPage, reader *bufio.Reader) error {
+	compressedPageSize, uncompressedPageSize := int(header.CompressedPageSize), int(header.UncompressedPageSize)
+
+	if cap(page.data) < compressedPageSize {
+		page.data = make([]byte, compressedPageSize)
+	} else {
+		page.data = page.data[:compressedPageSize]
+	}
+	if cap(page.values) < uncompressedPageSize {
+		page.values = make([]byte, 0, uncompressedPageSize)
+	}
+
+	if _, err := io.ReadFull(reader, page.data); err != nil {
+		return err
+	}
+
 	if header.CRC != 0 {
 		headerChecksum := uint32(header.CRC)
-		bufferChecksum := crc32.ChecksumIEEE(buffer)
+		bufferChecksum := crc32.ChecksumIEEE(page.data)
 
 		if headerChecksum != bufferChecksum {
 			// The parquet specs indicate that corruption errors could be
@@ -621,6 +620,7 @@ func (f *filePages) verifyPageChecksum(header *format.PageHeader, buffer []byte)
 			)
 		}
 	}
+
 	return nil
 }
 
