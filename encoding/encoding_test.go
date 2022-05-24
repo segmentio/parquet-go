@@ -7,6 +7,7 @@ import (
 	"math"
 	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
@@ -570,11 +571,11 @@ func benchmarkEncodeBoolean(b *testing.B, e encoding.Encoding) {
 	values := generateBooleanValues(benchmarkNumValues, newRand())
 	setBitWidth(e, 1)
 
-	benchmarkZeroAllocsPerRun(b, func() {
-		buffer, _ = e.EncodeBoolean(buffer, values)
+	reportThroughput(b, benchmarkNumValues, len(values), func() {
+		benchmarkZeroAllocsPerRun(b, func() {
+			buffer, _ = e.EncodeBoolean(buffer, values)
+		})
 	})
-
-	b.SetBytes(1 * int64(len(values)))
 }
 
 func benchmarkEncodeLevels(b *testing.B, e encoding.Encoding) {
@@ -583,11 +584,11 @@ func benchmarkEncodeLevels(b *testing.B, e encoding.Encoding) {
 	values := generateLevelValues(benchmarkNumValues, newRand())
 	setBitWidth(e, bits.MaxLen8(bits.BytesToInt8(values)))
 
-	benchmarkZeroAllocsPerRun(b, func() {
-		buffer, _ = e.EncodeLevels(buffer, values)
+	reportThroughput(b, benchmarkNumValues, len(values), func() {
+		benchmarkZeroAllocsPerRun(b, func() {
+			buffer, _ = e.EncodeLevels(buffer, values)
+		})
 	})
-
-	b.SetBytes(1 * int64(len(values)))
 }
 
 func benchmarkEncodeInt32(b *testing.B, e encoding.Encoding) {
@@ -596,11 +597,11 @@ func benchmarkEncodeInt32(b *testing.B, e encoding.Encoding) {
 	values := generateInt32Values(benchmarkNumValues, newRand())
 	setBitWidth(e, bits.MaxLen32(bits.BytesToInt32(values)))
 
-	benchmarkZeroAllocsPerRun(b, func() {
-		buffer, _ = e.EncodeInt32(buffer, values)
+	reportThroughput(b, benchmarkNumValues, len(values), func() {
+		benchmarkZeroAllocsPerRun(b, func() {
+			buffer, _ = e.EncodeInt32(buffer, values)
+		})
 	})
-
-	b.SetBytes(4 * int64(len(values)))
 }
 
 func benchmarkEncodeInt64(b *testing.B, e encoding.Encoding) {
@@ -609,11 +610,11 @@ func benchmarkEncodeInt64(b *testing.B, e encoding.Encoding) {
 	values := generateInt64Values(benchmarkNumValues, newRand())
 	setBitWidth(e, bits.MaxLen64(bits.BytesToInt64(values)))
 
-	benchmarkZeroAllocsPerRun(b, func() {
-		buffer, _ = e.EncodeInt64(buffer, values)
+	reportThroughput(b, benchmarkNumValues, len(values), func() {
+		benchmarkZeroAllocsPerRun(b, func() {
+			buffer, _ = e.EncodeInt64(buffer, values)
+		})
 	})
-
-	b.SetBytes(8 * int64(len(values)))
 }
 
 func benchmarkEncodeFloat(b *testing.B, e encoding.Encoding) {
@@ -621,11 +622,11 @@ func benchmarkEncodeFloat(b *testing.B, e encoding.Encoding) {
 	buffer := make([]byte, 0)
 	values := generateFloatValues(benchmarkNumValues, newRand())
 
-	benchmarkZeroAllocsPerRun(b, func() {
-		buffer, _ = e.EncodeFloat(buffer, values)
+	reportThroughput(b, benchmarkNumValues, len(values), func() {
+		benchmarkZeroAllocsPerRun(b, func() {
+			buffer, _ = e.EncodeFloat(buffer, values)
+		})
 	})
-
-	b.SetBytes(4 * int64(len(values)))
 }
 
 func benchmarkEncodeDouble(b *testing.B, e encoding.Encoding) {
@@ -633,11 +634,11 @@ func benchmarkEncodeDouble(b *testing.B, e encoding.Encoding) {
 	buffer := make([]byte, 0)
 	values := generateDoubleValues(benchmarkNumValues, newRand())
 
-	benchmarkZeroAllocsPerRun(b, func() {
-		buffer, _ = e.EncodeDouble(buffer, values)
+	reportThroughput(b, benchmarkNumValues, len(values), func() {
+		benchmarkZeroAllocsPerRun(b, func() {
+			buffer, _ = e.EncodeDouble(buffer, values)
+		})
 	})
-
-	b.SetBytes(8 * int64(len(values)))
 }
 
 func benchmarkEncodeByteArray(b *testing.B, e encoding.Encoding) {
@@ -645,11 +646,11 @@ func benchmarkEncodeByteArray(b *testing.B, e encoding.Encoding) {
 	buffer := make([]byte, 0)
 	values := generateByteArrayValues(benchmarkNumValues, newRand())
 
-	benchmarkZeroAllocsPerRun(b, func() {
-		buffer, _ = e.EncodeByteArray(buffer, values)
+	reportThroughput(b, benchmarkNumValues, len(values), func() {
+		benchmarkZeroAllocsPerRun(b, func() {
+			buffer, _ = e.EncodeByteArray(buffer, values)
+		})
 	})
-
-	b.SetBytes(int64(len(values)))
 }
 
 func benchmarkEncodeFixedLenByteArray(b *testing.B, e encoding.Encoding) {
@@ -658,11 +659,11 @@ func benchmarkEncodeFixedLenByteArray(b *testing.B, e encoding.Encoding) {
 	buffer := make([]byte, 0)
 	values := generateFixedLenByteArrayValues(benchmarkNumValues, newRand(), size)
 
-	benchmarkZeroAllocsPerRun(b, func() {
-		buffer, _ = e.EncodeFixedLenByteArray(buffer, values, size)
+	reportThroughput(b, benchmarkNumValues, len(values), func() {
+		benchmarkZeroAllocsPerRun(b, func() {
+			buffer, _ = e.EncodeFixedLenByteArray(buffer, values, size)
+		})
 	})
-
-	b.SetBytes(int64(len(values)))
 }
 
 func BenchmarkDecode(b *testing.B) {
@@ -720,11 +721,11 @@ func benchmarkDecodeBoolean(b *testing.B, e encoding.Encoding) {
 	setBitWidth(e, 1)
 	buffer, _ := e.EncodeBoolean(nil, values)
 
-	benchmarkZeroAllocsPerRun(b, func() {
-		output, _ = e.DecodeBoolean(output, buffer)
+	reportThroughput(b, benchmarkNumValues, len(values), func() {
+		benchmarkZeroAllocsPerRun(b, func() {
+			output, _ = e.DecodeBoolean(output, buffer)
+		})
 	})
-
-	b.SetBytes(1 * int64(len(values)))
 }
 
 func benchmarkDecodeLevels(b *testing.B, e encoding.Encoding) {
@@ -734,11 +735,11 @@ func benchmarkDecodeLevels(b *testing.B, e encoding.Encoding) {
 	setBitWidth(e, bits.MaxLen8(bits.BytesToInt8(values)))
 	buffer, _ := e.EncodeLevels(nil, values)
 
-	benchmarkZeroAllocsPerRun(b, func() {
-		output, _ = e.DecodeLevels(output, buffer)
+	reportThroughput(b, benchmarkNumValues, len(values), func() {
+		benchmarkZeroAllocsPerRun(b, func() {
+			output, _ = e.DecodeLevels(output, buffer)
+		})
 	})
-
-	b.SetBytes(1 * int64(len(values)))
 }
 
 func benchmarkDecodeInt32(b *testing.B, e encoding.Encoding) {
@@ -748,11 +749,11 @@ func benchmarkDecodeInt32(b *testing.B, e encoding.Encoding) {
 	setBitWidth(e, bits.MaxLen32(bits.BytesToInt32(values)))
 	buffer, _ := e.EncodeInt32(nil, values)
 
-	benchmarkZeroAllocsPerRun(b, func() {
-		output, _ = e.DecodeInt32(output, buffer)
+	reportThroughput(b, benchmarkNumValues, len(values), func() {
+		benchmarkZeroAllocsPerRun(b, func() {
+			output, _ = e.DecodeInt32(output, buffer)
+		})
 	})
-
-	b.SetBytes(4 * int64(len(values)))
 }
 
 func benchmarkDecodeInt64(b *testing.B, e encoding.Encoding) {
@@ -762,11 +763,11 @@ func benchmarkDecodeInt64(b *testing.B, e encoding.Encoding) {
 	setBitWidth(e, bits.MaxLen64(bits.BytesToInt64(values)))
 	buffer, _ := e.EncodeInt64(nil, values)
 
-	benchmarkZeroAllocsPerRun(b, func() {
-		output, _ = e.DecodeInt64(output, buffer)
+	reportThroughput(b, benchmarkNumValues, len(values), func() {
+		benchmarkZeroAllocsPerRun(b, func() {
+			output, _ = e.DecodeInt64(output, buffer)
+		})
 	})
-
-	b.SetBytes(8 * int64(len(values)))
 }
 
 func benchmarkDecodeFloat(b *testing.B, e encoding.Encoding) {
@@ -775,11 +776,11 @@ func benchmarkDecodeFloat(b *testing.B, e encoding.Encoding) {
 	output := make([]byte, 0)
 	buffer, _ := e.EncodeFloat(nil, values)
 
-	benchmarkZeroAllocsPerRun(b, func() {
-		output, _ = e.DecodeFloat(output, buffer)
+	reportThroughput(b, benchmarkNumValues, len(values), func() {
+		benchmarkZeroAllocsPerRun(b, func() {
+			output, _ = e.DecodeFloat(output, buffer)
+		})
 	})
-
-	b.SetBytes(4 * int64(len(values)))
 }
 
 func benchmarkDecodeDouble(b *testing.B, e encoding.Encoding) {
@@ -788,11 +789,11 @@ func benchmarkDecodeDouble(b *testing.B, e encoding.Encoding) {
 	output := make([]byte, 0)
 	buffer, _ := e.EncodeDouble(nil, values)
 
-	benchmarkZeroAllocsPerRun(b, func() {
-		output, _ = e.DecodeDouble(output, buffer)
+	reportThroughput(b, benchmarkNumValues, len(values), func() {
+		benchmarkZeroAllocsPerRun(b, func() {
+			output, _ = e.DecodeDouble(output, buffer)
+		})
 	})
-
-	b.SetBytes(8 * int64(len(values)))
 }
 
 func benchmarkDecodeByteArray(b *testing.B, e encoding.Encoding) {
@@ -801,11 +802,11 @@ func benchmarkDecodeByteArray(b *testing.B, e encoding.Encoding) {
 	output := make([]byte, 0)
 	buffer, _ := e.EncodeByteArray(nil, values)
 
-	benchmarkZeroAllocsPerRun(b, func() {
-		output, _ = e.DecodeByteArray(output, buffer)
+	reportThroughput(b, benchmarkNumValues, len(values), func() {
+		benchmarkZeroAllocsPerRun(b, func() {
+			output, _ = e.DecodeByteArray(output, buffer)
+		})
 	})
-
-	b.SetBytes(int64(len(values)))
 }
 
 func benchmarkDecodeFixedLenByteArray(b *testing.B, e encoding.Encoding) {
@@ -815,17 +816,25 @@ func benchmarkDecodeFixedLenByteArray(b *testing.B, e encoding.Encoding) {
 	output := make([]byte, 0)
 	buffer, _ := e.EncodeFixedLenByteArray(nil, values, size)
 
-	benchmarkZeroAllocsPerRun(b, func() {
-		output, _ = e.DecodeFixedLenByteArray(output, buffer, size)
+	reportThroughput(b, benchmarkNumValues, len(values), func() {
+		benchmarkZeroAllocsPerRun(b, func() {
+			output, _ = e.DecodeFixedLenByteArray(output, buffer, size)
+		})
 	})
-
-	b.SetBytes(int64(len(values)))
 }
 
 func benchmarkZeroAllocsPerRun(b *testing.B, f func()) {
 	if allocs := testing.AllocsPerRun(b.N, f); allocs != 0 {
 		b.Errorf("too many memory allocations: %g", allocs)
 	}
+}
+
+func reportThroughput(b *testing.B, numValues, numBytes int, do func()) {
+	start := time.Now()
+	do()
+	seconds := time.Since(start).Seconds()
+	b.SetBytes(int64(numBytes))
+	b.ReportMetric(float64(b.N*numValues)/seconds, "value/s")
 }
 
 func generateBooleanValues(n int, r *rand.Rand) []byte {
