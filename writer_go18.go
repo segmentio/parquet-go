@@ -27,7 +27,7 @@ import (
 //   with parquet.Writer.
 //
 // - The parquet.GenericWriter[T].Write method uses a data-oriented design,
-//   accepting an slice of instead of a single value, creating more
+//   accepting an slice of T instead of a single value, creating more
 //   opportunities to amortize the runtime cost of abstractions.
 //   This optimization is not available for parquet.Writer because its Write
 //   method's argument would be of type []interface{}, which would require
