@@ -21,7 +21,7 @@ import (
 //
 // - Since type information is known at compile time, the implementation of
 //   parquet.GenericWriter[T] can make safe assumptions, removing the need for
-//   runtime validation of how the parameters passed to its methods.
+//   runtime validation of how the parameters are passed to its methods.
 //   Optimizations relying on type information are more effective, some of the
 //   writer's state can be precomputed at initialization, which was not possible
 //   with parquet.Writer.
