@@ -1470,10 +1470,6 @@ func (col *byteArrayColumnBuffer) Write(b []byte) (int, error) {
 	return n, err
 }
 
-func (col *byteArrayColumnBuffer) WriteRequired(values []byte) (int, error) {
-	return col.WriteByteArrays(values)
-}
-
 func (col *byteArrayColumnBuffer) WriteByteArrays(values []byte) (int, error) {
 	n, _, err := col.writeByteArrays(values)
 	return n, err
@@ -1483,7 +1479,7 @@ func (col *byteArrayColumnBuffer) writeByteArrays(values []byte) (count, bytes i
 	baseCount, baseBytes := len(col.offsets), len(col.values)
 
 	err = plain.RangeByteArrays(values, func(value []byte) error {
-		col.append(value)
+		col.append(bits.BytesToString(value))
 		return nil
 	})
 
@@ -1491,10 +1487,20 @@ func (col *byteArrayColumnBuffer) writeByteArrays(values []byte) (count, bytes i
 }
 
 func (col *byteArrayColumnBuffer) WriteValues(values []Value) (int, error) {
-	for _, value := range values {
-		col.append(value.ByteArray())
+	rows := array{
+		ptr: *(*unsafe.Pointer)(unsafe.Pointer(&values)),
+		len: len(values),
 	}
+	var value Value
+	col.writeValues(rows, unsafe.Sizeof(value), unsafe.Offsetof(value.ptr))
 	return len(values), nil
+}
+
+func (col *byteArrayColumnBuffer) writeValues(rows array, size, offset uintptr) {
+	for i := 0; i < rows.len; i++ {
+		p := rows.index(i, size, offset)
+		col.append(*(*string)(p))
+	}
 }
 
 func (col *byteArrayColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int, err error) {
@@ -1518,10 +1524,9 @@ func (col *byteArrayColumnBuffer) ReadValuesAt(values []Value, offset int64) (n 
 	}
 }
 
-func (col *byteArrayColumnBuffer) append(value []byte) {
-	offset := uint32(len(col.values))
-	col.values = plain.AppendByteArray(col.values, value)
-	col.offsets = append(col.offsets, offset)
+func (col *byteArrayColumnBuffer) append(value string) {
+	col.offsets = append(col.offsets, uint32(len(col.values)))
+	col.values = plain.AppendByteArrayString(col.values, value)
 	col.numValues++
 }
 
@@ -1599,10 +1604,6 @@ func (col *fixedLenByteArrayColumnBuffer) Write(b []byte) (int, error) {
 	return n * col.size, err
 }
 
-func (col *fixedLenByteArrayColumnBuffer) WriteRequired(values []byte) (int, error) {
-	return col.WriteFixedLenByteArrays(values)
-}
-
 func (col *fixedLenByteArrayColumnBuffer) WriteFixedLenByteArrays(values []byte) (int, error) {
 	d, m := len(values)/col.size, len(values)%col.size
 	if m != 0 {
@@ -1617,6 +1618,30 @@ func (col *fixedLenByteArrayColumnBuffer) WriteValues(values []Value) (int, erro
 		col.data = append(col.data, v.ByteArray()...)
 	}
 	return len(values), nil
+}
+
+func (col *fixedLenByteArrayColumnBuffer) writeValues(rows array, size, offset uintptr) {
+	for i := 0; i < rows.len; i++ {
+		p := rows.index(i, size, offset)
+		col.data = append(col.data, unsafe.Slice((*byte)(p), col.size)...)
+	}
+}
+
+func (col *fixedLenByteArrayColumnBuffer) writeValues128(rows array, size, offset uintptr) {
+	c := 16 * col.Cap()
+	n := 16 * (col.Len() + rows.len)
+	if c < n {
+		col.data = append(make([]byte, 0, max(n, 2*c)), col.data...)
+	}
+
+	firstIndex := len(col.data)
+	col.data = col.data[:len(col.data)+(16*rows.len)]
+
+	data := unsafe.Pointer(&col.data[firstIndex])
+	for i := 0; i < rows.len; i++ {
+		p := rows.index(i, size, offset)
+		*(*[16]byte)(unsafe.Add(data, i*16)) = *(*[16]byte)(p)
+	}
 }
 
 func (col *fixedLenByteArrayColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int, err error) {

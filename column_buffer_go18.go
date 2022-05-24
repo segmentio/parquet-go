@@ -8,7 +8,6 @@ import (
 	"unsafe"
 
 	"github.com/segmentio/parquet-go/deprecated"
-	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 func makeArray[T any](s []T) array {
@@ -827,12 +826,7 @@ func (w *columnBufferWriter) writeRowsString(rows array, size, offset uintptr, l
 
 	switch c := w.columns[levels.columnIndex].(type) {
 	case *byteArrayColumnBuffer:
-		for i := 0; i < rows.len; i++ {
-			p := rows.index(i, size, offset)
-			c.append(unsafecast.StringToBytes(*(*string)(p)))
-		}
-		return nil
-
+		c.writeValues(rows, size, offset)
 	default:
 		w.reset()
 		for i := 0; i < rows.len; i++ {
@@ -855,14 +849,7 @@ func (w *columnBufferWriter) writeRowsUUID(rows array, size, offset uintptr, lev
 
 	switch c := w.columns[levels.columnIndex].(type) {
 	case *fixedLenByteArrayColumnBuffer:
-		uuids := unsafecast.Slice[[16]byte](c.data)
-		for i := 0; i < rows.len; i++ {
-			p := rows.index(i, size, offset)
-			uuids = append(uuids, *(*[16]byte)(p))
-		}
-		c.data = unsafecast.Slice[byte](uuids)
-		return nil
-
+		c.writeValues128(rows, size, offset)
 	default:
 		w.reset()
 		for i := 0; i < rows.len; i++ {
@@ -885,12 +872,7 @@ func (w *columnBufferWriter) writeRowsArray(rows array, size, offset uintptr, le
 
 	switch c := w.columns[levels.columnIndex].(type) {
 	case *fixedLenByteArrayColumnBuffer:
-		for i := 0; i < rows.len; i++ {
-			p := rows.index(i, size, offset)
-			c.data = append(c.data, unsafe.Slice((*byte)(p), len)...)
-		}
-		return nil
-
+		c.writeValues(rows, size, offset)
 	default:
 		w.reset()
 		for i := 0; i < rows.len; i++ {
