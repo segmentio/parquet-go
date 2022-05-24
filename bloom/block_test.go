@@ -1,13 +1,14 @@
 package bloom_test
 
 import (
+	"math"
 	"testing"
 
 	"github.com/segmentio/parquet-go/bloom"
 )
 
 func TestBlock(t *testing.T) {
-	for i := uint64(0); i < 2; /*math.MaxUint32*/ i = (i * 2) + 1 {
+	for i := uint64(0); i < math.MaxUint32; i = (i * 2) + 1 {
 		x := uint32(i)
 		b := bloom.Block{}
 		b.Insert(x)
