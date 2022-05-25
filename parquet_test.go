@@ -17,7 +17,7 @@ import (
 
 const (
 	benchmarkNumRows     = 10_000
-	benchmarkRowsPerStep = 100
+	benchmarkRowsPerStep = 1000
 )
 
 type benchmarkRowType struct {
