@@ -69,7 +69,7 @@ type Schema struct {
 // Invalid combination of struct tags and Go types, or repeating options will
 // cause the function to panic.
 //
-// As a special case, if the field tag is "-", the field is omitted from the schema 
+// As a special case, if the field tag is "-", the field is omitted from the schema
 // and the data will not be written into the parquet file(s).
 // Note that a field with name "-" can still be generated using the tag "-,".
 //
