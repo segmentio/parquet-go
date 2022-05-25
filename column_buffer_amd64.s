@@ -8,17 +8,50 @@ TEXT ·writeValuesInt32(SB), NOSPLIT, $0-56
     MOVQ rows_base+24(FP), BX
     MOVQ rows_len+32(FP), CX
     MOVQ size+40(FP), DX
-    MOVQ offset+48(FP), DI
 
     XORQ SI, SI
-    ADDQ DI, BX
-loop:
-    MOVL (BX), R8
-    MOVL R8, (AX)
+    ADDQ offset+48(FP), BX
 
-    ADDQ $4, AX
+    CMPQ CX, $0
+    JE done
+
+    CMPQ CX, $4
+    JB loop1x4
+
+    MOVQ CX, DI
+    SHRQ $2, DI
+    SHLQ $2, DI
+loop4x4:
+    MOVL (BX), R8
+    ADDQ DX, BX
+
+    MOVL (BX), R9
+    ADDQ DX, BX
+
+    MOVL (BX), R10
+    ADDQ DX, BX
+
+    MOVL (BX), R11
+    ADDQ DX, BX
+
+    MOVL R8, (AX)(SI*4)
+    MOVL R9, 4(AX)(SI*4)
+    MOVL R10, 8(AX)(SI*4)
+    MOVL R11, 12(AX)(SI*4)
+
+    ADDQ $4, SI
+    CMPQ SI, DI
+    JNE loop4x4
+
+    CMPQ SI, CX
+    JE done
+loop1x4:
+    MOVL (BX), R8
+    MOVL R8, (AX)(SI*4)
+
     ADDQ DX, BX
     INCQ SI
     CMPQ SI, CX
-    JNE loop
+    JNE loop1x4
+done:
     RET
