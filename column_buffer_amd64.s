@@ -18,6 +18,9 @@ init:
     SHRQ $3, CX
     XORQ SI, SI
 
+    CMPB ·hasAVX2(SB), $0
+    JE loop
+
     // Make sure `size - offset` is at least 4 bytes, otherwise VPGATHERDD
     // may read data beyond the end of the program memory and trigger a fault.
     //
@@ -111,6 +114,9 @@ TEXT ·writeValues32bits(SB), NOSPLIT, $0-40
     CMPQ CX, $8
     JB loop1x4
 
+    CMPB ·hasAVX2(SB), $0
+    JE loop1x4
+
     MOVQ CX, DI
     SHRQ $3, DI
     SHLQ $3, DI
@@ -194,6 +200,9 @@ TEXT ·writeValues64bits(SB), NOSPLIT, $0-40
     CMPQ CX, $4
     JB loop1x8
 
+    CMPB ·hasAVX2(SB), $0
+    JE loop1x8
+
     MOVQ CX, DI
     SHRQ $2, DI
     SHLQ $2, DI
@@ -241,6 +250,9 @@ TEXT ·writeValues128bits(SB), NOSPLIT, $0-40
 
     CMPQ CX, $2
     JB loop1x16
+
+    CMPB ·hasAVX2(SB), $0
+    JE loop1x16
 
     MOVQ CX, DI
     SHRQ $1, DI
