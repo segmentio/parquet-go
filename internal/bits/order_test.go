@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/segmentio/parquet-go/internal/bits"
+	"github.com/segmentio/parquet-go/internal/quick"
 )
 
 type boolOrder []bool
@@ -115,7 +116,7 @@ func TestOrderOfBool(t *testing.T) {
 	check := func(values []bool) bool {
 		return checkOrdering(t, boolOrder(values), bits.OrderOfBool(values))
 	}
-	err := quickCheck(func(values []bool) bool {
+	err := quick.Check(func(values []bool) bool {
 		if !check(values) {
 			return false
 		}
@@ -138,7 +139,7 @@ func TestOrderOfInt32(t *testing.T) {
 	check := func(values []int32) bool {
 		return checkOrdering(t, int32Order(values), bits.OrderOfInt32(values))
 	}
-	err := quickCheck(func(values []int32) bool {
+	err := quick.Check(func(values []int32) bool {
 		if !check(values) {
 			return false
 		}
@@ -176,7 +177,7 @@ func TestOrderOfInt64(t *testing.T) {
 	check := func(values []int64) bool {
 		return checkOrdering(t, int64Order(values), bits.OrderOfInt64(values))
 	}
-	err := quickCheck(func(values []int64) bool {
+	err := quick.Check(func(values []int64) bool {
 		if !check(values) {
 			return false
 		}
@@ -210,7 +211,7 @@ func TestOrderOfUint32(t *testing.T) {
 	check := func(values []uint32) bool {
 		return checkOrdering(t, uint32Order(values), bits.OrderOfUint32(values))
 	}
-	err := quickCheck(func(values []uint32) bool {
+	err := quick.Check(func(values []uint32) bool {
 		if !check(values) {
 			return false
 		}
@@ -244,7 +245,7 @@ func TestOrderOfUint64(t *testing.T) {
 	check := func(values []uint64) bool {
 		return checkOrdering(t, uint64Order(values), bits.OrderOfUint64(values))
 	}
-	err := quickCheck(func(values []uint64) bool {
+	err := quick.Check(func(values []uint64) bool {
 		if !check(values) {
 			return false
 		}
@@ -278,7 +279,7 @@ func TestOrderOfFloat32(t *testing.T) {
 	check := func(values []float32) bool {
 		return checkOrdering(t, float32Order(values), bits.OrderOfFloat32(values))
 	}
-	err := quickCheck(func(values []float32) bool {
+	err := quick.Check(func(values []float32) bool {
 		if !check(values) {
 			return false
 		}
@@ -312,7 +313,7 @@ func TestOrderOfFloat64(t *testing.T) {
 	check := func(values []float64) bool {
 		return checkOrdering(t, float64Order(values), bits.OrderOfFloat64(values))
 	}
-	err := quickCheck(func(values []float64) bool {
+	err := quick.Check(func(values []float64) bool {
 		if !check(values) {
 			return false
 		}
@@ -346,7 +347,7 @@ func TestOrderOfBytes(t *testing.T) {
 	check := func(values [][]byte) bool {
 		return checkOrdering(t, bytesOrder(values), bits.OrderOfBytes(values))
 	}
-	err := quickCheck(func(values [][16]byte) bool {
+	err := quick.Check(func(values [][16]byte) bool {
 		slices := make([][]byte, len(values))
 		for i := range values {
 			slices[i] = values[i][:]

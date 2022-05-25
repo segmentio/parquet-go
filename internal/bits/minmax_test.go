@@ -6,12 +6,13 @@ import (
 	"testing"
 
 	"github.com/segmentio/parquet-go/internal/bits"
+	"github.com/segmentio/parquet-go/internal/quick"
 )
 
 const scaleFactor = 6000
 
 func TestMinMaxBool(t *testing.T) {
-	err := quickCheck(func(values []bool) bool {
+	err := quick.Check(func(values []bool) bool {
 		min := len(values) > 0
 		max := false
 		for _, v := range values {
@@ -41,7 +42,7 @@ func TestMinMaxBool(t *testing.T) {
 }
 
 func TestMinMaxInt32(t *testing.T) {
-	err := quickCheck(func(values []int32) bool {
+	err := quick.Check(func(values []int32) bool {
 		min := int32(0)
 		max := int32(0)
 		if len(values) > 0 {
@@ -65,7 +66,7 @@ func TestMinMaxInt32(t *testing.T) {
 }
 
 func TestMinMaxInt64(t *testing.T) {
-	err := quickCheck(func(values []int64) bool {
+	err := quick.Check(func(values []int64) bool {
 		min := int64(0)
 		max := int64(0)
 		if len(values) > 0 {
@@ -89,7 +90,7 @@ func TestMinMaxInt64(t *testing.T) {
 }
 
 func TestMinMaxUint32(t *testing.T) {
-	err := quickCheck(func(values []uint32) bool {
+	err := quick.Check(func(values []uint32) bool {
 		min := uint32(0)
 		max := uint32(0)
 		if len(values) > 0 {
@@ -113,7 +114,7 @@ func TestMinMaxUint32(t *testing.T) {
 }
 
 func TestMinMaxUint64(t *testing.T) {
-	err := quickCheck(func(values []uint64) bool {
+	err := quick.Check(func(values []uint64) bool {
 		min := uint64(0)
 		max := uint64(0)
 		if len(values) > 0 {
@@ -137,7 +138,7 @@ func TestMinMaxUint64(t *testing.T) {
 }
 
 func TestMinMaxFloat32(t *testing.T) {
-	err := quickCheck(func(values []float32) bool {
+	err := quick.Check(func(values []float32) bool {
 		min := float32(0)
 		max := float32(0)
 		if len(values) > 0 {
@@ -161,7 +162,7 @@ func TestMinMaxFloat32(t *testing.T) {
 }
 
 func TestMinMaxFloat64(t *testing.T) {
-	err := quickCheck(func(values []float64) bool {
+	err := quick.Check(func(values []float64) bool {
 		min := float64(0)
 		max := float64(0)
 		if len(values) > 0 {
@@ -185,7 +186,7 @@ func TestMinMaxFloat64(t *testing.T) {
 }
 
 func TestMinMaxFixedLenByteArray1(t *testing.T) {
-	err := quickCheck(func(values []byte) bool {
+	err := quick.Check(func(values []byte) bool {
 		min := [1]byte{}
 		max := [1]byte{}
 		if len(values) > 0 {
@@ -210,7 +211,7 @@ func TestMinMaxFixedLenByteArray1(t *testing.T) {
 }
 
 func TestMinMaxFixedLenByteArray16(t *testing.T) {
-	err := quickCheck(func(values [][16]byte) bool {
+	err := quick.Check(func(values [][16]byte) bool {
 		min := [16]byte{}
 		max := [16]byte{}
 		if len(values) > 0 {

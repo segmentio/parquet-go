@@ -5,10 +5,11 @@ import (
 	"testing"
 
 	"github.com/segmentio/parquet-go/internal/bits"
+	"github.com/segmentio/parquet-go/internal/quick"
 )
 
 func TestAddInt32(t *testing.T) {
-	err := quickCheck(func(values []int32) bool {
+	err := quick.Check(func(values []int32) bool {
 		const add = math.MaxInt32
 
 		valuesAndAdd := make([]int32, len(values))
@@ -32,7 +33,7 @@ func TestAddInt32(t *testing.T) {
 }
 
 func TestAddInt64(t *testing.T) {
-	err := quickCheck(func(values []int64) bool {
+	err := quick.Check(func(values []int64) bool {
 		const add = math.MaxInt64
 
 		valuesAndAdd := make([]int64, len(values))

@@ -5,10 +5,11 @@ import (
 	"testing"
 
 	"github.com/segmentio/parquet-go/internal/bits"
+	"github.com/segmentio/parquet-go/internal/quick"
 )
 
 func TestCountByte(t *testing.T) {
-	err := quickCheck(func(data []byte) bool {
+	err := quick.Check(func(data []byte) bool {
 		data = bytes.Repeat(data, 8)
 		for _, c := range data {
 			n1 := bytes.Count(data, []byte{c})
