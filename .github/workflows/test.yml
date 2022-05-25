@@ -29,6 +29,11 @@ jobs:
 
     - name: Install parquet-tools
       run: sudo apt-get install -y parquet-tools=1.12.2
+      run: |
+        git clone https://github.com/apache/parquet-mr
+        cd parquet-mr
+        git checkout apache-parquet-1.12.2
+        mvn install -Plocal
 
     - name: Setup Go ${{ matrix.go }}
       uses: actions/setup-go@v2
