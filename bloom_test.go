@@ -3,12 +3,12 @@ package parquet
 import (
 	"math/rand"
 	"testing"
-	"testing/quick"
 
 	"github.com/segmentio/parquet-go/bloom"
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding/plain"
 	"github.com/segmentio/parquet-go/internal/bits"
+	"github.com/segmentio/parquet-go/internal/quick"
 )
 
 func TestSplitBlockFilter(t *testing.T) {
@@ -145,7 +145,7 @@ func TestSplitBlockFilter(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.scenario, func(t *testing.T) {
-			if err := quick.Check(test.function, nil); err != nil {
+			if err := quick.Check(test.function); err != nil {
 				t.Error(err)
 			}
 		})

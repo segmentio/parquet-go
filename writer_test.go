@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
-	"testing/quick"
 
 	"github.com/google/uuid"
 	"github.com/hexops/gotextdiff"
@@ -474,7 +473,7 @@ func TestWriterGenerateBloomFilters(t *testing.T) {
 		LastName  utf8string `parquet:"last_name"`
 	}
 
-	f := func(rows []Person) bool {
+	err := quickCheck(func(rows []Person) bool {
 		if len(rows) == 0 { // TODO: support writing files with no rows
 			return true
 		}
@@ -529,9 +528,8 @@ func TestWriterGenerateBloomFilters(t *testing.T) {
 		}
 
 		return true
-	}
-
-	if err := quick.Check(f, nil); err != nil {
+	})
+	if err != nil {
 		t.Error(err)
 	}
 }

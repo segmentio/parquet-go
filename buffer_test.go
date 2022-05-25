@@ -10,7 +10,6 @@ import (
 	"sort"
 	"strconv"
 	"testing"
-	"testing/quick"
 
 	"github.com/segmentio/parquet-go"
 	"github.com/segmentio/parquet-go/encoding"
@@ -413,7 +412,7 @@ func TestBufferGenerateBloomFilters(t *testing.T) {
 		return true
 	}
 
-	if err := quick.Check(f, nil); err != nil {
+	if err := quickCheck(f); err != nil {
 		t.Error(err)
 	}
 }

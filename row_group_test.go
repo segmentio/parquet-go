@@ -2,11 +2,9 @@ package parquet_test
 
 import (
 	"bytes"
-	"math/rand"
 	"reflect"
 	"sort"
 	"testing"
-	"testing/quick"
 
 	"github.com/segmentio/parquet-go"
 )
@@ -66,7 +64,7 @@ func TestSeekToRow(t *testing.T) {
 }
 
 func testSeekToRow(t *testing.T, newRowGroup func([]Person) parquet.RowGroup) {
-	f := func(people []Person) bool {
+	err := quickCheck(func(people []Person) bool {
 		if len(people) == 0 { // TODO: fix creation of empty parquet files
 			return true
 		}
@@ -97,10 +95,8 @@ func testSeekToRow(t *testing.T, newRowGroup func([]Person) parquet.RowGroup) {
 		}
 
 		return true
-	}
-	if err := quick.Check(f, &quick.Config{
-		Rand: rand.New(rand.NewSource(3)),
-	}); err != nil {
+	})
+	if err != nil {
 		t.Error(err)
 	}
 }
