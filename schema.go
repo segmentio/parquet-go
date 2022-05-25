@@ -310,9 +310,6 @@ func structFieldsOf(t reflect.Type) []reflect.StructField {
 			if name != "" {
 				f.Name = name
 			}
-			if name == "-," {
-				f.Name = "-"
-			}
 		}
 	}
 
@@ -324,7 +321,7 @@ func appendStructFields(t reflect.Type, fields []reflect.StructField, index []in
 		f := t.Field(i)
 		if tag := f.Tag.Get("parquet"); tag != "" {
 			name, _ := split(tag)
-			if name == "-" {
+			if tag != "-," && name == "-" {
 				continue
 			}
 		}
@@ -686,10 +683,6 @@ func split(s string) (head, tail string) {
 		head = s
 	} else {
 		head, tail = s[:i], s[i+1:]
-
-		if head == "-" && s[len(s)-1] == ',' {
-			head = "-,"
-		}
 	}
 	return
 }
