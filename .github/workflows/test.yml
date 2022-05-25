@@ -21,6 +21,11 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
+    # Pin the JDK version to fix potential parquet-tools generation issues.
+    - uses: actions/setup-java@v3
+      with:
+        java-version: '18'
+
     - name: Setup Go ${{ matrix.go }}
       uses: actions/setup-go@v2
       with:
