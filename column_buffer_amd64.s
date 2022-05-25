@@ -95,8 +95,8 @@ loop:
     JNE loop
     RET
 
-// func writeValuesInt32(values []int32, rows array, size, offset uintptr)
-TEXT ·writeValuesInt32(SB), NOSPLIT, $0-56
+// func writeValues32bits(values []int32, rows array, size, offset uintptr)
+TEXT ·writeValues32bits(SB), NOSPLIT, $0-56
     MOVQ values_base+0(FP), AX
     MOVQ rows_base+24(FP), BX
     MOVQ rows_len+32(FP), CX
