@@ -816,7 +816,7 @@ func (col *booleanColumnBuffer) writeValues(rows array, size, offset uintptr) {
 				ptr: rows.index(i, size, 0),
 				len: ((rows.len - i) / 8) * 8,
 			}
-			writeValuesBitpack(col.bits[col.numValues/8:], section, size, offset)
+			writeValuesBool(col.bits[col.numValues/8:], section, size, offset)
 			col.numValues += int32(section.len)
 			i += section.len
 		}

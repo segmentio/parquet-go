@@ -2,13 +2,13 @@
 
 #include "textflag.h"
 
-// func writeValuesBitpack(values []byte, rows array, size, offset uintptr)
-TEXT ·writeValuesBitpack(SB), NOSPLIT, $0-56
+// func writeValuesBitpack(values unsafe.Pointer, rows array, size, offset uintptr)
+TEXT ·writeValuesBitpack(SB), NOSPLIT, $0-40
     MOVQ values_base+0(FP), AX
-    MOVQ rows_base+24(FP), BX
-    MOVQ rows_len+32(FP), CX
-    MOVQ size+40(FP), DX
-    MOVQ offset+48(FP), DI
+    MOVQ rows_base+8(FP), BX
+    MOVQ rows_len+16(FP), CX
+    MOVQ size+24(FP), DX
+    MOVQ offset+32(FP), DI
 
     CMPQ CX, $0
     JNE init
@@ -28,7 +28,7 @@ init:
     CMPQ R8, $4
     JB loop
 
-    VPBROADCASTD size+40(FP), Y0
+    VPBROADCASTD size+24(FP), Y0
     VPMULLD scale8x4<>(SB), Y0, Y0
     VPCMPEQD Y1, Y1, Y1
     VPCMPEQD Y2, Y2, Y2
@@ -95,15 +95,15 @@ loop:
     JNE loop
     RET
 
-// func writeValues32bits(values []int32, rows array, size, offset uintptr)
-TEXT ·writeValues32bits(SB), NOSPLIT, $0-56
+// func writeValues32bits(values unsafe.Pointer, rows array, size, offset uintptr)
+TEXT ·writeValues32bits(SB), NOSPLIT, $0-40
     MOVQ values_base+0(FP), AX
-    MOVQ rows_base+24(FP), BX
-    MOVQ rows_len+32(FP), CX
-    MOVQ size+40(FP), DX
+    MOVQ rows_base+8(FP), BX
+    MOVQ rows_len+16(FP), CX
+    MOVQ size+24(FP), DX
 
     XORQ SI, SI
-    ADDQ offset+48(FP), BX
+    ADDQ offset+32(FP), BX
 
     CMPQ CX, $0
     JE done
@@ -115,19 +115,16 @@ TEXT ·writeValues32bits(SB), NOSPLIT, $0-56
     SHRQ $3, DI
     SHLQ $3, DI
 
-    VPBROADCASTD size+40(FP), Y0
+    VPBROADCASTD size+24(FP), Y0
     VPMULLD scale8x4<>(SB), Y0, Y0
     VPCMPEQD Y1, Y1, Y1
     VPCMPEQD Y2, Y2, Y2
-
-    MOVQ DX, R9
-    SHLQ $3, R9
 loop8x4:
     VPGATHERDD Y1, (BX)(Y0*1), Y3
     VMOVDQU Y3, (AX)(SI*4)
     VMOVDQU Y2, Y1
 
-    ADDQ R9, BX
+    LEAQ (BX)(DX*8), BX
     ADDQ $8, SI
     CMPQ SI, DI
     JNE loop8x4
@@ -181,6 +178,54 @@ loop1x4:
 done:
     RET
 
+// func writeValues64bits(values unsafe.Pointer, rows array, size, offset uintptr)
+TEXT ·writeValues64bits(SB), NOSPLIT, $0-40
+    MOVQ values_base+0(FP), AX
+    MOVQ rows_base+8(FP), BX
+    MOVQ rows_len+16(FP), CX
+    MOVQ size+24(FP), DX
+
+    XORQ SI, SI
+    ADDQ offset+32(FP), BX
+
+    CMPQ CX, $0
+    JE done
+
+    CMPQ CX, $4
+    JB loop1x8
+
+    MOVQ CX, DI
+    SHRQ $2, DI
+    SHLQ $2, DI
+
+    VPBROADCASTQ size+24(FP), Y0
+    VPMULLQ scale4x8<>(SB), Y0, Y0
+    VPCMPEQD Y1, Y1, Y1
+    VPCMPEQD Y2, Y2, Y2
+loop4x8:
+    VPGATHERQQ Y1, (BX)(Y0*1), Y3
+    VMOVDQU Y3, (AX)(SI*8)
+    VMOVDQU Y2, Y1
+
+    LEAQ (BX)(DX*4), BX
+    ADDQ $4, SI
+    CMPQ SI, DI
+    JNE loop4x8
+    VZEROUPPER
+
+    CMPQ SI, CX
+    JE done
+loop1x8:
+    MOVQ (BX), R8
+    MOVQ R8, (AX)(SI*8)
+
+    ADDQ DX, BX
+    INCQ SI
+    CMPQ SI, CX
+    JNE loop1x8
+done:
+    RET
+
 GLOBL scale8x4<>(SB), RODATA|NOPTR, $32
 DATA scale8x4<>+0(SB)/4,  $0
 DATA scale8x4<>+4(SB)/4,  $1
@@ -190,3 +235,9 @@ DATA scale8x4<>+16(SB)/4, $4
 DATA scale8x4<>+20(SB)/4, $5
 DATA scale8x4<>+24(SB)/4, $6
 DATA scale8x4<>+28(SB)/4, $7
+
+GLOBL scale4x8<>(SB), RODATA|NOPTR, $32
+DATA scale4x8<>+0(SB)/8,  $0
+DATA scale4x8<>+8(SB)/8,  $1
+DATA scale4x8<>+16(SB)/8, $2
+DATA scale4x8<>+24(SB)/8, $3

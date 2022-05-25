@@ -2,7 +2,7 @@
 
 package parquet
 
-func writeValuesBitpack(values []byte, rows array, size, offset uintptr) {
+func writeValuesBool(values []byte, rows array, size, offset uintptr) {
 	for i, j := 0, 0; i < rows.len; i += 8 {
 		b0 := *(*byte)(rows.index(i+0, size, offset))
 		b1 := *(*byte)(rows.index(i+1, size, offset))
