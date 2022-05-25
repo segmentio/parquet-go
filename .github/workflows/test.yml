@@ -28,7 +28,6 @@ jobs:
         java-version: '18'
 
     - name: Install parquet-tools
-      run: sudo apt-get install -y parquet-tools=1.12.2
       run: |
         git clone https://github.com/apache/parquet-mr
         cd parquet-mr
