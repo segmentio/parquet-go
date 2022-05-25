@@ -816,7 +816,7 @@ func (col *booleanColumnBuffer) writeValues(rows array, size, offset uintptr) {
 				ptr: rows.index(i, size, 0),
 				len: ((rows.len - i) / 8) * 8,
 			}
-			writeValuesBits(col.bits[col.numValues/8:], section, size, offset)
+			writeValuesBitpack(col.bits[col.numValues/8:], section, size, offset)
 			col.numValues += int32(section.len)
 			i += section.len
 		}
@@ -1027,14 +1027,9 @@ func (col *int64ColumnBuffer) writeValues(rows array, size, offset uintptr) {
 	if n := len(col.values) + rows.len; n > cap(col.values) {
 		col.values = append(make([]int64, 0, max(n, 2*cap(col.values))), col.values...)
 	}
-
 	n := len(col.values)
 	col.values = col.values[:n+rows.len]
-
-	values := col.values[n:]
-	for i := range values {
-		values[i] = *(*int64)(rows.index(i, size, offset))
-	}
+	writeValuesInt64(col.values[n:], rows, size, offset)
 }
 
 func (col *int64ColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int, err error) {
@@ -1225,14 +1220,9 @@ func (col *floatColumnBuffer) writeValues(rows array, size, offset uintptr) {
 	if n := len(col.values) + rows.len; n > cap(col.values) {
 		col.values = append(make([]float32, 0, max(n, 2*cap(col.values))), col.values...)
 	}
-
 	n := len(col.values)
 	col.values = col.values[:n+rows.len]
-
-	values := col.values[n:]
-	for i := range values {
-		values[i] = *(*float32)(rows.index(i, size, offset))
-	}
+	writeValuesFloat32(col.values[n:], rows, size, offset)
 }
 
 func (col *floatColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int, err error) {
@@ -1329,14 +1319,9 @@ func (col *doubleColumnBuffer) writeValues(rows array, size, offset uintptr) {
 	if n := len(col.values) + rows.len; n > cap(col.values) {
 		col.values = append(make([]float64, 0, max(n, 2*cap(col.values))), col.values...)
 	}
-
 	n := len(col.values)
 	col.values = col.values[:n+rows.len]
-
-	values := col.values[n:]
-	for i := range values {
-		values[i] = *(*float64)(rows.index(i, size, offset))
-	}
+	writeValuesFloat64(col.values[n:], rows, size, offset)
 }
 
 func (col *doubleColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int, err error) {
@@ -1722,14 +1707,9 @@ func (col *uint32ColumnBuffer) writeValues(rows array, size, offset uintptr) {
 	if n := len(col.values) + rows.len; n > cap(col.values) {
 		col.values = append(make([]uint32, 0, max(n, 2*cap(col.values))), col.values...)
 	}
-
 	n := len(col.values)
 	col.values = col.values[:n+rows.len]
-
-	values := col.values[n:]
-	for i := range values {
-		values[i] = *(*uint32)(rows.index(i, size, offset))
-	}
+	writeValuesUint32(col.values[n:], rows, size, offset)
 }
 
 func (col *uint32ColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int, err error) {
@@ -1826,14 +1806,9 @@ func (col *uint64ColumnBuffer) writeValues(rows array, size, offset uintptr) {
 	if n := len(col.values) + rows.len; n > cap(col.values) {
 		col.values = append(make([]uint64, 0, max(n, 2*cap(col.values))), col.values...)
 	}
-
 	n := len(col.values)
 	col.values = col.values[:n+rows.len]
-
-	values := col.values[n:]
-	for i := range values {
-		values[i] = *(*uint64)(rows.index(i, size, offset))
-	}
+	writeValuesUint64(col.values[n:], rows, size, offset)
 }
 
 func (col *uint64ColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int, err error) {

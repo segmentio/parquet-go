@@ -2,8 +2,8 @@
 
 #include "textflag.h"
 
-// func writeValuesBits(values []byte, rows array, size, offset uintptr)
-TEXT ·writeValuesBits(SB), NOSPLIT, $0-56
+// func writeValuesBitpack(values []byte, rows array, size, offset uintptr)
+TEXT ·writeValuesBitpack(SB), NOSPLIT, $0-56
     MOVQ values_base+0(FP), AX
     MOVQ rows_base+24(FP), BX
     MOVQ rows_len+32(FP), CX

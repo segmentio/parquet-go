@@ -2,7 +2,7 @@
 
 package parquet
 
-func writeValuesBits(values []byte, rows array, size, offset uintptr) {
+func writeValuesBitpack(values []byte, rows array, size, offset uintptr) {
 	for i, j := 0, 0; i < rows.len; i += 8 {
 		b0 := *(*byte)(rows.index(i+0, size, offset))
 		b1 := *(*byte)(rows.index(i+1, size, offset))
@@ -28,5 +28,35 @@ func writeValuesBits(values []byte, rows array, size, offset uintptr) {
 func writeValuesInt32(values []int32, rows array, size, offset uintptr) {
 	for i := range values {
 		values[i] = *(*int32)(rows.index(i, size, offset))
+	}
+}
+
+func writeValuesInt64(values []int64, rows array, size, offset uintptr) {
+	for i := range values {
+		values[i] = *(*int64)(rows.index(i, size, offset))
+	}
+}
+
+func writeValuesUint32(values []uint32, rows array, size, offset uintptr) {
+	for i := range values {
+		values[i] = *(*uint32)(rows.index(i, size, offset))
+	}
+}
+
+func writeValuesUint64(values []uint64, rows array, size, offset uintptr) {
+	for i := range values {
+		values[i] = *(*uint64)(rows.index(i, size, offset))
+	}
+}
+
+func writeValuesFloat32(values []float32, rows array, size, offset uintptr) {
+	for i := range values {
+		values[i] = *(*float32)(rows.index(i, size, offset))
+	}
+}
+
+func writeValuesFloat64(values []float64, rows array, size, offset uintptr) {
+	for i := range values {
+		values[i] = *(*float64)(rows.index(i, size, offset))
 	}
 }
