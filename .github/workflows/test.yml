@@ -27,6 +27,9 @@ jobs:
         distribution: 'corretto'
         java-version: '18'
 
+    - name: Install maven
+      run: sudo apt-get install -y maven
+
     - name: Install parquet-tools
       run: |
         git clone https://github.com/apache/parquet-mr
