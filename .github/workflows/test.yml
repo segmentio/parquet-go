@@ -27,6 +27,9 @@ jobs:
         distribution: 'corretto'
         java-version: '18'
 
+    - name: Check java version
+      run: javac -version
+
     - name: Setup Go ${{ matrix.go }}
       uses: actions/setup-go@v2
       with:
