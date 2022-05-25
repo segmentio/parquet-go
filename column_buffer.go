@@ -792,16 +792,18 @@ func (col *booleanColumnBuffer) writeValues(rows array, size, offset uintptr) {
 		// First we attempt to write enough bits to align the number of values
 		// in the column buffer on 8 bytes. After this step the next bit should
 		// be written at the zero'th index of a byte of the buffer.
-		var b byte
-		for i < r {
-			v := *(*byte)(rows.index(i, size, offset))
-			b |= (v & 1) << uint(i)
-			i++
+		if r < 8 {
+			var b byte
+			for i < r {
+				v := *(*byte)(rows.index(i, size, offset))
+				b |= (v & 1) << uint(i)
+				i++
+			}
+			x := uint(col.numValues) / 8
+			y := uint(col.numValues) % 8
+			col.bits[x] |= (b << y) | (col.bits[x] & ^(0xFF << y))
+			col.numValues += int32(i)
 		}
-		x := uint(col.numValues) / 8
-		y := uint(col.numValues) % 8
-		col.bits[x] |= (b << y) | (col.bits[x] & ^(0xFF << y))
-		col.numValues += int32(i)
 
 		if n := rows.len - i; n >= 8 {
 			// At this stage, we know that that we have at least 8 bits to write
@@ -810,26 +812,13 @@ func (col *booleanColumnBuffer) writeValues(rows array, size, offset uintptr) {
 			// packing them into a single byte and writing it to the output
 			// buffer. This effectively reduces by 87.5% the number of memory
 			// stores that the program needs to perform to generate the values.
-			for j := i + (n/8)*8; i < j; i += 8 {
-				b0 := *(*byte)(rows.index(i+0, size, offset))
-				b1 := *(*byte)(rows.index(i+1, size, offset))
-				b2 := *(*byte)(rows.index(i+2, size, offset))
-				b3 := *(*byte)(rows.index(i+3, size, offset))
-				b4 := *(*byte)(rows.index(i+4, size, offset))
-				b5 := *(*byte)(rows.index(i+5, size, offset))
-				b6 := *(*byte)(rows.index(i+6, size, offset))
-				b7 := *(*byte)(rows.index(i+7, size, offset))
-
-				col.bits[col.numValues/8] = (b0 & 1) |
-					((b1 & 1) << 1) |
-					((b2 & 1) << 2) |
-					((b3 & 1) << 3) |
-					((b4 & 1) << 4) |
-					((b5 & 1) << 5) |
-					((b6 & 1) << 6) |
-					((b7 & 1) << 7)
-				col.numValues += 8
+			section := array{
+				ptr: rows.index(i, size, 0),
+				len: ((rows.len - i) / 8) * 8,
 			}
+			writeValuesBits(col.bits[col.numValues/8:], section, size, offset)
+			col.numValues += int32(section.len)
+			i += section.len
 		}
 	}
 

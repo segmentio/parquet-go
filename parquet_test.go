@@ -31,6 +31,15 @@ func (row benchmarkRowType) generate(prng *rand.Rand) benchmarkRowType {
 	return row
 }
 
+type paddedBooleanColumn struct {
+	Value bool
+	_     [3]byte
+}
+
+func (row paddedBooleanColumn) generate(prng *rand.Rand) paddedBooleanColumn {
+	return paddedBooleanColumn{Value: prng.Int()%2 == 0}
+}
+
 type booleanColumn struct {
 	Value bool
 }

@@ -2,6 +2,99 @@
 
 #include "textflag.h"
 
+// func writeValuesBits(values []byte, rows array, size, offset uintptr)
+TEXT ·writeValuesBits(SB), NOSPLIT, $0-56
+    MOVQ values_base+0(FP), AX
+    MOVQ rows_base+24(FP), BX
+    MOVQ rows_len+32(FP), CX
+    MOVQ size+40(FP), DX
+    MOVQ offset+48(FP), DI
+
+    CMPQ CX, $0
+    JNE init
+    RET
+init:
+    ADDQ DI, BX
+    SHRQ $3, CX
+    XORQ SI, SI
+
+    // Make sure `size - offset` is at least 4 bytes, otherwise VPGATHERDD
+    // may read data beyond the end of the program memory and trigger a fault.
+    //
+    // If the boolean values do not have enough padding we must fallback to the
+    // scalar algorithm to be able to load single bytes from memory.
+    MOVQ DX, R8
+    SUBQ DI, R8
+    CMPQ R8, $4
+    JB loop
+
+    VPBROADCASTD size+40(FP), Y0
+    VPMULLD scale8x4<>(SB), Y0, Y0
+    VPCMPEQD Y1, Y1, Y1
+    VPCMPEQD Y2, Y2, Y2
+    VPCMPEQD Y3, Y3, Y3
+    VPSRLD $31, Y3, Y3
+avx2loop:
+    VPGATHERDD Y1, (BX)(Y0*1), Y4
+    VMOVDQU Y2, Y1
+    VPAND Y3, Y4, Y4
+    VPSLLD $31, Y4, Y4
+    VMOVMSKPS Y4, DI
+
+    MOVB DI, (AX)(SI*1)
+
+    LEAQ (BX)(DX*8), BX
+    INCQ SI
+    CMPQ SI, CX
+    JNE avx2loop
+    VZEROUPPER
+    RET
+loop:
+    LEAQ (BX)(DX*2), DI
+    MOVBQZX (BX), R8
+    MOVBQZX (BX)(DX*1), R9
+    MOVBQZX (DI), R10
+    MOVBQZX (DI)(DX*1), R11
+    LEAQ (BX)(DX*4), BX
+    LEAQ (DI)(DX*4), DI
+    MOVBQZX (BX), R12
+    MOVBQZX (BX)(DX*1), R13
+    MOVBQZX (DI), R14
+    MOVBQZX (DI)(DX*1), R15
+    LEAQ (BX)(DX*4), BX
+
+    ANDQ $1, R8
+    ANDQ $1, R9
+    ANDQ $1, R10
+    ANDQ $1, R11
+    ANDQ $1, R12
+    ANDQ $1, R13
+    ANDQ $1, R14
+    ANDQ $1, R15
+
+    SHLQ $1, R9
+    SHLQ $2, R10
+    SHLQ $3, R11
+    SHLQ $4, R12
+    SHLQ $5, R13
+    SHLQ $6, R14
+    SHLQ $7, R15
+
+    ORQ R9, R8
+    ORQ R11, R10
+    ORQ R13, R12
+    ORQ R15, R14
+    ORQ R10, R8
+    ORQ R12, R8
+    ORQ R14, R8
+
+    MOVB R8, (AX)(SI*1)
+
+    INCQ SI
+    CMPQ SI, CX
+    JNE loop
+    RET
+
 // func writeValuesInt32(values []int32, rows array, size, offset uintptr)
 TEXT ·writeValuesInt32(SB), NOSPLIT, $0-56
     MOVQ values_base+0(FP), AX
@@ -24,11 +117,8 @@ TEXT ·writeValuesInt32(SB), NOSPLIT, $0-56
 
     VPBROADCASTD size+40(FP), Y0
     VPMULLD scale8x4<>(SB), Y0, Y0
-
-    MOVQ $0xFFFFFFFF, R8
-    MOVQ R8, X1
-    VPBROADCASTD X1, Y1
-    VMOVDQU Y1, Y2
+    VPCMPEQD Y1, Y1, Y1
+    VPCMPEQD Y2, Y2, Y2
 
     MOVQ DX, R9
     SHLQ $3, R9

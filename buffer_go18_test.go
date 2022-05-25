@@ -110,6 +110,7 @@ func BenchmarkGenericBuffer(b *testing.B) {
 	benchmarkGenericBuffer[mapColumn](b)
 	benchmarkGenericBuffer[decimalColumn](b)
 	benchmarkGenericBuffer[contact](b)
+	benchmarkGenericBuffer[paddedBooleanColumn](b)
 }
 
 func benchmarkGenericBuffer[Row generator[Row]](b *testing.B) {
