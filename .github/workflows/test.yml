@@ -28,7 +28,7 @@ jobs:
         java-version: '18'
 
     - name: Check java version
-      run: javac -version
+      run: java -version
 
     - name: Setup Go ${{ matrix.go }}
       uses: actions/setup-go@v2
