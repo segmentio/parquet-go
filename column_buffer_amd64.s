@@ -226,6 +226,53 @@ loop1x8:
 done:
     RET
 
+// func writeValues128bits(values unsafe.Pointer, rows array, size, offset uintptr)
+TEXT ·writeValues128bits(SB), NOSPLIT, $0-40
+    MOVQ values_base+0(FP), AX
+    MOVQ rows_base+8(FP), BX
+    MOVQ rows_len+16(FP), CX
+    MOVQ size+24(FP), DX
+
+    XORQ SI, SI
+    ADDQ offset+32(FP), BX
+
+    CMPQ CX, $0
+    JE done
+
+    CMPQ CX, $2
+    JB loop1x16
+
+    MOVQ CX, DI
+    SHRQ $1, DI
+    SHLQ $1, DI
+loop2x16:
+    VMOVDQU (BX), X0
+    VMOVDQU (BX)(DX*1), X1
+
+    VMOVDQU X0, (AX)
+    VMOVDQU X1, 16(AX)
+
+    ADDQ $32, AX
+    LEAQ (BX)(DX*2), BX
+    ADDQ $2, SI
+    CMPQ SI, DI
+    JNE loop2x16
+    VZEROUPPER
+
+    CMPQ SI, CX
+    JE done
+loop1x16:
+    MOVOU (BX), X0
+    MOVOU X0, (AX)
+
+    ADDQ $16, AX
+    ADDQ DX, BX
+    INCQ SI
+    CMPQ SI, CX
+    JNE loop1x16
+done:
+    RET
+
 GLOBL scale8x4<>(SB), RODATA|NOPTR, $32
 DATA scale8x4<>+0(SB)/4,  $0
 DATA scale8x4<>+4(SB)/4,  $1

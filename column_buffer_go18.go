@@ -850,7 +850,7 @@ func (w *columnBufferWriter) writeRowsUUID(rows array, size, offset uintptr, lev
 
 	switch c := w.columns[levels.columnIndex].(type) {
 	case *fixedLenByteArrayColumnBuffer:
-		c.writeValues128(rows, size, offset)
+		c.writeValuesUint128(rows, size, offset)
 	default:
 		w.reset()
 		for i := 0; i < rows.len; i++ {

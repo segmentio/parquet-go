@@ -1596,21 +1596,15 @@ func (col *fixedLenByteArrayColumnBuffer) writeValues(rows array, size, offset u
 	}
 }
 
-func (col *fixedLenByteArrayColumnBuffer) writeValues128(rows array, size, offset uintptr) {
+func (col *fixedLenByteArrayColumnBuffer) writeValuesUint128(rows array, size, offset uintptr) {
 	c := cap(col.data)
 	n := len(col.data) + (16 * rows.len)
 	if c < n {
 		col.data = append(make([]byte, 0, max(n, 2*c)), col.data...)
 	}
-
 	firstIndex := len(col.data)
 	col.data = col.data[:len(col.data)+(16*rows.len)]
-
-	data := unsafe.Pointer(&col.data[firstIndex])
-	for i := 0; i < rows.len; i++ {
-		p := rows.index(i, size, offset)
-		*(*[16]byte)(unsafe.Add(data, i*16)) = *(*[16]byte)(p)
-	}
+	writeValuesUint128(col.data[firstIndex:], rows, size, offset)
 }
 
 func (col *fixedLenByteArrayColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int, err error) {

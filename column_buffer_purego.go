@@ -2,6 +2,8 @@
 
 package parquet
 
+import "unsafe"
+
 func writeValuesBool(values []byte, rows array, size, offset uintptr) {
 	for i, j := 0, 0; i < rows.len; i += 8 {
 		b0 := *(*byte)(rows.index(i+0, size, offset))
@@ -46,6 +48,14 @@ func writeValuesUint32(values []uint32, rows array, size, offset uintptr) {
 func writeValuesUint64(values []uint64, rows array, size, offset uintptr) {
 	for i := range values {
 		values[i] = *(*uint64)(rows.index(i, size, offset))
+	}
+}
+
+func writeValuesUint128(values []byte, rows array, size, offset uintptr) {
+	data := unsafe.Pointer(&values[0])
+	for i := 0; i < rows.len; i++ {
+		p := rows.index(i, size, offset)
+		*(*[16]byte)(unsafe.Add(data, i*16)) = *(*[16]byte)(p)
 	}
 }
 
