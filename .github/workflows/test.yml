@@ -24,6 +24,7 @@ jobs:
     # Pin the JDK version to fix potential parquet-tools generation issues.
     - uses: actions/setup-java@v3
       with:
+        distribution: 'corretoo'
         java-version: '18'
 
     - name: Setup Go ${{ matrix.go }}
