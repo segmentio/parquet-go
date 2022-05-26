@@ -23,7 +23,9 @@ func randomRowsOf(prng *rand.Rand, numRows int, model interface{}) rows {
 	rows := make(rows, numRows)
 	makeValue := quick.MakeValueFuncOf(typ)
 	for i := range rows {
-		makeValue(reflect.ValueOf(&rows[i]).Elem(), prng)
+		v := reflect.New(typ).Elem()
+		makeValue(v, prng)
+		rows[i] = v.Interface()
 	}
 	return rows
 }
