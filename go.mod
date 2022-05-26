@@ -6,7 +6,7 @@ require (
 	github.com/andybalholm/brotli v1.0.3
 	github.com/google/uuid v1.3.0
 	github.com/hexops/gotextdiff v1.0.3
-	github.com/klauspost/compress v1.15.2
+	github.com/klauspost/compress v1.15.5
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/pierrec/lz4/v4 v4.1.9
 	github.com/segmentio/encoding v0.3.5
