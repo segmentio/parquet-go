@@ -174,7 +174,7 @@ TEXT ·writeValues64bits(SB), NOSPLIT, $0-40
     SHLQ $2, DI
 
     VPBROADCASTQ size+24(FP), Y0
-    VPMULLQ scale4x8<>(SB), Y0, Y0
+    VPMULLD scale4x8<>(SB), Y0, Y0
     VPCMPEQD Y1, Y1, Y1
     VPCMPEQD Y2, Y2, Y2
 loop4x8:
