@@ -36,3 +36,14 @@ func getInt32Buffer() *int32Buffer {
 func putInt32Buffer(b *int32Buffer) {
 	int32BufferPool.Put(b)
 }
+
+func resize(buf []byte, size int) []byte {
+	if cap(buf) < size {
+		newCap := 2 * cap(buf)
+		if newCap < size {
+			newCap = size
+		}
+		buf = append(make([]byte, 0, newCap), buf...)
+	}
+	return buf[:size]
+}

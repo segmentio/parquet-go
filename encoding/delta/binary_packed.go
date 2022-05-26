@@ -20,7 +20,25 @@ const (
 	//
 	// 65K+ values should be enough for any valid use case.
 	maxSupportedBlockSize = 65536
+
+	maxHeaderLen      = 4 * binary.MaxVarintLen64
+	maxBlockHeaderLen = binary.MaxVarintLen64 + numMiniBlocks
 )
+
+func maxEncodeInt32Len(numValues int) int {
+	return maxEncodeLen(numValues, 4)
+}
+
+func maxEncodeInt64Len(numValues int) int {
+	return maxEncodeLen(numValues, 8)
+}
+
+func maxEncodeLen(numValues, valueSize int) int {
+	if numValues--; (numValues % blockSize) != 0 {
+		numValues = ((numValues / blockSize) + 1) * blockSize
+	}
+	return maxHeaderLen + maxBlockHeaderLen + (valueSize * numValues)
+}
 
 type BinaryPackedEncoding struct {
 	encoding.NotSupported
@@ -38,102 +56,18 @@ func (e *BinaryPackedEncoding) EncodeInt32(dst, src []byte) ([]byte, error) {
 	if (len(src) % 4) != 0 {
 		return dst[:0], encoding.ErrEncodeInvalidInputSize(e, "INT64", len(src))
 	}
-	return e.encodeInt32(dst[:0], bits.BytesToInt32(src))
+	dst = resize(dst, maxEncodeInt32Len(len(src)/4))
+	n := encodeInt32(dst, bits.BytesToInt32(src))
+	return dst[:n], nil
 }
 
 func (e *BinaryPackedEncoding) EncodeInt64(dst, src []byte) ([]byte, error) {
 	if (len(src) % 8) != 0 {
 		return dst[:0], encoding.ErrEncodeInvalidInputSize(e, "INT64", len(src))
 	}
-	return e.encodeInt64(dst[:0], bits.BytesToInt64(src))
-}
-
-func (e *BinaryPackedEncoding) encodeInt32(dst []byte, src []int32) ([]byte, error) {
-	return e.encode(dst, len(src), func(i int) int64 { return int64(src[i]) })
-}
-
-func (e *BinaryPackedEncoding) encodeInt64(dst []byte, src []int64) ([]byte, error) {
-	return e.encode(dst, len(src), func(i int) int64 { return src[i] })
-}
-
-func (e *BinaryPackedEncoding) encode(dst []byte, totalValues int, valueAt func(int) int64) ([]byte, error) {
-	firstValue := int64(0)
-	if totalValues > 0 {
-		firstValue = valueAt(0)
-	}
-	dst = appendBinaryPackedHeader(dst, blockSize, numMiniBlocks, totalValues, firstValue)
-	if totalValues < 2 {
-		return dst, nil
-	}
-
-	lastValue := firstValue
-	for i := 1; i < totalValues; {
-		block := make([]int64, blockSize)
-		n := blockSize
-		r := totalValues - i
-		if n > r {
-			n = r
-		}
-		block = block[:n]
-		for j := range block {
-			block[j] = valueAt(i)
-			i++
-		}
-
-		for j, v := range block {
-			block[j], lastValue = v-lastValue, v
-		}
-
-		minDelta := bits.MinInt64(block)
-		bits.SubInt64(block, minDelta)
-
-		// blockSize x 8: we store at most `blockSize` count of values, which
-		// might be up to 64 bits in length, which is why we multiple by 8.
-		//
-		// Technically we could size the buffer to a smaller size when the
-		// bit width requires less than 8 bytes per value, but it would cause
-		// the buffer to be put on the heap since the compiler wouldn't know
-		// how much stack space it needs in advance.
-		miniBlock := make([]byte, blockSize*8)
-		bitWidths := make([]byte, numMiniBlocks)
-		bitOffset := uint(0)
-		miniBlockLength := 0
-
-		for i := range bitWidths {
-			j := (i + 0) * miniBlockSize
-			k := (i + 1) * miniBlockSize
-
-			if k > len(block) {
-				k = len(block)
-			}
-
-			bitWidth := uint(bits.MaxLen64(block[j:k]))
-			if bitWidth != 0 {
-				bitWidths[i] = byte(bitWidth)
-
-				for _, bits := range block[j:k] {
-					for b := uint(0); b < bitWidth; b++ {
-						x := bitOffset / 8
-						y := bitOffset % 8
-						miniBlock[x] |= byte(((bits >> b) & 1) << y)
-						bitOffset++
-					}
-				}
-
-				miniBlockLength += (miniBlockSize * int(bitWidth)) / 8
-			}
-
-			if k == len(block) {
-				break
-			}
-		}
-
-		miniBlock = miniBlock[:miniBlockLength]
-		dst = appendBinaryPackedBlock(dst, int64(minDelta), bitWidths)
-		dst = append(dst, miniBlock...)
-	}
-
-	return dst, nil
+	dst = resize(dst, maxEncodeInt64Len(len(src)/8))
+	n := encodeInt64(dst, bits.BytesToInt64(src))
+	return dst[:n], nil
 }
 
 func (e *BinaryPackedEncoding) DecodeInt32(dst, src []byte) ([]byte, error) {
@@ -266,24 +200,6 @@ func (e *BinaryPackedEncoding) wrap(err error) error {
 		err = encoding.Error(e, err)
 	}
 	return err
-}
-
-func appendBinaryPackedHeader(dst []byte, blockSize, numMiniBlocks, totalValues int, firstValue int64) []byte {
-	b := [4 * binary.MaxVarintLen64]byte{}
-	n := 0
-	n += binary.PutUvarint(b[n:], uint64(blockSize))
-	n += binary.PutUvarint(b[n:], uint64(numMiniBlocks))
-	n += binary.PutUvarint(b[n:], uint64(totalValues))
-	n += binary.PutVarint(b[n:], firstValue)
-	return append(dst, b[:n]...)
-}
-
-func appendBinaryPackedBlock(dst []byte, minDelta int64, bitWidths []byte) []byte {
-	b := [binary.MaxVarintLen64]byte{}
-	n := binary.PutVarint(b[:], minDelta)
-	dst = append(dst, b[:n]...)
-	dst = append(dst, bitWidths...)
-	return dst
 }
 
 func decodeBinaryPackedHeader(src []byte) (blockSize, numMiniBlocks, totalValues int, firstValue int64, next []byte, err error) {
