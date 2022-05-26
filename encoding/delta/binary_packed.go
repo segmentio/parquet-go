@@ -21,7 +21,12 @@ const (
 	// 65K+ values should be enough for any valid use case.
 	maxSupportedBlockSize = 65536
 
-	maxHeaderLen      = 4 * binary.MaxVarintLen64
+	// The header contains 4 varint, so its maximum size is 4 times the maximum
+	// length of a varint.
+	maxHeaderLen = 4 * binary.MaxVarintLen64
+
+	// Block headers have one varint for the min value, and one byte to hold the
+	// bit-width of each mini-block.
 	maxBlockHeaderLen = binary.MaxVarintLen64 + numMiniBlocks
 )
 
@@ -34,10 +39,13 @@ func maxEncodeInt64Len(numValues int) int {
 }
 
 func maxEncodeLen(numValues, valueSize int) int {
-	if numValues--; (numValues % blockSize) != 0 {
-		numValues = ((numValues / blockSize) + 1) * blockSize
+	if numValues > 0 {
+		if numValues--; (numValues % blockSize) != 0 {
+			numValues = ((numValues / blockSize) + 1) * blockSize
+		}
 	}
-	return maxHeaderLen + maxBlockHeaderLen + (valueSize * numValues)
+	numBlocks := numValues / blockSize
+	return maxHeaderLen + (numBlocks * maxBlockHeaderLen) + (valueSize * numValues)
 }
 
 type BinaryPackedEncoding struct {

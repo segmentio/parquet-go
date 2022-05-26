@@ -10,6 +10,15 @@ import (
 	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
+func EncodeInt32(t *testing.T, enc encoding.Encoding, min, max int, bitWidth uint) {
+	t.Helper()
+	encode(t, enc, min, max,
+		encoding.Encoding.EncodeInt32,
+		encoding.Encoding.DecodeInt32,
+		func(i int) int32 { return int32(i) & int32((1<<bitWidth)-1) },
+	)
+}
+
 func EncodeFloat(t *testing.T, enc encoding.Encoding, min, max int) {
 	t.Helper()
 	encode(t, enc, min, max,

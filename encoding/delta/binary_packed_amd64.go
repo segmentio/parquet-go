@@ -1,4 +1,4 @@
-//go:build purego || !amd64
+//go:build !purego
 
 package delta
 
@@ -8,71 +8,99 @@ import (
 	"github.com/segmentio/parquet-go/internal/bits"
 )
 
+//go:noescape
+func blockDeltaInt32(block *[blockSize]int32, lastValue int32) int32
+
+//go:noescape
+func blockDeltaInt32AVX2(block *[blockSize]int32, lastValue int32) int32
+
+//go:noescape
+func blockMinInt32(block *[blockSize]int32) int32
+
+//go:noescape
+func blockMinInt32AVX2(block *[blockSize]int32) int32
+
+//go:noescape
+func blockSubInt32(block *[blockSize]int32, value int32)
+
+//go:noescape
+func blockSubInt32AVX2(block *[blockSize]int32, value int32)
+
+//go:noescape
+func miniBlockBitWidthsInt32(bitWidths *[numMiniBlocks]byte, block *[blockSize]int32)
+
 func encodeInt32(dst []byte, src []int32) (n int) {
+	for i := range dst {
+		dst[i] = 0
+	}
+
 	totalValues := len(src)
 	firstValue := int32(0)
 	if totalValues > 0 {
 		firstValue = src[0]
 	}
-	dst = dst[:0]
-	dst = appendBinaryPackedHeader(dst, blockSize, numMiniBlocks, totalValues, int64(firstValue))
+	n += encodeBinaryPackedHeader(dst, blockSize, numMiniBlocks, totalValues, int64(firstValue))
 	if totalValues < 2 {
-		return len(dst)
+		return n
 	}
 
 	lastValue := firstValue
+
 	for i := 1; i < len(src); {
-		block := make([]int32, blockSize)
-		block = block[:copy(block, src[i:])]
-		i += len(block)
-
-		for j, v := range block {
-			block[j], lastValue = v-lastValue, v
+		var block *[blockSize]int32
+		var blockLength int
+		if remain := src[i:]; len(remain) >= blockSize {
+			block = (*[blockSize]int32)(remain)
+			blockLength = blockSize
+		} else {
+			blockBuffer := [blockSize]int32{}
+			blockLength = copy(blockBuffer[:], remain)
+			block = &blockBuffer
 		}
+		i += blockLength
 
-		minDelta := bits.MinInt32(block)
-		bits.SubInt32(block, minDelta)
+		lastValue = blockDeltaInt32(block, lastValue)
+		minDelta := blockMinInt32(block)
+		blockSubInt32(block, minDelta)
 
-		miniBlock := make([]byte, blockSize*4)
-		bitWidths := make([]byte, numMiniBlocks)
-		bitOffset := uint(0)
-		miniBlockLength := 0
+		n += binary.PutVarint(dst[n:], int64(minDelta))
+		n += numMiniBlocks
 
-		for i := range bitWidths {
+		bitWidths := dst[n-numMiniBlocks : n : n]
+		miniBlockBitWidthsInt32((*[numMiniBlocks]byte)(bitWidths), block)
+
+		for i, bitWidth := range bitWidths {
 			j := (i + 0) * miniBlockSize
 			k := (i + 1) * miniBlockSize
 
-			if k > len(block) {
-				k = len(block)
+			if k > blockLength {
+				k = blockLength
 			}
 
-			bitWidth := uint(bits.MaxLen32(block[j:k]))
 			if bitWidth != 0 {
-				bitWidths[i] = byte(bitWidth)
+				miniBlockLength := (miniBlockSize * int(bitWidth)) / 8
+				n += miniBlockLength
+
+				miniBlock := dst[n-miniBlockLength : n : n]
+				bitOffset := uint(0)
 
 				for _, bits := range block[j:k] {
-					for b := uint(0); b < bitWidth; b++ {
+					for b := uint(0); b < uint(bitWidth); b++ {
 						x := bitOffset / 8
 						y := bitOffset % 8
 						miniBlock[x] |= byte(((bits >> b) & 1) << y)
 						bitOffset++
 					}
 				}
-
-				miniBlockLength += (miniBlockSize * int(bitWidth)) / 8
 			}
 
-			if k == len(block) {
+			if k == blockLength {
 				break
 			}
 		}
-
-		miniBlock = miniBlock[:miniBlockLength]
-		dst = appendBinaryPackedBlock(dst, int64(minDelta), bitWidths)
-		dst = append(dst, miniBlock...)
 	}
 
-	return len(dst)
+	return n
 }
 
 func encodeInt64(dst []byte, src []int64) (n int) {
@@ -165,4 +193,18 @@ func appendBinaryPackedBlock(dst []byte, minDelta int64, bitWidths []byte) []byt
 	dst = append(dst, b[:n]...)
 	dst = append(dst, bitWidths...)
 	return dst
+}
+
+func encodeBinaryPackedHeader(dst []byte, blockSize, numMiniBlocks, totalValues int, firstValue int64) (n int) {
+	n += binary.PutUvarint(dst[n:], uint64(blockSize))
+	n += binary.PutUvarint(dst[n:], uint64(numMiniBlocks))
+	n += binary.PutUvarint(dst[n:], uint64(totalValues))
+	n += binary.PutVarint(dst[n:], firstValue)
+	return n
+}
+
+func encodeBinaryPackedBlock(dst []byte, minDelta int64, bitWidths [numMiniBlocks]byte) int {
+	n := binary.PutVarint(dst, minDelta)
+	n += copy(dst[n:], bitWidths[:])
+	return n
 }
