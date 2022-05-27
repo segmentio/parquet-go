@@ -84,8 +84,11 @@ var (
 )
 
 func isDictionaryEncoding(encoding encoding.Encoding) bool {
-	enc := encoding.Encoding()
-	return enc == format.PlainDictionary || enc == format.RLEDictionary
+	return isDictionaryFormat(encoding.Encoding())
+}
+
+func isDictionaryFormat(encoding format.Encoding) bool {
+	return encoding == format.PlainDictionary || encoding == format.RLEDictionary
 }
 
 // LookupEncoding returns the parquet encoding associated with the given code.

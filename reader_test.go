@@ -352,3 +352,112 @@ func TestReaderSeekToRow(t *testing.T) {
 		}
 	}
 }
+
+func TestSeekToRowNoDict(t *testing.T) {
+	type rowType struct {
+		Name utf8string `parquet:","` // no dictionary encoding
+	}
+
+	// write samples to in-memory buffer
+	buf := new(bytes.Buffer)
+	schema := parquet.SchemaOf(new(rowType))
+	w := parquet.NewWriter(buf, schema)
+	sample := rowType{
+		Name: "foo1",
+	}
+	// write two rows
+	w.Write(sample)
+	sample.Name = "foo2"
+	w.Write(sample)
+	w.Close()
+
+	// create reader
+	r := parquet.NewReader(bytes.NewReader(buf.Bytes()))
+
+	// read second row
+	r.SeekToRow(1)
+	row := new(rowType)
+	err := r.Read(row)
+	if err != nil {
+		t.Fatalf("reading row: %v", err)
+	}
+	// fmt.Println(&sample, row)
+	if *row != sample {
+		t.Fatalf("read != write")
+	}
+}
+
+func TestSeekToRowReadAll(t *testing.T) {
+	type rowType struct {
+		Name utf8string `parquet:",dict"`
+	}
+
+	// write samples to in-memory buffer
+	buf := new(bytes.Buffer)
+	schema := parquet.SchemaOf(new(rowType))
+	w := parquet.NewWriter(buf, schema)
+	sample := rowType{
+		Name: "foo1",
+	}
+	// write two rows
+	w.Write(sample)
+	sample.Name = "foo2"
+	w.Write(sample)
+	w.Close()
+
+	// create reader
+	r := parquet.NewReader(bytes.NewReader(buf.Bytes()))
+
+	// read first row
+	r.SeekToRow(0)
+	row := new(rowType)
+	err := r.Read(row)
+	if err != nil {
+		t.Fatalf("reading row: %v", err)
+	}
+	// read second row
+	r.SeekToRow(1)
+	row = new(rowType)
+	err = r.Read(row)
+	if err != nil {
+		t.Fatalf("reading row: %v", err)
+	}
+	// fmt.Println(&sample, row)
+	if *row != sample {
+		t.Fatalf("read != write")
+	}
+}
+
+func TestSeekToRowDictReadSecond(t *testing.T) {
+	type rowType struct {
+		Name utf8string `parquet:",dict"`
+	}
+
+	// write samples to in-memory buffer
+	buf := new(bytes.Buffer)
+	schema := parquet.SchemaOf(new(rowType))
+	w := parquet.NewWriter(buf, schema)
+	sample := rowType{
+		Name: "foo1",
+	}
+	// write two rows
+	w.Write(sample)
+	sample.Name = "foo2"
+	w.Write(sample)
+	w.Close()
+
+	// create reader
+	r := parquet.NewReader(bytes.NewReader(buf.Bytes()))
+
+	// read second row
+	r.SeekToRow(1)
+	row := new(rowType)
+	err := r.Read(row)
+	if err != nil {
+		t.Fatalf("reading row: %v", err)
+	}
+	// fmt.Println(&sample, row)
+	if *row != sample {
+		t.Fatalf("read != write")
+	}
+}

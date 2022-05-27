@@ -467,83 +467,23 @@ func (f *filePages) ReadPage() (Page, error) {
 		if err := f.decoder.Decode(header); err != nil {
 			return nil, err
 		}
-
-		if cap(f.dataPage.data) < int(header.CompressedPageSize) {
-			f.dataPage.data = make([]byte, header.CompressedPageSize)
-		} else {
-			f.dataPage.data = f.dataPage.data[:header.CompressedPageSize]
-		}
-
-		if cap(f.dataPage.values) < int(header.UncompressedPageSize) {
-			f.dataPage.values = make([]byte, 0, header.UncompressedPageSize)
-		}
-
-		if _, err := io.ReadFull(f.rbuf, f.dataPage.data); err != nil {
+		if err := f.readPage(header, f.dataPage, f.rbuf); err != nil {
 			return nil, err
 		}
 
-		if header.CRC != 0 {
-			headerChecksum := uint32(header.CRC)
-			bufferChecksum := crc32.ChecksumIEEE(f.dataPage.data)
-
-			if headerChecksum != bufferChecksum {
-				// The parquet specs indicate that corruption errors could be
-				// handled gracefully by skipping pages, tho this may not always
-				// be practical. Depending on how the pages are consumed,
-				// missing rows may cause unpredictable behaviors in algorithms.
-				//
-				// For now, we assume these errors to be fatal, but we may
-				// revisit later and improve error handling to be more resilient
-				// to data corruption.
-				return nil, fmt.Errorf("crc32 checksum mismatch in page %d of column %q: 0x%08X != 0x%08X: %w",
-					f.index,
-					f.columnPath(),
-					headerChecksum,
-					bufferChecksum,
-					ErrCorrupted,
-				)
-			}
-		}
-
-		var column = f.chunk.column
 		var page Page
 		var err error
 
 		switch header.Type {
 		case format.DataPageV2:
-			if header.DataPageHeaderV2 == nil {
-				err = ErrMissingPageHeader
-			} else {
-				page, err = column.decodeDataPageV2(DataPageHeaderV2{header.DataPageHeaderV2}, f.dataPage)
-			}
-
+			page, err = f.readDataPageV2(header)
 		case format.DataPage:
-			if header.DataPageHeader == nil {
-				err = ErrMissingPageHeader
-			} else {
-				page, err = column.decodeDataPageV1(DataPageHeaderV1{header.DataPageHeader}, f.dataPage)
-			}
-
+			page, err = f.readDataPageV1(header)
 		case format.DictionaryPage:
 			// Sometimes parquet files do not have the dictionary page offset
 			// recorded in the column metadata. We account for this by lazily
-			// checking whether the first page is a dictionary page.
-			if header.DictionaryPageHeader == nil {
-				err = ErrMissingPageHeader
-			} else if f.index > 0 {
-				err = ErrUnexpectedDictionaryPage
-			} else {
-				f.dictPage, _ = dictPagePool.Get().(*dictPage)
-				if f.dictPage == nil {
-					f.dictPage = new(dictPage)
-				}
-				f.dataPage.dictionary, err = column.decodeDictionary(
-					DictionaryPageHeader{header.DictionaryPageHeader},
-					f.dataPage,
-					f.dictPage,
-				)
-			}
-
+			// reading dictionary pages when we encounter them.
+			err = f.readDictionaryPage(header, f.dataPage)
 		default:
 			err = fmt.Errorf("cannot read values of type %s from page", header.Type)
 		}
@@ -573,6 +513,115 @@ func (f *filePages) ReadPage() (Page, error) {
 			f.skip -= numRows
 		}
 	}
+}
+
+func (f *filePages) readDictionary() error {
+	chunk := io.NewSectionReader(f.chunk.file, f.baseOffset, f.chunk.chunk.MetaData.TotalCompressedSize)
+	rbuf := acquireReadBuffer(chunk)
+	defer releaseReadBuffer(rbuf)
+
+	decoder := thrift.NewDecoder(f.protocol.NewReader(rbuf))
+	header := new(format.PageHeader)
+
+	if err := decoder.Decode(header); err != nil {
+		return err
+	}
+
+	page := acquireDataPage()
+	defer releaseDataPage(page)
+
+	if err := f.readPage(header, page, rbuf); err != nil {
+		return err
+	}
+
+	return f.readDictionaryPage(header, page)
+}
+
+func (f *filePages) readDictionaryPage(header *format.PageHeader, page *dataPage) (err error) {
+	if header.DictionaryPageHeader == nil {
+		return ErrMissingPageHeader
+	}
+	if f.index > 0 {
+		return ErrUnexpectedDictionaryPage
+	}
+	f.dictPage, _ = dictPagePool.Get().(*dictPage)
+	if f.dictPage == nil {
+		f.dictPage = new(dictPage)
+	}
+	f.dataPage.dictionary, err = f.chunk.column.decodeDictionary(
+		DictionaryPageHeader{header.DictionaryPageHeader},
+		page,
+		f.dictPage,
+	)
+	return err
+}
+
+func (f *filePages) readDataPageV1(header *format.PageHeader) (Page, error) {
+	if header.DataPageHeader == nil {
+		return nil, ErrMissingPageHeader
+	}
+	if isDictionaryFormat(header.DataPageHeader.Encoding) && f.dataPage.dictionary == nil {
+		if err := f.readDictionary(); err != nil {
+			return nil, err
+		}
+	}
+	return f.chunk.column.decodeDataPageV1(DataPageHeaderV1{header.DataPageHeader}, f.dataPage)
+}
+
+func (f *filePages) readDataPageV2(header *format.PageHeader) (Page, error) {
+	if header.DataPageHeaderV2 == nil {
+		return nil, ErrMissingPageHeader
+	}
+	if isDictionaryFormat(header.DataPageHeaderV2.Encoding) && f.dataPage.dictionary == nil {
+		// If the program seeked to a row passed the first page, the dictionary
+		// page may not have been seen, in which case we have to lazily load it
+		// from the beginning of column chunk.
+		if err := f.readDictionary(); err != nil {
+			return nil, err
+		}
+	}
+	return f.chunk.column.decodeDataPageV2(DataPageHeaderV2{header.DataPageHeaderV2}, f.dataPage)
+}
+
+func (f *filePages) readPage(header *format.PageHeader, page *dataPage, reader *bufio.Reader) error {
+	compressedPageSize, uncompressedPageSize := int(header.CompressedPageSize), int(header.UncompressedPageSize)
+
+	if cap(page.data) < compressedPageSize {
+		page.data = make([]byte, compressedPageSize)
+	} else {
+		page.data = page.data[:compressedPageSize]
+	}
+	if cap(page.values) < uncompressedPageSize {
+		page.values = make([]byte, 0, uncompressedPageSize)
+	}
+
+	if _, err := io.ReadFull(reader, page.data); err != nil {
+		return err
+	}
+
+	if header.CRC != 0 {
+		headerChecksum := uint32(header.CRC)
+		bufferChecksum := crc32.ChecksumIEEE(page.data)
+
+		if headerChecksum != bufferChecksum {
+			// The parquet specs indicate that corruption errors could be
+			// handled gracefully by skipping pages, tho this may not always
+			// be practical. Depending on how the pages are consumed,
+			// missing rows may cause unpredictable behaviors in algorithms.
+			//
+			// For now, we assume these errors to be fatal, but we may
+			// revisit later and improve error handling to be more resilient
+			// to data corruption.
+			return fmt.Errorf("crc32 checksum mismatch in page of column %q: want=0x%08X got=0x%08X: %w",
+				f.columnPath(),
+				headerChecksum,
+				bufferChecksum,
+				ErrCorrupted,
+			)
+		}
+	}
+
+	return nil
 }
 
 func (f *filePages) SeekToRow(rowIndex int64) (err error) {
