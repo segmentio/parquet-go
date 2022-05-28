@@ -8,16 +8,15 @@ import (
 	"github.com/segmentio/parquet-go/internal/bits"
 )
 
-func encodeInt32(dst []byte, src []int32) (n int) {
+func (e *BinaryPackedEncoding) encodeInt32(dst []byte, src []int32) []byte {
 	totalValues := len(src)
 	firstValue := int32(0)
 	if totalValues > 0 {
 		firstValue = src[0]
 	}
-	dst = dst[:0]
 	dst = appendBinaryPackedHeader(dst, blockSize, numMiniBlocks, totalValues, int64(firstValue))
 	if totalValues < 2 {
-		return len(dst)
+		return dst
 	}
 
 	lastValue := firstValue
@@ -72,19 +71,18 @@ func encodeInt32(dst []byte, src []int32) (n int) {
 		dst = append(dst, miniBlock...)
 	}
 
-	return len(dst)
+	return dst
 }
 
-func encodeInt64(dst []byte, src []int64) (n int) {
+func (e *BinaryPackedEncoding) encodeInt64(dst []byte, src []int64) []byte {
 	totalValues := len(src)
 	firstValue := int64(0)
 	if totalValues > 0 {
 		firstValue = src[0]
 	}
-	dst = dst[:0]
 	dst = appendBinaryPackedHeader(dst, blockSize, numMiniBlocks, totalValues, firstValue)
 	if totalValues < 2 {
-		return len(dst)
+		return dst
 	}
 
 	lastValue := firstValue
@@ -146,7 +144,7 @@ func encodeInt64(dst []byte, src []int64) (n int) {
 		dst = append(dst, miniBlock...)
 	}
 
-	return len(dst)
+	return dst
 }
 
 func appendBinaryPackedHeader(dst []byte, blockSize, numMiniBlocks, totalValues int, firstValue int64) []byte {

@@ -21,32 +21,9 @@ const (
 	// 65K+ values should be enough for any valid use case.
 	maxSupportedBlockSize = 65536
 
-	// The header contains 4 varint, so its maximum size is 4 times the maximum
-	// length of a varint.
-	maxHeaderLen = 4 * binary.MaxVarintLen64
-
-	// Block headers have one varint for the min value, and one byte to hold the
-	// bit-width of each mini-block.
-	maxBlockHeaderLen = binary.MaxVarintLen64 + numMiniBlocks
+	maxHeaderLength    = 4 * binary.MaxVarintLen64
+	maxMiniBlockLength = binary.MaxVarintLen64 + numMiniBlocks + (4 * blockSize)
 )
-
-func maxEncodeInt32Len(numValues int) int {
-	return maxEncodeLen(numValues, 4)
-}
-
-func maxEncodeInt64Len(numValues int) int {
-	return maxEncodeLen(numValues, 8)
-}
-
-func maxEncodeLen(numValues, valueSize int) int {
-	if numValues > 0 {
-		if numValues--; (numValues % blockSize) != 0 {
-			numValues = ((numValues / blockSize) + 1) * blockSize
-		}
-	}
-	numBlocks := numValues / blockSize
-	return maxHeaderLen + (numBlocks * maxBlockHeaderLen) + (valueSize * numValues)
-}
 
 type BinaryPackedEncoding struct {
 	encoding.NotSupported
@@ -64,18 +41,14 @@ func (e *BinaryPackedEncoding) EncodeInt32(dst, src []byte) ([]byte, error) {
 	if (len(src) % 4) != 0 {
 		return dst[:0], encoding.ErrEncodeInvalidInputSize(e, "INT64", len(src))
 	}
-	dst = resize(dst, maxEncodeInt32Len(len(src)/4))
-	n := encodeInt32(dst, bits.BytesToInt32(src))
-	return dst[:n], nil
+	return e.encodeInt32(dst[:0], bits.BytesToInt32(src)), nil
 }
 
 func (e *BinaryPackedEncoding) EncodeInt64(dst, src []byte) ([]byte, error) {
 	if (len(src) % 8) != 0 {
 		return dst[:0], encoding.ErrEncodeInvalidInputSize(e, "INT64", len(src))
 	}
-	dst = resize(dst, maxEncodeInt64Len(len(src)/8))
-	n := encodeInt64(dst, bits.BytesToInt64(src))
-	return dst[:n], nil
+	return e.encodeInt64(dst[:0], bits.BytesToInt64(src)), nil
 }
 
 func (e *BinaryPackedEncoding) DecodeInt32(dst, src []byte) ([]byte, error) {

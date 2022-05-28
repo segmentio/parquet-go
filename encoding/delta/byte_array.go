@@ -83,15 +83,12 @@ func (e *ByteArrayEncoding) encode(dst []byte, numValues int, valueAt func(int) 
 		lastValue = value
 	}
 
-	dst = resize(dst, 2*maxEncodeInt32Len(len(prefix.values)))
-	i := encodeInt32(dst[0:], prefix.values)
-	j := encodeInt32(dst[i:], length.values)
-	dst = dst[:i+j]
-
+	var binpack BinaryPackedEncoding
+	dst = binpack.encodeInt32(dst, prefix.values)
+	dst = binpack.encodeInt32(dst, length.values)
 	for i, p := range prefix.values {
 		dst = append(dst, valueAt(i)[p:]...)
 	}
-
 	return dst, nil
 }
 

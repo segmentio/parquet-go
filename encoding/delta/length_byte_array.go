@@ -40,14 +40,12 @@ func (e *LengthByteArrayEncoding) encodeByteArray(dst, src []byte) ([]byte, erro
 		return dst, encoding.Error(e, err)
 	}
 
-	dst = resize(dst, maxEncodeInt32Len(len(b.values)))
-	dst = dst[:encodeInt32(dst, b.values)]
-
+	var binpack BinaryPackedEncoding
+	dst = binpack.encodeInt32(dst, b.values)
 	plain.RangeByteArrays(src, func(value []byte) error {
 		dst = append(dst, value...)
 		return nil
 	})
-
 	return dst, nil
 }
 
