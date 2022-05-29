@@ -12,7 +12,7 @@ import (
 
 func TestEncodeInt32(t *testing.T) {
 	const minNumValues = 0
-	const maxNumValues = 100
+	const maxNumValues = 200
 
 	for bitWidth := uint(0); bitWidth <= 32; bitWidth++ {
 		t.Run(fmt.Sprintf("bitWidth=%d", bitWidth), func(t *testing.T) {
