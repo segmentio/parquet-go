@@ -456,45 +456,124 @@ TEXT ·miniBlockCopyInt32x1bitAVX2(SB), NOSPLIT, $0-16
     ORL R9, R8
     ORL R10, R8
     ORL R11, R8
-
     MOVL R8, (AX)
-
     VZEROUPPER
     RET
 
-TEXT ·miniBlockCopyInt32x8bitsAVX2(SB), NOSPLIT, $0-16
+TEXT ·miniBlockCopyInt32x2bitsAVX2(SB), NOSPLIT, $0-16
     MOVQ dst+0(FP), AX
     MOVQ src+8(FP), BX
 
-    XORQ SI, SI
-loop:
-    VMOVDQU (BX)(SI*4), X0
-    VPSHUFD $0b00111001, X0, X1
-    VPSHUFD $0b01001110, X0, X2
-    VPSHUFD $0b10010011, X0, X3
-    VPSLLD $8, X1, X1
-    VPSLLD $16, X2, X2
-    VPSLLD $24, X3, X3
-    VPOR X1, X0, X0
-    VPOR X3, X2, X2
-    VPOR X2, X0, X0
+    VMOVDQU 0(BX), Y0
+    VMOVDQU 32(BX), Y1
+    VMOVDQU 64(BX), Y2
+    VMOVDQU 96(BX), Y3
 
-    //VPERM2I128 $1, Y0, Y0, Y1
+    VPSLLD $31, Y0, Y4
+    VPSLLD $31, Y1, Y5
+    VPSLLD $31, Y2, Y6
+    VPSLLD $31, Y3, Y7
 
-    MOVQ X0, CX
-    //MOVQ X1, DX
-    //ANDQ $0xFFFFFFFF, CX
-    //SHLQ $32, DX
-    //ORQ DX, CX
-    //MOVQ CX, (AX)
-    MOVL CX, (AX)(SI*1)
+    VMOVMSKPS Y4, R8
+    VMOVMSKPS Y5, R9
+    VMOVMSKPS Y6, R10
+    VMOVMSKPS Y7, R11
 
-    ADDQ $4, SI
-    CMPQ SI, $miniBlockSize
-    JNE loop
+    SHLQ $8, R9
+    SHLQ $16, R10
+    SHLQ $24, R11
+    ORQ R9, R8
+    ORQ R10, R8
+    ORQ R11, R8
 
+    MOVQ $0x5555555555555555, DX // 0b010101...
+    PDEPQ DX, R8, R8
+
+    VPSLLD $30, Y0, Y8
+    VPSLLD $30, Y1, Y9
+    VPSLLD $30, Y2, Y10
+    VPSLLD $30, Y3, Y11
+
+    VMOVMSKPS Y8, R12
+    VMOVMSKPS Y9, R13
+    VMOVMSKPS Y10, R14
+    VMOVMSKPS Y11, R15
+
+    SHLQ $8, R13
+    SHLQ $16, R14
+    SHLQ $24, R15
+    ORQ R13, R12
+    ORQ R14, R12
+    ORQ R15, R12
+
+    MOVQ $0xAAAAAAAAAAAAAAAA, DI // 0b101010...
+    PDEPQ DI, R12, R12
+
+    ORQ R12, R8
+    MOVQ R8, (AX)
     VZEROUPPER
     RET
+
+#define miniBlockCopyInt32x3to8bitsAVX2(bitWidth) \
+    MOVQ dst+0(FP), AX              \
+    MOVQ src+8(FP), BX              \
+                                    \
+    XORQ DI, DI                     \
+    NOTQ DI                         \
+    SHRQ $64-4*bitWidth, DI         \
+                                    \
+    XORQ SI, SI                     \
+loop:                               \
+    VMOVDQU (BX)(SI*4), Y0          \
+    VPSHUFD $0b00111001, Y0, Y1     \
+    VPSHUFD $0b01001110, Y0, Y2     \
+    VPSHUFD $0b10010011, Y0, Y3     \
+                                    \
+    VPSLLD $1*bitWidth, Y1, Y1      \
+    VPSLLD $2*bitWidth, Y2, Y2      \
+    VPSLLD $3*bitWidth, Y3, Y3      \
+                                    \
+    VPOR Y1, Y0, Y0                 \
+    VPOR Y3, Y2, Y2                 \
+    VPOR Y2, Y0, Y0                 \
+                                    \
+    VPERM2I128 $1, Y0, Y0, Y1       \
+                                    \
+    MOVQ X0, R8                     \
+    MOVQ X1, R9                     \
+                                    \
+    ANDQ DI, R8                     \
+    ANDQ DI, R9                     \
+                                    \
+    SHLQ $4*bitWidth, R9            \
+    ORQ R9, R8                      \
+    MOVQ R8, (AX)                   \
+                                    \
+    ADDQ $bitWidth, AX              \
+    ADDQ $8, SI                     \
+    CMPQ SI, $miniBlockSize         \
+    JNE loop                        \
+                                    \
+    VZEROUPPER                      \
+    RET
+
+TEXT ·miniBlockCopyInt32x3bitsAVX2(SB), NOSPLIT, $0-16
+    miniBlockCopyInt32x3to8bitsAVX2(3)
+
+TEXT ·miniBlockCopyInt32x4bitsAVX2(SB), NOSPLIT, $0-16
+    miniBlockCopyInt32x3to8bitsAVX2(4)
+
+TEXT ·miniBlockCopyInt32x5bitsAVX2(SB), NOSPLIT, $0-16
+    miniBlockCopyInt32x3to8bitsAVX2(5)
+
+TEXT ·miniBlockCopyInt32x6bitsAVX2(SB), NOSPLIT, $0-16
+    miniBlockCopyInt32x3to8bitsAVX2(6)
+
+TEXT ·miniBlockCopyInt32x7bitsAVX2(SB), NOSPLIT, $0-16
+    miniBlockCopyInt32x3to8bitsAVX2(7)
+
+TEXT ·miniBlockCopyInt32x8bitsAVX2(SB), NOSPLIT, $0-16
+    miniBlockCopyInt32x3to8bitsAVX2(8)
 
 TEXT ·miniBlockCopyInt32x32bitsAVX2(SB), NOSPLIT, $0-16
     MOVQ dst+0(FP), AX
@@ -512,3 +591,57 @@ TEXT ·miniBlockCopyInt32x32bitsAVX2(SB), NOSPLIT, $0-16
 
     VZEROUPPER
     RET
+
+/*
+TEXT ·miniBlockCopyInt32x2to7bitsAVX2(SB), NOSPLIT, $0-24
+    MOVQ dst+0(FP), AX
+    MOVQ src+8(FP), BX
+    MOVQ bitWidth+16(FP), CX // bitWidth
+
+    MOVQ CX, DX // (8*bitWidth)/8 ~= bitWidth
+    SHLQ $2, CX // bitWidth *= 4; we work on 4 values in each register lane
+    MOVQ $1, DI // bitMask := (1 << bitWidth) - 1
+    SHLQ CX, DI
+    DECQ DI
+
+    VPBROADCASTD bitWidth+16(FP), Y4
+    VPSLLD $1, Y4, Y8  // 2*bitWidth
+    VMOVDQU Y4, Y5    // [1*bitWidth...]
+    VPADDD Y4, Y4, Y6 // [2*bitWidth...]
+    VPADDD Y8, Y4, Y7 // [3*bitWidth...]
+
+    XORQ SI, SI
+loop:
+    VMOVDQU (BX)(SI*4), Y0
+    VPSHUFD $0b00111001, Y0, Y1
+    VPSHUFD $0b01001110, Y0, Y2
+    VPSHUFD $0b10010011, Y0, Y3
+
+    VPSLLVD Y5, Y1, Y1
+    VPSLLVD Y6, Y2, Y2
+    VPSLLVD Y7, Y3, Y3
+
+    VPOR Y1, Y0, Y0
+    VPOR Y3, Y2, Y2
+    VPOR Y2, Y0, Y0
+
+    VPERM2I128 $1, Y0, Y0, Y1
+
+    MOVQ X0, R8
+    MOVQ X1, R9
+
+    ANDQ DI, R8
+    ANDQ DI, R9
+
+    SHLQ CX, R9
+    ORQ R9, R8
+    MOVQ R8, (AX)
+
+    ADDQ DX, AX
+    ADDQ $8, SI
+    CMPQ SI, $miniBlockSize
+    JNE loop
+
+    VZEROUPPER
+    RET
+*/

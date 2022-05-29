@@ -3,6 +3,8 @@
 package delta
 
 import (
+	"bytes"
+	"fmt"
 	"testing"
 
 	"github.com/segmentio/parquet-go/internal/bits"
@@ -23,33 +25,6 @@ func TestBlockDeltaInt32AVX2(t *testing.T) {
 	testBlockDeltaInt32(t, blockDeltaInt32AVX2)
 }
 
-func TestBlockMinInt32(t *testing.T) {
-	testBlockMinInt32(t, blockMinInt32)
-}
-
-func TestBlockMinInt32AVX2(t *testing.T) {
-	requireAVX2(t)
-	testBlockMinInt32(t, blockMinInt32AVX2)
-}
-
-func TestBlockSubInt32(t *testing.T) {
-	testBlockSubInt32(t, blockSubInt32)
-}
-
-func TestBlockSubInt32AVX2(t *testing.T) {
-	requireAVX2(t)
-	testBlockSubInt32(t, blockSubInt32AVX2)
-}
-
-func TestBlockBitWidthsInt32(t *testing.T) {
-	testBlockBitWidthsInt32(t, blockBitWidthsInt32)
-}
-
-func TestBlockBitWidthsInt32AVX2(t *testing.T) {
-	requireAVX2(t)
-	testBlockBitWidthsInt32(t, blockBitWidthsInt32AVX2)
-}
-
 func testBlockDeltaInt32(t *testing.T, f func(*[blockSize]int32, int32) int32) {
 	block := [blockSize]int32{}
 	for i := range block {
@@ -68,6 +43,15 @@ func testBlockDeltaInt32(t *testing.T, f func(*[blockSize]int32, int32) int32) {
 	}
 }
 
+func TestBlockMinInt32(t *testing.T) {
+	testBlockMinInt32(t, blockMinInt32)
+}
+
+func TestBlockMinInt32AVX2(t *testing.T) {
+	requireAVX2(t)
+	testBlockMinInt32(t, blockMinInt32AVX2)
+}
+
 func testBlockMinInt32(t *testing.T, f func(*[blockSize]int32) int32) {
 	block := [blockSize]int32{}
 	for i := range block {
@@ -76,6 +60,15 @@ func testBlockMinInt32(t *testing.T, f func(*[blockSize]int32) int32) {
 	if min := f(&block); min != 1 {
 		t.Errorf("wrong min block value: want=1 got=%d", min)
 	}
+}
+
+func TestBlockSubInt32(t *testing.T) {
+	testBlockSubInt32(t, blockSubInt32)
+}
+
+func TestBlockSubInt32AVX2(t *testing.T) {
+	requireAVX2(t)
+	testBlockSubInt32(t, blockSubInt32AVX2)
 }
 
 func testBlockSubInt32(t *testing.T, f func(*[blockSize]int32, int32)) {
@@ -89,6 +82,15 @@ func testBlockSubInt32(t *testing.T, f func(*[blockSize]int32, int32)) {
 			t.Errorf("wrong block value at index %d: want=%d got=%d", i, i-1, block[i])
 		}
 	}
+}
+
+func TestBlockBitWidthsInt32(t *testing.T) {
+	testBlockBitWidthsInt32(t, blockBitWidthsInt32)
+}
+
+func TestBlockBitWidthsInt32AVX2(t *testing.T) {
+	requireAVX2(t)
+	testBlockBitWidthsInt32(t, blockBitWidthsInt32AVX2)
 }
 
 func testBlockBitWidthsInt32(t *testing.T, f func(*[numMiniBlocks]byte, *[blockSize]int32)) {
@@ -111,12 +113,59 @@ func testBlockBitWidthsInt32(t *testing.T, f func(*[numMiniBlocks]byte, *[blockS
 	}
 }
 
+func TestMiniBlockCopyInt32(t *testing.T) {
+	testMiniBlockCopyInt32(t, miniBlockCopyInt32)
+}
+
+func TestMiniBlockCopyInt32AVX2(t *testing.T) {
+	testMiniBlockCopyInt32(t, miniBlockCopyInt32AVX2)
+}
+
+func testMiniBlockCopyInt32(t *testing.T, f func(*byte, *[miniBlockSize]int32, uint)) {
+	for bitWidth := uint(1); bitWidth <= 32; bitWidth++ {
+		t.Run(fmt.Sprintf("bitWidth=%d", bitWidth), func(t *testing.T) {
+			got := [4 * miniBlockSize]byte{}
+			src := [miniBlockSize]int32{}
+			for i := range src {
+				src[i] = int32(i) & int32((1<<bitWidth)-1)
+			}
+
+			want := [4 * miniBlockSize]byte{}
+			bitOffset := uint(0)
+
+			for _, bits := range src {
+				for b := uint(0); b < bitWidth; b++ {
+					x := bitOffset / 8
+					y := bitOffset % 8
+					want[x] |= byte(((bits >> b) & 1) << y)
+					bitOffset++
+				}
+			}
+
+			f(&got[0], &src, bitWidth)
+			n := (miniBlockSize * bitWidth) / 8
+
+			if !bytes.Equal(want[:n], got[:n]) {
+				t.Errorf("output mismatch: want=%08x got=%08x", want[:n], got[:n])
+			}
+		})
+	}
+}
+
 func BenchmarkBlockDeltaInt32(b *testing.B) {
 	benchmarkBlockDeltaInt32(b, blockDeltaInt32)
 }
 
 func BenchmarkBlockDeltaInt32AVX2(b *testing.B) {
 	benchmarkBlockDeltaInt32(b, blockDeltaInt32AVX2)
+}
+
+func benchmarkBlockDeltaInt32(b *testing.B, f func(*[blockSize]int32, int32) int32) {
+	b.SetBytes(4 * blockSize)
+	block := [blockSize]int32{}
+	for i := 0; i < b.N; i++ {
+		_ = f(&block, 0)
+	}
 }
 
 func BenchmarkBlockMinInt32(b *testing.B) {
@@ -128,6 +177,14 @@ func BenchmarkBlockMinInt32AVX2(b *testing.B) {
 	benchmarkBlockMinInt32(b, blockMinInt32AVX2)
 }
 
+func benchmarkBlockMinInt32(b *testing.B, f func(*[blockSize]int32) int32) {
+	b.SetBytes(4 * blockSize)
+	block := [blockSize]int32{}
+	for i := 0; i < b.N; i++ {
+		_ = f(&block)
+	}
+}
+
 func BenchmarkBlockSubInt32(b *testing.B) {
 	benchmarkBlockSubInt32(b, blockSubInt32)
 }
@@ -135,6 +192,14 @@ func BenchmarkBlockSubInt32(b *testing.B) {
 func BenchmarkBlockSubInt32AVX2(b *testing.B) {
 	requireAVX2(b)
 	benchmarkBlockSubInt32(b, blockSubInt32AVX2)
+}
+
+func benchmarkBlockSubInt32(b *testing.B, f func(*[blockSize]int32, int32)) {
+	b.SetBytes(4 * blockSize)
+	block := [blockSize]int32{}
+	for i := 0; i < b.N; i++ {
+		f(&block, 42)
+	}
 }
 
 func BenchmarkBlockBitWidthsInt32(b *testing.B) {
@@ -146,35 +211,33 @@ func BenchmarkBlockBitWidthsInt32AVX2(b *testing.B) {
 	benchmarkBlockBitWidthsInt32(b, blockBitWidthsInt32AVX2)
 }
 
-func benchmarkBlockDeltaInt32(b *testing.B, f func(*[blockSize]int32, int32) int32) {
-	b.SetBytes(4 * blockSize)
-	block := [blockSize]int32{}
-	for i := 0; i < b.N; i++ {
-		_ = f(&block, 0)
-	}
-}
-
-func benchmarkBlockMinInt32(b *testing.B, f func(*[blockSize]int32) int32) {
-	b.SetBytes(4 * blockSize)
-	block := [blockSize]int32{}
-	for i := 0; i < b.N; i++ {
-		_ = f(&block)
-	}
-}
-
-func benchmarkBlockSubInt32(b *testing.B, f func(*[blockSize]int32, int32)) {
-	b.SetBytes(4 * blockSize)
-	block := [blockSize]int32{}
-	for i := 0; i < b.N; i++ {
-		f(&block, 42)
-	}
-}
-
 func benchmarkBlockBitWidthsInt32(b *testing.B, f func(*[numMiniBlocks]byte, *[blockSize]int32)) {
 	b.SetBytes(4 * blockSize)
 	bitWidths := [numMiniBlocks]byte{}
 	block := [blockSize]int32{}
 	for i := 0; i < b.N; i++ {
 		f(&bitWidths, &block)
+	}
+}
+
+func BenchmarkMiniBlockCopyInt32(b *testing.B) {
+	benchmarkMiniBlockCopyInt32(b, miniBlockCopyInt32)
+}
+
+func BenchmarkMiniBlockCopyInt32AVX2(b *testing.B) {
+	requireAVX2(b)
+	benchmarkMiniBlockCopyInt32(b, miniBlockCopyInt32AVX2)
+}
+
+func benchmarkMiniBlockCopyInt32(b *testing.B, f func(*byte, *[miniBlockSize]int32, uint)) {
+	for bitWidth := uint(1); bitWidth <= 32; bitWidth++ {
+		b.Run(fmt.Sprintf("bitWidth=%d", bitWidth), func(b *testing.B) {
+			b.SetBytes(4 * miniBlockSize)
+			dst := [4 * miniBlockSize]byte{}
+			src := [miniBlockSize]int32{}
+			for i := 0; i < b.N; i++ {
+				f(&dst[0], &src, bitWidth)
+			}
+		})
 	}
 }

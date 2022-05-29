@@ -2,6 +2,15 @@
 
 package delta
 
+// This file contains the first implementations of the binary packedencoding
+// algorithms. These are very slow because they output bit one by one to the
+// destination buffer, while also performing multiple copies.
+//
+// They are kept here as a reference and fallback for architectures that we
+// do not have optimizations for yet. However, production workloads should
+// not be using these routines and should instead rely on SIMD optimizations
+// to accelerating processing.
+
 import (
 	"encoding/binary"
 
