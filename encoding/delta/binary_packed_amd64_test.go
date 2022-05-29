@@ -5,6 +5,7 @@ package delta
 import (
 	"testing"
 
+	"github.com/segmentio/parquet-go/internal/bits"
 	"golang.org/x/sys/cpu"
 )
 
@@ -38,6 +39,15 @@ func TestBlockSubInt32(t *testing.T) {
 func TestBlockSubInt32AVX2(t *testing.T) {
 	requireAVX2(t)
 	testBlockSubInt32(t, blockSubInt32AVX2)
+}
+
+func TestBlockBitWidthsInt32(t *testing.T) {
+	testBlockBitWidthsInt32(t, blockBitWidthsInt32)
+}
+
+func TestBlockBitWidthsInt32AVX2(t *testing.T) {
+	requireAVX2(t)
+	testBlockBitWidthsInt32(t, blockBitWidthsInt32AVX2)
 }
 
 func testBlockDeltaInt32(t *testing.T, f func(*[blockSize]int32, int32) int32) {
@@ -81,6 +91,26 @@ func testBlockSubInt32(t *testing.T, f func(*[blockSize]int32, int32)) {
 	}
 }
 
+func testBlockBitWidthsInt32(t *testing.T, f func(*[numMiniBlocks]byte, *[blockSize]int32)) {
+	bitWidths := [numMiniBlocks]byte{}
+	block := [blockSize]int32{}
+	for i := range block {
+		block[i] = int32(i)
+	}
+	f(&bitWidths, &block)
+
+	want := [numMiniBlocks]byte{}
+	for i := range want {
+		j := (i + 0) * miniBlockSize
+		k := (i + 1) * miniBlockSize
+		want[i] = byte(bits.MaxLen32(block[j:k]))
+	}
+
+	if bitWidths != want {
+		t.Errorf("wrong bit widths: want=%d got=%d", want, bitWidths)
+	}
+}
+
 func BenchmarkBlockDeltaInt32(b *testing.B) {
 	benchmarkBlockDeltaInt32(b, blockDeltaInt32)
 }
@@ -107,6 +137,15 @@ func BenchmarkBlockSubInt32AVX2(b *testing.B) {
 	benchmarkBlockSubInt32(b, blockSubInt32AVX2)
 }
 
+func BenchmarkBlockBitWidthsInt32(b *testing.B) {
+	benchmarkBlockBitWidthsInt32(b, blockBitWidthsInt32)
+}
+
+func BenchmarkBlockBitWidthsInt32AVX2(b *testing.B) {
+	requireAVX2(b)
+	benchmarkBlockBitWidthsInt32(b, blockBitWidthsInt32AVX2)
+}
+
 func benchmarkBlockDeltaInt32(b *testing.B, f func(*[blockSize]int32, int32) int32) {
 	b.SetBytes(4 * blockSize)
 	block := [blockSize]int32{}
@@ -128,5 +167,14 @@ func benchmarkBlockSubInt32(b *testing.B, f func(*[blockSize]int32, int32)) {
 	block := [blockSize]int32{}
 	for i := 0; i < b.N; i++ {
 		f(&block, 42)
+	}
+}
+
+func benchmarkBlockBitWidthsInt32(b *testing.B, f func(*[numMiniBlocks]byte, *[blockSize]int32)) {
+	b.SetBytes(4 * blockSize)
+	bitWidths := [numMiniBlocks]byte{}
+	block := [blockSize]int32{}
+	for i := 0; i < b.N; i++ {
+		f(&bitWidths, &block)
 	}
 }

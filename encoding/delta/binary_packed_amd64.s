@@ -93,7 +93,7 @@ DATA blockDeltaInt32Perm<>+20(SB)/4, $4
 DATA blockDeltaInt32Perm<>+24(SB)/4, $5
 DATA blockDeltaInt32Perm<>+28(SB)/4, $6
 
-#define cmpInt32x8(baseAddr, dst, offset, CMOV) \
+#define minInt32x8(baseAddr, min, offset) \
     MOVL offset+0(baseAddr), R8   \
     MOVL offset+4(baseAddr), R9   \
     MOVL offset+8(baseAddr), R10  \
@@ -104,31 +104,28 @@ DATA blockDeltaInt32Perm<>+28(SB)/4, $6
     MOVL offset+28(baseAddr), R15 \
                                   \
     CMPL R9, R8                   \
-    CMOV R9, R8                   \
+    CMOVLLT R9, R8                \
                                   \
     CMPL R11, R10                 \
-    CMOV R11, R10                 \
+    CMOVLLT R11, R10              \
                                   \
     CMPL R13, R12                 \
-    CMOV R13, R12                 \
+    CMOVLLT R13, R12              \
                                   \
     CMPL R15, R14                 \
-    CMOV R15, R14                 \
+    CMOVLLT R15, R14              \
                                   \
     CMPL R10, R8                  \
-    CMOV R10, R8                  \
+    CMOVLLT R10, R8               \
                                   \
     CMPL R14, R12                 \
-    CMOV R14, R12                 \
+    CMOVLLT R14, R12              \
                                   \
     CMPL R12, R8                  \
-    CMOV R12, R8                  \
+    CMOVLLT R12, R8               \
                                   \
-    CMPL R8, dst                  \
-    CMOV R8, dst
-
-#define minInt32x8(baseAddr, min, offset) \
-    cmpInt32x8(baseAddr, min, offset, CMOVLLT)
+    CMPL R8, min                  \
+    CMOVLLT R8, min
 
 // func blockMinInt32(block *[blockSize]int32) int32
 TEXT ·blockMinInt32(SB), NOSPLIT, $0-16
@@ -291,32 +288,169 @@ TEXT ·blockSubInt32AVX2(SB), NOSPLIT, $0-16
     VZEROUPPER
     RET
 
-#define miniBlockBitWidthsInt32x8(src, dst, offset) \
-    cmpInt32x8(src, dst, offset, CMOVLHI)
+#define blockBitWidthsInt32x8(baseAddr, dst, offset) \
+    MOVL offset+0(baseAddr), R8   \
+    MOVL offset+4(baseAddr), R9   \
+    MOVL offset+8(baseAddr), R10  \
+    MOVL offset+12(baseAddr), R11 \
+    MOVL offset+16(baseAddr), R12 \
+    MOVL offset+20(baseAddr), R13 \
+    MOVL offset+24(baseAddr), R14 \
+    MOVL offset+28(baseAddr), R15 \
+                                  \
+    CMPL R9, R8                   \
+    CMOVLHI R9, R8                \
+                                  \
+    CMPL R11, R10                 \
+    CMOVLHI R11, R10              \
+                                  \
+    CMPL R13, R12                 \
+    CMOVLHI R13, R12              \
+                                  \
+    CMPL R15, R14                 \
+    CMOVLHI R15, R14              \
+                                  \
+    CMPL R10, R8                  \
+    CMOVLHI R10, R8               \
+                                  \
+    CMPL R14, R12                 \
+    CMOVLHI R14, R12              \
+                                  \
+    CMPL R12, R8                  \
+    CMOVLHI R12, R8               \
+                                  \
+    CMPL R8, dst                  \
+    CMOVLHI R8, dst
 
-#define miniBlockBitWidthsInt32x32(src, dst, offset) \
-    miniBlockBitWidthsInt32x8(src, dst, offset+0)  \
-    miniBlockBitWidthsInt32x8(src, dst, offset+32) \
-    miniBlockBitWidthsInt32x8(src, dst, offset+64) \
-    miniBlockBitWidthsInt32x8(src, dst, offset+96) \
-    LZCNTL dst, R8                                 \
-    MOVL $32, dst                                  \
-    SUBL R8, dst
+#define blockBitWidthsInt32x32(src, dst, offset) \
+    XORQ dst, dst                                    \
+    blockBitWidthsInt32x8(src, dst, offset+0)    \
+    blockBitWidthsInt32x8(src, dst, offset+32)   \
+    blockBitWidthsInt32x8(src, dst, offset+64)   \
+    blockBitWidthsInt32x8(src, dst, offset+96)   \
+    LZCNTL dst, dst                                  \
+    NEGL dst                                         \
+    ADDL $32, dst
 
-// func miniBlockBitWidthsInt32(bitWidths *[numMiniBlocks]byte, block *[blockSize]int32)
-TEXT ·miniBlockBitWidthsInt32(SB), NOSPLIT, $0-16
+// func blockBitWidthsInt32(bitWidths *[numMiniBlocks]byte, block *[blockSize]int32)
+TEXT ·blockBitWidthsInt32(SB), NOSPLIT, $0-16
     MOVQ block+8(FP), DI
-    XORQ AX, AX
-    XORQ BX, BX
-    XORQ CX, CX
-    XORQ DX, DX
-    miniBlockBitWidthsInt32x32(DI, AX, 0)
-    miniBlockBitWidthsInt32x32(DI, BX, 128)
-    miniBlockBitWidthsInt32x32(DI, CX, 256)
-    miniBlockBitWidthsInt32x32(DI, DX, 384)
+    blockBitWidthsInt32x32(DI, AX, 0)
+    blockBitWidthsInt32x32(DI, BX, 128)
+    blockBitWidthsInt32x32(DI, CX, 256)
+    blockBitWidthsInt32x32(DI, DX, 384)
     MOVQ bitWidths+0(FP), DI
     MOVB AX, 0(DI)
     MOVB BX, 1(DI)
     MOVB CX, 2(DI)
     MOVB DX, 3(DI)
+    RET
+
+// func blockBitWidthsInt32AVX2(bitWidths *[numMiniBlocks]byte, block *[blockSize]int32)
+TEXT ·blockBitWidthsInt32AVX2(SB), NOSPLIT, $0-16
+    MOVQ bitWidths+0(FP), AX
+    MOVQ block+8(FP), BX
+
+    // AVX2 only has signed comparisons (and min/max), we emulate working on
+    // unsigned values by adding -2^31 to the values. Y5 is a vector of -2^31
+    // used to offset 8 packed 32 bits integers in other YMM registers where
+    // the block data are loaded.
+    VPCMPEQD Y5, Y5, Y5
+    VPSLLD $31, Y5, Y5
+
+    XORQ DI, DI
+loop:
+    VPBROADCASTD (BX), Y0 // max
+    VPADDD Y5, Y0, Y0
+
+    VMOVDQU (BX), Y1
+    VMOVDQU 32(BX), Y2
+    VMOVDQU 64(BX), Y3
+    VMOVDQU 96(BX), Y4
+
+    VPADDD Y5, Y1, Y1
+    VPADDD Y5, Y2, Y2
+    VPADDD Y5, Y3, Y3
+    VPADDD Y5, Y4, Y4
+
+    VPMAXSD Y2, Y1, Y1
+    VPMAXSD Y4, Y3, Y3
+    VPMAXSD Y3, Y1, Y1
+    VPMAXSD Y1, Y0, Y0
+
+    VPERM2I128 $1, Y0, Y0, Y1
+    VPMAXSD Y1, Y0, Y0
+
+    VPSHUFD $0b00011011, Y0, Y1
+    VPMAXSD Y1, Y0, Y0
+    VPSUBD Y5, Y0, Y0
+
+    MOVQ X0, CX
+    MOVL CX, DX
+    SHRQ $32, CX
+    CMPL CX, DX
+    CMOVLHI CX, DX
+
+    LZCNTL DX, DX
+    NEGL DX
+    ADDL $32, DX
+    MOVB DX, (AX)(DI*1)
+
+    ADDQ $128, BX
+    INCQ DI
+    CMPQ DI, $numMiniBlocks
+    JNE loop
+
+    VZEROUPPER
+    RET
+
+// func miniBlockCopyInt32x1bitAVX2(dst *byte, src *[miniBlockSize]int32)
+TEXT ·miniBlockCopyInt32x1bitAVX2(SB), NOSPLIT, $0-16
+    MOVQ dst+0(FP), AX
+    MOVQ src+8(FP), BX
+
+    VMOVDQU 0(BX), Y0
+    VMOVDQU 32(BX), Y1
+    VMOVDQU 64(BX), Y2
+    VMOVDQU 96(BX), Y3
+
+    VPSLLD $31, Y0, Y0
+    VPSLLD $31, Y1, Y1
+    VPSLLD $31, Y2, Y2
+    VPSLLD $31, Y3, Y3
+
+    VMOVMSKPS Y0, R8
+    VMOVMSKPS Y1, R9
+    VMOVMSKPS Y2, R10
+    VMOVMSKPS Y3, R11
+
+    SHLL $8, R9
+    SHLL $16, R10
+    SHLL $24, R11
+
+    ORL R9, R8
+    ORL R10, R8
+    ORL R11, R8
+
+    MOVL R8, (AX)
+
+    VZEROUPPER
+    RET
+
+// func miniBlockCopyInt32x32bitsAVX2(dst *byte, src *[miniBlockSize]int32)
+TEXT ·miniBlockCopyInt32x32bitsAVX2(SB), NOSPLIT, $0-16
+    MOVQ dst+0(FP), AX
+    MOVQ src+8(FP), BX
+
+    VMOVDQU 0(BX), Y0
+    VMOVDQU 32(BX), Y1
+    VMOVDQU 64(BX), Y2
+    VMOVDQU 96(BX), Y3
+
+    VMOVDQU Y0, 0(AX)
+    VMOVDQU Y1, 32(AX)
+    VMOVDQU Y2, 64(AX)
+    VMOVDQU Y3, 96(AX)
+
+    VZEROUPPER
     RET

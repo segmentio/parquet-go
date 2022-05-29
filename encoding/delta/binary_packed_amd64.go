@@ -28,7 +28,25 @@ func blockSubInt32(block *[blockSize]int32, value int32)
 func blockSubInt32AVX2(block *[blockSize]int32, value int32)
 
 //go:noescape
-func miniBlockBitWidthsInt32(bitWidths *[numMiniBlocks]byte, block *[blockSize]int32)
+func blockBitWidthsInt32(bitWidths *[numMiniBlocks]byte, block *[blockSize]int32)
+
+//go:noescape
+func blockBitWidthsInt32AVX2(bitWidths *[numMiniBlocks]byte, block *[blockSize]int32)
+
+//go:noescape
+func miniBlockCopyInt32x1bitAVX2(dst *byte, src *[miniBlockSize]int32)
+
+//go:noescape
+func miniBlockCopyInt32x32bitsAVX2(dst *byte, src *[miniBlockSize]int32)
+
+func blockClearInt32(block *[blockSize]int32, blockLength int) {
+	if blockLength < blockSize {
+		clear := block[blockLength:]
+		for i := range clear {
+			clear[i] = 0
+		}
+	}
+}
 
 func (e *BinaryPackedEncoding) encodeInt32(dst []byte, src []int32) []byte {
 	totalValues := len(src)
@@ -75,14 +93,10 @@ func (e *BinaryPackedEncoding) encodeInt32Block(dst []byte, block *[blockSize]in
 	lastValue = blockDeltaInt32(block, lastValue)
 	minDelta := blockMinInt32(block)
 	blockSubInt32(block, minDelta)
-
-	clear := block[blockLength:]
-	for i := range clear {
-		clear[i] = 0
-	}
+	blockClearInt32(block, blockLength)
 
 	bitWidths := [numMiniBlocks]byte{}
-	miniBlockBitWidthsInt32(&bitWidths, block)
+	blockBitWidthsInt32(&bitWidths, block)
 
 	n := len(dst)
 	dst = resize(dst, n+maxMiniBlockLength)
@@ -91,24 +105,18 @@ func (e *BinaryPackedEncoding) encodeInt32Block(dst []byte, block *[blockSize]in
 	for i, bitWidth := range bitWidths {
 		if bitWidth != 0 {
 			miniBlock := (*[miniBlockSize]int32)(block[i*miniBlockSize:])
+			bitOffset := uint(n) * 8
 
-			switch bitWidth {
-			case 32:
-				n += copy(dst[n:], bits.Int32ToBytes(miniBlock[:]))
-			default:
-				bitOffset := uint(n) * 8
-
-				for _, bits := range miniBlock {
-					for b := uint(0); b < uint(bitWidth); b++ {
-						x := bitOffset / 8
-						y := bitOffset % 8
-						dst[x] |= byte(((bits >> b) & 1) << y)
-						bitOffset++
-					}
+			for _, bits := range miniBlock {
+				for b := uint(0); b < uint(bitWidth); b++ {
+					x := bitOffset / 8
+					y := bitOffset % 8
+					dst[x] |= byte(((bits >> b) & 1) << y)
+					bitOffset++
 				}
-
-				n += (miniBlockSize * int(bitWidth)) / 8
 			}
+
+			n += (miniBlockSize * int(bitWidth)) / 8
 		}
 	}
 
@@ -119,14 +127,10 @@ func (e *BinaryPackedEncoding) encodeInt32BlockAVX2(dst []byte, block *[blockSiz
 	lastValue = blockDeltaInt32AVX2(block, lastValue)
 	minDelta := blockMinInt32AVX2(block)
 	blockSubInt32AVX2(block, minDelta)
-
-	clear := block[blockLength:]
-	for i := range clear {
-		clear[i] = 0
-	}
+	blockClearInt32(block, blockLength)
 
 	bitWidths := [numMiniBlocks]byte{}
-	miniBlockBitWidthsInt32(&bitWidths, block)
+	blockBitWidthsInt32AVX2(&bitWidths, block)
 
 	n := len(dst)
 	dst = resize(dst, n+maxMiniBlockLength)
@@ -134,14 +138,16 @@ func (e *BinaryPackedEncoding) encodeInt32BlockAVX2(dst []byte, block *[blockSiz
 
 	for i, bitWidth := range bitWidths {
 		if bitWidth != 0 {
+			out := &dst[n]
 			miniBlock := (*[miniBlockSize]int32)(block[i*miniBlockSize:])
 
 			switch bitWidth {
+			case 1:
+				miniBlockCopyInt32x1bitAVX2(out, miniBlock)
 			case 32:
-				n += copy(dst[n:], bits.Int32ToBytes(miniBlock[:]))
+				miniBlockCopyInt32x32bitsAVX2(out, miniBlock)
 			default:
 				bitOffset := uint(n) * 8
-
 				for _, bits := range miniBlock {
 					for b := uint(0); b < uint(bitWidth); b++ {
 						x := bitOffset / 8
@@ -150,9 +156,9 @@ func (e *BinaryPackedEncoding) encodeInt32BlockAVX2(dst []byte, block *[blockSiz
 						bitOffset++
 					}
 				}
-
-				n += (miniBlockSize * int(bitWidth)) / 8
 			}
+
+			n += (miniBlockSize * int(bitWidth)) / 8
 		}
 	}
 
