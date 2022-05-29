@@ -70,14 +70,17 @@ func (e *BinaryPackedEncoding) encodeInt32(dst []byte, src []int32) []byte {
 	}
 
 	lastValue := firstValue
-
-	for i := 1; i < len(src); i += blockSize {
-		block := [blockSize]int32{}
-		blockLength := copy(block[:], src[i:])
-		switch {
-		case cpu.X86.HasAVX2:
+	switch {
+	case cpu.X86.HasAVX2:
+		for i := 1; i < len(src); i += blockSize {
+			block := [blockSize]int32{}
+			blockLength := copy(block[:], src[i:])
 			dst, lastValue = e.encodeInt32BlockAVX2(dst, &block, blockLength, lastValue)
-		default:
+		}
+	default:
+		for i := 1; i < len(src); i += blockSize {
+			block := [blockSize]int32{}
+			blockLength := copy(block[:], src[i:])
 			dst, lastValue = e.encodeInt32Block(dst, &block, blockLength, lastValue)
 		}
 	}

@@ -4,7 +4,6 @@ package test
 
 import (
 	"fmt"
-	"math"
 	"testing"
 
 	"github.com/segmentio/parquet-go/encoding"
@@ -20,7 +19,7 @@ func EncodeInt32(t *testing.T, enc encoding.Encoding, min, max int, bitWidth uin
 			value := int32(i)
 			mask := int32((1 << bitWidth) - 1)
 			if (i % 2) != 0 {
-				value = int32(math.MaxUint32 - uint32(value))
+				value = -value
 			}
 			return value & mask
 		},

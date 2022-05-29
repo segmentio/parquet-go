@@ -468,21 +468,27 @@ TEXT ·miniBlockCopyInt32x8bitsAVX2(SB), NOSPLIT, $0-16
 
     XORQ SI, SI
 loop:
-    VMOVDQU (BX)(SI*4), X1
-    VPSHUFD $0b00111001, X1, X2
-    VPSHUFD $0b01001110, X1, X3
-    VPSHUFD $0b10010011, X1, X4
-    VPSLLD $8, X2, X2
-    VPSLLD $16, X3, X3
-    VPSLLD $24, X4, X4
-    VPOR X2, X1, X1
-    VPOR X4, X3, X3
-    VPOR X3, X1, X1
+    VMOVDQU (BX)(SI*4), X0
+    VPSHUFD $0b00111001, X0, X1
+    VPSHUFD $0b01001110, X0, X2
+    VPSHUFD $0b10010011, X0, X3
+    VPSLLD $8, X1, X1
+    VPSLLD $16, X2, X2
+    VPSLLD $24, X3, X3
+    VPOR X1, X0, X0
+    VPOR X3, X2, X2
+    VPOR X2, X0, X0
 
-    MOVQ X1, CX
-    MOVL CX, (AX)
+    //VPERM2I128 $1, Y0, Y0, Y1
 
-    ADDQ $4, AX
+    MOVQ X0, CX
+    //MOVQ X1, DX
+    //ANDQ $0xFFFFFFFF, CX
+    //SHLQ $32, DX
+    //ORQ DX, CX
+    //MOVQ CX, (AX)
+    MOVL CX, (AX)(SI*1)
+
     ADDQ $4, SI
     CMPQ SI, $miniBlockSize
     JNE loop
