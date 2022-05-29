@@ -404,7 +404,32 @@ loop:
     VZEROUPPER
     RET
 
-// func miniBlockCopyInt32x1bitAVX2(dst *byte, src *[miniBlockSize]int32)
+// func miniBlockCopyInt32(dst *byte, src *[miniBlockSize]int32, bitWidth uint)
+TEXT ·miniBlockCopyInt32(SB), NOSPLIT, $0-24
+    MOVQ dst+0(FP), AX
+    MOVQ src+8(FP), BX
+    MOVQ bitWidth+16(FP), R9
+
+    XORQ DI, DI // bit offset
+    XORQ SI, SI // mini block index
+loop:
+    MOVQ DI, CX
+    MOVQ DI, DX
+
+    ANDQ $0b11111, CX // i := bitOffset % 32
+    SHRQ $5, DX       // j := bitOffset / 32
+
+    MOVLQZX (BX)(SI*4), R8
+    SHLQ CX, R8
+    ORQ R8, (AX)(DX*4)
+
+    ADDQ R9, DI
+    INCQ SI
+    CMPQ SI, $miniBlockSize
+    JNE loop
+
+    RET
+
 TEXT ·miniBlockCopyInt32x1bitAVX2(SB), NOSPLIT, $0-16
     MOVQ dst+0(FP), AX
     MOVQ src+8(FP), BX
@@ -437,7 +462,34 @@ TEXT ·miniBlockCopyInt32x1bitAVX2(SB), NOSPLIT, $0-16
     VZEROUPPER
     RET
 
-// func miniBlockCopyInt32x32bitsAVX2(dst *byte, src *[miniBlockSize]int32)
+TEXT ·miniBlockCopyInt32x8bitsAVX2(SB), NOSPLIT, $0-16
+    MOVQ dst+0(FP), AX
+    MOVQ src+8(FP), BX
+
+    XORQ SI, SI
+loop:
+    VMOVDQU (BX)(SI*4), X1
+    VPSHUFD $0b00111001, X1, X2
+    VPSHUFD $0b01001110, X1, X3
+    VPSHUFD $0b10010011, X1, X4
+    VPSLLD $8, X2, X2
+    VPSLLD $16, X3, X3
+    VPSLLD $24, X4, X4
+    VPOR X2, X1, X1
+    VPOR X4, X3, X3
+    VPOR X3, X1, X1
+
+    MOVQ X1, CX
+    MOVL CX, (AX)
+
+    ADDQ $4, AX
+    ADDQ $4, SI
+    CMPQ SI, $miniBlockSize
+    JNE loop
+
+    VZEROUPPER
+    RET
+
 TEXT ·miniBlockCopyInt32x32bitsAVX2(SB), NOSPLIT, $0-16
     MOVQ dst+0(FP), AX
     MOVQ src+8(FP), BX

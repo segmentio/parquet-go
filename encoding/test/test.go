@@ -17,10 +17,12 @@ func EncodeInt32(t *testing.T, enc encoding.Encoding, min, max int, bitWidth uin
 		encoding.Encoding.EncodeInt32,
 		encoding.Encoding.DecodeInt32,
 		func(i int) int32 {
-			if (i % 2) == 0 {
-				return int32(i)
+			value := int32(i)
+			mask := int32((1 << bitWidth) - 1)
+			if (i % 2) != 0 {
+				value = int32(math.MaxUint32 - uint32(value))
 			}
-			return int32(math.MaxUint32-uint32(i)) & int32((1<<bitWidth)-1)
+			return value & mask
 		},
 	)
 }
