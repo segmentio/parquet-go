@@ -6,6 +6,15 @@
 #define numMiniBlocks 4
 #define miniBlockSize 32
 
+// blockCopyInt32 is similar to the builtin copy function but makes assumptions
+// about the size of the input and output, which allows the copy to be fully
+// branch-less and yields much better throughput.
+//
+// The input to encodeInt32 does not always aligned on block size, the Go code
+// is responsible for testing the length of the input and fallback to the copy
+// function is less than blockSize values remain.
+//
+// func blockCopyInt32(dst, src *[blockSize]int32)
 TEXT ·blockCopyInt32(SB), NOSPLIT, $0-16
     MOVQ dst+0(FP), AX
     MOVQ src+8(FP), BX
