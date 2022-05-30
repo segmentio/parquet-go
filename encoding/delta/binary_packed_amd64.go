@@ -43,47 +43,21 @@ func miniBlockCopyInt32x1bitAVX2(dst *byte, src *[miniBlockSize]int32)
 func miniBlockCopyInt32x2bitsAVX2(dst *byte, src *[miniBlockSize]int32)
 
 //go:noescape
-func miniBlockCopyInt32x3bitsAVX2(dst *byte, src *[miniBlockSize]int32)
-
-//go:noescape
-func miniBlockCopyInt32x4bitsAVX2(dst *byte, src *[miniBlockSize]int32)
-
-//go:noescape
-func miniBlockCopyInt32x5bitsAVX2(dst *byte, src *[miniBlockSize]int32)
-
-//go:noescape
-func miniBlockCopyInt32x6bitsAVX2(dst *byte, src *[miniBlockSize]int32)
-
-//go:noescape
-func miniBlockCopyInt32x7bitsAVX2(dst *byte, src *[miniBlockSize]int32)
-
-//go:noescape
-func miniBlockCopyInt32x8bitsAVX2(dst *byte, src *[miniBlockSize]int32)
+func miniBlockCopyInt32x3to16bitsAVX2(dst *byte, src *[miniBlockSize]int32, bitWidth uint)
 
 //go:noescape
 func miniBlockCopyInt32x32bitsAVX2(dst *byte, src *[miniBlockSize]int32)
 
 func miniBlockCopyInt32AVX2(dst *byte, src *[miniBlockSize]int32, bitWidth uint) {
-	switch bitWidth {
-	case 0:
-	case 1:
+	switch {
+	case bitWidth == 1:
 		miniBlockCopyInt32x1bitAVX2(dst, src)
-	case 2:
+	case bitWidth == 2:
 		miniBlockCopyInt32x2bitsAVX2(dst, src)
-	case 3:
-		miniBlockCopyInt32x3bitsAVX2(dst, src)
-	case 4:
-		miniBlockCopyInt32x4bitsAVX2(dst, src)
-	case 5:
-		miniBlockCopyInt32x5bitsAVX2(dst, src)
-	case 6:
-		miniBlockCopyInt32x6bitsAVX2(dst, src)
-	case 7:
-		miniBlockCopyInt32x7bitsAVX2(dst, src)
-	case 8:
-		miniBlockCopyInt32x8bitsAVX2(dst, src)
-	case 32:
+	case bitWidth == 32:
 		miniBlockCopyInt32x32bitsAVX2(dst, src)
+	case bitWidth <= 16:
+		miniBlockCopyInt32x3to16bitsAVX2(dst, src, bitWidth)
 	default:
 		miniBlockCopyInt32(dst, src, bitWidth)
 	}
@@ -166,7 +140,7 @@ func (e *BinaryPackedEncoding) encodeInt32BlockAVX2(dst []byte, block *[blockSiz
 	blockBitWidthsInt32AVX2(&bitWidths, block)
 
 	n := len(dst)
-	dst = resize(dst, n+maxMiniBlockLength+8)
+	dst = resize(dst, n+maxMiniBlockLength+16)
 	n += encodeBlockHeader(dst[n:], int64(minDelta), bitWidths)
 
 	for i, bitWidth := range bitWidths {

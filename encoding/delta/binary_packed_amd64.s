@@ -540,76 +540,91 @@ TEXT ·miniBlockCopyInt32x2bitsAVX2(SB), NOSPLIT, $0-16
     VZEROUPPER
     RET
 
-// The miniBlockCopyInt32x3to8bitsAVX2 macro is used to generate the code for
-// functions packing 32 bit integers into values of width 3 to 8 bits.
+// miniBlockCopyInt32x3to16bitsAVX2 is the algorithm used to bit-pack 32 bit
+// integers into values of width 3 to 16 bits.
 //
-// The use of a macro helps generate constant offsets which are scaled off of
-// the bit packing width.
+// This function is a small overhead due to having to initialize registers with
+// values that depend on the bit width. We measured this cost at ~10% throughput
+// in synthetic benchmarks compared to generating constants shifts and offsets
+// using a macro. Using a single function rather than generating one for each
+// bit width has the benefit of reducing the code size, which in practice can
+// also yield benefits like reducing CPU cache misses. Not using a macro also
+// has other advantages like providing accurate line number of stack traces and
+// enabling the use of breakpoints when debugging. Overall, this approach seemed
+// to be the right trade off between performance and maintainability.
 //
 // The algorithm treats chunks of 8 values in 4 iterations to process all 32
-// values of the mini block. Writes to the output buffer are aligned on 64 bits
-// since we may write up to 64 bits. Padding is therefore required in the output
-// buffer to avoid triggering a segfault. The encodeInt32AVX2 method adds enough
-// padding when sizing the output buffer to account of this requirement.
-#define miniBlockCopyInt32x3to8bitsAVX2(bitWidth) \
-    MOVQ dst+0(FP), AX              \
-    MOVQ src+8(FP), BX              \
-                                    \
-    XORQ DI, DI                     \
-    NOTQ DI                         \
-    SHRQ $64-4*bitWidth, DI         \
-                                    \
-    XORQ SI, SI                     \
-loop:                               \
-    VMOVDQU (BX)(SI*4), Y0          \
-    VPSHUFD $0b01010101, Y0, Y1     \
-    VPSHUFD $0b10101010, Y0, Y2     \
-    VPSHUFD $0b11111111, Y0, Y3     \
-                                    \
-    VPSLLD $1*bitWidth, Y1, Y1      \
-    VPSLLD $2*bitWidth, Y2, Y2      \
-    VPSLLD $3*bitWidth, Y3, Y3      \
-                                    \
-    VPOR Y1, Y0, Y0                 \
-    VPOR Y3, Y2, Y2                 \
-    VPOR Y2, Y0, Y0                 \
-                                    \
-    VPERM2I128 $1, Y0, Y0, Y1       \
-                                    \
-    MOVQ X0, R8                     \
-    MOVQ X1, R9                     \
-                                    \
-    ANDQ DI, R8                     \
-    ANDQ DI, R9                     \
-                                    \
-    SHLQ $4*bitWidth, R9            \
-    ORQ R9, R8                      \
-    MOVQ R8, (AX)                   \
-                                    \
-    ADDQ $bitWidth, AX              \
-    ADDQ $8, SI                     \
-    CMPQ SI, $miniBlockSize         \
-    JNE loop                        \
-    VZEROUPPER                      \
+// values of the mini block. Writes to the output buffer are aligned on 128 bits
+// since we may write up to 128 bits (8 x 16 bits). Padding is therefore
+// required in the output buffer to avoid triggering a segfault.
+// The encodeInt32AVX2 method adds enough padding when sizing the output buffer
+// to account of this requirement.
+//
+// We leverage the two lanes fo YMM registers to work on two sets of 4 values
+// (in the sequence of VMOVDQU/VPSHUFD, VPAND, VPSLLQ, VPOR), resulting in having
+// two sets of bit-packed values in the lower 64 bits of each YMM lane.
+// The upper lane is then permuted into a lower lane to merge the two results,
+// which may not be aligned on byte boundaries so we shift the lower and upper
+// bits and compose two sets of 128 bits sequences (VPSLLQ, VPSRLQ, VBLENDPD),
+// merge them and write the 16 bytes result to the output buffer.
+TEXT ·miniBlockCopyInt32x3to16bitsAVX2(SB), NOSPLIT, $0-24
+    MOVQ dst+0(FP), AX
+    MOVQ src+8(FP), BX
+
+    VPBROADCASTQ bitWidths+16(FP), Y6 // [1*bitWidth...]
+    VPSLLQ $1, Y6, Y7                 // [2*bitWidth...]
+    VPADDQ Y6, Y7, Y8                 // [3*bitWidth...]
+    VPSLLQ $2, Y6, Y9                 // [4*bitWidth...]
+
+    VPBROADCASTQ sixtyfour<>(SB), Y10
+    VPSUBQ Y6, Y10, Y11 // [64-1*bitWidth...]
+    VPSUBQ Y9, Y10, Y12 // [64-4*bitWidth...]
+    VPCMPEQQ Y4, Y4, Y4
+    VPSRLVQ Y11, Y4, Y4
+
+    VPXOR Y5, Y5, Y5
+    XORQ SI, SI
+loop:
+    VMOVDQU (BX)(SI*4), Y0
+    VPSHUFD $0b01010101, Y0, Y1
+    VPSHUFD $0b10101010, Y0, Y2
+    VPSHUFD $0b11111111, Y0, Y3
+
+    VPAND Y4, Y0, Y0
+    VPAND Y4, Y1, Y1
+    VPAND Y4, Y2, Y2
+    VPAND Y4, Y3, Y3
+
+    VPSLLVQ Y6, Y1, Y1
+    VPSLLVQ Y7, Y2, Y2
+    VPSLLVQ Y8, Y3, Y3
+
+    VPOR Y1, Y0, Y0
+    VPOR Y3, Y2, Y2
+    VPOR Y2, Y0, Y0
+
+    VPERMQ $0b00001010, Y0, Y1
+
+    VPSLLVQ X9, X1, X2
+    VPSRLQ X12, X1, X3
+    VBLENDPD $0b10, X3, X2, X1
+    VBLENDPD $0b10, X5, X0, X0
+    VPOR X1, X0, X0
+
+    VMOVDQU X0, (AX)
+
+    ADDQ CX, AX
+    ADDQ $8, SI
+    CMPQ SI, $miniBlockSize
+    JNE loop
+    VZEROUPPER
     RET
 
-TEXT ·miniBlockCopyInt32x3bitsAVX2(SB), NOSPLIT, $0-16
-    miniBlockCopyInt32x3to8bitsAVX2(3)
-
-TEXT ·miniBlockCopyInt32x4bitsAVX2(SB), NOSPLIT, $0-16
-    miniBlockCopyInt32x3to8bitsAVX2(4)
-
-TEXT ·miniBlockCopyInt32x5bitsAVX2(SB), NOSPLIT, $0-16
-    miniBlockCopyInt32x3to8bitsAVX2(5)
-
-TEXT ·miniBlockCopyInt32x6bitsAVX2(SB), NOSPLIT, $0-16
-    miniBlockCopyInt32x3to8bitsAVX2(6)
-
-TEXT ·miniBlockCopyInt32x7bitsAVX2(SB), NOSPLIT, $0-16
-    miniBlockCopyInt32x3to8bitsAVX2(7)
-
-TEXT ·miniBlockCopyInt32x8bitsAVX2(SB), NOSPLIT, $0-16
-    miniBlockCopyInt32x3to8bitsAVX2(8)
+GLOBL sixtyfour<>(SB), RODATA|NOPTR, $32
+DATA sixtyfour<>+0(SB)/8, $64
+DATA sixtyfour<>+8(SB)/8, $64
+DATA sixtyfour<>+16(SB)/8, $64
+DATA sixtyfour<>+24(SB)/8, $64
 
 // miniBlockCopyInt32x32bitsAVX2 is a specialization of the bit packing logic
 // for 32 bit integers when the output bit width is also 32, in which case a
@@ -629,6 +644,94 @@ TEXT ·miniBlockCopyInt32x32bitsAVX2(SB), NOSPLIT, $0-16
     VMOVDQU Y3, 96(AX)
     VZEROUPPER
     RET
+
+    /*
+ #define miniBlockCopyInt32x3to16bitsAVX2(bitWidth) \
+    MOVQ dst+0(FP), AX              \
+    MOVQ src+8(FP), BX              \
+                                    \
+    VPCMPEQQ Y4, Y4, Y4             \
+    VPSRLQ $64-bitWidth, Y4, Y4     \ // bit mask
+    VPXOR Y5, Y5, Y5                \ // zero
+    XORQ SI, SI                     \
+loop:                               \
+    VMOVDQU (BX)(SI*4), Y0          \
+    VPSHUFD $0b01010101, Y0, Y1     \
+    VPSHUFD $0b10101010, Y0, Y2     \
+    VPSHUFD $0b11111111, Y0, Y3     \
+                                    \
+    VPAND Y4, Y0, Y0                \
+    VPAND Y4, Y1, Y1                \
+    VPAND Y4, Y2, Y2                \
+    VPAND Y4, Y3, Y3                \
+                                    \
+    VPSLLQ $1*bitWidth, Y1, Y1      \
+    VPSLLQ $2*bitWidth, Y2, Y2      \
+    VPSLLQ $3*bitWidth, Y3, Y3      \
+                                    \
+    VPOR Y1, Y0, Y0                 \
+    VPOR Y3, Y2, Y2                 \
+    VPOR Y2, Y0, Y0                 \
+                                    \
+    VPERMQ $0b00001010, Y0, Y1      \ // move two copies of the first quad word of upper 128 bits of Y0 to lower bits of Y1
+                                    \
+    VPSLLQ $4*bitWidth, X1, X2      \ // align lower bits into first quad word
+    VPSRLQ $64-4*bitWidth, X1, X3   \ // align upper bits into second quad word
+    VBLENDPD $0b10, X3, X2, X1      \ // blend lower and upper bits
+    VBLENDPD $0b10, X5, X0, X0      \ // clear upper bytes
+    VPOR X1, X0, X0                 \ // merge two lanes of bit-packed results
+                                    \
+    VMOVDQU X0, (AX)                \
+                                    \
+    ADDQ $bitWidth, AX              \
+    ADDQ $8, SI                     \
+    CMPQ SI, $miniBlockSize         \
+    JNE loop                        \
+    VZEROUPPER                      \
+    RET
+
+TEXT ·miniBlockCopyInt32x3bitsAVX2(SB), NOSPLIT, $0-16
+    miniBlockCopyInt32x3to16bitsAVX2(3)
+
+TEXT ·miniBlockCopyInt32x4bitsAVX2(SB), NOSPLIT, $0-16
+    miniBlockCopyInt32x3to16bitsAVX2(4)
+
+TEXT ·miniBlockCopyInt32x5bitsAVX2(SB), NOSPLIT, $0-16
+    miniBlockCopyInt32x3to16bitsAVX2(5)
+
+TEXT ·miniBlockCopyInt32x6bitsAVX2(SB), NOSPLIT, $0-16
+    miniBlockCopyInt32x3to16bitsAVX2(6)
+
+TEXT ·miniBlockCopyInt32x7bitsAVX2(SB), NOSPLIT, $0-16
+    miniBlockCopyInt32x3to16bitsAVX2(7)
+
+TEXT ·miniBlockCopyInt32x8bitsAVX2(SB), NOSPLIT, $0-16
+    miniBlockCopyInt32x3to16bitsAVX2(8)
+
+TEXT ·miniBlockCopyInt32x9bitsAVX2(SB), NOSPLIT, $0-16
+    miniBlockCopyInt32x3to16bitsAVX2(9)
+
+TEXT ·miniBlockCopyInt32x10bitsAVX2(SB), NOSPLIT, $0-16
+    miniBlockCopyInt32x3to16bitsAVX2(10)
+
+TEXT ·miniBlockCopyInt32x11bitsAVX2(SB), NOSPLIT, $0-16
+    miniBlockCopyInt32x3to16bitsAVX2(11)
+
+TEXT ·miniBlockCopyInt32x12bitsAVX2(SB), NOSPLIT, $0-16
+    miniBlockCopyInt32x3to16bitsAVX2(12)
+
+TEXT ·miniBlockCopyInt32x13bitsAVX2(SB), NOSPLIT, $0-16
+    miniBlockCopyInt32x3to16bitsAVX2(13)
+
+TEXT ·miniBlockCopyInt32x14bitsAVX2(SB), NOSPLIT, $0-16
+    miniBlockCopyInt32x3to16bitsAVX2(14)
+
+TEXT ·miniBlockCopyInt32x15bitsAVX2(SB), NOSPLIT, $0-16
+    miniBlockCopyInt32x3to16bitsAVX2(15)
+
+TEXT ·miniBlockCopyInt32x16bitsAVX2(SB), NOSPLIT, $0-16
+    miniBlockCopyInt32x3to16bitsAVX2(16)
+    */
 
 /*
 TEXT ·miniBlockCopyInt32x2to7bitsAVX2(SB), NOSPLIT, $0-24
