@@ -6,52 +6,6 @@
 #define numMiniBlocks 4
 #define miniBlockSize 32
 
-// blockCopyInt32 is similar to the builtin copy function but makes assumptions
-// about the size of the input and output, which allows the copy to be fully
-// branch-less and yields much better throughput.
-//
-// The input to encodeInt32 does not always aligned on block size, the Go code
-// is responsible for testing the length of the input and fallback to the copy
-// function is less than blockSize values remain.
-//
-// func blockCopyInt32(dst, src *[blockSize]int32)
-TEXT ·blockCopyInt32(SB), NOSPLIT, $0-16
-    MOVQ dst+0(FP), AX
-    MOVQ src+8(FP), BX
-    VMOVDQU 0(AX), Y0
-    VMOVDQU 32(AX), Y1
-    VMOVDQU 64(AX), Y2
-    VMOVDQU 96(AX), Y3
-    VMOVDQU 128(AX), Y4
-    VMOVDQU 160(AX), Y5
-    VMOVDQU 192(AX), Y6
-    VMOVDQU 224(AX), Y7
-    VMOVDQU 256(AX), Y8
-    VMOVDQU 288(AX), Y9
-    VMOVDQU 320(AX), Y10
-    VMOVDQU 352(AX), Y11
-    VMOVDQU 384(AX), Y12
-    VMOVDQU 416(AX), Y13
-    VMOVDQU 448(AX), Y14
-    VMOVDQU 480(AX), Y15
-    VMOVDQU Y0, 0(BX)
-    VMOVDQU Y1, 32(BX)
-    VMOVDQU Y2, 64(BX)
-    VMOVDQU Y3, 96(BX)
-    VMOVDQU Y4, 128(BX)
-    VMOVDQU Y5, 160(BX)
-    VMOVDQU Y6, 192(BX)
-    VMOVDQU Y7, 224(BX)
-    VMOVDQU Y8, 256(BX)
-    VMOVDQU Y9, 288(BX)
-    VMOVDQU Y10, 320(BX)
-    VMOVDQU Y11, 352(BX)
-    VMOVDQU Y12, 384(BX)
-    VMOVDQU Y13, 416(BX)
-    VMOVDQU Y14, 448(BX)
-    VMOVDQU Y15, 480(BX)
-    RET
-
 #define deltaInt32x8(baseAddr, lastValue, offset) \
     MOVL offset+0(AX), R8        \
     MOVL offset+4(AX), R9        \

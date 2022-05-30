@@ -10,9 +10,6 @@ import (
 )
 
 //go:noescape
-func blockCopyInt32(dst, src *[blockSize]int32)
-
-//go:noescape
 func blockDeltaInt32(block *[blockSize]int32, lastValue int32) int32
 
 //go:noescape
@@ -95,12 +92,7 @@ func (e *BinaryPackedEncoding) encodeInt32(dst []byte, src []int32) []byte {
 	case cpu.X86.HasAVX2:
 		for i := 1; i < len(src); i += blockSize {
 			block := [blockSize]int32{}
-			blockLength := blockSize
-			if input := src[i:len(src):len(src)]; len(input) < blockSize {
-				blockLength = copy(block[:], input)
-			} else {
-				blockCopyInt32(&block, (*[blockSize]int32)(input))
-			}
+			blockLength := copy(block[:], src[i:])
 			dst, lastValue = e.encodeInt32BlockAVX2(dst, &block, blockLength, lastValue)
 		}
 	default:
