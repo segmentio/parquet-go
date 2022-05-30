@@ -1,4 +1,5 @@
 //go:build !purego
+
 #include "textflag.h"
 
 #define blockSize 128
@@ -400,10 +401,16 @@ loop:
     INCQ DI
     CMPQ DI, $numMiniBlocks
     JNE loop
-
     VZEROUPPER
     RET
 
+// miniBlockCopyInt32 is the generic implementation of the algorithm to pack
+// 32 bit integers into values of a given bit width (<=32).
+//
+// This algorithm is much slower than the vectorized versions, but is useful
+// as a reference implementation to run the tests against, and as fallback when
+// the code runs on a CPU which does not support the AVX2 instruction set.
+//
 // func miniBlockCopyInt32(dst *byte, src *[miniBlockSize]int32, bitWidth uint)
 TEXT ·miniBlockCopyInt32(SB), NOSPLIT, $0-24
     MOVQ dst+0(FP), AX
@@ -427,9 +434,18 @@ loop:
     INCQ SI
     CMPQ SI, $miniBlockSize
     JNE loop
-
     RET
 
+// miniBlockCopyInt32x1bitAVX2 packs 32 bit integers into 1 bit values in the
+// the output buffer.
+//
+// The algorithm use MOVMSKPS to extract the 8 relevant bits from the 8 values
+// packed in YMM registers, then combines 4 of these into  32 bit word which
+// then gets written to the output. The result is 32 bits because each mini
+// block has 32 values (the block size is 128 and there are 4 mini block per
+// block).
+//
+// func miniBlockCopyInt32x1bitAVX2(dst *byte, src *[miniBlockSize]int32)
 TEXT ·miniBlockCopyInt32x1bitAVX2(SB), NOSPLIT, $0-16
     MOVQ dst+0(FP), AX
     MOVQ src+8(FP), BX
@@ -460,6 +476,16 @@ TEXT ·miniBlockCopyInt32x1bitAVX2(SB), NOSPLIT, $0-16
     VZEROUPPER
     RET
 
+// miniBlockCopyInt32x2bitsAVX2 implements an algorithm for packing 32 bit
+// integers into 2 bit values.
+//
+// The algorithm is derived from the one employed in miniBlockCopyInt32x1bitAVX2
+// but needs to perform a bit extra work since MOVMSKPS can only extract one bit
+// per packed integer of each YMM vector. We run two passes to extract the two
+// bits needed to compose each item of the result, and merge the values by
+// interleaving the first and second bits with PDEP.
+//
+// func miniBlockCopyInt32x2bitsAVX2(dst *byte, src *[miniBlockSize]int32)
 TEXT ·miniBlockCopyInt32x2bitsAVX2(SB), NOSPLIT, $0-16
     MOVQ dst+0(FP), AX
     MOVQ src+8(FP), BX
@@ -514,6 +540,17 @@ TEXT ·miniBlockCopyInt32x2bitsAVX2(SB), NOSPLIT, $0-16
     VZEROUPPER
     RET
 
+// The miniBlockCopyInt32x3to8bitsAVX2 macro is used to generate the code for
+// functions packing 32 bit integers into values of width 3 to 8 bits.
+//
+// The use of a macro helps generate constant offsets which are scaled off of
+// the bit packing width.
+//
+// The algorithm treats chunks of 8 values in 4 iterations to process all 32
+// values of the mini block. Writes to the output buffer are aligned on 64 bits
+// since we may write up to 64 bits. Padding is therefore required in the output
+// buffer to avoid triggering a segfault. The encodeInt32AVX2 method adds enough
+// padding when sizing the output buffer to account of this requirement.
 #define miniBlockCopyInt32x3to8bitsAVX2(bitWidth) \
     MOVQ dst+0(FP), AX              \
     MOVQ src+8(FP), BX              \
@@ -525,9 +562,9 @@ TEXT ·miniBlockCopyInt32x2bitsAVX2(SB), NOSPLIT, $0-16
     XORQ SI, SI                     \
 loop:                               \
     VMOVDQU (BX)(SI*4), Y0          \
-    VPSHUFD $0b00111001, Y0, Y1     \
-    VPSHUFD $0b01001110, Y0, Y2     \
-    VPSHUFD $0b10010011, Y0, Y3     \
+    VPSHUFD $0b01010101, Y0, Y1     \
+    VPSHUFD $0b10101010, Y0, Y2     \
+    VPSHUFD $0b11111111, Y0, Y3     \
                                     \
     VPSLLD $1*bitWidth, Y1, Y1      \
     VPSLLD $2*bitWidth, Y2, Y2      \
@@ -553,7 +590,6 @@ loop:                               \
     ADDQ $8, SI                     \
     CMPQ SI, $miniBlockSize         \
     JNE loop                        \
-                                    \
     VZEROUPPER                      \
     RET
 
@@ -575,20 +611,22 @@ TEXT ·miniBlockCopyInt32x7bitsAVX2(SB), NOSPLIT, $0-16
 TEXT ·miniBlockCopyInt32x8bitsAVX2(SB), NOSPLIT, $0-16
     miniBlockCopyInt32x3to8bitsAVX2(8)
 
+// miniBlockCopyInt32x32bitsAVX2 is a specialization of the bit packing logic
+// for 32 bit integers when the output bit width is also 32, in which case a
+// simple copy of the mini block to the output buffer produces the result.
+//
+// func miniBlockCopyInt32x32bitsAVX2(dst *byte, src *[miniBlockSize]int32)
 TEXT ·miniBlockCopyInt32x32bitsAVX2(SB), NOSPLIT, $0-16
     MOVQ dst+0(FP), AX
     MOVQ src+8(FP), BX
-
     VMOVDQU 0(BX), Y0
     VMOVDQU 32(BX), Y1
     VMOVDQU 64(BX), Y2
     VMOVDQU 96(BX), Y3
-
     VMOVDQU Y0, 0(AX)
     VMOVDQU Y1, 32(AX)
     VMOVDQU Y2, 64(AX)
     VMOVDQU Y3, 96(AX)
-
     VZEROUPPER
     RET
 
