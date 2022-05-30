@@ -113,15 +113,15 @@ func testBlockBitWidthsInt32(t *testing.T, f func(*[numMiniBlocks]byte, *[blockS
 	}
 }
 
-func TestMiniBlockCopyInt32(t *testing.T) {
-	testMiniBlockCopyInt32(t, miniBlockCopyInt32)
+func TestMiniBlockPackInt32(t *testing.T) {
+	testMiniBlockPackInt32(t, miniBlockPackInt32)
 }
 
-func TestMiniBlockCopyInt32AVX2(t *testing.T) {
-	testMiniBlockCopyInt32(t, miniBlockCopyInt32AVX2)
+func TestMiniBlockPackInt32AVX2(t *testing.T) {
+	testMiniBlockPackInt32(t, miniBlockPackInt32AVX2)
 }
 
-func testMiniBlockCopyInt32(t *testing.T, f func(*byte, *[miniBlockSize]int32, uint)) {
+func testMiniBlockPackInt32(t *testing.T, f func(*byte, *[miniBlockSize]int32, uint)) {
 	for bitWidth := uint(1); bitWidth <= 32; bitWidth++ {
 		t.Run(fmt.Sprintf("bitWidth=%d", bitWidth), func(t *testing.T) {
 			got := [4 * miniBlockSize]byte{}
@@ -220,16 +220,16 @@ func benchmarkBlockBitWidthsInt32(b *testing.B, f func(*[numMiniBlocks]byte, *[b
 	}
 }
 
-func BenchmarkMiniBlockCopyInt32(b *testing.B) {
-	benchmarkMiniBlockCopyInt32(b, miniBlockCopyInt32)
+func BenchmarkMiniBlockPackInt32(b *testing.B) {
+	benchmarkMiniBlockPackInt32(b, miniBlockPackInt32)
 }
 
-func BenchmarkMiniBlockCopyInt32AVX2(b *testing.B) {
+func BenchmarkMiniBlockPackInt32AVX2(b *testing.B) {
 	requireAVX2(b)
-	benchmarkMiniBlockCopyInt32(b, miniBlockCopyInt32AVX2)
+	benchmarkMiniBlockPackInt32(b, miniBlockPackInt32AVX2)
 }
 
-func benchmarkMiniBlockCopyInt32(b *testing.B, f func(*byte, *[miniBlockSize]int32, uint)) {
+func benchmarkMiniBlockPackInt32(b *testing.B, f func(*byte, *[miniBlockSize]int32, uint)) {
 	for bitWidth := uint(1); bitWidth <= 32; bitWidth++ {
 		b.Run(fmt.Sprintf("bitWidth=%d", bitWidth), func(b *testing.B) {
 			b.SetBytes(4 * miniBlockSize)

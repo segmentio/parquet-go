@@ -34,32 +34,32 @@ func blockBitWidthsInt32(bitWidths *[numMiniBlocks]byte, block *[blockSize]int32
 func blockBitWidthsInt32AVX2(bitWidths *[numMiniBlocks]byte, block *[blockSize]int32)
 
 //go:noescape
-func miniBlockCopyInt32(dst *byte, src *[miniBlockSize]int32, bitWidth uint)
+func miniBlockPackInt32(dst *byte, src *[miniBlockSize]int32, bitWidth uint)
 
 //go:noescape
-func miniBlockCopyInt32x1bitAVX2(dst *byte, src *[miniBlockSize]int32)
+func miniBlockPackInt32x1bitAVX2(dst *byte, src *[miniBlockSize]int32)
 
 //go:noescape
-func miniBlockCopyInt32x2bitsAVX2(dst *byte, src *[miniBlockSize]int32)
+func miniBlockPackInt32x2bitsAVX2(dst *byte, src *[miniBlockSize]int32)
 
 //go:noescape
-func miniBlockCopyInt32x3to16bitsAVX2(dst *byte, src *[miniBlockSize]int32, bitWidth uint)
+func miniBlockPackInt32x3to16bitsAVX2(dst *byte, src *[miniBlockSize]int32, bitWidth uint)
 
 //go:noescape
-func miniBlockCopyInt32x32bitsAVX2(dst *byte, src *[miniBlockSize]int32)
+func miniBlockPackInt32x32bitsAVX2(dst *byte, src *[miniBlockSize]int32)
 
-func miniBlockCopyInt32AVX2(dst *byte, src *[miniBlockSize]int32, bitWidth uint) {
+func miniBlockPackInt32AVX2(dst *byte, src *[miniBlockSize]int32, bitWidth uint) {
 	switch {
 	case bitWidth == 1:
-		miniBlockCopyInt32x1bitAVX2(dst, src)
+		miniBlockPackInt32x1bitAVX2(dst, src)
 	case bitWidth == 2:
-		miniBlockCopyInt32x2bitsAVX2(dst, src)
+		miniBlockPackInt32x2bitsAVX2(dst, src)
 	case bitWidth == 32:
-		miniBlockCopyInt32x32bitsAVX2(dst, src)
+		miniBlockPackInt32x32bitsAVX2(dst, src)
 	case bitWidth <= 16:
-		miniBlockCopyInt32x3to16bitsAVX2(dst, src, bitWidth)
+		miniBlockPackInt32x3to16bitsAVX2(dst, src, bitWidth)
 	default:
-		miniBlockCopyInt32(dst, src, bitWidth)
+		miniBlockPackInt32(dst, src, bitWidth)
 	}
 }
 
@@ -122,7 +122,7 @@ func (e *BinaryPackedEncoding) encodeInt32Block(dst []byte, block *[blockSize]in
 	for i, bitWidth := range bitWidths {
 		if bitWidth != 0 {
 			miniBlock := (*[miniBlockSize]int32)(block[i*miniBlockSize:])
-			miniBlockCopyInt32(&dst[n], miniBlock, uint(bitWidth))
+			miniBlockPackInt32(&dst[n], miniBlock, uint(bitWidth))
 			n += (miniBlockSize * int(bitWidth)) / 8
 		}
 	}
@@ -146,7 +146,7 @@ func (e *BinaryPackedEncoding) encodeInt32BlockAVX2(dst []byte, block *[blockSiz
 	for i, bitWidth := range bitWidths {
 		if bitWidth != 0 {
 			miniBlock := (*[miniBlockSize]int32)(block[i*miniBlockSize:])
-			miniBlockCopyInt32AVX2(&dst[n], miniBlock, uint(bitWidth))
+			miniBlockPackInt32AVX2(&dst[n], miniBlock, uint(bitWidth))
 			n += (miniBlockSize * int(bitWidth)) / 8
 		}
 	}
