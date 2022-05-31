@@ -23,13 +23,38 @@ const (
 	// 65K+ values should be enough for any valid use case.
 	maxSupportedBlockSize = 65536
 
-	maxHeaderLength    = 4 * binary.MaxVarintLen64
-	maxMiniBlockLength = binary.MaxVarintLen64 + numMiniBlocks + (4 * blockSize)
+	maxHeaderLength32    = 4 * binary.MaxVarintLen64
+	maxMiniBlockLength32 = binary.MaxVarintLen64 + numMiniBlocks + (4 * blockSize)
+
+	maxHeaderLength64    = 8 * binary.MaxVarintLen64
+	maxMiniBlockLength64 = binary.MaxVarintLen64 + numMiniBlocks + (8 * blockSize)
 )
 
 var (
 	encodeInt32 = encodeInt32Default
+	encodeInt64 = encodeInt64Default
 )
+
+func miniBlockPackInt64(dst []byte, src *[miniBlockSize]int64, bitWidth uint) {
+	bitMask := uint64(1<<bitWidth) - 1
+	bitOffset := uint(0)
+
+	for _, value := range src {
+		i := bitOffset / 64
+		j := bitOffset % 64
+
+		lo := binary.LittleEndian.Uint64(dst[(i+0)*8:])
+		hi := binary.LittleEndian.Uint64(dst[(i+1)*8:])
+
+		lo |= (uint64(value) & bitMask) << j
+		hi |= (uint64(value) >> (64 - j))
+
+		binary.LittleEndian.PutUint64(dst[(i+0)*8:], lo)
+		binary.LittleEndian.PutUint64(dst[(i+1)*8:], hi)
+
+		bitOffset += bitWidth
+	}
+}
 
 func encodeInt32Default(dst []byte, src []int32) []byte {
 	totalValues := len(src)
@@ -39,7 +64,7 @@ func encodeInt32Default(dst []byte, src []int32) []byte {
 	}
 
 	n := len(dst)
-	dst = resize(dst, n+maxHeaderLength)
+	dst = resize(dst, n+maxHeaderLength32)
 	dst = dst[:n+encodeBinaryPackedHeader(dst[n:], blockSize, numMiniBlocks, totalValues, int64(firstValue))]
 
 	if totalValues < 2 {
@@ -60,13 +85,59 @@ func encodeInt32Default(dst []byte, src []int32) []byte {
 		blockBitWidthsInt32(&bitWidths, &block)
 
 		n := len(dst)
-		dst = resize(dst, n+maxMiniBlockLength+4)
+		dst = resize(dst, n+maxMiniBlockLength32+4)
 		n += encodeBlockHeader(dst[n:], int64(minDelta), bitWidths)
 
 		for i, bitWidth := range bitWidths {
 			if bitWidth != 0 {
 				miniBlock := (*[miniBlockSize]int32)(block[i*miniBlockSize:])
 				miniBlockPackInt32(dst[n:], miniBlock, uint(bitWidth))
+				n += (miniBlockSize * int(bitWidth)) / 8
+			}
+		}
+
+		dst = dst[:n]
+	}
+
+	return dst
+}
+
+func encodeInt64Default(dst []byte, src []int64) []byte {
+	totalValues := len(src)
+	firstValue := int64(0)
+	if totalValues > 0 {
+		firstValue = src[0]
+	}
+
+	n := len(dst)
+	dst = resize(dst, n+maxHeaderLength64)
+	dst = dst[:n+encodeBinaryPackedHeader(dst[n:], blockSize, numMiniBlocks, totalValues, firstValue)]
+
+	if totalValues < 2 {
+		return dst
+	}
+
+	lastValue := firstValue
+	for i := 1; i < len(src); i += blockSize {
+		block := [blockSize]int64{}
+		blockLength := copy(block[:], src[i:])
+
+		lastValue = blockDeltaInt64(&block, lastValue)
+		minDelta := blockMinInt64(&block)
+		blockSubInt64(&block, minDelta)
+		blockClearInt64(&block, blockLength)
+
+		bitWidths := [numMiniBlocks]byte{}
+		blockBitWidthsInt64(&bitWidths, &block)
+
+		n := len(dst)
+		dst = resize(dst, n+maxMiniBlockLength64+8)
+		n += encodeBlockHeader(dst[n:], minDelta, bitWidths)
+
+		for i, bitWidth := range bitWidths {
+			if bitWidth != 0 {
+				miniBlock := (*[miniBlockSize]int64)(block[i*miniBlockSize:])
+				miniBlockPackInt64(dst[n:], miniBlock, uint(bitWidth))
 				n += (miniBlockSize * int(bitWidth)) / 8
 			}
 		}
@@ -89,34 +160,6 @@ func encodeBlockHeader(dst []byte, minDelta int64, bitWidths [numMiniBlocks]byte
 	n += binary.PutVarint(dst, int64(minDelta))
 	n += copy(dst[n:], bitWidths[:])
 	return n
-}
-
-func appendBinaryPackedHeader(dst []byte, blockSize, numMiniBlocks, totalValues int, firstValue int64) []byte {
-	b := [4 * binary.MaxVarintLen64]byte{}
-	n := encodeBinaryPackedHeader(b[:], blockSize, numMiniBlocks, totalValues, firstValue)
-	return append(dst, b[:n]...)
-}
-
-func appendBinaryPackedBlock(dst []byte, minDelta int64, bitWidths [numMiniBlocks]byte) []byte {
-	b := [binary.MaxVarintLen64 + numMiniBlocks]byte{}
-	n := encodeBlockHeader(b[:], minDelta, bitWidths)
-	return append(dst, b[:n]...)
-}
-
-func resize(buf []byte, size int) []byte {
-	if cap(buf) < size {
-		newCap := 2 * cap(buf)
-		if newCap < size {
-			newCap = size
-		}
-		buf = append(make([]byte, 0, newCap), buf...)
-	} else if size > len(buf) {
-		clear := buf[len(buf):size]
-		for i := range clear {
-			clear[i] = 0
-		}
-	}
-	return buf[:size]
 }
 
 func blockClearInt32(block *[blockSize]int32, blockLength int) {
@@ -167,6 +210,70 @@ func blockBitWidthsInt32(bitWidths *[numMiniBlocks]byte, block *[blockSize]int32
 	}
 }
 
+func blockClearInt64(block *[blockSize]int64, blockLength int) {
+	if blockLength < blockSize {
+		clear := block[blockLength:]
+		for i := range clear {
+			clear[i] = 0
+		}
+	}
+}
+
+func blockDeltaInt64(block *[blockSize]int64, lastValue int64) int64 {
+	for i, v := range block {
+		block[i], lastValue = v-lastValue, v
+	}
+	return lastValue
+}
+
+func blockMinInt64(block *[blockSize]int64) int64 {
+	min := block[0]
+	for _, v := range block[1:] {
+		if v < min {
+			min = v
+		}
+	}
+	return min
+}
+
+func blockSubInt64(block *[blockSize]int64, value int64) {
+	for i := range block {
+		block[i] -= value
+	}
+}
+
+func blockBitWidthsInt64(bitWidths *[numMiniBlocks]byte, block *[blockSize]int64) {
+	for i := range bitWidths {
+		j := (i + 0) * miniBlockSize
+		k := (i + 1) * miniBlockSize
+		bitWidth := 0
+
+		for _, v := range block[j:k] {
+			if n := Len64(uint64(v)); n > bitWidth {
+				bitWidth = n
+			}
+		}
+
+		bitWidths[i] = byte(bitWidth)
+	}
+}
+
+func resize(buf []byte, size int) []byte {
+	if cap(buf) < size {
+		newCap := 2 * cap(buf)
+		if newCap < size {
+			newCap = size
+		}
+		buf = append(make([]byte, 0, newCap), buf...)
+	} else if size > len(buf) {
+		clear := buf[len(buf):size]
+		for i := range clear {
+			clear[i] = 0
+		}
+	}
+	return buf[:size]
+}
+
 type BinaryPackedEncoding struct {
 	encoding.NotSupported
 }
@@ -190,7 +297,7 @@ func (e *BinaryPackedEncoding) EncodeInt64(dst, src []byte) ([]byte, error) {
 	if (len(src) % 8) != 0 {
 		return dst[:0], encoding.ErrEncodeInvalidInputSize(e, "INT64", len(src))
 	}
-	return e.encodeInt64(dst[:0], bytesToInt64(src)), nil
+	return encodeInt64(dst[:0], bytesToInt64(src)), nil
 }
 
 func (e *BinaryPackedEncoding) DecodeInt32(dst, src []byte) ([]byte, error) {
