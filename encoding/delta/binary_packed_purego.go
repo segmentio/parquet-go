@@ -2,85 +2,31 @@
 
 package delta
 
-// This file contains the first implementations of the binary packedencoding
-// algorithms. These are very slow because they output bit one by one to the
-// destination buffer, while also performing multiple copies.
-//
-// They are kept here as a reference and fallback for architectures that we
-// do not have optimizations for yet. However, production workloads should
-// not be using these routines and should instead rely on SIMD optimizations
-// to accelerating processing.
-
 import (
 	"encoding/binary"
 
 	"github.com/segmentio/parquet-go/internal/bits"
 )
 
-func (e *BinaryPackedEncoding) encodeInt32(dst []byte, src []int32) []byte {
-	totalValues := len(src)
-	firstValue := int32(0)
-	if totalValues > 0 {
-		firstValue = src[0]
+func miniBlockPackInt32(dst []byte, src *[miniBlockSize]int32, bitWidth uint) {
+	bitMask := uint32(1<<bitWidth) - 1
+	bitOffset := uint(0)
+
+	for _, value := range src {
+		i := bitOffset / 32
+		j := bitOffset % 32
+
+		lo := binary.LittleEndian.Uint32(dst[(i+0)*4:])
+		hi := binary.LittleEndian.Uint32(dst[(i+1)*4:])
+
+		lo |= (uint32(value) & bitMask) << j
+		hi |= (uint32(value) >> (32 - j))
+
+		binary.LittleEndian.PutUint32(dst[(i+0)*4:], lo)
+		binary.LittleEndian.PutUint32(dst[(i+1)*4:], hi)
+
+		bitOffset += bitWidth
 	}
-	dst = appendBinaryPackedHeader(dst, blockSize, numMiniBlocks, totalValues, int64(firstValue))
-	if totalValues < 2 {
-		return dst
-	}
-
-	lastValue := firstValue
-	for i := 1; i < len(src); {
-		block := make([]int32, blockSize)
-		block = block[:copy(block, src[i:])]
-		i += len(block)
-
-		for j, v := range block {
-			block[j], lastValue = v-lastValue, v
-		}
-
-		minDelta := bits.MinInt32(block)
-		bits.SubInt32(block, minDelta)
-
-		miniBlock := make([]byte, blockSize*4)
-		bitWidths := make([]byte, numMiniBlocks)
-		bitOffset := uint(0)
-		miniBlockLength := 0
-
-		for i := range bitWidths {
-			j := (i + 0) * miniBlockSize
-			k := (i + 1) * miniBlockSize
-
-			if k > len(block) {
-				k = len(block)
-			}
-
-			bitWidth := uint(bits.MaxLen32(block[j:k]))
-			if bitWidth != 0 {
-				bitWidths[i] = byte(bitWidth)
-
-				for _, bits := range block[j:k] {
-					for b := uint(0); b < bitWidth; b++ {
-						x := bitOffset / 8
-						y := bitOffset % 8
-						miniBlock[x] |= byte(((bits >> b) & 1) << y)
-						bitOffset++
-					}
-				}
-
-				miniBlockLength += (miniBlockSize * int(bitWidth)) / 8
-			}
-
-			if k == len(block) {
-				break
-			}
-		}
-
-		miniBlock = miniBlock[:miniBlockLength]
-		dst = appendBinaryPackedBlock(dst, int64(minDelta), bitWidths)
-		dst = append(dst, miniBlock...)
-	}
-
-	return dst
 }
 
 func (e *BinaryPackedEncoding) encodeInt64(dst []byte, src []int64) []byte {
@@ -115,7 +61,7 @@ func (e *BinaryPackedEncoding) encodeInt64(dst []byte, src []int64) []byte {
 		// the buffer to be put on the heap since the compiler wouldn't know
 		// how much stack space it needs in advance.
 		miniBlock := make([]byte, blockSize*8)
-		bitWidths := make([]byte, numMiniBlocks)
+		bitWidths := [numMiniBlocks]byte{}
 		bitOffset := uint(0)
 		miniBlockLength := 0
 
@@ -153,23 +99,5 @@ func (e *BinaryPackedEncoding) encodeInt64(dst []byte, src []int64) []byte {
 		dst = append(dst, miniBlock...)
 	}
 
-	return dst
-}
-
-func appendBinaryPackedHeader(dst []byte, blockSize, numMiniBlocks, totalValues int, firstValue int64) []byte {
-	b := [4 * binary.MaxVarintLen64]byte{}
-	n := 0
-	n += binary.PutUvarint(b[n:], uint64(blockSize))
-	n += binary.PutUvarint(b[n:], uint64(numMiniBlocks))
-	n += binary.PutUvarint(b[n:], uint64(totalValues))
-	n += binary.PutVarint(b[n:], firstValue)
-	return append(dst, b[:n]...)
-}
-
-func appendBinaryPackedBlock(dst []byte, minDelta int64, bitWidths []byte) []byte {
-	b := [binary.MaxVarintLen64]byte{}
-	n := binary.PutVarint(b[:], minDelta)
-	dst = append(dst, b[:n]...)
-	dst = append(dst, bitWidths...)
 	return dst
 }

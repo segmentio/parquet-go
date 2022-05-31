@@ -9,6 +9,8 @@ import (
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/format"
 	"github.com/segmentio/parquet-go/internal/bits"
+
+	. "math/bits"
 )
 
 const (
@@ -24,6 +26,146 @@ const (
 	maxHeaderLength    = 4 * binary.MaxVarintLen64
 	maxMiniBlockLength = binary.MaxVarintLen64 + numMiniBlocks + (4 * blockSize)
 )
+
+var (
+	encodeInt32 = encodeInt32Default
+)
+
+func encodeInt32Default(dst []byte, src []int32) []byte {
+	totalValues := len(src)
+	firstValue := int32(0)
+	if totalValues > 0 {
+		firstValue = src[0]
+	}
+
+	n := len(dst)
+	dst = resize(dst, n+maxHeaderLength)
+	dst = dst[:n+encodeBinaryPackedHeader(dst[n:], blockSize, numMiniBlocks, totalValues, int64(firstValue))]
+
+	if totalValues < 2 {
+		return dst
+	}
+
+	lastValue := firstValue
+	for i := 1; i < len(src); i += blockSize {
+		block := [blockSize]int32{}
+		blockLength := copy(block[:], src[i:])
+
+		lastValue = blockDeltaInt32(&block, lastValue)
+		minDelta := blockMinInt32(&block)
+		blockSubInt32(&block, minDelta)
+		blockClearInt32(&block, blockLength)
+
+		bitWidths := [numMiniBlocks]byte{}
+		blockBitWidthsInt32(&bitWidths, &block)
+
+		n := len(dst)
+		dst = resize(dst, n+maxMiniBlockLength+4)
+		n += encodeBlockHeader(dst[n:], int64(minDelta), bitWidths)
+
+		for i, bitWidth := range bitWidths {
+			if bitWidth != 0 {
+				miniBlock := (*[miniBlockSize]int32)(block[i*miniBlockSize:])
+				miniBlockPackInt32(dst[n:], miniBlock, uint(bitWidth))
+				n += (miniBlockSize * int(bitWidth)) / 8
+			}
+		}
+
+		dst = dst[:n]
+	}
+
+	return dst
+}
+
+func encodeBinaryPackedHeader(dst []byte, blockSize, numMiniBlocks, totalValues int, firstValue int64) (n int) {
+	n += binary.PutUvarint(dst[n:], uint64(blockSize))
+	n += binary.PutUvarint(dst[n:], uint64(numMiniBlocks))
+	n += binary.PutUvarint(dst[n:], uint64(totalValues))
+	n += binary.PutVarint(dst[n:], firstValue)
+	return n
+}
+
+func encodeBlockHeader(dst []byte, minDelta int64, bitWidths [numMiniBlocks]byte) (n int) {
+	n += binary.PutVarint(dst, int64(minDelta))
+	n += copy(dst[n:], bitWidths[:])
+	return n
+}
+
+func appendBinaryPackedHeader(dst []byte, blockSize, numMiniBlocks, totalValues int, firstValue int64) []byte {
+	b := [4 * binary.MaxVarintLen64]byte{}
+	n := encodeBinaryPackedHeader(b[:], blockSize, numMiniBlocks, totalValues, firstValue)
+	return append(dst, b[:n]...)
+}
+
+func appendBinaryPackedBlock(dst []byte, minDelta int64, bitWidths [numMiniBlocks]byte) []byte {
+	b := [binary.MaxVarintLen64 + numMiniBlocks]byte{}
+	n := encodeBlockHeader(b[:], minDelta, bitWidths)
+	return append(dst, b[:n]...)
+}
+
+func resize(buf []byte, size int) []byte {
+	if cap(buf) < size {
+		newCap := 2 * cap(buf)
+		if newCap < size {
+			newCap = size
+		}
+		buf = append(make([]byte, 0, newCap), buf...)
+	} else if size > len(buf) {
+		clear := buf[len(buf):size]
+		for i := range clear {
+			clear[i] = 0
+		}
+	}
+	return buf[:size]
+}
+
+func blockClearInt32(block *[blockSize]int32, blockLength int) {
+	if blockLength < blockSize {
+		clear := block[blockLength:]
+		for i := range clear {
+			clear[i] = 0
+		}
+	}
+}
+
+func blockDeltaInt32(block *[blockSize]int32, lastValue int32) int32 {
+	for i, v := range block {
+		block[i], lastValue = v-lastValue, v
+	}
+	return lastValue
+}
+
+func blockMinInt32(block *[blockSize]int32) int32 {
+	min := block[0]
+	for _, v := range block[1:] {
+		if v < min {
+			min = v
+		}
+	}
+	return min
+}
+
+func blockSubInt32(block *[blockSize]int32, value int32) {
+	for i := range block {
+		block[i] -= value
+	}
+}
+
+func blockBitWidthsInt32(bitWidths *[numMiniBlocks]byte, block *[blockSize]int32) {
+	for i := range bitWidths {
+		j := (i + 0) * miniBlockSize
+		k := (i + 1) * miniBlockSize
+		bitWidth := 0
+
+		for _, v := range block[j:k] {
+			if n := Len32(uint32(v)); n > bitWidth {
+				bitWidth = n
+			}
+		}
+
+		bitWidths[i] = byte(bitWidth)
+	}
+}
 
 type BinaryPackedEncoding struct {
 	encoding.NotSupported
@@ -41,14 +183,14 @@ func (e *BinaryPackedEncoding) EncodeInt32(dst, src []byte) ([]byte, error) {
 	if (len(src) % 4) != 0 {
 		return dst[:0], encoding.ErrEncodeInvalidInputSize(e, "INT64", len(src))
 	}
-	return e.encodeInt32(dst[:0], bits.BytesToInt32(src)), nil
+	return encodeInt32(dst[:0], bytesToInt32(src)), nil
 }
 
 func (e *BinaryPackedEncoding) EncodeInt64(dst, src []byte) ([]byte, error) {
 	if (len(src) % 8) != 0 {
 		return dst[:0], encoding.ErrEncodeInvalidInputSize(e, "INT64", len(src))
 	}
-	return e.encodeInt64(dst[:0], bits.BytesToInt64(src)), nil
+	return e.encodeInt64(dst[:0], bytesToInt64(src)), nil
 }
 
 func (e *BinaryPackedEncoding) DecodeInt32(dst, src []byte) ([]byte, error) {

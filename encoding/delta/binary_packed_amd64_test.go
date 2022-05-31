@@ -114,7 +114,7 @@ func testBlockBitWidthsInt32(t *testing.T, f func(*[numMiniBlocks]byte, *[blockS
 }
 
 func TestMiniBlockPackInt32(t *testing.T) {
-	testMiniBlockPackInt32(t, miniBlockPackInt32)
+	testMiniBlockPackInt32(t, miniBlockPackInt32Default)
 }
 
 func TestMiniBlockPackInt32AVX2(t *testing.T) {
@@ -221,7 +221,7 @@ func benchmarkBlockBitWidthsInt32(b *testing.B, f func(*[numMiniBlocks]byte, *[b
 }
 
 func BenchmarkMiniBlockPackInt32(b *testing.B) {
-	benchmarkMiniBlockPackInt32(b, miniBlockPackInt32)
+	benchmarkMiniBlockPackInt32(b, miniBlockPackInt32Default)
 }
 
 func BenchmarkMiniBlockPackInt32AVX2(b *testing.B) {

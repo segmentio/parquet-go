@@ -3,38 +3,30 @@
 package delta
 
 import (
-	"encoding/binary"
-
 	"github.com/segmentio/parquet-go/internal/bits"
 	"golang.org/x/sys/cpu"
 )
 
-//go:noescape
-func blockDeltaInt32(block *[blockSize]int32, lastValue int32) int32
+func init() {
+	if cpu.X86.HasAVX2 {
+		encodeInt32 = encodeInt32AVX2
+	}
+}
 
 //go:noescape
 func blockDeltaInt32AVX2(block *[blockSize]int32, lastValue int32) int32
 
 //go:noescape
-func blockMinInt32(block *[blockSize]int32) int32
-
-//go:noescape
 func blockMinInt32AVX2(block *[blockSize]int32) int32
-
-//go:noescape
-func blockSubInt32(block *[blockSize]int32, value int32)
 
 //go:noescape
 func blockSubInt32AVX2(block *[blockSize]int32, value int32)
 
 //go:noescape
-func blockBitWidthsInt32(bitWidths *[numMiniBlocks]byte, block *[blockSize]int32)
-
-//go:noescape
 func blockBitWidthsInt32AVX2(bitWidths *[numMiniBlocks]byte, block *[blockSize]int32)
 
 //go:noescape
-func miniBlockPackInt32(dst *byte, src *[miniBlockSize]int32, bitWidth uint)
+func miniBlockPackInt32Default(dst *byte, src *[miniBlockSize]int32, bitWidth uint)
 
 //go:noescape
 func miniBlockPackInt32x1bitAVX2(dst *byte, src *[miniBlockSize]int32)
@@ -48,6 +40,10 @@ func miniBlockPackInt32x3to16bitsAVX2(dst *byte, src *[miniBlockSize]int32, bitW
 //go:noescape
 func miniBlockPackInt32x32bitsAVX2(dst *byte, src *[miniBlockSize]int32)
 
+func miniBlockPackInt32(dst []byte, src *[miniBlockSize]int32, bitWidth uint) {
+	miniBlockPackInt32Default(&dst[0], src, bitWidth)
+}
+
 func miniBlockPackInt32AVX2(dst *byte, src *[miniBlockSize]int32, bitWidth uint) {
 	switch {
 	case bitWidth == 1:
@@ -59,20 +55,11 @@ func miniBlockPackInt32AVX2(dst *byte, src *[miniBlockSize]int32, bitWidth uint)
 	case bitWidth <= 16:
 		miniBlockPackInt32x3to16bitsAVX2(dst, src, bitWidth)
 	default:
-		miniBlockPackInt32(dst, src, bitWidth)
+		miniBlockPackInt32Default(dst, src, bitWidth)
 	}
 }
 
-func blockClearInt32(block *[blockSize]int32, blockLength int) {
-	if blockLength < blockSize {
-		clear := block[blockLength:]
-		for i := range clear {
-			clear[i] = 0
-		}
-	}
-}
-
-func (e *BinaryPackedEncoding) encodeInt32(dst []byte, src []int32) []byte {
+func encodeInt32AVX2(dst []byte, src []int32) []byte {
 	totalValues := len(src)
 	firstValue := int32(0)
 	if totalValues > 0 {
@@ -88,70 +75,34 @@ func (e *BinaryPackedEncoding) encodeInt32(dst []byte, src []int32) []byte {
 	}
 
 	lastValue := firstValue
-	switch {
-	case cpu.X86.HasAVX2:
-		for i := 1; i < len(src); i += blockSize {
-			block := [blockSize]int32{}
-			blockLength := copy(block[:], src[i:])
-			dst, lastValue = e.encodeInt32BlockAVX2(dst, &block, blockLength, lastValue)
+	for i := 1; i < len(src); i += blockSize {
+		block := [blockSize]int32{}
+		blockLength := copy(block[:], src[i:])
+
+		lastValue = blockDeltaInt32AVX2(&block, lastValue)
+		minDelta := blockMinInt32AVX2(&block)
+		blockSubInt32AVX2(&block, minDelta)
+		blockClearInt32(&block, blockLength)
+
+		bitWidths := [numMiniBlocks]byte{}
+		blockBitWidthsInt32AVX2(&bitWidths, &block)
+
+		n := len(dst)
+		dst = resize(dst, n+maxMiniBlockLength+16)
+		n += encodeBlockHeader(dst[n:], int64(minDelta), bitWidths)
+
+		for i, bitWidth := range bitWidths {
+			if bitWidth != 0 {
+				miniBlock := (*[miniBlockSize]int32)(block[i*miniBlockSize:])
+				miniBlockPackInt32AVX2(&dst[n], miniBlock, uint(bitWidth))
+				n += (miniBlockSize * int(bitWidth)) / 8
+			}
 		}
-	default:
-		for i := 1; i < len(src); i += blockSize {
-			block := [blockSize]int32{}
-			blockLength := copy(block[:], src[i:])
-			dst, lastValue = e.encodeInt32Block(dst, &block, blockLength, lastValue)
-		}
+
+		dst = dst[:n]
 	}
 
 	return dst
-}
-
-func (e *BinaryPackedEncoding) encodeInt32Block(dst []byte, block *[blockSize]int32, blockLength int, lastValue int32) ([]byte, int32) {
-	lastValue = blockDeltaInt32(block, lastValue)
-	minDelta := blockMinInt32(block)
-	blockSubInt32(block, minDelta)
-	blockClearInt32(block, blockLength)
-
-	bitWidths := [numMiniBlocks]byte{}
-	blockBitWidthsInt32(&bitWidths, block)
-
-	n := len(dst)
-	dst = resize(dst, n+maxMiniBlockLength+4)
-	n += encodeBlockHeader(dst[n:], int64(minDelta), bitWidths)
-
-	for i, bitWidth := range bitWidths {
-		if bitWidth != 0 {
-			miniBlock := (*[miniBlockSize]int32)(block[i*miniBlockSize:])
-			miniBlockPackInt32(&dst[n], miniBlock, uint(bitWidth))
-			n += (miniBlockSize * int(bitWidth)) / 8
-		}
-	}
-
-	return dst[:n], lastValue
-}
-
-func (e *BinaryPackedEncoding) encodeInt32BlockAVX2(dst []byte, block *[blockSize]int32, blockLength int, lastValue int32) ([]byte, int32) {
-	lastValue = blockDeltaInt32AVX2(block, lastValue)
-	minDelta := blockMinInt32AVX2(block)
-	blockSubInt32AVX2(block, minDelta)
-	blockClearInt32(block, blockLength)
-
-	bitWidths := [numMiniBlocks]byte{}
-	blockBitWidthsInt32AVX2(&bitWidths, block)
-
-	n := len(dst)
-	dst = resize(dst, n+maxMiniBlockLength+16)
-	n += encodeBlockHeader(dst[n:], int64(minDelta), bitWidths)
-
-	for i, bitWidth := range bitWidths {
-		if bitWidth != 0 {
-			miniBlock := (*[miniBlockSize]int32)(block[i*miniBlockSize:])
-			miniBlockPackInt32AVX2(&dst[n], miniBlock, uint(bitWidth))
-			n += (miniBlockSize * int(bitWidth)) / 8
-		}
-	}
-
-	return dst[:n], lastValue
 }
 
 func (e *BinaryPackedEncoding) encodeInt64(dst []byte, src []int64) []byte {
@@ -225,46 +176,4 @@ func (e *BinaryPackedEncoding) encodeInt64(dst []byte, src []int64) []byte {
 	}
 
 	return dst
-}
-
-func encodeBinaryPackedHeader(dst []byte, blockSize, numMiniBlocks, totalValues int, firstValue int64) (n int) {
-	n += binary.PutUvarint(dst[n:], uint64(blockSize))
-	n += binary.PutUvarint(dst[n:], uint64(numMiniBlocks))
-	n += binary.PutUvarint(dst[n:], uint64(totalValues))
-	n += binary.PutVarint(dst[n:], firstValue)
-	return n
-}
-
-func encodeBlockHeader(dst []byte, minDelta int64, bitWidths [numMiniBlocks]byte) (n int) {
-	n += binary.PutVarint(dst, int64(minDelta))
-	n += copy(dst[n:], bitWidths[:])
-	return n
-}
-
-func appendBinaryPackedHeader(dst []byte, blockSize, numMiniBlocks, totalValues int, firstValue int64) []byte {
-	b := [4 * binary.MaxVarintLen64]byte{}
-	n := encodeBinaryPackedHeader(b[:], blockSize, numMiniBlocks, totalValues, firstValue)
-	return append(dst, b[:n]...)
-}
-
-func appendBinaryPackedBlock(dst []byte, minDelta int64, bitWidths [numMiniBlocks]byte) []byte {
-	b := [binary.MaxVarintLen64 + numMiniBlocks]byte{}
-	n := encodeBlockHeader(b[:], minDelta, bitWidths)
-	return append(dst, b[:n]...)
-}
-
-func resize(buf []byte, size int) []byte {
-	if cap(buf) < size {
-		newCap := 2 * cap(buf)
-		if newCap < size {
-			newCap = size
-		}
-		buf = append(make([]byte, 0, newCap), buf...)
-	} else if size > len(buf) {
-		clear := buf[len(buf):size]
-		for i := range clear {
-			clear[i] = 0
-		}
-	}
-	return buf[:size]
 }

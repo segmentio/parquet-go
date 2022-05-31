@@ -6,48 +6,6 @@
 #define numMiniBlocks 4
 #define miniBlockSize 32
 
-#define deltaInt32x8(baseAddr, lastValue, offset) \
-    MOVL offset+0(AX), R8        \
-    MOVL offset+4(AX), R9        \
-    MOVL offset+8(AX), R10       \
-    MOVL offset+12(AX), R11      \
-    MOVL offset+16(AX), R12      \
-    MOVL offset+20(AX), R13      \
-    MOVL offset+24(AX), R14      \
-    MOVL offset+28(AX), R15      \
-    SUBL lastValue, offset+0(AX) \
-    SUBL R8, offset+4(AX)        \
-    SUBL R9, offset+8(AX)        \
-    SUBL R10, offset+12(AX)      \
-    SUBL R11, offset+16(AX)      \
-    SUBL R12, offset+20(AX)      \
-    SUBL R13, offset+24(AX)      \
-    SUBL R14, offset+28(AX)      \
-    MOVL R15, lastValue
-
-// func blockDeltaInt32(block *[blockSize]int32, lastValue int32) int32
-TEXT ·blockDeltaInt32(SB), NOSPLIT, $0-24
-    MOVQ block+0(FP), AX
-    MOVL lastValue+8(FP), BX
-    deltaInt32x8(AX, BX, 0)
-    deltaInt32x8(AX, BX, 32)
-    deltaInt32x8(AX, BX, 64)
-    deltaInt32x8(AX, BX, 96)
-    deltaInt32x8(AX, BX, 128)
-    deltaInt32x8(AX, BX, 160)
-    deltaInt32x8(AX, BX, 192)
-    deltaInt32x8(AX, BX, 224)
-    deltaInt32x8(AX, BX, 256)
-    deltaInt32x8(AX, BX, 288)
-    deltaInt32x8(AX, BX, 320)
-    deltaInt32x8(AX, BX, 352)
-    deltaInt32x8(AX, BX, 384)
-    deltaInt32x8(AX, BX, 416)
-    deltaInt32x8(AX, BX, 448)
-    deltaInt32x8(AX, BX, 480)
-    MOVL BX, ret+16(FP)
-    RET
-
 #define deltaInt32AVX2x8(baseAddr) \
     VMOVDQU baseAddr, Y1    /* [0,1,2,3,4,5,6,7] */         \
     VPERMD Y1, Y3, Y2       /* [7,0,1,2,3,4,5,6] */         \
@@ -63,7 +21,7 @@ TEXT ·blockDeltaInt32AVX2(SB), NOSPLIT, $0-24
     MOVL CX, ret+16(FP)
 
     VPBROADCASTD lastValue+8(FP), Y0
-    VMOVDQU blockDeltaInt32Perm<>(SB), Y3
+    VMOVDQU deltaInt32Perm<>(SB), Y3
 
     deltaInt32AVX2x8(0(AX))
     deltaInt32AVX2x8(32(AX))
@@ -84,72 +42,15 @@ TEXT ·blockDeltaInt32AVX2(SB), NOSPLIT, $0-24
     VZEROUPPER
     RET
 
-GLOBL blockDeltaInt32Perm<>(SB), RODATA|NOPTR, $32
-DATA blockDeltaInt32Perm<>+0(SB)/4, $7
-DATA blockDeltaInt32Perm<>+4(SB)/4, $0
-DATA blockDeltaInt32Perm<>+8(SB)/4, $1
-DATA blockDeltaInt32Perm<>+12(SB)/4, $2
-DATA blockDeltaInt32Perm<>+16(SB)/4, $3
-DATA blockDeltaInt32Perm<>+20(SB)/4, $4
-DATA blockDeltaInt32Perm<>+24(SB)/4, $5
-DATA blockDeltaInt32Perm<>+28(SB)/4, $6
-
-#define minInt32x8(baseAddr, min, offset) \
-    MOVL offset+0(baseAddr), R8   \
-    MOVL offset+4(baseAddr), R9   \
-    MOVL offset+8(baseAddr), R10  \
-    MOVL offset+12(baseAddr), R11 \
-    MOVL offset+16(baseAddr), R12 \
-    MOVL offset+20(baseAddr), R13 \
-    MOVL offset+24(baseAddr), R14 \
-    MOVL offset+28(baseAddr), R15 \
-                                  \
-    CMPL R9, R8                   \
-    CMOVLLT R9, R8                \
-                                  \
-    CMPL R11, R10                 \
-    CMOVLLT R11, R10              \
-                                  \
-    CMPL R13, R12                 \
-    CMOVLLT R13, R12              \
-                                  \
-    CMPL R15, R14                 \
-    CMOVLLT R15, R14              \
-                                  \
-    CMPL R10, R8                  \
-    CMOVLLT R10, R8               \
-                                  \
-    CMPL R14, R12                 \
-    CMOVLLT R14, R12              \
-                                  \
-    CMPL R12, R8                  \
-    CMOVLLT R12, R8               \
-                                  \
-    CMPL R8, min                  \
-    CMOVLLT R8, min
-
-// func blockMinInt32(block *[blockSize]int32) int32
-TEXT ·blockMinInt32(SB), NOSPLIT, $0-16
-    MOVQ block+0(FP), AX
-    MOVL (AX), BX
-    minInt32x8(AX, BX, 0)
-    minInt32x8(AX, BX, 32)
-    minInt32x8(AX, BX, 64)
-    minInt32x8(AX, BX, 96)
-    minInt32x8(AX, BX, 128)
-    minInt32x8(AX, BX, 160)
-    minInt32x8(AX, BX, 192)
-    minInt32x8(AX, BX, 224)
-    minInt32x8(AX, BX, 256)
-    minInt32x8(AX, BX, 288)
-    minInt32x8(AX, BX, 320)
-    minInt32x8(AX, BX, 352)
-    minInt32x8(AX, BX, 384)
-    minInt32x8(AX, BX, 416)
-    minInt32x8(AX, BX, 448)
-    minInt32x8(AX, BX, 480)
-    MOVL BX, ret+8(FP)
-    RET
+GLOBL deltaInt32Perm<>(SB), RODATA|NOPTR, $32
+DATA deltaInt32Perm<>+0(SB)/4, $7
+DATA deltaInt32Perm<>+4(SB)/4, $0
+DATA deltaInt32Perm<>+8(SB)/4, $1
+DATA deltaInt32Perm<>+12(SB)/4, $2
+DATA deltaInt32Perm<>+16(SB)/4, $3
+DATA deltaInt32Perm<>+20(SB)/4, $4
+DATA deltaInt32Perm<>+24(SB)/4, $5
+DATA deltaInt32Perm<>+28(SB)/4, $6
 
 // func blockMinInt32AVX2(block *[blockSize]int32) int32
 TEXT ·blockMinInt32AVX2(SB), NOSPLIT, $0-16
@@ -222,38 +123,6 @@ TEXT ·blockMinInt32AVX2(SB), NOSPLIT, $0-16
     MOVL BX, ret+8(FP)
     RET
 
-#define subInt32x8(baseAddr, value, offset) \
-    SUBL value, offset+0(baseAddr)          \
-    SUBL value, offset+4(baseAddr)          \
-    SUBL value, offset+8(baseAddr)          \
-    SUBL value, offset+12(baseAddr)         \
-    SUBL value, offset+16(baseAddr)         \
-    SUBL value, offset+20(baseAddr)         \
-    SUBL value, offset+24(baseAddr)         \
-    SUBL value, offset+28(baseAddr)
-
-// func blockSubInt32(block *[blockSize]int32, value int32)
-TEXT ·blockSubInt32(SB), NOSPLIT, $0-16
-    MOVQ block+0(FP), AX
-    MOVQ value+8(FP), BX
-    subInt32x8(AX, BX, 0)
-    subInt32x8(AX, BX, 32)
-    subInt32x8(AX, BX, 64)
-    subInt32x8(AX, BX, 96)
-    subInt32x8(AX, BX, 128)
-    subInt32x8(AX, BX, 160)
-    subInt32x8(AX, BX, 192)
-    subInt32x8(AX, BX, 224)
-    subInt32x8(AX, BX, 256)
-    subInt32x8(AX, BX, 288)
-    subInt32x8(AX, BX, 320)
-    subInt32x8(AX, BX, 352)
-    subInt32x8(AX, BX, 384)
-    subInt32x8(AX, BX, 416)
-    subInt32x8(AX, BX, 448)
-    subInt32x8(AX, BX, 480)
-    RET
-
 #define subInt32AVX2x64(baseAddr, offset) \
     VMOVDQU offset+0(baseAddr), Y1      \
     VMOVDQU offset+32(baseAddr), Y2     \
@@ -287,64 +156,6 @@ TEXT ·blockSubInt32AVX2(SB), NOSPLIT, $0-16
     subInt32AVX2x64(AX, 0)
     subInt32AVX2x64(AX, 256)
     VZEROUPPER
-    RET
-
-#define blockBitWidthsInt32x8(baseAddr, dst, offset) \
-    MOVL offset+0(baseAddr), R8   \
-    MOVL offset+4(baseAddr), R9   \
-    MOVL offset+8(baseAddr), R10  \
-    MOVL offset+12(baseAddr), R11 \
-    MOVL offset+16(baseAddr), R12 \
-    MOVL offset+20(baseAddr), R13 \
-    MOVL offset+24(baseAddr), R14 \
-    MOVL offset+28(baseAddr), R15 \
-                                  \
-    CMPL R9, R8                   \
-    CMOVLHI R9, R8                \
-                                  \
-    CMPL R11, R10                 \
-    CMOVLHI R11, R10              \
-                                  \
-    CMPL R13, R12                 \
-    CMOVLHI R13, R12              \
-                                  \
-    CMPL R15, R14                 \
-    CMOVLHI R15, R14              \
-                                  \
-    CMPL R10, R8                  \
-    CMOVLHI R10, R8               \
-                                  \
-    CMPL R14, R12                 \
-    CMOVLHI R14, R12              \
-                                  \
-    CMPL R12, R8                  \
-    CMOVLHI R12, R8               \
-                                  \
-    CMPL R8, dst                  \
-    CMOVLHI R8, dst
-
-#define blockBitWidthsInt32x32(src, dst, offset) \
-    XORQ dst, dst                                    \
-    blockBitWidthsInt32x8(src, dst, offset+0)    \
-    blockBitWidthsInt32x8(src, dst, offset+32)   \
-    blockBitWidthsInt32x8(src, dst, offset+64)   \
-    blockBitWidthsInt32x8(src, dst, offset+96)   \
-    LZCNTL dst, dst                                  \
-    NEGL dst                                         \
-    ADDL $32, dst
-
-// func blockBitWidthsInt32(bitWidths *[numMiniBlocks]byte, block *[blockSize]int32)
-TEXT ·blockBitWidthsInt32(SB), NOSPLIT, $0-16
-    MOVQ block+8(FP), DI
-    blockBitWidthsInt32x32(DI, AX, 0)
-    blockBitWidthsInt32x32(DI, BX, 128)
-    blockBitWidthsInt32x32(DI, CX, 256)
-    blockBitWidthsInt32x32(DI, DX, 384)
-    MOVQ bitWidths+0(FP), DI
-    MOVB AX, 0(DI)
-    MOVB BX, 1(DI)
-    MOVB CX, 2(DI)
-    MOVB DX, 3(DI)
     RET
 
 // func blockBitWidthsInt32AVX2(bitWidths *[numMiniBlocks]byte, block *[blockSize]int32)
@@ -404,15 +215,15 @@ loop:
     VZEROUPPER
     RET
 
-// miniBlockPackInt32 is the generic implementation of the algorithm to pack
-// 32 bit integers into values of a given bit width (<=32).
+// miniBlockPackInt32Default is the generic implementation of the algorithm to
+// pack 32 bit integers into values of a given bit width (<=32).
 //
 // This algorithm is much slower than the vectorized versions, but is useful
 // as a reference implementation to run the tests against, and as fallback when
 // the code runs on a CPU which does not support the AVX2 instruction set.
 //
-// func miniBlockPackInt32(dst *byte, src *[miniBlockSize]int32, bitWidth uint)
-TEXT ·miniBlockPackInt32(SB), NOSPLIT, $0-24
+// func miniBlockPackInt32Default(dst *byte, src *[miniBlockSize]int32, bitWidth uint)
+TEXT ·miniBlockPackInt32Default(SB), NOSPLIT, $0-24
     MOVQ dst+0(FP), AX
     MOVQ src+8(FP), BX
     MOVQ bitWidth+16(FP), R9
