@@ -1,4 +1,4 @@
-//go:build amd64
+//go:build amd64 && go1.18
 
 package delta_test
 
