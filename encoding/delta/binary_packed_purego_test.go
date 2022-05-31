@@ -30,6 +30,7 @@ func TestBlockDeltaInt32(t *testing.T) {
 }
 
 func testBlockDeltaInt32(t *testing.T, f func(*[blockSize]int32, int32) int32) {
+	t.Helper()
 	block := [blockSize]int32{}
 	for i := range block {
 		block[i] = int32(2 * (i + 1))
@@ -52,6 +53,7 @@ func TestBlockMinInt32(t *testing.T) {
 }
 
 func testBlockMinInt32(t *testing.T, f func(*[blockSize]int32) int32) {
+	t.Helper()
 	block := [blockSize]int32{}
 	for i := range block {
 		block[i] = blockSize - int32(i)
@@ -66,6 +68,7 @@ func TestBlockSubInt32(t *testing.T) {
 }
 
 func testBlockSubInt32(t *testing.T, f func(*[blockSize]int32, int32)) {
+	t.Helper()
 	block := [blockSize]int32{}
 	for i := range block {
 		block[i] = int32(i)
@@ -83,6 +86,7 @@ func TestBlockBitWidthsInt32(t *testing.T) {
 }
 
 func testBlockBitWidthsInt32(t *testing.T, f func(*[numMiniBlocks]byte, *[blockSize]int32)) {
+	t.Helper()
 	bitWidths := [numMiniBlocks]byte{}
 	block := [blockSize]int32{}
 	for i := range block {
@@ -107,6 +111,7 @@ func TestMiniBlockPackInt32(t *testing.T) {
 }
 
 func testMiniBlockPackInt32(t *testing.T, f func([]byte, *[miniBlockSize]int32, uint)) {
+	t.Helper()
 	for bitWidth := uint(1); bitWidth <= 32; bitWidth++ {
 		t.Run(fmt.Sprintf("bitWidth=%d", bitWidth), func(t *testing.T) {
 			got := [4*miniBlockSize + 32]byte{}
@@ -208,6 +213,7 @@ func TestBlockDeltaInt64(t *testing.T) {
 }
 
 func testBlockDeltaInt64(t *testing.T, f func(*[blockSize]int64, int64) int64) {
+	t.Helper()
 	block := [blockSize]int64{}
 	for i := range block {
 		block[i] = int64(2 * (i + 1))

@@ -26,6 +26,22 @@ func EncodeInt32(t *testing.T, enc encoding.Encoding, min, max int, bitWidth uin
 	)
 }
 
+func EncodeInt64(t *testing.T, enc encoding.Encoding, min, max int, bitWidth uint) {
+	t.Helper()
+	encode(t, enc, min, max,
+		encoding.Encoding.EncodeInt64,
+		encoding.Encoding.DecodeInt64,
+		func(i int) int64 {
+			value := int64(i)
+			mask := int64((1 << bitWidth) - 1)
+			if (i % 2) != 0 {
+				value = -value
+			}
+			return value & mask
+		},
+	)
+}
+
 func EncodeFloat(t *testing.T, enc encoding.Encoding, min, max int) {
 	t.Helper()
 	encode(t, enc, min, max,

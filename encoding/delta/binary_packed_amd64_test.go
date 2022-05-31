@@ -71,3 +71,61 @@ func BenchmarkMiniBlockPackInt32AVX2(b *testing.B) {
 		},
 	)
 }
+
+func TestBlockDeltaInt64AVX2(t *testing.T) {
+	requireAVX2(t)
+	testBlockDeltaInt64(t, blockDeltaInt64AVX2)
+}
+
+func TestBlockMinInt64AVX2(t *testing.T) {
+	requireAVX2(t)
+	testBlockMinInt64(t, blockMinInt64AVX2)
+}
+
+func TestBlockSubInt64AVX2(t *testing.T) {
+	requireAVX2(t)
+	testBlockSubInt64(t, blockSubInt64AVX2)
+}
+
+func TestBlockBitWidthsInt64AVX2(t *testing.T) {
+	requireAVX2(t)
+	testBlockBitWidthsInt64(t, blockBitWidthsInt64AVX2)
+}
+
+func TestMiniBlockPackInt64AVX2(t *testing.T) {
+	requireAVX2(t)
+	testMiniBlockPackInt64(t,
+		func(dst []byte, src *[miniBlockSize]int64, bitWidth uint) {
+			miniBlockPackInt64AVX2(&dst[0], src, bitWidth)
+		},
+	)
+}
+
+func BenchmarkBlockDeltaInt64AVX2(b *testing.B) {
+	requireAVX2(b)
+	benchmarkBlockDeltaInt64(b, blockDeltaInt64AVX2)
+}
+
+func BenchmarkBlockMinInt64AVX2(b *testing.B) {
+	requireAVX2(b)
+	benchmarkBlockMinInt64(b, blockMinInt64AVX2)
+}
+
+func BenchmarkBlockSubInt64AVX2(b *testing.B) {
+	requireAVX2(b)
+	benchmarkBlockSubInt64(b, blockSubInt64AVX2)
+}
+
+func BenchmarkBlockBitWidthsInt64AVX2(b *testing.B) {
+	requireAVX2(b)
+	benchmarkBlockBitWidthsInt64(b, blockBitWidthsInt64AVX2)
+}
+
+func BenchmarkMiniBlockPackInt64AVX2(b *testing.B) {
+	requireAVX2(b)
+	benchmarkMiniBlockPackInt64(b,
+		func(dst []byte, src *[miniBlockSize]int64, bitWidth uint) {
+			miniBlockPackInt64AVX2(&dst[0], src, bitWidth)
+		},
+	)
+}

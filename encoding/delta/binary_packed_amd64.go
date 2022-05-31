@@ -9,6 +9,7 @@ import (
 func init() {
 	if cpu.X86.HasAVX2 {
 		encodeInt32 = encodeInt32AVX2
+		encodeInt64 = encodeInt64AVX2
 	}
 }
 
@@ -94,6 +95,93 @@ func encodeInt32AVX2(dst []byte, src []int32) []byte {
 			if bitWidth != 0 {
 				miniBlock := (*[miniBlockSize]int32)(block[i*miniBlockSize:])
 				miniBlockPackInt32AVX2(&dst[n], miniBlock, uint(bitWidth))
+				n += (miniBlockSize * int(bitWidth)) / 8
+			}
+		}
+
+		dst = dst[:n]
+	}
+
+	return dst
+}
+
+//go:noescape
+func blockDeltaInt64AVX2(block *[blockSize]int64, lastValue int64) int64
+
+//go:noescape
+func blockMinInt64AVX2(block *[blockSize]int64) int64
+
+//go:noescape
+func blockSubInt64AVX2(block *[blockSize]int64, value int64)
+
+//go:noescape
+func blockBitWidthsInt64AVX2(bitWidths *[numMiniBlocks]byte, block *[blockSize]int64)
+
+//go:noescape
+func miniBlockPackInt64Default(dst *byte, src *[miniBlockSize]int64, bitWidth uint)
+
+//go:noescape
+func miniBlockPackInt64x1bitAVX2(dst *byte, src *[miniBlockSize]int64)
+
+//go:noescape
+func miniBlockPackInt64x2bitsAVX2(dst *byte, src *[miniBlockSize]int64)
+
+//go:noescape
+func miniBlockPackInt64x64bitsAVX2(dst *byte, src *[miniBlockSize]int64)
+
+func miniBlockPackInt64(dst []byte, src *[miniBlockSize]int64, bitWidth uint) {
+	miniBlockPackInt64Default(&dst[0], src, bitWidth)
+}
+
+func miniBlockPackInt64AVX2(dst *byte, src *[miniBlockSize]int64, bitWidth uint) {
+	switch {
+	case bitWidth == 1:
+		miniBlockPackInt64x1bitAVX2(dst, src)
+	case bitWidth == 2:
+		miniBlockPackInt64x2bitsAVX2(dst, src)
+	case bitWidth == 64:
+		miniBlockPackInt64x64bitsAVX2(dst, src)
+	default:
+		miniBlockPackInt64Default(dst, src, bitWidth)
+	}
+}
+
+func encodeInt64AVX2(dst []byte, src []int64) []byte {
+	totalValues := len(src)
+	firstValue := int64(0)
+	if totalValues > 0 {
+		firstValue = src[0]
+	}
+
+	n := len(dst)
+	dst = resize(dst, n+maxHeaderLength64)
+	dst = dst[:n+encodeBinaryPackedHeader(dst[n:], blockSize, numMiniBlocks, totalValues, int64(firstValue))]
+
+	if totalValues < 2 {
+		return dst
+	}
+
+	lastValue := firstValue
+	for i := 1; i < len(src); i += blockSize {
+		block := [blockSize]int64{}
+		blockLength := copy(block[:], src[i:])
+
+		lastValue = blockDeltaInt64AVX2(&block, lastValue)
+		minDelta := blockMinInt64AVX2(&block)
+		blockSubInt64AVX2(&block, minDelta)
+		blockClearInt64(&block, blockLength)
+
+		bitWidths := [numMiniBlocks]byte{}
+		blockBitWidthsInt64AVX2(&bitWidths, &block)
+
+		n := len(dst)
+		dst = resize(dst, n+maxMiniBlockLength64+16)
+		n += encodeBlockHeader(dst[n:], int64(minDelta), bitWidths)
+
+		for i, bitWidth := range bitWidths {
+			if bitWidth != 0 {
+				miniBlock := (*[miniBlockSize]int64)(block[i*miniBlockSize:])
+				miniBlockPackInt64AVX2(&dst[n], miniBlock, uint(bitWidth))
 				n += (miniBlockSize * int(bitWidth)) / 8
 			}
 		}
