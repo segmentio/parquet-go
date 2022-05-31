@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	encodeMinNumValues = 2
-	encodeMaxNumValues = 2
+	encodeMinNumValues = 0
+	encodeMaxNumValues = 200
 )
 
 func TestEncodeInt32(t *testing.T) {
