@@ -5,10 +5,6 @@ import (
 	"unsafe"
 )
 
-const (
-	defaultBufferSize = 4096
-)
-
 type int32Buffer struct {
 	values []int32
 }
