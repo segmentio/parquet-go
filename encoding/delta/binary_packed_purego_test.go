@@ -103,19 +103,19 @@ func testBlockBitWidthsInt32(t *testing.T, f func(*[numMiniBlocks]byte, *[blockS
 }
 
 func TestMiniBlockPackInt32(t *testing.T) {
-	testMiniBlockPackInt32(t, miniBlockPackInt32Default)
+	testMiniBlockPackInt32(t, miniBlockPackInt32)
 }
 
-func testMiniBlockPackInt32(t *testing.T, f func(*byte, *[miniBlockSize]int32, uint)) {
+func testMiniBlockPackInt32(t *testing.T, f func([]byte, *[miniBlockSize]int32, uint)) {
 	for bitWidth := uint(1); bitWidth <= 32; bitWidth++ {
 		t.Run(fmt.Sprintf("bitWidth=%d", bitWidth), func(t *testing.T) {
-			got := [4 * miniBlockSize]byte{}
+			got := [4*miniBlockSize + 32]byte{}
 			src := [miniBlockSize]int32{}
 			for i := range src {
 				src[i] = int32(i) & int32((1<<bitWidth)-1)
 			}
 
-			want := [4 * miniBlockSize]byte{}
+			want := [4*miniBlockSize + 32]byte{}
 			bitOffset := uint(0)
 
 			for _, bits := range src {
@@ -127,7 +127,7 @@ func testMiniBlockPackInt32(t *testing.T, f func(*byte, *[miniBlockSize]int32, u
 				}
 			}
 
-			f(&got[0], &src, bitWidth)
+			f(got[:], &src, bitWidth)
 			n := (miniBlockSize * bitWidth) / 8
 
 			if !bytes.Equal(want[:n], got[:n]) {
@@ -194,8 +194,186 @@ func benchmarkMiniBlockPackInt32(b *testing.B, f func([]byte, *[miniBlockSize]in
 	for bitWidth := uint(1); bitWidth <= 32; bitWidth++ {
 		b.Run(fmt.Sprintf("bitWidth=%d", bitWidth), func(b *testing.B) {
 			b.SetBytes(4 * miniBlockSize)
-			dst := [4 * miniBlockSize]byte{}
+			dst := [4*miniBlockSize + 32]byte{}
 			src := [miniBlockSize]int32{}
+			for i := 0; i < b.N; i++ {
+				f(dst[:], &src, bitWidth)
+			}
+		})
+	}
+}
+
+func TestBlockDeltaInt64(t *testing.T) {
+	testBlockDeltaInt64(t, blockDeltaInt64)
+}
+
+func testBlockDeltaInt64(t *testing.T, f func(*[blockSize]int64, int64) int64) {
+	block := [blockSize]int64{}
+	for i := range block {
+		block[i] = int64(2 * (i + 1))
+	}
+	lastValue := f(&block, 0)
+	if lastValue != 2*blockSize {
+		t.Errorf("wrong last block value: want=%d got=%d", 2*blockSize, lastValue)
+	}
+	for i := range block {
+		j := int64(2 * (i + 0))
+		k := int64(2 * (i + 1))
+		if block[i] != (k - j) {
+			t.Errorf("wrong block delta at index %d: want=%d got=%d", i, k-j, block[i])
+		}
+	}
+}
+
+func TestBlockMinInt64(t *testing.T) {
+	testBlockMinInt64(t, blockMinInt64)
+}
+
+func testBlockMinInt64(t *testing.T, f func(*[blockSize]int64) int64) {
+	block := [blockSize]int64{}
+	for i := range block {
+		block[i] = blockSize - int64(i)
+	}
+	if min := f(&block); min != 1 {
+		t.Errorf("wrong min block value: want=1 got=%d", min)
+	}
+}
+
+func TestBlockSubInt64(t *testing.T) {
+	testBlockSubInt64(t, blockSubInt64)
+}
+
+func testBlockSubInt64(t *testing.T, f func(*[blockSize]int64, int64)) {
+	block := [blockSize]int64{}
+	for i := range block {
+		block[i] = int64(i)
+	}
+	f(&block, 1)
+	for i := range block {
+		if block[i] != int64(i-1) {
+			t.Errorf("wrong block value at index %d: want=%d got=%d", i, i-1, block[i])
+		}
+	}
+}
+
+func TestBlockBitWidthsInt64(t *testing.T) {
+	testBlockBitWidthsInt64(t, blockBitWidthsInt64)
+}
+
+func testBlockBitWidthsInt64(t *testing.T, f func(*[numMiniBlocks]byte, *[blockSize]int64)) {
+	bitWidths := [numMiniBlocks]byte{}
+	block := [blockSize]int64{}
+	for i := range block {
+		block[i] = int64(i)
+	}
+	f(&bitWidths, &block)
+
+	want := [numMiniBlocks]byte{}
+	for i := range want {
+		j := (i + 0) * miniBlockSize
+		k := (i + 1) * miniBlockSize
+		want[i] = byte(maxLen64(block[j:k]))
+	}
+
+	if bitWidths != want {
+		t.Errorf("wrong bit widths: want=%d got=%d", want, bitWidths)
+	}
+}
+
+func TestMiniBlockPackInt64(t *testing.T) {
+	testMiniBlockPackInt64(t, miniBlockPackInt64)
+}
+
+func testMiniBlockPackInt64(t *testing.T, f func([]byte, *[miniBlockSize]int64, uint)) {
+	for bitWidth := uint(1); bitWidth <= 64; bitWidth++ {
+		t.Run(fmt.Sprintf("bitWidth=%d", bitWidth), func(t *testing.T) {
+			got := [8*miniBlockSize + 64]byte{}
+			src := [miniBlockSize]int64{}
+			for i := range src {
+				src[i] = int64(i) & int64((1<<bitWidth)-1)
+			}
+
+			want := [8*miniBlockSize + 64]byte{}
+			bitOffset := uint(0)
+
+			for _, bits := range src {
+				for b := uint(0); b < bitWidth; b++ {
+					x := bitOffset / 8
+					y := bitOffset % 8
+					want[x] |= byte(((bits >> b) & 1) << y)
+					bitOffset++
+				}
+			}
+
+			f(got[:], &src, bitWidth)
+			n := (miniBlockSize * bitWidth) / 8
+
+			if !bytes.Equal(want[:n], got[:n]) {
+				t.Errorf("output mismatch: want=%08x got=%08x", want[:n], got[:n])
+			}
+		})
+	}
+}
+
+func BenchmarkBlockDeltaInt64(b *testing.B) {
+	benchmarkBlockDeltaInt64(b, blockDeltaInt64)
+}
+
+func benchmarkBlockDeltaInt64(b *testing.B, f func(*[blockSize]int64, int64) int64) {
+	b.SetBytes(8 * blockSize)
+	block := [blockSize]int64{}
+	for i := 0; i < b.N; i++ {
+		_ = f(&block, 0)
+	}
+}
+
+func BenchmarkBlockMinInt64(b *testing.B) {
+	benchmarkBlockMinInt64(b, blockMinInt64)
+}
+
+func benchmarkBlockMinInt64(b *testing.B, f func(*[blockSize]int64) int64) {
+	b.SetBytes(8 * blockSize)
+	block := [blockSize]int64{}
+	for i := 0; i < b.N; i++ {
+		_ = f(&block)
+	}
+}
+
+func BenchmarkBlockSubInt64(b *testing.B) {
+	benchmarkBlockSubInt64(b, blockSubInt64)
+}
+
+func benchmarkBlockSubInt64(b *testing.B, f func(*[blockSize]int64, int64)) {
+	b.SetBytes(8 * blockSize)
+	block := [blockSize]int64{}
+	for i := 0; i < b.N; i++ {
+		f(&block, 42)
+	}
+}
+
+func BenchmarkBlockBitWidthsInt64(b *testing.B) {
+	benchmarkBlockBitWidthsInt64(b, blockBitWidthsInt64)
+}
+
+func benchmarkBlockBitWidthsInt64(b *testing.B, f func(*[numMiniBlocks]byte, *[blockSize]int64)) {
+	b.SetBytes(8 * blockSize)
+	bitWidths := [numMiniBlocks]byte{}
+	block := [blockSize]int64{}
+	for i := 0; i < b.N; i++ {
+		f(&bitWidths, &block)
+	}
+}
+
+func BenchmarkMiniBlockPackInt64(b *testing.B) {
+	benchmarkMiniBlockPackInt64(b, miniBlockPackInt64)
+}
+
+func benchmarkMiniBlockPackInt64(b *testing.B, f func([]byte, *[miniBlockSize]int64, uint)) {
+	for bitWidth := uint(1); bitWidth <= 64; bitWidth++ {
+		b.Run(fmt.Sprintf("bitWidth=%d", bitWidth), func(b *testing.B) {
+			b.SetBytes(8 * miniBlockSize)
+			dst := [8*miniBlockSize + 64]byte{}
+			src := [miniBlockSize]int64{}
 			for i := 0; i < b.N; i++ {
 				f(dst[:], &src, bitWidth)
 			}

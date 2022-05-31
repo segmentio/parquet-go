@@ -36,7 +36,11 @@ func TestBlockBitWidthsInt32AVX2(t *testing.T) {
 
 func TestMiniBlockPackInt32AVX2(t *testing.T) {
 	requireAVX2(t)
-	testMiniBlockPackInt32(t, miniBlockPackInt32AVX2)
+	testMiniBlockPackInt32(t,
+		func(dst []byte, src *[miniBlockSize]int32, bitWidth uint) {
+			miniBlockPackInt32AVX2(&dst[0], src, bitWidth)
+		},
+	)
 }
 
 func BenchmarkBlockDeltaInt32AVX2(b *testing.B) {
