@@ -5,7 +5,17 @@ import (
 	"testing"
 )
 
-func TestPrefixLength(t *testing.T) {
+func TestLinearSearchPrefixLength(t *testing.T) {
+	testSearchPrefixLength(t, linearSearchPrefixLength)
+}
+
+func TestBinarySearchPrefixLength(t *testing.T) {
+	testSearchPrefixLength(t, func(base, data []byte) int {
+		return binarySearchPrefixLength(len(base)/2, base, data)
+	})
+}
+
+func testSearchPrefixLength(t *testing.T, prefixLength func(base, data []byte) int) {
 	tests := []struct {
 		base string
 		data string
@@ -118,10 +128,20 @@ func TestPrefixLength(t *testing.T) {
 	}
 }
 
-func BenchmarkPrefixLength(b *testing.B) {
+func BenchmarkLinearSearchkPrefixLength(b *testing.B) {
+	benchmarkSearchPrefixLength(b, linearSearchPrefixLength)
+}
+
+func BenchmarkBinarySearchkPrefixLength(b *testing.B) {
+	benchmarkSearchPrefixLength(b, func(base, data []byte) int {
+		return binarySearchPrefixLength(len(base)/2, base, data)
+	})
+}
+
+func benchmarkSearchPrefixLength(b *testing.B, prefixLength func(base, data []byte) int) {
 	value := bytes.Repeat([]byte("0123456789"), 100)
 
 	for i := 0; i < b.N; i++ {
-		prefixLength(value, value)
+		_ = prefixLength(value, value)
 	}
 }
