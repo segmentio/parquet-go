@@ -232,24 +232,23 @@ func PutByteArrayLength(b []byte, n int) {
 	binary.LittleEndian.PutUint32(b, uint32(n))
 }
 
+type status int
+
+const (
+	ok status = iota
+	errTooShort
+	errTooLarge
+)
+
 func ValidateByteArrays(b []byte) error {
-	for i := 0; i < len(b); {
-		r := len(b) - i
-		if r < ByteArrayLengthSize {
-			return ErrTooShort(r)
-		}
-		n := ByteArrayLength(b[i:])
-		i += ByteArrayLengthSize
-		r -= ByteArrayLengthSize
-		if n > r {
-			return ErrTooShort(n)
-		}
-		if n > MaxByteArrayLength {
-			return ErrTooLarge(n)
-		}
-		i += n
+	switch validateByteArrays(b) {
+	case errTooShort:
+		return ErrTooShort(len(b))
+	case errTooLarge:
+		return ErrTooLarge(len(b))
+	default: // ok
+		return nil
 	}
-	return nil
 }
 
 func RangeByteArrays(b []byte, do func([]byte) error) (err error) {
