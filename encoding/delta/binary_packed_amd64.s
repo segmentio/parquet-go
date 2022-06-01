@@ -223,7 +223,7 @@ loop:
 // the output buffer.
 //
 // The algorithm uses MOVMSKPS to extract the 8 relevant bits from the 8 values
-// packed in YMM registers, then combines 4 of these into  32 bit word which
+// packed in YMM registers, then combines 4 of these into a 32 bit word which
 // then gets written to the output. The result is 32 bits because each mini
 // block has 32 values (the block size is 128 and there are 4 mini block per
 // block).
