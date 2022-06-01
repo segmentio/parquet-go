@@ -65,6 +65,35 @@ func TestSchemaOf(t *testing.T) {
 	required double long;
 }`,
 		},
+
+		{
+			value: new(struct {
+				Inner struct {
+					FirstName          string `parquet:"first_name"`
+					ShouldNotBePresent string `parquet:"-"`
+				} `parquet:"inner,optional"`
+			}),
+			print: `message {
+	optional group inner {
+		required binary first_name (STRING);
+	}
+}`,
+		},
+
+		{
+			value: new(struct {
+				Inner struct {
+					FirstName    string `parquet:"first_name"`
+					MyNameIsDash string `parquet:"-,"`
+				} `parquet:"inner,optional"`
+			}),
+			print: `message {
+	optional group inner {
+		required binary first_name (STRING);
+		required binary - (STRING);
+	}
+}`,
+		},
 	}
 
 	for _, test := range tests {
