@@ -432,13 +432,13 @@ DATA sixtyfour<>+24(SB)/8, $64
 // 64 bits
 // -----------------------------------------------------------------------------
 
-#define deltaInt64AVX2x4(baseAddr) \
-    VMOVDQU baseAddr, Y1    \ // [0,1,2,3]
-    VPERMQ Y1, Y3, Y2       \ // [3,0,1,2]
-    VPBLENDD $3, Y0, Y2, Y2 \ // [x,0,1,2]
-    VPSUBQ Y2, Y1, Y2       \ // [0,1,2,3] - [x,0,1,2]
-    VMOVDQU Y2, baseAddr    \
-    VPERMQ Y1, Y3, Y0
+#define deltaInt64AVX2x4(baseAddr)  \
+    VMOVDQU baseAddr, Y1            \ // [0,1,2,3]
+    VPERMQ $0b10010011, Y1, Y2      \ // [3,0,1,2]
+    VPBLENDD $3, Y0, Y2, Y2         \ // [x,0,1,2]
+    VPSUBQ Y2, Y1, Y2               \ // [0,1,2,3] - [x,0,1,2]
+    VMOVDQU Y2, baseAddr            \
+    VPERMQ $0b10010011, Y1, Y0
 
 // func blockDeltaInt64AVX2(block *[blockSize]int64, lastValue int64) int64
 TEXT ·blockDeltaInt64AVX2(SB), NOSPLIT, $0-24
@@ -447,8 +447,6 @@ TEXT ·blockDeltaInt64AVX2(SB), NOSPLIT, $0-24
     MOVQ CX, ret+16(FP)
 
     VPBROADCASTQ lastValue+8(FP), Y0
-    VMOVDQU deltaInt64Perm<>(SB), Y3
-
     XORQ SI, SI
 loop:
     deltaInt64AVX2x4((AX)(SI*8))
@@ -461,12 +459,6 @@ loop:
 
     VZEROUPPER
     RET
-
-GLOBL deltaInt64Perm<>(SB), RODATA|NOPTR, $32
-DATA deltaInt64Perm<>+0(SB)/8, $3
-DATA deltaInt64Perm<>+8(SB)/8, $0
-DATA deltaInt64Perm<>+16(SB)/8, $1
-DATA deltaInt64Perm<>+24(SB)/8, $2
 
 // func blockMinInt64AVX2(block *[blockSize]int64) int64
 TEXT ·blockMinInt64AVX2(SB), NOSPLIT, $0-16
