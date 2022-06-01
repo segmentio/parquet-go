@@ -56,6 +56,7 @@ type Schema struct {
 //	decimal   | for int32, int64 and [n]byte types, use the parquet DECIMAL logical type
 //	date      | for int32 types use the DATE logical type
 //	timestamp | for int64 types use the TIMESTAMP logical type with millisecond precision
+//	split     | for float32/float64, use the BYTE_STREAM_SPLIT encoding
 //
 // The date logical type is an int32 value of the number of days since the unix epoch
 //
@@ -501,6 +502,14 @@ func makeStructField(f reflect.StructField) structField {
 				} else {
 					throwInvalidFieldTag(f, option)
 				}
+			default:
+				throwInvalidFieldTag(f, option)
+			}
+
+		case "split":
+			switch f.Type.Kind() {
+			case reflect.Float32, reflect.Float64:
+				setEncoding(&ByteStreamSplit)
 			default:
 				throwInvalidFieldTag(f, option)
 			}
