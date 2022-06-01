@@ -50,7 +50,7 @@ func (row booleanColumn) generate(prng *rand.Rand) booleanColumn {
 }
 
 type int32Column struct {
-	Value int32
+	Value int32 `parquet:",delta"`
 }
 
 func (row int32Column) generate(prng *rand.Rand) int32Column {
