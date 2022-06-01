@@ -25,7 +25,7 @@ type Row []Value
 //
 // This method is useful to capture rows after a call to RowReader.ReadRows when
 // values need to be retained before the next call to ReadRows or after the lifespan
-// span of the reader.
+// of the reader.
 func (row Row) Clone() Row {
 	clone := make(Row, len(row))
 	for i := range row {
