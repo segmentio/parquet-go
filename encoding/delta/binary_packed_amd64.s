@@ -347,7 +347,7 @@ TEXT ·miniBlockPackInt32x32bitsAVX2(SB), NOSPLIT, $0-16
 //
 // This function is a small overhead due to having to initialize registers with
 // values that depend on the bit width. We measured this cost at ~10% throughput
-// in synthetic benchmarks compared to generating constants shifts and offsets
+// in synthetic benchmarks compared to generating constant shifts and offsets
 // using a macro. Using a single function rather than generating one for each
 // bit width has the benefit of reducing the code size, which in practice can
 // also yield benefits like reducing CPU cache misses. Not using a macro also
