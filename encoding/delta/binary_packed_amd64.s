@@ -360,7 +360,7 @@ TEXT ·miniBlockPackInt32x32bitsAVX2(SB), NOSPLIT, $0-16
 // since we may write up to 128 bits (8 x 16 bits). Padding is therefore
 // required in the output buffer to avoid triggering a segfault.
 // The encodeInt32AVX2 method adds enough padding when sizing the output buffer
-// to account of this requirement.
+// to account for this requirement.
 //
 // We leverage the two lanes fo YMM registers to work on two sets of 4 values
 // (in the sequence of VMOVDQU/VPSHUFD, VPAND, VPSLLQ, VPOR), resulting in having
