@@ -13,11 +13,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/segmentio/parquet-go"
 	"github.com/segmentio/parquet-go/deprecated"
+	"github.com/segmentio/parquet-go/internal/quick"
 )
 
 const (
 	benchmarkNumRows     = 10_000
-	benchmarkRowsPerStep = 100
+	benchmarkRowsPerStep = 1000
 )
 
 type benchmarkRowType struct {
@@ -29,6 +30,15 @@ func (row benchmarkRowType) generate(prng *rand.Rand) benchmarkRowType {
 	prng.Read(row.ID[:])
 	row.Value = prng.Float64()
 	return row
+}
+
+type paddedBooleanColumn struct {
+	Value bool
+	_     [3]byte
+}
+
+func (row paddedBooleanColumn) generate(prng *rand.Rand) paddedBooleanColumn {
+	return paddedBooleanColumn{Value: prng.Int()%2 == 0}
 }
 
 type booleanColumn struct {
@@ -417,4 +427,15 @@ func generateString(r *rand.Rand, n int) string {
 		b.WriteByte(characters[r.Intn(len(characters))])
 	}
 	return b.String()
+}
+
+var quickCheckConfig = quick.Config{
+	Sizes: []int{
+		0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+		10, 20, 30, 40, 50, 123,
+	},
+}
+
+func quickCheck(f interface{}) error {
+	return quickCheckConfig.Check(f)
 }

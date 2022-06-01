@@ -10,7 +10,6 @@ import (
 	"math/rand"
 	"reflect"
 	"testing"
-	"testing/quick"
 
 	"github.com/segmentio/parquet-go"
 )
@@ -40,10 +39,9 @@ func TestGenericReader(t *testing.T) {
 }
 
 func testGenericReader[Row any](t *testing.T) {
-	var prng = rand.New(rand.NewSource(2))
 	var model Row
 	t.Run(reflect.TypeOf(model).Name(), func(t *testing.T) {
-		f := func(rows []Row) bool {
+		err := quickCheck(func(rows []Row) bool {
 			if len(rows) == 0 {
 				return true // TODO: fix support for parquet files with zero rows
 			}
@@ -52,8 +50,8 @@ func testGenericReader[Row any](t *testing.T) {
 				return false
 			}
 			return true
-		}
-		if err := quick.Check(f, &quick.Config{Rand: prng}); err != nil {
+		})
+		if err != nil {
 			t.Error(err)
 		}
 	})

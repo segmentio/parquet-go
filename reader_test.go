@@ -8,9 +8,9 @@ import (
 	"math/rand"
 	"reflect"
 	"testing"
-	"testing/quick"
 
 	"github.com/segmentio/parquet-go"
+	"github.com/segmentio/parquet-go/internal/quick"
 )
 
 func rowsOf(numRows int, model interface{}) rows {
@@ -21,11 +21,10 @@ func rowsOf(numRows int, model interface{}) rows {
 func randomRowsOf(prng *rand.Rand, numRows int, model interface{}) rows {
 	typ := reflect.TypeOf(model)
 	rows := make(rows, numRows)
+	makeValue := quick.MakeValueFuncOf(typ)
 	for i := range rows {
-		v, ok := quick.Value(typ, prng)
-		if !ok {
-			panic("cannot generate random value for test")
-		}
+		v := reflect.New(typ).Elem()
+		makeValue(v, prng)
 		rows[i] = v.Interface()
 	}
 	return rows
@@ -290,7 +289,7 @@ func TestReaderReadSubset(t *testing.T) {
 	type Point3D struct{ X, Y, Z int64 }
 	type Point2D struct{ X, Y int64 }
 
-	f := func(points3D []Point3D) bool {
+	err := quickCheck(func(points3D []Point3D) bool {
 		if len(points3D) == 0 {
 			return true
 		}
@@ -317,8 +316,8 @@ func TestReaderReadSubset(t *testing.T) {
 			}
 		}
 		return true
-	}
-	if err := quick.Check(f, nil); err != nil {
+	})
+	if err != nil {
 		t.Error(err)
 	}
 }

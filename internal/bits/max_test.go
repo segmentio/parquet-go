@@ -6,10 +6,11 @@ import (
 	"testing"
 
 	"github.com/segmentio/parquet-go/internal/bits"
+	"github.com/segmentio/parquet-go/internal/quick"
 )
 
 func TestMaxBool(t *testing.T) {
-	err := quickCheck(func(values []bool) bool {
+	err := quick.Check(func(values []bool) bool {
 		max := false
 		for _, v := range values {
 			if v {
@@ -36,7 +37,7 @@ func TestMaxBool(t *testing.T) {
 }
 
 func TestMaxInt32(t *testing.T) {
-	err := quickCheck(func(values []int32) bool {
+	err := quick.Check(func(values []int32) bool {
 		max := int32(0)
 		if len(values) > 0 {
 			max = values[0]
@@ -54,7 +55,7 @@ func TestMaxInt32(t *testing.T) {
 }
 
 func TestMaxInt64(t *testing.T) {
-	err := quickCheck(func(values []int64) bool {
+	err := quick.Check(func(values []int64) bool {
 		max := int64(0)
 		if len(values) > 0 {
 			max = values[0]
@@ -72,7 +73,7 @@ func TestMaxInt64(t *testing.T) {
 }
 
 func TestMaxUint32(t *testing.T) {
-	err := quickCheck(func(values []uint32) bool {
+	err := quick.Check(func(values []uint32) bool {
 		max := uint32(0)
 		if len(values) > 0 {
 			max = values[0]
@@ -90,7 +91,7 @@ func TestMaxUint32(t *testing.T) {
 }
 
 func TestMaxUint64(t *testing.T) {
-	err := quickCheck(func(values []uint64) bool {
+	err := quick.Check(func(values []uint64) bool {
 		max := uint64(0)
 		if len(values) > 0 {
 			max = values[0]
@@ -108,7 +109,7 @@ func TestMaxUint64(t *testing.T) {
 }
 
 func TestMaxFloat32(t *testing.T) {
-	err := quickCheck(func(values []float32) bool {
+	err := quick.Check(func(values []float32) bool {
 		max := float32(0)
 		if len(values) > 0 {
 			max = values[0]
@@ -126,7 +127,7 @@ func TestMaxFloat32(t *testing.T) {
 }
 
 func TestMaxFloat64(t *testing.T) {
-	err := quickCheck(func(values []float64) bool {
+	err := quick.Check(func(values []float64) bool {
 		max := float64(0)
 		if len(values) > 0 {
 			max = values[0]
@@ -144,7 +145,7 @@ func TestMaxFloat64(t *testing.T) {
 }
 
 func TestMaxFixedLenByteArray1(t *testing.T) {
-	err := quickCheck(func(values []byte) bool {
+	err := quick.Check(func(values []byte) bool {
 		max := [1]byte{}
 		if len(values) > 0 {
 			max[0] = values[0]
@@ -163,7 +164,7 @@ func TestMaxFixedLenByteArray1(t *testing.T) {
 }
 
 func TestMaxFixedLenByteArray16(t *testing.T) {
-	err := quickCheck(func(values [][16]byte) bool {
+	err := quick.Check(func(values [][16]byte) bool {
 		max := [16]byte{}
 		if len(values) > 0 {
 			max = values[0]
