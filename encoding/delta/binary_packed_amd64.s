@@ -362,7 +362,7 @@ TEXT ·miniBlockPackInt32x32bitsAVX2(SB), NOSPLIT, $0-16
 // The encodeInt32AVX2 method adds enough padding when sizing the output buffer
 // to account for this requirement.
 //
-// We leverage the two lanes fo YMM registers to work on two sets of 4 values
+// We leverage the two lanes of YMM registers to work on two sets of 4 values
 // (in the sequence of VMOVDQU/VPSHUFD, VPAND, VPSLLQ, VPOR), resulting in having
 // two sets of bit-packed values in the lower 64 bits of each YMM lane.
 // The upper lane is then permuted into a lower lane to merge the two results,
