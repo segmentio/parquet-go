@@ -456,40 +456,54 @@ loop:
     ADDQ $16, SI
     CMPQ SI, $blockSize
     JNE loop
-
     VZEROUPPER
     RET
+
+// vpminsq is an emulation of the AVX-512 VPMINSQ instruction with AVX2.
+#define vpminsq(ones, tmp, arg2, arg1, ret) \
+    VPCMPGTQ arg1, arg2, tmp \
+    VPBLENDVB tmp, arg1, arg2, ret
 
 // func blockMinInt64AVX2(block *[blockSize]int64) int64
 TEXT ·blockMinInt64AVX2(SB), NOSPLIT, $0-16
     MOVQ block+0(FP), AX
     XORQ SI, SI
+    VPCMPEQQ Y9, Y9, Y9 // ones
     VPBROADCASTQ (AX), Y0
 loop:
-    VPMINSQ 0(AX)(SI*8), Y0, Y1
-    VPMINSQ 32(AX)(SI*8), Y0, Y2
-    VPMINSQ 64(AX)(SI*8), Y0, Y3
-    VPMINSQ 96(AX)(SI*8), Y0, Y4
-    VPMINSQ 128(AX)(SI*8), Y0, Y5
-    VPMINSQ 160(AX)(SI*8), Y0, Y6
-    VPMINSQ 192(AX)(SI*8), Y0, Y7
-    VPMINSQ 224(AX)(SI*8), Y0, Y8
+    VMOVDQU 0(AX)(SI*8), Y1
+    VMOVDQU 32(AX)(SI*8), Y2
+    VMOVDQU 64(AX)(SI*8), Y3
+    VMOVDQU 96(AX)(SI*8), Y4
+    VMOVDQU 128(AX)(SI*8), Y5
+    VMOVDQU 160(AX)(SI*8), Y6
+    VMOVDQU 192(AX)(SI*8), Y7
+    VMOVDQU 224(AX)(SI*8), Y8
 
-    VPMINSQ Y2, Y1, Y1
-    VPMINSQ Y4, Y3, Y3
-    VPMINSQ Y6, Y5, Y5
-    VPMINSQ Y8, Y7, Y7
+    vpminsq(Y9, Y10, Y0, Y1, Y1)
+    vpminsq(Y9, Y11, Y0, Y2, Y2)
+    vpminsq(Y9, Y12, Y0, Y3, Y3)
+    vpminsq(Y9, Y13, Y0, Y4, Y4)
+    vpminsq(Y9, Y14, Y0, Y5, Y5)
+    vpminsq(Y9, Y15, Y0, Y6, Y6)
+    vpminsq(Y9, Y10, Y0, Y7, Y7)
+    vpminsq(Y9, Y11, Y0, Y8, Y8)
 
-    VPMINSQ Y3, Y1, Y1
-    VPMINSQ Y7, Y5, Y5
-    VPMINSQ Y5, Y1, Y0
+    vpminsq(Y9, Y12, Y2, Y1, Y1)
+    vpminsq(Y9, Y13, Y4, Y3, Y3)
+    vpminsq(Y9, Y14, Y6, Y5, Y5)
+    vpminsq(Y9, Y15, Y8, Y7, Y7)
+
+    vpminsq(Y9, Y10, Y3, Y1, Y1)
+    vpminsq(Y9, Y11, Y7, Y5, Y5)
+    vpminsq(Y9, Y12, Y5, Y1, Y0)
 
     ADDQ $32, SI
     CMPQ SI, $blockSize
     JNE loop
 
     VPERM2I128 $1, Y0, Y0, Y1
-    VPMINSQ Y1, Y0, Y0
+    vpminsq(Y9, Y10, Y1, Y0, Y0)
 
     MOVQ X0, CX
     VPEXTRQ $1, X0, BX
