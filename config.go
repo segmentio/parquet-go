@@ -136,7 +136,6 @@ type WriterConfig struct {
 	CreatedBy            string
 	ColumnPageBuffers    PageBufferPool
 	ColumnIndexSizeLimit int
-	PageBufferPool       PageBufferPool
 	PageBufferSize       int
 	WriteBufferSize      int
 	DataPageVersion      int
