@@ -69,6 +69,10 @@ type Schema struct {
 // Invalid combination of struct tags and Go types, or repeating options will
 // cause the function to panic.
 //
+// As a special case, if the field tag is "-", the field is omitted from the schema
+// and the data will not be written into the parquet file(s).
+// Note that a field with name "-" can still be generated using the tag "-,".
+//
 // The schema name is the Go type name of the value.
 func SchemaOf(model interface{}) *Schema {
 	return schemaOf(dereference(reflect.TypeOf(model)))
@@ -314,10 +318,17 @@ func structFieldsOf(t reflect.Type) []reflect.StructField {
 
 func appendStructFields(t reflect.Type, fields []reflect.StructField, index []int, offset uintptr) []reflect.StructField {
 	for i, n := 0, t.NumField(); i < n; i++ {
+		f := t.Field(i)
+		if tag := f.Tag.Get("parquet"); tag != "" {
+			name, _ := split(tag)
+			if tag != "-," && name == "-" {
+				continue
+			}
+		}
+
 		fieldIndex := index[:len(index):len(index)]
 		fieldIndex = append(fieldIndex, i)
 
-		f := t.Field(i)
 		f.Offset += offset
 
 		if f.Anonymous {
@@ -391,7 +402,6 @@ func (f *structField) Value(base reflect.Value) reflect.Value {
 			return fieldByIndex(base, f.index)
 		}
 	}
-	return reflect.Value{}
 }
 
 func structFieldString(f reflect.StructField) string {
