@@ -57,6 +57,17 @@ func TestSchemaOf(t *testing.T) {
 
 		{
 			value: new(struct {
+				Short float32 `parquet:"short,split"`
+				Long  float64 `parquet:"long,split"`
+			}),
+			print: `message {
+	required float short;
+	required double long;
+}`,
+		},
+
+		{
+			value: new(struct {
 				Inner struct {
 					FirstName          string `parquet:"first_name"`
 					ShouldNotBePresent string `parquet:"-"`
