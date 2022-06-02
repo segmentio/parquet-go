@@ -1653,21 +1653,26 @@ func (col *fixedLenByteArrayColumnBuffer) WriteValues(values []Value) (int, erro
 }
 
 func (col *fixedLenByteArrayColumnBuffer) writeValues(rows array, size, offset uintptr, _ columnLevels) {
-	for i := 0; i < rows.len; i++ {
-		p := rows.index(i, size, offset)
-		col.data = append(col.data, unsafe.Slice((*byte)(p), col.size)...)
-	}
-}
+	n := col.size * rows.len
+	i := len(col.data)
+	j := len(col.data) + n
 
-func (col *fixedLenByteArrayColumnBuffer) writeValuesUint128(rows array, size, offset uintptr) {
-	c := cap(col.data)
-	n := len(col.data) + (16 * rows.len)
-	if c < n {
-		col.data = append(make([]byte, 0, max(n, 2*c)), col.data...)
+	if cap(col.data) < j {
+		col.data = append(make([]byte, 0, max(i+n, 2*cap(col.data))), col.data...)
 	}
-	firstIndex := len(col.data)
-	col.data = col.data[:len(col.data)+(16*rows.len)]
-	writeValuesUint128(col.data[firstIndex:], rows, size, offset)
+
+	col.data = col.data[:j]
+	newData := col.data[i:]
+
+	switch col.size {
+	case 16:
+		writeValuesUint128(newData, rows, size, offset)
+	default:
+		for i := 0; i < rows.len; i++ {
+			p := rows.index(i, size, offset)
+			copy(newData[i*col.size:], unsafe.Slice((*byte)(p), col.size))
+		}
+	}
 }
 
 func (col *fixedLenByteArrayColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int, err error) {
