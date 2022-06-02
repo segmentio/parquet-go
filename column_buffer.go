@@ -16,6 +16,12 @@ import (
 //
 // ColumnBuffer implements sort.Interface as a way to support reordering the
 // rows that have been written to it.
+//
+// The current implementation has a limitation which prevents applications from
+// providing custom versions of this interface because it contains unexported
+// methods. The only way to create ColumnBuffer values is to call the
+// NewColumnBuffer of Type instances. This limitation may be lifted in future
+// releases.
 type ColumnBuffer interface {
 	// Exposes a read-only view of the column buffer.
 	ColumnChunk
@@ -58,6 +64,19 @@ type ColumnBuffer interface {
 
 	// Returns the size of the column buffer in bytes.
 	Size() int64
+
+	// This method is employed to write rows from arrays of Go values into the
+	// column buffer. The method is currently unexported because it uses unsafe
+	// APIs which would be difficult for applications to leverage, increasing
+	// the risk of introducing bugs in the code. As a consequence, applications
+	// cannot use custom implementations of the ColumnBuffer interface since
+	// they cannot declare an unexported method that would match this signature.
+	// It means that in order to create a ColumnBuffer value, programs need to
+	// go through a call to NewColumnBuffer on a Type instance. We make this
+	// trade off for now as it is preferrable to optimize for safety over
+	// extensibility in the public APIs, we might revisit in the future if we
+	// learn about valid use cases for custom column buffer types.
+	writeValues(rows array, size, offset uintptr, levels columnLevels)
 }
 
 type array struct {
@@ -297,19 +316,10 @@ func (col *optionalColumnBuffer) WriteValues(values []Value) (n int, err error) 
 			count, err := col.base.WriteValues(values[i:n])
 			col.definitionLevels = appendLevel(col.definitionLevels, col.maxDefinitionLevel, count)
 
-			if (cap(col.rows) - len(col.rows)) < count {
-				minCap := len(col.rows) + count
-				newCap := 2 * cap(col.rows)
-				if newCap < minCap {
-					newCap = minCap
-				}
-				col.rows = append(make([]int32, 0, newCap), col.rows...)
-			}
-
-			col.rows = col.rows[:len(col.rows)+count]
-			newRows := col.rows[len(col.rows)-count:]
-			for i := range newRows {
-				newRows[i] = rowIndex
+			for count > 0 {
+				col.rows = append(col.rows, rowIndex)
+				rowIndex++
+				count--
 			}
 
 			if err != nil {
@@ -317,8 +327,35 @@ func (col *optionalColumnBuffer) WriteValues(values []Value) (n int, err error) 
 			}
 		}
 	}
-
 	return n, nil
+}
+
+func (col *optionalColumnBuffer) writeValues(rows array, size, offset uintptr, levels columnLevels) {
+	col.definitionLevels = appendLevel(col.definitionLevels, levels.definitionLevel, rows.len)
+
+	if (cap(col.rows) - len(col.rows)) < rows.len {
+		minCap := len(col.rows) + rows.len
+		newCap := 2 * cap(col.rows)
+		if newCap < minCap {
+			newCap = minCap
+		}
+		col.rows = append(make([]int32, 0, newCap), col.rows...)
+	}
+
+	col.rows = col.rows[:len(col.rows)+rows.len]
+	newRows := col.rows[len(col.rows)-rows.len:]
+
+	if levels.definitionLevel != col.maxDefinitionLevel {
+		for i := range newRows {
+			newRows[i] = -1
+		}
+	} else {
+		rowIndex := int32(col.base.Len())
+		for i := range newRows {
+			newRows[i] = rowIndex + int32(i)
+		}
+		col.base.writeValues(rows, size, offset, levels)
+	}
 }
 
 func (col *optionalColumnBuffer) ReadValuesAt(values []Value, offset int64) (int, error) {
@@ -641,6 +678,11 @@ func (col *repeatedColumnBuffer) writeRow(row []Value) error {
 	return nil
 }
 
+func (col *repeatedColumnBuffer) writeValues(rows array, size, offset uintptr, levels columnLevels) {
+	// TODO
+	panic("NOT IMPLEMENTED")
+}
+
 func (col *repeatedColumnBuffer) ReadValuesAt(values []Value, offset int64) (int, error) {
 	// TODO:
 	panic("NOT IMPLEMENTED")
@@ -774,7 +816,7 @@ func (col *booleanColumnBuffer) WriteBooleans(values []bool) (int, error) {
 		ptr: *(*unsafe.Pointer)(unsafe.Pointer(&values)),
 		len: len(values),
 	}
-	col.writeValues(rows, unsafe.Sizeof(false), 0)
+	col.writeValues(rows, unsafe.Sizeof(false), 0, columnLevels{})
 	return len(values), nil
 }
 
@@ -784,11 +826,11 @@ func (col *booleanColumnBuffer) WriteValues(values []Value) (int, error) {
 		len: len(values),
 	}
 	var value Value
-	col.writeValues(rows, unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
+	col.writeValues(rows, unsafe.Sizeof(value), unsafe.Offsetof(value.u64), columnLevels{})
 	return len(values), nil
 }
 
-func (col *booleanColumnBuffer) writeValues(rows array, size, offset uintptr) {
+func (col *booleanColumnBuffer) writeValues(rows array, size, offset uintptr, _ columnLevels) {
 	numBytes := bits.ByteCount(uint(col.numValues) + uint(rows.len))
 	if cap(col.bits) < numBytes {
 		col.bits = append(make([]byte, 0, 2*cap(col.bits)), col.bits...)
@@ -929,11 +971,11 @@ func (col *int32ColumnBuffer) WriteValues(values []Value) (int, error) {
 		len: len(values),
 	}
 	var value Value
-	col.writeValues(rows, unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
+	col.writeValues(rows, unsafe.Sizeof(value), unsafe.Offsetof(value.u64), columnLevels{})
 	return len(values), nil
 }
 
-func (col *int32ColumnBuffer) writeValues(rows array, size, offset uintptr) {
+func (col *int32ColumnBuffer) writeValues(rows array, size, offset uintptr, _ columnLevels) {
 	if n := len(col.values) + rows.len; n > cap(col.values) {
 		col.values = append(make([]int32, 0, max(n, 2*cap(col.values))), col.values...)
 	}
@@ -1028,11 +1070,11 @@ func (col *int64ColumnBuffer) WriteValues(values []Value) (int, error) {
 		len: len(values),
 	}
 	var value Value
-	col.writeValues(rows, unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
+	col.writeValues(rows, unsafe.Sizeof(value), unsafe.Offsetof(value.u64), columnLevels{})
 	return len(values), nil
 }
 
-func (col *int64ColumnBuffer) writeValues(rows array, size, offset uintptr) {
+func (col *int64ColumnBuffer) writeValues(rows array, size, offset uintptr, _ columnLevels) {
 	if n := len(col.values) + rows.len; n > cap(col.values) {
 		col.values = append(make([]int64, 0, max(n, 2*cap(col.values))), col.values...)
 	}
@@ -1128,7 +1170,7 @@ func (col *int96ColumnBuffer) WriteValues(values []Value) (int, error) {
 	return len(values), nil
 }
 
-func (col *int96ColumnBuffer) writeValues(rows array, size, offset uintptr) {
+func (col *int96ColumnBuffer) writeValues(rows array, size, offset uintptr, _ columnLevels) {
 	for i := 0; i < rows.len; i++ {
 		p := rows.index(i, size, offset)
 		col.values = append(col.values, *(*deprecated.Int96)(p))
@@ -1221,11 +1263,11 @@ func (col *floatColumnBuffer) WriteValues(values []Value) (int, error) {
 		len: len(values),
 	}
 	var value Value
-	col.writeValues(rows, unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
+	col.writeValues(rows, unsafe.Sizeof(value), unsafe.Offsetof(value.u64), columnLevels{})
 	return len(values), nil
 }
 
-func (col *floatColumnBuffer) writeValues(rows array, size, offset uintptr) {
+func (col *floatColumnBuffer) writeValues(rows array, size, offset uintptr, _ columnLevels) {
 	if n := len(col.values) + rows.len; n > cap(col.values) {
 		col.values = append(make([]float32, 0, max(n, 2*cap(col.values))), col.values...)
 	}
@@ -1320,11 +1362,11 @@ func (col *doubleColumnBuffer) WriteValues(values []Value) (int, error) {
 		len: len(values),
 	}
 	var value Value
-	col.writeValues(rows, unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
+	col.writeValues(rows, unsafe.Sizeof(value), unsafe.Offsetof(value.u64), columnLevels{})
 	return len(values), nil
 }
 
-func (col *doubleColumnBuffer) writeValues(rows array, size, offset uintptr) {
+func (col *doubleColumnBuffer) writeValues(rows array, size, offset uintptr, _ columnLevels) {
 	if n := len(col.values) + rows.len; n > cap(col.values) {
 		col.values = append(make([]float64, 0, max(n, 2*cap(col.values))), col.values...)
 	}
@@ -1470,11 +1512,11 @@ func (col *byteArrayColumnBuffer) WriteValues(values []Value) (int, error) {
 		len: len(values),
 	}
 	var value Value
-	col.writeValues(rows, unsafe.Sizeof(value), unsafe.Offsetof(value.ptr))
+	col.writeValues(rows, unsafe.Sizeof(value), unsafe.Offsetof(value.ptr), columnLevels{})
 	return len(values), nil
 }
 
-func (col *byteArrayColumnBuffer) writeValues(rows array, size, offset uintptr) {
+func (col *byteArrayColumnBuffer) writeValues(rows array, size, offset uintptr, _ columnLevels) {
 	for i := 0; i < rows.len; i++ {
 		p := rows.index(i, size, offset)
 		col.append(*(*string)(p))
@@ -1598,7 +1640,7 @@ func (col *fixedLenByteArrayColumnBuffer) WriteValues(values []Value) (int, erro
 	return len(values), nil
 }
 
-func (col *fixedLenByteArrayColumnBuffer) writeValues(rows array, size, offset uintptr) {
+func (col *fixedLenByteArrayColumnBuffer) writeValues(rows array, size, offset uintptr, _ columnLevels) {
 	for i := 0; i < rows.len; i++ {
 		p := rows.index(i, size, offset)
 		col.data = append(col.data, unsafe.Slice((*byte)(p), col.size)...)
@@ -1702,11 +1744,11 @@ func (col *uint32ColumnBuffer) WriteValues(values []Value) (int, error) {
 		len: len(values),
 	}
 	var value Value
-	col.writeValues(rows, unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
+	col.writeValues(rows, unsafe.Sizeof(value), unsafe.Offsetof(value.u64), columnLevels{})
 	return len(values), nil
 }
 
-func (col *uint32ColumnBuffer) writeValues(rows array, size, offset uintptr) {
+func (col *uint32ColumnBuffer) writeValues(rows array, size, offset uintptr, _ columnLevels) {
 	if n := len(col.values) + rows.len; n > cap(col.values) {
 		col.values = append(make([]uint32, 0, max(n, 2*cap(col.values))), col.values...)
 	}
@@ -1801,11 +1843,11 @@ func (col *uint64ColumnBuffer) WriteValues(values []Value) (int, error) {
 		len: len(values),
 	}
 	var value Value
-	col.writeValues(rows, unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
+	col.writeValues(rows, unsafe.Sizeof(value), unsafe.Offsetof(value.u64), columnLevels{})
 	return len(values), nil
 }
 
-func (col *uint64ColumnBuffer) writeValues(rows array, size, offset uintptr) {
+func (col *uint64ColumnBuffer) writeValues(rows array, size, offset uintptr, _ columnLevels) {
 	if n := len(col.values) + rows.len; n > cap(col.values) {
 		col.values = append(make([]uint64, 0, max(n, 2*cap(col.values))), col.values...)
 	}

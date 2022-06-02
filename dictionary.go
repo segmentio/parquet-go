@@ -1121,6 +1121,10 @@ func (col *indexedColumnBuffer) WriteValues(values []Value) (int, error) {
 	return len(values), nil
 }
 
+func (col *indexedColumnBuffer) writeValues(rows array, size, offset uintptr, _ columnLevels) {
+	panic("NOT IMPLEMENTED")
+}
+
 func (col *indexedColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int, err error) {
 	i := int(offset)
 	switch {
