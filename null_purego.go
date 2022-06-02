@@ -2,96 +2,44 @@
 
 package parquet
 
-import (
-	"unsafe"
-)
+func nullIndexInt(a array) int { return nullIndex[int](a) }
 
-func nullIndexInt(a array) int {
-	for i, v := range unsafe.Slice((*int)(a.ptr), a.len) {
-		if v == 0 {
-			return i
-		}
-	}
-	return a.len
-}
+func nullIndexInt32(a array) int { return nullIndex[int32](a) }
 
-func nullIndexInt32(a array) int {
-	for i, v := range unsafe.Slice((*int32)(a.ptr), a.len) {
-		if v == 0 {
-			return i
-		}
-	}
-	return a.len
-}
+func nullIndexInt64(a array) int { return nullIndex[int64](a) }
 
-func nullIndexInt64(a array) int {
-	for i, v := range unsafe.Slice((*int64)(a.ptr), a.len) {
-		if v == 0 {
-			return i
-		}
-	}
-	return a.len
-}
+func nullIndexUint(a array) int { return nullIndex[uint](a) }
 
-func nullIndexUint(a array) int {
-	for i, v := range unsafe.Slice((*uint)(a.ptr), a.len) {
-		if v == 0 {
-			return i
-		}
-	}
-	return a.len
-}
+func nullIndexUint32(a array) int { return nullIndex[uint32](a) }
 
-func nullIndexUint32(a array) int {
-	for i, v := range unsafe.Slice((*uint32)(a.ptr), a.len) {
-		if v == 0 {
-			return i
-		}
-	}
-	return a.len
-}
+func nullIndexUint64(a array) int { return nullIndex[uint64](a) }
 
-func nullIndexUint64(a array) int {
-	for i, v := range unsafe.Slice((*uint64)(a.ptr), a.len) {
-		if v == 0 {
-			return i
-		}
-	}
-	return a.len
-}
+func nullIndexOfUint128(a array) int { return nullIndex[[16]byte](a) }
 
-func nullIndexOfUint128(a array) int {
-	for i, v := range unsafe.Slice((*[16]byte)(a.ptr), a.len) {
-		if v == ([16]byte{}) {
-			return i
-		}
-	}
-	return a.len
-}
+func nullIndexFloat32(a array) int { return nullIndex[float32](a) }
 
-func nullIndexFloat32(a array) int {
-	for i, v := range unsafe.Slice((*float32)(a.ptr), a.len) {
-		if v == 0 {
-			return i
-		}
-	}
-	return a.len
-}
+func nullIndexFloat64(a array) int { return nullIndex[float64](a) }
 
-func nullIndexFloat64(a array) int {
-	for i, v := range unsafe.Slice((*float64)(a.ptr), a.len) {
-		if v == 0 {
-			return i
-		}
-	}
-	return a.len
-}
+func nullIndexPointer(a array) int { return nullIndex[*byte](a) }
 
-func nullIndexPointer(a array) int {
-	for i, v := range unsafe.Slice((*unsafe.Pointer)(a.ptr), a.len) {
-		if v == nil {
-			return i
-		}
-	}
-	return a.len
-}
+func nonNullIndexBool(a array) int { return nonNullIndex[bool](a) }
+
+func nonNullIndexInt(a array) int { return nonNullIndex[int](a) }
+
+func nonNullIndexInt32(a array) int { return nonNullIndex[int32](a) }
+
+func nonNullIndexInt64(a array) int { return nonNullIndex[int64](a) }
+
+func nonNullIndexUint(a array) int { return nonNullIndex[uint](a) }
+
+func nonNullIndexUint32(a array) int { return nonNullIndex[uint32](a) }
+
+func nonNullIndexUint64(a array) int { return nonNullIndex[uint64](a) }
+
+func nonNullIndexUint128(a array) int { return nonNullIndex[[16]byte](a) }
+
+func nonNullIndexFloat32(a array) int { return nonNullIndex[float32](a) }
+
+func nonNullIndexFloat64(a array) int { return nonNullIndex[float64](a) }
+
+func nonNullIndexPointer(a array) int { return nonNullIndex[*byte](a) }

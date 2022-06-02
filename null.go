@@ -20,6 +20,16 @@ import (
 // type. Struct values are never null.
 type nullIndexFunc func(array) int
 
+func nullIndex[T comparable](a array) int {
+	var zero T
+	for i, v := range makeSlice[T](a) {
+		if v == zero {
+			return i
+		}
+	}
+	return a.len
+}
+
 func nullIndexBool(a array) int {
 	i := bytes.IndexByte(makeSlice[byte](a), 0)
 	if i < 0 {
@@ -29,22 +39,11 @@ func nullIndexBool(a array) int {
 }
 
 func nullIndexInt96(a array) int {
-	for i, v := range unsafe.Slice((*deprecated.Int96)(a.ptr), a.len) {
-		if v == (deprecated.Int96{}) {
-			return i
-		}
-	}
-	return a.len
+	return nullIndex[deprecated.Int96](a)
 }
 
 func nullIndexString(a array) int {
-	for i := 0; i < a.len; i++ {
-		p := *(*string)(a.index(i, unsafe.Sizeof(""), 0))
-		if p == "" {
-			return i
-		}
-	}
-	return a.len
+	return nullIndex[string](a)
 }
 
 func nullIndexSlice(a array) int {
@@ -142,17 +141,6 @@ func nullIndexFuncOfByteArray(size int) nullIndexFunc {
 // type. Struct values are never null.
 type nonNullIndexFunc func(array) int
 
-func nonNullIndexSlice(a array) int {
-	const size = unsafe.Sizeof(([]byte)(nil))
-	for i := 0; i < a.len; i++ {
-		p := *(*unsafe.Pointer)(a.index(i, size, 0))
-		if p != nil {
-			return i
-		}
-	}
-	return a.len
-}
-
 func nonNullIndex[T comparable](a array) int {
 	var zero T
 	for i, v := range makeSlice[T](a) {
@@ -163,50 +151,70 @@ func nonNullIndex[T comparable](a array) int {
 	return a.len
 }
 
+func nonNullIndexInt96(a array) int { return nonNullIndex[deprecated.Int96](a) }
+
+func nonNullIndexString(a array) int { return nonNullIndex[string](a) }
+
+func nonNullIndexSlice(a array) int {
+	const size = unsafe.Sizeof(([]struct{})(nil))
+	for i := 0; i < a.len; i++ {
+		p := *(*unsafe.Pointer)(a.index(i, size, 0))
+		if p != nil {
+			return i
+		}
+	}
+	return a.len
+}
+
 func nonNullIndexFuncOf(t reflect.Type) nonNullIndexFunc {
 	switch t {
 	case reflect.TypeOf(deprecated.Int96{}):
-		return nonNullIndex[deprecated.Int96]
+		return nonNullIndexInt96
 	}
 
 	switch t.Kind() {
 	case reflect.Bool:
-		return nonNullIndex[bool]
+		return nonNullIndexBool
 
 	case reflect.Int, reflect.Uint:
-		return nonNullIndex[int]
+		return nonNullIndexInt
 
-	case reflect.Int8, reflect.Uint8:
-		return nonNullIndex[int8]
+	case reflect.Int32:
+		return nonNullIndexInt32
 
-	case reflect.Int16, reflect.Uint16:
-		return nonNullIndex[int16]
+	case reflect.Int64:
+		return nonNullIndexInt64
 
-	case reflect.Int32, reflect.Uint32:
-		return nonNullIndex[int32]
+	case reflect.Uint32:
+		return nonNullIndexUint32
 
-	case reflect.Int64, reflect.Uint64:
-		return nonNullIndex[int64]
+	case reflect.Uint64:
+		return nonNullIndexUint64
 
 	case reflect.Float32:
-		return nonNullIndex[float32]
+		return nonNullIndexFloat32
 
 	case reflect.Float64:
-		return nonNullIndex[float64]
+		return nonNullIndexFloat64
 
 	case reflect.String:
-		return nonNullIndex[string]
+		return nonNullIndexString
 
 	case reflect.Slice:
 		return nonNullIndexSlice
 
 	case reflect.Array:
 		if t.Elem().Kind() == reflect.Uint8 {
-			return nonNullIndexFuncOfArray(t)
+			switch size := t.Len(); size {
+			case 16:
+				return nonNullIndexUint128
+			default:
+				return nonNullIndexFuncOfArray(size)
+			}
 		}
 
 	case reflect.Pointer:
-		return nonNullIndex[unsafe.Pointer]
+		return nonNullIndexPointer
 
 	case reflect.Struct:
 		return func(array) int { return 0 }
@@ -215,12 +223,11 @@ func nonNullIndexFuncOf(t reflect.Type) nonNullIndexFunc {
 	panic("cannot convert Go values of type " + t.String() + " to parquet value")
 }
 
-func nonNullIndexFuncOfArray(t reflect.Type) nonNullIndexFunc {
-	arrayLen := t.Len()
+func nonNullIndexFuncOfArray(size int) nonNullIndexFunc {
 	return func(a array) int {
 		for i := 0; i < a.len; i++ {
-			p := a.index(i, uintptr(arrayLen), 0)
-			b := slice[byte](p, arrayLen)
+			p := a.index(i, uintptr(size), 0)
+			b := slice[byte](p, size)
 			if bytes.Count(b, []byte{0}) != len(b) {
 				return i
 			}

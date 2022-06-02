@@ -30,3 +30,37 @@ func nullIndexFloat32(a array) int { return nullIndex32bits(a) }
 func nullIndexFloat64(a array) int { return nullIndex64bits(a) }
 
 func nullIndexPointer(a array) int { return nullIndex64bits(a) }
+
+//go:noescape
+func nonNullIndex8bits(array) int
+
+//go:noescape
+func nonNullIndex32bits(array) int
+
+//go:noescape
+func nonNullIndex64bits(array) int
+
+//go:noescape
+func nonNullIndex128bits(array) int
+
+func nonNullIndexBool(a array) int { return nonNullIndex8bits(a) }
+
+func nonNullIndexInt(a array) int { return nonNullIndex64bits(a) }
+
+func nonNullIndexInt32(a array) int { return nonNullIndex32bits(a) }
+
+func nonNullIndexInt64(a array) int { return nonNullIndex64bits(a) }
+
+func nonNullIndexUint(a array) int { return nonNullIndex64bits(a) }
+
+func nonNullIndexUint32(a array) int { return nonNullIndex32bits(a) }
+
+func nonNullIndexUint64(a array) int { return nonNullIndex64bits(a) }
+
+func nonNullIndexUint128(a array) int { return nonNullIndex128bits(a) }
+
+func nonNullIndexFloat32(a array) int { return nonNullIndex32bits(a) }
+
+func nonNullIndexFloat64(a array) int { return nonNullIndex64bits(a) }
+
+func nonNullIndexPointer(a array) int { return nonNullIndex64bits(a) }
