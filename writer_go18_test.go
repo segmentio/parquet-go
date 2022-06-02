@@ -26,6 +26,8 @@ func BenchmarkGenericWriter(b *testing.B) {
 	benchmarkGenericWriter[mapColumn](b)
 	benchmarkGenericWriter[decimalColumn](b)
 	benchmarkGenericWriter[contact](b)
+	benchmarkGenericWriter[paddedBooleanColumn](b)
+	benchmarkGenericWriter[optionalInt32Column](b)
 }
 
 func benchmarkGenericWriter[Row generator[Row]](b *testing.B) {

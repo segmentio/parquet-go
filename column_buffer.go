@@ -297,10 +297,19 @@ func (col *optionalColumnBuffer) WriteValues(values []Value) (n int, err error) 
 			count, err := col.base.WriteValues(values[i:n])
 			col.definitionLevels = appendLevel(col.definitionLevels, col.maxDefinitionLevel, count)
 
-			for count > 0 {
-				col.rows = append(col.rows, rowIndex)
-				rowIndex++
-				count--
+			if (cap(col.rows) - len(col.rows)) < count {
+				minCap := len(col.rows) + count
+				newCap := 2 * cap(col.rows)
+				if newCap < minCap {
+					newCap = minCap
+				}
+				col.rows = append(make([]int32, 0, newCap), col.rows...)
+			}
+
+			col.rows = col.rows[:len(col.rows)+count]
+			newRows := col.rows[len(col.rows)-count:]
+			for i := range newRows {
+				newRows[i] = rowIndex
 			}
 
 			if err != nil {

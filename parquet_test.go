@@ -175,6 +175,14 @@ func (row contact) generate(prng *rand.Rand) contact {
 	}
 }
 
+type optionalInt32Column struct {
+	Value int32 `parquet:",optional"`
+}
+
+func (row optionalInt32Column) generate(prng *rand.Rand) optionalInt32Column {
+	return optionalInt32Column{Value: prng.Int31n(100)}
+}
+
 type listColumn2 struct {
 	Value utf8string `parquet:",optional"`
 }
