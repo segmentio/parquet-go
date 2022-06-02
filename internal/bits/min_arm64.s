@@ -59,14 +59,47 @@ TEXT ·minInt32(SB), NOSPLIT, $0-28
     MOVD data_len+8(FP), R1 // length of data
     MOVD $ret+24(FP), R2 // address for result
 
-    MOVD R0, R6
-    ADD  R0, R1, R5
+    CMP $0, R1
+    BEQ zero
 
-    MOVD R1, R7
+    MOVD R0, R6 // R6 is a copy of the first address
+    MOVD $4, R5
+    MUL R1, R5, R5
+    ADD  R0, R5, R5 // R5 contains the address of the last value
 
-    MOVD $0x7FFFFFFF, R8
+    MOVD R1, R7 // R7 is a copy of the length of data
 
-    B loopv
+    MOVD (R0), R8
+    VLD1 (R0), [V0.S4]
+
+loopv8:
+    CMP $8, R7
+    BLT loop
+
+    VLD1.P 32(R0), [V1.S4, V2.S4]
+    VUMIN V1.S4, V0.S4, V0.S4
+    VUMIN V2.S4, V0.S4, V0.S4
+
+    SUB $8, R7
+    CMP $8, R7
+    BGE loopv8
+
+    VMOV V0.S[0], R3
+    VMOV V0.S[1], R4
+
+    CMP R3, R4
+    CSEL LT, R4, R3, R4
+
+    VMOV V0.S[2], R3
+    CMP R3, R4
+    CSEL LT, R4, R3, R4
+
+    VMOV V0.S[3], R3
+    CMP R3, R4
+    CSEL LT, R4, R3, R4
+
+    CMP R4, R8
+    CSEL LT, R8, R4, R8
 
 loop:
     CMP R0, R5
@@ -82,33 +115,6 @@ done:
     MOVW R8, (R2)
     RET
 
-// a single int32 is stored in 32 bits (or 4 bytes)
-// armv8 vector sizes are 128bits, meaning we can store up to 4 int32 per vector.
-loopv:
-    CMP $8, R7
-    BLT loop
-
-    VLD1.P 32(R0), [V1.D2, V2.D2]
-    VUMIN V1.B16, V2.B16, V3.B16
-
-    VMOV V3.S[0], R3
-    VMOV V3.S[1], R4
-
-    CMP R3, R4
-    CSEL LT, R4, R3, R4
-
-    VMOV V3.S[2], R3
-    CMP R3, R4
-    CSEL LT, R4, R3, R4
-
-    VMOV V3.S[3], R3
-    CMP R3, R4
-    CSEL LT, R4, R3, R4
-
-    CMP R4, R8
-    CSEL LT, R8, R4, R8
-
-    SUB $8, R7
-    ADD $24, R5
-
-    B loopv
+zero:
+    MOVD ZR, (R2)
+    RET
