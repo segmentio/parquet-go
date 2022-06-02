@@ -84,8 +84,18 @@ type array struct {
 	len int
 }
 
+func makeValueArray(values []Value) array {
+	return *(*array)(unsafe.Pointer(&values))
+}
+
 func (a array) index(i int, size, offset uintptr) unsafe.Pointer {
 	return unsafe.Add(a.ptr, uintptr(i)*size+offset)
+}
+
+type columnLevels struct {
+	repetitionDepth byte
+	repetitionLevel byte
+	definitionLevel byte
 }
 
 func columnIndexOfNullable(base ColumnBuffer, maxDefinitionLevel byte, definitionLevels []byte) ColumnIndex {
@@ -331,20 +341,29 @@ func (col *optionalColumnBuffer) WriteValues(values []Value) (n int, err error) 
 }
 
 func (col *optionalColumnBuffer) writeValues(rows array, size, offset uintptr, levels columnLevels) {
-	col.definitionLevels = appendLevel(col.definitionLevels, levels.definitionLevel, rows.len)
-
-	if (cap(col.rows) - len(col.rows)) < rows.len {
-		minCap := len(col.rows) + rows.len
-		newCap := 2 * cap(col.rows)
-		if newCap < minCap {
-			newCap = minCap
-		}
-		col.rows = append(make([]int32, 0, newCap), col.rows...)
+	// The row count is zero when writing an null optional value, in which case
+	// we still need to output a row to the buffer to record the definition
+	// level.
+	if rows.len == 0 {
+		col.definitionLevels = append(col.definitionLevels, 0)
+		col.rows = append(col.rows, -1)
+		return
 	}
 
-	col.rows = col.rows[:len(col.rows)+rows.len]
-	newRows := col.rows[len(col.rows)-rows.len:]
+	col.definitionLevels = appendLevel(col.definitionLevels, levels.definitionLevel, rows.len)
 
+	i := len(col.rows)
+	j := len(col.rows) + rows.len
+
+	if j <= cap(col.rows) {
+		col.rows = col.rows[:j]
+	} else {
+		tmp := make([]int32, j, 2*j)
+		copy(tmp, col.rows)
+		col.rows = tmp
+	}
+
+	newRows := col.rows[i:]
 	if levels.definitionLevel != col.maxDefinitionLevel {
 		for i := range newRows {
 			newRows[i] = -1
@@ -678,9 +697,26 @@ func (col *repeatedColumnBuffer) writeRow(row []Value) error {
 	return nil
 }
 
-func (col *repeatedColumnBuffer) writeValues(rows array, size, offset uintptr, levels columnLevels) {
-	// TODO
-	panic("NOT IMPLEMENTED")
+func (col *repeatedColumnBuffer) writeValues(row array, size, offset uintptr, levels columnLevels) {
+	if levels.repetitionLevel == 0 {
+		col.rows = append(col.rows, region{
+			offset:     uint32(len(col.repetitionLevels)),
+			baseOffset: uint32(col.base.NumValues()),
+		})
+	}
+
+	if row.len == 0 {
+		col.repetitionLevels = append(col.repetitionLevels, levels.repetitionLevel)
+		col.definitionLevels = append(col.definitionLevels, levels.definitionLevel)
+		return
+	}
+
+	col.repetitionLevels = appendLevel(col.repetitionLevels, levels.repetitionLevel, row.len)
+	col.definitionLevels = appendLevel(col.definitionLevels, levels.definitionLevel, row.len)
+
+	if levels.definitionLevel == col.maxDefinitionLevel {
+		col.base.writeValues(row, size, offset, levels)
+	}
 }
 
 func (col *repeatedColumnBuffer) ReadValuesAt(values []Value, offset int64) (int, error) {
@@ -821,12 +857,8 @@ func (col *booleanColumnBuffer) WriteBooleans(values []bool) (int, error) {
 }
 
 func (col *booleanColumnBuffer) WriteValues(values []Value) (int, error) {
-	var rows = array{
-		ptr: *(*unsafe.Pointer)(unsafe.Pointer(&values)),
-		len: len(values),
-	}
 	var value Value
-	col.writeValues(rows, unsafe.Sizeof(value), unsafe.Offsetof(value.u64), columnLevels{})
+	col.writeValues(makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64), columnLevels{})
 	return len(values), nil
 }
 
@@ -966,12 +998,8 @@ func (col *int32ColumnBuffer) WriteInt32s(values []int32) (int, error) {
 }
 
 func (col *int32ColumnBuffer) WriteValues(values []Value) (int, error) {
-	var rows = array{
-		ptr: *(*unsafe.Pointer)(unsafe.Pointer(&values)),
-		len: len(values),
-	}
 	var value Value
-	col.writeValues(rows, unsafe.Sizeof(value), unsafe.Offsetof(value.u64), columnLevels{})
+	col.writeValues(makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64), columnLevels{})
 	return len(values), nil
 }
 
@@ -1065,12 +1093,8 @@ func (col *int64ColumnBuffer) WriteInt64s(values []int64) (int, error) {
 }
 
 func (col *int64ColumnBuffer) WriteValues(values []Value) (int, error) {
-	var rows = array{
-		ptr: *(*unsafe.Pointer)(unsafe.Pointer(&values)),
-		len: len(values),
-	}
 	var value Value
-	col.writeValues(rows, unsafe.Sizeof(value), unsafe.Offsetof(value.u64), columnLevels{})
+	col.writeValues(makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64), columnLevels{})
 	return len(values), nil
 }
 
@@ -1258,12 +1282,8 @@ func (col *floatColumnBuffer) WriteFloats(values []float32) (int, error) {
 }
 
 func (col *floatColumnBuffer) WriteValues(values []Value) (int, error) {
-	var rows = array{
-		ptr: *(*unsafe.Pointer)(unsafe.Pointer(&values)),
-		len: len(values),
-	}
 	var value Value
-	col.writeValues(rows, unsafe.Sizeof(value), unsafe.Offsetof(value.u64), columnLevels{})
+	col.writeValues(makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64), columnLevels{})
 	return len(values), nil
 }
 
@@ -1357,12 +1377,8 @@ func (col *doubleColumnBuffer) WriteDoubles(values []float64) (int, error) {
 }
 
 func (col *doubleColumnBuffer) WriteValues(values []Value) (int, error) {
-	var rows = array{
-		ptr: *(*unsafe.Pointer)(unsafe.Pointer(&values)),
-		len: len(values),
-	}
 	var value Value
-	col.writeValues(rows, unsafe.Sizeof(value), unsafe.Offsetof(value.u64), columnLevels{})
+	col.writeValues(makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64), columnLevels{})
 	return len(values), nil
 }
 
@@ -1507,12 +1523,8 @@ func (col *byteArrayColumnBuffer) writeByteArrays(values []byte) (count, bytes i
 }
 
 func (col *byteArrayColumnBuffer) WriteValues(values []Value) (int, error) {
-	rows := array{
-		ptr: *(*unsafe.Pointer)(unsafe.Pointer(&values)),
-		len: len(values),
-	}
 	var value Value
-	col.writeValues(rows, unsafe.Sizeof(value), unsafe.Offsetof(value.ptr), columnLevels{})
+	col.writeValues(makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.ptr), columnLevels{})
 	return len(values), nil
 }
 
@@ -1739,12 +1751,8 @@ func (col *uint32ColumnBuffer) WriteUint32s(values []uint32) (int, error) {
 }
 
 func (col *uint32ColumnBuffer) WriteValues(values []Value) (int, error) {
-	var rows = array{
-		ptr: *(*unsafe.Pointer)(unsafe.Pointer(&values)),
-		len: len(values),
-	}
 	var value Value
-	col.writeValues(rows, unsafe.Sizeof(value), unsafe.Offsetof(value.u64), columnLevels{})
+	col.writeValues(makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64), columnLevels{})
 	return len(values), nil
 }
 
@@ -1838,12 +1846,8 @@ func (col *uint64ColumnBuffer) WriteUint64s(values []uint64) (int, error) {
 }
 
 func (col *uint64ColumnBuffer) WriteValues(values []Value) (int, error) {
-	var rows = array{
-		ptr: *(*unsafe.Pointer)(unsafe.Pointer(&values)),
-		len: len(values),
-	}
 	var value Value
-	col.writeValues(rows, unsafe.Sizeof(value), unsafe.Offsetof(value.u64), columnLevels{})
+	col.writeValues(makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64), columnLevels{})
 	return len(values), nil
 }
 

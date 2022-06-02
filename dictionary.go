@@ -3,6 +3,7 @@ package parquet
 import (
 	"bytes"
 	"io"
+	"unsafe"
 
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
@@ -21,6 +22,12 @@ const (
 //
 // Programs can instantiate dictionaries by call the NewDictionary method of a
 // Type object.
+//
+// The current implementation has a limitation which prevents applications from
+// providing custom versions of this interface because it contains unexported
+// methods. The only way to create Dictionary values is to call the
+// NewDictionary of Type instances. This limitation may be lifted in future
+// releases.
 type Dictionary interface {
 	// Returns the type that the dictionary was created from.
 	Type() Type
@@ -56,6 +63,10 @@ type Dictionary interface {
 	// The returned page shares the underlying memory of the buffer, it remains
 	// valid to use until the dictionary's Reset method is called.
 	Page() BufferedPage
+
+	// See ColumnBuffer.writeValues for details on the use of unexported methods
+	// on interfaces.
+	insert(indexes []int32, rows array, size, offset uintptr)
 }
 
 // The boolean dictionary always contains two values for true and false.
@@ -82,7 +93,12 @@ func (d *booleanDictionary) Len() int { return int(d.numValues) }
 func (d *booleanDictionary) Index(i int32) Value { return makeValueBoolean(d.valueAt(int(i))) }
 
 func (d *booleanDictionary) Insert(indexes []int32, values []Value) {
-	_ = indexes[:len(values)]
+	var value Value
+	d.insert(indexes, makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
+}
+
+func (d *booleanDictionary) insert(indexes []int32, rows array, size, offset uintptr) {
+	_ = indexes[:rows.len]
 
 	if d.index == nil {
 		d.index = make(map[bool]int32, cap(d.bits))
@@ -91,8 +107,8 @@ func (d *booleanDictionary) Insert(indexes []int32, values []Value) {
 		}
 	}
 
-	for i, v := range values {
-		value := v.Boolean()
+	for i := 0; i < rows.len; i++ {
+		value := *(*bool)(rows.index(i, size, offset))
 
 		index, exists := d.index[value]
 		if !exists {
@@ -167,7 +183,12 @@ func (d *int32Dictionary) Len() int { return len(d.values) }
 func (d *int32Dictionary) Index(i int32) Value { return makeValueInt32(d.values[i]) }
 
 func (d *int32Dictionary) Insert(indexes []int32, values []Value) {
-	_ = indexes[:len(values)]
+	var value Value
+	d.insert(indexes, makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
+}
+
+func (d *int32Dictionary) insert(indexes []int32, rows array, size, offset uintptr) {
+	_ = indexes[:rows.len]
 
 	if d.index == nil {
 		d.index = make(map[int32]int32, cap(d.values))
@@ -176,8 +197,8 @@ func (d *int32Dictionary) Insert(indexes []int32, values []Value) {
 		}
 	}
 
-	for i, v := range values {
-		value := v.Int32()
+	for i := 0; i < rows.len; i++ {
+		value := *(*int32)(rows.index(i, size, offset))
 
 		index, exists := d.index[value]
 		if !exists {
@@ -248,7 +269,12 @@ func (d *int64Dictionary) Len() int { return len(d.values) }
 func (d *int64Dictionary) Index(i int32) Value { return makeValueInt64(d.values[i]) }
 
 func (d *int64Dictionary) Insert(indexes []int32, values []Value) {
-	_ = indexes[:len(values)]
+	var value Value
+	d.insert(indexes, makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
+}
+
+func (d *int64Dictionary) insert(indexes []int32, rows array, size, offset uintptr) {
+	_ = indexes[:rows.len]
 
 	if d.index == nil {
 		d.index = make(map[int64]int32, cap(d.values))
@@ -257,8 +283,8 @@ func (d *int64Dictionary) Insert(indexes []int32, values []Value) {
 		}
 	}
 
-	for i, v := range values {
-		value := v.Int64()
+	for i := 0; i < rows.len; i++ {
+		value := *(*int64)(rows.index(i, size, offset))
 
 		index, exists := d.index[value]
 		if !exists {
@@ -329,7 +355,19 @@ func (d *int96Dictionary) Len() int { return len(d.values) }
 func (d *int96Dictionary) Index(i int32) Value { return makeValueInt96(d.values[i]) }
 
 func (d *int96Dictionary) Insert(indexes []int32, values []Value) {
-	_ = indexes[:len(values)]
+	d.insertValues(indexes, len(values), func(i int) deprecated.Int96 {
+		return values[i].Int96()
+	})
+}
+
+func (d *int96Dictionary) insert(indexes []int32, rows array, size, offset uintptr) {
+	d.insertValues(indexes, rows.len, func(i int) deprecated.Int96 {
+		return *(*deprecated.Int96)(rows.index(i, size, offset))
+	})
+}
+
+func (d *int96Dictionary) insertValues(indexes []int32, count int, valueAt func(int) deprecated.Int96) {
+	_ = indexes[:count]
 
 	if d.index == nil {
 		d.index = make(map[deprecated.Int96]int32, cap(d.values))
@@ -338,8 +376,8 @@ func (d *int96Dictionary) Insert(indexes []int32, values []Value) {
 		}
 	}
 
-	for i, v := range values {
-		value := v.Int96()
+	for i := 0; i < count; i++ {
+		value := valueAt(i)
 
 		index, exists := d.index[value]
 		if !exists {
@@ -410,7 +448,12 @@ func (d *floatDictionary) Len() int { return len(d.values) }
 func (d *floatDictionary) Index(i int32) Value { return makeValueFloat(d.values[i]) }
 
 func (d *floatDictionary) Insert(indexes []int32, values []Value) {
-	_ = indexes[:len(values)]
+	var value Value
+	d.insert(indexes, makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
+}
+
+func (d *floatDictionary) insert(indexes []int32, rows array, size, offset uintptr) {
+	_ = indexes[:rows.len]
 
 	if d.index == nil {
 		d.index = make(map[float32]int32, cap(d.values))
@@ -419,8 +462,8 @@ func (d *floatDictionary) Insert(indexes []int32, values []Value) {
 		}
 	}
 
-	for i, v := range values {
-		value := v.Float()
+	for i := 0; i < rows.len; i++ {
+		value := *(*float32)(rows.index(i, size, offset))
 
 		index, exists := d.index[value]
 		if !exists {
@@ -491,7 +534,12 @@ func (d *doubleDictionary) Len() int { return len(d.values) }
 func (d *doubleDictionary) Index(i int32) Value { return makeValueDouble(d.values[i]) }
 
 func (d *doubleDictionary) Insert(indexes []int32, values []Value) {
-	_ = indexes[:len(values)]
+	var value Value
+	d.insert(indexes, makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
+}
+
+func (d *doubleDictionary) insert(indexes []int32, rows array, size, offset uintptr) {
+	_ = indexes[:rows.len]
 
 	if d.index == nil {
 		d.index = make(map[float64]int32, cap(d.values))
@@ -500,8 +548,8 @@ func (d *doubleDictionary) Insert(indexes []int32, values []Value) {
 		}
 	}
 
-	for i, v := range values {
-		value := v.Double()
+	for i := 0; i < rows.len; i++ {
+		value := *(*float64)(rows.index(i, size, offset))
 
 		index, exists := d.index[value]
 		if !exists {
@@ -586,7 +634,12 @@ func (d *byteArrayDictionary) Index(i int32) Value {
 }
 
 func (d *byteArrayDictionary) Insert(indexes []int32, values []Value) {
-	_ = indexes[:len(values)]
+	var value Value
+	d.insert(indexes, makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.ptr))
+}
+
+func (d *byteArrayDictionary) insert(indexes []int32, rows array, size, offset uintptr) {
+	_ = indexes[:rows.len]
 
 	if d.index == nil {
 		d.index = make(map[string]int32, cap(d.offsets))
@@ -595,27 +648,26 @@ func (d *byteArrayDictionary) Insert(indexes []int32, values []Value) {
 		}
 	}
 
-	for i, v := range values {
-		value := v.ByteArray()
+	for i := 0; i < rows.len; i++ {
+		value := *(*string)(rows.index(i, size, offset))
 
-		index, exists := d.index[string(value)]
+		index, exists := d.index[value]
 		if !exists {
 			index = int32(len(d.offsets))
 			value = d.append(value)
-			stringValue := bits.BytesToString(value)
-			d.index[stringValue] = index
+			d.index[value] = index
 		}
 
 		indexes[i] = index
 	}
 }
 
-func (d *byteArrayDictionary) append(value []byte) []byte {
+func (d *byteArrayDictionary) append(value string) string {
 	offset := len(d.values)
-	d.values = plain.AppendByteArray(d.values, value)
+	d.values = plain.AppendByteArrayString(d.values, value)
 	d.offsets = append(d.offsets, uint32(offset))
 	d.numValues++
-	return d.values[offset+plain.ByteArrayLengthSize : len(d.values) : len(d.values)]
+	return bits.BytesToString(d.values[offset+plain.ByteArrayLengthSize : len(d.values)])
 }
 
 func (d *byteArrayDictionary) Lookup(indexes []int32, values []Value) {
@@ -686,7 +738,19 @@ func (d *fixedLenByteArrayDictionary) value(i int32) []byte {
 }
 
 func (d *fixedLenByteArrayDictionary) Insert(indexes []int32, values []Value) {
-	_ = indexes[:len(values)]
+	d.insertValues(indexes, len(values), func(i int) *byte {
+		return values[i].ptr
+	})
+}
+
+func (d *fixedLenByteArrayDictionary) insert(indexes []int32, rows array, size, offset uintptr) {
+	d.insertValues(indexes, rows.len, func(i int) *byte {
+		return (*byte)(rows.index(i, size, offset))
+	})
+}
+
+func (d *fixedLenByteArrayDictionary) insertValues(indexes []int32, count int, valueAt func(int) *byte) {
+	_ = indexes[:count]
 
 	if d.index == nil {
 		d.index = make(map[string]int32, cap(d.data)/d.size)
@@ -696,8 +760,8 @@ func (d *fixedLenByteArrayDictionary) Insert(indexes []int32, values []Value) {
 		}
 	}
 
-	for i, v := range values {
-		value := v.ByteArray()
+	for i := 0; i < count; i++ {
+		value := unsafe.Slice(valueAt(i), d.size)
 
 		index, exists := d.index[string(value)]
 		if !exists {
@@ -769,7 +833,12 @@ func (d *uint32Dictionary) Len() int { return len(d.values) }
 func (d *uint32Dictionary) Index(i int32) Value { return makeValueUint32(d.values[i]) }
 
 func (d *uint32Dictionary) Insert(indexes []int32, values []Value) {
-	_ = indexes[:len(values)]
+	var value Value
+	d.insert(indexes, makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
+}
+
+func (d *uint32Dictionary) insert(indexes []int32, rows array, size, offset uintptr) {
+	_ = indexes[:rows.len]
 
 	if d.index == nil {
 		d.index = make(map[uint32]int32, cap(d.values))
@@ -778,8 +847,8 @@ func (d *uint32Dictionary) Insert(indexes []int32, values []Value) {
 		}
 	}
 
-	for i, v := range values {
-		value := v.Uint32()
+	for i := 0; i < rows.len; i++ {
+		value := *(*uint32)(rows.index(i, size, offset))
 
 		index, exists := d.index[value]
 		if !exists {
@@ -850,7 +919,12 @@ func (d *uint64Dictionary) Len() int { return len(d.values) }
 func (d *uint64Dictionary) Index(i int32) Value { return makeValueUint64(d.values[i]) }
 
 func (d *uint64Dictionary) Insert(indexes []int32, values []Value) {
-	_ = indexes[:len(values)]
+	var value Value
+	d.insert(indexes, makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
+}
+
+func (d *uint64Dictionary) insert(indexes []int32, rows array, size, offset uintptr) {
+	_ = indexes[:rows.len]
 
 	if d.index == nil {
 		d.index = make(map[uint64]int32, cap(d.values))
@@ -859,8 +933,8 @@ func (d *uint64Dictionary) Insert(indexes []int32, values []Value) {
 		}
 	}
 
-	for i, v := range values {
-		value := v.Uint64()
+	for i := 0; i < rows.len; i++ {
+		value := *(*uint64)(rows.index(i, size, offset))
 
 		index, exists := d.index[value]
 		if !exists {
@@ -1112,9 +1186,9 @@ func (col *indexedColumnBuffer) WriteValues(values []Value) (int, error) {
 	if j <= cap(col.values) {
 		col.values = col.values[:j]
 	} else {
-		colValues := make([]int32, j, 2*j)
-		copy(colValues, col.values)
-		col.values = colValues
+		tmp := make([]int32, j, 2*j)
+		copy(tmp, col.values)
+		col.values = tmp
 	}
 
 	col.typ.dict.Insert(col.values[i:], values)
@@ -1122,7 +1196,18 @@ func (col *indexedColumnBuffer) WriteValues(values []Value) (int, error) {
 }
 
 func (col *indexedColumnBuffer) writeValues(rows array, size, offset uintptr, _ columnLevels) {
-	panic("NOT IMPLEMENTED")
+	i := len(col.values)
+	j := len(col.values) + rows.len
+
+	if j <= cap(col.values) {
+		col.values = col.values[:j]
+	} else {
+		tmp := make([]int32, j, 2*j)
+		copy(tmp, col.values)
+		col.values = tmp
+	}
+
+	col.typ.dict.insert(col.values[i:], rows, size, offset)
 }
 
 func (col *indexedColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int, err error) {

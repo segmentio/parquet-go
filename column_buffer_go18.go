@@ -228,12 +228,6 @@ func nonNullIndexFuncOfArray(t reflect.Type) nonNullIndexFunc {
 	}
 }
 
-type columnLevels struct {
-	repetitionDepth byte
-	repetitionLevel byte
-	definitionLevel byte
-}
-
 // writeRowsFunc is the type of functions that apply rows to a set of column
 // buffers.
 //
