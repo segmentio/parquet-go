@@ -3,6 +3,7 @@
 package parquet
 
 import (
+	"math/bits"
 	"reflect"
 	"unsafe"
 
@@ -98,16 +99,20 @@ func writeRowsFuncOfRequired(t reflect.Type, schema *Schema, path columnPath) wr
 }
 
 func writeRowsFuncOfOptional(t reflect.Type, schema *Schema, path columnPath, writeRows writeRowsFunc) writeRowsFunc {
-	nullIndex, nonNullIndex := nullIndexFuncOf(t), nonNullIndexFuncOf(t)
+	nullBits := nullBitsFuncOf(t)
 	return func(columns []ColumnBuffer, rows array, size, offset uintptr, levels columnLevels) error {
 		if rows.len == 0 {
 			return writeRows(columns, rows, size, 0, levels)
 		}
 
-		nonNullLevels := levels
-		nonNullLevels.definitionLevel++
+		nulls := acquireBitmap(rows.len)
+		defer releaseBitmap(nulls)
+		nullBits(nulls.bits, rows, size, offset)
+
+		nullLevels := levels
+		levels.definitionLevel++
 		// In this function, we are dealing with optional values which are
-		// neither pointers nor slices; for example, a []int32 field marked
+		// neither pointers nor slices; for example, a int32 field marked
 		// "optional" in its parent struct.
 		//
 		// We need to find zero values, which should be represented as nulls
@@ -123,30 +128,71 @@ func writeRowsFuncOfOptional(t reflect.Type, schema *Schema, path columnPath, wr
 		// sequences of single values, we do not expect this condition to be a
 		// common case.
 		for i := 0; i < rows.len; {
-			a := array{}
-			p := rows.index(i, size, 0)
-			j := i + nonNullIndex(array{ptr: p, len: rows.len - i})
+			j := 0
+			x := i / 64
+			y := i % 64
+
+			if y != 0 {
+				if b := nulls.bits[x] >> uint(y); b == 0 {
+					x++
+					y = 0
+				} else {
+					y += bits.TrailingZeros64(b)
+					goto writeNulls
+				}
+			}
+
+			for x < len(nulls.bits) && nulls.bits[x] == 0 {
+				x++
+			}
+
+			if x < len(nulls.bits) {
+				y = bits.TrailingZeros64(nulls.bits[x]) % 64
+			}
+
+		writeNulls:
+			if j = x*64 + y; j > rows.len {
+				j = rows.len
+			}
 
 			if i < j {
-				a.ptr = p
-				a.len = j - i
-				if err := writeRows(columns, a, size, 0, levels); err != nil {
+				slice := rows.slice(i, j, size, offset)
+				if err := writeRows(columns, slice, size, offset, nullLevels); err != nil {
 					return err
 				}
-			}
-
-			if j < rows.len {
-				p = rows.index(j, size, 0)
 				i = j
-				j = j + nullIndex(array{ptr: p, len: rows.len - j})
-				a.ptr = p
-				a.len = j - i
-				if err := writeRows(columns, a, size, 0, nonNullLevels); err != nil {
-					return err
+			}
+
+			if y != 0 {
+				if b := nulls.bits[x] >> uint(y); b == (1<<uint64(y))-1 {
+					x++
+					y = 0
+				} else {
+					y += bits.TrailingZeros64(^b)
+					goto writeNonNulls
 				}
 			}
 
-			i = j
+			for x < len(nulls.bits) && nulls.bits[x] == ^uint64(0) {
+				x++
+			}
+
+			if x < len(nulls.bits) {
+				y = bits.TrailingZeros64(^nulls.bits[x]) % 64
+			}
+
+		writeNonNulls:
+			if j = x*64 + y; j > rows.len {
+				j = rows.len
+			}
+
+			if i < j {
+				slice := rows.slice(i, j, size, offset)
+				if err := writeRows(columns, slice, size, offset, levels); err != nil {
+					return err
+				}
+				i = j
+			}
 		}
 
 		return nil
