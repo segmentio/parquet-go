@@ -14,38 +14,14 @@ type nullBitsFunc func(bits []uint64, rows array, size, offset uintptr)
 
 func nullBits[T comparable](bits []uint64, rows array, size, offset uintptr) {
 	var zero T
-
-	i := 0
-	n := (rows.len + 63) / 64
-
-	for i < n {
-		b := uint64(0)
-
-		for j := 0; j < 64; j++ {
-			v := *(*T)(rows.index(i, size, offset))
-			x := uint64(0)
-			if v != zero {
-				x = 1
-			}
-			b |= x << uint(j)
-		}
-
-		bits[i/64] = b
-		i += 64
-	}
-
-	b := uint64(0)
-	for i < rows.len {
+	for i := 0; i < rows.len; i++ {
 		v := *(*T)(rows.index(i, size, offset))
-		x := uint64(0)
+		b := uint64(0)
 		if v != zero {
-			x = 1
+			b = 1
 		}
-		b |= x << uint(i%64)
-		i++
+		bits[uint(i)/64] |= b << (uint(i) % 64)
 	}
-
-	bits[i/64] = b
 }
 
 func nullBitsSlice(bits []uint64, rows array, size, offset uintptr) {
