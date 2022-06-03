@@ -137,7 +137,7 @@ TEXT ·nullIndex64bits(SB), NOSPLIT, $0-40
     SHLQ $2, R8
 
     VPBROADCASTQ size+24(FP), Y0
-    VPMULLQ ·scale4x8(SB), Y0, Y0
+    VPMULLD ·scale4x8(SB), Y0, Y0
     VPCMPEQQ Y1, Y1, Y1
     VPCMPEQQ Y2, Y2, Y2
     VPXOR Y3, Y3, Y3
