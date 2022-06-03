@@ -550,6 +550,11 @@ TEXT ·blockSubInt64AVX2(SB), NOSPLIT, $0-16
     VZEROUPPER
     RET
 
+// vpmaxsq is an emulation of the AVX-512 VPMAXSQ instruction with AVX2.
+#define vpmaxsq(tmp, arg2, arg1, ret) \
+    VPCMPGTQ arg2, arg1, tmp \
+    VPBLENDVB tmp, arg1, arg2, ret
+
 // func blockBitWidthsInt64AVX2(bitWidths *[numMiniBlocks]byte, block *[blockSize]int64)
 TEXT ·blockBitWidthsInt64AVX2(SB), NOSPLIT, $0-16
     MOVQ bitWidths+0(FP), AX
@@ -585,18 +590,18 @@ loop:
     VPADDQ Y9, Y7, Y7
     VPADDQ Y9, Y8, Y8
 
-    VPMAXSQ Y2, Y1, Y1
-    VPMAXSQ Y4, Y3, Y3
-    VPMAXSQ Y6, Y5, Y5
-    VPMAXSQ Y8, Y7, Y7
+    vpmaxsq(Y10, Y2, Y1, Y1)
+    vpmaxsq(Y11, Y4, Y3, Y3)
+    vpmaxsq(Y12, Y6, Y5, Y5)
+    vpmaxsq(Y13, Y8, Y7, Y7)
 
-    VPMAXSQ Y3, Y1, Y1
-    VPMAXSQ Y7, Y5, Y5
-    VPMAXSQ Y5, Y1, Y1
-    VPMAXSQ Y1, Y0, Y0
+    vpmaxsq(Y10, Y3, Y1, Y1)
+    vpmaxsq(Y11, Y7, Y5, Y5)
+    vpmaxsq(Y12, Y5, Y1, Y1)
+    vpmaxsq(Y13, Y1, Y0, Y0)
 
     VPERM2I128 $1, Y0, Y0, Y1
-    VPMAXSQ Y1, Y0, Y0
+    vpmaxsq(Y10, Y1, Y0, Y0)
     VPSUBQ Y9, Y0, Y0
 
     MOVQ X0, CX
