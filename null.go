@@ -8,6 +8,7 @@ import (
 	"unsafe"
 
 	"github.com/segmentio/parquet-go/deprecated"
+	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 // nullIndexFunc is the type of functions used to detect null values in rows.
@@ -32,9 +33,7 @@ func nullIndex[T comparable](bits []uint64, rows array, size, offset uintptr) {
 }
 
 func nullIndexStruct(bits []uint64, rows array, size, offset uintptr) {
-	for i := range bits {
-		bits[i] = ^uint64(0)
-	}
+	memset(unsafecast.Slice[byte](bits), 0xFF)
 }
 
 func nullIndexFuncOf(t reflect.Type) nullIndexFunc {
