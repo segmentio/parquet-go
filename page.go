@@ -275,35 +275,6 @@ func errPageBoundsOutOfRange(i, j, n int64) error {
 	return fmt.Errorf("page bounds out of range [%d:%d]: with length %d", i, j, n)
 }
 
-func countLevelsEqual(levels []byte, value byte) int {
-	return bits.CountByte(levels, value)
-}
-
-func countLevelsNotEqual(levels []byte, value byte) int {
-	return len(levels) - countLevelsEqual(levels, value)
-}
-
-func appendLevel(levels []byte, value byte, count int) []byte {
-	if count > 0 {
-		i := len(levels)
-		n := len(levels) + count
-
-		if cap(levels) < n {
-			newLevels := make([]byte, n)
-			copy(newLevels, levels)
-			levels = newLevels
-		} else {
-			levels = levels[:n]
-		}
-
-		fill := levels[i:]
-		for i := range fill {
-			fill[i] = value
-		}
-	}
-	return levels
-}
-
 type optionalPage struct {
 	base               BufferedPage
 	maxDefinitionLevel byte
