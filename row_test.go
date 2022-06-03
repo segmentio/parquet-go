@@ -8,6 +8,16 @@ import (
 	"github.com/segmentio/parquet-go"
 )
 
+func TestRowClone(t *testing.T) {
+	row := parquet.Row{
+		parquet.ValueOf(42).Level(0, 1, 0),
+		parquet.ValueOf("Hello World").Level(1, 1, 1),
+	}
+	if clone := row.Clone(); !row.Equal(clone) {
+		t.Error("row and its clone are not equal")
+	}
+}
+
 func TestDeconstructionReconstruction(t *testing.T) {
 	type Person struct {
 		FirstName string
