@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/segmentio/parquet-go/encoding/fuzz"
+	"github.com/segmentio/parquet-go/internal/quick"
 )
 
 func FuzzEncodeBoolean(f *testing.F) {
@@ -21,50 +22,43 @@ func FuzzEncodeInt32(f *testing.F) {
 	fuzz.EncodeInt32(f, &Encoding{BitWidth: 32})
 }
 
-func TestIsZero(t *testing.T) {
-	data := make([]byte, 1234)
-	if !isZero(data) {
-		t.Fatal("data is zero but got isZero=false")
-	}
-	data[len(data)-1] = 1
-	if isZero(data) {
-		t.Fatal("data is not zero but got isZero=true")
-	}
+func TestEncodeInt32IndexEqual8Contiguous(t *testing.T) {
+	testEncodeInt32IndexEqual8Contiguous(t, encodeInt32IndexEqual8Contiguous)
 }
 
-func TestIsOnes(t *testing.T) {
-	data := make([]byte, 1234)
-	for i := range data {
-		data[i] = 0xFF
-	}
-	if !isOnes(data) {
-		t.Fatal("data is ones but got isOnes=false")
-	}
-	data[len(data)-1] = 0
-	if isOnes(data) {
-		t.Fatal("data is not ones but got isOnes=true")
-	}
-}
+func testEncodeInt32IndexEqual8Contiguous(t *testing.T, f func([][8]int32) int) {
+	t.Helper()
 
-func BenchmarkIsZero(b *testing.B) {
-	data := make([]byte, 1000)
-	for i := 0; i < b.N; i++ {
-		if !isZero(data) {
-			b.Fatal("isZero=false")
+	err := quick.Check(func(words [][8]int32) bool {
+		want := 0
+
+		for want < len(words) && words[want] != broadcast8x4(words[want][0]) {
+			want++
 		}
+
+		if got := f(words); got != want {
+			t.Errorf("want=%d got=%d", want, got)
+			return false
+		}
+
+		return true
+	})
+	if err != nil {
+		t.Error(err)
 	}
-	b.SetBytes(int64(len(data)))
 }
 
-func BenchmarkIsOnes(b *testing.B) {
-	data := make([]byte, 1000)
-	for i := range data {
-		data[i] = 0xFF
+func BenchmarkEncodeInt32IndexEqual8Contiguous(b *testing.B) {
+	benchmarkEncodeInt32IndexEqual8Contiguous(b, encodeInt32IndexEqual8Contiguous)
+}
+
+func benchmarkEncodeInt32IndexEqual8Contiguous(b *testing.B, f func([][8]int32) int) {
+	words := make([][8]int32, 1000)
+	for i := range words {
+		words[i][0] = 1
 	}
 	for i := 0; i < b.N; i++ {
-		if !isOnes(data) {
-			b.Fatal("isOnes=false")
-		}
+		_ = f(words)
 	}
-	b.SetBytes(int64(len(data)))
+	b.SetBytes(32 * int64(len(words)))
 }

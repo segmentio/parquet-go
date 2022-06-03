@@ -2,29 +2,13 @@
 
 package rle
 
-import "encoding/binary"
-
-func isZero(data []byte) bool {
-	for i := range data {
-		if data[i] != 0 {
-			return false
-		}
-	}
-	return true
-}
-
-func isOnes(data []byte) bool {
-	for i := range data {
-		if data[i] != 0xFF {
-			return false
-		}
-	}
-	return true
-}
+import (
+	"encoding/binary"
+)
 
 func encodeBytesBitpack(dst []byte, src []uint64, bitWidth uint) int {
 	bitMask := uint64(1<<bitWidth) - 1
-	offset := 0
+	n := 0
 
 	for _, word := range src {
 		word = (word & bitMask) |
@@ -35,9 +19,20 @@ func encodeBytesBitpack(dst []byte, src []uint64, bitWidth uint) int {
 			(((word >> 40) & bitMask) << (5 * bitWidth)) |
 			(((word >> 48) & bitMask) << (6 * bitWidth)) |
 			(((word >> 56) & bitMask) << (7 * bitWidth))
-		binary.LittleEndian.PutUint64(dst[offset:], word)
-		offset += int(bitWidth)
+		binary.LittleEndian.PutUint64(dst[n:], word)
+		n += int(bitWidth)
 	}
 
-	return offset
+	return n
+}
+
+func encodeInt32IndexEqual8Contiguous(words [][8]int32) (n int) {
+	for n < len(words) && words[n] != broadcast8x4(words[n][0]) {
+		n++
+	}
+	return n
+}
+
+func encodeInt32Bitpack(dst []byte, src [][8]int32, bitWidth uint) int {
+	return encodeInt32BitpackDefault(dst, src, bitWidth)
 }

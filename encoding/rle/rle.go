@@ -6,6 +6,7 @@
 package rle
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -177,9 +178,10 @@ func encodeBytes(dst, src []byte, bitWidth uint) ([]byte, error) {
 
 				offset := len(dst)
 				length := j - i
-				dst = resize(dst, len(dst)+(length*int(bitWidth))+binary.MaxVarintLen64+8)
+				dst = resize(dst, offset+(length*int(bitWidth))+binary.MaxVarintLen64+8)
 				offset += binary.PutUvarint(dst[offset:], uint64(length<<1)|1)
-				dst = dst[:offset+encodeBytesBitpack(dst[offset:], words[i:j], bitWidth)]
+				offset += encodeBytesBitpack(dst[offset:], words[i:j], bitWidth)
+				dst = dst[:offset]
 			}
 
 			i = j
@@ -212,9 +214,6 @@ func encodeInt32(dst []byte, src []int32, bitWidth uint) ([]byte, error) {
 		return appendUvarint(dst, uint64(len(src))<<1), nil
 	}
 
-	bitMask := uint32(1<<bitWidth) - 1
-	byteCount := bits.ByteCount(8 * bitWidth)
-
 	if len(src) >= 8 {
 		words := unsafe.Slice((*[8]int32)(unsafe.Pointer(&src[0])), len(src)/8)
 
@@ -230,29 +229,15 @@ func encodeInt32(dst []byte, src []int32, bitWidth uint) ([]byte, error) {
 				dst = appendUvarint(dst, uint64(8*(j-i))<<1)
 				dst = appendInt32(dst, pattern[0], bitWidth)
 			} else {
-				j++
+				j += 1
+				j += encodeInt32IndexEqual8Contiguous(words[j:])
 
-				for j < len(words) && words[j] != broadcast8x4(words[j-1][0]) {
-					j++
-				}
-
-				dst = appendUvarint(dst, uint64(j-i)<<1|1)
-
-				for _, word := range words[i:j] {
-					bits := [9]uint32{}
-					bitOffset := uint(0)
-
-					for _, value := range word {
-						i := bitOffset / 32
-						j := bitOffset % 32
-						bits[i+0] |= (uint32(value) & bitMask) << j
-						bits[i+1] |= (uint32(value) >> (32 - j))
-						bitOffset += bitWidth
-					}
-
-					b := unsafe.Slice((*byte)(unsafe.Pointer(&bits[0])), byteCount)
-					dst = append(dst, b...)
-				}
+				offset := len(dst)
+				length := j - i
+				dst = resize(dst, offset+(length*int(bitWidth))+32+binary.MaxVarintLen64)
+				offset += binary.PutUvarint(dst[offset:], uint64(length)<<1|1)
+				offset += encodeInt32Bitpack(dst[offset:], words[i:j], bitWidth)
+				dst = dst[:offset]
 			}
 
 			i = j
@@ -483,6 +468,18 @@ func broadcast8x4(v int32) [8]int32 {
 	return [8]int32{v, v, v, v, v, v, v, v}
 }
 
+func count(data []byte, value byte) int {
+	return bytes.Count(data, []byte{value})
+}
+
+func isZero(data []byte) bool {
+	return count(data, 0x00) == len(data)
+}
+
+func isOnes(data []byte) bool {
+	return count(data, 0xFF) == len(data)
+}
+
 func isZeroInt8(data []int8) bool {
 	return isZero(bits.Int8ToBytes(data))
 }
@@ -505,4 +502,22 @@ func resize(buf []byte, size int) []byte {
 		}
 	}
 	return buf[:size]
+}
+
+func encodeInt32BitpackDefault(dst []byte, src [][8]int32, bitWidth uint) int {
+	bits := unsafe.Slice((*uint32)(unsafe.Pointer(&dst[0])), len(dst)/4)
+	bitMask := uint32(1<<bitWidth) - 1
+	bitOffset := uint(0)
+
+	for k := range src {
+		for _, value := range src[k] {
+			i := bitOffset / 32
+			j := bitOffset % 32
+			bits[i+0] |= (uint32(value) & bitMask) << j
+			bits[i+1] |= (uint32(value) >> (32 - j))
+			bitOffset += bitWidth
+		}
+	}
+
+	return int(bitOffset / 8)
 }
