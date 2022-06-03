@@ -169,6 +169,7 @@ func (col *reversedColumnBuffer) Less(i, j int) bool { return col.ColumnBuffer.L
 // column or one of its parent(s) are marked optional.
 type optionalColumnBuffer struct {
 	base               ColumnBuffer
+	reordered          bool
 	maxDefinitionLevel byte
 	rows               []int32
 	sortIndex          []int32
@@ -190,6 +191,7 @@ func newOptionalColumnBuffer(base ColumnBuffer, maxDefinitionLevel byte, nullOrd
 func (col *optionalColumnBuffer) Clone() ColumnBuffer {
 	return &optionalColumnBuffer{
 		base:               col.base.Clone(),
+		reordered:          col.reordered,
 		maxDefinitionLevel: col.maxDefinitionLevel,
 		rows:               append([]int32{}, col.rows...),
 		definitionLevels:   append([]byte{}, col.definitionLevels...),
@@ -230,44 +232,44 @@ func (col *optionalColumnBuffer) Pages() Pages {
 }
 
 func (col *optionalColumnBuffer) Page() BufferedPage {
-	if !optionalRowsHaveBeenReordered(col.rows) {
-		// No need for any cyclic sorting if the rows have not been reordered.
-		// This case is also important because the cyclic sorting modifies the
-		// buffer which makes it unsafe to read the buffer concurrently.
-		return newOptionalPage(col.base.Page(), col.maxDefinitionLevel, col.definitionLevels)
-	}
+	// No need for any cyclic sorting if the rows have not been reordered.
+	// This case is also important because the cyclic sorting modifies the
+	// buffer which makes it unsafe to read the buffer concurrently.
+	if col.reordered {
+		numNulls := countLevelsNotEqual(col.definitionLevels, col.maxDefinitionLevel)
+		numValues := len(col.rows) - numNulls
 
-	numNulls := countLevelsNotEqual(col.definitionLevels, col.maxDefinitionLevel)
-	numValues := len(col.rows) - numNulls
+		if numValues > 0 {
+			if cap(col.sortIndex) < numValues {
+				col.sortIndex = make([]int32, numValues)
+			}
+			sortIndex := col.sortIndex[:numValues]
+			i := 0
+			for _, j := range col.rows {
+				if j >= 0 {
+					sortIndex[j] = int32(i)
+					i++
+				}
+			}
 
-	if numValues > 0 {
-		if cap(col.sortIndex) < numValues {
-			col.sortIndex = make([]int32, numValues)
+			// Cyclic sort: O(N)
+			for i := range sortIndex {
+				for j := int(sortIndex[i]); i != j; j = int(sortIndex[i]) {
+					col.base.Swap(i, j)
+					sortIndex[i], sortIndex[j] = sortIndex[j], sortIndex[i]
+				}
+			}
 		}
-		sortIndex := col.sortIndex[:numValues]
+
 		i := 0
-		for _, j := range col.rows {
-			if j >= 0 {
-				sortIndex[j] = int32(i)
+		for _, r := range col.rows {
+			if r >= 0 {
+				col.rows[i] = int32(i)
 				i++
 			}
 		}
 
-		// Cyclic sort: O(N)
-		for i := range sortIndex {
-			for j := int(sortIndex[i]); i != j; j = int(sortIndex[i]) {
-				col.base.Swap(i, j)
-				sortIndex[i], sortIndex[j] = sortIndex[j], sortIndex[i]
-			}
-		}
-	}
-
-	i := 0
-	for _, r := range col.rows {
-		if r >= 0 {
-			col.rows[i] = int32(i)
-			i++
-		}
+		col.reordered = false
 	}
 
 	return newOptionalPage(col.base.Page(), col.maxDefinitionLevel, col.definitionLevels)
@@ -303,6 +305,7 @@ func (col *optionalColumnBuffer) Swap(i, j int) {
 	// swap its values at indexes i and j. We swap the row indexes only, then
 	// reorder the underlying buffer using a cyclic sort when the buffer is
 	// materialized into a page view.
+	col.reordered = true
 	col.rows[i], col.rows[j] = col.rows[j], col.rows[i]
 	col.definitionLevels[i], col.definitionLevels[j] = col.definitionLevels[j], col.definitionLevels[i]
 }
@@ -447,6 +450,7 @@ func (col *optionalColumnBuffer) ReadValuesAt(values []Value, offset int64) (int
 // are marked repeated.
 type repeatedColumnBuffer struct {
 	base               ColumnBuffer
+	reordered          bool
 	maxRepetitionLevel byte
 	maxDefinitionLevel byte
 	rows               []region
@@ -483,6 +487,7 @@ func newRepeatedColumnBuffer(base ColumnBuffer, maxRepetitionLevel, maxDefinitio
 func (col *repeatedColumnBuffer) Clone() ColumnBuffer {
 	return &repeatedColumnBuffer{
 		base:               col.base.Clone(),
+		reordered:          col.reordered,
 		maxRepetitionLevel: col.maxRepetitionLevel,
 		maxDefinitionLevel: col.maxDefinitionLevel,
 		rows:               append([]region{}, col.rows...),
@@ -525,7 +530,7 @@ func (col *repeatedColumnBuffer) Pages() Pages {
 }
 
 func (col *repeatedColumnBuffer) Page() BufferedPage {
-	if repeatedRowsHaveBeenReordered(col.rows) {
+	if col.reordered {
 		if col.reordering == nil {
 			col.reordering = col.Clone().(*repeatedColumnBuffer)
 		}
@@ -574,6 +579,7 @@ func (col *repeatedColumnBuffer) Page() BufferedPage {
 		}
 
 		col.swapReorderingBuffer(column)
+		col.reordered = false
 	}
 
 	return newRepeatedPage(
@@ -637,6 +643,7 @@ func (col *repeatedColumnBuffer) Swap(i, j int) {
 	// column buffer when its view is materialized into a page by creating a
 	// copy and writing rows back to it following the order of rows in the
 	// repeated column buffer.
+	col.reordered = true
 	col.rows[i], col.rows[j] = col.rows[j], col.rows[i]
 }
 
@@ -735,37 +742,6 @@ func (col *repeatedColumnBuffer) writeValues(row array, size, offset uintptr, le
 func (col *repeatedColumnBuffer) ReadValuesAt(values []Value, offset int64) (int, error) {
 	// TODO:
 	panic("NOT IMPLEMENTED")
-}
-
-func optionalRowsHaveBeenReordered(rows []int32) bool {
-	i := int32(0)
-	for _, row := range rows {
-		if row < 0 {
-			// Skip any row that is null.
-			continue
-		}
-
-		// If rows have been reordered the indices are not increasing exactly
-		// one by one.
-		if row != i {
-			return true
-		}
-
-		// Only increment the index if the row is not null.
-		i++
-	}
-	return false
-}
-
-func repeatedRowsHaveBeenReordered(rows []region) bool {
-	lastOffset := uint32(0)
-	for _, row := range rows {
-		if row.offset < lastOffset {
-			return true
-		}
-		lastOffset = row.offset
-	}
-	return false
 }
 
 // =============================================================================
