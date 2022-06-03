@@ -1,0 +1,121 @@
+//go:build !purego
+
+#include "textflag.h"
+
+// func isZero(data []byte) bool
+TEXT ·isZero(SB), NOSPLIT, $0-32
+    MOVQ data+0(FP), AX
+    MOVQ data+8(FP), BX
+    XORQ DX, DX
+    XORQ SI, SI
+
+    CMPQ BX, $32
+    JB test
+
+    CMPB ·hasAVX2(SB), $0
+    JE test
+
+    VPXOR Y0, Y0, Y0
+    MOVQ BX, DI
+    SHRQ $5, DI
+    SHLQ $5, DI
+loop32:
+    VMOVDQU (AX)(SI*1), Y1
+    VPCMPEQQ Y0, Y1, Y1
+    VMOVMSKPD Y1, CX
+    CMPB CX, $0b1111
+    JNE done
+    ADDQ $32, SI
+    CMPQ SI, DI
+    JNE loop32
+    VZEROUPPER
+    JMP test
+loop:
+    MOVB (AX)(SI*1), CX
+    CMPB CX, $0x00
+    JNE done
+    INCQ SI
+test:
+    CMPQ SI, BX
+    JNE loop
+yes:
+    MOVQ $1, DX
+done:
+    MOVQ DX, ret+24(FP)
+    RET
+
+// func isOnes(data []byte) bool
+TEXT ·isOnes(SB), NOSPLIT, $0-32
+    MOVQ data+0(FP), AX
+    MOVQ data+8(FP), BX
+    XORQ DX, DX
+    XORQ SI, SI
+
+    CMPQ BX, $32
+    JB test
+
+    CMPB ·hasAVX2(SB), $0
+    JE test
+
+    VPCMPEQQ Y0, Y0, Y0
+    MOVQ BX, DI
+    SHRQ $5, DI
+    SHLQ $5, DI
+loop32:
+    VMOVDQU (AX)(SI*1), Y1
+    VPCMPEQQ Y0, Y1, Y1
+    VMOVMSKPD Y1, CX
+    CMPB CX, $0b1111
+    JNE done
+    ADDQ $32, SI
+    CMPQ SI, DI
+    JNE loop32
+    VZEROUPPER
+    JMP test
+loop:
+    MOVB (AX)(SI*1), CX
+    CMPB CX, $0xFF
+    JNE done
+    INCQ SI
+test:
+    CMPQ SI, BX
+    JNE loop
+yes:
+    MOVQ $1, DX
+done:
+    MOVQ DX, ret+24(FP)
+    RET
+
+GLOBL bitMasks<>(SB), RODATA|NOPTR, $64
+DATA bitMasks<>+0(SB)/8, $0b0000000100000001000000010000000100000001000000010000000100000001
+DATA bitMasks<>+8(SB)/8, $0b0000001100000011000000110000001100000011000000110000001100000011
+DATA bitMasks<>+16(SB)/8, $0b0000011100000111000001110000011100000111000001110000011100000111
+DATA bitMasks<>+24(SB)/8, $0b0000111100001111000011110000111100001111000011110000111100001111
+DATA bitMasks<>+32(SB)/8, $0b0001111100011111000111110001111100011111000111110001111100011111
+DATA bitMasks<>+40(SB)/8, $0b0011111100111111001111110011111100111111001111110011111100111111
+DATA bitMasks<>+48(SB)/8, $0b0111111101111111011111110111111101111111011111110111111101111111
+DATA bitMasks<>+56(SB)/8, $0b1111111111111111111111111111111111111111111111111111111111111111
+
+// func encodeBytesBitpack(dst []byte, src []uint64, bitWidth uint) int
+TEXT ·encodeBytesBitpack(SB), NOSPLIT, $0-64
+    MOVQ dst+0(FP), AX
+    MOVQ src+24(FP), BX
+    MOVQ src+32(FP), CX
+    MOVQ bitWidth+48(FP), DX
+    LEAQ bitMasks<>(SB), DI
+    MOVQ -8(DI)(DX*8), DI
+    XORQ SI, SI
+    JMP test
+loop:
+    MOVQ (BX)(SI*8), R8
+    PEXTQ DI, R8, R8
+    MOVQ R8, (AX)
+    ADDQ DX, AX
+    INCQ SI
+test:
+    CMPQ SI, CX
+    JNE loop
+done:
+    SUBQ dst+0(FP), AX
+    MOVQ AX, ret+56(FP)
+    RET
