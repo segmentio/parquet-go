@@ -3,64 +3,70 @@
 package parquet
 
 //go:noescape
-func nullIndex32bits(array) int
+func nullIndex8bits(bits *uint64, rows array, size, offset uintptr)
 
 //go:noescape
-func nullIndex64bits(array) int
+func nullIndex32bits(bits *uint64, rows array, size, offset uintptr)
 
 //go:noescape
-func nullIndex128bits(array) int
-
-func nullIndexInt(a array) int { return nullIndex64bits(a) }
-
-func nullIndexInt32(a array) int { return nullIndex32bits(a) }
-
-func nullIndexInt64(a array) int { return nullIndex64bits(a) }
-
-func nullIndexUint(a array) int { return nullIndex64bits(a) }
-
-func nullIndexUint32(a array) int { return nullIndex32bits(a) }
-
-func nullIndexUint64(a array) int { return nullIndex64bits(a) }
-
-func nullIndexOfUint128(a array) int { return nullIndex128bits(a) }
-
-func nullIndexFloat32(a array) int { return nullIndex32bits(a) }
-
-func nullIndexFloat64(a array) int { return nullIndex64bits(a) }
-
-func nullIndexPointer(a array) int { return nullIndex64bits(a) }
+func nullIndex64bits(bits *uint64, rows array, size, offset uintptr)
 
 //go:noescape
-func nonNullIndex8bits(array) int
+func nullIndex128bits(bits *uint64, rows array, size, offset uintptr)
 
-//go:noescape
-func nonNullIndex32bits(array) int
+func nullIndexBool(bits []uint64, rows array, size, offset uintptr) {
+	nullIndex8bits(&bits[0], rows, size, offset)
+}
 
-//go:noescape
-func nonNullIndex64bits(array) int
+func nullIndexInt(bits []uint64, rows array, size, offset uintptr) {
+	nullIndex64bits(&bits[0], rows, size, offset)
+}
 
-//go:noescape
-func nonNullIndex128bits(array) int
+func nullIndexInt32(bits []uint64, rows array, size, offset uintptr) {
+	nullIndex32bits(&bits[0], rows, size, offset)
+}
 
-func nonNullIndexBool(a array) int { return nonNullIndex8bits(a) }
+func nullIndexInt64(bits []uint64, rows array, size, offset uintptr) {
+	nullIndex64bits(&bits[0], rows, size, offset)
+}
 
-func nonNullIndexInt(a array) int { return nonNullIndex64bits(a) }
+func nullIndexUint(bits []uint64, rows array, size, offset uintptr) {
+	nullIndex64bits(&bits[0], rows, size, offset)
+}
 
-func nonNullIndexInt32(a array) int { return nonNullIndex32bits(a) }
+func nullIndexUint32(bits []uint64, rows array, size, offset uintptr) {
+	nullIndex32bits(&bits[0], rows, size, offset)
+}
 
-func nonNullIndexInt64(a array) int { return nonNullIndex64bits(a) }
+func nullIndexUint64(bits []uint64, rows array, size, offset uintptr) {
+	nullIndex64bits(&bits[0], rows, size, offset)
+}
 
-func nonNullIndexUint(a array) int { return nonNullIndex64bits(a) }
+func nullIndexUint128(bits []uint64, rows array, size, offset uintptr) {
+	nullIndex128bits(&bits[0], rows, size, offset)
+}
 
-func nonNullIndexUint32(a array) int { return nonNullIndex32bits(a) }
+func nullIndexFloat32(bits []uint64, rows array, size, offset uintptr) {
+	nullIndex32bits(&bits[0], rows, size, offset)
+}
 
-func nonNullIndexUint64(a array) int { return nonNullIndex64bits(a) }
+func nullIndexFloat64(bits []uint64, rows array, size, offset uintptr) {
+	nullIndex64bits(&bits[0], rows, size, offset)
+}
 
-func nonNullIndexUint128(a array) int { return nonNullIndex128bits(a) }
+func nullIndexString(bits []uint64, rows array, size, offset uintptr) {
+	// We offset by an extra 8 bytes to test the lengths of string values where
+	// the first field is the pointer and the second is the length which we want
+	// to test.
+	nullIndex64bits(&bits[0], rows, size, offset+8)
+}
 
-func nonNullIndexFloat32(a array) int { return nonNullIndex32bits(a) }
+func nullIndexSlice(bits []uint64, rows array, size, offset uintptr) {
+	// Slice values are null if their pointer is nil, which is held in the first
+	// 8 bytes of the object so we can simply test 64 bits words.
+	nullIndex64bits(&bits[0], rows, size, offset)
+}
 
-func nonNullIndexFloat64(a array) int { return nonNullIndex64bits(a) }
-
-func nonNullIndexPointer(a array) int { return nonNullIndex64bits(a) }
+func nullIndexPointer(bits []uint64, rows array, size, offset uintptr) {
+	nullIndex64bits(&bits[0], rows, size, offset)
+}

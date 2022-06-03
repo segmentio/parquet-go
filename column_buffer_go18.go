@@ -99,7 +99,7 @@ func writeRowsFuncOfRequired(t reflect.Type, schema *Schema, path columnPath) wr
 }
 
 func writeRowsFuncOfOptional(t reflect.Type, schema *Schema, path columnPath, writeRows writeRowsFunc) writeRowsFunc {
-	nullBits := nullBitsFuncOf(t)
+	nullIndex := nullIndexFuncOf(t)
 	return func(columns []ColumnBuffer, rows array, size, offset uintptr, levels columnLevels) error {
 		if rows.len == 0 {
 			return writeRows(columns, rows, size, 0, levels)
@@ -107,7 +107,7 @@ func writeRowsFuncOfOptional(t reflect.Type, schema *Schema, path columnPath, wr
 
 		nulls := acquireBitmap(rows.len)
 		defer releaseBitmap(nulls)
-		nullBits(nulls.bits, rows, size, offset)
+		nullIndex(nulls.bits, rows, size, offset)
 
 		nullLevels := levels
 		levels.definitionLevel++

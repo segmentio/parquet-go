@@ -3,13 +3,12 @@
 package parquet
 
 import (
-	"io"
-	"math/rand"
 	"reflect"
 	"testing"
+	"unsafe"
 
 	"github.com/segmentio/parquet-go/deprecated"
-	"github.com/segmentio/parquet-go/internal/unsafecast"
+	"github.com/segmentio/parquet-go/internal/quick"
 )
 
 func TestNullIndex(t *testing.T) {
@@ -25,29 +24,41 @@ func TestNullIndex(t *testing.T) {
 	testNullIndex[[10]byte](t)
 	testNullIndex[[16]byte](t)
 	testNullIndex[deprecated.Int96](t)
+	testNullIndex[string](t)
+	testNullIndex[*struct{}](t)
 }
 
 func testNullIndex[T comparable](t *testing.T) {
 	var zero T
-	var typ = reflect.TypeOf(zero)
 	t.Helper()
-	t.Run(typ.String(), func(t *testing.T) {
-		data := make([]byte, 1023)
-		prng := rand.New(rand.NewSource(0))
-
-		for seed := int64(0); seed < 10; seed++ {
-			if seed > 0 {
-				prng.Seed(seed)
-				io.ReadFull(prng, data)
+	t.Run(reflect.TypeOf(zero).String(), func(t *testing.T) {
+		err := quick.Check(func(data []T) bool {
+			if len(data) == 0 {
+				return true
 			}
 
-			array := makeArray(unsafecast.Slice[T](data))
-			want := nullIndex[T](array)
-			got := nullIndexFuncOf(typ)(array)
+			size := unsafe.Sizeof(zero)
+			want := make([]uint64, (len(data)+63)/64)
+			got := make([]uint64, (len(data)+63)/64)
 
-			if want != got {
-				t.Errorf("unexpected null index: want=%d got=%d", want, got)
+			for i := range data {
+				if (i % 2) == 0 {
+					data[i] = zero
+				}
 			}
+
+			array := makeArray(data)
+			nullIndex[T](want, array, size, 0)
+			nullIndexFuncOf(reflect.TypeOf(zero))(got, array, size, 0)
+
+			if !reflect.DeepEqual(want, got) {
+				t.Errorf("unexpected null index\nwant = %064b\ngot  = %064b", want, got)
+				return false
+			}
+			return true
+		})
+		if err != nil {
+			t.Error(err)
 		}
 	})
 }
@@ -65,113 +76,25 @@ func BenchmarkNullIndex(b *testing.B) {
 	benchmarkNullIndex[[10]byte](b)
 	benchmarkNullIndex[[16]byte](b)
 	benchmarkNullIndex[deprecated.Int96](b)
+	benchmarkNullIndex[string](b)
+	benchmarkNullIndex[[]struct{}](b)
+	benchmarkNullIndex[*struct{}](b)
 }
 
-func benchmarkNullIndex[T comparable](b *testing.B) {
+func benchmarkNullIndex[T any](b *testing.B) {
+	const N = 1000
+
 	var zero T
 	typ := reflect.TypeOf(zero)
-	nullIndex := nullIndexFuncOf(typ)
-
-	data := make([]byte, 1023)
-	for i := range data {
-		data[i] = 0xFF
-	}
-
-	clear := data[len(data)-20:]
-	for i := range clear {
-		clear[i] = 0
-	}
+	size := unsafe.Sizeof(zero)
+	null := nullIndexFuncOf(typ)
+	data := makeArray(make([]T, N))
+	bits := make([]uint64, (N+63)/64)
 
 	b.Run(typ.String(), func(b *testing.B) {
-		a := makeArray(unsafecast.Slice[T](data))
-		j := 0
-
 		for i := 0; i < b.N; i++ {
-			j = nullIndex(a)
+			null(bits, data, size, 0)
 		}
-
-		b.SetBytes(int64(j) * int64(typ.Size()))
-	})
-}
-
-func TestNonNullIndex(t *testing.T) {
-	testNonNullIndex[bool](t)
-	testNonNullIndex[int](t)
-	testNonNullIndex[int32](t)
-	testNonNullIndex[int64](t)
-	testNonNullIndex[uint](t)
-	testNonNullIndex[uint32](t)
-	testNonNullIndex[uint64](t)
-	testNonNullIndex[float32](t)
-	testNonNullIndex[float64](t)
-	testNonNullIndex[[10]byte](t)
-	testNonNullIndex[[16]byte](t)
-	testNonNullIndex[deprecated.Int96](t)
-}
-
-func testNonNullIndex[T comparable](t *testing.T) {
-	var zero T
-	var typ = reflect.TypeOf(zero)
-	t.Helper()
-	t.Run(typ.String(), func(t *testing.T) {
-		data := make([]byte, 1023)
-		prng := rand.New(rand.NewSource(0))
-
-		for seed := int64(0); seed < 10; seed++ {
-			for i := range data {
-				data[i] = 0
-			}
-
-			if seed > 0 {
-				prng.Seed(seed)
-				io.ReadFull(prng, data[prng.Intn(len(data)):])
-			}
-
-			array := makeArray(unsafecast.Slice[T](data))
-			want := nonNullIndex[T](array)
-			got := nonNullIndexFuncOf(typ)(array)
-
-			if want != got {
-				t.Errorf("unexpected non-null index: want=%d got=%d", want, got)
-			}
-		}
-	})
-}
-
-func BenchmarkNonNullIndex(b *testing.B) {
-	benchmarkNonNullIndex[bool](b)
-	benchmarkNonNullIndex[int](b)
-	benchmarkNonNullIndex[int32](b)
-	benchmarkNonNullIndex[int64](b)
-	benchmarkNonNullIndex[uint](b)
-	benchmarkNonNullIndex[uint32](b)
-	benchmarkNonNullIndex[uint64](b)
-	benchmarkNonNullIndex[float32](b)
-	benchmarkNonNullIndex[float64](b)
-	benchmarkNonNullIndex[[10]byte](b)
-	benchmarkNonNullIndex[[16]byte](b)
-	benchmarkNonNullIndex[deprecated.Int96](b)
-}
-
-func benchmarkNonNullIndex[T comparable](b *testing.B) {
-	var zero T
-	typ := reflect.TypeOf(zero)
-	nonNullIndex := nonNullIndexFuncOf(typ)
-
-	data := make([]byte, 1023)
-	ones := data[len(data)-20:]
-	for i := range ones {
-		ones[i] = 0xFF
-	}
-
-	b.Run(typ.String(), func(b *testing.B) {
-		a := makeArray(unsafecast.Slice[T](data))
-		j := 0
-
-		for i := 0; i < b.N; i++ {
-			j = nonNullIndex(a)
-		}
-
-		b.SetBytes(int64(j) * int64(typ.Size()))
+		b.SetBytes(int64(size * N))
 	})
 }

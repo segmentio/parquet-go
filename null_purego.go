@@ -2,44 +2,61 @@
 
 package parquet
 
-func nullIndexInt(a array) int { return nullIndex[int](a) }
+func nullIndexBool(bits []uint64, rows array, size, offset uintptr) {
+	nullIndex[bool](bits, rows, size, offset)
+}
 
-func nullIndexInt32(a array) int { return nullIndex[int32](a) }
+func nullIndexInt(bits []uint64, rows array, size, offset uintptr) {
+	nullIndex[int](bits, rows, size, offset)
+}
 
-func nullIndexInt64(a array) int { return nullIndex[int64](a) }
+func nullIndexInt32(bits []uint64, rows array, size, offset uintptr) {
+	nullIndex[int32](bits, rows, size, offset)
+}
 
-func nullIndexUint(a array) int { return nullIndex[uint](a) }
+func nullIndexInt64(bits []uint64, rows array, size, offset uintptr) {
+	nullIndex[int64](bits, rows, size, offset)
+}
 
-func nullIndexUint32(a array) int { return nullIndex[uint32](a) }
+func nullIndexUint(bits []uint64, rows array, size, offset uintptr) {
+	nullIndex[uint](bits, rows, size, offset)
+}
 
-func nullIndexUint64(a array) int { return nullIndex[uint64](a) }
+func nullIndexUint32(bits []uint64, rows array, size, offset uintptr) {
+	nullIndex[uint32](bits, rows, size, offset)
+}
 
-func nullIndexOfUint128(a array) int { return nullIndex[[16]byte](a) }
+func nullIndexUint64(bits []uint64, rows array, size, offset uintptr) {
+	nullIndex[uint64](bits, rows, size, offset)
+}
 
-func nullIndexFloat32(a array) int { return nullIndex[float32](a) }
+func nullIndexUint128(bits []uint64, rows array, size, offset uintptr) {
+	nullIndex[[16]byte](bits, rows, size, offset)
+}
 
-func nullIndexFloat64(a array) int { return nullIndex[float64](a) }
+func nullIndexFloat32(bits []uint64, rows array, size, offset uintptr) {
+	nullIndex[float32](bits, rows, size, offset)
+}
 
-func nullIndexPointer(a array) int { return nullIndex[*byte](a) }
+func nullIndexFloat64(bits []uint64, rows array, size, offset uintptr) {
+	nullIndex[float64](bits, rows, size, offset)
+}
 
-func nonNullIndexBool(a array) int { return nonNullIndex[bool](a) }
+func nullIndexString(bits []uint64, rows array, size, offset uintptr) {
+	nullIndex[string](bits, rows, size, offset)
+}
 
-func nonNullIndexInt(a array) int { return nonNullIndex[int](a) }
+func nullIndexSlice(bits []uint64, rows array, size, offset uintptr) {
+	for i := 0; i < rows.len; i++ {
+		p := *(**struct{})(rows.index(i, size, offset))
+		b := uint64(0)
+		if p != nil {
+			b = 1
+		}
+		bits[uint(i)/64] |= b << (uint(i) % 64)
+	}
+}
 
-func nonNullIndexInt32(a array) int { return nonNullIndex[int32](a) }
-
-func nonNullIndexInt64(a array) int { return nonNullIndex[int64](a) }
-
-func nonNullIndexUint(a array) int { return nonNullIndex[uint](a) }
-
-func nonNullIndexUint32(a array) int { return nonNullIndex[uint32](a) }
-
-func nonNullIndexUint64(a array) int { return nonNullIndex[uint64](a) }
-
-func nonNullIndexUint128(a array) int { return nonNullIndex[[16]byte](a) }
-
-func nonNullIndexFloat32(a array) int { return nonNullIndex[float32](a) }
-
-func nonNullIndexFloat64(a array) int { return nonNullIndex[float64](a) }
-
-func nonNullIndexPointer(a array) int { return nonNullIndex[*byte](a) }
+func nullIndexPointer(bits []uint64, rows array, size, offset uintptr) {
+	nullIndex[*struct{}](bits, rows, size, offset)
+}

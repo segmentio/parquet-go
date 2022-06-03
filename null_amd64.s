@@ -2,405 +2,224 @@
 
 #include "textflag.h"
 
-// func nullIndex32bits(a array) int
-TEXT ·nullIndex32bits(SB), NOSPLIT, $0-24
-    MOVQ a+0(FP), AX
-    MOVQ a+8(FP), BX
+// func nullIndex8bits(bits *uint64, rows array, size, offset uintptr)
+TEXT ·nullIndex8bits(SB), NOSPLIT, $0-40
+    MOVQ bits+0(FP), AX
+    MOVQ rows+8(FP), BX
+    MOVQ rows+16(FP), DI
+    MOVQ size+24(FP), DX
+    ADDQ offset+32(FP), BX
+
+    MOVQ $1, CX
     XORQ SI, SI
 
-    CMPQ BX, $0
+    CMPQ DI, $0
     JE done
-
-    CMPQ BX, $32
-    JB loop1x4
-
-    CMPB ·hasAVX2(SB), $0
-    JE loop1x4
-
-    MOVQ BX, DI
-    SHRQ $5, DI
-    SHLQ $5, DI
-    VPXOR Y0, Y0, Y0
-
-loop32x4:
-    VMOVDQU 0(AX)(SI*4), Y1
-    VMOVDQU 32(AX)(SI*4), Y2
-    VMOVDQU 64(AX)(SI*4), Y3
-    VMOVDQU 96(AX)(SI*4), Y4
-
-    VPCMPEQD Y0, Y1, Y1
-    VPCMPEQD Y0, Y2, Y2
-    VPCMPEQD Y0, Y3, Y3
-    VPCMPEQD Y0, Y4, Y4
-
-    VMOVMSKPS Y1, CX
-    VMOVMSKPS Y2, DX
-    VMOVMSKPS Y3, R8
-    VMOVMSKPS Y4, R9
-
-    SHLQ $8, DX
-    SHLQ $16, R8
-    SHLQ $24, R9
-
-    ORQ DX, CX
-    ORQ R8, CX
-    ORQ R9, CX
-
-    CMPL CX, $0
-    JE next32x4
-
-    TZCNTQ CX, CX
-    ADDQ CX, SI
-    VZEROUPPER
-    JMP done
-
-next32x4:
-    ADDQ $32, SI
-    CMPQ SI, DI
-    JNE loop32x4
-
-    VZEROUPPER
-    CMPQ SI, BX
-    JE done
-
-loop1x4:
-    MOVL (AX)(SI*4), CX
-    CMPL CX, $0
-    JE done
-    INCQ SI
-    CMPQ SI, BX
-    JNE loop1x4
-
-done:
-    MOVQ SI, ret+16(FP)
-    RET
-
-// func nullIndex64bits(a array) int
-TEXT ·nullIndex64bits(SB), NOSPLIT, $0-24
-    MOVQ a+0(FP), AX
-    MOVQ a+8(FP), BX
-    XORQ SI, SI
-
-    CMPQ BX, $0
-    JE done
-
-    CMPQ BX, $16
-    JB loop1x8
-
-    CMPB ·hasAVX2(SB), $0
-    JE loop1x8
-
-    MOVQ BX, DI
-    SHRQ $4, DI
-    SHLQ $4, DI
-    VPXOR Y0, Y0, Y0
-
-loop16x8:
-    VMOVDQU 0(AX)(SI*8), Y1
-    VMOVDQU 32(AX)(SI*8), Y2
-    VMOVDQU 64(AX)(SI*8), Y3
-    VMOVDQU 96(AX)(SI*8), Y4
-
-    VPCMPEQQ Y0, Y1, Y1
-    VPCMPEQQ Y0, Y2, Y2
-    VPCMPEQQ Y0, Y3, Y3
-    VPCMPEQQ Y0, Y4, Y4
-
-    VMOVMSKPD Y1, CX
-    VMOVMSKPD Y2, DX
-    VMOVMSKPD Y3, R8
-    VMOVMSKPD Y4, R9
-
-    SHLQ $4, DX
-    SHLQ $8, R8
-    SHLQ $12, R9
-
-    ORQ DX, CX
-    ORQ R8, CX
-    ORQ R9, CX
-
-    CMPW CX, $0
-    JE next16x8
-
-    TZCNTQ CX, CX
-    ADDQ CX, SI
-    VZEROUPPER
-    JMP done
-
-next16x8:
-    ADDQ $16, SI
-    CMPQ SI, DI
-    JNE loop16x8
-
-    VZEROUPPER
-    CMPQ SI, BX
-    JE done
-
-loop1x8:
-    MOVQ (AX)(SI*8), CX
-    CMPQ CX, $0
-    JE done
-    INCQ SI
-    CMPQ SI, BX
-    JNE loop1x8
-
-done:
-    MOVQ SI, ret+16(FP)
-    RET
-
-// func nullIndex128bits(a array) int
-TEXT ·nullIndex128bits(SB), NOSPLIT, $0-24
-    MOVQ a+0(FP), AX
-    MOVQ a+8(FP), BX
-    XORQ SI, SI
-    PXOR X0, X0
-
-    CMPQ BX, $0
-    JE done
-
-loop1x16:
-    MOVOU (AX), X1
-    PCMPEQQ X0, X1
-    MOVMSKPD X1, CX
-
-    CMPB CX, $0b11
-    JE done
-
-    ADDQ $16, AX
-    INCQ SI
-    CMPQ SI, BX
-    JNE loop1x16
-
-done:
-    MOVQ SI, ret+16(FP)
-    RET
-
-// func nonNullIndex8bits(a array) int
-TEXT ·nonNullIndex8bits(SB), NOSPLIT, $0-24
-    MOVQ a+0(FP), AX
-    MOVQ a+8(FP), BX
-    XORQ SI, SI
-
-    CMPQ BX, $0
-    JE done
-
-    CMPQ BX, $32
-    JB loop1x1
-
-    CMPB ·hasAVX2(SB), $0
-    JE loop1x1
-
-    MOVQ BX, DI
-    SHRQ $5, DI
-    SHLQ $5, DI
-    VPXOR Y0, Y0, Y0
-
-loop32x1:
-    VMOVDQU (AX)(SI*1), Y1
-    VPCMPEQB Y0, Y1, Y1
-    VPMOVMSKB Y1, CX
-
-    CMPL CX, $0xFFFFFFFF
-    JE next32x1
-
-    NOTQ CX
-    TZCNTQ CX, CX
-    ADDQ CX, SI
-    VZEROUPPER
-    JMP done
-
-next32x1:
-    ADDQ $32, SI
-    CMPQ SI, DI
-    JNE loop32x1
-
-    VZEROUPPER
-    CMPQ SI, BX
-    JE done
-
 loop1x1:
-    MOVBQZX (AX)(SI*1), CX
-    CMPQ CX, $0
-    JNE done
-    INCQ SI
-    CMPQ SI, BX
-    JNE loop1x1
+    XORQ R8, R8
+    MOVB (BX), R9
+    CMPB R9, $0
+    JE next1x1
 
+    MOVQ SI, R10
+    SHRQ $6, R10
+    ORQ CX, (AX)(R10*8)
+next1x1:
+    ADDQ DX, BX
+    ROLQ $1, CX
+    INCQ SI
+    CMPQ SI, DI
+    JNE loop1x1
 done:
-    MOVQ SI, ret+16(FP)
     RET
 
-// func nonNullIndex32bits(a array) int
-TEXT ·nonNullIndex32bits(SB), NOSPLIT, $0-24
-    MOVQ a+0(FP), AX
-    MOVQ a+8(FP), BX
+// func nullIndex32bits(bits *uint64, rows array, size, offset uintptr)
+TEXT ·nullIndex32bits(SB), NOSPLIT, $0-40
+    MOVQ bits+0(FP), AX
+    MOVQ rows+8(FP), BX
+    MOVQ rows+16(FP), DI
+    MOVQ size+24(FP), DX
+    ADDQ offset+32(FP), BX
+
+    MOVQ $1, CX
     XORQ SI, SI
 
-    CMPQ BX, $0
+    CMPQ DI, $0
     JE done
 
-    CMPQ BX, $32
+    CMPQ DI, $8
     JB loop1x4
 
     CMPB ·hasAVX2(SB), $0
     JE loop1x4
 
-    MOVQ BX, DI
-    SHRQ $5, DI
-    SHLQ $5, DI
-    VPXOR Y0, Y0, Y0
+    MOVQ DI, R8
+    SHRQ $3, R8
+    SHLQ $3, R8
 
-loop32x4:
-    VMOVDQU 0(AX)(SI*4), Y1
-    VMOVDQU 32(AX)(SI*4), Y2
-    VMOVDQU 64(AX)(SI*4), Y3
-    VMOVDQU 96(AX)(SI*4), Y4
-
-    VPCMPEQD Y0, Y1, Y1
-    VPCMPEQD Y0, Y2, Y2
-    VPCMPEQD Y0, Y3, Y3
-    VPCMPEQD Y0, Y4, Y4
-
-    VMOVMSKPS Y1, CX
-    VMOVMSKPS Y2, DX
-    VMOVMSKPS Y3, R8
+    VPBROADCASTD size+24(FP), Y0
+    VPMULLD ·scale8x4(SB), Y0, Y0
+    VPCMPEQD Y1, Y1, Y1
+    VPCMPEQD Y2, Y2, Y2
+    VPXOR Y3, Y3, Y3
+loop8x4:
+    VPGATHERDD Y1, (BX)(Y0*1), Y4
+    VPCMPEQD Y3, Y4, Y4
     VMOVMSKPS Y4, R9
+    VMOVDQU Y2, Y1
 
-    SHLQ $8, DX
-    SHLQ $16, R8
-    SHLQ $24, R9
+    NOTQ R9
+    ANDQ $0b11111111, R9
 
-    ORQ DX, CX
-    ORQ R8, CX
-    ORQ R9, CX
+    MOVQ SI, CX
+    ANDQ $0b111111, CX
 
-    CMPL CX, $0xFFFFFFFF
-    JE next32x4
+    MOVQ SI, R10
+    SHRQ $6, R10
 
-    NOTQ CX
-    TZCNTQ CX, CX
-    ADDQ CX, SI
+    SHLQ CX, R9
+    ORQ R9, (AX)(R10*8)
+
+    LEAQ (BX)(DX*8), BX
+    ADDQ $8, SI
+    CMPQ SI, R8
+    JNE loop8x4
     VZEROUPPER
-    JMP done
 
-next32x4:
-    ADDQ $32, SI
     CMPQ SI, DI
-    JNE loop32x4
-
-    VZEROUPPER
-    CMPQ SI, BX
     JE done
+
+    MOVQ $1, R8
+    MOVQ SI, CX
+    ANDQ $0b111111, R8
+    SHLQ CX, R8
+    MOVQ R8, CX
 
 loop1x4:
-    MOVLQZX (AX)(SI*4), CX
-    CMPQ CX, $0
-    JNE done
-    INCQ SI
-    CMPQ SI, BX
-    JNE loop1x4
+    MOVL (BX), R8
+    CMPL R8, $0
+    JE next1x4
 
+    MOVQ SI, R9
+    SHRQ $6, R9
+    ORQ CX, (AX)(R9*8)
+next1x4:
+    ADDQ DX, BX
+    ROLQ $1, CX
+    INCQ SI
+    CMPQ SI, DI
+    JNE loop1x4
 done:
-    MOVQ SI, ret+16(FP)
     RET
 
-// func nonNullIndex64bits(a array) int
-TEXT ·nonNullIndex64bits(SB), NOSPLIT, $0-24
-    MOVQ a+0(FP), AX
-    MOVQ a+8(FP), BX
+// func nullIndex64bits(bits *uint64, rows array, size, offset uintptr)
+TEXT ·nullIndex64bits(SB), NOSPLIT, $0-40
+    MOVQ bits+0(FP), AX
+    MOVQ rows+8(FP), BX
+    MOVQ rows+16(FP), DI
+    MOVQ size+24(FP), DX
+    ADDQ offset+32(FP), BX
+
+    MOVQ $1, CX
     XORQ SI, SI
 
-    CMPQ BX, $0
+    CMPQ DI, $0
     JE done
 
-    CMPQ BX, $16
+    CMPQ DI, $4
     JB loop1x8
 
     CMPB ·hasAVX2(SB), $0
     JE loop1x8
 
-    MOVQ BX, DI
-    SHRQ $4, DI
-    SHLQ $4, DI
-    VPXOR Y0, Y0, Y0
+    MOVQ DI, R8
+    SHRQ $2, R8
+    SHLQ $2, R8
 
-loop16x8:
-    VMOVDQU 0(AX)(SI*8), Y1
-    VMOVDQU 32(AX)(SI*8), Y2
-    VMOVDQU 64(AX)(SI*8), Y3
-    VMOVDQU 96(AX)(SI*8), Y4
-
-    VPCMPEQQ Y0, Y1, Y1
-    VPCMPEQQ Y0, Y2, Y2
-    VPCMPEQQ Y0, Y3, Y3
-    VPCMPEQQ Y0, Y4, Y4
-
-    VMOVMSKPD Y1, CX
-    VMOVMSKPD Y2, DX
-    VMOVMSKPD Y3, R8
+    VPBROADCASTQ size+24(FP), Y0
+    VPMULLQ ·scale4x8(SB), Y0, Y0
+    VPCMPEQQ Y1, Y1, Y1
+    VPCMPEQQ Y2, Y2, Y2
+    VPXOR Y3, Y3, Y3
+loop4x8:
+    VPGATHERQQ Y1, (BX)(Y0*1), Y4
+    VPCMPEQQ Y3, Y4, Y4
     VMOVMSKPD Y4, R9
+    VMOVDQU Y2, Y1
 
-    SHLQ $4, DX
-    SHLQ $8, R8
-    SHLQ $12, R9
+    NOTQ R9
+    ANDQ $0b1111, R9
 
-    ORQ DX, CX
-    ORQ R8, CX
-    ORQ R9, CX
+    MOVQ SI, CX
+    ANDQ $0b111111, CX
 
-    CMPW CX, $0xFFFF
-    JE next16x8
+    MOVQ SI, R10
+    SHRQ $6, R10
 
-    NOTQ CX
-    TZCNTQ CX, CX
-    ADDQ CX, SI
+    SHLQ CX, R9
+    ORQ R9, (AX)(R10*8)
+
+    LEAQ (BX)(DX*4), BX
+    ADDQ $4, SI
+    CMPQ SI, R8
+    JNE loop4x8
     VZEROUPPER
-    JMP done
 
-next16x8:
-    ADDQ $16, SI
     CMPQ SI, DI
-    JNE loop16x8
-
-    VZEROUPPER
-    CMPQ SI, BX
     JE done
+
+    MOVQ $1, R8
+    MOVQ SI, CX
+    ANDQ $0b111111, R8
+    SHLQ CX, R8
+    MOVQ R8, CX
 
 loop1x8:
-    MOVQ (AX)(SI*8), CX
-    CMPQ CX, $0
-    JNE done
-    INCQ SI
-    CMPQ SI, BX
-    JNE loop1x8
+    MOVQ (BX), R8
+    CMPQ R8, $0
+    JE next1x8
 
+    MOVQ SI, R9
+    SHRQ $6, R9
+    ORQ CX, (AX)(R9*8)
+next1x8:
+    ADDQ DX, BX
+    ROLQ $1, CX
+    INCQ SI
+    CMPQ SI, DI
+    JNE loop1x8
 done:
-    MOVQ SI, ret+16(FP)
     RET
 
-// func nonNullIndex128bits(a array) int
-TEXT ·nonNullIndex128bits(SB), NOSPLIT, $0-24
-    MOVQ a+0(FP), AX
-    MOVQ a+8(FP), BX
-    XORQ SI, SI
-    PXOR X0, X0
+// func nullIndex128bits(bits *uint64, rows array, size, offset uintptr)
+TEXT ·nullIndex128bits(SB), NOSPLIT, $0-40
+    MOVQ bits+0(FP), AX
+    MOVQ rows+8(FP), BX
+    MOVQ rows+16(FP), DI
+    MOVQ size+24(FP), DX
+    ADDQ offset+32(FP), BX
 
-    CMPQ BX, $0
+    CMPQ DI, $0
     JE done
 
+    MOVQ $1, CX
+    XORQ SI, SI
+    PXOR X0, X0
 loop1x16:
-    MOVOU (AX), X1
+    MOVOU (BX), X1
     PCMPEQQ X0, X1
-    MOVMSKPD X1, CX
+    MOVMSKPD X1, R8
+    CMPB R8, $0b11
+    JE next1x16
 
-    CMPQ CX, $0b11
-    JNE done
-
-    ADDQ $16, AX
+    MOVQ SI, R9
+    SHRQ $6, R9
+    ORQ CX, (AX)(R9*8)
+next1x16:
+    ADDQ DX, BX
+    ROLQ $1, CX
     INCQ SI
-    CMPQ SI, BX
+    CMPQ SI, DI
     JNE loop1x16
-
 done:
-    MOVQ SI, ret+16(FP)
     RET
