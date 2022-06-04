@@ -551,6 +551,40 @@ func TestBufferSeekToRow(t *testing.T) {
 	}
 }
 
+type TestStruct struct {
+	A *string `parquet:"a,optional,dict"`
+}
+
+func TestOptionalDictWriteRowGroup(t *testing.T) {
+	s := parquet.SchemaOf(&TestStruct{})
+
+	str1 := "test1"
+	str2 := "test2"
+	records := []*TestStruct{
+		{A: nil},
+		{A: &str1},
+		{A: nil},
+		{A: &str2},
+		{A: nil},
+	}
+
+	buf := parquet.NewBuffer(s)
+	for _, rec := range records {
+		row := s.Deconstruct(nil, rec)
+		_, err := buf.WriteRows([]parquet.Row{row})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	b := bytes.NewBuffer(nil)
+	w := parquet.NewWriter(b)
+	_, err := w.WriteRowGroup(buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func generateBenchmarkBufferRows(n int) (*parquet.Schema, []parquet.Row) {
 	model := new(benchmarkRowType)
 	schema := parquet.SchemaOf(model)
