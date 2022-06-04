@@ -32,7 +32,7 @@ init:
     JB loop
 
     VPBROADCASTD size+24(FP), Y0
-    VPMULLD scale8x4<>(SB), Y0, Y0
+    VPMULLD ·scale8x4(SB), Y0, Y0
     VPCMPEQD Y1, Y1, Y1
     VPCMPEQD Y2, Y2, Y2
     VPCMPEQD Y3, Y3, Y3
@@ -122,7 +122,7 @@ TEXT ·writeValues32bits(SB), NOSPLIT, $0-40
     SHLQ $3, DI
 
     VPBROADCASTD size+24(FP), Y0
-    VPMULLD scale8x4<>(SB), Y0, Y0
+    VPMULLD ·scale8x4(SB), Y0, Y0
     VPCMPEQD Y1, Y1, Y1
     VPCMPEQD Y2, Y2, Y2
 loop8x4:
@@ -174,7 +174,7 @@ TEXT ·writeValues64bits(SB), NOSPLIT, $0-40
     SHLQ $2, DI
 
     VPBROADCASTQ size+24(FP), Y0
-    VPMULLD scale4x8<>(SB), Y0, Y0
+    VPMULLD ·scale4x8(SB), Y0, Y0
     VPCMPEQD Y1, Y1, Y1
     VPCMPEQD Y2, Y2, Y2
 loop4x8:
@@ -251,18 +251,18 @@ loop1x16:
 done:
     RET
 
-GLOBL scale8x4<>(SB), RODATA|NOPTR, $32
-DATA scale8x4<>+0(SB)/4,  $0
-DATA scale8x4<>+4(SB)/4,  $1
-DATA scale8x4<>+8(SB)/4,  $2
-DATA scale8x4<>+12(SB)/4, $3
-DATA scale8x4<>+16(SB)/4, $4
-DATA scale8x4<>+20(SB)/4, $5
-DATA scale8x4<>+24(SB)/4, $6
-DATA scale8x4<>+28(SB)/4, $7
+GLOBL ·scale8x4(SB), RODATA|NOPTR, $32
+DATA ·scale8x4+0(SB)/4,  $0
+DATA ·scale8x4+4(SB)/4,  $1
+DATA ·scale8x4+8(SB)/4,  $2
+DATA ·scale8x4+12(SB)/4, $3
+DATA ·scale8x4+16(SB)/4, $4
+DATA ·scale8x4+20(SB)/4, $5
+DATA ·scale8x4+24(SB)/4, $6
+DATA ·scale8x4+28(SB)/4, $7
 
-GLOBL scale4x8<>(SB), RODATA|NOPTR, $32
-DATA scale4x8<>+0(SB)/8,  $0
-DATA scale4x8<>+8(SB)/8,  $1
-DATA scale4x8<>+16(SB)/8, $2
-DATA scale4x8<>+24(SB)/8, $3
+GLOBL ·scale4x8(SB), RODATA|NOPTR, $32
+DATA ·scale4x8+0(SB)/8,  $0
+DATA ·scale4x8+8(SB)/8,  $1
+DATA ·scale4x8+16(SB)/8, $2
+DATA ·scale4x8+24(SB)/8, $3

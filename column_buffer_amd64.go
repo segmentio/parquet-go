@@ -4,11 +4,7 @@ package parquet
 
 import (
 	"unsafe"
-
-	"golang.org/x/sys/cpu"
 )
-
-var hasAVX2 = cpu.X86.HasAVX2
 
 //go:noescape
 func writeValuesBitpack(values unsafe.Pointer, rows array, size, offset uintptr)
