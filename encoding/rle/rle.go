@@ -97,7 +97,7 @@ func (e *Encoding) wrap(err error) error {
 }
 
 func encodeBits(dst, src []byte) ([]byte, error) {
-	if isZero(src) || isOnes(src) {
+	if len(src) == 0 || isZero(src) || isOnes(src) {
 		dst = appendUvarint(dst, uint64(8*len(src))<<1)
 		if len(src) > 0 {
 			dst = append(dst, src[0])
@@ -117,8 +117,7 @@ func encodeBits(dst, src []byte) ([]byte, error) {
 			}
 
 			if n := j - i; n > 1 {
-				dst = appendUvarint(dst, uint64(8*n)<<1)
-				dst = append(dst, src[i])
+				dst = appendRunLengthBits(dst, 8*n, src[i])
 				i = j
 				continue
 			}
@@ -131,14 +130,11 @@ func encodeBits(dst, src []byte) ([]byte, error) {
 			j++
 		}
 
-		n := j - i
-		if n > 1 && j < len(src) {
-			n--
+		if (j-i) > 1 && j < len(src) {
 			j--
 		}
 
-		dst = appendUvarint(dst, uint64(n)<<1|1)
-		dst = append(dst, src[i:j]...)
+		dst = appendBitPackedBits(dst, src[i:j])
 		i = j
 	}
 	return dst, nil
@@ -167,8 +163,7 @@ func encodeBytes(dst, src []byte, bitWidth uint) ([]byte, error) {
 			}
 
 			if i < j {
-				dst = appendUvarint(dst, uint64(8*(j-i))<<1)
-				dst = append(dst, byte(pattern))
+				dst = appendRunLengthBytes(dst, 8*(j-i), byte(pattern))
 			} else {
 				j++
 
@@ -176,12 +171,7 @@ func encodeBytes(dst, src []byte, bitWidth uint) ([]byte, error) {
 					j++
 				}
 
-				offset := len(dst)
-				length := j - i
-				dst = resize(dst, offset+(length*int(bitWidth))+binary.MaxVarintLen64+8)
-				offset += binary.PutUvarint(dst[offset:], uint64(length<<1)|1)
-				offset += encodeBytesBitpack(dst[offset:], words[i:j], bitWidth)
-				dst = dst[:offset]
+				dst = appendBitPackedBytes(dst, words[i:j], bitWidth)
 			}
 
 			i = j
@@ -195,8 +185,7 @@ func encodeBytes(dst, src []byte, bitWidth uint) ([]byte, error) {
 			j++
 		}
 
-		dst = appendUvarint(dst, uint64(j-i)<<1)
-		dst = append(dst, byte(src[i]))
+		dst = appendRunLengthBytes(dst, j-i, src[i])
 		i = j
 	}
 
@@ -226,18 +215,11 @@ func encodeInt32(dst []byte, src []int32, bitWidth uint) ([]byte, error) {
 			}
 
 			if i < j {
-				dst = appendUvarint(dst, uint64(8*(j-i))<<1)
-				dst = appendInt32(dst, pattern[0], bitWidth)
+				dst = appendRunLengthInt32(dst, 8*(j-i), pattern[0], bitWidth)
 			} else {
 				j += 1
 				j += encodeInt32IndexEqual8Contiguous(words[j:])
-
-				offset := len(dst)
-				length := j - i
-				dst = resize(dst, offset+(length*int(bitWidth))+32+binary.MaxVarintLen64)
-				offset += binary.PutUvarint(dst[offset:], uint64(length)<<1|1)
-				offset += encodeInt32Bitpack(dst[offset:], words[i:j], bitWidth)
-				dst = dst[:offset]
+				dst = appendBitPackedInt32(dst, words[i:j], bitWidth)
 			}
 
 			i = j
@@ -251,8 +233,7 @@ func encodeInt32(dst []byte, src []int32, bitWidth uint) ([]byte, error) {
 			j++
 		}
 
-		dst = appendUvarint(dst, uint64(j-i)<<1)
-		dst = appendInt32(dst, src[i], bitWidth)
+		dst = appendRunLengthInt32(dst, j-i, src[i], bitWidth)
 		i = j
 	}
 
@@ -454,10 +435,48 @@ func appendUvarint(dst []byte, u uint64) []byte {
 	return append(dst, b[:n]...)
 }
 
-func appendInt32(dst []byte, v int32, bitWidth uint) []byte {
-	var b [4]byte
-	binary.LittleEndian.PutUint32(b[:], uint32(v))
-	return append(dst, b[:bits.ByteCount(bitWidth)]...)
+func appendRunLengthBits(dst []byte, count int, value byte) []byte {
+	return appendRunLengthBytes(dst, count, value)
+}
+
+func appendBitPackedBits(dst []byte, words []byte) []byte {
+	n := len(dst)
+	dst = resize(dst, n+binary.MaxVarintLen64+len(words))
+	n += binary.PutUvarint(dst[n:], uint64(len(words)<<1)|1)
+	n += copy(dst[n:], words)
+	return dst[:n]
+}
+
+func appendRunLengthBytes(dst []byte, count int, value byte) []byte {
+	n := len(dst)
+	dst = resize(dst, n+binary.MaxVarintLen64+1)
+	n += binary.PutUvarint(dst[n:], uint64(count)<<1)
+	dst[n] = value
+	return dst[:n+1]
+}
+
+func appendBitPackedBytes(dst []byte, words []uint64, bitWidth uint) []byte {
+	n := len(dst)
+	dst = resize(dst, n+binary.MaxVarintLen64+(len(words)*int(bitWidth))+8)
+	n += binary.PutUvarint(dst[n:], uint64(len(words)<<1)|1)
+	n += encodeBytesBitpack(dst[n:], words, bitWidth)
+	return dst[:n]
+}
+
+func appendRunLengthInt32(dst []byte, count int, value int32, bitWidth uint) []byte {
+	n := len(dst)
+	dst = resize(dst, n+binary.MaxVarintLen64+4)
+	n += binary.PutUvarint(dst[n:], uint64(count)<<1)
+	binary.LittleEndian.PutUint32(dst[n:], uint32(value))
+	return dst[:n+int((bitWidth+7)/8)]
+}
+
+func appendBitPackedInt32(dst []byte, words [][8]int32, bitWidth uint) []byte {
+	n := len(dst)
+	dst = resize(dst, n+binary.MaxVarintLen64+(len(words)*int(bitWidth))+32)
+	n += binary.PutUvarint(dst[n:], uint64(len(words))<<1|1)
+	n += encodeInt32Bitpack(dst[n:], words, bitWidth)
+	return dst[:n]
 }
 
 func broadcast8x1(v uint64) uint64 {
@@ -490,18 +509,25 @@ func isZeroInt32(data []int32) bool {
 
 func resize(buf []byte, size int) []byte {
 	if cap(buf) < size {
-		newCap := 2 * cap(buf)
-		if newCap < size {
-			newCap = size
-		}
-		buf = append(make([]byte, 0, newCap), buf...)
-	} else if size > len(buf) {
+		return grow(buf, size)
+	}
+	if size > len(buf) {
 		clear := buf[len(buf):size]
 		for i := range clear {
 			clear[i] = 0
 		}
 	}
 	return buf[:size]
+}
+
+func grow(buf []byte, size int) []byte {
+	newCap := 2 * cap(buf)
+	if newCap < size {
+		newCap = size
+	}
+	newBuf := make([]byte, size, newCap)
+	copy(newBuf, buf)
+	return newBuf
 }
 
 func encodeInt32BitpackDefault(dst []byte, src [][8]int32, bitWidth uint) int {
