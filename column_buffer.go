@@ -379,16 +379,10 @@ func (col *optionalColumnBuffer) writeValues(rows array, size, offset uintptr, l
 		col.rows = tmp
 	}
 
-	newRows := col.rows[i:]
 	if levels.definitionLevel != col.maxDefinitionLevel {
-		for i := range newRows {
-			newRows[i] = -1
-		}
+		broadcastValueInt32(col.rows[i:], -1)
 	} else {
-		rowIndex := int32(col.base.Len())
-		for i := range newRows {
-			newRows[i] = rowIndex + int32(i)
-		}
+		broadcastRangeInt32(col.rows[i:], int32(col.base.Len()))
 		col.base.writeValues(rows, size, offset, levels)
 	}
 }

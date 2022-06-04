@@ -4,6 +4,19 @@ package parquet
 
 import "unsafe"
 
+func broadcastValueInt32(dst []int32, src int8) {
+	value := 0x01010101 * int32(src)
+	for i := range dst {
+		dst[i] = value
+	}
+}
+
+func broadcastRangeInt32(dst []int32, base int32) {
+	for i := range dst {
+		dst[i] = base + int32(i)
+	}
+}
+
 func writeValuesBool(values []byte, rows array, size, offset uintptr) {
 	for i, j := 0, 0; i < rows.len; i += 8 {
 		b0 := *(*byte)(rows.index(i+0, size, offset))

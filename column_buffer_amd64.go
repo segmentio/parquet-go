@@ -6,6 +6,13 @@ import (
 	"unsafe"
 )
 
+func broadcastValueInt32(dst []int32, src int8) {
+	memset(unsafe.Slice(*(**byte)(unsafe.Pointer(&dst)), len(dst)*4), byte(src))
+}
+
+//go:noescape
+func broadcastRangeInt32(dst []int32, base int32)
+
 //go:noescape
 func writeValuesBitpack(values unsafe.Pointer, rows array, size, offset uintptr)
 

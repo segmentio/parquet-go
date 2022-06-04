@@ -2,6 +2,59 @@
 
 #include "textflag.h"
 
+// func broadcastRangeInt32(dst []int32, base int32)
+TEXT ·broadcastRangeInt32(SB), NOSPLIT, $0-32
+    MOVQ dst+0(FP), AX
+    MOVQ dst+8(FP), BX
+    MOVL base+24(FP), CX
+    XORQ SI, SI
+
+    CMPQ BX, $8
+    JB test1x4
+
+    CMPB ·hasAVX2(SB), $0
+    JE test1x4
+
+    VMOVDQU rangeInt32<>(SB), Y0         // [0,1,2,3,4,5,6,7]
+    VPBROADCASTD rangeInt32<>+32(SB), Y1 // [8,8,8,8,8,8,8,8]
+    VPBROADCASTD base+24(FP), Y2         // [base...]
+    VPADDD Y2, Y0, Y0                    // [base,base+1,...]
+
+    MOVQ BX, DI
+    SHRQ $3, DI
+    SHLQ $3, DI
+    JMP test8x4
+loop8x4:
+    VMOVDQU Y0, (AX)(SI*4)
+    VPADDD Y1, Y0, Y0
+    ADDQ $8, SI
+test8x4:
+    CMPQ SI, DI
+    JNE loop8x4
+    VZEROUPPER
+    JMP test1x4
+
+loop1x4:
+    INCQ SI
+    MOVL CX, DX
+    IMULL SI, DX
+    MOVL DX, -4(AX)(SI*4)
+test1x4:
+    CMPQ SI, BX
+    JNE loop1x4
+    RET
+
+GLOBL rangeInt32<>(SB), RODATA|NOPTR, $40
+DATA rangeInt32<>+0(SB)/4, $0
+DATA rangeInt32<>+4(SB)/4, $1
+DATA rangeInt32<>+8(SB)/4, $2
+DATA rangeInt32<>+12(SB)/4, $3
+DATA rangeInt32<>+16(SB)/4, $4
+DATA rangeInt32<>+20(SB)/4, $5
+DATA rangeInt32<>+24(SB)/4, $6
+DATA rangeInt32<>+28(SB)/4, $7
+DATA rangeInt32<>+32(SB)/4, $8
+
 // func writeValuesBitpack(values unsafe.Pointer, rows array, size, offset uintptr)
 TEXT ·writeValuesBitpack(SB), NOSPLIT, $0-40
     MOVQ values_base+0(FP), AX
