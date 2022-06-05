@@ -17,5 +17,5 @@ var (
 )
 
 func optimize(n int) bool {
-	return n >= minLenAVX2 && cpu.X86.HasAVX2
+	return n >= minLenAVX2 && hasAVX2
 }
