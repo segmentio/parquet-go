@@ -53,7 +53,7 @@ type Dictionary interface {
 	Lookup(indexes []int32, values []Value)
 
 	// Returns the min and max values found in the given indexes.
-	Bounds(indexed []int32) (min, max Value)
+	Bounds(indexes []int32) (min, max Value)
 
 	// Resets the dictionary to its initial state, removing all values.
 	Reset()
