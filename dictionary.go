@@ -132,9 +132,9 @@ func (d *booleanDictionary) insert(indexes []int32, rows array, size, offset uin
 }
 
 func (d *booleanDictionary) Lookup(indexes []int32, values []Value) {
-	for i, j := range indexes {
-		values[i] = d.Index(j)
-	}
+	var value Value
+	memsetValues(values, makeValueBoolean(false))
+	d.lookup(indexes, makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
 }
 
 func (d *booleanDictionary) Bounds(indexes []int32) (min, max Value) {
@@ -223,12 +223,9 @@ func (d *int32Dictionary) insert(indexes []int32, rows array, size, offset uintp
 }
 
 func (d *int32Dictionary) Lookup(indexes []int32, values []Value) {
-	for i, j := range indexes {
-		values[i] = d.Index(j)
-	}
-	//var value Value
-	//memsetValues(values, makeValueInt32(0))
-	//d.lookup(indexes, makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
+	var value Value
+	memsetValues(values, makeValueInt32(0))
+	d.lookup(indexes, makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
 }
 
 func (d *int32Dictionary) Bounds(indexes []int32) (min, max Value) {
@@ -314,9 +311,9 @@ func (d *int64Dictionary) insert(indexes []int32, rows array, size, offset uintp
 }
 
 func (d *int64Dictionary) Lookup(indexes []int32, values []Value) {
-	for i, j := range indexes {
-		values[i] = d.Index(j)
-	}
+	var value Value
+	memsetValues(values, makeValueInt64(0))
+	d.lookup(indexes, makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
 }
 
 func (d *int64Dictionary) Bounds(indexes []int32) (min, max Value) {
@@ -497,9 +494,9 @@ func (d *floatDictionary) insert(indexes []int32, rows array, size, offset uintp
 }
 
 func (d *floatDictionary) Lookup(indexes []int32, values []Value) {
-	for i, j := range indexes {
-		values[i] = d.Index(j)
-	}
+	var value Value
+	memsetValues(values, makeValueFloat(0))
+	d.lookup(indexes, makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
 }
 
 func (d *floatDictionary) Bounds(indexes []int32) (min, max Value) {
@@ -585,9 +582,9 @@ func (d *doubleDictionary) insert(indexes []int32, rows array, size, offset uint
 }
 
 func (d *doubleDictionary) Lookup(indexes []int32, values []Value) {
-	for i, j := range indexes {
-		values[i] = d.Index(j)
-	}
+	var value Value
+	memsetValues(values, makeValueDouble(0))
+	d.lookup(indexes, makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
 }
 
 func (d *doubleDictionary) Bounds(indexes []int32) (min, max Value) {
@@ -695,9 +692,9 @@ func (d *byteArrayDictionary) append(value string) string {
 }
 
 func (d *byteArrayDictionary) Lookup(indexes []int32, values []Value) {
-	for i, j := range indexes {
-		values[i] = d.Index(j)
-	}
+	var value Value
+	memsetValues(values, makeValueByteArray(ByteArray, nil, 0))
+	d.lookup(indexes, makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.ptr))
 }
 
 func (d *byteArrayDictionary) Bounds(indexes []int32) (min, max Value) {
@@ -888,9 +885,9 @@ func (d *uint32Dictionary) insert(indexes []int32, rows array, size, offset uint
 }
 
 func (d *uint32Dictionary) Lookup(indexes []int32, values []Value) {
-	for i, j := range indexes {
-		values[i] = d.Index(j)
-	}
+	var value Value
+	memsetValues(values, makeValueDouble(0))
+	d.lookup(indexes, makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
 }
 
 func (d *uint32Dictionary) Bounds(indexes []int32) (min, max Value) {
@@ -976,9 +973,9 @@ func (d *uint64Dictionary) insert(indexes []int32, rows array, size, offset uint
 }
 
 func (d *uint64Dictionary) Lookup(indexes []int32, values []Value) {
-	for i, j := range indexes {
-		values[i] = d.Index(j)
-	}
+	var value Value
+	memsetValues(values, makeValueInt64(0))
+	d.lookup(indexes, makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
 }
 
 func (d *uint64Dictionary) Bounds(indexes []int32) (min, max Value) {
