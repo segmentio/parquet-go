@@ -17,6 +17,7 @@ var (
 func init() {
 	switch {
 	case cpu.X86.HasAVX512F && cpu.X86.HasAVX512VL:
+		dictionaryBoundsInt32 = dictionaryBoundsInt32AVX512
 		dictionaryLookup32bits = dictionaryLookup32bitsAVX512
 		dictionaryLookup64bits = dictionaryLookup64bitsAVX512
 	}
@@ -24,6 +25,9 @@ func init() {
 
 //go:noescape
 func dictionaryBoundsInt32Default(dict []int32, indexes []int32) (min, max int32, err errno)
+
+//go:noescape
+func dictionaryBoundsInt32AVX512(dict []int32, indexes []int32) (min, max int32, err errno)
 
 //go:noescape
 func dictionaryLookup32bitsDefault(dict []uint32, indexes []int32, rows array, size, offset uintptr) errno

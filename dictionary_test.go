@@ -77,6 +77,26 @@ func testDictionary(t *testing.T, typ parquet.Type) {
 			}
 		}
 
+		minValue := values[i]
+		maxValue := values[i]
+
+		for _, value := range values[i+1 : j] {
+			switch {
+			case typ.Compare(value, minValue) < 0:
+				minValue = value
+			case typ.Compare(value, maxValue) > 0:
+				maxValue = value
+			}
+		}
+
+		lowerBound, upperBound := dict.Bounds(indexes[i:j])
+		if !parquet.Equal(lowerBound, minValue) {
+			t.Fatalf("wrong lower bound betwen indexes %d and %d: want=%#v got=%#v", i, j, minValue, lowerBound)
+		}
+		if !parquet.Equal(upperBound, maxValue) {
+			t.Fatalf("wrong upper bound between indexes %d and %d: want=%#v got=%#v", i, j, maxValue, upperBound)
+		}
+
 		i = j
 	}
 

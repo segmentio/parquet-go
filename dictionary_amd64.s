@@ -15,8 +15,110 @@ TEXT ·dictionaryBoundsInt32Default(SB), NOSPLIT, $0-64
     XORQ R10, R10 // min
     XORQ R11, R11 // max
     XORQ R12, R12 // err
-
     XORQ SI, SI
+
+    CMPQ DX, $0
+    JE return
+
+    MOVL (CX)(SI*4), DI
+    CMPL DI, BX
+    JAE indexOutOfBounds
+    MOVL (AX)(DI*4), R10
+    MOVL R10, R11
+    INCQ SI
+    JMP test
+loop:
+    MOVL (CX)(SI*4), DI
+    CMPL DI, BX
+    JAE indexOutOfBounds
+    MOVL (AX)(DI*4), DI
+    CMPL DI, R10
+    CMOVLLT DI, R10
+    CMPL DI, R11
+    CMOVLGT DI, R11
+    INCQ SI
+test:
+    CMPQ SI, DX
+    JNE loop
+return:
+    MOVL R10, ret+48(FP)
+    MOVL R11, ret+52(FP)
+    MOVQ R12, ret+56(FP)
+    RET
+indexOutOfBounds:
+    MOVQ $errnoIndexOutOfBounds, R12
+    JMP return
+
+// func dictionaryBoundsInt32AVX512(dict []int32, indexes []int32) (min, max int32, err errno)
+TEXT ·dictionaryBoundsInt32AVX512(SB), NOSPLIT, $0-64
+    MOVQ dict+0(FP), AX
+    MOVQ dict+8(FP), BX
+
+    MOVQ indexes+24(FP), CX
+    MOVQ indexes+32(FP), DX
+
+    XORQ R10, R10 // min
+    XORQ R11, R11 // max
+    XORQ R12, R12 // err
+    XORQ SI, SI
+
+    CMPQ DX, $0
+    JE return
+
+    MOVL (CX)(SI*4), DI
+    CMPL DI, BX
+    JAE indexOutOfBounds
+    MOVL (AX)(DI*4), R10
+    MOVL R10, R11
+
+    CMPQ DX, $8
+    JB test
+
+    MOVQ DX, DI
+    SHRQ $3, DI
+    SHLQ $3, DI
+
+    MOVQ $0xFFFF, R8
+    KMOVQ R8, K1
+
+    VPBROADCASTD BX, Y3  // [len(dict)...]
+    VPBROADCASTD R10, Y4 // [min...]
+    VMOVDQU32 Y4, Y5     // [max...]
+loopAVX512:
+    VMOVDQU32 (CX)(SI*4), Y0
+    VPCMPUD $1, Y3, Y0, K2
+    KMOVW K2, R9
+    CMPB R9, $0xFF
+    JNE indexOutOfBounds
+    VPGATHERDD (AX)(Y0*4), K1, Y1
+    VPMINSD Y1, Y4, Y4
+    VPMAXSD Y1, Y5, Y5
+    KMOVQ R8, K1
+    ADDQ $8, SI
+    CMPQ SI, DI
+    JNE loopAVX512
+
+    VPERM2I128 $1, Y4, Y4, Y0
+    VPERM2I128 $1, Y5, Y5, Y1
+    VPMINSD Y4, Y0, Y0
+    VPMAXSD Y5, Y1, Y1
+
+    VPSHUFD $0b1110, Y0, Y4
+    VPSHUFD $0b1110, Y1, Y5
+    VPMINSD Y4, Y0, Y0
+    VPMAXSD Y5, Y1, Y1
+
+    VPSHUFD $1, Y0, Y4
+    VPSHUFD $1, Y1, Y5
+    VPMINSD Y4, Y0, Y0
+    VPMAXSD Y5, Y1, Y1
+
+    MOVQ X0, R10
+    MOVQ X1, R11
+    ANDQ $0xFFFFFFFF, R10
+    ANDQ $0xFFFFFFFF, R11
+
+    VZEROUPPER
     JMP test
 loop:
     MOVL (CX)(SI*4), DI
@@ -68,39 +170,6 @@ loop:
     JAE indexOutOfBounds
     MOVL (AX)(DI*4), DI
     MOVL DI, (R8)
-    ADDQ R9, R8
-    INCQ SI
-test:
-    CMPQ SI, DX
-    JNE loop
-    XORQ AX, AX
-    MOVQ AX, ret+80(FP)
-    RET
-indexOutOfBounds:
-    MOVQ $errnoIndexOutOfBounds, AX
-    MOVQ AX, ret+80(FP)
-    RET
-
-// func dictionaryLookup64bitsDefault(dict []uint64, indexes []int32, rows array, size, offset uintptr) errno
-TEXT ·dictionaryLookup64bitsDefault(SB), NOSPLIT, $0-88
-    MOVQ dict+0(FP), AX
-    MOVQ dict+8(FP), BX
-
-    MOVQ indexes+24(FP), CX
-    MOVQ indexes+32(FP), DX
-
-    MOVQ values+48(FP), R8
-    MOVQ size+64(FP), R9
-    ADDQ offset+72(FP), R8
-
-    XORQ SI, SI
-    JMP test
-loop:
-    MOVL (CX)(SI*4), DI
-    CMPL DI, BX
-    JAE indexOutOfBounds
-    MOVQ (AX)(DI*8), DI
-    MOVQ DI, (R8)
     ADDQ R9, R8
     INCQ SI
 test:
@@ -167,6 +236,39 @@ loop:
     JAE indexOutOfBounds
     MOVL (AX)(DI*4), DI
     MOVL DI, (R8)
+    ADDQ R9, R8
+    INCQ SI
+test:
+    CMPQ SI, DX
+    JNE loop
+    XORQ AX, AX
+    MOVQ AX, ret+80(FP)
+    RET
+indexOutOfBounds:
+    MOVQ $errnoIndexOutOfBounds, AX
+    MOVQ AX, ret+80(FP)
+    RET
+
+// func dictionaryLookup64bitsDefault(dict []uint64, indexes []int32, rows array, size, offset uintptr) errno
+TEXT ·dictionaryLookup64bitsDefault(SB), NOSPLIT, $0-88
+    MOVQ dict+0(FP), AX
+    MOVQ dict+8(FP), BX
+
+    MOVQ indexes+24(FP), CX
+    MOVQ indexes+32(FP), DX
+
+    MOVQ values+48(FP), R8
+    MOVQ size+64(FP), R9
+    ADDQ offset+72(FP), R8
+
+    XORQ SI, SI
+    JMP test
+loop:
+    MOVL (CX)(SI*4), DI
+    CMPL DI, BX
+    JAE indexOutOfBounds
+    MOVQ (AX)(DI*8), DI
+    MOVQ DI, (R8)
     ADDQ R9, R8
     INCQ SI
 test:
