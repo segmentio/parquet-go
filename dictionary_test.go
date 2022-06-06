@@ -17,6 +17,8 @@ var dictionaryTypes = [...]parquet.Type{
 	parquet.DoubleType,
 	parquet.ByteArrayType,
 	parquet.FixedLenByteArrayType(16),
+	parquet.Uint(32).Type(),
+	parquet.Uint(64).Type(),
 }
 
 func TestDictionary(t *testing.T) {
@@ -91,10 +93,10 @@ func testDictionary(t *testing.T, typ parquet.Type) {
 
 		lowerBound, upperBound := dict.Bounds(indexes[i:j])
 		if !parquet.Equal(lowerBound, minValue) {
-			t.Fatalf("wrong lower bound betwen indexes %d and %d: want=%#v got=%#v", i, j, minValue, lowerBound)
+			t.Errorf("wrong lower bound betwen indexes %d and %d: want=%#v got=%#v", i, j, minValue, lowerBound)
 		}
 		if !parquet.Equal(upperBound, maxValue) {
-			t.Fatalf("wrong upper bound between indexes %d and %d: want=%#v got=%#v", i, j, maxValue, upperBound)
+			t.Errorf("wrong upper bound between indexes %d and %d: want=%#v got=%#v", i, j, maxValue, upperBound)
 		}
 
 		i = j

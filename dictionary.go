@@ -306,19 +306,7 @@ func (d *int64Dictionary) Lookup(indexes []int32, values []Value) {
 
 func (d *int64Dictionary) Bounds(indexes []int32) (min, max Value) {
 	if len(indexes) > 0 {
-		minValue := d.index(indexes[0])
-		maxValue := minValue
-
-		for _, i := range indexes[1:] {
-			value := d.index(i)
-			switch {
-			case value < minValue:
-				minValue = value
-			case value > maxValue:
-				maxValue = value
-			}
-		}
-
+		minValue, maxValue := d.bounds(indexes)
 		min = makeValueInt64(minValue)
 		max = makeValueInt64(maxValue)
 	}
@@ -874,25 +862,13 @@ func (d *uint32Dictionary) insert(indexes []int32, rows array, size, offset uint
 
 func (d *uint32Dictionary) Lookup(indexes []int32, values []Value) {
 	var value Value
-	memsetValues(values, makeValueDouble(0))
+	memsetValues(values, makeValueInt32(0))
 	d.lookup(indexes, makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
 }
 
 func (d *uint32Dictionary) Bounds(indexes []int32) (min, max Value) {
 	if len(indexes) > 0 {
-		minValue := d.index(indexes[0])
-		maxValue := minValue
-
-		for _, i := range indexes[1:] {
-			value := d.index(i)
-			switch {
-			case value < minValue:
-				minValue = value
-			case value > maxValue:
-				maxValue = value
-			}
-		}
-
+		minValue, maxValue := d.bounds(indexes)
 		min = makeValueUint32(minValue)
 		max = makeValueUint32(maxValue)
 	}
@@ -968,19 +944,7 @@ func (d *uint64Dictionary) Lookup(indexes []int32, values []Value) {
 
 func (d *uint64Dictionary) Bounds(indexes []int32) (min, max Value) {
 	if len(indexes) > 0 {
-		minValue := d.index(indexes[0])
-		maxValue := minValue
-
-		for _, i := range indexes[1:] {
-			value := d.index(i)
-			switch {
-			case value < minValue:
-				minValue = value
-			case value > maxValue:
-				maxValue = value
-			}
-		}
-
+		minValue, maxValue := d.bounds(indexes)
 		min = makeValueUint64(minValue)
 		max = makeValueUint64(maxValue)
 	}

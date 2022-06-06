@@ -67,10 +67,61 @@ func (d *int32Dictionary) bounds(indexes []int32) (min, max int32) {
 
 	for _, i := range indexes[1:] {
 		value := d.index(i)
-		switch {
-		case value < min:
+		if value < min {
 			min = value
-		case value > max:
+		}
+		if value > max {
+			max = value
+		}
+	}
+
+	return min, max
+}
+
+func (d *int64Dictionary) bounds(indexes []int32) (min, max int64) {
+	min = d.index(indexes[0])
+	max = min
+
+	for _, i := range indexes[1:] {
+		value := d.index(i)
+		if value < min {
+			min = value
+		}
+		if value > max {
+			max = value
+		}
+	}
+
+	return min, max
+}
+
+func (d *uint32Dictionary) bounds(indexes []int32) (min, max uint32) {
+	min = d.index(indexes[0])
+	max = min
+
+	for _, i := range indexes[1:] {
+		value := d.index(i)
+		if value < min {
+			min = value
+		}
+		if value > max {
+			max = value
+		}
+	}
+
+	return min, max
+}
+
+func (d *uint64Dictionary) bounds(indexes []int32) (min, max uint64) {
+	min = d.index(indexes[0])
+	max = min
+
+	for _, i := range indexes[1:] {
+		value := d.index(i)
+		if value < min {
+			min = value
+		}
+		if value > max {
 			max = value
 		}
 	}
