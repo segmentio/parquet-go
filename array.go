@@ -7,30 +7,6 @@ type array struct {
 	len int
 }
 
-func makeInt32Array(values []int32) array {
-	return *(*array)(unsafe.Pointer(&values))
-}
-
-func makeInt64Array(values []int64) array {
-	return *(*array)(unsafe.Pointer(&values))
-}
-
-func makeFloat32Array(values []float32) array {
-	return *(*array)(unsafe.Pointer(&values))
-}
-
-func makeFloat64Array(values []float64) array {
-	return *(*array)(unsafe.Pointer(&values))
-}
-
-func makeUint32Array(values []uint32) array {
-	return *(*array)(unsafe.Pointer(&values))
-}
-
-func makeUint64Array(values []uint64) array {
-	return *(*array)(unsafe.Pointer(&values))
-}
-
 func makeValueArray(values []Value) array {
 	return *(*array)(unsafe.Pointer(&values))
 }
