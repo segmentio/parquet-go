@@ -9,7 +9,7 @@
 // the first slice argument.
 //
 // The optimizations relies on the fact that we can pack 4 parquet.Value values
-// into a 3 YMM registers (24 x 4 = 32 x 3 = 96).
+// into 3 YMM registers (24 x 4 = 32 x 3 = 96).
 //
 // func memsetValuesAVX2(values []Value, model Value)
 TEXT ·memsetValuesAVX2(SB), NOSPLIT, $0-56 // 48 + padding to load model in YMM
