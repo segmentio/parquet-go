@@ -2,6 +2,7 @@ package parquet
 
 import (
 	"io"
+	. "math/bits"
 	"unsafe"
 
 	"github.com/segmentio/parquet-go/deprecated"
@@ -78,16 +79,38 @@ func checkLookupIndexBounds(indexes []int32, rows array) {
 // The boolean dictionary always contains two values for true and false.
 type booleanDictionary struct {
 	booleanPage
-	hashmap map[bool]int32
+	// There are only two possible values for booleans, false and true.
+	// Rather than using a Go map, we track the indexes of each values
+	// in an array of two 32 bits integers. When inserting values in the
+	// dictionary, we ensure that an index exist for each boolean value,
+	// then use the value 0 or 1 (false or true) to perform a lookup in
+	// the dictionary's map.
+	hashmap [2]int32
 }
 
 func newBooleanDictionary(typ Type, columnIndex int16, numValues int32, values []byte) *booleanDictionary {
+	indexOfFalse, indexOfTrue := int32(-1), int32(-1)
+
+	for i := int32(0); i < numValues && indexOfFalse < 0 && indexOfTrue < 0; i += 8 {
+		v := values[i]
+		if v != 0x00 {
+			indexOfTrue = i + int32(TrailingZeros8(v))
+		}
+		if v != 0xFF {
+			indexOfFalse = i + int32(TrailingZeros8(^v))
+		}
+	}
+
 	return &booleanDictionary{
 		booleanPage: booleanPage{
 			typ:         typ,
 			bits:        values[:bits.ByteCount(uint(numValues))],
 			numValues:   numValues,
 			columnIndex: ^columnIndex,
+		},
+		hashmap: [2]int32{
+			0: indexOfFalse,
+			1: indexOfTrue,
 		},
 	}
 }
@@ -108,25 +131,23 @@ func (d *booleanDictionary) Insert(indexes []int32, values []Value) {
 func (d *booleanDictionary) insert(indexes []int32, rows array, size, offset uintptr) {
 	_ = indexes[:rows.len]
 
-	if d.hashmap == nil {
-		d.hashmap = make(map[bool]int32, cap(d.bits))
-		for i := int32(0); i < d.numValues; i++ {
-			d.hashmap[d.index(i)] = i
-		}
+	if d.hashmap[0] < 0 {
+		d.hashmap[0] = d.numValues
+		d.numValues++
+		d.bits = plain.AppendBoolean(d.bits, int(d.hashmap[0]), false)
 	}
 
+	if d.hashmap[1] < 0 {
+		d.hashmap[1] = d.numValues
+		d.numValues++
+		d.bits = plain.AppendBoolean(d.bits, int(d.hashmap[1]), true)
+	}
+
+	dict := d.hashmap
+
 	for i := 0; i < rows.len; i++ {
-		value := *(*bool)(rows.index(i, size, offset))
-
-		index, exists := d.hashmap[value]
-		if !exists {
-			index = d.numValues
-			d.bits = plain.AppendBoolean(d.bits, int(index), value)
-			d.hashmap[value] = index
-			d.numValues++
-		}
-
-		indexes[i] = index
+		v := *(*byte)(rows.index(i, size, offset)) & 1
+		indexes[i] = dict[v]
 	}
 }
 
@@ -134,6 +155,13 @@ func (d *booleanDictionary) Lookup(indexes []int32, values []Value) {
 	var value Value
 	memsetValues(values, makeValueBoolean(false))
 	d.lookup(indexes, makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
+}
+
+func (d *booleanDictionary) lookup(indexes []int32, rows array, size, offset uintptr) {
+	checkLookupIndexBounds(indexes, rows)
+	for i, j := range indexes {
+		*(*bool)(rows.index(i, size, offset)) = d.index(j)
+	}
 }
 
 func (d *booleanDictionary) Bounds(indexes []int32) (min, max Value) {
@@ -162,7 +190,7 @@ func (d *booleanDictionary) Reset() {
 	d.bits = d.bits[:0]
 	d.offset = 0
 	d.numValues = 0
-	d.hashmap = nil
+	d.hashmap = [2]int32{-1, -1}
 }
 
 func (d *booleanDictionary) Page() BufferedPage {
