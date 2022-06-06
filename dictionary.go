@@ -1,7 +1,6 @@
 package parquet
 
 import (
-	"bytes"
 	"io"
 	"unsafe"
 
@@ -477,19 +476,7 @@ func (d *floatDictionary) Lookup(indexes []int32, values []Value) {
 
 func (d *floatDictionary) Bounds(indexes []int32) (min, max Value) {
 	if len(indexes) > 0 {
-		minValue := d.index(indexes[0])
-		maxValue := minValue
-
-		for _, i := range indexes[1:] {
-			value := d.index(i)
-			switch {
-			case value < minValue:
-				minValue = value
-			case value > maxValue:
-				maxValue = value
-			}
-		}
-
+		minValue, maxValue := d.bounds(indexes)
 		min = makeValueFloat(minValue)
 		max = makeValueFloat(maxValue)
 	}
@@ -565,19 +552,7 @@ func (d *doubleDictionary) Lookup(indexes []int32, values []Value) {
 
 func (d *doubleDictionary) Bounds(indexes []int32) (min, max Value) {
 	if len(indexes) > 0 {
-		minValue := d.index(indexes[0])
-		maxValue := minValue
-
-		for _, i := range indexes[1:] {
-			value := d.index(i)
-			switch {
-			case value < minValue:
-				minValue = value
-			case value > maxValue:
-				maxValue = value
-			}
-		}
-
+		minValue, maxValue := d.bounds(indexes)
 		min = makeValueDouble(minValue)
 		max = makeValueDouble(maxValue)
 	}
@@ -680,10 +655,10 @@ func (d *byteArrayDictionary) Bounds(indexes []int32) (min, max Value) {
 
 		for _, i := range indexes[1:] {
 			value := d.index(i)
-			switch {
-			case bytes.Compare(value, minValue) < 0:
+			if string(value) < string(minValue) {
 				minValue = value
-			case bytes.Compare(value, maxValue) > 0:
+			}
+			if string(value) > string(maxValue) {
 				maxValue = value
 			}
 		}
@@ -785,10 +760,10 @@ func (d *fixedLenByteArrayDictionary) Bounds(indexes []int32) (min, max Value) {
 
 		for _, i := range indexes[1:] {
 			value := d.index(i)
-			switch {
-			case bytes.Compare(value, minValue) < 0:
+			if string(value) < string(minValue) {
 				minValue = value
-			case bytes.Compare(value, maxValue) > 0:
+			}
+			if string(value) > string(maxValue) {
 				maxValue = value
 			}
 		}

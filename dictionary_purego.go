@@ -95,6 +95,40 @@ func (d *int64Dictionary) bounds(indexes []int32) (min, max int64) {
 	return min, max
 }
 
+func (d *floatDictionary) bounds(indexes []int32) (min, max float32) {
+	min = d.index(indexes[0])
+	max = min
+
+	for _, i := range indexes[1:] {
+		value := d.index(i)
+		if value < min {
+			min = value
+		}
+		if value > max {
+			max = value
+		}
+	}
+
+	return min, max
+}
+
+func (d *doubleDictionary) bounds(indexes []int32) (min, max float64) {
+	min = d.index(indexes[0])
+	max = min
+
+	for _, i := range indexes[1:] {
+		value := d.index(i)
+		if value < min {
+			min = value
+		}
+		if value > max {
+			max = value
+		}
+	}
+
+	return min, max
+}
+
 func (d *uint32Dictionary) bounds(indexes []int32) (min, max uint32) {
 	min = d.index(indexes[0])
 	max = min
