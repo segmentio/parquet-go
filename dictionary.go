@@ -230,19 +230,7 @@ func (d *int32Dictionary) Lookup(indexes []int32, values []Value) {
 
 func (d *int32Dictionary) Bounds(indexes []int32) (min, max Value) {
 	if len(indexes) > 0 {
-		minValue := d.index(indexes[0])
-		maxValue := minValue
-
-		for _, i := range indexes[1:] {
-			value := d.index(i)
-			switch {
-			case value < minValue:
-				minValue = value
-			case value > maxValue:
-				maxValue = value
-			}
-		}
-
+		minValue, maxValue := d.bounds(indexes)
 		min = makeValueInt32(minValue)
 		max = makeValueInt32(maxValue)
 	}

@@ -39,7 +39,6 @@ TEXT ·memsetValuesAVX2(SB), NOSPLIT, $0-56 // 48 + padding to load model in YMM
     VPERMQ $0b00100100, Y0, Y0
     VPERMQ $0b01001001, Y1, Y1
     VPERMQ $0b10010010, Y2, Y2
-
 loop4:
     VMOVDQU Y0, 0(AX)(SI*1)
     VMOVDQU Y1, 32(AX)(SI*1)

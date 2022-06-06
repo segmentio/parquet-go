@@ -4,6 +4,42 @@
 
 #define errnoIndexOutOfBounds 1
 
+// func dictionaryBoundsInt32Default(dict []int32, indexes []int32) (min, max int32, err errno)
+TEXT ·dictionaryBoundsInt32Default(SB), NOSPLIT, $0-64
+    MOVQ dict+0(FP), AX
+    MOVQ dict+8(FP), BX
+
+    MOVQ indexes+24(FP), CX
+    MOVQ indexes+32(FP), DX
+
+    XORQ R10, R10 // min
+    XORQ R11, R11 // max
+    XORQ R12, R12 // err
+
+    XORQ SI, SI
+    JMP test
+loop:
+    MOVL (CX)(SI*4), DI
+    CMPL DI, BX
+    JAE indexOutOfBounds
+    MOVL (AX)(DI*4), DI
+    CMPL DI, R10
+    CMOVLLT DI, R10
+    CMPL DI, R11
+    CMOVLGT DI, R11
+    INCQ SI
+test:
+    CMPQ SI, DX
+    JNE loop
+return:
+    MOVL R10, ret+48(FP)
+    MOVL R11, ret+52(FP)
+    MOVQ R12, ret+56(FP)
+    RET
+indexOutOfBounds:
+    MOVQ $errnoIndexOutOfBounds, R12
+    JMP return
+
 // The lookup functions provide optimized versions of the dictionary index
 // lookup logic.
 //
@@ -12,8 +48,8 @@
 // values in the dictionary, then VPSCATTER* to do 8 parallel writes to the
 // sparse output buffer.
 
-// func dictionary32bitsLookupDefault(dict []uint32, indexes []int32, values array, size, offset uintptr) errno
-TEXT ·dictionary32bitsLookupDefault(SB), NOSPLIT, $0-88
+// func dictionaryLookup32bitsDefault(dict []uint32, indexes []int32, rows array, size, offset uintptr) errno
+TEXT ·dictionaryLookup32bitsDefault(SB), NOSPLIT, $0-88
     MOVQ dict+0(FP), AX
     MOVQ dict+8(FP), BX
 
@@ -45,8 +81,8 @@ indexOutOfBounds:
     MOVQ AX, ret+80(FP)
     RET
 
-// func dictionary64bitsLookupDefault(dict []uint64, indexes []int32, values array, size, offset uintptr) errno
-TEXT ·dictionary64bitsLookupDefault(SB), NOSPLIT, $0-88
+// func dictionaryLookup64bitsDefault(dict []uint64, indexes []int32, rows array, size, offset uintptr) errno
+TEXT ·dictionaryLookup64bitsDefault(SB), NOSPLIT, $0-88
     MOVQ dict+0(FP), AX
     MOVQ dict+8(FP), BX
 
@@ -78,8 +114,8 @@ indexOutOfBounds:
     MOVQ AX, ret+80(FP)
     RET
 
-// func dictionary32bitsLookupAVX512(dict []uint32, indexes []int32, values array, size, offset uintptr) errno
-TEXT ·dictionary32bitsLookupAVX512(SB), NOSPLIT, $0-88
+// func dictionaryLookup32bitsAVX512(dict []uint32, indexes []int32, rows array, size, offset uintptr) errno
+TEXT ·dictionaryLookup32bitsAVX512(SB), NOSPLIT, $0-88
     MOVQ dict+0(FP), AX
     MOVQ dict+8(FP), BX
 
@@ -144,8 +180,8 @@ indexOutOfBounds:
     MOVQ AX, ret+80(FP)
     RET
 
-// func dictionary64bitsLookupAVX512(dict []uint64, indexes []int32, values array, size, offset uintptr) errno
-TEXT ·dictionary64bitsLookupAVX512(SB), NOSPLIT, $0-88
+// func dictionaryLookup64bitsAVX512(dict []uint64, indexes []int32, rows array, size, offset uintptr) errno
+TEXT ·dictionaryLookup64bitsAVX512(SB), NOSPLIT, $0-88
     MOVQ dict+0(FP), AX
     MOVQ dict+8(FP), BX
 

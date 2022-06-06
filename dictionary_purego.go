@@ -60,3 +60,20 @@ func (d *uint64Dictionary) lookup(indexes []int32, rows array, size, offset uint
 		*(*uint64)(rows.index(i, size, offset)) = d.index(j)
 	}
 }
+
+func (d *int32Dictionary) bounds(indexes []int32) (min, max int32) {
+	min = d.index(indexes[0])
+	max = min
+
+	for _, i := range indexes[1:] {
+		value := d.index(i)
+		switch {
+		case value < min:
+			min = value
+		case value > max:
+			max = value
+		}
+	}
+
+	return min, max
+}
