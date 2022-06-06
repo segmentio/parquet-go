@@ -150,7 +150,7 @@ func BenchmarkDictionary(b *testing.B) {
 					}
 
 					seconds := time.Since(start).Seconds()
-					b.ReportMetric(float64(b.N)/seconds, "value/s")
+					b.ReportMetric(float64(N*b.N)/seconds, "value/s")
 				})
 			}
 		})
