@@ -30,26 +30,28 @@ func TestDictionary(t *testing.T) {
 }
 
 func testDictionary(t *testing.T, typ parquet.Type) {
-	const N = 500
+	const columnIndex = 1
+	const numValues = 500
 
-	dict := typ.NewDictionary(0, 0, nil)
-	values := make([]parquet.Value, N)
-	indexes := make([]int32, N)
-	lookups := make([]parquet.Value, N)
+	dict := typ.NewDictionary(columnIndex, 0, nil)
+	values := make([]parquet.Value, numValues)
+	indexes := make([]int32, numValues)
+	lookups := make([]parquet.Value, numValues)
 
 	f := randValueFuncOf(typ)
 	r := rand.New(rand.NewSource(0))
 
 	for i := range values {
 		values[i] = f(r)
+		values[i] = values[i].Level(0, 0, columnIndex)
 	}
 
-	mapping := make(map[int32]parquet.Value, N)
+	mapping := make(map[int32]parquet.Value, numValues)
 
-	for i := 0; i < N; {
-		j := i + ((N-i)/2 + 1)
-		if j > N {
-			j = N
+	for i := 0; i < numValues; {
+		j := i + ((numValues-i)/2 + 1)
+		if j > numValues {
+			j = numValues
 		}
 
 		dict.Insert(indexes[i:j], values[i:j])
@@ -74,7 +76,7 @@ func testDictionary(t *testing.T, typ parquet.Type) {
 			want := mapping[valueIndex]
 			got := lookups[lookupIndex+i]
 
-			if !parquet.Equal(want, got) {
+			if !parquet.DeepEqual(want, got) {
 				t.Fatalf("wrong value looked up at index %d: want=%#v got=%#v", valueIndex, want, got)
 			}
 		}
@@ -92,10 +94,10 @@ func testDictionary(t *testing.T, typ parquet.Type) {
 		}
 
 		lowerBound, upperBound := dict.Bounds(indexes[i:j])
-		if !parquet.Equal(lowerBound, minValue) {
+		if !parquet.DeepEqual(lowerBound, minValue) {
 			t.Errorf("wrong lower bound betwen indexes %d and %d: want=%#v got=%#v", i, j, minValue, lowerBound)
 		}
-		if !parquet.Equal(upperBound, maxValue) {
+		if !parquet.DeepEqual(upperBound, maxValue) {
 			t.Errorf("wrong upper bound between indexes %d and %d: want=%#v got=%#v", i, j, maxValue, upperBound)
 		}
 
@@ -119,7 +121,7 @@ func testDictionary(t *testing.T, typ parquet.Type) {
 }
 
 func BenchmarkDictionary(b *testing.B) {
-	const N = 1000
+	const numValues = 1000
 
 	tests := []struct {
 		scenario string
@@ -149,8 +151,8 @@ func BenchmarkDictionary(b *testing.B) {
 	for _, test := range tests {
 		b.Run(test.scenario, func(b *testing.B) {
 			for _, typ := range dictionaryTypes {
-				dict := typ.NewDictionary(0, 0, make([]byte, 0, 4*N))
-				values := make([]parquet.Value, N)
+				dict := typ.NewDictionary(0, 0, make([]byte, 0, 4*numValues))
+				values := make([]parquet.Value, numValues)
 
 				f := randValueFuncOf(typ)
 				r := rand.New(rand.NewSource(0))
@@ -172,7 +174,7 @@ func BenchmarkDictionary(b *testing.B) {
 					}
 
 					seconds := time.Since(start).Seconds()
-					b.ReportMetric(float64(N*b.N)/seconds, "value/s")
+					b.ReportMetric(float64(numValues*b.N)/seconds, "value/s")
 				})
 			}
 		})

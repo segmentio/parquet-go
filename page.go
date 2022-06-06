@@ -542,8 +542,8 @@ func (page *booleanPage) bounds() (min, max bool) {
 func (page *booleanPage) Bounds() (min, max Value, ok bool) {
 	if ok = page.numValues > 0; ok {
 		minBool, maxBool := page.bounds()
-		min = makeValueBoolean(minBool)
-		max = makeValueBoolean(maxBool)
+		min = page.makeValue(minBool)
+		max = page.makeValue(maxBool)
 	}
 	return min, max, ok
 }
@@ -573,6 +573,12 @@ func (page *booleanPage) Slice(i, j int64) BufferedPage {
 		numValues:   int32(j - i),
 		columnIndex: page.columnIndex,
 	}
+}
+
+func (page *booleanPage) makeValue(v bool) Value {
+	value := makeValueBoolean(v)
+	value.columnIndex = page.columnIndex
+	return value
 }
 
 type int32Page struct {
@@ -622,8 +628,8 @@ func (page *int32Page) bounds() (min, max int32) { return bits.MinMaxInt32(page.
 func (page *int32Page) Bounds() (min, max Value, ok bool) {
 	if ok = len(page.values) > 0; ok {
 		minInt32, maxInt32 := page.bounds()
-		min = makeValueInt32(minInt32)
-		max = makeValueInt32(maxInt32)
+		min = page.makeValue(minInt32)
+		max = page.makeValue(maxInt32)
 	}
 	return min, max, ok
 }
@@ -642,6 +648,12 @@ func (page *int32Page) Slice(i, j int64) BufferedPage {
 		values:      page.values[i:j],
 		columnIndex: page.columnIndex,
 	}
+}
+
+func (page *int32Page) makeValue(v int32) Value {
+	value := makeValueInt32(v)
+	value.columnIndex = page.columnIndex
+	return value
 }
 
 type int64Page struct {
@@ -691,8 +703,8 @@ func (page *int64Page) bounds() (min, max int64) { return bits.MinMaxInt64(page.
 func (page *int64Page) Bounds() (min, max Value, ok bool) {
 	if ok = len(page.values) > 0; ok {
 		minInt64, maxInt64 := page.bounds()
-		min = makeValueInt64(minInt64)
-		max = makeValueInt64(maxInt64)
+		min = page.makeValue(minInt64)
+		max = page.makeValue(maxInt64)
 	}
 	return min, max, ok
 }
@@ -711,6 +723,12 @@ func (page *int64Page) Slice(i, j int64) BufferedPage {
 		values:      page.values[i:j],
 		columnIndex: page.columnIndex,
 	}
+}
+
+func (page *int64Page) makeValue(v int64) Value {
+	value := makeValueInt64(v)
+	value.columnIndex = page.columnIndex
+	return value
 }
 
 type int96Page struct {
@@ -762,8 +780,8 @@ func (page *int96Page) bounds() (min, max deprecated.Int96) {
 func (page *int96Page) Bounds() (min, max Value, ok bool) {
 	if ok = len(page.values) > 0; ok {
 		minInt96, maxInt96 := page.bounds()
-		min = makeValueInt96(minInt96)
-		max = makeValueInt96(maxInt96)
+		min = page.makeValue(minInt96)
+		max = page.makeValue(maxInt96)
 	}
 	return min, max, ok
 }
@@ -782,6 +800,12 @@ func (page *int96Page) Slice(i, j int64) BufferedPage {
 		values:      page.values[i:j],
 		columnIndex: page.columnIndex,
 	}
+}
+
+func (page *int96Page) makeValue(v deprecated.Int96) Value {
+	value := makeValueInt96(v)
+	value.columnIndex = page.columnIndex
+	return value
 }
 
 type floatPage struct {
@@ -831,8 +855,8 @@ func (page *floatPage) bounds() (min, max float32) { return bits.MinMaxFloat32(p
 func (page *floatPage) Bounds() (min, max Value, ok bool) {
 	if ok = len(page.values) > 0; ok {
 		minFloat32, maxFloat32 := page.bounds()
-		min = makeValueFloat(minFloat32)
-		max = makeValueFloat(maxFloat32)
+		min = page.makeValue(minFloat32)
+		max = page.makeValue(maxFloat32)
 	}
 	return min, max, ok
 }
@@ -851,6 +875,12 @@ func (page *floatPage) Slice(i, j int64) BufferedPage {
 		values:      page.values[i:j],
 		columnIndex: page.columnIndex,
 	}
+}
+
+func (page *floatPage) makeValue(v float32) Value {
+	value := makeValueFloat(v)
+	value.columnIndex = page.columnIndex
+	return value
 }
 
 type doublePage struct {
@@ -900,8 +930,8 @@ func (page *doublePage) bounds() (min, max float64) { return bits.MinMaxFloat64(
 func (page *doublePage) Bounds() (min, max Value, ok bool) {
 	if ok = len(page.values) > 0; ok {
 		minFloat64, maxFloat64 := page.bounds()
-		min = makeValueDouble(minFloat64)
-		max = makeValueDouble(maxFloat64)
+		min = page.makeValue(minFloat64)
+		max = page.makeValue(maxFloat64)
 	}
 	return min, max, ok
 }
@@ -920,6 +950,12 @@ func (page *doublePage) Slice(i, j int64) BufferedPage {
 		values:      page.values[i:j],
 		columnIndex: page.columnIndex,
 	}
+}
+
+func (page *doublePage) makeValue(v float64) Value {
+	value := makeValueDouble(v)
+	value.columnIndex = page.columnIndex
+	return value
 }
 
 type byteArrayPage struct {
@@ -1030,8 +1066,8 @@ func (page *byteArrayPage) bounds() (min, max []byte) {
 func (page *byteArrayPage) Bounds() (min, max Value, ok bool) {
 	if ok = len(page.values) > 0; ok {
 		minBytes, maxBytes := page.bounds()
-		min = makeValueBytes(ByteArray, minBytes)
-		max = makeValueBytes(ByteArray, maxBytes)
+		min = page.makeValue(minBytes)
+		max = page.makeValue(maxBytes)
 	}
 	return min, max, ok
 }
@@ -1075,6 +1111,12 @@ func (page *byteArrayPage) Slice(i, j int64) BufferedPage {
 		numValues:   int32(numValues),
 		columnIndex: page.columnIndex,
 	}
+}
+
+func (page *byteArrayPage) makeValue(v []byte) Value {
+	value := makeValueBytes(ByteArray, v)
+	value.columnIndex = page.columnIndex
+	return value
 }
 
 type fixedLenByteArrayPage struct {
@@ -1141,8 +1183,8 @@ func (page *fixedLenByteArrayPage) bounds() (min, max []byte) {
 func (page *fixedLenByteArrayPage) Bounds() (min, max Value, ok bool) {
 	if ok = len(page.data) > 0; ok {
 		minBytes, maxBytes := page.bounds()
-		min = makeValueBytes(FixedLenByteArray, minBytes)
-		max = makeValueBytes(FixedLenByteArray, maxBytes)
+		min = page.makeValue(minBytes)
+		max = page.makeValue(maxBytes)
 	}
 	return min, max, ok
 }
@@ -1163,6 +1205,12 @@ func (page *fixedLenByteArrayPage) Slice(i, j int64) BufferedPage {
 		size:        page.size,
 		columnIndex: page.columnIndex,
 	}
+}
+
+func (page *fixedLenByteArrayPage) makeValue(v []byte) Value {
+	value := makeValueBytes(FixedLenByteArray, v)
+	value.columnIndex = page.columnIndex
+	return value
 }
 
 type uint32Page struct {
@@ -1212,8 +1260,8 @@ func (page *uint32Page) bounds() (min, max uint32) { return bits.MinMaxUint32(pa
 func (page *uint32Page) Bounds() (min, max Value, ok bool) {
 	if ok = len(page.values) > 0; ok {
 		minUint32, maxUint32 := page.bounds()
-		min = makeValueUint32(minUint32)
-		max = makeValueUint32(maxUint32)
+		min = page.makeValue(minUint32)
+		max = page.makeValue(maxUint32)
 	}
 	return min, max, ok
 }
@@ -1232,6 +1280,12 @@ func (page *uint32Page) Slice(i, j int64) BufferedPage {
 		values:      page.values[i:j],
 		columnIndex: page.columnIndex,
 	}
+}
+
+func (page *uint32Page) makeValue(v uint32) Value {
+	value := makeValueUint32(v)
+	value.columnIndex = page.columnIndex
+	return value
 }
 
 type uint64Page struct {
@@ -1281,8 +1335,8 @@ func (page *uint64Page) bounds() (min, max uint64) { return bits.MinMaxUint64(pa
 func (page *uint64Page) Bounds() (min, max Value, ok bool) {
 	if ok = len(page.values) > 0; ok {
 		minUint64, maxUint64 := page.bounds()
-		min = makeValueUint64(minUint64)
-		max = makeValueUint64(maxUint64)
+		min = page.makeValue(minUint64)
+		max = page.makeValue(maxUint64)
 	}
 	return min, max, ok
 }
@@ -1301,6 +1355,12 @@ func (page *uint64Page) Slice(i, j int64) BufferedPage {
 		values:      page.values[i:j],
 		columnIndex: page.columnIndex,
 	}
+}
+
+func (page *uint64Page) makeValue(v uint64) Value {
+	value := makeValueUint64(v)
+	value.columnIndex = page.columnIndex
+	return value
 }
 
 type nullPage struct {
