@@ -590,7 +590,7 @@ TEXT ·dictionaryLookup32bits(SB), NOSPLIT, $0-88
     MOVQ indexes+24(FP), CX
     MOVQ indexes+32(FP), DX
 
-    MOVQ values+48(FP), R8
+    MOVQ rows+48(FP), R8
     MOVQ size+64(FP), R9
     ADDQ offset+72(FP), R8
 
@@ -659,7 +659,7 @@ TEXT ·dictionaryLookup64bits(SB), NOSPLIT, $0-88
     MOVQ indexes+24(FP), CX
     MOVQ indexes+32(FP), DX
 
-    MOVQ values+48(FP), R8
+    MOVQ rows+48(FP), R8
     MOVQ size+64(FP), R9
     ADDQ offset+72(FP), R8
 
@@ -715,6 +715,62 @@ test:
     XORQ AX, AX
 return:
     MOVQ AX, ret+80(FP)
+    RET
+indexOutOfBounds:
+    MOVQ $errnoIndexOutOfBounds, AX
+    JMP return
+
+// func dictionaryLookupString(dict []uint32, page []byte, indexes []int32, rows array, size, offset uintptr) errno
+TEXT ·dictionaryLookupString(SB), NOSPLIT, $0-112
+    MOVQ dict+0(FP), AX
+    MOVQ dict+8(FP), BX
+
+    MOVQ page+24(FP), CX
+
+    MOVQ indexes+48(FP), R8
+    MOVQ indexes+56(FP), R9
+
+    MOVQ rows+72(FP), R10
+    MOVQ size+88(FP), R11
+    ADDQ offset+96(FP), R10
+
+    XORQ DI, DI
+    XORQ SI, SI
+    JMP test
+loop:
+    // Load the index that we want to read the value from. This may come from
+    // user input so we must validate that the indexes are within the bounds of
+    // the dictionary.
+    MOVL (R8)(SI*4), DI
+    CMPL DI, BX
+    JAE indexOutOfBounds
+
+    // Load the offset within the dictionary page where the value is stored.
+    // We trust the offsets to be correct since they are generated internally by
+    // the dictionary code, there is no need to check that they are within the
+    // bounds of the dictionary page.
+    MOVL (AX)(DI*4), DI
+
+    // Load the value from the dictionary page. The page uses the PLAIN encoding
+    // where each byte array is prefixed with a 4 bytes little endian length.
+    LEAQ 4(CX)(DI*1), DX
+    MOVL (CX)(DI*1), DI
+
+    // Store the length and pointer to the value into the output location.
+    // The memory layout is expected to hold a pointer and length, which are
+    // both 64 bits words. This is the layout used by parquet.Value and the Go
+    // string value type.
+    MOVQ DX, (R10)
+    MOVQ DI, 8(R10)
+
+    ADDQ R11, R10
+    INCQ SI
+test:
+    CMPQ SI, R9
+    JNE loop
+    XORQ AX, AX
+return:
+    MOVQ AX, ret+104(FP)
     RET
 indexOutOfBounds:
     MOVQ $errnoIndexOutOfBounds, AX
