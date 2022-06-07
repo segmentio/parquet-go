@@ -38,6 +38,7 @@ func TestGenericReader(t *testing.T) {
 	testGenericReader[*contact](t)
 	testGenericReader[paddedBooleanColumn](t)
 	testGenericReader[optionalInt32Column](t)
+	testGenericReader[repeatedInt32Column](t)
 }
 
 func testGenericReader[Row any](t *testing.T) {

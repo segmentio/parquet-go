@@ -183,6 +183,18 @@ func (row optionalInt32Column) generate(prng *rand.Rand) optionalInt32Column {
 	return optionalInt32Column{Value: prng.Int31n(100)}
 }
 
+type repeatedInt32Column struct {
+	Values []int32
+}
+
+func (row repeatedInt32Column) generate(prng *rand.Rand) repeatedInt32Column {
+	row.Values = make([]int32, prng.Intn(10))
+	for i := range row.Values {
+		row.Values[i] = prng.Int31n(10)
+	}
+	return row
+}
+
 type listColumn2 struct {
 	Value utf8string `parquet:",optional"`
 }

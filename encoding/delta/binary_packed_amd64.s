@@ -372,11 +372,12 @@ TEXT ·miniBlockPackInt32x32bitsAVX2(SB), NOSPLIT, $0-16
 TEXT ·miniBlockPackInt32x3to16bitsAVX2(SB), NOSPLIT, $0-24
     MOVQ dst+0(FP), AX
     MOVQ src+8(FP), BX
+    MOVQ bitWidth+16(FP), CX
 
-    VPBROADCASTQ bitWidths+16(FP), Y6 // [1*bitWidth...]
-    VPSLLQ $1, Y6, Y7                 // [2*bitWidth...]
-    VPADDQ Y6, Y7, Y8                 // [3*bitWidth...]
-    VPSLLQ $2, Y6, Y9                 // [4*bitWidth...]
+    VPBROADCASTQ bitWidth+16(FP), Y6 // [1*bitWidth...]
+    VPSLLQ $1, Y6, Y7                // [2*bitWidth...]
+    VPADDQ Y6, Y7, Y8                // [3*bitWidth...]
+    VPSLLQ $2, Y6, Y9                // [4*bitWidth...]
 
     VPBROADCASTQ sixtyfour<>(SB), Y10
     VPSUBQ Y6, Y10, Y11 // [64-1*bitWidth...]
