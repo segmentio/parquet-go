@@ -819,10 +819,10 @@ func (d *fixedLenByteArrayDictionary) Bounds(indexes []int32) (min, max Value) {
 
 		for _, i := range indexes[1:] {
 			value := d.index(i)
-			if string(value) < string(minValue) {
+			switch {
+			case string(value) < string(minValue):
 				minValue = value
-			}
-			if string(value) > string(maxValue) {
+			case string(value) > string(maxValue):
 				maxValue = value
 			}
 		}
