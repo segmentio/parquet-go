@@ -613,9 +613,9 @@ TEXT ·dictionaryLookup32bits(SB), NOSPLIT, $0-88
     KMOVW R11, K1
     KMOVW R11, K2
 
-    VPBROADCASTD R9, Y2            // [size...]
-    VPMULLD range0n7<>(SB), Y2, Y2 // [0*size,1*size,...]
-    VPBROADCASTD BX, Y3            // [len(dict)...]
+    VPBROADCASTD R9, Y2           // [size...]
+    VPMULLD ·range0n8(SB), Y2, Y2 // [0*size,1*size,...]
+    VPBROADCASTD BX, Y3           // [len(dict)...]
 loopAVX512:
     VMOVDQU32 (CX)(SI*4), Y0
     VPCMPUD $1, Y3, Y0, K3
@@ -682,9 +682,9 @@ TEXT ·dictionaryLookup64bits(SB), NOSPLIT, $0-88
     KMOVW R11, K1
     KMOVW R11, K2
 
-    VPBROADCASTD R9, Y2            // [size...]
-    VPMULLD range0n7<>(SB), Y2, Y2 // [0*size,1*size,...]
-    VPBROADCASTD BX, Y3            // [len(dict)...]
+    VPBROADCASTD R9, Y2           // [size...]
+    VPMULLD ·range0n8(SB), Y2, Y2 // [0*size,1*size,...]
+    VPBROADCASTD BX, Y3           // [len(dict)...]
 loopAVX512:
     VMOVDQU32 (CX)(SI*4), Y0
     VPCMPUD $1, Y3, Y0, K3
@@ -720,8 +720,8 @@ indexOutOfBounds:
     MOVQ $errnoIndexOutOfBounds, AX
     JMP return
 
-// func dictionaryLookupString(dict []uint32, page []byte, indexes []int32, rows array, size, offset uintptr) errno
-TEXT ·dictionaryLookupString(SB), NOSPLIT, $0-112
+// func dictionaryLookupByteArrayString(dict []uint32, page []byte, indexes []int32, rows array, size, offset uintptr) errno
+TEXT ·dictionaryLookupByteArrayString(SB), NOSPLIT, $0-112
     MOVQ dict_base+0(FP), AX
     MOVQ dict_len+8(FP), BX
 
@@ -775,12 +775,13 @@ indexOutOfBounds:
     MOVQ $errnoIndexOutOfBounds, AX
     JMP return
 
-GLOBL range0n7<>(SB), RODATA|NOPTR, $32
-DATA range0n7<>+0(SB)/4,  $0
-DATA range0n7<>+4(SB)/4,  $1
-DATA range0n7<>+8(SB)/4,  $2
-DATA range0n7<>+12(SB)/4, $3
-DATA range0n7<>+16(SB)/4, $4
-DATA range0n7<>+20(SB)/4, $5
-DATA range0n7<>+24(SB)/4, $6
-DATA range0n7<>+28(SB)/4, $7
+GLOBL ·range0n8(SB), RODATA|NOPTR, $40
+DATA ·range0n8+0(SB)/4, $0
+DATA ·range0n8+4(SB)/4, $1
+DATA ·range0n8+8(SB)/4, $2
+DATA ·range0n8+12(SB)/4, $3
+DATA ·range0n8+16(SB)/4, $4
+DATA ·range0n8+20(SB)/4, $5
+DATA ·range0n8+24(SB)/4, $6
+DATA ·range0n8+28(SB)/4, $7
+DATA ·range0n8+32(SB)/4, $8

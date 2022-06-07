@@ -12,10 +12,10 @@ TEXT ·broadcastRangeInt32AVX2(SB), NOSPLIT, $0-28
     CMPQ BX, $8
     JB test1x4
 
-    VMOVDQU rangeInt32<>(SB), Y0         // [0,1,2,3,4,5,6,7]
-    VPBROADCASTD rangeInt32<>+32(SB), Y1 // [8,8,8,8,8,8,8,8]
-    VPBROADCASTD base+24(FP), Y2         // [base...]
-    VPADDD Y2, Y0, Y0                    // [base,base+1,...]
+    VMOVDQU ·range0n8(SB), Y0         // [0,1,2,3,4,5,6,7]
+    VPBROADCASTD ·range0n8+32(SB), Y1 // [8,8,8,8,8,8,8,8]
+    VPBROADCASTD base+24(FP), Y2      // [base...]
+    VPADDD Y2, Y0, Y0                 // [base,base+1,...]
 
     MOVQ BX, DI
     SHRQ $3, DI
@@ -40,17 +40,6 @@ test1x4:
     CMPQ SI, BX
     JNE loop1x4
     RET
-
-GLOBL rangeInt32<>(SB), RODATA|NOPTR, $40
-DATA rangeInt32<>+0(SB)/4, $0
-DATA rangeInt32<>+4(SB)/4, $1
-DATA rangeInt32<>+8(SB)/4, $2
-DATA rangeInt32<>+12(SB)/4, $3
-DATA rangeInt32<>+16(SB)/4, $4
-DATA rangeInt32<>+20(SB)/4, $5
-DATA rangeInt32<>+24(SB)/4, $6
-DATA rangeInt32<>+28(SB)/4, $7
-DATA rangeInt32<>+32(SB)/4, $8
 
 // func writeValuesBitpackAVX2(values unsafe.Pointer, rows array, size, offset uintptr)
 TEXT ·writeValuesBitpackAVX2(SB), NOSPLIT, $0-40
@@ -79,7 +68,7 @@ init:
     JB loop
 
     VPBROADCASTD size+24(FP), Y0
-    VPMULLD ·scale8x4(SB), Y0, Y0
+    VPMULLD ·range0n8(SB), Y0, Y0
     VPCMPEQD Y1, Y1, Y1
     VPCMPEQD Y2, Y2, Y2
     VPCMPEQD Y3, Y3, Y3
@@ -166,7 +155,7 @@ TEXT ·writeValues32bitsAVX2(SB), NOSPLIT, $0-40
     SHLQ $3, DI
 
     VPBROADCASTD size+24(FP), Y0
-    VPMULLD ·scale8x4(SB), Y0, Y0
+    VPMULLD ·range0n8(SB), Y0, Y0
     VPCMPEQD Y1, Y1, Y1
     VPCMPEQD Y2, Y2, Y2
 loop8x4:
@@ -288,16 +277,6 @@ loop1x16:
     JNE loop1x16
 done:
     RET
-
-GLOBL ·scale8x4(SB), RODATA|NOPTR, $32
-DATA ·scale8x4+0(SB)/4,  $0
-DATA ·scale8x4+4(SB)/4,  $1
-DATA ·scale8x4+8(SB)/4,  $2
-DATA ·scale8x4+12(SB)/4, $3
-DATA ·scale8x4+16(SB)/4, $4
-DATA ·scale8x4+20(SB)/4, $5
-DATA ·scale8x4+24(SB)/4, $6
-DATA ·scale8x4+28(SB)/4, $7
 
 GLOBL ·scale4x8(SB), RODATA|NOPTR, $32
 DATA ·scale4x8+0(SB)/8,  $0

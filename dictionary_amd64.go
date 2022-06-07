@@ -31,7 +31,10 @@ func dictionaryLookup32bits(dict []uint32, indexes []int32, rows array, size, of
 func dictionaryLookup64bits(dict []uint64, indexes []int32, rows array, size, offset uintptr) errno
 
 //go:noescape
-func dictionaryLookupString(dict []uint32, page []byte, indexes []int32, rows array, size, offset uintptr) errno
+func dictionaryLookupByteArrayString(dict []uint32, page []byte, indexes []int32, rows array, size, offset uintptr) errno
+
+//go:noescape
+func dictionaryLookupFixedLenByteArrayString(dict []byte, len int, indexes []int32, rows array, size, offset uintptr) errno
 
 func (d *int32Dictionary) lookup(indexes []int32, rows array, size, offset uintptr) {
 	checkLookupIndexBounds(indexes, rows)
@@ -59,7 +62,7 @@ func (d *doubleDictionary) lookup(indexes []int32, rows array, size, offset uint
 
 func (d *byteArrayDictionary) lookup(indexes []int32, rows array, size, offset uintptr) {
 	checkLookupIndexBounds(indexes, rows)
-	dictionaryLookupString(d.offsets, d.values, indexes, rows, size, offset)
+	dictionaryLookupByteArrayString(d.offsets, d.values, indexes, rows, size, offset)
 }
 
 func (d *uint32Dictionary) lookup(indexes []int32, rows array, size, offset uintptr) {
