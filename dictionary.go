@@ -119,7 +119,7 @@ func (d *booleanDictionary) Type() Type { return newIndexedType(d.typ, d) }
 
 func (d *booleanDictionary) Len() int { return int(d.numValues) }
 
-func (d *booleanDictionary) Index(i int32) Value { return makeValueBoolean(d.index(i)) }
+func (d *booleanDictionary) Index(i int32) Value { return d.makeValue(d.index(i)) }
 
 func (d *booleanDictionary) index(i int32) bool { return d.valueAt(int(i)) }
 
@@ -216,7 +216,7 @@ func (d *int32Dictionary) Type() Type { return newIndexedType(d.typ, d) }
 
 func (d *int32Dictionary) Len() int { return len(d.values) }
 
-func (d *int32Dictionary) Index(i int32) Value { return makeValueInt32(d.index(i)) }
+func (d *int32Dictionary) Index(i int32) Value { return d.makeValue(d.index(i)) }
 
 func (d *int32Dictionary) index(i int32) int32 { return d.values[i] }
 
@@ -292,7 +292,7 @@ func (d *int64Dictionary) Type() Type { return newIndexedType(d.typ, d) }
 
 func (d *int64Dictionary) Len() int { return len(d.values) }
 
-func (d *int64Dictionary) Index(i int32) Value { return makeValueInt64(d.index(i)) }
+func (d *int64Dictionary) Index(i int32) Value { return d.makeValue(d.index(i)) }
 
 func (d *int64Dictionary) index(i int32) int64 { return d.values[i] }
 
@@ -463,7 +463,7 @@ func (d *floatDictionary) Type() Type { return newIndexedType(d.typ, d) }
 
 func (d *floatDictionary) Len() int { return len(d.values) }
 
-func (d *floatDictionary) Index(i int32) Value { return makeValueFloat(d.index(i)) }
+func (d *floatDictionary) Index(i int32) Value { return d.makeValue(d.index(i)) }
 
 func (d *floatDictionary) index(i int32) float32 { return d.values[i] }
 
@@ -539,7 +539,7 @@ func (d *doubleDictionary) Type() Type { return newIndexedType(d.typ, d) }
 
 func (d *doubleDictionary) Len() int { return len(d.values) }
 
-func (d *doubleDictionary) Index(i int32) Value { return makeValueDouble(d.index(i)) }
+func (d *doubleDictionary) Index(i int32) Value { return d.makeValue(d.index(i)) }
 
 func (d *doubleDictionary) index(i int32) float64 { return d.values[i] }
 
@@ -871,7 +871,7 @@ func (d *uint32Dictionary) Type() Type { return newIndexedType(d.typ, d) }
 
 func (d *uint32Dictionary) Len() int { return len(d.values) }
 
-func (d *uint32Dictionary) Index(i int32) Value { return makeValueUint32(d.index(i)) }
+func (d *uint32Dictionary) Index(i int32) Value { return d.makeValue(d.index(i)) }
 
 func (d *uint32Dictionary) index(i int32) uint32 { return d.values[i] }
 
@@ -947,7 +947,7 @@ func (d *uint64Dictionary) Type() Type { return newIndexedType(d.typ, d) }
 
 func (d *uint64Dictionary) Len() int { return len(d.values) }
 
-func (d *uint64Dictionary) Index(i int32) Value { return makeValueUint64(d.index(i)) }
+func (d *uint64Dictionary) Index(i int32) Value { return d.makeValue(d.index(i)) }
 
 func (d *uint64Dictionary) index(i int32) uint64 { return d.values[i] }
 
