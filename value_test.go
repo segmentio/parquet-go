@@ -74,7 +74,7 @@ func TestValueClone(t *testing.T) {
 				v := parquet.ValueOf(value)
 				c := v.Clone()
 
-				if !parquet.Equal(v, c) {
+				if !parquet.DeepEqual(v, c) {
 					t.Errorf("cloned values are not equal: want=%#v got=%#v", v, c)
 				}
 				if v.RepetitionLevel() != c.RepetitionLevel() {

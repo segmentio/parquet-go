@@ -763,7 +763,7 @@ func unsafeByteArray(v reflect.Value, n int) []byte {
 // the underlying byte arrays are tested for equality.
 //
 // Note that the repetition levels, definition levels, and column indexes are
-// not compared by this function.
+// not compared by this function, use DeepEqual instead.
 func Equal(v1, v2 Value) bool {
 	if v1.kind != v2.kind {
 		return false
@@ -788,6 +788,17 @@ func Equal(v1, v2 Value) bool {
 	default:
 		return false
 	}
+}
+
+// DeepEqual returns true if v1 and v2 are equal, including their repetition
+// levels, definition levels, and column indexes.
+//
+// See Equal for details about how value equality is determined.
+func DeepEqual(v1, v2 Value) bool {
+	return Equal(v1, v2) &&
+		v1.repetitionLevel == v2.repetitionLevel &&
+		v1.definitionLevel == v2.definitionLevel &&
+		v1.columnIndex == v2.columnIndex
 }
 
 var (
