@@ -4,13 +4,6 @@ package parquet
 
 import "unsafe"
 
-func (d *booleanDictionary) lookup(indexes []int32, rows array, size, offset uintptr) {
-	checkLookupIndexBounds(indexes, rows)
-	for i, j := range indexes {
-		*(*bool)(rows.index(i, size, offset)) = d.index(j)
-	}
-}
-
 func (d *int32Dictionary) lookup(indexes []int32, rows array, size, offset uintptr) {
 	checkLookupIndexBounds(indexes, rows)
 	for i, j := range indexes {
