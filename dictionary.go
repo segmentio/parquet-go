@@ -15,9 +15,6 @@ const (
 	// Completely arbitrary, feel free to adjust if a different value would be
 	// more representative of the map implementation in Go.
 	mapSizeOverheadPerItem = 8
-	// Max length of the subsection of a dictionary that are searched linearly
-	// instead of using a binary search.
-	linearSearchBoundsMaxLen = 32
 )
 
 // The Dictionary interface represents type-specific implementations of parquet
@@ -681,51 +678,33 @@ func (d *byteArrayDictionary) Lookup(indexes []int32, values []Value) {
 
 func (d *byteArrayDictionary) Bounds(indexes []int32) (min, max Value) {
 	if len(indexes) > 0 {
-		minValue, maxValue := d.binarySearchBounds(indexes, 0, len(indexes))
+		base := d.index(indexes[0])
+		minValue := *(*string)(unsafe.Pointer(&base))
+		maxValue := minValue
+		values := [64]string{}
+
+		for i := 1; i < len(indexes); i += len(values) {
+			n := len(indexes) - i
+			if n > len(values) {
+				n = len(values)
+			}
+			j := i + n
+			d.lookup(indexes[i:j:j], makeArrayString(values[:n:n]), unsafe.Sizeof(values[0]), 0)
+
+			for _, value := range values[:n:n] {
+				switch {
+				case value < minValue:
+					minValue = value
+				case value > maxValue:
+					maxValue = value
+				}
+			}
+		}
+
 		min = d.makeValueString(minValue)
 		max = d.makeValueString(maxValue)
 	}
 	return min, max
-}
-
-func (d *byteArrayDictionary) linearSearchBounds(indexes []int32) (min, max string) {
-	var values [linearSearchBoundsMaxLen]string
-	d.lookup(indexes, makeArrayString(values[:]), unsafe.Sizeof(values[0]), 0)
-
-	min = values[0]
-	max = values[0]
-
-	if len(indexes) > 1 {
-		for _, value := range values[1:len(indexes)] {
-			switch {
-			case value < min:
-				min = value
-			case value > max:
-				max = value
-			}
-		}
-	}
-
-	return min, max
-}
-
-func (d *byteArrayDictionary) binarySearchBounds(indexes []int32, i, j int) (min, max string) {
-	if n := j - i; n <= linearSearchBoundsMaxLen {
-		return d.linearSearchBounds(indexes[i:j:j])
-	} else {
-		k := i + (n / 2)
-		min1, max1 := d.binarySearchBounds(indexes, i, k)
-		min2, max2 := d.binarySearchBounds(indexes, k, j)
-
-		if min2 < min1 {
-			min1 = min2
-		}
-		if max2 > max1 {
-			max1 = max2
-		}
-
-		return min1, max1
-	}
 }
 
 func (d *byteArrayDictionary) Reset() {
