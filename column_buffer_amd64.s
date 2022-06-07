@@ -2,8 +2,8 @@
 
 #include "textflag.h"
 
-// func broadcastRangeInt32(dst []int32, base int32)
-TEXT ·broadcastRangeInt32(SB), NOSPLIT, $0-32
+// func broadcastRangeInt32AVX2(dst []int32, base int32)
+TEXT ·broadcastRangeInt32AVX2(SB), NOSPLIT, $0-32
     MOVQ dst+0(FP), AX
     MOVQ dst+8(FP), BX
     MOVL base+24(FP), CX
@@ -11,9 +11,6 @@ TEXT ·broadcastRangeInt32(SB), NOSPLIT, $0-32
 
     CMPQ BX, $8
     JB test1x4
-
-    CMPB ·hasAVX2(SB), $0
-    JE test1x4
 
     VMOVDQU rangeInt32<>(SB), Y0         // [0,1,2,3,4,5,6,7]
     VPBROADCASTD rangeInt32<>+32(SB), Y1 // [8,8,8,8,8,8,8,8]
@@ -55,8 +52,8 @@ DATA rangeInt32<>+24(SB)/4, $6
 DATA rangeInt32<>+28(SB)/4, $7
 DATA rangeInt32<>+32(SB)/4, $8
 
-// func writeValuesBitpack(values unsafe.Pointer, rows array, size, offset uintptr)
-TEXT ·writeValuesBitpack(SB), NOSPLIT, $0-40
+// func writeValuesBitpackAVX2(values unsafe.Pointer, rows array, size, offset uintptr)
+TEXT ·writeValuesBitpackAVX2(SB), NOSPLIT, $0-40
     MOVQ values_base+0(FP), AX
     MOVQ rows_base+8(FP), BX
     MOVQ rows_len+16(FP), CX
@@ -70,9 +67,6 @@ init:
     ADDQ DI, BX
     SHRQ $3, CX
     XORQ SI, SI
-
-    CMPB ·hasAVX2(SB), $0
-    JE loop
 
     // Make sure `size - offset` is at least 4 bytes, otherwise VPGATHERDD
     // may read data beyond the end of the program memory and trigger a fault.
@@ -151,8 +145,8 @@ loop:
     JNE loop
     RET
 
-// func writeValues32bits(values unsafe.Pointer, rows array, size, offset uintptr)
-TEXT ·writeValues32bits(SB), NOSPLIT, $0-40
+// func writeValues32bitsAVX2(values unsafe.Pointer, rows array, size, offset uintptr)
+TEXT ·writeValues32bitsAVX2(SB), NOSPLIT, $0-40
     MOVQ values_base+0(FP), AX
     MOVQ rows_base+8(FP), BX
     MOVQ rows_len+16(FP), CX
@@ -166,9 +160,6 @@ TEXT ·writeValues32bits(SB), NOSPLIT, $0-40
 
     CMPQ CX, $8
     JB loop1x4
-
-    CMPB ·hasAVX2(SB), $0
-    JE loop1x4
 
     MOVQ CX, DI
     SHRQ $3, DI
@@ -203,8 +194,8 @@ loop1x4:
 done:
     RET
 
-// func writeValues64bits(values unsafe.Pointer, rows array, size, offset uintptr)
-TEXT ·writeValues64bits(SB), NOSPLIT, $0-40
+// func writeValues64bitsAVX2(values unsafe.Pointer, rows array, size, offset uintptr)
+TEXT ·writeValues64bitsAVX2(SB), NOSPLIT, $0-40
     MOVQ values_base+0(FP), AX
     MOVQ rows_base+8(FP), BX
     MOVQ rows_len+16(FP), CX
@@ -218,9 +209,6 @@ TEXT ·writeValues64bits(SB), NOSPLIT, $0-40
 
     CMPQ CX, $4
     JB loop1x8
-
-    CMPB ·hasAVX2(SB), $0
-    JE loop1x8
 
     MOVQ CX, DI
     SHRQ $2, DI
@@ -254,8 +242,8 @@ loop1x8:
 done:
     RET
 
-// func writeValues128bits(values unsafe.Pointer, rows array, size, offset uintptr)
-TEXT ·writeValues128bits(SB), NOSPLIT, $0-40
+// func writeValues128bitsAVX2(values unsafe.Pointer, rows array, size, offset uintptr)
+TEXT ·writeValues128bitsAVX2(SB), NOSPLIT, $0-40
     MOVQ values_base+0(FP), AX
     MOVQ rows_base+8(FP), BX
     MOVQ rows_len+16(FP), CX
@@ -269,9 +257,6 @@ TEXT ·writeValues128bits(SB), NOSPLIT, $0-40
 
     CMPQ CX, $2
     JB loop1x16
-
-    CMPB ·hasAVX2(SB), $0
-    JE loop1x16
 
     MOVQ CX, DI
     SHRQ $1, DI

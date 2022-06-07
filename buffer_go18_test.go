@@ -37,6 +37,7 @@ func TestGenericBuffer(t *testing.T) {
 	testGenericBuffer[*contact](t)
 	testGenericBuffer[paddedBooleanColumn](t)
 	testGenericBuffer[optionalInt32Column](t)
+	testGenericBuffer[repeatedInt32Column](t)
 }
 
 func testGenericBuffer[Row any](t *testing.T) {
@@ -112,6 +113,7 @@ func BenchmarkGenericBuffer(b *testing.B) {
 	benchmarkGenericBuffer[contact](b)
 	benchmarkGenericBuffer[paddedBooleanColumn](b)
 	benchmarkGenericBuffer[optionalInt32Column](b)
+	benchmarkGenericBuffer[repeatedInt32Column](b)
 }
 
 func benchmarkGenericBuffer[Row generator[Row]](b *testing.B) {
