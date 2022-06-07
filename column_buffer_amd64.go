@@ -35,7 +35,7 @@ func writeValues32bitsAVX2(values unsafe.Pointer, rows array, size, offset uintp
 func writeValues64bitsAVX2(values unsafe.Pointer, rows array, size, offset uintptr)
 
 //go:noescape
-func writeValues128bitsAVX2(values unsafe.Pointer, rows array, size, offset uintptr)
+func writeValues128bits(values unsafe.Pointer, rows array, size, offset uintptr)
 
 func writeValuesBool(values []byte, rows array, size, offset uintptr) {
 	writeValuesBitpackAVX2(*(*unsafe.Pointer)(unsafe.Pointer(&values)), rows, size, offset)
@@ -58,7 +58,7 @@ func writeValuesUint64(values []uint64, rows array, size, offset uintptr) {
 }
 
 func writeValuesUint128(values []byte, rows array, size, offset uintptr) {
-	writeValues128bitsAVX2(*(*unsafe.Pointer)(unsafe.Pointer(&values)), rows, size, offset)
+	writeValues128bits(*(*unsafe.Pointer)(unsafe.Pointer(&values)), rows, size, offset)
 }
 
 func writeValuesFloat32(values []float32, rows array, size, offset uintptr) {
