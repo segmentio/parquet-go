@@ -3,9 +3,9 @@
 #include "textflag.h"
 
 // func memset(dst []byte, src byte)
-TEXT ·memset(SB), NOSPLIT, $0-32
-    MOVQ dst+0(FP), AX
-    MOVQ dst+8(FP), BX
+TEXT ·memset(SB), NOSPLIT, $0-25
+    MOVQ dst_base+0(FP), AX
+    MOVQ dst_len+8(FP), BX
     MOVBQZX src+24(FP), CX
 
     CMPQ BX, $8

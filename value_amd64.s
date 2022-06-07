@@ -11,14 +11,14 @@
 // The optimizations relies on the fact that we can pack 4 parquet.Value values
 // into 3 YMM registers (24 x 4 = 32 x 3 = 96).
 //
-// func memsetValuesAVX2(values []Value, model Value)
+// func memsetValuesAVX2(values []Value, model Value, _ uint64)
 TEXT ·memsetValuesAVX2(SB), NOSPLIT, $0-56 // 48 + padding to load model in YMM
-    MOVQ values+0(FP), AX
-    MOVQ values+8(FP), BX
+    MOVQ values_base+0(FP), AX
+    MOVQ values_len+8(FP), BX
 
-    MOVQ model+24(FP), R10
-    MOVQ model+32(FP), R11
-    MOVQ model+40(FP), R12
+    MOVQ model_ptr+24(FP), R10
+    MOVQ model_u64+32(FP), R11
+    MOVQ model+40(FP), R12 // go vet complains about this line but it's OK
 
     XORQ SI, SI // byte index
     MOVQ BX, DI // byte count

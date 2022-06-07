@@ -4,8 +4,8 @@
 
 // func writeValuesBitpack(values unsafe.Pointer, rows array, size, offset uintptr)
 TEXT ·writeValuesBitpack(SB), NOSPLIT, $0-40
-    MOVQ values_base+0(FP), AX
-    MOVQ rows_base+8(FP), BX
+    MOVQ values+0(FP), AX
+    MOVQ rows_ptr+8(FP), BX
     MOVQ rows_len+16(FP), CX
     MOVQ size+24(FP), DX
     MOVQ offset+32(FP), DI
@@ -100,8 +100,8 @@ loop:
 
 // func writeValues32bits(values unsafe.Pointer, rows array, size, offset uintptr)
 TEXT ·writeValues32bits(SB), NOSPLIT, $0-40
-    MOVQ values_base+0(FP), AX
-    MOVQ rows_base+8(FP), BX
+    MOVQ values+0(FP), AX
+    MOVQ rows_ptr+8(FP), BX
     MOVQ rows_len+16(FP), CX
     MOVQ size+24(FP), DX
 
@@ -152,8 +152,8 @@ done:
 
 // func writeValues64bits(values unsafe.Pointer, rows array, size, offset uintptr)
 TEXT ·writeValues64bits(SB), NOSPLIT, $0-40
-    MOVQ values_base+0(FP), AX
-    MOVQ rows_base+8(FP), BX
+    MOVQ values+0(FP), AX
+    MOVQ rows_ptr+8(FP), BX
     MOVQ rows_len+16(FP), CX
     MOVQ size+24(FP), DX
 
@@ -203,8 +203,8 @@ done:
 
 // func writeValues128bits(values unsafe.Pointer, rows array, size, offset uintptr)
 TEXT ·writeValues128bits(SB), NOSPLIT, $0-40
-    MOVQ values_base+0(FP), AX
-    MOVQ rows_base+8(FP), BX
+    MOVQ values+0(FP), AX
+    MOVQ rows_ptr+8(FP), BX
     MOVQ rows_len+16(FP), CX
     MOVQ size+24(FP), DX
 

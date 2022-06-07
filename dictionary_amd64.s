@@ -6,11 +6,11 @@
 
 // func dictionaryBoundsInt32(dict []int32, indexes []int32) (min, max int32, err errno)
 TEXT ·dictionaryBoundsInt32(SB), NOSPLIT, $0-64
-    MOVQ dict+0(FP), AX
-    MOVQ dict+8(FP), BX
+    MOVQ dict_base+0(FP), AX
+    MOVQ dict_len+8(FP), BX
 
-    MOVQ indexes+24(FP), CX
-    MOVQ indexes+32(FP), DX
+    MOVQ indexes_base+24(FP), CX
+    MOVQ indexes_len+32(FP), DX
 
     XORQ R10, R10 // min
     XORQ R11, R11 // max
@@ -92,9 +92,9 @@ test:
     CMPQ SI, DX
     JNE loop
 return:
-    MOVL R10, ret+48(FP)
-    MOVL R11, ret+52(FP)
-    MOVQ R12, ret+56(FP)
+    MOVL R10, min+48(FP)
+    MOVL R11, max+52(FP)
+    MOVQ R12, err+56(FP)
     RET
 indexOutOfBounds:
     MOVQ $errnoIndexOutOfBounds, R12
@@ -102,11 +102,11 @@ indexOutOfBounds:
 
 // func dictionaryBoundsInt64(dict []int64, indexes []int32) (min, max int64, err errno)
 TEXT ·dictionaryBoundsInt64(SB), NOSPLIT, $0-72
-    MOVQ dict+0(FP), AX
-    MOVQ dict+8(FP), BX
+    MOVQ dict_base+0(FP), AX
+    MOVQ dict_len+8(FP), BX
 
-    MOVQ indexes+24(FP), CX
-    MOVQ indexes+32(FP), DX
+    MOVQ indexes_base+24(FP), CX
+    MOVQ indexes_len+32(FP), DX
 
     XORQ R10, R10 // min
     XORQ R11, R11 // max
@@ -186,9 +186,9 @@ test:
     CMPQ SI, DX
     JNE loop
 return:
-    MOVQ R10, ret+48(FP)
-    MOVQ R11, ret+56(FP)
-    MOVQ R12, ret+64(FP)
+    MOVQ R10, min+48(FP)
+    MOVQ R11, max+56(FP)
+    MOVQ R12, err+64(FP)
     RET
 indexOutOfBounds:
     MOVQ $errnoIndexOutOfBounds, R12
@@ -196,11 +196,11 @@ indexOutOfBounds:
 
 // func dictionaryBoundsFloat32(dict []float32, indexes []int32) (min, max float32, err errno)
 TEXT ·dictionaryBoundsFloat32(SB), NOSPLIT, $0-64
-    MOVQ dict+0(FP), AX
-    MOVQ dict+8(FP), BX
+    MOVQ dict_base+0(FP), AX
+    MOVQ dict_len+8(FP), BX
 
-    MOVQ indexes+24(FP), CX
-    MOVQ indexes+32(FP), DX
+    MOVQ indexes_base+24(FP), CX
+    MOVQ indexes_len+32(FP), DX
 
     PXOR X3, X3   // min
     PXOR X4, X4   // max
@@ -281,9 +281,9 @@ test:
     CMPQ SI, DX
     JNE loop
 return:
-    MOVSS X3, ret+48(FP)
-    MOVSS X4, ret+52(FP)
-    MOVQ R12, ret+56(FP)
+    MOVSS X3, min+48(FP)
+    MOVSS X4, max+52(FP)
+    MOVQ R12, err+56(FP)
     RET
 indexOutOfBounds:
     MOVQ $errnoIndexOutOfBounds, R12
@@ -291,11 +291,11 @@ indexOutOfBounds:
 
 // func dictionaryBoundsFloat64(dict []float64, indexes []int32) (min, max float64, err errno)
 TEXT ·dictionaryBoundsFloat64(SB), NOSPLIT, $0-72
-    MOVQ dict+0(FP), AX
-    MOVQ dict+8(FP), BX
+    MOVQ dict_base+0(FP), AX
+    MOVQ dict_len+8(FP), BX
 
-    MOVQ indexes+24(FP), CX
-    MOVQ indexes+32(FP), DX
+    MOVQ indexes_base+24(FP), CX
+    MOVQ indexes_len+32(FP), DX
 
     PXOR X3, X3   // min
     PXOR X4, X4   // max
@@ -376,9 +376,9 @@ test:
     CMPQ SI, DX
     JNE loop
 return:
-    MOVSD X3, ret+48(FP)
-    MOVSD X4, ret+56(FP)
-    MOVQ R12, ret+64(FP)
+    MOVSD X3, min+48(FP)
+    MOVSD X4, max+56(FP)
+    MOVQ R12, err+64(FP)
     RET
 indexOutOfBounds:
     MOVQ $errnoIndexOutOfBounds, R12
@@ -386,11 +386,11 @@ indexOutOfBounds:
 
 // func dictionaryBoundsUint32(dict []uint32, indexes []int32) (min, max uint32, err errno)
 TEXT ·dictionaryBoundsUint32(SB), NOSPLIT, $0-64
-    MOVQ dict+0(FP), AX
-    MOVQ dict+8(FP), BX
+    MOVQ dict_base+0(FP), AX
+    MOVQ dict_len+8(FP), BX
 
-    MOVQ indexes+24(FP), CX
-    MOVQ indexes+32(FP), DX
+    MOVQ indexes_base+24(FP), CX
+    MOVQ indexes_len+32(FP), DX
 
     XORQ R10, R10 // min
     XORQ R11, R11 // max
@@ -472,9 +472,9 @@ test:
     CMPQ SI, DX
     JNE loop
 return:
-    MOVL R10, ret+48(FP)
-    MOVL R11, ret+52(FP)
-    MOVQ R12, ret+56(FP)
+    MOVL R10, min+48(FP)
+    MOVL R11, max+52(FP)
+    MOVQ R12, err+56(FP)
     RET
 indexOutOfBounds:
     MOVQ $errnoIndexOutOfBounds, R12
@@ -482,11 +482,11 @@ indexOutOfBounds:
 
 // func dictionaryBoundsUint64(dict []uint64, indexes []int32) (min, max uint64, err errno)
 TEXT ·dictionaryBoundsUint64(SB), NOSPLIT, $0-72
-    MOVQ dict+0(FP), AX
-    MOVQ dict+8(FP), BX
+    MOVQ dict_base+0(FP), AX
+    MOVQ dict_len+8(FP), BX
 
-    MOVQ indexes+24(FP), CX
-    MOVQ indexes+32(FP), DX
+    MOVQ indexes_base+24(FP), CX
+    MOVQ indexes_len+32(FP), DX
 
     XORQ R10, R10 // min
     XORQ R11, R11 // max
@@ -566,9 +566,9 @@ test:
     CMPQ SI, DX
     JNE loop
 return:
-    MOVQ R10, ret+48(FP)
-    MOVQ R11, ret+56(FP)
-    MOVQ R12, ret+64(FP)
+    MOVQ R10, min+48(FP)
+    MOVQ R11, max+56(FP)
+    MOVQ R12, err+64(FP)
     RET
 indexOutOfBounds:
     MOVQ $errnoIndexOutOfBounds, R12
@@ -584,13 +584,13 @@ indexOutOfBounds:
 
 // func dictionaryLookup32bits(dict []uint32, indexes []int32, rows array, size, offset uintptr) errno
 TEXT ·dictionaryLookup32bits(SB), NOSPLIT, $0-88
-    MOVQ dict+0(FP), AX
-    MOVQ dict+8(FP), BX
+    MOVQ dict_base+0(FP), AX
+    MOVQ dict_len+8(FP), BX
 
-    MOVQ indexes+24(FP), CX
-    MOVQ indexes+32(FP), DX
+    MOVQ indexes_base+24(FP), CX
+    MOVQ indexes_len+32(FP), DX
 
-    MOVQ rows+48(FP), R8
+    MOVQ rows_ptr+48(FP), R8
     MOVQ size+64(FP), R9
     ADDQ offset+72(FP), R8
 
@@ -653,13 +653,13 @@ indexOutOfBounds:
 
 // func dictionaryLookup64bits(dict []uint64, indexes []int32, rows array, size, offset uintptr) errno
 TEXT ·dictionaryLookup64bits(SB), NOSPLIT, $0-88
-    MOVQ dict+0(FP), AX
-    MOVQ dict+8(FP), BX
+    MOVQ dict_base+0(FP), AX
+    MOVQ dict_len+8(FP), BX
 
-    MOVQ indexes+24(FP), CX
-    MOVQ indexes+32(FP), DX
+    MOVQ indexes_base+24(FP), CX
+    MOVQ indexes_len+32(FP), DX
 
-    MOVQ rows+48(FP), R8
+    MOVQ rows_ptr+48(FP), R8
     MOVQ size+64(FP), R9
     ADDQ offset+72(FP), R8
 
@@ -722,15 +722,15 @@ indexOutOfBounds:
 
 // func dictionaryLookupString(dict []uint32, page []byte, indexes []int32, rows array, size, offset uintptr) errno
 TEXT ·dictionaryLookupString(SB), NOSPLIT, $0-112
-    MOVQ dict+0(FP), AX
-    MOVQ dict+8(FP), BX
+    MOVQ dict_base+0(FP), AX
+    MOVQ dict_len+8(FP), BX
 
     MOVQ page+24(FP), CX
 
-    MOVQ indexes+48(FP), R8
-    MOVQ indexes+56(FP), R9
+    MOVQ indexes_base+48(FP), R8
+    MOVQ indexes_len+56(FP), R9
 
-    MOVQ rows+72(FP), R10
+    MOVQ rows_ptr+72(FP), R10
     MOVQ size+88(FP), R11
     ADDQ offset+96(FP), R10
 
