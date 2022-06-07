@@ -15,6 +15,9 @@ const (
 	// Completely arbitrary, feel free to adjust if a different value would be
 	// more representative of the map implementation in Go.
 	mapSizeOverheadPerItem = 8
+	// Max length of the subsection of a dictionary that are searched linearly
+	// instead of using a binary search.
+	linearSearchBoundsMaxLen = 32
 )
 
 // The Dictionary interface represents type-specific implementations of parquet
@@ -71,8 +74,8 @@ type Dictionary interface {
 }
 
 func checkLookupIndexBounds(indexes []int32, rows array) {
-	if len(indexes) < rows.len {
-		panic("dictionary lookup with indexes than values")
+	if rows.len < len(indexes) {
+		panic("dictionary lookup with more indexes than values")
 	}
 }
 
@@ -125,7 +128,7 @@ func (d *booleanDictionary) index(i int32) bool { return d.valueAt(int(i)) }
 
 func (d *booleanDictionary) Insert(indexes []int32, values []Value) {
 	var value Value
-	d.insert(indexes, makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
+	d.insert(indexes, makeArrayValue(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
 }
 
 func (d *booleanDictionary) insert(indexes []int32, rows array, size, offset uintptr) {
@@ -154,7 +157,7 @@ func (d *booleanDictionary) insert(indexes []int32, rows array, size, offset uin
 func (d *booleanDictionary) Lookup(indexes []int32, values []Value) {
 	model := d.makeValue(false)
 	memsetValues(values, model)
-	d.lookup(indexes, makeValueArray(values), unsafe.Sizeof(model), unsafe.Offsetof(model.u64))
+	d.lookup(indexes, makeArrayValue(values), unsafe.Sizeof(model), unsafe.Offsetof(model.u64))
 }
 
 func (d *booleanDictionary) lookup(indexes []int32, rows array, size, offset uintptr) {
@@ -222,7 +225,7 @@ func (d *int32Dictionary) index(i int32) int32 { return d.values[i] }
 
 func (d *int32Dictionary) Insert(indexes []int32, values []Value) {
 	var value Value
-	d.insert(indexes, makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
+	d.insert(indexes, makeArrayValue(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
 }
 
 func (d *int32Dictionary) insert(indexes []int32, rows array, size, offset uintptr) {
@@ -252,7 +255,7 @@ func (d *int32Dictionary) insert(indexes []int32, rows array, size, offset uintp
 func (d *int32Dictionary) Lookup(indexes []int32, values []Value) {
 	model := d.makeValue(0)
 	memsetValues(values, model)
-	d.lookup(indexes, makeValueArray(values), unsafe.Sizeof(model), unsafe.Offsetof(model.u64))
+	d.lookup(indexes, makeArrayValue(values), unsafe.Sizeof(model), unsafe.Offsetof(model.u64))
 }
 
 func (d *int32Dictionary) Bounds(indexes []int32) (min, max Value) {
@@ -298,7 +301,7 @@ func (d *int64Dictionary) index(i int32) int64 { return d.values[i] }
 
 func (d *int64Dictionary) Insert(indexes []int32, values []Value) {
 	var value Value
-	d.insert(indexes, makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
+	d.insert(indexes, makeArrayValue(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
 }
 
 func (d *int64Dictionary) insert(indexes []int32, rows array, size, offset uintptr) {
@@ -328,7 +331,7 @@ func (d *int64Dictionary) insert(indexes []int32, rows array, size, offset uintp
 func (d *int64Dictionary) Lookup(indexes []int32, values []Value) {
 	model := d.makeValue(0)
 	memsetValues(values, model)
-	d.lookup(indexes, makeValueArray(values), unsafe.Sizeof(model), unsafe.Offsetof(model.u64))
+	d.lookup(indexes, makeArrayValue(values), unsafe.Sizeof(model), unsafe.Offsetof(model.u64))
 }
 
 func (d *int64Dictionary) Bounds(indexes []int32) (min, max Value) {
@@ -469,7 +472,7 @@ func (d *floatDictionary) index(i int32) float32 { return d.values[i] }
 
 func (d *floatDictionary) Insert(indexes []int32, values []Value) {
 	var value Value
-	d.insert(indexes, makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
+	d.insert(indexes, makeArrayValue(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
 }
 
 func (d *floatDictionary) insert(indexes []int32, rows array, size, offset uintptr) {
@@ -499,7 +502,7 @@ func (d *floatDictionary) insert(indexes []int32, rows array, size, offset uintp
 func (d *floatDictionary) Lookup(indexes []int32, values []Value) {
 	model := d.makeValue(0)
 	memsetValues(values, model)
-	d.lookup(indexes, makeValueArray(values), unsafe.Sizeof(model), unsafe.Offsetof(model.u64))
+	d.lookup(indexes, makeArrayValue(values), unsafe.Sizeof(model), unsafe.Offsetof(model.u64))
 }
 
 func (d *floatDictionary) Bounds(indexes []int32) (min, max Value) {
@@ -545,7 +548,7 @@ func (d *doubleDictionary) index(i int32) float64 { return d.values[i] }
 
 func (d *doubleDictionary) Insert(indexes []int32, values []Value) {
 	var value Value
-	d.insert(indexes, makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
+	d.insert(indexes, makeArrayValue(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
 }
 
 func (d *doubleDictionary) insert(indexes []int32, rows array, size, offset uintptr) {
@@ -575,7 +578,7 @@ func (d *doubleDictionary) insert(indexes []int32, rows array, size, offset uint
 func (d *doubleDictionary) Lookup(indexes []int32, values []Value) {
 	model := d.makeValue(0)
 	memsetValues(values, model)
-	d.lookup(indexes, makeValueArray(values), unsafe.Sizeof(model), unsafe.Offsetof(model.u64))
+	d.lookup(indexes, makeArrayValue(values), unsafe.Sizeof(model), unsafe.Offsetof(model.u64))
 }
 
 func (d *doubleDictionary) Bounds(indexes []int32) (min, max Value) {
@@ -635,7 +638,7 @@ func (d *byteArrayDictionary) index(i int32) []byte { return d.valueAt(d.offsets
 
 func (d *byteArrayDictionary) Insert(indexes []int32, values []Value) {
 	var value Value
-	d.insert(indexes, makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.ptr))
+	d.insert(indexes, makeArrayValue(values), unsafe.Sizeof(value), unsafe.Offsetof(value.ptr))
 }
 
 func (d *byteArrayDictionary) insert(indexes []int32, rows array, size, offset uintptr) {
@@ -671,30 +674,58 @@ func (d *byteArrayDictionary) append(value string) string {
 }
 
 func (d *byteArrayDictionary) Lookup(indexes []int32, values []Value) {
-	model := d.makeValue(nil)
+	model := d.makeValueString("")
 	memsetValues(values, model)
-	d.lookup(indexes, makeValueArray(values), unsafe.Sizeof(model), unsafe.Offsetof(model.ptr))
+	d.lookup(indexes, makeArrayValue(values), unsafe.Sizeof(model), unsafe.Offsetof(model.ptr))
 }
 
 func (d *byteArrayDictionary) Bounds(indexes []int32) (min, max Value) {
 	if len(indexes) > 0 {
-		minValue := d.index(indexes[0])
-		maxValue := minValue
-
-		for _, i := range indexes[1:] {
-			value := d.index(i)
-			if string(value) < string(minValue) {
-				minValue = value
-			}
-			if string(value) > string(maxValue) {
-				maxValue = value
-			}
-		}
-
-		min = d.makeValue(minValue)
-		max = d.makeValue(maxValue)
+		minValue, maxValue := d.binarySearchBounds(indexes, 0, len(indexes))
+		min = d.makeValueString(minValue)
+		max = d.makeValueString(maxValue)
 	}
 	return min, max
+}
+
+func (d *byteArrayDictionary) linearSearchBounds(indexes []int32) (min, max string) {
+	var values [linearSearchBoundsMaxLen]string
+	d.lookup(indexes, makeArrayString(values[:]), unsafe.Sizeof(values[0]), 0)
+
+	min = values[0]
+	max = values[0]
+
+	if len(indexes) > 1 {
+		for _, value := range values[1:len(indexes)] {
+			switch {
+			case value < min:
+				min = value
+			case value > max:
+				max = value
+			}
+		}
+	}
+
+	return min, max
+}
+
+func (d *byteArrayDictionary) binarySearchBounds(indexes []int32, i, j int) (min, max string) {
+	if n := j - i; n <= linearSearchBoundsMaxLen {
+		return d.linearSearchBounds(indexes[i:j:j])
+	} else {
+		k := i + (n / 2)
+		min1, max1 := d.binarySearchBounds(indexes, i, k)
+		min2, max2 := d.binarySearchBounds(indexes, k, j)
+
+		if min2 < min1 {
+			min1 = min2
+		}
+		if max2 > max1 {
+			max1 = max2
+		}
+
+		return min1, max1
+	}
 }
 
 func (d *byteArrayDictionary) Reset() {
@@ -836,7 +867,7 @@ func (d *uint32Dictionary) index(i int32) uint32 { return d.values[i] }
 
 func (d *uint32Dictionary) Insert(indexes []int32, values []Value) {
 	var value Value
-	d.insert(indexes, makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
+	d.insert(indexes, makeArrayValue(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
 }
 
 func (d *uint32Dictionary) insert(indexes []int32, rows array, size, offset uintptr) {
@@ -866,7 +897,7 @@ func (d *uint32Dictionary) insert(indexes []int32, rows array, size, offset uint
 func (d *uint32Dictionary) Lookup(indexes []int32, values []Value) {
 	model := d.makeValue(0)
 	memsetValues(values, model)
-	d.lookup(indexes, makeValueArray(values), unsafe.Sizeof(model), unsafe.Offsetof(model.u64))
+	d.lookup(indexes, makeArrayValue(values), unsafe.Sizeof(model), unsafe.Offsetof(model.u64))
 }
 
 func (d *uint32Dictionary) Bounds(indexes []int32) (min, max Value) {
@@ -912,7 +943,7 @@ func (d *uint64Dictionary) index(i int32) uint64 { return d.values[i] }
 
 func (d *uint64Dictionary) Insert(indexes []int32, values []Value) {
 	var value Value
-	d.insert(indexes, makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
+	d.insert(indexes, makeArrayValue(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
 }
 
 func (d *uint64Dictionary) insert(indexes []int32, rows array, size, offset uintptr) {
@@ -942,7 +973,7 @@ func (d *uint64Dictionary) insert(indexes []int32, rows array, size, offset uint
 func (d *uint64Dictionary) Lookup(indexes []int32, values []Value) {
 	model := d.makeValue(0)
 	memsetValues(values, model)
-	d.lookup(indexes, makeValueArray(values), unsafe.Sizeof(model), unsafe.Offsetof(model.u64))
+	d.lookup(indexes, makeArrayValue(values), unsafe.Sizeof(model), unsafe.Offsetof(model.u64))
 }
 
 func (d *uint64Dictionary) Bounds(indexes []int32) (min, max Value) {

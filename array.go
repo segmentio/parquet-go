@@ -7,7 +7,11 @@ type array struct {
 	len int
 }
 
-func makeValueArray(values []Value) array {
+func makeArrayString(values []string) array {
+	return *(*array)(unsafe.Pointer(&values))
+}
+
+func makeArrayValue(values []Value) array {
 	return *(*array)(unsafe.Pointer(&values))
 }
 

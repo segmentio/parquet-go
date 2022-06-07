@@ -821,7 +821,7 @@ func (col *booleanColumnBuffer) WriteBooleans(values []bool) (int, error) {
 
 func (col *booleanColumnBuffer) WriteValues(values []Value) (int, error) {
 	var value Value
-	col.writeValues(makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64), columnLevels{})
+	col.writeValues(makeArrayValue(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64), columnLevels{})
 	return len(values), nil
 }
 
@@ -962,7 +962,7 @@ func (col *int32ColumnBuffer) WriteInt32s(values []int32) (int, error) {
 
 func (col *int32ColumnBuffer) WriteValues(values []Value) (int, error) {
 	var value Value
-	col.writeValues(makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64), columnLevels{})
+	col.writeValues(makeArrayValue(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64), columnLevels{})
 	return len(values), nil
 }
 
@@ -1057,7 +1057,7 @@ func (col *int64ColumnBuffer) WriteInt64s(values []int64) (int, error) {
 
 func (col *int64ColumnBuffer) WriteValues(values []Value) (int, error) {
 	var value Value
-	col.writeValues(makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64), columnLevels{})
+	col.writeValues(makeArrayValue(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64), columnLevels{})
 	return len(values), nil
 }
 
@@ -1246,7 +1246,7 @@ func (col *floatColumnBuffer) WriteFloats(values []float32) (int, error) {
 
 func (col *floatColumnBuffer) WriteValues(values []Value) (int, error) {
 	var value Value
-	col.writeValues(makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64), columnLevels{})
+	col.writeValues(makeArrayValue(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64), columnLevels{})
 	return len(values), nil
 }
 
@@ -1341,7 +1341,7 @@ func (col *doubleColumnBuffer) WriteDoubles(values []float64) (int, error) {
 
 func (col *doubleColumnBuffer) WriteValues(values []Value) (int, error) {
 	var value Value
-	col.writeValues(makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64), columnLevels{})
+	col.writeValues(makeArrayValue(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64), columnLevels{})
 	return len(values), nil
 }
 
@@ -1487,7 +1487,7 @@ func (col *byteArrayColumnBuffer) writeByteArrays(values []byte) (count, bytes i
 
 func (col *byteArrayColumnBuffer) WriteValues(values []Value) (int, error) {
 	var value Value
-	col.writeValues(makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.ptr), columnLevels{})
+	col.writeValues(makeArrayValue(values), unsafe.Sizeof(value), unsafe.Offsetof(value.ptr), columnLevels{})
 	return len(values), nil
 }
 
@@ -1720,7 +1720,7 @@ func (col *uint32ColumnBuffer) WriteUint32s(values []uint32) (int, error) {
 
 func (col *uint32ColumnBuffer) WriteValues(values []Value) (int, error) {
 	var value Value
-	col.writeValues(makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64), columnLevels{})
+	col.writeValues(makeArrayValue(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64), columnLevels{})
 	return len(values), nil
 }
 
@@ -1815,7 +1815,7 @@ func (col *uint64ColumnBuffer) WriteUint64s(values []uint64) (int, error) {
 
 func (col *uint64ColumnBuffer) WriteValues(values []Value) (int, error) {
 	var value Value
-	col.writeValues(makeValueArray(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64), columnLevels{})
+	col.writeValues(makeArrayValue(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64), columnLevels{})
 	return len(values), nil
 }
 

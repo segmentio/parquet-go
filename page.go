@@ -1066,8 +1066,8 @@ func (page *byteArrayPage) bounds() (min, max []byte) {
 func (page *byteArrayPage) Bounds() (min, max Value, ok bool) {
 	if ok = len(page.values) > 0; ok {
 		minBytes, maxBytes := page.bounds()
-		min = page.makeValue(minBytes)
-		max = page.makeValue(maxBytes)
+		min = page.makeValueBytes(minBytes)
+		max = page.makeValueBytes(maxBytes)
 	}
 	return min, max, ok
 }
@@ -1113,8 +1113,14 @@ func (page *byteArrayPage) Slice(i, j int64) BufferedPage {
 	}
 }
 
-func (page *byteArrayPage) makeValue(v []byte) Value {
+func (page *byteArrayPage) makeValueBytes(v []byte) Value {
 	value := makeValueBytes(ByteArray, v)
+	value.columnIndex = page.columnIndex
+	return value
+}
+
+func (page *byteArrayPage) makeValueString(v string) Value {
+	value := makeValueString(ByteArray, v)
 	value.columnIndex = page.columnIndex
 	return value
 }
