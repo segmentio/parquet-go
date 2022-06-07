@@ -239,18 +239,25 @@ func blockBitWidthsInt64(bitWidths *[numMiniBlocks]byte, block *[blockSize]int64
 
 func resize(buf []byte, size int) []byte {
 	if cap(buf) < size {
-		newCap := 2 * cap(buf)
-		if newCap < size {
-			newCap = size
-		}
-		buf = append(make([]byte, 0, newCap), buf...)
-	} else if size > len(buf) {
+		return grow(buf, size)
+	}
+	if size > len(buf) {
 		clear := buf[len(buf):size]
 		for i := range clear {
 			clear[i] = 0
 		}
 	}
 	return buf[:size]
+}
+
+func grow(buf []byte, size int) []byte {
+	newCap := 2 * cap(buf)
+	if newCap < size {
+		newCap = size
+	}
+	newBuf := make([]byte, size, newCap)
+	copy(newBuf, buf)
+	return newBuf
 }
 
 type BinaryPackedEncoding struct {

@@ -2,8 +2,8 @@
 
 #include "textflag.h"
 
-// func memset(dst []byte, src byte)
-TEXT ·memset(SB), NOSPLIT, $0-32
+// func memsetAVX2(dst []byte, src byte)
+TEXT ·memsetAVX2(SB), NOSPLIT, $0-32
     MOVQ dst+0(FP), AX
     MOVQ dst+8(FP), BX
     MOVBQZX src+24(FP), CX
@@ -13,9 +13,6 @@ TEXT ·memset(SB), NOSPLIT, $0-32
 
     CMPQ BX, $64
     JB init8
-
-    CMPB ·hasAVX2(SB), $0
-    JE init8
 
     XORQ SI, SI
     MOVQ BX, DX
