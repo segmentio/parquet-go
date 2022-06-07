@@ -60,9 +60,14 @@ func (d *doubleDictionary) lookup(indexes []int32, rows array, size, offset uint
 	dictionaryLookup64bits(dict, indexes, rows, size, offset).check()
 }
 
-func (d *byteArrayDictionary) lookup(indexes []int32, rows array, size, offset uintptr) {
+func (d *byteArrayDictionary) lookupString(indexes []int32, rows array, size, offset uintptr) {
 	checkLookupIndexBounds(indexes, rows)
-	dictionaryLookupByteArrayString(d.offsets, d.values, indexes, rows, size, offset)
+	dictionaryLookupByteArrayString(d.offsets, d.values, indexes, rows, size, offset).check()
+}
+
+func (d *fixedLenByteArrayDictionary) lookupString(indexes []int32, rows array, size, offset uintptr) {
+	checkLookupIndexBounds(indexes, rows)
+	dictionaryLookupFixedLenByteArrayString(d.data, d.size, indexes, rows, size, offset).check()
 }
 
 func (d *uint32Dictionary) lookup(indexes []int32, rows array, size, offset uintptr) {

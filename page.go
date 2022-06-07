@@ -1189,8 +1189,8 @@ func (page *fixedLenByteArrayPage) bounds() (min, max []byte) {
 func (page *fixedLenByteArrayPage) Bounds() (min, max Value, ok bool) {
 	if ok = len(page.data) > 0; ok {
 		minBytes, maxBytes := page.bounds()
-		min = page.makeValue(minBytes)
-		max = page.makeValue(maxBytes)
+		min = page.makeValueBytes(minBytes)
+		max = page.makeValueBytes(maxBytes)
 	}
 	return min, max, ok
 }
@@ -1213,8 +1213,14 @@ func (page *fixedLenByteArrayPage) Slice(i, j int64) BufferedPage {
 	}
 }
 
-func (page *fixedLenByteArrayPage) makeValue(v []byte) Value {
+func (page *fixedLenByteArrayPage) makeValueBytes(v []byte) Value {
 	value := makeValueBytes(FixedLenByteArray, v)
+	value.columnIndex = page.columnIndex
+	return value
+}
+
+func (page *fixedLenByteArrayPage) makeValueString(v string) Value {
+	value := makeValueString(FixedLenByteArray, v)
 	value.columnIndex = page.columnIndex
 	return value
 }

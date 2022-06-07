@@ -775,6 +775,45 @@ indexOutOfBounds:
     MOVQ $errnoIndexOutOfBounds, AX
     JMP return
 
+// func dictionaryLookupFixedLenByteArrayString(dict []byte, len int, indexes []int32, rows array, size, offset uintptr) errno
+TEXT ·dictionaryLookupFixedLenByteArrayString(SB), NOSPLIT, $0-96
+    MOVQ dict_base+0(FP), AX
+    MOVQ dict_len+8(FP), BX
+
+    MOVQ len+24(FP), CX
+
+    MOVQ indexes_base+32(FP), DX
+    MOVQ indexes_len+40(FP), R8
+
+    MOVQ rows_ptr+56(FP), R9
+    MOVQ size+72(FP), R10
+    ADDQ offset+80(FP), R9
+
+    XORQ DI, DI
+    XORQ SI, SI
+loop:
+    MOVL (DX)(SI*4), DI
+    IMULQ CX, DI
+    CMPL DI, BX
+    JAE indexOutOfBounds
+
+    ADDQ AX, DI
+    MOVQ DI, (R9)
+    MOVQ CX, 8(R9)
+
+    ADDQ R10, R9
+    INCQ SI
+test:
+    CMPQ SI, R8
+    JNE loop
+    XORQ AX, AX
+return:
+    MOVQ AX, ret+88(FP)
+    RET
+indexOutOfBounds:
+    MOVQ $errnoIndexOutOfBounds, AX
+    JMP return
+
 GLOBL ·range0n8(SB), RODATA|NOPTR, $40
 DATA ·range0n8+0(SB)/4, $0
 DATA ·range0n8+4(SB)/4, $1

@@ -32,7 +32,15 @@ func (d *doubleDictionary) lookup(indexes []int32, rows array, size, offset uint
 	}
 }
 
-func (d *byteArrayDictionary) lookup(indexes []int32, rows array, size, offset uintptr) {
+func (d *byteArrayDictionary) lookupString(indexes []int32, rows array, size, offset uintptr) {
+	checkLookupIndexBounds(indexes, rows)
+	for i, j := range indexes {
+		v := d.index(j)
+		*(*string)(rows.index(i, size, offset)) = *(*string)(unsafe.Pointer(&v))
+	}
+}
+
+func (d *fixedLenyteArrayDictionary) lookupString(indexes []int32, rows array, size, offset uintptr) {
 	checkLookupIndexBounds(indexes, rows)
 	for i, j := range indexes {
 		v := d.index(j)

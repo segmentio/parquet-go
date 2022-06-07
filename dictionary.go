@@ -627,9 +627,7 @@ func (d *byteArrayDictionary) Type() Type { return newIndexedType(d.typ, d) }
 
 func (d *byteArrayDictionary) Len() int { return len(d.offsets) }
 
-func (d *byteArrayDictionary) Index(i int32) Value {
-	return makeValueBytes(ByteArray, d.index(i))
-}
+func (d *byteArrayDictionary) Index(i int32) Value { return d.makeValueBytes(d.index(i)) }
 
 func (d *byteArrayDictionary) index(i int32) []byte { return d.valueAt(d.offsets[i]) }
 
@@ -673,7 +671,7 @@ func (d *byteArrayDictionary) append(value string) string {
 func (d *byteArrayDictionary) Lookup(indexes []int32, values []Value) {
 	model := d.makeValueString("")
 	memsetValues(values, model)
-	d.lookup(indexes, makeArrayValue(values), unsafe.Sizeof(model), unsafe.Offsetof(model.ptr))
+	d.lookupString(indexes, makeArrayValue(values), unsafe.Sizeof(model), unsafe.Offsetof(model.ptr))
 }
 
 func (d *byteArrayDictionary) Bounds(indexes []int32) (min, max Value) {
@@ -689,7 +687,7 @@ func (d *byteArrayDictionary) Bounds(indexes []int32) (min, max Value) {
 				n = len(values)
 			}
 			j := i + n
-			d.lookup(indexes[i:j:j], makeArrayString(values[:n:n]), unsafe.Sizeof(values[0]), 0)
+			d.lookupString(indexes[i:j:j], makeArrayString(values[:n:n]), unsafe.Sizeof(values[0]), 0)
 
 			for _, value := range values[:n:n] {
 				switch {
@@ -740,11 +738,13 @@ func (d *fixedLenByteArrayDictionary) Type() Type { return newIndexedType(d.typ,
 func (d *fixedLenByteArrayDictionary) Len() int { return len(d.data) / d.size }
 
 func (d *fixedLenByteArrayDictionary) Index(i int32) Value {
-	return d.makeValue(d.index(i))
+	return d.makeValueBytes(d.index(i))
 }
 
 func (d *fixedLenByteArrayDictionary) index(i int32) []byte {
-	return d.data[int(i)*d.size : int(i+1)*d.size]
+	j := (int(i) + 0) * d.size
+	k := (int(i) + 1) * d.size
+	return d.data[j:k:k]
 }
 
 func (d *fixedLenByteArrayDictionary) Insert(indexes []int32, values []Value) {
@@ -786,28 +786,59 @@ func (d *fixedLenByteArrayDictionary) insertValues(indexes []int32, count int, v
 }
 
 func (d *fixedLenByteArrayDictionary) Lookup(indexes []int32, values []Value) {
-	for i, j := range indexes {
-		values[i] = d.Index(j)
-	}
+	model := d.makeValueString("")
+	memsetValues(values, model)
+	d.lookupString(indexes, makeArrayValue(values), unsafe.Sizeof(model), unsafe.Offsetof(model.ptr))
 }
+
+// func (d *fixedLenByteArrayDictionary) Bounds(indexes []int32) (min, max Value) {
+// 	if len(indexes) > 0 {
+// 		minValue := d.index(indexes[0])
+// 		maxValue := minValue
+
+// 		for _, i := range indexes[1:] {
+// 			value := d.index(i)
+// 			switch {
+// 			case string(value) < string(minValue):
+// 				minValue = value
+// 			case string(value) > string(maxValue):
+// 				maxValue = value
+// 			}
+// 		}
+
+// 		min = d.makeValue(minValue)
+// 		max = d.makeValue(maxValue)
+// 	}
+// 	return min, max
+// }
 
 func (d *fixedLenByteArrayDictionary) Bounds(indexes []int32) (min, max Value) {
 	if len(indexes) > 0 {
-		minValue := d.index(indexes[0])
+		base := d.index(indexes[0])
+		minValue := *(*string)(unsafe.Pointer(&base))
 		maxValue := minValue
+		values := [64]string{}
 
-		for _, i := range indexes[1:] {
-			value := d.index(i)
-			switch {
-			case string(value) < string(minValue):
-				minValue = value
-			case string(value) > string(maxValue):
-				maxValue = value
+		for i := 1; i < len(indexes); i += len(values) {
+			n := len(indexes) - i
+			if n > len(values) {
+				n = len(values)
+			}
+			j := i + n
+			d.lookupString(indexes[i:j:j], makeArrayString(values[:n:n]), unsafe.Sizeof(values[0]), 0)
+
+			for _, value := range values[:n:n] {
+				switch {
+				case value < minValue:
+					minValue = value
+				case value > maxValue:
+					maxValue = value
+				}
 			}
 		}
 
-		min = d.makeValue(minValue)
-		max = d.makeValue(maxValue)
+		min = d.makeValueString(minValue)
+		max = d.makeValueString(maxValue)
 	}
 	return min, max
 }
