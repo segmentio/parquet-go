@@ -40,7 +40,7 @@ func (d *byteArrayDictionary) lookupString(indexes []int32, rows array, size, of
 	}
 }
 
-func (d *fixedLenyteArrayDictionary) lookupString(indexes []int32, rows array, size, offset uintptr) {
+func (d *fixedLenByteArrayDictionary) lookupString(indexes []int32, rows array, size, offset uintptr) {
 	checkLookupIndexBounds(indexes, rows)
 	for i, j := range indexes {
 		v := d.index(j)
