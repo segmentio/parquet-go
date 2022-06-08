@@ -116,25 +116,6 @@ func TestMinFloat64(t *testing.T) {
 	}
 }
 
-func TestMinFixedLenByteArray(t *testing.T) {
-	err := quick.Check(func(values []byte) bool {
-		min := [1]byte{}
-		if len(values) > 0 {
-			min[0] = values[0]
-			for _, v := range values[1:] {
-				if v < min[0] {
-					min[0] = v
-				}
-			}
-		}
-		ret := minFixedLenByteArray(values, 1)
-		return (len(values) == 0 && ret == nil) || bytes.Equal(min[:], ret)
-	})
-	if err != nil {
-		t.Error(err)
-	}
-}
-
 func TestMinBE128(t *testing.T) {
 	err := quick.Check(func(values [][16]byte) bool {
 		min := [16]byte{}
@@ -147,6 +128,25 @@ func TestMinBE128(t *testing.T) {
 			}
 		}
 		ret := minBE128(values)
+		return (len(values) == 0 && ret == nil) || bytes.Equal(min[:], ret)
+	})
+	if err != nil {
+		t.Error(err)
+	}
+}
+
+func TestMinFixedLenByteArray(t *testing.T) {
+	err := quick.Check(func(values []byte) bool {
+		min := [1]byte{}
+		if len(values) > 0 {
+			min[0] = values[0]
+			for _, v := range values[1:] {
+				if v < min[0] {
+					min[0] = v
+				}
+			}
+		}
+		ret := minFixedLenByteArray(values, 1)
 		return (len(values) == 0 && ret == nil) || bytes.Equal(min[:], ret)
 	})
 	if err != nil {
@@ -251,7 +251,7 @@ func BenchmarkMinFixedLenByteArray(b *testing.B) {
 		prng := rand.New(rand.NewSource(1))
 		prng.Read(values)
 		for i := 0; i < b.N; i++ {
-			minFixedLenByteArray(values, 10)
+			minFixedLenByteArray(values, 32)
 		}
 	})
 }

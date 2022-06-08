@@ -116,25 +116,6 @@ func TestMaxFloat64(t *testing.T) {
 	}
 }
 
-func TestMaxFixedLenByteArray(t *testing.T) {
-	err := quick.Check(func(values []byte) bool {
-		max := [1]byte{}
-		if len(values) > 0 {
-			max[0] = values[0]
-			for _, v := range values[1:] {
-				if v > max[0] {
-					max[0] = v
-				}
-			}
-		}
-		ret := maxFixedLenByteArray(values, 1)
-		return (len(values) == 0 && ret == nil) || bytes.Equal(max[:], ret)
-	})
-	if err != nil {
-		t.Error(err)
-	}
-}
-
 func TestMaxBE128(t *testing.T) {
 	err := quick.Check(func(values [][16]byte) bool {
 		max := [16]byte{}
@@ -147,6 +128,25 @@ func TestMaxBE128(t *testing.T) {
 			}
 		}
 		ret := maxBE128(values)
+		return (len(values) == 0 && ret == nil) || bytes.Equal(max[:], ret)
+	})
+	if err != nil {
+		t.Error(err)
+	}
+}
+
+func TestMaxFixedLenByteArray(t *testing.T) {
+	err := quick.Check(func(values []byte) bool {
+		max := [1]byte{}
+		if len(values) > 0 {
+			max[0] = values[0]
+			for _, v := range values[1:] {
+				if v > max[0] {
+					max[0] = v
+				}
+			}
+		}
+		ret := maxFixedLenByteArray(values, 1)
 		return (len(values) == 0 && ret == nil) || bytes.Equal(max[:], ret)
 	})
 	if err != nil {
@@ -251,7 +251,7 @@ func BenchmarkMaxFixedLenByteArray(b *testing.B) {
 		prng := rand.New(rand.NewSource(1))
 		prng.Read(values)
 		for i := 0; i < b.N; i++ {
-			maxFixedLenByteArray(values, 10)
+			maxFixedLenByteArray(values, 32)
 		}
 	})
 }
