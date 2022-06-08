@@ -3,12 +3,12 @@ package parquet
 import (
 	"bytes"
 	"fmt"
+	"math/bits"
 	"time"
 
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/format"
-	"github.com/segmentio/parquet-go/internal/bits"
 )
 
 // Kind is an enumeration type representing the physical types supported by the
@@ -681,7 +681,7 @@ func (t *intType) LogicalType() *format.LogicalType {
 }
 
 func (t *intType) ConvertedType() *deprecated.ConvertedType {
-	convertedType := bits.Len8(int8(t.BitWidth)/8) - 1 // 8=>0, 16=>1, 32=>2, 64=>4
+	convertedType := bits.Len8(uint8(t.BitWidth)/8) - 1 // 8=>0, 16=>1, 32=>2, 64=>4
 	if t.IsSigned {
 		convertedType += int(deprecated.Int8)
 	} else {
