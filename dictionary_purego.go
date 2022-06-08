@@ -62,6 +62,15 @@ func (d *uint64Dictionary) lookup(indexes []int32, rows array, size, offset uint
 	}
 }
 
+func (d *be128Dictionary) lookupString(indexes []int32, rows array, size, offset uintptr) {
+	checkLookupIndexBounds(indexes, rows)
+	s := "0123456789ABCDEF"
+	for i, j := range indexes {
+		*(**[16]byte)(unsafe.Pointer(&s)) = d.index(j)
+		*(*string)(rows.index(i, size, offset)) = s
+	}
+}
+
 func (d *be128Dictionary) lookupPointer(indexes []int32, rows array, size, offset uintptr) {
 	checkLookupIndexBounds(indexes, rows)
 	for i, j := range indexes {

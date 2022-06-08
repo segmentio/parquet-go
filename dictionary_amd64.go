@@ -88,6 +88,12 @@ func (d *uint64Dictionary) lookup(indexes []int32, rows array, size, offset uint
 	dictionaryLookup64bits(d.values, indexes, rows, size, offset).check()
 }
 
+func (d *be128Dictionary) lookupString(indexes []int32, rows array, size, offset uintptr) {
+	checkLookupIndexBounds(indexes, rows)
+	dict := bits.Uint128ToBytes(d.values)
+	dictionaryLookupFixedLenByteArrayString(dict, 16, indexes, rows, size, offset).check()
+}
+
 func (d *be128Dictionary) lookupPointer(indexes []int32, rows array, size, offset uintptr) {
 	checkLookupIndexBounds(indexes, rows)
 	dict := bits.Uint128ToBytes(d.values)

@@ -1043,9 +1043,9 @@ func (d *be128Dictionary) insertValues(indexes []int32, count int, valueAt func(
 }
 
 func (d *be128Dictionary) Lookup(indexes []int32, values []Value) {
-	model := d.makeValue(&zeroBE128) // pre-assign the length 16 to all values
+	model := d.makeValueString("")
 	memsetValues(values, model)
-	d.lookupPointer(indexes, makeArrayValue(values), unsafe.Sizeof(model), unsafe.Offsetof(model.ptr))
+	d.lookupString(indexes, makeArrayValue(values), unsafe.Sizeof(model), unsafe.Offsetof(model.ptr))
 }
 
 func (d *be128Dictionary) Bounds(indexes []int32) (min, max Value) {
