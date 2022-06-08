@@ -5,11 +5,10 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"math/bits"
 
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/format"
-
-	. "math/bits"
 )
 
 const (
@@ -179,7 +178,7 @@ func blockBitWidthsInt32(bitWidths *[numMiniBlocks]byte, block *[blockSize]int32
 		bitWidth := 0
 
 		for _, v := range block[j:k] {
-			if n := Len32(uint32(v)); n > bitWidth {
+			if n := bits.Len32(uint32(v)); n > bitWidth {
 				bitWidth = n
 			}
 		}
@@ -227,7 +226,7 @@ func blockBitWidthsInt64(bitWidths *[numMiniBlocks]byte, block *[blockSize]int64
 		bitWidth := 0
 
 		for _, v := range block[j:k] {
-			if n := Len64(uint64(v)); n > bitWidth {
+			if n := bits.Len64(uint64(v)); n > bitWidth {
 				bitWidth = n
 			}
 		}
