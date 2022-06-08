@@ -621,7 +621,7 @@ func (page *int32Page) Values() ValueReader { return &int32PageValues{page: page
 
 func (page *int32Page) Buffer() BufferedPage { return page }
 
-func (page *int32Page) min() int32 { return bits.MinInt32(page.values) }
+func (page *int32Page) min() int32 { return minInt32(page.values) }
 
 func (page *int32Page) max() int32 { return bits.MaxInt32(page.values) }
 
@@ -696,7 +696,7 @@ func (page *int64Page) Values() ValueReader { return &int64PageValues{page: page
 
 func (page *int64Page) Buffer() BufferedPage { return page }
 
-func (page *int64Page) min() int64 { return bits.MinInt64(page.values) }
+func (page *int64Page) min() int64 { return minInt64(page.values) }
 
 func (page *int64Page) max() int64 { return bits.MaxInt64(page.values) }
 
@@ -848,7 +848,7 @@ func (page *floatPage) Values() ValueReader { return &floatPageValues{page: page
 
 func (page *floatPage) Buffer() BufferedPage { return page }
 
-func (page *floatPage) min() float32 { return bits.MinFloat32(page.values) }
+func (page *floatPage) min() float32 { return minFloat32(page.values) }
 
 func (page *floatPage) max() float32 { return bits.MaxFloat32(page.values) }
 
@@ -923,7 +923,7 @@ func (page *doublePage) Values() ValueReader { return &doublePageValues{page: pa
 
 func (page *doublePage) Buffer() BufferedPage { return page }
 
-func (page *doublePage) min() float64 { return bits.MinFloat64(page.values) }
+func (page *doublePage) min() float64 { return minFloat64(page.values) }
 
 func (page *doublePage) max() float64 { return bits.MaxFloat64(page.values) }
 
@@ -1177,7 +1177,7 @@ func (page *fixedLenByteArrayPage) Values() ValueReader {
 func (page *fixedLenByteArrayPage) Buffer() BufferedPage { return page }
 
 func (page *fixedLenByteArrayPage) min() []byte {
-	return bits.MinFixedLenByteArray(page.size, page.data)
+	return minFixedLenByteArray(page.size, page.data)
 }
 
 func (page *fixedLenByteArrayPage) max() []byte {
@@ -1265,7 +1265,7 @@ func (page *uint32Page) Values() ValueReader { return &uint32PageValues{page: pa
 
 func (page *uint32Page) Buffer() BufferedPage { return page }
 
-func (page *uint32Page) min() uint32 { return bits.MinUint32(page.values) }
+func (page *uint32Page) min() uint32 { return minUint32(page.values) }
 
 func (page *uint32Page) max() uint32 { return bits.MaxUint32(page.values) }
 
@@ -1340,7 +1340,7 @@ func (page *uint64Page) Values() ValueReader { return &uint64PageValues{page: pa
 
 func (page *uint64Page) Buffer() BufferedPage { return page }
 
-func (page *uint64Page) min() uint64 { return bits.MinUint64(page.values) }
+func (page *uint64Page) min() uint64 { return minUint64(page.values) }
 
 func (page *uint64Page) max() uint64 { return bits.MaxUint64(page.values) }
 
@@ -1421,9 +1421,7 @@ func (page *be128Page) Values() ValueReader { return &be128PageValues{page: page
 
 func (page *be128Page) Buffer() BufferedPage { return page }
 
-func (page *be128Page) min() []byte {
-	return bits.MinFixedLenByteArray(16, page.Data())
-}
+func (page *be128Page) min() []byte { return minBE128(page.Data()) }
 
 func (page *be128Page) max() []byte {
 	return bits.MaxFixedLenByteArray(16, page.Data())
