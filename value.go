@@ -802,11 +802,6 @@ func DeepEqual(v1, v2 Value) bool {
 }
 
 var (
-	// The zero-value of a big-endian 128 bits object. This variable is used to
-	// initialize parquet.Value to a non-null, fixed-length byte arrary of size
-	// 16.
-	zeroBE128 [16]byte
-
 	_ fmt.Formatter = Value{}
 	_ fmt.Stringer  = Value{}
 )
