@@ -8,7 +8,6 @@ import (
 
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/format"
-	"github.com/segmentio/parquet-go/internal/bits"
 
 	. "math/bits"
 )
@@ -391,7 +390,10 @@ func (e *BinaryPackedEncoding) decode(src []byte, observe func(int64)) ([]byte, 
 			}
 		}
 
-		bits.AddInt64(block, minDelta)
+		for i := range block {
+			block[i] += minDelta
+		}
+
 		block[0] += lastValue
 		for i := 1; i < len(block); i++ {
 			block[i] += block[i-1]
