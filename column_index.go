@@ -5,6 +5,7 @@ import (
 	"github.com/segmentio/parquet-go/encoding/plain"
 	"github.com/segmentio/parquet-go/format"
 	"github.com/segmentio/parquet-go/internal/bits"
+	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 type ColumnIndex interface {
@@ -321,8 +322,8 @@ func (i *booleanColumnIndexer) IndexPage(numValues, numNulls int64, min, max Val
 
 func (i *booleanColumnIndexer) ColumnIndex() format.ColumnIndex {
 	return i.columnIndex(
-		splitFixedLenByteArrays(bits.BoolToBytes(i.minValues), 1),
-		splitFixedLenByteArrays(bits.BoolToBytes(i.maxValues), 1),
+		splitFixedLenByteArrays(unsafecast.BoolToBytes(i.minValues), 1),
+		splitFixedLenByteArrays(unsafecast.BoolToBytes(i.maxValues), 1),
 		bits.OrderOfBool(i.minValues),
 		bits.OrderOfBool(i.maxValues),
 	)
@@ -352,8 +353,8 @@ func (i *int32ColumnIndexer) IndexPage(numValues, numNulls int64, min, max Value
 
 func (i *int32ColumnIndexer) ColumnIndex() format.ColumnIndex {
 	return i.columnIndex(
-		splitFixedLenByteArrays(bits.Int32ToBytes(i.minValues), 4),
-		splitFixedLenByteArrays(bits.Int32ToBytes(i.maxValues), 4),
+		splitFixedLenByteArrays(unsafecast.Int32ToBytes(i.minValues), 4),
+		splitFixedLenByteArrays(unsafecast.Int32ToBytes(i.maxValues), 4),
 		bits.OrderOfInt32(i.minValues),
 		bits.OrderOfInt32(i.maxValues),
 	)
@@ -383,8 +384,8 @@ func (i *int64ColumnIndexer) IndexPage(numValues, numNulls int64, min, max Value
 
 func (i *int64ColumnIndexer) ColumnIndex() format.ColumnIndex {
 	return i.columnIndex(
-		splitFixedLenByteArrays(bits.Int64ToBytes(i.minValues), 8),
-		splitFixedLenByteArrays(bits.Int64ToBytes(i.maxValues), 8),
+		splitFixedLenByteArrays(unsafecast.Int64ToBytes(i.minValues), 8),
+		splitFixedLenByteArrays(unsafecast.Int64ToBytes(i.maxValues), 8),
 		bits.OrderOfInt64(i.minValues),
 		bits.OrderOfInt64(i.maxValues),
 	)
@@ -445,8 +446,8 @@ func (i *floatColumnIndexer) IndexPage(numValues, numNulls int64, min, max Value
 
 func (i *floatColumnIndexer) ColumnIndex() format.ColumnIndex {
 	return i.columnIndex(
-		splitFixedLenByteArrays(bits.Float32ToBytes(i.minValues), 4),
-		splitFixedLenByteArrays(bits.Float32ToBytes(i.maxValues), 4),
+		splitFixedLenByteArrays(unsafecast.Float32ToBytes(i.minValues), 4),
+		splitFixedLenByteArrays(unsafecast.Float32ToBytes(i.maxValues), 4),
 		bits.OrderOfFloat32(i.minValues),
 		bits.OrderOfFloat32(i.maxValues),
 	)
@@ -476,8 +477,8 @@ func (i *doubleColumnIndexer) IndexPage(numValues, numNulls int64, min, max Valu
 
 func (i *doubleColumnIndexer) ColumnIndex() format.ColumnIndex {
 	return i.columnIndex(
-		splitFixedLenByteArrays(bits.Float64ToBytes(i.minValues), 8),
-		splitFixedLenByteArrays(bits.Float64ToBytes(i.maxValues), 8),
+		splitFixedLenByteArrays(unsafecast.Float64ToBytes(i.minValues), 8),
+		splitFixedLenByteArrays(unsafecast.Float64ToBytes(i.maxValues), 8),
 		bits.OrderOfFloat64(i.minValues),
 		bits.OrderOfFloat64(i.maxValues),
 	)
@@ -593,8 +594,8 @@ func (i *uint32ColumnIndexer) IndexPage(numValues, numNulls int64, min, max Valu
 
 func (i *uint32ColumnIndexer) ColumnIndex() format.ColumnIndex {
 	return i.columnIndex(
-		splitFixedLenByteArrays(bits.Uint32ToBytes(i.minValues), 4),
-		splitFixedLenByteArrays(bits.Uint32ToBytes(i.maxValues), 4),
+		splitFixedLenByteArrays(unsafecast.Uint32ToBytes(i.minValues), 4),
+		splitFixedLenByteArrays(unsafecast.Uint32ToBytes(i.maxValues), 4),
 		bits.OrderOfUint32(i.minValues),
 		bits.OrderOfUint32(i.maxValues),
 	)
@@ -624,8 +625,8 @@ func (i *uint64ColumnIndexer) IndexPage(numValues, numNulls int64, min, max Valu
 
 func (i *uint64ColumnIndexer) ColumnIndex() format.ColumnIndex {
 	return i.columnIndex(
-		splitFixedLenByteArrays(bits.Uint64ToBytes(i.minValues), 8),
-		splitFixedLenByteArrays(bits.Uint64ToBytes(i.maxValues), 8),
+		splitFixedLenByteArrays(unsafecast.Uint64ToBytes(i.minValues), 8),
+		splitFixedLenByteArrays(unsafecast.Uint64ToBytes(i.maxValues), 8),
 		bits.OrderOfUint64(i.minValues),
 		bits.OrderOfUint64(i.maxValues),
 	)
@@ -658,8 +659,8 @@ func (i *be128ColumnIndexer) IndexPage(numValues, numNulls int64, min, max Value
 }
 
 func (i *be128ColumnIndexer) ColumnIndex() format.ColumnIndex {
-	minValues := splitFixedLenByteArrays(bits.Uint128ToBytes(i.minValues), 16)
-	maxValues := splitFixedLenByteArrays(bits.Uint128ToBytes(i.maxValues), 16)
+	minValues := splitFixedLenByteArrays(unsafecast.Uint128ToBytes(i.minValues), 16)
+	maxValues := splitFixedLenByteArrays(unsafecast.Uint128ToBytes(i.maxValues), 16)
 	return i.columnIndex(
 		minValues,
 		maxValues,

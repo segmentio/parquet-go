@@ -2,6 +2,8 @@ package bits
 
 import (
 	"bytes"
+
+	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 func OrderOfBool(data []bool) int {
@@ -34,14 +36,14 @@ func OrderOfBool(data []bool) int {
 }
 
 func streakOfTrue(data []bool) int {
-	if i := bytes.IndexByte(BoolToBytes(data), 0); i >= 0 {
+	if i := bytes.IndexByte(unsafecast.BoolToBytes(data), 0); i >= 0 {
 		return i
 	}
 	return len(data)
 }
 
 func streakOfFalse(data []bool) int {
-	if i := bytes.IndexByte(BoolToBytes(data), 1); i >= 0 {
+	if i := bytes.IndexByte(unsafecast.BoolToBytes(data), 1); i >= 0 {
 		return i
 	}
 	return len(data)

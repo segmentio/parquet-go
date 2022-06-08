@@ -1,10 +1,20 @@
 package parquet
 
-import "unsafe"
+import (
+	"unsafe"
+)
 
 type array struct {
 	ptr unsafe.Pointer
 	len int
+}
+
+func makeArray(ptr unsafe.Pointer, len int) array {
+	return array{ptr: ptr, len: len}
+}
+
+func makeArrayBool(values []bool) array {
+	return *(*array)(unsafe.Pointer(&values))
 }
 
 func makeArrayString(values []string) array {

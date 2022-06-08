@@ -9,6 +9,7 @@ import (
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding/plain"
 	"github.com/segmentio/parquet-go/internal/bits"
+	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 // Page values represent sequences of parquet values. From the Parquet
@@ -591,7 +592,7 @@ type int32Page struct {
 func newInt32Page(typ Type, columnIndex int16, numValues int32, values []byte) *int32Page {
 	return &int32Page{
 		typ:         typ,
-		values:      bits.BytesToInt32(values)[:numValues],
+		values:      unsafecast.BytesToInt32(values)[:numValues],
 		columnIndex: ^columnIndex,
 	}
 }
@@ -614,7 +615,7 @@ func (page *int32Page) RepetitionLevels() []byte { return nil }
 
 func (page *int32Page) DefinitionLevels() []byte { return nil }
 
-func (page *int32Page) Data() []byte { return bits.Int32ToBytes(page.values) }
+func (page *int32Page) Data() []byte { return unsafecast.Int32ToBytes(page.values) }
 
 func (page *int32Page) Values() ValueReader { return &int32PageValues{page: page} }
 
@@ -666,7 +667,7 @@ type int64Page struct {
 func newInt64Page(typ Type, columnIndex int16, numValues int32, values []byte) *int64Page {
 	return &int64Page{
 		typ:         typ,
-		values:      bits.BytesToInt64(values)[:numValues],
+		values:      unsafecast.BytesToInt64(values)[:numValues],
 		columnIndex: ^columnIndex,
 	}
 }
@@ -689,7 +690,7 @@ func (page *int64Page) RepetitionLevels() []byte { return nil }
 
 func (page *int64Page) DefinitionLevels() []byte { return nil }
 
-func (page *int64Page) Data() []byte { return bits.Int64ToBytes(page.values) }
+func (page *int64Page) Data() []byte { return unsafecast.Int64ToBytes(page.values) }
 
 func (page *int64Page) Values() ValueReader { return &int64PageValues{page: page} }
 
@@ -818,7 +819,7 @@ type floatPage struct {
 func newFloatPage(typ Type, columnIndex int16, numValues int32, values []byte) *floatPage {
 	return &floatPage{
 		typ:         typ,
-		values:      bits.BytesToFloat32(values)[:numValues],
+		values:      unsafecast.BytesToFloat32(values)[:numValues],
 		columnIndex: ^columnIndex,
 	}
 }
@@ -841,7 +842,7 @@ func (page *floatPage) RepetitionLevels() []byte { return nil }
 
 func (page *floatPage) DefinitionLevels() []byte { return nil }
 
-func (page *floatPage) Data() []byte { return bits.Float32ToBytes(page.values) }
+func (page *floatPage) Data() []byte { return unsafecast.Float32ToBytes(page.values) }
 
 func (page *floatPage) Values() ValueReader { return &floatPageValues{page: page} }
 
@@ -893,7 +894,7 @@ type doublePage struct {
 func newDoublePage(typ Type, columnIndex int16, numValues int32, values []byte) *doublePage {
 	return &doublePage{
 		typ:         typ,
-		values:      bits.BytesToFloat64(values)[:numValues],
+		values:      unsafecast.BytesToFloat64(values)[:numValues],
 		columnIndex: ^columnIndex,
 	}
 }
@@ -916,7 +917,7 @@ func (page *doublePage) RepetitionLevels() []byte { return nil }
 
 func (page *doublePage) DefinitionLevels() []byte { return nil }
 
-func (page *doublePage) Data() []byte { return bits.Float64ToBytes(page.values) }
+func (page *doublePage) Data() []byte { return unsafecast.Float64ToBytes(page.values) }
 
 func (page *doublePage) Values() ValueReader { return &doublePageValues{page: page} }
 
@@ -1235,7 +1236,7 @@ type uint32Page struct {
 func newUint32Page(typ Type, columnIndex int16, numValues int32, values []byte) *uint32Page {
 	return &uint32Page{
 		typ:         typ,
-		values:      bits.BytesToUint32(values)[:numValues],
+		values:      unsafecast.BytesToUint32(values)[:numValues],
 		columnIndex: ^columnIndex,
 	}
 }
@@ -1258,7 +1259,7 @@ func (page *uint32Page) RepetitionLevels() []byte { return nil }
 
 func (page *uint32Page) DefinitionLevels() []byte { return nil }
 
-func (page *uint32Page) Data() []byte { return bits.Uint32ToBytes(page.values) }
+func (page *uint32Page) Data() []byte { return unsafecast.Uint32ToBytes(page.values) }
 
 func (page *uint32Page) Values() ValueReader { return &uint32PageValues{page: page} }
 
@@ -1310,7 +1311,7 @@ type uint64Page struct {
 func newUint64Page(typ Type, columnIndex int16, numValues int32, values []byte) *uint64Page {
 	return &uint64Page{
 		typ:         typ,
-		values:      bits.BytesToUint64(values)[:numValues],
+		values:      unsafecast.BytesToUint64(values)[:numValues],
 		columnIndex: ^columnIndex,
 	}
 }
@@ -1333,7 +1334,7 @@ func (page *uint64Page) RepetitionLevels() []byte { return nil }
 
 func (page *uint64Page) DefinitionLevels() []byte { return nil }
 
-func (page *uint64Page) Data() []byte { return bits.Uint64ToBytes(page.values) }
+func (page *uint64Page) Data() []byte { return unsafecast.Uint64ToBytes(page.values) }
 
 func (page *uint64Page) Values() ValueReader { return &uint64PageValues{page: page} }
 
@@ -1391,7 +1392,7 @@ func newBE128Page(typ Type, columnIndex int16, numValues int32, data []byte) *be
 	}
 	return &be128Page{
 		typ:         typ,
-		values:      bits.BytesToUint128(data),
+		values:      unsafecast.BytesToUint128(data),
 		columnIndex: ^columnIndex,
 	}
 }
@@ -1414,7 +1415,7 @@ func (page *be128Page) RepetitionLevels() []byte { return nil }
 
 func (page *be128Page) DefinitionLevels() []byte { return nil }
 
-func (page *be128Page) Data() []byte { return bits.Uint128ToBytes(page.values) }
+func (page *be128Page) Data() []byte { return unsafecast.Uint128ToBytes(page.values) }
 
 func (page *be128Page) Values() ValueReader { return &be128PageValues{page: page} }
 

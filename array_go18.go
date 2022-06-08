@@ -2,13 +2,14 @@
 
 package parquet
 
-import "unsafe"
+import (
+	"unsafe"
 
-func makeArray[T any](s []T) array {
-	return array{
-		ptr: *(*unsafe.Pointer)(unsafe.Pointer(&s)),
-		len: len(s),
-	}
+	"github.com/segmentio/parquet-go/internal/unsafecast"
+)
+
+func makeArrayOf[T any](s []T) array {
+	return makeArray(unsafecast.PointerOf(s), len(s))
 }
 
 func makeSlice[T any](a array) []T {

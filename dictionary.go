@@ -9,6 +9,7 @@ import (
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/encoding/plain"
 	"github.com/segmentio/parquet-go/internal/bits"
+	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 const (
@@ -206,7 +207,7 @@ func newInt32Dictionary(typ Type, columnIndex int16, numValues int32, values []b
 	return &int32Dictionary{
 		int32Page: int32Page{
 			typ:         typ,
-			values:      bits.BytesToInt32(values)[:numValues],
+			values:      unsafecast.BytesToInt32(values)[:numValues],
 			columnIndex: ^columnIndex,
 		},
 	}
@@ -282,7 +283,7 @@ func newInt64Dictionary(typ Type, columnIndex int16, numValues int32, values []b
 	return &int64Dictionary{
 		int64Page: int64Page{
 			typ:         typ,
-			values:      bits.BytesToInt64(values)[:numValues],
+			values:      unsafecast.BytesToInt64(values)[:numValues],
 			columnIndex: ^columnIndex,
 		},
 	}
@@ -453,7 +454,7 @@ func newFloatDictionary(typ Type, columnIndex int16, numValues int32, values []b
 	return &floatDictionary{
 		floatPage: floatPage{
 			typ:         typ,
-			values:      bits.BytesToFloat32(values)[:numValues],
+			values:      unsafecast.BytesToFloat32(values)[:numValues],
 			columnIndex: ^columnIndex,
 		},
 	}
@@ -529,7 +530,7 @@ func newDoubleDictionary(typ Type, columnIndex int16, numValues int32, values []
 	return &doubleDictionary{
 		doublePage: doublePage{
 			typ:         typ,
-			values:      bits.BytesToFloat64(values)[:numValues],
+			values:      unsafecast.BytesToFloat64(values)[:numValues],
 			columnIndex: ^columnIndex,
 		},
 	}
@@ -677,7 +678,7 @@ func (d *byteArrayDictionary) Lookup(indexes []int32, values []Value) {
 func (d *byteArrayDictionary) Bounds(indexes []int32) (min, max Value) {
 	if len(indexes) > 0 {
 		base := d.index(indexes[0])
-		minValue := *(*string)(unsafe.Pointer(&base))
+		minValue := unsafecast.BytesToString(base)
 		maxValue := minValue
 		values := [64]string{}
 
@@ -794,7 +795,7 @@ func (d *fixedLenByteArrayDictionary) Lookup(indexes []int32, values []Value) {
 func (d *fixedLenByteArrayDictionary) Bounds(indexes []int32) (min, max Value) {
 	if len(indexes) > 0 {
 		base := d.index(indexes[0])
-		minValue := *(*string)(unsafe.Pointer(&base))
+		minValue := unsafecast.BytesToString(base)
 		maxValue := minValue
 		values := [64]string{}
 
@@ -840,7 +841,7 @@ func newUint32Dictionary(typ Type, columnIndex int16, numValues int32, data []by
 	return &uint32Dictionary{
 		uint32Page: uint32Page{
 			typ:         typ,
-			values:      bits.BytesToUint32(data)[:numValues],
+			values:      unsafecast.BytesToUint32(data)[:numValues],
 			columnIndex: ^columnIndex,
 		},
 	}
@@ -916,7 +917,7 @@ func newUint64Dictionary(typ Type, columnIndex int16, numValues int32, data []by
 	return &uint64Dictionary{
 		uint64Page: uint64Page{
 			typ:         typ,
-			values:      bits.BytesToUint64(data),
+			values:      unsafecast.BytesToUint64(data),
 			columnIndex: ^columnIndex,
 		},
 	}
@@ -992,7 +993,7 @@ func newBE128Dictionary(typ Type, columnIndex int16, numValues int32, data []byt
 	return &be128Dictionary{
 		be128Page: be128Page{
 			typ:         typ,
-			values:      bits.BytesToUint128(data),
+			values:      unsafecast.BytesToUint128(data),
 			columnIndex: ^columnIndex,
 		},
 	}
@@ -1117,7 +1118,7 @@ func newIndexedPage(typ *indexedType, columnIndex int16, numValues int32, values
 
 	return &indexedPage{
 		typ:         typ,
-		values:      bits.BytesToInt32(values[:size]),
+		values:      unsafecast.BytesToInt32(values[:size]),
 		columnIndex: ^columnIndex,
 	}
 }
@@ -1140,7 +1141,7 @@ func (page *indexedPage) RepetitionLevels() []byte { return nil }
 
 func (page *indexedPage) DefinitionLevels() []byte { return nil }
 
-func (page *indexedPage) Data() []byte { return bits.Int32ToBytes(page.values) }
+func (page *indexedPage) Data() []byte { return unsafecast.Int32ToBytes(page.values) }
 
 func (page *indexedPage) Values() ValueReader { return &indexedPageValues{page: page} }
 

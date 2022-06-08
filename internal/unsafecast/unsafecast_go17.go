@@ -1,8 +1,23 @@
 //go:build !go1.18
 
-package bits
+package unsafecast
 
-import "unsafe"
+import (
+	"reflect"
+	"unsafe"
+)
+
+func AddressOfBytes(data []byte) *byte {
+	return *(**byte)(unsafe.Pointer(&data))
+}
+
+func AddressOfString(data string) *byte {
+	return *(**byte)(unsafe.Pointer(&data))
+}
+
+func PointerOfValue(value reflect.Value) unsafe.Pointer {
+	return (*[2]unsafe.Pointer)(unsafe.Pointer(&value))[1]
+}
 
 func BoolToBytes(data []bool) []byte {
 	return unsafe.Slice(*(**byte)(unsafe.Pointer(&data)), len(data))

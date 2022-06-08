@@ -7,6 +7,7 @@ import (
 
 	"github.com/segmentio/parquet-go/internal/bits"
 	"github.com/segmentio/parquet-go/internal/quick"
+	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 func TestMaxBool(t *testing.T) {
@@ -174,7 +175,7 @@ func TestMaxFixedLenByteArray16(t *testing.T) {
 				}
 			}
 		}
-		ret := bits.MaxFixedLenByteArray(16, bits.Uint128ToBytes(values))
+		ret := bits.MaxFixedLenByteArray(16, unsafecast.Uint128ToBytes(values))
 		return (len(values) == 0 && ret == nil) || bytes.Equal(max[:], ret)
 	})
 	if err != nil {

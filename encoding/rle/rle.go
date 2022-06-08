@@ -15,6 +15,7 @@ import (
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/format"
 	"github.com/segmentio/parquet-go/internal/bits"
+	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 const (
@@ -59,7 +60,7 @@ func (e *Encoding) EncodeInt32(dst, src []byte) ([]byte, error) {
 	if (len(src) % 4) != 0 {
 		return dst[:0], encoding.ErrEncodeInvalidInputSize(e, "INT32", len(src))
 	}
-	dst, err := encodeInt32(dst[:0], bits.BytesToInt32(src), uint(e.BitWidth))
+	dst, err := encodeInt32(dst[:0], unsafecast.BytesToInt32(src), uint(e.BitWidth))
 	return dst, e.wrap(err)
 }
 
@@ -197,7 +198,7 @@ func encodeInt32(dst []byte, src []int32, bitWidth uint) ([]byte, error) {
 		return dst, errEncodeInvalidBitWidth("INT32", bitWidth)
 	}
 	if bitWidth == 0 {
-		if !isZeroInt32(src) {
+		if !isZero(unsafecast.Int32ToBytes(src)) {
 			return dst, errEncodeInvalidBitWidth("INT32", bitWidth)
 		}
 		return appendUvarint(dst, uint64(len(src))<<1), nil
@@ -497,14 +498,6 @@ func isZero(data []byte) bool {
 
 func isOnes(data []byte) bool {
 	return count(data, 0xFF) == len(data)
-}
-
-func isZeroInt8(data []int8) bool {
-	return isZero(bits.Int8ToBytes(data))
-}
-
-func isZeroInt32(data []int32) bool {
-	return isZero(bits.Int32ToBytes(data))
 }
 
 func resize(buf []byte, size int) []byte {

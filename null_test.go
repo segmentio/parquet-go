@@ -47,7 +47,7 @@ func testNullIndex[T comparable](t *testing.T) {
 				}
 			}
 
-			array := makeArray(data)
+			array := makeArrayOf(data)
 			nullIndex[T](want, array, size, 0)
 			nullIndexFuncOf(reflect.TypeOf(zero))(got, array, size, 0)
 
@@ -88,7 +88,7 @@ func benchmarkNullIndex[T any](b *testing.B) {
 	typ := reflect.TypeOf(zero)
 	size := unsafe.Sizeof(zero)
 	null := nullIndexFuncOf(typ)
-	data := makeArray(make([]T, N))
+	data := makeArrayOf(make([]T, N))
 	bits := make([]uint64, (N+63)/64)
 
 	b.Run(typ.String(), func(b *testing.B) {
