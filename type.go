@@ -519,7 +519,18 @@ func (t fixedLenByteArrayType) Decode(dst, src []byte, enc encoding.Encoding) ([
 	return enc.DecodeFixedLenByteArray(dst, src, t.length)
 }
 
-type be128Type struct{} // big-endian 128 bits
+// BE128 stands for "big-endian 128 bits". This type is used as a special case
+// for fixed-length byte arrays of 16 bytes, which are commonly used to
+// represent columns of random unique identifiers such as UUIDs.
+//
+// Comparisons of BE128 values use the natural byte order, the zeroth byte is
+// the most significant byte.
+//
+// The special case is intended to provide optimizations based on the knowledge
+// that the values are 16 bytes long. Stronger type checking can also be applied
+// by the compiler when using [16]byte values rather than []byte, reducing the
+// risk of seeing bugs on these common code paths.
+type be128Type struct{}
 
 func (t be128Type) String() string { return "FIXED_LEN_BYTE_ARRAY(16)" }
 
