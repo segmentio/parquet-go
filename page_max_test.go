@@ -8,153 +8,153 @@ import (
 	"github.com/segmentio/parquet-go/internal/quick"
 )
 
-func TestMinInt32(t *testing.T) {
+func TestMaxInt32(t *testing.T) {
 	err := quick.Check(func(values []int32) bool {
-		min := int32(0)
+		max := int32(0)
 		if len(values) > 0 {
-			min = values[0]
+			max = values[0]
 			for _, v := range values[1:] {
-				if v < min {
-					min = v
+				if v > max {
+					max = v
 				}
 			}
 		}
-		return min == minInt32(values)
+		return max == maxInt32(values)
 	})
 	if err != nil {
 		t.Error(err)
 	}
 }
 
-func TestMinInt64(t *testing.T) {
+func TestMaxInt64(t *testing.T) {
 	err := quick.Check(func(values []int64) bool {
-		min := int64(0)
+		max := int64(0)
 		if len(values) > 0 {
-			min = values[0]
+			max = values[0]
 			for _, v := range values[1:] {
-				if v < min {
-					min = v
+				if v > max {
+					max = v
 				}
 			}
 		}
-		return min == minInt64(values)
+		return max == maxInt64(values)
 	})
 	if err != nil {
 		t.Error(err)
 	}
 }
 
-func TestMinUint32(t *testing.T) {
+func TestMaxUint32(t *testing.T) {
 	err := quick.Check(func(values []uint32) bool {
-		min := uint32(0)
+		max := uint32(0)
 		if len(values) > 0 {
-			min = values[0]
+			max = values[0]
 			for _, v := range values[1:] {
-				if v < min {
-					min = v
+				if v > max {
+					max = v
 				}
 			}
 		}
-		return min == minUint32(values)
+		return max == maxUint32(values)
 	})
 	if err != nil {
 		t.Error(err)
 	}
 }
 
-func TestMinUint64(t *testing.T) {
+func TestMaxUint64(t *testing.T) {
 	err := quick.Check(func(values []uint64) bool {
-		min := uint64(0)
+		max := uint64(0)
 		if len(values) > 0 {
-			min = values[0]
+			max = values[0]
 			for _, v := range values[1:] {
-				if v < min {
-					min = v
+				if v > max {
+					max = v
 				}
 			}
 		}
-		return min == minUint64(values)
+		return max == maxUint64(values)
 	})
 	if err != nil {
 		t.Error(err)
 	}
 }
 
-func TestMinFloat32(t *testing.T) {
+func TestMaxFloat32(t *testing.T) {
 	err := quick.Check(func(values []float32) bool {
-		min := float32(0)
+		max := float32(0)
 		if len(values) > 0 {
-			min = values[0]
+			max = values[0]
 			for _, v := range values[1:] {
-				if v < min {
-					min = v
+				if v > max {
+					max = v
 				}
 			}
 		}
-		return min == minFloat32(values)
+		return max == maxFloat32(values)
 	})
 	if err != nil {
 		t.Error(err)
 	}
 }
 
-func TestMinFloat64(t *testing.T) {
+func TestMaxFloat64(t *testing.T) {
 	err := quick.Check(func(values []float64) bool {
-		min := float64(0)
+		max := float64(0)
 		if len(values) > 0 {
-			min = values[0]
+			max = values[0]
 			for _, v := range values[1:] {
-				if v < min {
-					min = v
+				if v > max {
+					max = v
 				}
 			}
 		}
-		return min == minFloat64(values)
+		return max == maxFloat64(values)
 	})
 	if err != nil {
 		t.Error(err)
 	}
 }
 
-func TestMinFixedLenByteArray(t *testing.T) {
+func TestMaxFixedLenByteArray(t *testing.T) {
 	err := quick.Check(func(values []byte) bool {
-		min := [1]byte{}
+		max := [1]byte{}
 		if len(values) > 0 {
-			min[0] = values[0]
+			max[0] = values[0]
 			for _, v := range values[1:] {
-				if v < min[0] {
-					min[0] = v
+				if v > max[0] {
+					max[0] = v
 				}
 			}
 		}
-		ret := minFixedLenByteArray(values, 1)
-		return (len(values) == 0 && ret == nil) || bytes.Equal(min[:], ret)
+		ret := maxFixedLenByteArray(values, 1)
+		return (len(values) == 0 && ret == nil) || bytes.Equal(max[:], ret)
 	})
 	if err != nil {
 		t.Error(err)
 	}
 }
 
-func TestMinBE128(t *testing.T) {
+func TestMaxBE128(t *testing.T) {
 	err := quick.Check(func(values [][16]byte) bool {
-		min := [16]byte{}
+		max := [16]byte{}
 		if len(values) > 0 {
-			min = values[0]
+			max = values[0]
 			for _, v := range values[1:] {
-				if bytes.Compare(v[:], min[:]) < 0 {
-					min = v
+				if bytes.Compare(v[:], max[:]) > 0 {
+					max = v
 				}
 			}
 		}
-		ret := minBE128(values)
-		return (len(values) == 0 && ret == nil) || bytes.Equal(min[:], ret)
+		ret := maxBE128(values)
+		return (len(values) == 0 && ret == nil) || bytes.Equal(max[:], ret)
 	})
 	if err != nil {
 		t.Error(err)
 	}
 }
 
-func BenchmarkMinInt32(b *testing.B) {
+func BenchmarkMaxInt32(b *testing.B) {
 	forEachBenchmarkBufferSize(b, func(b *testing.B, bufferSize int) {
 		values := make([]int32, bufferSize/4)
 		prng := rand.New(rand.NewSource(1))
@@ -162,12 +162,12 @@ func BenchmarkMinInt32(b *testing.B) {
 			values[i] = prng.Int31()
 		}
 		for i := 0; i < b.N; i++ {
-			minInt32(values)
+			maxInt32(values)
 		}
 	})
 }
 
-func BenchmarkMinInt64(b *testing.B) {
+func BenchmarkMaxInt64(b *testing.B) {
 	forEachBenchmarkBufferSize(b, func(b *testing.B, bufferSize int) {
 		values := make([]int64, bufferSize/8)
 		prng := rand.New(rand.NewSource(1))
@@ -175,12 +175,12 @@ func BenchmarkMinInt64(b *testing.B) {
 			values[i] = prng.Int63()
 		}
 		for i := 0; i < b.N; i++ {
-			minInt64(values)
+			maxInt64(values)
 		}
 	})
 }
 
-func BenchmarkMinUint32(b *testing.B) {
+func BenchmarkMaxUint32(b *testing.B) {
 	forEachBenchmarkBufferSize(b, func(b *testing.B, bufferSize int) {
 		values := make([]uint32, bufferSize/4)
 		prng := rand.New(rand.NewSource(1))
@@ -188,12 +188,12 @@ func BenchmarkMinUint32(b *testing.B) {
 			values[i] = prng.Uint32()
 		}
 		for i := 0; i < b.N; i++ {
-			minUint32(values)
+			maxUint32(values)
 		}
 	})
 }
 
-func BenchmarkMinUint64(b *testing.B) {
+func BenchmarkMaxUint64(b *testing.B) {
 	forEachBenchmarkBufferSize(b, func(b *testing.B, bufferSize int) {
 		values := make([]uint64, bufferSize/8)
 		prng := rand.New(rand.NewSource(1))
@@ -201,12 +201,12 @@ func BenchmarkMinUint64(b *testing.B) {
 			values[i] = prng.Uint64()
 		}
 		for i := 0; i < b.N; i++ {
-			minUint64(values)
+			maxUint64(values)
 		}
 	})
 }
 
-func BenchmarkMinFloat32(b *testing.B) {
+func BenchmarkMaxFloat32(b *testing.B) {
 	forEachBenchmarkBufferSize(b, func(b *testing.B, bufferSize int) {
 		values := make([]float32, bufferSize/4)
 		prng := rand.New(rand.NewSource(1))
@@ -214,12 +214,12 @@ func BenchmarkMinFloat32(b *testing.B) {
 			values[i] = prng.Float32()
 		}
 		for i := 0; i < b.N; i++ {
-			minFloat32(values)
+			maxFloat32(values)
 		}
 	})
 }
 
-func BenchmarkMinFloat64(b *testing.B) {
+func BenchmarkMaxFloat64(b *testing.B) {
 	forEachBenchmarkBufferSize(b, func(b *testing.B, bufferSize int) {
 		values := make([]float64, bufferSize/8)
 		prng := rand.New(rand.NewSource(1))
@@ -227,12 +227,12 @@ func BenchmarkMinFloat64(b *testing.B) {
 			values[i] = prng.Float64()
 		}
 		for i := 0; i < b.N; i++ {
-			minFloat64(values)
+			maxFloat64(values)
 		}
 	})
 }
 
-func BenchmarkMinBE128(b *testing.B) {
+func BenchmarkMaxBE128(b *testing.B) {
 	forEachBenchmarkBufferSize(b, func(b *testing.B, bufferSize int) {
 		values := make([][16]byte, bufferSize)
 		prng := rand.New(rand.NewSource(1))
@@ -240,18 +240,18 @@ func BenchmarkMinBE128(b *testing.B) {
 			prng.Read(values[i][:])
 		}
 		for i := 0; i < b.N; i++ {
-			minBE128(values)
+			maxBE128(values)
 		}
 	})
 }
 
-func BenchmarkMinFixedLenByteArray(b *testing.B) {
+func BenchmarkMaxFixedLenByteArray(b *testing.B) {
 	forEachBenchmarkBufferSize(b, func(b *testing.B, bufferSize int) {
 		values := make([]byte, bufferSize)
 		prng := rand.New(rand.NewSource(1))
 		prng.Read(values)
 		for i := 0; i < b.N; i++ {
-			minFixedLenByteArray(values, 10)
+			maxFixedLenByteArray(values, 10)
 		}
 	})
 }
