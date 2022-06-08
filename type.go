@@ -529,7 +529,7 @@ func (t fixedLenByteArrayType) Decode(dst, src []byte, enc encoding.Encoding) ([
 // The special case is intended to provide optimizations based on the knowledge
 // that the values are 16 bytes long. Stronger type checking can also be applied
 // by the compiler when using [16]byte values rather than []byte, reducing the
-// risk of seeing bugs on these common code paths.
+// risk of errors on these common code paths.
 type be128Type struct{}
 
 func (t be128Type) String() string { return "FIXED_LEN_BYTE_ARRAY(16)" }
