@@ -2,8 +2,8 @@
 
 #include "textflag.h"
 
-// func countByte(data []byte, value byte) int
-TEXT ·countByte(SB), NOSPLIT, $0-40
+// func Count(data []byte, value byte) int
+TEXT ·Count(SB), NOSPLIT, $0-40
     MOVQ data_base+0(FP), AX
     MOVQ data_len+8(FP), CX
     MOVQ value+24(FP), BX
@@ -11,22 +11,19 @@ TEXT ·countByte(SB), NOSPLIT, $0-40
     ADDQ AX, CX // end
     XORQ SI, SI // count
 
-    CMPQ DX, $0
-    JE done
-
     CMPQ DX, $256
-    JB loop
+    JB test
+
+    CMPB ·hasAVX2(SB), $0
+    JE test
 
     XORQ R12, R12
     XORQ R13, R13
     XORQ R14, R14
     XORQ R15, R15
 
-    CMPB ·hasAVX512CountByte(SB), $0
+    CMPB ·hasAVX512Count(SB), $0
     JE initAVX2
-
-    CMPQ DX, $256
-    JB initAVX2
 
     SHRQ $8, DX
     SHLQ $8, DX
@@ -61,6 +58,7 @@ loopAVX512:
     ADDQ R13, SI
     ADDQ R15, SI
     JMP doneAVX
+
 initAVX2:
     SHRQ $6, DX
     SHLQ $6, DX
@@ -82,10 +80,11 @@ loopAVX2:
     JNE loopAVX2
     ADDQ R14, SI
     ADDQ R15, SI
+
 doneAVX:
     VZEROUPPER
-    CMPQ AX, CX
-    JE done
+    JMP test
+
 loop:
     MOVQ SI, DI
     INCQ DI
@@ -93,6 +92,7 @@ loop:
     CMPB BX, R8
     CMOVQEQ DI, SI
     INCQ AX
+test:
     CMPQ AX, CX
     JNE loop
 done:

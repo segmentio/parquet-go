@@ -1,9 +1,9 @@
 //go:build purego || !amd64
 
-package bits
+package bytealg
 
 import "bytes"
 
-func countByte(data []byte, value byte) int {
+func Count(data []byte, value byte) int {
 	return bytes.Count(data, []byte{value})
 }

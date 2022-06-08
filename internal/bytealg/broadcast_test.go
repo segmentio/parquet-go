@@ -1,11 +1,13 @@
-package parquet
+package bytealg_test
 
 import (
 	"fmt"
 	"testing"
+
+	"github.com/segmentio/parquet-go/internal/bytealg"
 )
 
-func TestMemset(t *testing.T) {
+func TestBroadcast(t *testing.T) {
 	const N = 100_0000
 	buffer := make([]byte, N)
 
@@ -17,7 +19,7 @@ func TestMemset(t *testing.T) {
 				b[i] = 0
 			}
 
-			memset(b, 42)
+			bytealg.Broadcast(b, 42)
 
 			for i, c := range b {
 				if c != 42 {
@@ -28,13 +30,13 @@ func TestMemset(t *testing.T) {
 	}
 }
 
-func BenchmarkMemset(b *testing.B) {
+func BenchmarkBroadcast(b *testing.B) {
 	for _, size := range []int{0, 10, 100, 1000, 10_000} {
 		b.Run(fmt.Sprintf("size=%d", size), func(b *testing.B) {
 			data := make([]byte, size)
 
 			for i := 0; i < b.N; i++ {
-				memset(data, 1)
+				bytealg.Broadcast(data, 1)
 			}
 
 			b.SetBytes(int64(size))

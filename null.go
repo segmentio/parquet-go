@@ -3,11 +3,11 @@
 package parquet
 
 import (
-	"bytes"
 	"reflect"
 	"unsafe"
 
 	"github.com/segmentio/parquet-go/deprecated"
+	"github.com/segmentio/parquet-go/internal/bytealg"
 	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
@@ -33,7 +33,7 @@ func nullIndex[T comparable](bits []uint64, rows array, size, offset uintptr) {
 }
 
 func nullIndexStruct(bits []uint64, rows array, size, offset uintptr) {
-	memset(unsafecast.Slice[byte](bits), 0xFF)
+	bytealg.Broadcast(unsafecast.Slice[byte](bits), 0xFF)
 }
 
 func nullIndexFuncOf(t reflect.Type) nullIndexFunc {
@@ -101,11 +101,20 @@ func nullIndexFuncOfByteArray(n int) nullIndexFunc {
 		for i := 0; i < rows.len; i++ {
 			p := (*byte)(rows.index(i, size, offset))
 			b := unsafe.Slice(p, n)
-			if bytes.Count(b, []byte{0}) != n {
+			if isZero(b) {
 				x := uint(i) / 64
 				y := uint(i) % 64
 				bits[x] |= 1 << y
 			}
 		}
 	}
+}
+
+func isZero(b []byte) bool {
+	for _, c := range b {
+		if c != 0 {
+			return false
+		}
+	}
+	return true
 }

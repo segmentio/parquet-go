@@ -1,8 +1,8 @@
 //go:build purego || !amd64
 
-package parquet
+package bytealg
 
-func memset(dst []byte, src byte) {
+func Broadcast(dst []byte, src bool) {
 	for i := range dst {
 		dst[i] = src
 	}

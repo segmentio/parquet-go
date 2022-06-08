@@ -2,8 +2,8 @@
 
 #include "textflag.h"
 
-// func memsetAVX2(dst []byte, src byte)
-TEXT ·memsetAVX2(SB), NOSPLIT, $0-25
+// func broadcastAVX2(dst []byte, src byte)
+TEXT ·broadcastAVX2(SB), NOSPLIT, $0-25
     MOVQ dst_base+0(FP), AX
     MOVQ dst_len+8(FP), BX
     MOVBQZX src+24(FP), CX

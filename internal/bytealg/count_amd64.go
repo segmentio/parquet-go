@@ -1,6 +1,6 @@
 //go:build !purego
 
-package bits
+package bytealg
 
 // This function is similar to using the standard bytes.Count function with a
 // one-byte separator. However, the implementation makes use of AVX-512 when
@@ -25,4 +25,4 @@ package bits
 //
 //
 //go:noescape
-func countByte(data []byte, value byte) int
+func Count(data []byte, value byte) int
