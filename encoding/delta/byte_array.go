@@ -1,8 +1,8 @@
 package delta
 
 import (
-	"bytes"
 	"fmt"
+	"sort"
 
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/encoding/plain"
@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	maxLinearSearchPrefixLength = 128 // arbitrary
+	maxLinearSearchPrefixLength = 64 // arbitrary
 )
 
 type ByteArrayEncoding struct {
@@ -55,7 +55,7 @@ func (e *ByteArrayEncoding) EncodeByteArray(dst, src []byte) ([]byte, error) {
 		if len(v) <= maxLinearSearchPrefixLength {
 			p = linearSearchPrefixLength(lastValue, v)
 		} else {
-			p = binarySearchPrefixLength(len(lastValue)/2, lastValue, v)
+			p = binarySearchPrefixLength(lastValue, v)
 		}
 
 		prefix.values = append(prefix.values, int32(p))
@@ -229,17 +229,12 @@ func linearSearchPrefixLength(base, data []byte) (n int) {
 	return n
 }
 
-func binarySearchPrefixLength(max int, base, data []byte) int {
-	for len(base) > 0 {
-		if bytes.HasPrefix(data, base[:max]) {
-			if max == len(base) {
-				return max
-			}
-			max += (len(base)-max)/2 + 1
-		} else {
-			base = base[:max-1]
-			max /= 2
-		}
+func binarySearchPrefixLength(base, data []byte) int {
+	n := len(base)
+	if n > len(data) {
+		n = len(data)
 	}
-	return 0
+	return sort.Search(n, func(i int) bool {
+		return string(base[:i+1]) != string(data[:i+1])
+	})
 }
