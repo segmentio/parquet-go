@@ -1,4 +1,4 @@
-//go:build !go1.18 && (purego || !amd64)
+//go:build purego || !amd64
 
 package bits
 
@@ -7,6 +7,11 @@ import (
 
 	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
+
+// -----------------------------------------------------------------------------
+// TODO: use generics versions of the these functions to reduce the amount of
+// code to maintain when we drop compatilibty with Go version older than 1.18.
+// -----------------------------------------------------------------------------
 
 func maxBool(data []bool) (max bool) {
 	return len(data) > 0 && !boolEqualAll(data, false)
