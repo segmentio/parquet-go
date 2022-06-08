@@ -4,6 +4,8 @@ package parquet
 
 import (
 	"unsafe"
+
+	"github.com/segmentio/parquet-go/internal/bits"
 )
 
 //go:noescape
@@ -25,6 +27,9 @@ func dictionaryBoundsUint32(dict []uint32, indexes []int32) (min, max uint32, er
 func dictionaryBoundsUint64(dict []uint64, indexes []int32) (min, max uint64, err errno)
 
 //go:noescape
+func dictionaryBoundsBE128(dict [][16]byte, indexes []int32) (min, max *[16]byte, err errno)
+
+//go:noescape
 func dictionaryLookup32bits(dict []uint32, indexes []int32, rows array, size, offset uintptr) errno
 
 //go:noescape
@@ -35,6 +40,9 @@ func dictionaryLookupByteArrayString(dict []uint32, page []byte, indexes []int32
 
 //go:noescape
 func dictionaryLookupFixedLenByteArrayString(dict []byte, len int, indexes []int32, rows array, size, offset uintptr) errno
+
+//go:noescape
+func dictionaryLookupFixedLenByteArrayPointer(dict []byte, len int, indexes []int32, rows array, size, offset uintptr) errno
 
 func (d *int32Dictionary) lookup(indexes []int32, rows array, size, offset uintptr) {
 	checkLookupIndexBounds(indexes, rows)
@@ -80,6 +88,18 @@ func (d *uint64Dictionary) lookup(indexes []int32, rows array, size, offset uint
 	dictionaryLookup64bits(d.values, indexes, rows, size, offset).check()
 }
 
+func (d *be128Dictionary) lookupString(indexes []int32, rows array, size, offset uintptr) {
+	checkLookupIndexBounds(indexes, rows)
+	dict := bits.Uint128ToBytes(d.values)
+	dictionaryLookupFixedLenByteArrayString(dict, 16, indexes, rows, size, offset).check()
+}
+
+func (d *be128Dictionary) lookupPointer(indexes []int32, rows array, size, offset uintptr) {
+	checkLookupIndexBounds(indexes, rows)
+	dict := bits.Uint128ToBytes(d.values)
+	dictionaryLookupFixedLenByteArrayPointer(dict, 16, indexes, rows, size, offset).check()
+}
+
 func (d *int32Dictionary) bounds(indexes []int32) (min, max int32) {
 	min, max, err := dictionaryBoundsInt32(d.values, indexes)
 	err.check()
@@ -112,6 +132,12 @@ func (d *uint32Dictionary) bounds(indexes []int32) (min, max uint32) {
 
 func (d *uint64Dictionary) bounds(indexes []int32) (min, max uint64) {
 	min, max, err := dictionaryBoundsUint64(d.values, indexes)
+	err.check()
+	return min, max
+}
+
+func (d *be128Dictionary) bounds(indexes []int32) (min, max *[16]byte) {
+	min, max, err := dictionaryBoundsBE128(d.values, indexes)
 	err.check()
 	return min, max
 }

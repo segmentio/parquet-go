@@ -3,11 +3,8 @@ package parquet
 import (
 	"bytes"
 	"fmt"
-	"math"
-	"reflect"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/format"
@@ -522,10 +519,70 @@ func (t fixedLenByteArrayType) Decode(dst, src []byte, enc encoding.Encoding) ([
 	return enc.DecodeFixedLenByteArray(dst, src, t.length)
 }
 
+// BE128 stands for "big-endian 128 bits". This type is used as a special case
+// for fixed-length byte arrays of 16 bytes, which are commonly used to
+// represent columns of random unique identifiers such as UUIDs.
+//
+// Comparisons of BE128 values use the natural byte order, the zeroth byte is
+// the most significant byte.
+//
+// The special case is intended to provide optimizations based on the knowledge
+// that the values are 16 bytes long. Stronger type checking can also be applied
+// by the compiler when using [16]byte values rather than []byte, reducing the
+// risk of errors on these common code paths.
+type be128Type struct{}
+
+func (t be128Type) String() string { return "FIXED_LEN_BYTE_ARRAY(16)" }
+
+func (t be128Type) Kind() Kind { return FixedLenByteArray }
+
+func (t be128Type) Length() int { return 16 }
+
+func (t be128Type) Compare(a, b Value) int {
+	return compareBE128((*[16]byte)(a.ByteArray()), (*[16]byte)(b.ByteArray()))
+}
+
+func (t be128Type) ColumnOrder() *format.ColumnOrder { return &typeDefinedColumnOrder }
+
+func (t be128Type) LogicalType() *format.LogicalType { return nil }
+
+func (t be128Type) ConvertedType() *deprecated.ConvertedType { return nil }
+
+func (t be128Type) PhysicalType() *format.Type { return &physicalTypes[FixedLenByteArray] }
+
+func (t be128Type) NewColumnIndexer(sizeLimit int) ColumnIndexer {
+	return newBE128ColumnIndexer()
+}
+
+func (t be128Type) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
+	return newBE128ColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
+}
+
+func (t be128Type) NewDictionary(columnIndex, numValues int, data []byte) Dictionary {
+	return newBE128Dictionary(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
+}
+
+func (t be128Type) NewPage(columnIndex, numValues int, data []byte) Page {
+	return newBE128Page(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
+}
+
+func (t be128Type) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+	return enc.EncodeFixedLenByteArray(dst, src, 16)
+}
+
+func (t be128Type) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+	return enc.DecodeFixedLenByteArray(dst, src, 16)
+}
+
 // FixedLenByteArrayType constructs a type for fixed-length values of the given
 // size (in bytes).
 func FixedLenByteArrayType(length int) Type {
-	return fixedLenByteArrayType{length: length}
+	switch length {
+	case 16:
+		return be128Type{}
+	default:
+		return fixedLenByteArrayType{length: length}
+	}
 }
 
 // Int constructs a leaf node of signed integer logical type of the given bit
@@ -713,12 +770,6 @@ func (t *intType) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error)
 	}
 }
 
-// FixedLenByteArray decimals are sized based on precision
-// this function calculates the necessary byte array size
-func calcDecimalFixedLenByteArraySize(precision int) int {
-	return int(math.Ceil((math.Log10(2) + float64(precision)) / math.Log10(256)))
-}
-
 // Decimal constructs a leaf node of decimal logical type with the given
 // scale, precision, and underlying type.
 //
@@ -802,10 +853,6 @@ func (t *stringType) NewPage(columnIndex, numValues int, data []byte) Page {
 	return newByteArrayPage(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
-func (t *stringType) GoType() reflect.Type {
-	return reflect.TypeOf("")
-}
-
 func (t *stringType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
 	return enc.EncodeByteArray(dst, src)
 }
@@ -828,16 +875,12 @@ func (t *uuidType) Kind() Kind { return FixedLenByteArray }
 func (t *uuidType) Length() int { return 16 }
 
 func (t *uuidType) Compare(a, b Value) int {
-	return bytes.Compare(a.ByteArray(), b.ByteArray())
+	return compareBE128((*[16]byte)(a.ByteArray()), (*[16]byte)(b.ByteArray()))
 }
 
-func (t *uuidType) ColumnOrder() *format.ColumnOrder {
-	return &typeDefinedColumnOrder
-}
+func (t *uuidType) ColumnOrder() *format.ColumnOrder { return &typeDefinedColumnOrder }
 
-func (t *uuidType) PhysicalType() *format.Type {
-	return &physicalTypes[FixedLenByteArray]
-}
+func (t *uuidType) PhysicalType() *format.Type { return &physicalTypes[FixedLenByteArray] }
 
 func (t *uuidType) LogicalType() *format.LogicalType {
 	return &format.LogicalType{UUID: (*format.UUIDType)(t)}
@@ -846,23 +889,19 @@ func (t *uuidType) LogicalType() *format.LogicalType {
 func (t *uuidType) ConvertedType() *deprecated.ConvertedType { return nil }
 
 func (t *uuidType) NewColumnIndexer(sizeLimit int) ColumnIndexer {
-	return newFixedLenByteArrayColumnIndexer(16, sizeLimit)
+	return newBE128ColumnIndexer()
 }
 
 func (t *uuidType) NewDictionary(columnIndex, numValues int, data []byte) Dictionary {
-	return newFixedLenByteArrayDictionary(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
+	return newBE128Dictionary(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
 func (t *uuidType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
-	return newFixedLenByteArrayColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
+	return newBE128ColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
 }
 
 func (t *uuidType) NewPage(columnIndex, numValues int, data []byte) Page {
-	return newFixedLenByteArrayPage(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
-}
-
-func (t *uuidType) GoType() reflect.Type {
-	return reflect.TypeOf(uuid.UUID{})
+	return newBE128Page(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
 func (t *uuidType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
@@ -920,10 +959,6 @@ func (t *enumType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
 
 func (t *enumType) NewPage(columnIndex, numValues int, data []byte) Page {
 	return newByteArrayPage(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
-}
-
-func (t *enumType) GoType() reflect.Type {
-	return reflect.TypeOf("")
 }
 
 func (t *enumType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {

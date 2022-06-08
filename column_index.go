@@ -241,6 +241,16 @@ func (i uint64ColumnIndex) MaxValue(int) Value  { return makeValueUint64(i.page.
 func (i uint64ColumnIndex) IsAscending() bool   { return false }
 func (i uint64ColumnIndex) IsDescending() bool  { return false }
 
+type be128ColumnIndex struct{ page *be128Page }
+
+func (i be128ColumnIndex) NumPages() int       { return 1 }
+func (i be128ColumnIndex) NullCount(int) int64 { return 0 }
+func (i be128ColumnIndex) NullPage(int) bool   { return false }
+func (i be128ColumnIndex) MinValue(int) Value  { return makeValueBytes(FixedLenByteArray, i.page.min()) }
+func (i be128ColumnIndex) MaxValue(int) Value  { return makeValueBytes(FixedLenByteArray, i.page.max()) }
+func (i be128ColumnIndex) IsAscending() bool   { return false }
+func (i be128ColumnIndex) IsDescending() bool  { return false }
+
 // The ColumnIndexer interface is implemented by types that support generating
 // parquet column indexes.
 //
@@ -618,6 +628,43 @@ func (i *uint64ColumnIndexer) ColumnIndex() format.ColumnIndex {
 		splitFixedLenByteArrays(bits.Uint64ToBytes(i.maxValues), 8),
 		bits.OrderOfUint64(i.minValues),
 		bits.OrderOfUint64(i.maxValues),
+	)
+}
+
+type be128ColumnIndexer struct {
+	baseColumnIndexer
+	minValues [][16]byte
+	maxValues [][16]byte
+}
+
+func newBE128ColumnIndexer() *be128ColumnIndexer {
+	return new(be128ColumnIndexer)
+}
+
+func (i *be128ColumnIndexer) Reset() {
+	i.reset()
+	i.minValues = i.minValues[:0]
+	i.maxValues = i.maxValues[:0]
+}
+
+func (i *be128ColumnIndexer) IndexPage(numValues, numNulls int64, min, max Value) {
+	i.observe(numValues, numNulls)
+	if !min.IsNull() {
+		i.minValues = append(i.minValues, *(*[16]byte)(min.ByteArray()))
+	}
+	if !max.IsNull() {
+		i.maxValues = append(i.maxValues, *(*[16]byte)(max.ByteArray()))
+	}
+}
+
+func (i *be128ColumnIndexer) ColumnIndex() format.ColumnIndex {
+	minValues := splitFixedLenByteArrays(bits.Uint128ToBytes(i.minValues), 16)
+	maxValues := splitFixedLenByteArrays(bits.Uint128ToBytes(i.maxValues), 16)
+	return i.columnIndex(
+		minValues,
+		maxValues,
+		bits.OrderOfBytes(minValues),
+		bits.OrderOfBytes(maxValues),
 	)
 }
 

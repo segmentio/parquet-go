@@ -2,6 +2,7 @@ package parquet
 
 import (
 	"fmt"
+	"math"
 	"reflect"
 	"strconv"
 	"strings"
@@ -564,7 +565,7 @@ func makeStructField(f reflect.StructField) structField {
 			case reflect.Int64:
 				baseType = Int64Type
 			case reflect.Array:
-				baseType = FixedLenByteArrayType(calcDecimalFixedLenByteArraySize(precision))
+				baseType = FixedLenByteArrayType(decimalFixedLenByteArraySize(precision))
 			default:
 				throwInvalidFieldTag(f, option)
 			}
@@ -610,6 +611,12 @@ func makeStructField(f reflect.StructField) structField {
 	}
 
 	return field
+}
+
+// FixedLenByteArray decimals are sized based on precision
+// this function calculates the necessary byte array size.
+func decimalFixedLenByteArraySize(precision int) int {
+	return int(math.Ceil((math.Log10(2) + float64(precision)) / math.Log10(256)))
 }
 
 func forEachStructTagOption(st reflect.StructTag, do func(option, args string)) {

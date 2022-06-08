@@ -62,6 +62,22 @@ func (d *uint64Dictionary) lookup(indexes []int32, rows array, size, offset uint
 	}
 }
 
+func (d *be128Dictionary) lookupString(indexes []int32, rows array, size, offset uintptr) {
+	checkLookupIndexBounds(indexes, rows)
+	s := "0123456789ABCDEF"
+	for i, j := range indexes {
+		*(**[16]byte)(unsafe.Pointer(&s)) = d.index(j)
+		*(*string)(rows.index(i, size, offset)) = s
+	}
+}
+
+func (d *be128Dictionary) lookupPointer(indexes []int32, rows array, size, offset uintptr) {
+	checkLookupIndexBounds(indexes, rows)
+	for i, j := range indexes {
+		*(**[16]byte)(rows.index(i, size, offset)) = d.index(j)
+	}
+}
+
 func (d *int32Dictionary) bounds(indexes []int32) (min, max int32) {
 	min = d.index(indexes[0])
 	max = min
@@ -158,6 +174,32 @@ func (d *uint64Dictionary) bounds(indexes []int32) (min, max uint64) {
 		}
 		if value > max {
 			max = value
+		}
+	}
+
+	return min, max
+}
+
+func (d *be128Dictionary) bounds(indexes []int32) (min, max *[16]byte) {
+	values := [64]*[16]byte{}
+	min = d.index(indexes[0])
+	max = min
+
+	for i := 1; i < len(indexes); i += len(values) {
+		n := len(indexes) - i
+		if n > len(values) {
+			n = len(values)
+		}
+		j := i + n
+		d.lookupPointer(indexes[i:j:j], makeArrayBE128(values[:n:n]), unsafe.Sizeof(values[0]), 0)
+
+		for _, value := range values[:n:n] {
+			switch {
+			case lessBE128(value, min):
+				min = value
+			case lessBE128(max, value):
+				max = value
+			}
 		}
 	}
 

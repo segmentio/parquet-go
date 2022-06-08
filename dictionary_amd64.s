@@ -574,6 +574,79 @@ indexOutOfBounds:
     MOVQ $errnoIndexOutOfBounds, R12
     JMP return
 
+// func dictionaryBoundsBE128(dict [][16]byte, indexes []int32) (min, max *[16]byte, err errno)
+TEXT ·dictionaryBoundsBE128(SB), NOSPLIT, $0-72
+    MOVQ dict_base+0(FP), AX
+    MOVQ dict_len+8(FP), BX
+
+    MOVQ indexes_base+24(FP), CX
+    MOVQ indexes_len+32(FP), DX
+    SHLQ $2, DX // x 4
+    ADDQ CX, DX // end
+
+    XORQ R8, R8 // min (pointer)
+    XORQ R9, R9 // max (pointer)
+    XORQ SI, SI // err
+    XORQ DI, DI
+
+    CMPQ DX, $0
+    JE return
+
+    MOVL (CX), DI
+    CMPL DI, BX
+    JAE indexOutOfBounds
+    SHLQ $4, DI // the dictionary contains 16 byte words
+    LEAQ (AX)(DI*1), R8
+    MOVQ R8, R9
+    MOVBEQQ 0(AX)(DI*1), R10 // min (high)
+    MOVBEQQ 8(AX)(DI*1), R11 // min (low)
+    MOVQ R10, R12 // max (high)
+    MOVQ R11, R13 // max (low)
+
+    JMP next
+loop:
+    MOVL (CX), DI
+    CMPL DI, BX
+    JAE indexOutOfBounds
+    SHLQ $4, DI
+    MOVQ 0(AX)(DI*1), R14
+    MOVQ 8(AX)(DI*1), R15
+    BSWAPQ R14
+    BSWAPQ R15
+testLessThan:
+    CMPQ R14, R10
+    JA testGreaterThan
+    JB lessThan
+    CMPQ R15, R11
+    JAE testGreaterThan
+lessThan:
+    LEAQ (AX)(DI*1), R8
+    MOVQ R14, R10
+    MOVQ R15, R11
+    JMP next
+testGreaterThan:
+    CMPQ R14, R12
+    JB next
+    JA greaterThan
+    CMPQ R15, R13
+    JBE next
+greaterThan:
+    LEAQ (AX)(DI*1), R9
+    MOVQ R14, R12
+    MOVQ R15, R13
+next:
+    ADDQ $4, CX
+    CMPQ CX, DX
+    JNE loop
+return:
+    MOVQ R8, min+48(FP)
+    MOVQ R9, max+56(FP)
+    MOVQ SI, err+64(FP)
+    RET
+indexOutOfBounds:
+    MOVQ $errnoIndexOutOfBounds, SI
+    JMP return
+
 // The lookup functions provide optimized versions of the dictionary index
 // lookup logic.
 //
@@ -800,6 +873,49 @@ loop:
     ADDQ AX, DI
     MOVQ DI, (R9)
     MOVQ CX, 8(R9)
+
+    ADDQ R10, R9
+    INCQ SI
+test:
+    CMPQ SI, R8
+    JNE loop
+    XORQ AX, AX
+return:
+    MOVQ AX, ret+88(FP)
+    RET
+indexOutOfBounds:
+    MOVQ $errnoIndexOutOfBounds, AX
+    JMP return
+
+// This is the same algorithm as dictionaryLookupFixedLenByteArrayString but we
+// only store the pointer to the location holding the value instead of storing
+// the pair of pointer and length. Since the length is fixed for this dictionary
+// type, the application can assume it at the call site.
+//
+// func dictionaryLookupFixedLenByteArrayPointer(dict []byte, len int, indexes []int32, rows array, size, offset uintptr) errno
+TEXT ·dictionaryLookupFixedLenByteArrayPointer(SB), NOSPLIT, $0-96
+    MOVQ dict_base+0(FP), AX
+    MOVQ dict_len+8(FP), BX
+
+    MOVQ len+24(FP), CX
+
+    MOVQ indexes_base+32(FP), DX
+    MOVQ indexes_len+40(FP), R8
+
+    MOVQ rows_ptr+56(FP), R9
+    MOVQ size+72(FP), R10
+    ADDQ offset+80(FP), R9
+
+    XORQ DI, DI
+    XORQ SI, SI
+loop:
+    MOVL (DX)(SI*4), DI
+    IMULQ CX, DI
+    CMPL DI, BX
+    JAE indexOutOfBounds
+
+    ADDQ AX, DI
+    MOVQ DI, (R9)
 
     ADDQ R10, R9
     INCQ SI

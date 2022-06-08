@@ -231,50 +231,42 @@ loop1x8:
 done:
     RET
 
-// func writeValues128bitsAVX2(values unsafe.Pointer, rows array, size, offset uintptr)
-TEXT ·writeValues128bitsAVX2(SB), NOSPLIT, $0-40
+// func writeValues128bits(values unsafe.Pointer, rows array, size, offset uintptr)
+TEXT ·writeValues128bits(SB), NOSPLIT, $0-40
     MOVQ values+0(FP), AX
     MOVQ rows_ptr+8(FP), BX
     MOVQ rows_len+16(FP), CX
     MOVQ size+24(FP), DX
-
-    XORQ SI, SI
     ADDQ offset+32(FP), BX
 
     CMPQ CX, $0
     JE done
 
-    CMPQ CX, $2
-    JB loop1x16
+    CMPQ CX, $1
+    JE tail
 
+    XORQ SI, SI
     MOVQ CX, DI
     SHRQ $1, DI
     SHLQ $1, DI
-loop2x16:
-    VMOVDQU (BX), X0
-    VMOVDQU (BX)(DX*1), X1
+loop:
+    MOVOU (BX), X0
+    MOVOU (BX)(DX*1), X1
 
-    VMOVDQU X0, (AX)
-    VMOVDQU X1, 16(AX)
+    MOVOU X0, (AX)
+    MOVOU X1, 16(AX)
 
-    ADDQ $32, AX
     LEAQ (BX)(DX*2), BX
+    ADDQ $32, AX
     ADDQ $2, SI
     CMPQ SI, DI
-    JNE loop2x16
-    VZEROUPPER
+    JNE loop
 
     CMPQ SI, CX
     JE done
-loop1x16:
+tail:
     MOVOU (BX), X0
     MOVOU X0, (AX)
-
-    ADDQ $16, AX
-    ADDQ DX, BX
-    INCQ SI
-    CMPQ SI, CX
-    JNE loop1x16
 done:
     RET
 

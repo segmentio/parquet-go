@@ -906,8 +906,7 @@ func (col *booleanColumnBuffer) ReadValuesAt(values []Value, offset int64) (n in
 		return 0, io.EOF
 	default:
 		for n < len(values) && i < int(col.numValues) {
-			values[n] = makeValueBoolean(col.valueAt(i))
-			values[n].columnIndex = col.columnIndex
+			values[n] = col.makeValue(col.valueAt(i))
 			n++
 			i++
 		}
@@ -1009,8 +1008,7 @@ func (col *int32ColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int,
 		return 0, io.EOF
 	default:
 		for n < len(values) && i < len(col.values) {
-			values[n] = makeValueInt32(col.values[i])
-			values[n].columnIndex = col.columnIndex
+			values[n] = col.makeValue(col.values[i])
 			n++
 			i++
 		}
@@ -1111,8 +1109,7 @@ func (col *int64ColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int,
 		return 0, io.EOF
 	default:
 		for n < len(values) && i < len(col.values) {
-			values[n] = makeValueInt64(col.values[i])
-			values[n].columnIndex = col.columnIndex
+			values[n] = col.makeValue(col.values[i])
 			n++
 			i++
 		}
@@ -1205,8 +1202,7 @@ func (col *int96ColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int,
 		return 0, io.EOF
 	default:
 		for n < len(values) && i < len(col.values) {
-			values[n] = makeValueInt96(col.values[i])
-			values[n].columnIndex = col.columnIndex
+			values[n] = col.makeValue(col.values[i])
 			n++
 			i++
 		}
@@ -1307,8 +1303,7 @@ func (col *floatColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int,
 		return 0, io.EOF
 	default:
 		for n < len(values) && i < len(col.values) {
-			values[n] = makeValueFloat(col.values[i])
-			values[n].columnIndex = col.columnIndex
+			values[n] = col.makeValue(col.values[i])
 			n++
 			i++
 		}
@@ -1409,8 +1404,7 @@ func (col *doubleColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int
 		return 0, io.EOF
 	default:
 		for n < len(values) && i < len(col.values) {
-			values[n] = makeValueDouble(col.values[i])
-			values[n].columnIndex = col.columnIndex
+			values[n] = col.makeValue(col.values[i])
 			n++
 			i++
 		}
@@ -1553,8 +1547,7 @@ func (col *byteArrayColumnBuffer) ReadValuesAt(values []Value, offset int64) (n 
 		return 0, io.EOF
 	default:
 		for n < len(values) && i < len(col.offsets) {
-			values[n] = makeValueBytes(ByteArray, col.valueAt(col.offsets[i]))
-			values[n].columnIndex = col.columnIndex
+			values[n] = col.makeValueBytes(col.valueAt(col.offsets[i]))
 			n++
 			i++
 		}
@@ -1673,13 +1666,9 @@ func (col *fixedLenByteArrayColumnBuffer) writeValues(rows array, size, offset u
 	col.data = col.data[:j]
 	newData := col.data[i:]
 
-	if optimize(rows.len) && col.size == 16 {
-		writeValuesUint128(newData, rows, size, offset)
-	} else {
-		for i := 0; i < rows.len; i++ {
-			p := rows.index(i, size, offset)
-			copy(newData[i*col.size:], unsafe.Slice((*byte)(p), col.size))
-		}
+	for i := 0; i < rows.len; i++ {
+		p := rows.index(i, size, offset)
+		copy(newData[i*col.size:], unsafe.Slice((*byte)(p), col.size))
 	}
 }
 
@@ -1692,8 +1681,7 @@ func (col *fixedLenByteArrayColumnBuffer) ReadValuesAt(values []Value, offset in
 		return 0, io.EOF
 	default:
 		for n < len(values) && i < len(col.data) {
-			values[n] = makeValueBytes(FixedLenByteArray, col.data[i:i+col.size])
-			values[n].columnIndex = col.columnIndex
+			values[n] = col.makeValueBytes(col.data[i : i+col.size])
 			n++
 			i += col.size
 		}
@@ -1794,8 +1782,7 @@ func (col *uint32ColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int
 		return 0, io.EOF
 	default:
 		for n < len(values) && i < len(col.values) {
-			values[n] = makeValueUint32(col.values[i])
-			values[n].columnIndex = col.columnIndex
+			values[n] = col.makeValue(col.values[i])
 			n++
 			i++
 		}
@@ -1896,8 +1883,101 @@ func (col *uint64ColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int
 		return 0, io.EOF
 	default:
 		for n < len(values) && i < len(col.values) {
-			values[n] = makeValueUint64(col.values[i])
-			values[n].columnIndex = col.columnIndex
+			values[n] = col.makeValue(col.values[i])
+			n++
+			i++
+		}
+		if n < len(values) {
+			err = io.EOF
+		}
+		return n, err
+	}
+}
+
+type be128ColumnBuffer struct{ be128Page }
+
+func newBE128ColumnBuffer(typ Type, columnIndex int16, bufferSize int) *be128ColumnBuffer {
+	return &be128ColumnBuffer{
+		be128Page: be128Page{
+			typ:         typ,
+			values:      make([][16]byte, 0, bufferSize/16),
+			columnIndex: ^columnIndex,
+		},
+	}
+}
+
+func (col *be128ColumnBuffer) Clone() ColumnBuffer {
+	return &be128ColumnBuffer{
+		be128Page: be128Page{
+			typ:         col.typ,
+			values:      append([][16]byte{}, col.values...),
+			columnIndex: col.columnIndex,
+		},
+	}
+}
+
+func (col *be128ColumnBuffer) ColumnIndex() ColumnIndex {
+	return be128ColumnIndex{&col.be128Page}
+}
+
+func (col *be128ColumnBuffer) OffsetIndex() OffsetIndex {
+	return be128OffsetIndex{&col.be128Page}
+}
+
+func (col *be128ColumnBuffer) BloomFilter() BloomFilter { return nil }
+
+func (col *be128ColumnBuffer) Dictionary() Dictionary { return nil }
+
+func (col *be128ColumnBuffer) Pages() Pages { return onePage(col.Page()) }
+
+func (col *be128ColumnBuffer) Page() BufferedPage { return &col.be128Page }
+
+func (col *be128ColumnBuffer) Reset() { col.values = col.values[:0] }
+
+func (col *be128ColumnBuffer) Cap() int { return cap(col.values) }
+
+func (col *be128ColumnBuffer) Len() int { return len(col.values) }
+
+func (col *be128ColumnBuffer) Less(i, j int) bool {
+	return lessBE128(&col.values[i], &col.values[j])
+}
+
+func (col *be128ColumnBuffer) Swap(i, j int) {
+	col.values[i], col.values[j] = col.values[j], col.values[i]
+}
+
+func (col *be128ColumnBuffer) WriteValues(values []Value) (int, error) {
+	if n := len(col.values) + len(values); n > cap(col.values) {
+		col.values = append(make([][16]byte, 0, max(n, 2*cap(col.values))), col.values...)
+	}
+	n := len(col.values)
+	col.values = col.values[:n+len(values)]
+	newValues := col.values[n:]
+	for i, v := range values {
+		copy(newValues[i][:], v.ByteArray())
+	}
+	return len(values), nil
+}
+
+func (col *be128ColumnBuffer) writeValues(rows array, size, offset uintptr, _ columnLevels) {
+	if n := len(col.values) + rows.len; n > cap(col.values) {
+		col.values = append(make([][16]byte, 0, max(n, 2*cap(col.values))), col.values...)
+	}
+	n := len(col.values)
+	col.values = col.values[:n+rows.len]
+	writeValuesBE128(col.values[n:], rows, size, offset)
+}
+
+func (col *be128ColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int, err error) {
+	i := int(offset)
+	switch {
+	case i < 0:
+		return 0, errRowIndexOutOfBounds(offset, int64(len(col.values)))
+	case i >= len(col.values):
+		return 0, io.EOF
+	default:
+		for n < len(values) && i < len(col.values) {
+			values[n] = col.makeValue(&col.values[i])
 			n++
 			i++
 		}
