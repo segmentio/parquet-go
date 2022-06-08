@@ -888,7 +888,7 @@ indexOutOfBounds:
     JMP return
 
 // This is the same algorithm as dictionaryLookupFixedLenByteArrayString but we
-// only store the pointer to the location hodling the value instead of storing
+// only store the pointer to the location holding the value instead of storing
 // the pair of pointer and length. Since the length is fixed for this dictionary
 // type, the application can assume it at the call site.
 //
