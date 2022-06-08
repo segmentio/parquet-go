@@ -9,7 +9,7 @@ import (
 	"github.com/segmentio/parquet-go"
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding/plain"
-	"github.com/segmentio/parquet-go/internal/bits"
+	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 func TestPage(t *testing.T) {
@@ -50,13 +50,13 @@ func testPageInt32(t *testing.T) {
 		testBufferPage(t, schema, pageTest{
 			write: func(w parquet.ValueWriter) (interface{}, error) {
 				values := []int32{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
-				n, err := w.(io.Writer).Write(bits.Int32ToBytes(values))
+				n, err := w.(io.Writer).Write(unsafecast.Int32ToBytes(values))
 				return values[:n/4], err
 			},
 
 			read: func(r parquet.ValueReader) (interface{}, error) {
 				values := make([]int32, 10)
-				n, err := r.(io.Reader).Read(bits.Int32ToBytes(values))
+				n, err := r.(io.Reader).Read(unsafecast.Int32ToBytes(values))
 				return values[:n/4], err
 			},
 		})
@@ -86,13 +86,13 @@ func testPageInt64(t *testing.T) {
 		testBufferPage(t, schema, pageTest{
 			write: func(w parquet.ValueWriter) (interface{}, error) {
 				values := []int64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
-				n, err := w.(io.Writer).Write(bits.Int64ToBytes(values))
+				n, err := w.(io.Writer).Write(unsafecast.Int64ToBytes(values))
 				return values[:n/8], err
 			},
 
 			read: func(r parquet.ValueReader) (interface{}, error) {
 				values := make([]int64, 10)
-				n, err := r.(io.Reader).Read(bits.Int64ToBytes(values))
+				n, err := r.(io.Reader).Read(unsafecast.Int64ToBytes(values))
 				return values[:n/8], err
 			},
 		})
@@ -158,13 +158,13 @@ func testPageFloat(t *testing.T) {
 		testBufferPage(t, schema, pageTest{
 			write: func(w parquet.ValueWriter) (interface{}, error) {
 				values := []float32{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
-				n, err := w.(io.Writer).Write(bits.Float32ToBytes(values))
+				n, err := w.(io.Writer).Write(unsafecast.Float32ToBytes(values))
 				return values[:n/4], err
 			},
 
 			read: func(r parquet.ValueReader) (interface{}, error) {
 				values := make([]float32, 10)
-				n, err := r.(io.Reader).Read(bits.Float32ToBytes(values))
+				n, err := r.(io.Reader).Read(unsafecast.Float32ToBytes(values))
 				return values[:n/4], err
 			},
 		})
@@ -194,13 +194,13 @@ func testPageDouble(t *testing.T) {
 		testBufferPage(t, schema, pageTest{
 			write: func(w parquet.ValueWriter) (interface{}, error) {
 				values := []float64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
-				n, err := w.(io.Writer).Write(bits.Float64ToBytes(values))
+				n, err := w.(io.Writer).Write(unsafecast.Float64ToBytes(values))
 				return values[:n/8], err
 			},
 
 			read: func(r parquet.ValueReader) (interface{}, error) {
 				values := make([]float64, 10)
-				n, err := r.(io.Reader).Read(bits.Float64ToBytes(values))
+				n, err := r.(io.Reader).Read(unsafecast.Float64ToBytes(values))
 				return values[:n/8], err
 			},
 		})

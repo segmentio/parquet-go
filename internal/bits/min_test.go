@@ -7,6 +7,7 @@ import (
 
 	"github.com/segmentio/parquet-go/internal/bits"
 	"github.com/segmentio/parquet-go/internal/quick"
+	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 func TestMinBool(t *testing.T) {
@@ -174,7 +175,7 @@ func TestMinFixedLenByteArray16(t *testing.T) {
 				}
 			}
 		}
-		ret := bits.MinFixedLenByteArray(16, bits.Uint128ToBytes(values))
+		ret := bits.MinFixedLenByteArray(16, unsafecast.Uint128ToBytes(values))
 		return (len(values) == 0 && ret == nil) || bytes.Equal(min[:], ret)
 	})
 	if err != nil {

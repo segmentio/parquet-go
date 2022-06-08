@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/segmentio/parquet-go/deprecated"
+	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 const (
@@ -329,11 +330,11 @@ func makeValueDouble(value float64) Value {
 }
 
 func makeValueBytes(kind Kind, value []byte) Value {
-	return makeValueByteArray(kind, *(**byte)(unsafe.Pointer(&value)), len(value))
+	return makeValueByteArray(kind, unsafecast.AddressOfBytes(value), len(value))
 }
 
 func makeValueString(kind Kind, value string) Value {
-	return makeValueByteArray(kind, *(**byte)(unsafe.Pointer(&value)), len(value))
+	return makeValueByteArray(kind, unsafecast.AddressOfString(value), len(value))
 }
 
 func makeValueFixedLenByteArray(v reflect.Value) Value {
@@ -348,9 +349,7 @@ func makeValueFixedLenByteArray(v reflect.Value) Value {
 		u.Elem().Set(v)
 		v = u
 	}
-	// TODO: unclear if the conversion to unsafe.Pointer from
-	// reflect.Value.Pointer is safe here.
-	return makeValueByteArray(FixedLenByteArray, (*byte)(unsafe.Pointer(v.Pointer())), t.Len())
+	return makeValueByteArray(FixedLenByteArray, (*byte)(unsafePointer(v)), t.Len())
 }
 
 func makeValueByteArray(kind Kind, data *byte, size int) Value {
@@ -546,7 +545,7 @@ func (v Value) String() string {
 		// underlying data to a new memory location. This is safe as long as the
 		// application respects the requirement to not mutate the byte slices
 		// returned when calling ByteArray.
-		return unsafeBytesToString(v.ByteArray())
+		return unsafecast.BytesToString(v.ByteArray())
 	default:
 		return "<null>"
 	}
@@ -573,7 +572,7 @@ func (v Value) Clone() Value {
 	switch k := v.Kind(); k {
 	case ByteArray, FixedLenByteArray:
 		b := copyBytes(v.ByteArray())
-		v.ptr = *(**byte)(unsafe.Pointer(&b))
+		v.ptr = unsafecast.AddressOfBytes(b)
 	}
 	return v
 }
@@ -682,7 +681,8 @@ func assignValue(dst reflect.Value, src Value) error {
 				// overhead we instead convert the reflect.Value holding the
 				// destination array into a byte slice which allows us to use
 				// a more efficient call to copy.
-				copy(unsafeByteArray(dst, len(v)), v)
+				d := unsafe.Slice((*byte)(unsafecast.PointerOfValue(dst)), len(v))
+				copy(d, v)
 				return nil
 			}
 		case reflect.Slice:
@@ -742,18 +742,6 @@ func copyBytes(b []byte) []byte {
 	c := make([]byte, len(b))
 	copy(c, b)
 	return c
-}
-
-func unsafeBytesToString(b []byte) string {
-	return *(*string)(unsafe.Pointer(&b))
-}
-
-func unsafePointerOf(v reflect.Value) unsafe.Pointer {
-	return (*[2]unsafe.Pointer)(unsafe.Pointer(&v))[1]
-}
-
-func unsafeByteArray(v reflect.Value, n int) []byte {
-	return unsafe.Slice((*byte)(unsafePointerOf(v)), n)
 }
 
 // Equal returns true if v1 and v2 are equal.

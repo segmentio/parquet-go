@@ -5,7 +5,7 @@ import (
 
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding/plain"
-	"github.com/segmentio/parquet-go/internal/bits"
+	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 type optionalPageValues struct {
@@ -138,7 +138,7 @@ type int32PageValues struct {
 }
 
 func (r *int32PageValues) Read(b []byte) (n int, err error) {
-	n, err = r.ReadInt32s(bits.BytesToInt32(b))
+	n, err = r.ReadInt32s(unsafecast.BytesToInt32(b))
 	return 4 * n, err
 }
 
@@ -169,7 +169,7 @@ type int64PageValues struct {
 }
 
 func (r *int64PageValues) Read(b []byte) (n int, err error) {
-	n, err = r.ReadInt64s(bits.BytesToInt64(b))
+	n, err = r.ReadInt64s(unsafecast.BytesToInt64(b))
 	return 8 * n, err
 }
 
@@ -231,7 +231,7 @@ type floatPageValues struct {
 }
 
 func (r *floatPageValues) Read(b []byte) (n int, err error) {
-	n, err = r.ReadFloats(bits.BytesToFloat32(b))
+	n, err = r.ReadFloats(unsafecast.BytesToFloat32(b))
 	return 4 * n, err
 }
 
@@ -262,7 +262,7 @@ type doublePageValues struct {
 }
 
 func (r *doublePageValues) Read(b []byte) (n int, err error) {
-	n, err = r.ReadDoubles(bits.BytesToFloat64(b))
+	n, err = r.ReadDoubles(unsafecast.BytesToFloat64(b))
 	return 8 * n, err
 }
 
@@ -385,7 +385,7 @@ type uint32PageValues struct {
 }
 
 func (r *uint32PageValues) Read(b []byte) (n int, err error) {
-	n, err = r.ReadUint32s(bits.BytesToUint32(b))
+	n, err = r.ReadUint32s(unsafecast.BytesToUint32(b))
 	return 4 * n, err
 }
 
@@ -416,7 +416,7 @@ type uint64PageValues struct {
 }
 
 func (r *uint64PageValues) Read(b []byte) (n int, err error) {
-	n, err = r.ReadUint64s(bits.BytesToUint64(b))
+	n, err = r.ReadUint64s(unsafecast.BytesToUint64(b))
 	return 8 * n, err
 }
 

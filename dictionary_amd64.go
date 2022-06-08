@@ -3,9 +3,7 @@
 package parquet
 
 import (
-	"unsafe"
-
-	"github.com/segmentio/parquet-go/internal/bits"
+	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 //go:noescape
@@ -46,25 +44,25 @@ func dictionaryLookupFixedLenByteArrayPointer(dict []byte, len int, indexes []in
 
 func (d *int32Dictionary) lookup(indexes []int32, rows array, size, offset uintptr) {
 	checkLookupIndexBounds(indexes, rows)
-	dict := *(*[]uint32)(unsafe.Pointer(&d.values))
+	dict := unsafecast.Int32ToUint32(d.values)
 	dictionaryLookup32bits(dict, indexes, rows, size, offset).check()
 }
 
 func (d *int64Dictionary) lookup(indexes []int32, rows array, size, offset uintptr) {
 	checkLookupIndexBounds(indexes, rows)
-	dict := *(*[]uint64)(unsafe.Pointer(&d.values))
+	dict := unsafecast.Int64ToUint64(d.values)
 	dictionaryLookup64bits(dict, indexes, rows, size, offset).check()
 }
 
 func (d *floatDictionary) lookup(indexes []int32, rows array, size, offset uintptr) {
 	checkLookupIndexBounds(indexes, rows)
-	dict := *(*[]uint32)(unsafe.Pointer(&d.values))
+	dict := unsafecast.Float32ToUint32(d.values)
 	dictionaryLookup32bits(dict, indexes, rows, size, offset).check()
 }
 
 func (d *doubleDictionary) lookup(indexes []int32, rows array, size, offset uintptr) {
 	checkLookupIndexBounds(indexes, rows)
-	dict := *(*[]uint64)(unsafe.Pointer(&d.values))
+	dict := unsafecast.Float64ToUint64(d.values)
 	dictionaryLookup64bits(dict, indexes, rows, size, offset).check()
 }
 
@@ -90,13 +88,13 @@ func (d *uint64Dictionary) lookup(indexes []int32, rows array, size, offset uint
 
 func (d *be128Dictionary) lookupString(indexes []int32, rows array, size, offset uintptr) {
 	checkLookupIndexBounds(indexes, rows)
-	dict := bits.Uint128ToBytes(d.values)
+	dict := unsafecast.Uint128ToBytes(d.values)
 	dictionaryLookupFixedLenByteArrayString(dict, 16, indexes, rows, size, offset).check()
 }
 
 func (d *be128Dictionary) lookupPointer(indexes []int32, rows array, size, offset uintptr) {
 	checkLookupIndexBounds(indexes, rows)
-	dict := bits.Uint128ToBytes(d.values)
+	dict := unsafecast.Uint128ToBytes(d.values)
 	dictionaryLookupFixedLenByteArrayPointer(dict, 16, indexes, rows, size, offset).check()
 }
 

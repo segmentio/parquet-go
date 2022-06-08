@@ -7,6 +7,7 @@ import (
 
 	"github.com/segmentio/parquet-go/internal/bits"
 	"github.com/segmentio/parquet-go/internal/quick"
+	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 const scaleFactor = 6000
@@ -226,7 +227,7 @@ func TestMinMaxFixedLenByteArray16(t *testing.T) {
 				}
 			}
 		}
-		minValue, maxValue := bits.MinMaxFixedLenByteArray(16, bits.Uint128ToBytes(values))
+		minValue, maxValue := bits.MinMaxFixedLenByteArray(16, unsafecast.Uint128ToBytes(values))
 		return (len(values) == 0 && minValue == nil && maxValue == nil) ||
 			(bytes.Equal(min[:], minValue) && bytes.Equal(max[:], maxValue))
 	})

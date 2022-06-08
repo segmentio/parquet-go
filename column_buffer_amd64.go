@@ -5,11 +5,12 @@ package parquet
 import (
 	"unsafe"
 
+	"github.com/segmentio/parquet-go/internal/unsafecast"
 	"golang.org/x/sys/cpu"
 )
 
 func broadcastValueInt32(dst []int32, src int8) {
-	memset(unsafe.Slice(*(**byte)(unsafe.Pointer(&dst)), len(dst)*4), byte(src))
+	memset(unsafecast.Int32ToBytes(dst), byte(src))
 }
 
 //go:noescape

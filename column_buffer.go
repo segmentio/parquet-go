@@ -10,6 +10,7 @@ import (
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding/plain"
 	"github.com/segmentio/parquet-go/internal/bits"
+	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 // ColumnBuffer is an interface representing columns of a row group.
@@ -805,11 +806,7 @@ func (col *booleanColumnBuffer) Swap(i, j int) {
 }
 
 func (col *booleanColumnBuffer) WriteBooleans(values []bool) (int, error) {
-	var rows = array{
-		ptr: *(*unsafe.Pointer)(unsafe.Pointer(&values)),
-		len: len(values),
-	}
-	col.writeValues(rows, unsafe.Sizeof(false), 0, columnLevels{})
+	col.writeValues(makeArrayBool(values), unsafe.Sizeof(false), 0, columnLevels{})
 	return len(values), nil
 }
 
@@ -967,7 +964,7 @@ func (col *int32ColumnBuffer) Write(b []byte) (int, error) {
 	if (len(b) % 4) != 0 {
 		return 0, fmt.Errorf("cannot write INT32 values from input of size %d", len(b))
 	}
-	col.values = append(col.values, bits.BytesToInt32(b)...)
+	col.values = append(col.values, unsafecast.BytesToInt32(b)...)
 	return len(b), nil
 }
 
@@ -1069,7 +1066,7 @@ func (col *int64ColumnBuffer) Write(b []byte) (int, error) {
 	if (len(b) % 8) != 0 {
 		return 0, fmt.Errorf("cannot write INT64 values from input of size %d", len(b))
 	}
-	col.values = append(col.values, bits.BytesToInt64(b)...)
+	col.values = append(col.values, unsafecast.BytesToInt64(b)...)
 	return len(b), nil
 }
 
@@ -1263,7 +1260,7 @@ func (col *floatColumnBuffer) Write(b []byte) (int, error) {
 	if (len(b) % 4) != 0 {
 		return 0, fmt.Errorf("cannot write FLOAT values from input of size %d", len(b))
 	}
-	col.values = append(col.values, bits.BytesToFloat32(b)...)
+	col.values = append(col.values, unsafecast.BytesToFloat32(b)...)
 	return len(b), nil
 }
 
@@ -1364,7 +1361,7 @@ func (col *doubleColumnBuffer) Write(b []byte) (int, error) {
 	if (len(b) % 8) != 0 {
 		return 0, fmt.Errorf("cannot write DOUBLE values from input of size %d", len(b))
 	}
-	col.values = append(col.values, bits.BytesToFloat64(b)...)
+	col.values = append(col.values, unsafecast.BytesToFloat64(b)...)
 	return len(b), nil
 }
 
@@ -1518,7 +1515,7 @@ func (col *byteArrayColumnBuffer) writeByteArrays(values []byte) (count, bytes i
 	baseCount, baseBytes := len(col.offsets), len(col.values)
 
 	err = plain.RangeByteArrays(values, func(value []byte) error {
-		col.append(bits.BytesToString(value))
+		col.append(unsafecast.BytesToString(value))
 		return nil
 	})
 
@@ -1742,7 +1739,7 @@ func (col *uint32ColumnBuffer) Write(b []byte) (int, error) {
 	if (len(b) % 4) != 0 {
 		return 0, fmt.Errorf("cannot write INT32 values from input of size %d", len(b))
 	}
-	col.values = append(col.values, bits.BytesToUint32(b)...)
+	col.values = append(col.values, unsafecast.BytesToUint32(b)...)
 	return len(b), nil
 }
 
@@ -1843,7 +1840,7 @@ func (col *uint64ColumnBuffer) Write(b []byte) (int, error) {
 	if (len(b) % 8) != 0 {
 		return 0, fmt.Errorf("cannot write INT64 values from input of size %d", len(b))
 	}
-	col.values = append(col.values, bits.BytesToUint64(b)...)
+	col.values = append(col.values, unsafecast.BytesToUint64(b)...)
 	return len(b), nil
 }
 
