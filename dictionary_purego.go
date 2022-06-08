@@ -170,3 +170,29 @@ func (d *uint64Dictionary) bounds(indexes []int32) (min, max uint64) {
 
 	return min, max
 }
+
+func (d *be128Dictionary) bounds(indexes []int32) (min, max *[16]byte) {
+	values := [64]*[16]byte{}
+	min = d.index(indexes[0])
+	max = min
+
+	for i := 1; i < len(indexes); i += len(values) {
+		n := len(indexes) - i
+		if n > len(values) {
+			n = len(values)
+		}
+		j := i + n
+		d.lookupPointer(indexes[i:j:j], makeArrayBE128(values[:n:n]), unsafe.Sizeof(values[0]), 0)
+
+		for _, value := range values[:n:n] {
+			switch {
+			case lessBE128(value, min):
+				min = value
+			case lessBE128(max, value):
+				max = value
+			}
+		}
+	}
+
+	return min, max
+}
