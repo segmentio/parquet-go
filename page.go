@@ -467,7 +467,7 @@ type booleanPage struct {
 func newBooleanPage(typ Type, columnIndex int16, numValues int32, values []byte) *booleanPage {
 	return &booleanPage{
 		typ:         typ,
-		bits:        values[:bits.ByteCount(uint(numValues))],
+		bits:        values[:byteCount(uint(numValues))],
 		numValues:   numValues,
 		columnIndex: ^columnIndex,
 	}
