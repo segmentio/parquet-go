@@ -1,6 +1,7 @@
 package parquet
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -1012,7 +1013,7 @@ func (page *byteArrayPage) min() (min []byte) {
 		for i := 4 + len(min); i < len(page.values); {
 			v := page.valueAt(uint32(i))
 
-			if string(v) < string(min) {
+			if bytes.Compare(v, min) < 0 {
 				min = v
 			}
 
@@ -1030,7 +1031,7 @@ func (page *byteArrayPage) max() (max []byte) {
 		for i := 4 + len(max); i < len(page.values); {
 			v := page.valueAt(uint32(i))
 
-			if string(v) > string(max) {
+			if bytes.Compare(v, max) > 0 {
 				max = v
 			}
 
@@ -1050,9 +1051,9 @@ func (page *byteArrayPage) bounds() (min, max []byte) {
 			v := page.valueAt(uint32(i))
 
 			switch {
-			case string(v) < string(min):
+			case bytes.Compare(v, min) < 0:
 				min = v
-			case string(v) > string(max):
+			case bytes.Compare(v, max) > 0:
 				max = v
 			}
 
