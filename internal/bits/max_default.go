@@ -2,7 +2,11 @@
 
 package bits
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+
+	"github.com/segmentio/parquet-go/internal/unsafecast"
+)
 
 func maxBool(data []bool) (max bool) {
 	return len(data) > 0 && !boolEqualAll(data, false)
@@ -88,7 +92,7 @@ func maxFloat64(data []float64) (max float64) {
 
 func maxBE128(data []byte) (min []byte) {
 	if len(data) > 0 {
-		be128 := BytesToUint128(data)
+		be128 := unsafecast.BytesToUint128(data)
 		m := binary.BigEndian.Uint64(be128[0][:8])
 		j := 0
 		for i := 1; i < len(be128); i++ {

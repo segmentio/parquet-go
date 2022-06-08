@@ -2,7 +2,11 @@
 
 package bits
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+
+	"github.com/segmentio/parquet-go/internal/unsafecast"
+)
 
 func boolEqualAll(data []bool, value bool) bool {
 	for _, v := range data {
@@ -131,7 +135,7 @@ func minMaxFloat64(data []float64) (min, max float64) {
 
 func minMaxBE128(data []byte) (min, max []byte) {
 	if len(data) > 0 {
-		be128 := BytesToUint128(data)
+		be128 := unsafecast.BytesToUint128(data)
 		minHi := binary.BigEndian.Uint64(be128[0][:8])
 		maxHi := minHi
 		minIndex := 0

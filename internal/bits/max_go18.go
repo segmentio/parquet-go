@@ -39,7 +39,7 @@ func max[T ordered](data []T) (max T) {
 
 func maxBE128(data []byte) (min []byte) {
 	if len(data) > 0 {
-		be128 := unsafecast.BytesToSlice[uint128](data)
+		be128 := unsafecast.Slice[uint128](data)
 		m := binary.BigEndian.Uint64(be128[0][:8])
 		j := 0
 		for i := 1; i < len(be128); i++ {
