@@ -1,6 +1,7 @@
 package delta
 
 import (
+	"bytes"
 	"fmt"
 	"sort"
 
@@ -235,6 +236,6 @@ func binarySearchPrefixLength(base, data []byte) int {
 		n = len(data)
 	}
 	return sort.Search(n, func(i int) bool {
-		return string(base[:i+1]) != string(data[:i+1])
+		return !bytes.Equal(base[:i+1], data[:i+1])
 	})
 }
