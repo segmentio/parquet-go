@@ -1375,6 +1375,103 @@ func (page *uint64Page) makeValue(v uint64) Value {
 	return value
 }
 
+type be128Page struct {
+	typ         Type
+	values      [][16]byte
+	columnIndex int16
+}
+
+func newBE128Page(typ Type, columnIndex int16, numValues int32, data []byte) *be128Page {
+	if (len(data) % 16) != 0 {
+		panic("cannot create fixed-length byte array page from input which is not a multiple of the type size")
+	}
+	if int(numValues) != len(data)/16 {
+		panic(fmt.Errorf("number of values mismatch in numValues and data arguments: %d != %d", numValues, len(data)/16))
+	}
+	return &be128Page{
+		typ:         typ,
+		values:      bits.BytesToUint128(data),
+		columnIndex: ^columnIndex,
+	}
+}
+
+func (page *be128Page) Type() Type { return page.typ }
+
+func (page *be128Page) Column() int { return int(^page.columnIndex) }
+
+func (page *be128Page) Dictionary() Dictionary { return nil }
+
+func (page *be128Page) NumRows() int64 { return int64(len(page.values)) }
+
+func (page *be128Page) NumValues() int64 { return int64(len(page.values)) }
+
+func (page *be128Page) NumNulls() int64 { return 0 }
+
+func (page *be128Page) Size() int64 { return 16 * int64(len(page.values)) }
+
+func (page *be128Page) RepetitionLevels() []byte { return nil }
+
+func (page *be128Page) DefinitionLevels() []byte { return nil }
+
+func (page *be128Page) Data() []byte { return bits.Uint128ToBytes(page.values) }
+
+func (page *be128Page) Values() ValueReader { return &be128PageValues{page: page} }
+
+func (page *be128Page) Buffer() BufferedPage { return page }
+
+func (page *be128Page) min() []byte {
+	return bits.MinFixedLenByteArray(16, page.Data())
+}
+
+func (page *be128Page) max() []byte {
+	return bits.MaxFixedLenByteArray(16, page.Data())
+}
+
+func (page *be128Page) bounds() (min, max []byte) {
+	return bits.MinMaxFixedLenByteArray(16, page.Data())
+}
+
+func (page *be128Page) Bounds() (min, max Value, ok bool) {
+	if ok = len(page.values) > 0; ok {
+		minBytes, maxBytes := page.bounds()
+		min = page.makeValueBytes(minBytes)
+		max = page.makeValueBytes(maxBytes)
+	}
+	return min, max, ok
+}
+
+func (page *be128Page) Clone() BufferedPage {
+	return &be128Page{
+		typ:         page.typ,
+		values:      append([][16]byte{}, page.values...),
+		columnIndex: page.columnIndex,
+	}
+}
+
+func (page *be128Page) Slice(i, j int64) BufferedPage {
+	return &be128Page{
+		typ:         page.typ,
+		values:      page.values[i:j],
+		columnIndex: page.columnIndex,
+	}
+}
+
+func (page *be128Page) makeValue(v *[16]byte) Value {
+	return page.makeValueBytes(v[:])
+}
+
+func (page *be128Page) makeValueBytes(v []byte) Value {
+	value := makeValueBytes(FixedLenByteArray, v)
+	value.columnIndex = page.columnIndex
+	return value
+}
+
+func (page *be128Page) makeValueString(v string) Value {
+	value := makeValueString(FixedLenByteArray, v)
+	value.columnIndex = page.columnIndex
+	return value
+}
+
 type nullPage struct {
 	typ    Type
 	column int

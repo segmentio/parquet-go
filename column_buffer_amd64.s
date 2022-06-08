@@ -238,7 +238,6 @@ TEXT ·writeValues128bits(SB), NOSPLIT, $0-40
     MOVQ rows_len+16(FP), CX
     MOVQ size+24(FP), DX
     ADDQ offset+32(FP), BX
-    XORQ SI, SI
 
     CMPQ CX, $0
     JE done
@@ -246,6 +245,7 @@ TEXT ·writeValues128bits(SB), NOSPLIT, $0-40
     CMPQ CX, $1
     JE tail
 
+    XORQ SI, SI
     MOVQ CX, DI
     SHRQ $1, DI
     SHLQ $1, DI

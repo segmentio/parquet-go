@@ -62,6 +62,13 @@ func (d *uint64Dictionary) lookup(indexes []int32, rows array, size, offset uint
 	}
 }
 
+func (d *be128Dictionary) lookupPointer(indexes []int32, rows array, size, offset uintptr) {
+	checkLookupIndexBounds(indexes, rows)
+	for i, j := range indexes {
+		*(**[16]byte)(rows.index(i, size, offset)) = d.index(j)
+	}
+}
+
 func (d *int32Dictionary) bounds(indexes []int32) (min, max int32) {
 	min = d.index(indexes[0])
 	max = min

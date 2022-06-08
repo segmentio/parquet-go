@@ -15,6 +15,10 @@ func makeArrayValue(values []Value) array {
 	return *(*array)(unsafe.Pointer(&values))
 }
 
+func makeArrayBE128(values []*[16]byte) array {
+	return *(*array)(unsafe.Pointer(&values))
+}
+
 func (a array) index(i int, size, offset uintptr) unsafe.Pointer {
 	return unsafe.Add(a.ptr, uintptr(i)*size+offset)
 }

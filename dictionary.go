@@ -791,27 +791,6 @@ func (d *fixedLenByteArrayDictionary) Lookup(indexes []int32, values []Value) {
 	d.lookupString(indexes, makeArrayValue(values), unsafe.Sizeof(model), unsafe.Offsetof(model.ptr))
 }
 
-// func (d *fixedLenByteArrayDictionary) Bounds(indexes []int32) (min, max Value) {
-// 	if len(indexes) > 0 {
-// 		minValue := d.index(indexes[0])
-// 		maxValue := minValue
-
-// 		for _, i := range indexes[1:] {
-// 			value := d.index(i)
-// 			switch {
-// 			case string(value) < string(minValue):
-// 				minValue = value
-// 			case string(value) > string(maxValue):
-// 				maxValue = value
-// 			}
-// 		}
-
-// 		min = d.makeValue(minValue)
-// 		max = d.makeValue(maxValue)
-// 	}
-// 	return min, max
-// }
-
 func (d *fixedLenByteArrayDictionary) Bounds(indexes []int32) (min, max Value) {
 	if len(indexes) > 0 {
 		base := d.index(indexes[0])
@@ -1002,6 +981,110 @@ func (d *uint64Dictionary) Reset() {
 
 func (d *uint64Dictionary) Page() BufferedPage {
 	return &d.uint64Page
+}
+
+type be128Dictionary struct {
+	be128Page
+	hashmap map[[16]byte]int32
+}
+
+func newBE128Dictionary(typ Type, columnIndex int16, numValues int32, data []byte) *be128Dictionary {
+	return &be128Dictionary{
+		be128Page: be128Page{
+			typ:         typ,
+			values:      bits.BytesToUint128(data),
+			columnIndex: ^columnIndex,
+		},
+	}
+}
+
+func (d *be128Dictionary) Type() Type { return newIndexedType(d.typ, d) }
+
+func (d *be128Dictionary) Len() int { return len(d.values) }
+
+func (d *be128Dictionary) Index(i int32) Value { return d.makeValue(d.index(i)) }
+
+func (d *be128Dictionary) index(i int32) *[16]byte { return &d.values[i] }
+
+func (d *be128Dictionary) Insert(indexes []int32, values []Value) {
+	d.insertValues(indexes, len(values), func(i int) [16]byte {
+		return *(*[16]byte)(values[i].ByteArray())
+	})
+}
+
+func (d *be128Dictionary) insert(indexes []int32, rows array, size, offset uintptr) {
+	d.insertValues(indexes, rows.len, func(i int) [16]byte {
+		return *(*[16]byte)(rows.index(i, size, offset))
+	})
+}
+
+func (d *be128Dictionary) insertValues(indexes []int32, count int, valueAt func(int) [16]byte) {
+	_ = indexes[:count]
+
+	if d.hashmap == nil {
+		d.hashmap = make(map[[16]byte]int32, cap(d.values))
+		for i, v := range d.values {
+			d.hashmap[v] = int32(i)
+		}
+	}
+
+	for i := 0; i < count; i++ {
+		value := valueAt(i)
+
+		index, exists := d.hashmap[value]
+		if !exists {
+			index = int32(len(d.values))
+			d.values = append(d.values, value)
+			d.hashmap[value] = index
+		}
+
+		indexes[i] = index
+	}
+}
+
+func (d *be128Dictionary) Lookup(indexes []int32, values []Value) {
+	model := d.makeValue(&zeroBE128) // pre-assign the length 16 to all values
+	memsetValues(values, model)
+	d.lookupPointer(indexes, makeArrayValue(values), unsafe.Sizeof(model), unsafe.Offsetof(model.ptr))
+}
+
+func (d *be128Dictionary) Bounds(indexes []int32) (min, max Value) {
+	if len(indexes) > 0 {
+		minValue := d.index(indexes[0])
+		maxValue := minValue
+		values := [64]*[16]byte{}
+
+		for i := 1; i < len(indexes); i += len(values) {
+			n := len(indexes) - i
+			if n > len(values) {
+				n = len(values)
+			}
+			j := i + n
+			d.lookupPointer(indexes[i:j:j], makeArrayBE128(values[:n:n]), unsafe.Sizeof(values[0]), 0)
+
+			for _, value := range values[:n:n] {
+				switch {
+				case lessBE128(value, minValue):
+					minValue = value
+				case lessBE128(maxValue, value):
+					maxValue = value
+				}
+			}
+		}
+
+		min = d.makeValue(minValue)
+		max = d.makeValue(maxValue)
+	}
+	return min, max
+}
+
+func (d *be128Dictionary) Reset() {
+	d.values = d.values[:0]
+	d.hashmap = nil
+}
+
+func (d *be128Dictionary) Page() BufferedPage {
+	return &d.be128Page
 }
 
 // indexedType is a wrapper around a Type value which overrides object

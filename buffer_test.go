@@ -110,6 +110,21 @@ var bufferTests = [...]struct {
 	},
 
 	{
+		scenario: "fixed length byte array",
+		typ:      parquet.FixedLenByteArrayType(10),
+		values: [][]interface{}{
+			{},
+			{[10]byte{}},
+			{[10]byte{0: 1}},
+			{
+				[10]byte{0: 0}, [10]byte{0: 2}, [10]byte{0: 1}, [10]byte{0: 4}, [10]byte{0: 3},
+				[10]byte{0: 6}, [10]byte{0: 5}, [10]byte{0: 8}, [10]byte{0: 7}, [10]byte{0: 10},
+				[10]byte{0: 11}, [10]byte{0: 12}, [10]byte{9: 0xFF},
+			},
+		},
+	},
+
+	{
 		scenario: "uuid",
 		typ:      parquet.UUID().Type(),
 		values: [][]interface{}{

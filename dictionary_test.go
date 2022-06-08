@@ -16,6 +16,7 @@ var dictionaryTypes = [...]parquet.Type{
 	parquet.FloatType,
 	parquet.DoubleType,
 	parquet.ByteArrayType,
+	parquet.FixedLenByteArrayType(10),
 	parquet.FixedLenByteArrayType(16),
 	parquet.Uint(32).Type(),
 	parquet.Uint(64).Type(),

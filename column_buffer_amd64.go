@@ -57,14 +57,14 @@ func writeValuesUint64(values []uint64, rows array, size, offset uintptr) {
 	writeValues64bitsAVX2(*(*unsafe.Pointer)(unsafe.Pointer(&values)), rows, size, offset)
 }
 
-func writeValuesUint128(values []byte, rows array, size, offset uintptr) {
-	writeValues128bits(*(*unsafe.Pointer)(unsafe.Pointer(&values)), rows, size, offset)
-}
-
 func writeValuesFloat32(values []float32, rows array, size, offset uintptr) {
 	writeValues32bitsAVX2(*(*unsafe.Pointer)(unsafe.Pointer(&values)), rows, size, offset)
 }
 
 func writeValuesFloat64(values []float64, rows array, size, offset uintptr) {
 	writeValues64bitsAVX2(*(*unsafe.Pointer)(unsafe.Pointer(&values)), rows, size, offset)
+}
+
+func writeValuesBE128(values [][16]byte, rows array, size, offset uintptr) {
+	writeValues128bits(*(*unsafe.Pointer)(unsafe.Pointer(&values)), rows, size, offset)
 }
