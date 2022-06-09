@@ -9,7 +9,51 @@ import (
 
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/format"
+	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
+
+type BinaryPackedEncoding struct {
+	encoding.NotSupported
+}
+
+func (e *BinaryPackedEncoding) String() string {
+	return "DELTA_BINARY_PACKED"
+}
+
+func (e *BinaryPackedEncoding) Encoding() format.Encoding {
+	return format.DeltaBinaryPacked
+}
+
+func (e *BinaryPackedEncoding) EncodeInt32(dst, src []byte) ([]byte, error) {
+	if (len(src) % 4) != 0 {
+		return dst[:0], encoding.ErrEncodeInvalidInputSize(e, "INT64", len(src))
+	}
+	return encodeInt32(dst[:0], bytesToInt32(src)), nil
+}
+
+func (e *BinaryPackedEncoding) EncodeInt64(dst, src []byte) ([]byte, error) {
+	if (len(src) % 8) != 0 {
+		return dst[:0], encoding.ErrEncodeInvalidInputSize(e, "INT64", len(src))
+	}
+	return encodeInt64(dst[:0], bytesToInt64(src)), nil
+}
+
+func (e *BinaryPackedEncoding) DecodeInt32(dst, src []byte) ([]byte, error) {
+	dst, _, err := decodeInt32(dst[:0], src)
+	return dst, e.wrap(err)
+}
+
+func (e *BinaryPackedEncoding) DecodeInt64(dst, src []byte) ([]byte, error) {
+	dst, _, err := decodeInt64(dst[:0], src)
+	return dst, e.wrap(err)
+}
+
+func (e *BinaryPackedEncoding) wrap(err error) error {
+	if err != nil {
+		err = encoding.Error(e, err)
+	}
+	return err
+}
 
 const (
 	blockSize     = 128
@@ -258,165 +302,212 @@ func grow(buf []byte, size int) []byte {
 	return newBuf
 }
 
-type BinaryPackedEncoding struct {
-	encoding.NotSupported
+var (
+	decodeBlockInt32     = decodeBlockInt32Default
+	decodeMiniBlockInt32 = decodeMiniBlockInt32Default
+)
+
+type decodeBlockInt32Func func([]int32, int32, int32) int32
+
+type decodeMiniBlockInt32Func func([]int32, []uint32, int, uint)
+
+func decodeInt32(dst, src []byte) ([]byte, []byte, error) {
+	return decodeInt32Default(dst, src, decodeBlockInt32, decodeMiniBlockInt32)
 }
 
-func (e *BinaryPackedEncoding) String() string {
-	return "DELTA_BINARY_PACKED"
-}
-
-func (e *BinaryPackedEncoding) Encoding() format.Encoding {
-	return format.DeltaBinaryPacked
-}
-
-func (e *BinaryPackedEncoding) EncodeInt32(dst, src []byte) ([]byte, error) {
-	if (len(src) % 4) != 0 {
-		return dst[:0], encoding.ErrEncodeInvalidInputSize(e, "INT64", len(src))
-	}
-	return encodeInt32(dst[:0], bytesToInt32(src)), nil
-}
-
-func (e *BinaryPackedEncoding) EncodeInt64(dst, src []byte) ([]byte, error) {
-	if (len(src) % 8) != 0 {
-		return dst[:0], encoding.ErrEncodeInvalidInputSize(e, "INT64", len(src))
-	}
-	return encodeInt64(dst[:0], bytesToInt64(src)), nil
-}
-
-func (e *BinaryPackedEncoding) DecodeInt32(dst, src []byte) ([]byte, error) {
-	dst, _, err := e.decodeInt32(dst[:0], src)
-	return dst, e.wrap(err)
-}
-
-func (e *BinaryPackedEncoding) DecodeInt64(dst, src []byte) ([]byte, error) {
-	dst, _, err := e.decodeInt64(dst[:0], src)
-	return dst, e.wrap(err)
-}
-
-func (e *BinaryPackedEncoding) decodeInt32(dst, src []byte) ([]byte, []byte, error) {
-	src, err := e.decode(src, func(value int64) {
-		buf := [4]byte{}
-		binary.LittleEndian.PutUint32(buf[:], uint32(value))
-		dst = append(dst, buf[:]...)
-	})
-	return dst, src, err
-}
-
-func (e *BinaryPackedEncoding) decodeInt64(dst, src []byte) ([]byte, []byte, error) {
-	src, err := e.decode(src, func(value int64) {
-		buf := [8]byte{}
-		binary.LittleEndian.PutUint64(buf[:], uint64(value))
-		dst = append(dst, buf[:]...)
-	})
-	return dst, src, err
-}
-
-func (e *BinaryPackedEncoding) decode(src []byte, observe func(int64)) ([]byte, error) {
+func decodeInt32Default(dst, src []byte, decodeBlock decodeBlockInt32Func, decodeMiniBlock decodeMiniBlockInt32Func) ([]byte, []byte, error) {
 	blockSize, numMiniBlocks, totalValues, firstValue, src, err := decodeBinaryPackedHeader(src)
 	if err != nil {
-		return src, err
+		return dst, src, err
 	}
 	if totalValues == 0 {
-		return src, nil
+		return dst, src, nil
+	}
+	if firstValue < math.MinInt32 || firstValue > math.MaxInt32 {
+		return dst, src, fmt.Errorf("first value out of range: %d", firstValue)
 	}
 
-	observe(firstValue)
+	writeOffset := len(dst)
+	dst = resize(dst, len(dst)+4*totalValues)
+	out := unsafecast.BytesToInt32(dst)
+	out[writeOffset] = int32(firstValue)
+	writeOffset++
 	totalValues--
-	lastValue := firstValue
+	lastValue := int32(firstValue)
 	numValuesInMiniBlock := blockSize / numMiniBlocks
-
-	block := make([]int64, 128)
-	if cap(block) < blockSize {
-		block = make([]int64, blockSize)
-	} else {
-		block = block[:blockSize]
-	}
-
-	miniBlockData := make([]byte, 256)
 
 	for totalValues > 0 && len(src) > 0 {
 		var minDelta int64
 		var bitWidths []byte
 		minDelta, bitWidths, src, err = decodeBinaryPackedBlock(src, numMiniBlocks)
 		if err != nil {
-			return src, err
+			return dst, src, err
 		}
 
-		blockOffset := 0
-		for i := range block {
-			block[i] = 0
-		}
+		blockOffset := writeOffset
 
 		for _, bitWidth := range bitWidths {
-			if bitWidth == 0 {
-				n := numValuesInMiniBlock
-				if n > totalValues {
-					n = totalValues
-				}
-				blockOffset += n
-				totalValues -= n
-			} else {
+			n := min(numValuesInMiniBlock, totalValues)
+			if bitWidth != 0 {
 				miniBlockSize := (numValuesInMiniBlock * int(bitWidth)) / 8
-				if cap(miniBlockData) < miniBlockSize {
-					miniBlockData = make([]byte, miniBlockSize, miniBlockSize)
-				} else {
-					miniBlockData = miniBlockData[:miniBlockSize]
+				miniBlockData := src
+				if miniBlockSize <= len(src) {
+					miniBlockData = src[:miniBlockSize]
 				}
-
-				n := copy(miniBlockData, src)
-				src = src[n:]
-				bitOffset := uint(0)
-
-				for count := numValuesInMiniBlock; count > 0 && totalValues > 0; count-- {
-					delta := int64(0)
-
-					for b := uint(0); b < uint(bitWidth); b++ {
-						x := (bitOffset + b) / 8
-						y := (bitOffset + b) % 8
-						delta |= int64((miniBlockData[x]>>y)&1) << b
-					}
-
-					block[blockOffset] = delta
-					blockOffset++
-					totalValues--
-					bitOffset += uint(bitWidth)
-				}
+				src = src[len(miniBlockData):]
+				in := unsafecast.BytesToUint32(miniBlockData)
+				decodeMiniBlock(out[writeOffset:], in, n, uint(bitWidth))
 			}
-
+			writeOffset += n
+			totalValues -= n
 			if totalValues == 0 {
 				break
 			}
 		}
 
+		lastValue = decodeBlock(out[blockOffset:writeOffset], int32(minDelta), lastValue)
+	}
+
+	if totalValues > 0 {
+		return dst, src, fmt.Errorf("%d missing values: %w", totalValues, io.ErrUnexpectedEOF)
+	}
+
+	return dst, src, nil
+}
+
+func decodeBlockInt32Default(block []int32, minDelta, lastValue int32) int32 {
+	if len(block) > 0 {
 		for i := range block {
 			block[i] += minDelta
 		}
-
 		block[0] += lastValue
 		for i := 1; i < len(block); i++ {
 			block[i] += block[i-1]
 		}
-		if values := block[:blockOffset]; len(values) > 0 {
-			for _, v := range values {
-				observe(v)
-			}
-			lastValue = values[len(values)-1]
+		lastValue = block[len(block)-1]
+	}
+	return lastValue
+}
+
+func decodeMiniBlockInt32Default(dst []int32, src []uint32, numValues int, bitWidth uint) {
+	bitMask := uint32(1<<bitWidth) - 1
+	bitOffset := uint(0)
+
+	for n := 0; n < numValues; n++ {
+		i := bitOffset / 32
+		j := bitOffset % 32
+		d := (src[i] & (bitMask << j)) >> j
+		if j+bitWidth > 32 {
+			k := 32 - j
+			d |= (src[i+1] & (bitMask >> k)) << k
 		}
+		dst[n] = int32(d)
+		bitOffset += bitWidth
+	}
+}
+
+var (
+	decodeBlockInt64     = decodeBlockInt64Default
+	decodeMiniBlockInt64 = decodeMiniBlockInt64Default
+)
+
+type decodeBlockInt64Func func([]int64, int64, int64) int64
+
+type decodeMiniBlockInt64Func func([]int64, []uint32, int, uint)
+
+func decodeInt64(dst, src []byte) ([]byte, []byte, error) {
+	return decodeInt64Default(dst, src, decodeBlockInt64, decodeMiniBlockInt64)
+}
+
+func decodeInt64Default(dst, src []byte, decodeBlock decodeBlockInt64Func, decodeMiniBlock decodeMiniBlockInt64Func) ([]byte, []byte, error) {
+	blockSize, numMiniBlocks, totalValues, firstValue, src, err := decodeBinaryPackedHeader(src)
+	if err != nil {
+		return dst, src, err
+	}
+	if totalValues == 0 {
+		return dst, src, nil
+	}
+
+	writeOffset := len(dst)
+	dst = resize(dst, len(dst)+8*totalValues)
+	out := unsafecast.BytesToInt64(dst)
+	out[writeOffset] = firstValue
+	writeOffset++
+	totalValues--
+	lastValue := firstValue
+	numValuesInMiniBlock := blockSize / numMiniBlocks
+
+	for totalValues > 0 && len(src) > 0 {
+		var minDelta int64
+		var bitWidths []byte
+		minDelta, bitWidths, src, err = decodeBinaryPackedBlock(src, numMiniBlocks)
+		if err != nil {
+			return dst, src, err
+		}
+		blockOffset := writeOffset
+
+		for _, bitWidth := range bitWidths {
+			n := min(numValuesInMiniBlock, totalValues)
+			if bitWidth != 0 {
+				miniBlockSize := (numValuesInMiniBlock * int(bitWidth)) / 8
+				miniBlockData := src
+				if miniBlockSize <= len(src) {
+					miniBlockData = src[:miniBlockSize]
+				}
+				src = src[len(miniBlockData):]
+				in := unsafecast.BytesToUint32(miniBlockData)
+				decodeMiniBlock(out[writeOffset:], in, n, uint(bitWidth))
+			}
+			writeOffset += n
+			totalValues -= n
+			if totalValues == 0 {
+				break
+			}
+		}
+
+		lastValue = decodeBlock(out[blockOffset:writeOffset], minDelta, lastValue)
 	}
 
 	if totalValues > 0 {
-		return src, fmt.Errorf("%d missing values: %w", totalValues, io.ErrUnexpectedEOF)
+		return dst, src, fmt.Errorf("%d missing values: %w", totalValues, io.ErrUnexpectedEOF)
 	}
 
-	return src, nil
+	return dst, src, nil
 }
 
-func (e *BinaryPackedEncoding) wrap(err error) error {
-	if err != nil {
-		err = encoding.Error(e, err)
+func decodeBlockInt64Default(block []int64, minDelta, lastValue int64) int64 {
+	if len(block) > 0 {
+		for i := range block {
+			block[i] += minDelta
+		}
+		block[0] += lastValue
+		for i := 1; i < len(block); i++ {
+			block[i] += block[i-1]
+		}
+		lastValue = block[len(block)-1]
 	}
-	return err
+	return lastValue
+}
+
+func decodeMiniBlockInt64Default(dst []int64, src []uint32, numValues int, bitWidth uint) {
+	bitMask := uint64(1<<bitWidth) - 1
+	bitOffset := uint(0)
+
+	for n := 0; n < numValues; n++ {
+		i := bitOffset / 32
+		j := bitOffset % 32
+		d := (uint64(src[i]) & (bitMask << j)) >> j
+		if j+bitWidth > 32 {
+			k := 32 - j
+			d |= (uint64(src[i+1]) & (bitMask >> k)) << k
+			if j+bitWidth > 64 {
+				k := 64 - j
+				d |= (uint64(src[i+2]) & (bitMask >> k)) << k
+			}
+		}
+		dst[n] = int64(d)
+		bitOffset += bitWidth
+	}
 }
 
 func decodeBinaryPackedHeader(src []byte) (blockSize, numMiniBlocks, totalValues int, firstValue int64, next []byte, err error) {

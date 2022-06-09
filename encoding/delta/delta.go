@@ -3,6 +3,8 @@ package delta
 import (
 	"sync"
 	"unsafe"
+
+	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 type int32Buffer struct {
@@ -10,8 +12,9 @@ type int32Buffer struct {
 }
 
 func (buf *int32Buffer) decode(src []byte) ([]byte, error) {
-	var binpack BinaryPackedEncoding
-	return binpack.decode(src, func(value int64) { buf.values = append(buf.values, int32(value)) })
+	values, remain, err := decodeInt32(unsafecast.Int32ToBytes(buf.values[:0]), src)
+	buf.values = unsafecast.BytesToInt32(values)
+	return remain, err
 }
 
 var (
@@ -40,4 +43,11 @@ func bytesToInt32(b []byte) []int32 {
 
 func bytesToInt64(b []byte) []int64 {
 	return unsafe.Slice(*(**int64)(unsafe.Pointer(&b)), len(b)/8)
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
