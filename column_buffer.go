@@ -727,11 +727,11 @@ func (col *repeatedColumnBuffer) ReadValuesAt(values []Value, offset int64) (int
 
 type booleanColumnBuffer struct{ booleanPage }
 
-func newBooleanColumnBuffer(typ Type, columnIndex int16, bufferSize int) *booleanColumnBuffer {
+func newBooleanColumnBuffer(typ Type, columnIndex int16, numValues int32) *booleanColumnBuffer {
 	return &booleanColumnBuffer{
 		booleanPage: booleanPage{
 			typ:         typ,
-			bits:        make([]byte, 0, bufferSize),
+			bits:        make([]byte, 0, numValues),
 			columnIndex: ^columnIndex,
 		},
 	}
@@ -916,11 +916,11 @@ func (col *booleanColumnBuffer) ReadValuesAt(values []Value, offset int64) (n in
 
 type int32ColumnBuffer struct{ int32Page }
 
-func newInt32ColumnBuffer(typ Type, columnIndex int16, bufferSize int) *int32ColumnBuffer {
+func newInt32ColumnBuffer(typ Type, columnIndex int16, numValues int32) *int32ColumnBuffer {
 	return &int32ColumnBuffer{
 		int32Page: int32Page{
 			typ:         typ,
-			values:      make([]int32, 0, bufferSize/4),
+			values:      make([]int32, 0, numValues),
 			columnIndex: ^columnIndex,
 		},
 	}
@@ -1018,11 +1018,11 @@ func (col *int32ColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int,
 
 type int64ColumnBuffer struct{ int64Page }
 
-func newInt64ColumnBuffer(typ Type, columnIndex int16, bufferSize int) *int64ColumnBuffer {
+func newInt64ColumnBuffer(typ Type, columnIndex int16, numValues int32) *int64ColumnBuffer {
 	return &int64ColumnBuffer{
 		int64Page: int64Page{
 			typ:         typ,
-			values:      make([]int64, 0, bufferSize/8),
+			values:      make([]int64, 0, numValues),
 			columnIndex: ^columnIndex,
 		},
 	}
@@ -1119,11 +1119,11 @@ func (col *int64ColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int,
 
 type int96ColumnBuffer struct{ int96Page }
 
-func newInt96ColumnBuffer(typ Type, columnIndex int16, bufferSize int) *int96ColumnBuffer {
+func newInt96ColumnBuffer(typ Type, columnIndex int16, numValues int32) *int96ColumnBuffer {
 	return &int96ColumnBuffer{
 		int96Page: int96Page{
 			typ:         typ,
-			values:      make([]deprecated.Int96, 0, bufferSize/12),
+			values:      make([]deprecated.Int96, 0, numValues),
 			columnIndex: ^columnIndex,
 		},
 	}
@@ -1212,11 +1212,11 @@ func (col *int96ColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int,
 
 type floatColumnBuffer struct{ floatPage }
 
-func newFloatColumnBuffer(typ Type, columnIndex int16, bufferSize int) *floatColumnBuffer {
+func newFloatColumnBuffer(typ Type, columnIndex int16, numValues int32) *floatColumnBuffer {
 	return &floatColumnBuffer{
 		floatPage: floatPage{
 			typ:         typ,
-			values:      make([]float32, 0, bufferSize/4),
+			values:      make([]float32, 0, numValues),
 			columnIndex: ^columnIndex,
 		},
 	}
@@ -1313,11 +1313,11 @@ func (col *floatColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int,
 
 type doubleColumnBuffer struct{ doublePage }
 
-func newDoubleColumnBuffer(typ Type, columnIndex int16, bufferSize int) *doubleColumnBuffer {
+func newDoubleColumnBuffer(typ Type, columnIndex int16, numValues int32) *doubleColumnBuffer {
 	return &doubleColumnBuffer{
 		doublePage: doublePage{
 			typ:         typ,
-			values:      make([]float64, 0, bufferSize/8),
+			values:      make([]float64, 0, numValues),
 			columnIndex: ^columnIndex,
 		},
 	}
@@ -1417,14 +1417,14 @@ type byteArrayColumnBuffer struct {
 	offsets []uint32
 }
 
-func newByteArrayColumnBuffer(typ Type, columnIndex int16, bufferSize int) *byteArrayColumnBuffer {
+func newByteArrayColumnBuffer(typ Type, columnIndex int16, numValues int32) *byteArrayColumnBuffer {
 	return &byteArrayColumnBuffer{
 		byteArrayPage: byteArrayPage{
 			typ:         typ,
-			values:      make([]byte, 0, bufferSize/2),
+			values:      make([]byte, 0, typ.EstimateSize(int(numValues))),
 			columnIndex: ^columnIndex,
 		},
-		offsets: make([]uint32, 0, bufferSize/8),
+		offsets: make([]uint32, 0, numValues),
 	}
 }
 
@@ -1566,13 +1566,13 @@ type fixedLenByteArrayColumnBuffer struct {
 	tmp []byte
 }
 
-func newFixedLenByteArrayColumnBuffer(typ Type, columnIndex int16, bufferSize int) *fixedLenByteArrayColumnBuffer {
+func newFixedLenByteArrayColumnBuffer(typ Type, columnIndex int16, numValues int32) *fixedLenByteArrayColumnBuffer {
 	size := typ.Length()
 	return &fixedLenByteArrayColumnBuffer{
 		fixedLenByteArrayPage: fixedLenByteArrayPage{
 			typ:         typ,
 			size:        size,
-			data:        make([]byte, 0, bufferSize),
+			data:        make([]byte, 0, typ.EstimateSize(int(numValues))),
 			columnIndex: ^columnIndex,
 		},
 		tmp: make([]byte, size),
@@ -1691,11 +1691,11 @@ func (col *fixedLenByteArrayColumnBuffer) ReadValuesAt(values []Value, offset in
 
 type uint32ColumnBuffer struct{ uint32Page }
 
-func newUint32ColumnBuffer(typ Type, columnIndex int16, bufferSize int) *uint32ColumnBuffer {
+func newUint32ColumnBuffer(typ Type, columnIndex int16, numValues int32) *uint32ColumnBuffer {
 	return &uint32ColumnBuffer{
 		uint32Page: uint32Page{
 			typ:         typ,
-			values:      make([]uint32, 0, bufferSize/4),
+			values:      make([]uint32, 0, numValues),
 			columnIndex: ^columnIndex,
 		},
 	}
@@ -1792,11 +1792,11 @@ func (col *uint32ColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int
 
 type uint64ColumnBuffer struct{ uint64Page }
 
-func newUint64ColumnBuffer(typ Type, columnIndex int16, bufferSize int) *uint64ColumnBuffer {
+func newUint64ColumnBuffer(typ Type, columnIndex int16, numValues int32) *uint64ColumnBuffer {
 	return &uint64ColumnBuffer{
 		uint64Page: uint64Page{
 			typ:         typ,
-			values:      make([]uint64, 0, bufferSize/8),
+			values:      make([]uint64, 0, numValues),
 			columnIndex: ^columnIndex,
 		},
 	}
@@ -1893,11 +1893,11 @@ func (col *uint64ColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int
 
 type be128ColumnBuffer struct{ be128Page }
 
-func newBE128ColumnBuffer(typ Type, columnIndex int16, bufferSize int) *be128ColumnBuffer {
+func newBE128ColumnBuffer(typ Type, columnIndex int16, numValues int32) *be128ColumnBuffer {
 	return &be128ColumnBuffer{
 		be128Page: be128Page{
 			typ:         typ,
-			values:      make([][16]byte, 0, bufferSize/16),
+			values:      make([][16]byte, 0, numValues),
 			columnIndex: ^columnIndex,
 		},
 	}

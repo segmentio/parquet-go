@@ -1079,8 +1079,8 @@ func newIndexedType(typ Type, dict Dictionary) *indexedType {
 	return &indexedType{Type: typ, dict: dict}
 }
 
-func (t *indexedType) NewColumnBuffer(columnIndex, bufferSize int) ColumnBuffer {
-	return newIndexedColumnBuffer(t, makeColumnIndex(columnIndex), bufferSize)
+func (t *indexedType) NewColumnBuffer(columnIndex, numValues int) ColumnBuffer {
+	return newIndexedColumnBuffer(t, makeColumnIndex(columnIndex), makeNumValues(numValues))
 }
 
 func (t *indexedType) NewPage(columnIndex, numValues int, data []byte) Page {
@@ -1215,11 +1215,11 @@ func (r *indexedPageValues) ReadValues(values []Value) (n int, err error) {
 // builds a page of indexes into a parent dictionary when values are written.
 type indexedColumnBuffer struct{ indexedPage }
 
-func newIndexedColumnBuffer(typ *indexedType, columnIndex int16, bufferSize int) *indexedColumnBuffer {
+func newIndexedColumnBuffer(typ *indexedType, columnIndex int16, numValues int32) *indexedColumnBuffer {
 	return &indexedColumnBuffer{
 		indexedPage: indexedPage{
 			typ:         typ,
-			values:      make([]int32, 0, bufferSize/4),
+			values:      make([]int32, 0, numValues),
 			columnIndex: ^columnIndex,
 		},
 	}
