@@ -6,7 +6,6 @@
 package rle
 
 import (
-	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -14,7 +13,7 @@ import (
 
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/format"
-	"github.com/segmentio/parquet-go/internal/bits"
+	"github.com/segmentio/parquet-go/internal/bytealg"
 	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
@@ -287,7 +286,7 @@ func decodeBytes(dst, src []byte, bitWidth uint) ([]byte, error) {
 	}
 
 	bitMask := uint64(1<<bitWidth) - 1
-	byteCount := bits.ByteCount(8 * bitWidth)
+	byteCount := byteCount(8 * bitWidth)
 
 	for i := 0; i < len(src); {
 		u, n := binary.Uvarint(src[i:])
@@ -355,8 +354,8 @@ func decodeInt32(dst, src []byte, bitWidth uint) ([]byte, error) {
 	}
 
 	bitMask := uint64(1<<bitWidth) - 1
-	byteCount1 := bits.ByteCount(1 * bitWidth)
-	byteCount8 := bits.ByteCount(8 * bitWidth)
+	byteCount1 := byteCount(1 * bitWidth)
+	byteCount8 := byteCount(8 * bitWidth)
 
 	for i := 0; i < len(src); {
 		u, n := binary.Uvarint(src[i:])
@@ -488,16 +487,16 @@ func broadcast8x4(v int32) [8]int32 {
 	return [8]int32{v, v, v, v, v, v, v, v}
 }
 
-func count(data []byte, value byte) int {
-	return bytes.Count(data, []byte{value})
+func byteCount(numBits uint) int {
+	return int((numBits + 7) / 8)
 }
 
 func isZero(data []byte) bool {
-	return count(data, 0x00) == len(data)
+	return bytealg.Count(data, 0x00) == len(data)
 }
 
 func isOnes(data []byte) bool {
-	return count(data, 0xFF) == len(data)
+	return bytealg.Count(data, 0xFF) == len(data)
 }
 
 func resize(buf []byte, size int) []byte {

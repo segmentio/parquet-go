@@ -2,13 +2,12 @@ package parquet
 
 import (
 	"io"
-	. "math/bits"
+	"math/bits"
 	"unsafe"
 
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/encoding/plain"
-	"github.com/segmentio/parquet-go/internal/bits"
 	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
@@ -95,17 +94,17 @@ func newBooleanDictionary(typ Type, columnIndex int16, numValues int32, values [
 	for i := int32(0); i < numValues && indexOfFalse < 0 && indexOfTrue < 0; i += 8 {
 		v := values[i]
 		if v != 0x00 {
-			indexOfTrue = i + int32(TrailingZeros8(v))
+			indexOfTrue = i + int32(bits.TrailingZeros8(v))
 		}
 		if v != 0xFF {
-			indexOfFalse = i + int32(TrailingZeros8(^v))
+			indexOfFalse = i + int32(bits.TrailingZeros8(^v))
 		}
 	}
 
 	return &booleanDictionary{
 		booleanPage: booleanPage{
 			typ:         typ,
-			bits:        values[:bits.ByteCount(uint(numValues))],
+			bits:        values[:byteCount(uint(numValues))],
 			numValues:   numValues,
 			columnIndex: ^columnIndex,
 		},
