@@ -94,6 +94,19 @@ func TestSchemaOf(t *testing.T) {
 	}
 }`,
 		},
+
+		{
+			value: new(struct {
+				Inner struct {
+					Timestamp int64 `parquet:",timestamp(microsecond)"`
+				} `parquet:"inner,optional"`
+			}),
+			print: `message {
+	optional group inner {
+		required int64 Timestamp (TIMESTAMP(isAdjustedToUTC=true,unit=MICROS));
+	}
+}`,
+		},
 	}
 
 	for _, test := range tests {

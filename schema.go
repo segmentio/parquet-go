@@ -581,7 +581,11 @@ func makeStructField(f reflect.StructField) structField {
 		case "timestamp":
 			switch f.Type.Kind() {
 			case reflect.Int64:
-				setNode(Timestamp(Millisecond))
+				timeUnit, err := parseTimestampArgs(args)
+				if err != nil {
+					throwInvalidFieldTag(f, args)
+				}
+				setNode(Timestamp(timeUnit))
 			default:
 				throwInvalidFieldTag(f, option)
 			}
@@ -730,6 +734,27 @@ func parseDecimalArgs(args string) (scale, precision int, err error) {
 		return 0, 0, err
 	}
 	return int(s), int(p), nil
+}
+
+func parseTimestampArgs(args string) (TimeUnit, error) {
+	if !strings.HasPrefix(args, "(") || !strings.HasSuffix(args, ")") {
+		return nil, fmt.Errorf("malformed timestamp args: %s", args)
+	}
+
+	args = strings.TrimPrefix(args, "(")
+	args = strings.TrimSuffix(args, ")")
+
+	switch args {
+	case "millisecond":
+		return Millisecond, nil
+	case "microsecond":
+		return Microsecond, nil
+	case "nanosecond":
+		return Nanosecond, nil
+	default:
+	}
+
+	return nil, fmt.Errorf("unknown time unit: %s", args)
 }
 
 type goNode struct {
