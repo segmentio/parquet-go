@@ -588,6 +588,9 @@ func makeStructField(f reflect.StructField) structField {
 			default:
 				throwInvalidFieldTag(f, option)
 			}
+		default:
+			throwUnknownFieldTag(f, option)
+		}
 	})
 
 	if field.Node == nil {
