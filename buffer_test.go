@@ -206,7 +206,7 @@ func TestBuffer(t *testing.T) {
 
 									options := []parquet.RowGroupOption{
 										schema,
-										parquet.ColumnBufferSize(1024),
+										parquet.ColumnBufferCapacity(100),
 									}
 									if ordering.sorting != nil {
 										options = append(options, parquet.SortingColumns(ordering.sorting))
