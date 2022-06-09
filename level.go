@@ -1,9 +1,9 @@
 package parquet
 
-import "github.com/segmentio/parquet-go/internal/bits"
+import "github.com/segmentio/parquet-go/internal/bytealg"
 
 func countLevelsEqual(levels []byte, value byte) int {
-	return bits.CountByte(levels, value)
+	return bytealg.Count(levels, value)
 }
 
 func countLevelsNotEqual(levels []byte, value byte) int {
@@ -22,6 +22,6 @@ func appendLevel(levels []byte, value byte, count int) []byte {
 		levels = levels[:n]
 	}
 
-	memset(levels[i:], value)
+	bytealg.Broadcast(levels[i:], value)
 	return levels
 }

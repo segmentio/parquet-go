@@ -6,7 +6,6 @@
 package rle
 
 import (
-	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/format"
+	"github.com/segmentio/parquet-go/internal/bytealg"
 	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
@@ -491,16 +491,12 @@ func byteCount(numBits uint) int {
 	return int((numBits + 7) / 8)
 }
 
-func count(data []byte, value byte) int {
-	return bytes.Count(data, []byte{value})
-}
-
 func isZero(data []byte) bool {
-	return count(data, 0x00) == len(data)
+	return bytealg.Count(data, 0x00) == len(data)
 }
 
 func isOnes(data []byte) bool {
-	return count(data, 0xFF) == len(data)
+	return bytealg.Count(data, 0xFF) == len(data)
 }
 
 func resize(buf []byte, size int) []byte {
