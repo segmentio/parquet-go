@@ -744,6 +744,10 @@ func parseTimestampArgs(args string) (TimeUnit, error) {
 	args = strings.TrimPrefix(args, "(")
 	args = strings.TrimSuffix(args, ")")
 
+	if len(args) == 0 {
+		return Millisecond, nil
+	}
+
 	switch args {
 	case "millisecond":
 		return Millisecond, nil
