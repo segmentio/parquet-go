@@ -376,15 +376,10 @@ func decodeInt32Default(dst, src []byte, decodeBlock decodeBlockInt32Func, decod
 }
 
 func decodeBlockInt32Default(block []int32, minDelta, lastValue int32) int32 {
-	if len(block) > 0 {
-		for i := range block {
-			block[i] += minDelta
-		}
-		block[0] += lastValue
-		for i := 1; i < len(block); i++ {
-			block[i] += block[i-1]
-		}
-		lastValue = block[len(block)-1]
+	for i := range block {
+		block[i] += minDelta
+		block[i] += lastValue
+		lastValue = block[i]
 	}
 	return lastValue
 }
@@ -476,15 +471,10 @@ func decodeInt64Default(dst, src []byte, decodeBlock decodeBlockInt64Func, decod
 }
 
 func decodeBlockInt64Default(block []int64, minDelta, lastValue int64) int64 {
-	if len(block) > 0 {
-		for i := range block {
-			block[i] += minDelta
-		}
-		block[0] += lastValue
-		for i := 1; i < len(block); i++ {
-			block[i] += block[i-1]
-		}
-		lastValue = block[len(block)-1]
+	for i := range block {
+		block[i] += minDelta
+		block[i] += lastValue
+		lastValue = block[i]
 	}
 	return lastValue
 }
