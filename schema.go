@@ -56,10 +56,17 @@ type Schema struct {
 //	uuid      | for string and [16]byte types, use the parquet UUID logical type
 //	decimal   | for int32, int64 and [n]byte types, use the parquet DECIMAL logical type
 //	date      | for int32 types use the DATE logical type
-//	timestamp | for int64 types use the TIMESTAMP logical type with millisecond precision
+//	timestamp | for int64 types use the TIMESTAMP logical type with, by default, millisecond precision
 //	split     | for float32/float64, use the BYTE_STREAM_SPLIT encoding
 //
 // The date logical type is an int32 value of the number of days since the unix epoch
+//
+// The timestamp precision can be changed by defining which precision to use as an argument.
+// Supported precisions are: nanosecond, millisecond and microsecond. Example:
+//
+//  type Message struct {
+//    TimestrampMicros int64 `parquet:"timestamp_micros,timestamp(microsecond)"
+//  }
 //
 // The decimal tag must be followed by two integer parameters, the first integer
 // representing the scale and the second the precision; for example:
