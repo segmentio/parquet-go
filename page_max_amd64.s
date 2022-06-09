@@ -581,14 +581,14 @@ next:
     CMPQ AX, CX
     JB loop
 done:
-    MOVQ BX, ret+24(FP)
-    MOVQ $16, ret+32(FP)
-    MOVQ $16, ret+40(FP)
+    MOVQ BX, ret_base+24(FP)
+    MOVQ $16, ret_len+32(FP)
+    MOVQ $16, ret_cap+40(FP)
     RET
 null:
     XORQ BX, BX
-    MOVQ BX, min+24(FP)
-    MOVQ BX, min+32(FP)
-    MOVQ BX, min+40(FP)
+    MOVQ BX, ret_base+24(FP)
+    MOVQ BX, ret_len+32(FP)
+    MOVQ BX, ret_cap+40(FP)
     RET
 
