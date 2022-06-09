@@ -436,14 +436,14 @@ done:
 // of quad words representing the 128 bits elements are the minimums.
 #define vpminu128mask(M) MOVB $0b10101010, M
 
-/*
-// func minBE128(data []byte) []byte
+// func minBE128(data [][16]byte) []byte
 TEXT ·minBE128(SB), NOSPLIT, $-48
     MOVQ data_base+0(FP), AX
     MOVQ data_len+8(FP), CX
     CMPQ CX, $0
     JE null
 
+    SHLQ $4, CX
     MOVQ CX, DX // len
     MOVQ AX, BX // min
     ADDQ AX, CX // end
@@ -586,4 +586,3 @@ null:
     MOVQ BX, min+32(FP)
     MOVQ BX, min+40(FP)
     RET
-*/

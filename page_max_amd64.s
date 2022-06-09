@@ -435,14 +435,15 @@ done:
 // are used to compute results of the operation to determine which of the pairs
 // of quad words representing the 128 bits elements are the maximums.
 #define vpmaxu128mask(M) MOVB $0b10101010, M
-/*
-// func maxBE128(data []byte) []byte
+
+// func maxBE128(data [][16]byte) []byte
 TEXT ·maxBE128(SB), NOSPLIT, $-48
     MOVQ data_base+0(FP), AX
     MOVQ data_len+8(FP), CX
     CMPQ CX, $0
     JE null
 
+    SHLQ $4, CX
     MOVQ CX, DX // len
     MOVQ AX, BX // max
     ADDQ AX, CX // end
@@ -590,4 +591,4 @@ null:
     MOVQ BX, min+32(FP)
     MOVQ BX, min+40(FP)
     RET
-*/
+

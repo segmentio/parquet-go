@@ -2,6 +2,8 @@
 
 package parquet
 
+import "encoding/binary"
+
 // -----------------------------------------------------------------------------
 // TODO: use generics versions of the these functions to reduce the amount of
 // code to maintain when we drop compatilibty with Go version older than 1.18.
@@ -81,6 +83,28 @@ func minFloat64(data []float64) (min float64) {
 				min = value
 			}
 		}
+	}
+	return min
+}
+
+func minBE128(data [][16]byte) (min []byte) {
+	if len(data) > 0 {
+		m := binary.BigEndian.Uint64(data[0][:8])
+		j := 0
+		for i := 1; i < len(data); i++ {
+			x := binary.BigEndian.Uint64(data[i][:8])
+			switch {
+			case x < m:
+				m, j = x, i
+			case x == m:
+				y := binary.BigEndian.Uint64(data[i][8:])
+				n := binary.BigEndian.Uint64(data[j][8:])
+				if y < n {
+					m, j = x, i
+				}
+			}
+		}
+		min = data[j][:]
 	}
 	return min
 }
