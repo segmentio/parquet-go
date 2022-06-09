@@ -11,7 +11,7 @@ const (
 	DefaultCreatedBy            = "github.com/segmentio/parquet-go"
 	DefaultColumnIndexSizeLimit = 16
 	DefaultColumnBufferCapacity = 16 * 1024
-	DefaultPageBufferSize       = 128 * 1024
+	DefaultPageBufferSize       = 256 * 1024
 	DefaultWriteBufferSize      = 32 * 1024
 	DefaultDataPageVersion      = 2
 	DefaultDataPageStatistics   = false
@@ -325,7 +325,7 @@ func SkipBloomFilters(skip bool) FileOption {
 // read and write pages rather than controlling the space used by the encoded
 // representation on disk.
 //
-// Defaults to 1 MiB.
+// Defaults to 256KiB.
 func PageBufferSize(size int) WriterOption {
 	return writerOption(func(config *WriterConfig) { config.PageBufferSize = size })
 }
@@ -335,7 +335,7 @@ func PageBufferSize(size int) WriterOption {
 // Setting the writer buffer size to zero deactivates buffering, all writes are
 // immediately sent to the output io.Writer.
 //
-// Defaults to 32 KiB.
+// Defaults to 32KiB.
 func WriteBufferSize(size int) WriterOption {
 	return writerOption(func(config *WriterConfig) { config.WriteBufferSize = size })
 }
