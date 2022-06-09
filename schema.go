@@ -430,6 +430,10 @@ func makeStructField(f reflect.StructField) structField {
 		compressed compress.Codec
 	)
 
+	if f.Type.Kind() == reflect.Pointer {
+		f.Type = f.Type.Elem()
+	}
+
 	setNode := func(node Node) {
 		if field.Node != nil {
 			throwInvalidStructField("struct field has multiple logical parquet types declared", f)
@@ -563,7 +567,7 @@ func makeStructField(f reflect.StructField) structField {
 				baseType = Int32Type
 			case reflect.Int64:
 				baseType = Int64Type
-			case reflect.Array:
+			case reflect.Array, reflect.Slice:
 				baseType = FixedLenByteArrayType(calcDecimalFixedLenByteArraySize(precision))
 			default:
 				throwInvalidFieldTag(f, option)
@@ -581,6 +585,13 @@ func makeStructField(f reflect.StructField) structField {
 			switch f.Type.Kind() {
 			case reflect.Int64:
 				setNode(Timestamp(Millisecond))
+			default:
+				throwInvalidFieldTag(f, option)
+			}
+		case "timestamp_micros":
+			switch f.Type.Kind() {
+			case reflect.Int64:
+				setNode(Timestamp(Microsecond))
 			default:
 				throwInvalidFieldTag(f, option)
 			}
