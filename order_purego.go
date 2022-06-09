@@ -1,6 +1,6 @@
 //go:build purego || !amd64
 
-package bits
+package parquet
 
 // -----------------------------------------------------------------------------
 // TODO: use generics versions of the these functions to reduce the amount of
@@ -8,27 +8,31 @@ package bits
 // -----------------------------------------------------------------------------
 
 func orderOfInt32(data []int32) int {
-	if int32AreInAscendingOrder(data) {
-		return +1
-	}
-	if int32AreInDescendingOrder(data) {
-		return -1
+	if len(data) > 1 {
+		if int32AreInAscendingOrder(data) {
+			return +1
+		}
+		if int32AreInDescendingOrder(data) {
+			return -1
+		}
 	}
 	return 0
 }
 
 func orderOfInt64(data []int64) int {
-	if int64AreInAscendingOrder(data) {
-		return +1
-	}
-	if int64AreInDescendingOrder(data) {
-		return -1
+	if len(data) > 1 {
+		if int64AreInAscendingOrder(data) {
+			return +1
+		}
+		if int64AreInDescendingOrder(data) {
+			return -1
+		}
 	}
 	return 0
 }
 
 func orderOfUint32(data []uint32) int {
-	if len(data) > 0 {
+	if len(data) > 1 {
 		if uint32AreInAscendingOrder(data) {
 			return +1
 		}
@@ -40,31 +44,37 @@ func orderOfUint32(data []uint32) int {
 }
 
 func orderOfUint64(data []uint64) int {
-	if uint64AreInAscendingOrder(data) {
-		return +1
-	}
-	if uint64AreInDescendingOrder(data) {
-		return -1
+	if len(data) > 1 {
+		if uint64AreInAscendingOrder(data) {
+			return +1
+		}
+		if uint64AreInDescendingOrder(data) {
+			return -1
+		}
 	}
 	return 0
 }
 
 func orderOfFloat32(data []float32) int {
-	if float32AreInAscendingOrder(data) {
-		return +1
-	}
-	if float32AreInDescendingOrder(data) {
-		return -1
+	if len(data) > 1 {
+		if float32AreInAscendingOrder(data) {
+			return +1
+		}
+		if float32AreInDescendingOrder(data) {
+			return -1
+		}
 	}
 	return 0
 }
 
 func orderOfFloat64(data []float64) int {
-	if float64AreInAscendingOrder(data) {
-		return +1
-	}
-	if float64AreInDescendingOrder(data) {
-		return -1
+	if len(data) > 1 {
+		if float64AreInAscendingOrder(data) {
+			return +1
+		}
+		if float64AreInDescendingOrder(data) {
+			return -1
+		}
 	}
 	return 0
 }

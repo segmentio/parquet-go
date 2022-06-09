@@ -2,7 +2,7 @@
 
 package bytealg
 
-func Broadcast(dst []byte, src bool) {
+func Broadcast(dst []byte, src byte) {
 	for i := range dst {
 		dst[i] = src
 	}

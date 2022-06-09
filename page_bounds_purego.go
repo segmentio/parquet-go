@@ -4,8 +4,6 @@ package parquet
 
 import (
 	"encoding/binary"
-
-	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 func boundsInt32(data []int32) (min, max int32) {
@@ -110,21 +108,20 @@ func boundsFloat64(data []float64) (min, max float64) {
 	return min, max
 }
 
-func boundsBE128(data []byte) (min, max []byte) {
+func boundsBE128(data [][16]byte) (min, max []byte) {
 	if len(data) > 0 {
-		be128 := unsafecast.BytesToUint128(data)
-		minHi := binary.BigEndian.Uint64(be128[0][:8])
+		minHi := binary.BigEndian.Uint64(data[0][:8])
 		maxHi := minHi
 		minIndex := 0
 		maxIndex := 0
-		for i := 1; i < len(be128); i++ {
-			hi := binary.BigEndian.Uint64(be128[i][:8])
-			lo := binary.BigEndian.Uint64(be128[i][8:])
+		for i := 1; i < len(data); i++ {
+			hi := binary.BigEndian.Uint64(data[i][:8])
+			lo := binary.BigEndian.Uint64(data[i][8:])
 			switch {
 			case hi < minHi:
 				minHi, minIndex = hi, i
 			case hi == minHi:
-				minLo := binary.BigEndian.Uint64(be128[minIndex][8:])
+				minLo := binary.BigEndian.Uint64(data[minIndex][8:])
 				if lo < minLo {
 					minHi, minIndex = hi, i
 				}
@@ -133,14 +130,14 @@ func boundsBE128(data []byte) (min, max []byte) {
 			case hi > maxHi:
 				maxHi, maxIndex = hi, i
 			case hi == maxHi:
-				maxLo := binary.BigEndian.Uint64(be128[maxIndex][8:])
+				maxLo := binary.BigEndian.Uint64(data[maxIndex][8:])
 				if lo > maxLo {
 					maxHi, maxIndex = hi, i
 				}
 			}
 		}
-		min = be128[minIndex][:]
-		max = be128[maxIndex][:]
+		min = data[minIndex][:]
+		max = data[maxIndex][:]
 	}
 	return min, max
 }
