@@ -588,16 +588,6 @@ func makeStructField(f reflect.StructField) structField {
 			default:
 				throwInvalidFieldTag(f, option)
 			}
-		case "timestamp_micros":
-			switch f.Type.Kind() {
-			case reflect.Int64:
-				setNode(Timestamp(Microsecond))
-			default:
-				throwInvalidFieldTag(f, option)
-			}
-		default:
-			throwUnknownFieldTag(f, option)
-		}
 	})
 
 	if field.Node == nil {
