@@ -1,6 +1,6 @@
 //go:build !purego
 
-package bits
+package parquet
 
 //go:noescape
 func orderOfInt32(data []int32) int

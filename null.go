@@ -101,7 +101,7 @@ func nullIndexFuncOfByteArray(n int) nullIndexFunc {
 		for i := 0; i < rows.len; i++ {
 			p := (*byte)(rows.index(i, size, offset))
 			b := unsafe.Slice(p, n)
-			if isZero(b) {
+			if !isZero(b) {
 				x := uint(i) / 64
 				y := uint(i) % 64
 				bits[x] |= 1 << y

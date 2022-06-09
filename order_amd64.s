@@ -41,7 +41,10 @@ TEXT ·orderOfInt32(SB), NOSPLIT, $-32
     XORQ SI, SI
     XORQ DI, DI
 
-    CMPB ·hasAVX512(SB), $0
+    CMPQ R9, $2
+    JB undefined
+
+    CMPB ·hasAVX512VL(SB), $0
     JE test
 
     CMPQ R9, $16
@@ -122,7 +125,10 @@ TEXT ·orderOfInt64(SB), NOSPLIT, $-32
     XORQ SI, SI
     XORQ DI, DI
 
-    CMPB ·hasAVX512(SB), $0
+    CMPQ R9, $2
+    JB undefined
+
+    CMPB ·hasAVX512VL(SB), $0
     JE test
 
     CMPQ R9, $8
@@ -203,7 +209,10 @@ TEXT ·orderOfUint32(SB), NOSPLIT, $-32
     XORQ SI, SI
     XORQ DI, DI
 
-    CMPB ·hasAVX512(SB), $0
+    CMPQ R9, $2
+    JB undefined
+
+    CMPB ·hasAVX512VL(SB), $0
     JE test
 
     CMPQ R9, $16
@@ -284,7 +293,10 @@ TEXT ·orderOfUint64(SB), NOSPLIT, $-32
     XORQ SI, SI
     XORQ DI, DI
 
-    CMPB ·hasAVX512(SB), $0
+    CMPQ R9, $2
+    JB undefined
+
+    CMPB ·hasAVX512VL(SB), $0
     JE test
 
     CMPQ R9, $8
@@ -365,7 +377,10 @@ TEXT ·orderOfFloat32(SB), NOSPLIT, $-32
     XORQ SI, SI
     XORQ DI, DI
 
-    CMPB ·hasAVX512(SB), $0
+    CMPQ R9, $2
+    JB undefined
+
+    CMPB ·hasAVX512VL(SB), $0
     JE test
 
     CMPQ R9, $16
@@ -450,7 +465,10 @@ TEXT ·orderOfFloat64(SB), NOSPLIT, $-32
     XORQ SI, SI
     XORQ DI, DI
 
-    CMPB ·hasAVX512(SB), $0
+    CMPQ R9, $2
+    JB undefined
+
+    CMPB ·hasAVX512VL(SB), $0
     JE test
 
     CMPQ R9, $8

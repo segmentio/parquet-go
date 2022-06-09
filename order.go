@@ -1,4 +1,4 @@
-package bits
+package parquet
 
 import (
 	"bytes"
@@ -6,7 +6,7 @@ import (
 	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
-func OrderOfBool(data []bool) int {
+func orderOfBool(data []bool) int {
 	switch len(data) {
 	case 0, 1:
 		return 0
@@ -49,61 +49,7 @@ func streakOfFalse(data []bool) int {
 	return len(data)
 }
 
-func OrderOfInt32(data []int32) int {
-	switch len(data) {
-	case 0, 1:
-		return 0
-	default:
-		return orderOfInt32(data)
-	}
-}
-
-func OrderOfInt64(data []int64) int {
-	switch len(data) {
-	case 0, 1:
-		return 0
-	default:
-		return orderOfInt64(data)
-	}
-}
-
-func OrderOfUint32(data []uint32) int {
-	switch len(data) {
-	case 0, 1:
-		return 0
-	default:
-		return orderOfUint32(data)
-	}
-}
-
-func OrderOfUint64(data []uint64) int {
-	switch len(data) {
-	case 0, 1:
-		return 0
-	default:
-		return orderOfUint64(data)
-	}
-}
-
-func OrderOfFloat32(data []float32) int {
-	switch len(data) {
-	case 0, 1:
-		return 0
-	default:
-		return orderOfFloat32(data)
-	}
-}
-
-func OrderOfFloat64(data []float64) int {
-	switch len(data) {
-	case 0, 1:
-		return 0
-	default:
-		return orderOfFloat64(data)
-	}
-}
-
-func OrderOfBytes(data [][]byte) int {
+func orderOfBytes(data [][]byte) int {
 	switch len(data) {
 	case 0, 1:
 		return 0

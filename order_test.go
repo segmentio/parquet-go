@@ -1,11 +1,10 @@
-package bits_test
+package parquet
 
 import (
 	"bytes"
 	"sort"
 	"testing"
 
-	"github.com/segmentio/parquet-go/internal/bits"
 	"github.com/segmentio/parquet-go/internal/quick"
 )
 
@@ -57,20 +56,14 @@ func (v bytesOrder) Len() int           { return len(v) }
 func (v bytesOrder) Less(i, j int) bool { return bytes.Compare(v[i], v[j]) < 0 }
 func (v bytesOrder) Swap(i, j int)      { v[i], v[j] = v[j], v[i] }
 
-const (
-	ascending  = "ascending"
-	descending = "descending"
-	undefined  = "undefined"
-)
-
 func orderingName(ordering int) string {
 	switch {
 	case isAscending(ordering):
-		return ascending
+		return "ascending"
 	case isDescending(ordering):
-		return descending
+		return "descending"
 	default:
-		return undefined
+		return "undefined"
 	}
 }
 
@@ -95,17 +88,17 @@ func checkOrdering(t *testing.T, set sort.Interface, ordering int) bool {
 	switch {
 	case isOrdered(set):
 		if !isAscending(ordering) {
-			t.Errorf("got=%s want=%s", orderingName(ordering), ascending)
+			t.Errorf("got=%s want=ascending", orderingName(ordering))
 			return false
 		}
 	case isOrdered(sort.Reverse(set)):
 		if !isDescending(ordering) {
-			t.Errorf("got=%s want=%s", orderingName(ordering), descending)
+			t.Errorf("got=%s want=descending", orderingName(ordering))
 			return false
 		}
 	default:
 		if !isUndefined(ordering) {
-			t.Errorf("got=%s want=%s", orderingName(ordering), undefined)
+			t.Errorf("got=%s want=undefined", orderingName(ordering))
 			return false
 		}
 	}
@@ -114,7 +107,7 @@ func checkOrdering(t *testing.T, set sort.Interface, ordering int) bool {
 
 func TestOrderOfBool(t *testing.T) {
 	check := func(values []bool) bool {
-		return checkOrdering(t, boolOrder(values), bits.OrderOfBool(values))
+		return checkOrdering(t, boolOrder(values), orderOfBool(values))
 	}
 	err := quick.Check(func(values []bool) bool {
 		if !check(values) {
@@ -137,7 +130,7 @@ func TestOrderOfBool(t *testing.T) {
 
 func TestOrderOfInt32(t *testing.T) {
 	check := func(values []int32) bool {
-		return checkOrdering(t, int32Order(values), bits.OrderOfInt32(values))
+		return checkOrdering(t, int32Order(values), orderOfInt32(values))
 	}
 	err := quick.Check(func(values []int32) bool {
 		if !check(values) {
@@ -175,7 +168,7 @@ func TestOrderOfInt32(t *testing.T) {
 
 func TestOrderOfInt64(t *testing.T) {
 	check := func(values []int64) bool {
-		return checkOrdering(t, int64Order(values), bits.OrderOfInt64(values))
+		return checkOrdering(t, int64Order(values), orderOfInt64(values))
 	}
 	err := quick.Check(func(values []int64) bool {
 		if !check(values) {
@@ -209,7 +202,7 @@ func TestOrderOfInt64(t *testing.T) {
 
 func TestOrderOfUint32(t *testing.T) {
 	check := func(values []uint32) bool {
-		return checkOrdering(t, uint32Order(values), bits.OrderOfUint32(values))
+		return checkOrdering(t, uint32Order(values), orderOfUint32(values))
 	}
 	err := quick.Check(func(values []uint32) bool {
 		if !check(values) {
@@ -243,7 +236,7 @@ func TestOrderOfUint32(t *testing.T) {
 
 func TestOrderOfUint64(t *testing.T) {
 	check := func(values []uint64) bool {
-		return checkOrdering(t, uint64Order(values), bits.OrderOfUint64(values))
+		return checkOrdering(t, uint64Order(values), orderOfUint64(values))
 	}
 	err := quick.Check(func(values []uint64) bool {
 		if !check(values) {
@@ -277,7 +270,7 @@ func TestOrderOfUint64(t *testing.T) {
 
 func TestOrderOfFloat32(t *testing.T) {
 	check := func(values []float32) bool {
-		return checkOrdering(t, float32Order(values), bits.OrderOfFloat32(values))
+		return checkOrdering(t, float32Order(values), orderOfFloat32(values))
 	}
 	err := quick.Check(func(values []float32) bool {
 		if !check(values) {
@@ -311,7 +304,7 @@ func TestOrderOfFloat32(t *testing.T) {
 
 func TestOrderOfFloat64(t *testing.T) {
 	check := func(values []float64) bool {
-		return checkOrdering(t, float64Order(values), bits.OrderOfFloat64(values))
+		return checkOrdering(t, float64Order(values), orderOfFloat64(values))
 	}
 	err := quick.Check(func(values []float64) bool {
 		if !check(values) {
@@ -345,7 +338,7 @@ func TestOrderOfFloat64(t *testing.T) {
 
 func TestOrderOfBytes(t *testing.T) {
 	check := func(values [][]byte) bool {
-		return checkOrdering(t, bytesOrder(values), bits.OrderOfBytes(values))
+		return checkOrdering(t, bytesOrder(values), orderOfBytes(values))
 	}
 	err := quick.Check(func(values [][16]byte) bool {
 		slices := make([][]byte, len(values))
@@ -374,7 +367,7 @@ func BenchmarkOrderOfBool(b *testing.B) {
 	forEachBenchmarkBufferSize(b, func(b *testing.B, bufferSize int) {
 		values := make([]bool, bufferSize/1)
 		for i := 0; i < b.N; i++ {
-			bits.OrderOfBool(values)
+			orderOfBool(values)
 		}
 	})
 }
@@ -383,7 +376,7 @@ func BenchmarkOrderOfInt32(b *testing.B) {
 	forEachBenchmarkBufferSize(b, func(b *testing.B, bufferSize int) {
 		values := make([]int32, bufferSize/4)
 		for i := 0; i < b.N; i++ {
-			bits.OrderOfInt32(values)
+			orderOfInt32(values)
 		}
 	})
 }
@@ -392,7 +385,7 @@ func BenchmarkOrderOfInt64(b *testing.B) {
 	forEachBenchmarkBufferSize(b, func(b *testing.B, bufferSize int) {
 		values := make([]int64, bufferSize/8)
 		for i := 0; i < b.N; i++ {
-			bits.OrderOfInt64(values)
+			orderOfInt64(values)
 		}
 	})
 }
@@ -401,7 +394,7 @@ func BenchmarkOrderOfUint32(b *testing.B) {
 	forEachBenchmarkBufferSize(b, func(b *testing.B, bufferSize int) {
 		values := make([]uint32, bufferSize/4)
 		for i := 0; i < b.N; i++ {
-			bits.OrderOfUint32(values)
+			orderOfUint32(values)
 		}
 	})
 }
@@ -410,7 +403,7 @@ func BenchmarkOrderOfUint64(b *testing.B) {
 	forEachBenchmarkBufferSize(b, func(b *testing.B, bufferSize int) {
 		values := make([]uint64, bufferSize/8)
 		for i := 0; i < b.N; i++ {
-			bits.OrderOfUint64(values)
+			orderOfUint64(values)
 		}
 	})
 }
@@ -419,7 +412,7 @@ func BenchmarkOrderOfFloat32(b *testing.B) {
 	forEachBenchmarkBufferSize(b, func(b *testing.B, bufferSize int) {
 		values := make([]float32, bufferSize/4)
 		for i := 0; i < b.N; i++ {
-			bits.OrderOfFloat32(values)
+			orderOfFloat32(values)
 		}
 	})
 }
@@ -428,7 +421,7 @@ func BenchmarkOrderOfFloat64(b *testing.B) {
 	forEachBenchmarkBufferSize(b, func(b *testing.B, bufferSize int) {
 		values := make([]float64, bufferSize/8)
 		for i := 0; i < b.N; i++ {
-			bits.OrderOfFloat64(values)
+			orderOfFloat64(values)
 		}
 	})
 }
@@ -441,7 +434,7 @@ func BenchmarkOrderOfBytes(b *testing.B) {
 			values[i] = data[i*16 : (i+1)*16]
 		}
 		for i := 0; i < b.N; i++ {
-			bits.OrderOfBytes(values)
+			orderOfBytes(values)
 		}
 	})
 }
