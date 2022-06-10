@@ -4,7 +4,11 @@ import (
 	"bytes"
 	"fmt"
 	"math/bits"
+	"math/rand"
+	"reflect"
 	"testing"
+
+	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 func maxLen32(miniBlock []int32) (maxLen int) {
@@ -316,6 +320,66 @@ func testMiniBlockPackInt64(t *testing.T, f func([]byte, *[miniBlockSize]int64, 
 
 			if !bytes.Equal(want[:n], got[:n]) {
 				t.Errorf("output mismatch: want=%08x got=%08x", want[:n], got[:n])
+			}
+		})
+	}
+}
+
+func TestDecodeMiniBlockInt32(t *testing.T) {
+	testDecodeMiniBlockInt32(t, decodeMiniBlockInt32)
+}
+
+func testDecodeMiniBlockInt32(t *testing.T, f func(dst []int32, src []uint32, bitWidth uint)) {
+	for bitWidth := uint(1); bitWidth <= 32; bitWidth++ {
+		t.Run(fmt.Sprintf("bitWidth=%d", bitWidth), func(t *testing.T) {
+			miniBlock := [miniBlockSize]int32{}
+			bitMask := int32(bitWidth<<1) - 1
+
+			prng := rand.New(rand.NewSource(0))
+			for i := range miniBlock {
+				miniBlock[i] = prng.Int31() & bitMask
+			}
+
+			size := (miniBlockSize * bitWidth) / 8
+			buf := make([]byte, size+64)
+			miniBlockPackInt32(buf, &miniBlock, bitWidth)
+
+			src := unsafecast.BytesToUint32(buf[:size])
+			dst := make([]int32, miniBlockSize)
+			f(dst, src, bitWidth)
+
+			if !reflect.DeepEqual(miniBlock[:], dst) {
+				t.Errorf("values mismatch:\nwant = %v\ngot  = %v", miniBlock[:], dst)
+			}
+		})
+	}
+}
+
+func TestDecodeMiniBlockInt64(t *testing.T) {
+	testDecodeMiniBlockInt64(t, decodeMiniBlockInt64)
+}
+
+func testDecodeMiniBlockInt64(t *testing.T, f func(dst []int64, src []uint32, bitWidth uint)) {
+	for bitWidth := uint(1); bitWidth <= 63; bitWidth++ {
+		t.Run(fmt.Sprintf("bitWidth=%d", bitWidth), func(t *testing.T) {
+			miniBlock := [miniBlockSize]int64{}
+			bitMask := int64(bitWidth<<1) - 1
+
+			prng := rand.New(rand.NewSource(0))
+			for i := range miniBlock {
+				miniBlock[i] = prng.Int63() & bitMask
+			}
+
+			size := (miniBlockSize * bitWidth) / 8
+			buf := make([]byte, size+64)
+			miniBlockPackInt64(buf, &miniBlock, bitWidth)
+
+			src := unsafecast.BytesToUint32(buf[:size])
+			dst := make([]int64, miniBlockSize)
+			f(dst, src, bitWidth)
+
+			if !reflect.DeepEqual(miniBlock[:], dst) {
+				t.Errorf("values mismatch:\nwant = %v\ngot  = %v", miniBlock[:], dst)
 			}
 		})
 	}

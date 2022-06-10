@@ -303,19 +303,51 @@ func grow(buf []byte, size int) []byte {
 }
 
 var (
-	decodeBlockInt32     = decodeBlockInt32Default
-	decodeMiniBlockInt32 = decodeMiniBlockInt32Default
+	// These variables are used to hook optimized versions of the functions
+	// decoding delta encoded blocks and mini-blocks.
+	decodeBlockInt32 = decodeBlockInt32Default
+	decodeBlockInt64 = decodeBlockInt64Default
+
+	decodeMiniBlockInt32Table [32]func(dst []int32, src []uint32)
+	decodeMiniBlockInt64Table [64]func(dst []int64, src []uint32)
 )
 
-type decodeBlockInt32Func func([]int32, int32, int32) int32
+func init() {
+	for i := range decodeMiniBlockInt32Table {
+		bitWidth := uint(i + 1)
+		decodeMiniBlockInt32Table[i] = func(dst []int32, src []uint32) {
+			decodeMiniBlockInt32Default(dst, src, bitWidth)
+		}
+	}
 
-type decodeMiniBlockInt32Func func([]int32, []uint32, int, uint)
+	for i := range decodeMiniBlockInt64Table {
+		bitWidth := uint(i + 1)
+		decodeMiniBlockInt64Table[i] = func(dst []int64, src []uint32) {
+			decodeMiniBlockInt64Default(dst, src, bitWidth)
+		}
+	}
 
-func decodeInt32(dst, src []byte) ([]byte, []byte, error) {
-	return decodeInt32Default(dst, src, decodeBlockInt32, decodeMiniBlockInt32)
+	decodeMiniBlockInt32Table[31] = decodeMiniBlockInt32x32bits
+	decodeMiniBlockInt64Table[63] = decodeMiniBlockInt64x64bits
 }
 
-func decodeInt32Default(dst, src []byte, decodeBlock decodeBlockInt32Func, decodeMiniBlock decodeMiniBlockInt32Func) ([]byte, []byte, error) {
+func decodeMiniBlockInt32x32bits(dst []int32, src []uint32) {
+	copy(dst, unsafecast.Uint32ToInt32(src))
+}
+
+func decodeMiniBlockInt64x64bits(dst []int64, src []uint32) {
+	copy(dst, unsafecast.Uint32ToInt64(src))
+}
+
+func decodeMiniBlockInt32(dst []int32, src []uint32, bitWidth uint) {
+	decodeMiniBlockInt32Table[bitWidth-1](dst, src)
+}
+
+func decodeMiniBlockInt64(dst []int64, src []uint32, bitWidth uint) {
+	decodeMiniBlockInt64Table[bitWidth-1](dst, src)
+}
+
+func decodeInt32(dst, src []byte) ([]byte, []byte, error) {
 	blockSize, numMiniBlocks, totalValues, firstValue, src, err := decodeBinaryPackedHeader(src)
 	if err != nil {
 		return dst, src, err
@@ -356,7 +388,7 @@ func decodeInt32Default(dst, src []byte, decodeBlock decodeBlockInt32Func, decod
 				}
 				src = src[len(miniBlockData):]
 				in := unsafecast.BytesToUint32(miniBlockData)
-				decodeMiniBlock(out[writeOffset:], in, n, uint(bitWidth))
+				decodeMiniBlockInt32(out[writeOffset:writeOffset+n], in, uint(bitWidth))
 			}
 			writeOffset += n
 			totalValues -= n
@@ -365,7 +397,7 @@ func decodeInt32Default(dst, src []byte, decodeBlock decodeBlockInt32Func, decod
 			}
 		}
 
-		lastValue = decodeBlock(out[blockOffset:writeOffset], int32(minDelta), lastValue)
+		lastValue = decodeBlockInt32(out[blockOffset:writeOffset], int32(minDelta), lastValue)
 	}
 
 	if totalValues > 0 {
@@ -375,46 +407,7 @@ func decodeInt32Default(dst, src []byte, decodeBlock decodeBlockInt32Func, decod
 	return dst, src, nil
 }
 
-func decodeBlockInt32Default(block []int32, minDelta, lastValue int32) int32 {
-	for i := range block {
-		block[i] += minDelta
-		block[i] += lastValue
-		lastValue = block[i]
-	}
-	return lastValue
-}
-
-func decodeMiniBlockInt32Default(dst []int32, src []uint32, numValues int, bitWidth uint) {
-	bitMask := uint32(1<<bitWidth) - 1
-	bitOffset := uint(0)
-
-	for n := 0; n < numValues; n++ {
-		i := bitOffset / 32
-		j := bitOffset % 32
-		d := (src[i] & (bitMask << j)) >> j
-		if j+bitWidth > 32 {
-			k := 32 - j
-			d |= (src[i+1] & (bitMask >> k)) << k
-		}
-		dst[n] = int32(d)
-		bitOffset += bitWidth
-	}
-}
-
-var (
-	decodeBlockInt64     = decodeBlockInt64Default
-	decodeMiniBlockInt64 = decodeMiniBlockInt64Default
-)
-
-type decodeBlockInt64Func func([]int64, int64, int64) int64
-
-type decodeMiniBlockInt64Func func([]int64, []uint32, int, uint)
-
 func decodeInt64(dst, src []byte) ([]byte, []byte, error) {
-	return decodeInt64Default(dst, src, decodeBlockInt64, decodeMiniBlockInt64)
-}
-
-func decodeInt64Default(dst, src []byte, decodeBlock decodeBlockInt64Func, decodeMiniBlock decodeMiniBlockInt64Func) ([]byte, []byte, error) {
 	blockSize, numMiniBlocks, totalValues, firstValue, src, err := decodeBinaryPackedHeader(src)
 	if err != nil {
 		return dst, src, err
@@ -451,7 +444,7 @@ func decodeInt64Default(dst, src []byte, decodeBlock decodeBlockInt64Func, decod
 				}
 				src = src[len(miniBlockData):]
 				in := unsafecast.BytesToUint32(miniBlockData)
-				decodeMiniBlock(out[writeOffset:], in, n, uint(bitWidth))
+				decodeMiniBlockInt64(out[writeOffset:writeOffset+n], in, uint(bitWidth))
 			}
 			writeOffset += n
 			totalValues -= n
@@ -460,7 +453,7 @@ func decodeInt64Default(dst, src []byte, decodeBlock decodeBlockInt64Func, decod
 			}
 		}
 
-		lastValue = decodeBlock(out[blockOffset:writeOffset], minDelta, lastValue)
+		lastValue = decodeBlockInt64(out[blockOffset:writeOffset], minDelta, lastValue)
 	}
 
 	if totalValues > 0 {
@@ -468,36 +461,6 @@ func decodeInt64Default(dst, src []byte, decodeBlock decodeBlockInt64Func, decod
 	}
 
 	return dst, src, nil
-}
-
-func decodeBlockInt64Default(block []int64, minDelta, lastValue int64) int64 {
-	for i := range block {
-		block[i] += minDelta
-		block[i] += lastValue
-		lastValue = block[i]
-	}
-	return lastValue
-}
-
-func decodeMiniBlockInt64Default(dst []int64, src []uint32, numValues int, bitWidth uint) {
-	bitMask := uint64(1<<bitWidth) - 1
-	bitOffset := uint(0)
-
-	for n := 0; n < numValues; n++ {
-		i := bitOffset / 32
-		j := bitOffset % 32
-		d := (uint64(src[i]) & (bitMask << j)) >> j
-		if j+bitWidth > 32 {
-			k := 32 - j
-			d |= (uint64(src[i+1]) & (bitMask >> k)) << k
-			if j+bitWidth > 64 {
-				k := 64 - j
-				d |= (uint64(src[i+2]) & (bitMask >> k)) << k
-			}
-		}
-		dst[n] = int64(d)
-		bitOffset += bitWidth
-	}
 }
 
 func decodeBinaryPackedHeader(src []byte) (blockSize, numMiniBlocks, totalValues int, firstValue int64, next []byte, err error) {

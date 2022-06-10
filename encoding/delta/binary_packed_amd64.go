@@ -11,7 +11,6 @@ func init() {
 		encodeInt32 = encodeInt32AVX2
 		encodeInt64 = encodeInt64AVX2
 		decodeBlockInt32 = decodeBlockInt32AVX2
-		decodeBlockInt64 = decodeBlockInt64AVX2
 	}
 }
 
@@ -195,7 +194,16 @@ func encodeInt64AVX2(dst []byte, src []int64) []byte {
 }
 
 //go:noescape
+func decodeBlockInt32Default(dst []int32, minDelta, lastValue int32) int32
+
+//go:noescape
 func decodeBlockInt32AVX2(dst []int32, minDelta, lastValue int32) int32
 
 //go:noescape
-func decodeBlockInt64AVX2(dst []int64, minDelta, lastValue int64) int64
+func decodeBlockInt64Default(dst []int64, minDelta, lastValue int64) int64
+
+//go:noescape
+func decodeMiniBlockInt32Default(dst []int32, src []uint32, bitWidht uint)
+
+//go:noescape
+func decodeMiniBlockInt64Default(dst []int64, src []uint32, bitWidth uint)
