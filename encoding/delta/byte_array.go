@@ -174,10 +174,7 @@ func (e *ByteArrayEncoding) DecodeByteArray(dst, src []byte) ([]byte, error) {
 			return dst, e.errPrefixLengthOutOfBounds(p, len(lastValue))
 		}
 
-		b := [plain.ByteArrayLengthSize]byte{}
-		plain.PutByteArrayLength(b[:], p+n)
-		dst = append(dst, b[:]...)
-
+		dst = plain.AppendByteArrayLength(dst, p+n)
 		j := len(dst)
 		dst = append(dst, lastValue[:p]...)
 		dst = append(dst, src[:n]...)
