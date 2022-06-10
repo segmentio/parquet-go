@@ -119,7 +119,7 @@ func makeWriteFunc[T any](t reflect.Type, schema *Schema) writeFunc[T] {
 				w.columns[i] = c.columnBuffer
 			}
 		}
-		err = writeRows(w.columns, makeArray(rows), size, 0, columnLevels{})
+		err = writeRows(w.columns, makeArrayOf(rows), size, 0, columnLevels{})
 		if err == nil {
 			n = len(rows)
 		}

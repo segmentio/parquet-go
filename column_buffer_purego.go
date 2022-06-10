@@ -35,14 +35,16 @@ func writeValuesUint64(values []uint64, rows array, size, offset uintptr) {
 	panic("unreachable")
 }
 
-func writeValuesUint128(values []byte, rows array, size, offset uintptr) {
-	panic("unreachable")
-}
-
 func writeValuesFloat32(values []float32, rows array, size, offset uintptr) {
 	panic("unreachable")
 }
 
 func writeValuesFloat64(values []float64, rows array, size, offset uintptr) {
 	panic("unreachable")
+}
+
+func writeValuesBE128(values [][16]byte, rows array, size, offset uintptr) {
+	for i := range values {
+		values[i] = *(*[16]byte)(rows.index(i, size, offset))
+	}
 }

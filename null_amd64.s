@@ -5,8 +5,8 @@
 // func nullIndex8bits(bits *uint64, rows array, size, offset uintptr)
 TEXT ·nullIndex8bits(SB), NOSPLIT, $0-40
     MOVQ bits+0(FP), AX
-    MOVQ rows+8(FP), BX
-    MOVQ rows+16(FP), DI
+    MOVQ rows_ptr+8(FP), BX
+    MOVQ rows_len+16(FP), DI
     MOVQ size+24(FP), DX
     ADDQ offset+32(FP), BX
 
@@ -36,8 +36,8 @@ done:
 // func nullIndex32bits(bits *uint64, rows array, size, offset uintptr)
 TEXT ·nullIndex32bits(SB), NOSPLIT, $0-40
     MOVQ bits+0(FP), AX
-    MOVQ rows+8(FP), BX
-    MOVQ rows+16(FP), DI
+    MOVQ rows_ptr+8(FP), BX
+    MOVQ rows_len+16(FP), DI
     MOVQ size+24(FP), DX
     ADDQ offset+32(FP), BX
 
@@ -58,7 +58,7 @@ TEXT ·nullIndex32bits(SB), NOSPLIT, $0-40
     SHLQ $3, R8
 
     VPBROADCASTD size+24(FP), Y0
-    VPMULLD ·scale8x4(SB), Y0, Y0
+    VPMULLD ·range0n8(SB), Y0, Y0
     VPCMPEQD Y1, Y1, Y1
     VPCMPEQD Y2, Y2, Y2
     VPXOR Y3, Y3, Y3
@@ -115,8 +115,8 @@ done:
 // func nullIndex64bits(bits *uint64, rows array, size, offset uintptr)
 TEXT ·nullIndex64bits(SB), NOSPLIT, $0-40
     MOVQ bits+0(FP), AX
-    MOVQ rows+8(FP), BX
-    MOVQ rows+16(FP), DI
+    MOVQ rows_ptr+8(FP), BX
+    MOVQ rows_len+16(FP), DI
     MOVQ size+24(FP), DX
     ADDQ offset+32(FP), BX
 
@@ -194,8 +194,8 @@ done:
 // func nullIndex128bits(bits *uint64, rows array, size, offset uintptr)
 TEXT ·nullIndex128bits(SB), NOSPLIT, $0-40
     MOVQ bits+0(FP), AX
-    MOVQ rows+8(FP), BX
-    MOVQ rows+16(FP), DI
+    MOVQ rows_ptr+8(FP), BX
+    MOVQ rows_len+16(FP), DI
     MOVQ size+24(FP), DX
     ADDQ offset+32(FP), BX
 
