@@ -5,11 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"math/rand"
 	"sort"
 	"testing"
-	"time"
 
 	"github.com/segmentio/parquet-go"
 )
@@ -43,7 +41,6 @@ func BenchmarkMergeRowGroups(b *testing.B) {
 					if err != nil {
 						b.Fatal(err)
 					}
-					start := time.Now()
 
 					rows := mergedRowGroup.Rows()
 					rbuf := make([]parquet.Row, benchmarkRowsPerStep)
@@ -60,9 +57,6 @@ func BenchmarkMergeRowGroups(b *testing.B) {
 						}
 						return n
 					})
-
-					seconds := time.Since(start).Seconds()
-					b.ReportMetric(float64(b.N)/seconds, "row/s")
 				})
 			}
 		})
@@ -115,7 +109,6 @@ func BenchmarkMergeFiles(b *testing.B) {
 					if err != nil {
 						b.Fatal(err)
 					}
-					start := time.Now()
 
 					rows := mergedRowGroup.Rows()
 					rbuf := make([]parquet.Row, benchmarkRowsPerStep)
@@ -137,10 +130,6 @@ func BenchmarkMergeFiles(b *testing.B) {
 					for _, f := range files[:n] {
 						totalSize += f.Size()
 					}
-
-					seconds := time.Since(start).Seconds()
-					b.ReportMetric(float64(b.N)/seconds, "row/s")
-					b.SetBytes(int64(math.Ceil(float64(totalSize) / benchmarkNumRows)))
 				})
 			}
 		})

@@ -2,7 +2,6 @@ package delta
 
 import (
 	"bytes"
-	"fmt"
 	"sort"
 
 	"github.com/segmentio/parquet-go/encoding"
@@ -137,90 +136,132 @@ func (e *ByteArrayEncoding) EncodeFixedLenByteArray(dst, src []byte, size int) (
 
 func (e *ByteArrayEncoding) DecodeByteArray(dst, src []byte) ([]byte, error) {
 	dst = dst[:0]
-	err := e.decode(src, func(prefix, suffix []byte) ([]byte, error) {
-		n := len(prefix) + len(suffix)
-		b := [4]byte{}
-		plain.PutByteArrayLength(b[:], n)
-		dst = append(dst, b[:]...)
-		i := len(dst)
-		dst = append(dst, prefix...)
-		dst = append(dst, suffix...)
-		return dst[i:len(dst):len(dst)], nil
-	})
-	if err != nil {
-		err = encoding.Error(e, err)
-	}
-	return dst, err
-}
 
-func (e *ByteArrayEncoding) DecodeFixedLenByteArray(dst, src []byte, size int) ([]byte, error) {
-	if size < 0 || size > encoding.MaxFixedLenByteArraySize {
-		return dst[:0], encoding.Error(e, encoding.ErrInvalidArgument)
-	}
-	dst = dst[:0]
-	err := e.decode(src, func(prefix, suffix []byte) ([]byte, error) {
-		n := len(prefix) + len(suffix)
-		if n != size {
-			return nil, fmt.Errorf("cannot decode value of size %d into fixed-length byte array of size %d", n, size)
-		}
-		i := len(dst)
-		dst = append(dst, prefix...)
-		dst = append(dst, suffix...)
-		return dst[i:len(dst):len(dst)], nil
-	})
-	if err != nil {
-		err = encoding.Error(e, err)
-	}
-	return dst, err
-}
-
-func (e *ByteArrayEncoding) decode(src []byte, observe func(prefix, suffix []byte) ([]byte, error)) error {
 	prefix := getInt32Buffer()
 	defer putInt32Buffer(prefix)
 
-	length := getInt32Buffer()
-	defer putInt32Buffer(length)
+	suffix := getInt32Buffer()
+	defer putInt32Buffer(suffix)
 
 	var err error
 	src, err = prefix.decode(src)
 	if err != nil {
-		return err
+		return dst, encoding.Error(e, err)
 	}
-	src, err = length.decode(src)
+	src, err = suffix.decode(src)
 	if err != nil {
-		return err
+		return dst, encoding.Error(e, err)
 	}
-	if len(prefix.values) != len(length.values) {
-		return fmt.Errorf("number of prefix and lengths mismatch: %d != %d", len(prefix.values), len(length.values))
+	if len(prefix.values) != len(suffix.values) {
+		return dst, e.errPrefixAndSuffixLengthMismatch(len(prefix.values), len(suffix.values))
 	}
 
 	var lastValue []byte
-	for i, n := range length.values {
-		if int(n) < 0 {
-			return fmt.Errorf("invalid negative value length: %d", n)
+	for i := range suffix.values {
+		n := int(suffix.values[i])
+		if n < 0 {
+			return dst, e.errInvalidNegativeValueLength(n)
 		}
-		if int(n) > len(src) {
-			return fmt.Errorf("value length is larger than the input size: %d > %d", n, len(src))
-		}
-
-		p := prefix.values[i]
-		if int(p) < 0 {
-			return fmt.Errorf("invalid negative prefix length: %d", p)
-		}
-		if int(p) > len(lastValue) {
-			return fmt.Errorf("prefix length %d is larger than the last value of size %d", p, len(lastValue))
+		if n > len(src) {
+			return dst, e.errValueLengthOutOfBounds(n, len(src))
 		}
 
-		prefix := lastValue[:p:p]
-		suffix := src[:n:n]
-		src = src[n:len(src):len(src)]
-
-		if lastValue, err = observe(prefix, suffix); err != nil {
-			return err
+		p := int(prefix.values[i])
+		if p < 0 {
+			return dst, e.errInvalidNegativePrefixLength(p)
 		}
+		if p > len(lastValue) {
+			return dst, e.errPrefixLengthOutOfBounds(p, len(lastValue))
+		}
+
+		b := [plain.ByteArrayLengthSize]byte{}
+		plain.PutByteArrayLength(b[:], p+n)
+		dst = append(dst, b[:]...)
+
+		j := len(dst)
+		dst = append(dst, lastValue[:p]...)
+		dst = append(dst, src[:n]...)
+		lastValue = dst[j:]
+		src = src[n:]
+	}
+	return dst, nil
+
+}
+
+func (e *ByteArrayEncoding) DecodeFixedLenByteArray(dst, src []byte, size int) ([]byte, error) {
+	dst = dst[:0]
+
+	if size < 0 || size > encoding.MaxFixedLenByteArraySize {
+		return dst, encoding.Error(e, encoding.ErrInvalidArgument)
 	}
 
-	return nil
+	prefix := getInt32Buffer()
+	defer putInt32Buffer(prefix)
+
+	suffix := getInt32Buffer()
+	defer putInt32Buffer(suffix)
+
+	var err error
+	src, err = prefix.decode(src)
+	if err != nil {
+		return dst, encoding.Error(e, err)
+	}
+	src, err = suffix.decode(src)
+	if err != nil {
+		return dst, encoding.Error(e, err)
+	}
+	if len(prefix.values) != len(suffix.values) {
+		return dst, e.errPrefixAndSuffixLengthMismatch(len(prefix.values), len(suffix.values))
+	}
+
+	var lastValue []byte
+	for i := range suffix.values {
+		n := int(suffix.values[i])
+		if n < 0 {
+			return dst, e.errInvalidNegativeValueLength(n)
+		}
+		if n > len(src) {
+			return dst, e.errValueLengthOutOfBounds(n, len(src))
+		}
+
+		p := int(prefix.values[i])
+		if p < 0 {
+			return dst, e.errInvalidNegativePrefixLength(p)
+		}
+		if p > len(lastValue) {
+			return dst, e.errPrefixLengthOutOfBounds(p, len(lastValue))
+		}
+		if p+n != size {
+			return dst, encoding.Errorf(e, "cannot decode value of size %d into fixed-length byte array of size %d", p+n, size)
+		}
+
+		j := len(dst)
+		dst = append(dst, lastValue[:p]...)
+		dst = append(dst, src[:n]...)
+		lastValue = dst[j:]
+		src = src[n:]
+	}
+	return dst, nil
+}
+
+func (e *ByteArrayEncoding) errPrefixAndSuffixLengthMismatch(prefixLength, suffixLength int) error {
+	return encoding.Errorf(e, "length of prefix and suffix mismatch: %d != %d", prefixLength, suffixLength)
+}
+
+func (e *ByteArrayEncoding) errInvalidNegativeValueLength(length int) error {
+	return encoding.Errorf(e, "invalid negative value length: %d", length)
+}
+
+func (e *ByteArrayEncoding) errInvalidNegativePrefixLength(length int) error {
+	return encoding.Errorf(e, "invalid negative prefix length: %d", length)
+}
+
+func (e *ByteArrayEncoding) errValueLengthOutOfBounds(length, maxLength int) error {
+	return encoding.Errorf(e, "value length is larger than the input size: %d > %d", length, maxLength)
+}
+
+func (e *ByteArrayEncoding) errPrefixLengthOutOfBounds(length, maxLength int) error {
+	return encoding.Errorf(e, "prefix length %d is larger than the last value of size %d", length, maxLength)
 }
 
 func linearSearchPrefixLength(base, data []byte) (n int) {
