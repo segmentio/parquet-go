@@ -8,22 +8,8 @@ import (
 	"unsafe"
 
 	"github.com/segmentio/parquet-go/deprecated"
+	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
-
-func makeArray[T any](s []T) array {
-	return array{
-		ptr: *(*unsafe.Pointer)(unsafe.Pointer(&s)),
-		len: len(s),
-	}
-}
-
-func makeSlice[T any](a array) []T {
-	return slice[T](a.ptr, a.len)
-}
-
-func slice[T any](p unsafe.Pointer, n int) []T {
-	return unsafe.Slice((*T)(p), n)
-}
 
 // writeRowsFunc is the type of functions that apply rows to a set of column
 // buffers.
@@ -385,8 +371,8 @@ func writeRowsFuncOfMap(t reflect.Type, schema *Schema, path columnPath) writeRo
 					mapKey.SetIterKey(it)
 					mapValue.SetIterValue(it)
 
-					k := array{ptr: addressOf(mapKey), len: 1}
-					v := array{ptr: addressOf(mapValue), len: 1}
+					k := makeArray(unsafecast.PointerOfValue(mapKey), 1)
+					v := makeArray(unsafecast.PointerOfValue(mapValue), 1)
 
 					if err := writeKeyValues(columns, k, v, elemLevels); err != nil {
 						return err
@@ -399,8 +385,4 @@ func writeRowsFuncOfMap(t reflect.Type, schema *Schema, path columnPath) writeRo
 
 		return nil
 	}
-}
-
-func addressOf(v reflect.Value) unsafe.Pointer {
-	return (*[2]unsafe.Pointer)(unsafe.Pointer(&v))[1]
 }

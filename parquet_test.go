@@ -413,7 +413,21 @@ func randValueFuncOf(t parquet.Type) func(*rand.Rand) parquet.Value {
 		return func(r *rand.Rand) parquet.Value {
 			n := r.Intn(49) + 1
 			b := make([]byte, n)
+			const characters = "1234567890qwertyuiopasdfghjklzxcvbnm "
+			for i := range b {
+				b[i] = characters[r.Intn(len(characters))]
+			}
 			return parquet.ValueOf(b)
+		}
+
+	case parquet.FixedLenByteArray:
+		arrayType := reflect.ArrayOf(t.Length(), reflect.TypeOf(byte(0)))
+		return func(r *rand.Rand) parquet.Value {
+			b := make([]byte, arrayType.Len())
+			r.Read(b)
+			v := reflect.New(arrayType).Elem()
+			reflect.Copy(v, reflect.ValueOf(b))
+			return parquet.ValueOf(v.Interface())
 		}
 
 	default:
