@@ -229,6 +229,54 @@ test:
     JNE loop
     RET
 
+// func decodeMiniBlockInt32x4bits1AVX2(dst []int32, src []uint32)
+TEXT ·decodeMiniBlockInt32x4bitsAVX2(SB), NOSPLIT, $0-48
+    MOVQ dst_base+0(FP), AX
+    MOVQ dst_len+8(FP), DX
+    MOVQ src_base+24(FP), BX
+    XORQ SI, SI
+
+    CMPQ DX, $8
+    JB test
+
+    MOVQ DX, CX
+    SHRQ $3, CX
+    SHLQ $3, CX
+    XORQ DI, DI
+    MOVQ $0x0F0F0F0F0F0F0F0F, R8
+
+    VPXOR X0, X0, X0
+    VMOVDQU shuffleMask8bits0to3<>(SB), X3
+    VMOVDQU shuffleMask8bits4to7<>(SB), X4
+loopAVX2:
+    MOVL (BX)(DI*4), R9
+    PDEPQ R8, R9, R9
+    MOVQ R9, X0
+    VPSHUFB X3, X0, X1
+    VPSHUFB X4, X0, X2
+    VMOVDQU X1, (AX)(SI*4)
+    VMOVDQU X2, 16(AX)(SI*4)
+    ADDQ $8, SI
+    INCQ DI
+    CMPQ SI, CX
+    JNE loopAVX2
+    JMP test
+loop: // dst[i] = (src[i/8] >> (4 * (i%8))) & 0xF
+    MOVQ SI, DI
+    MOVQ SI, CX
+    SHRQ $3, DI
+    ANDQ $0b111, CX
+    SHLQ $2, CX
+    MOVL (BX)(DI*4), DI
+    SHRL CX, DI
+    ANDL $0xF, DI
+    MOVL DI, (AX)(SI*4)
+    INCQ SI
+test:
+    CMPQ SI, DX
+    JNE loop
+    RET
+
 // func decodeMiniBlockInt32x8bitsAVX2(dst []int32, src []uint32)
 TEXT ·decodeMiniBlockInt32x8bitsAVX2(SB), NOSPLIT, $0-48
     MOVQ dst_base+0(FP), AX
