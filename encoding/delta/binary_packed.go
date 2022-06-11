@@ -323,6 +323,9 @@ func decodeInt32(dst, src []byte) ([]byte, []byte, error) {
 	lastValue := int32(firstValue)
 	numValuesInMiniBlock := blockSize / numMiniBlocks
 
+	const padding = 16
+	miniBlockTemp := make([]byte, 256+padding)
+
 	for totalValues > 0 && len(src) > 0 {
 		var minDelta int64
 		var bitWidths []byte
@@ -339,10 +342,14 @@ func decodeInt32(dst, src []byte) ([]byte, []byte, error) {
 				miniBlockSize := (numValuesInMiniBlock * int(bitWidth)) / 8
 				miniBlockData := src
 				if miniBlockSize <= len(src) {
-					miniBlockData = src[:miniBlockSize]
+					miniBlockData = miniBlockData[:miniBlockSize]
 				}
 				src = src[len(miniBlockData):]
-				in := unsafecast.BytesToUint32(miniBlockData)
+				if cap(miniBlockData) < miniBlockSize+padding {
+					miniBlockTemp = resize(miniBlockTemp[:0], miniBlockSize+padding)
+					miniBlockData = miniBlockTemp[:copy(miniBlockTemp, miniBlockData)]
+				}
+				in := unsafecast.BytesToUint32(miniBlockData[:miniBlockSize])
 				decodeMiniBlockInt32(out[writeOffset:writeOffset+n], in, uint(bitWidth))
 			}
 			writeOffset += n
@@ -380,6 +387,9 @@ func decodeInt64(dst, src []byte) ([]byte, []byte, error) {
 	lastValue := firstValue
 	numValuesInMiniBlock := blockSize / numMiniBlocks
 
+	const padding = 16
+	miniBlockTemp := make([]byte, 512+padding)
+
 	for totalValues > 0 && len(src) > 0 {
 		var minDelta int64
 		var bitWidths []byte
@@ -398,7 +408,11 @@ func decodeInt64(dst, src []byte) ([]byte, []byte, error) {
 					miniBlockData = src[:miniBlockSize]
 				}
 				src = src[len(miniBlockData):]
-				in := unsafecast.BytesToUint32(miniBlockData)
+				if len(miniBlockData) < miniBlockSize+padding {
+					miniBlockTemp = resize(miniBlockTemp[:0], miniBlockSize+padding)
+					miniBlockData = miniBlockTemp[:copy(miniBlockTemp, miniBlockData)]
+				}
+				in := unsafecast.BytesToUint32(miniBlockData[:miniBlockSize])
 				decodeMiniBlockInt64(out[writeOffset:writeOffset+n], in, uint(bitWidth))
 			}
 			writeOffset += n

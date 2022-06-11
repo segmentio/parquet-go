@@ -217,6 +217,9 @@ func decodeMiniBlockInt32Default(dst []int32, src []uint32, bitWidth uint)
 func decodeMiniBlockInt32x1to16bitsAVX2(dst []int32, src []uint32, bitWidth uint)
 
 //go:noescape
+func decodeMiniBlockInt32x17to31bitsAVX2(dst []int32, src []uint32, bitWidth uint)
+
+//go:noescape
 func decodeMiniBlockInt64Default(dst []int64, src []uint32, bitWidth uint)
 
 func decodeMiniBlockInt32(dst []int32, src []uint32, bitWidth uint) {
@@ -226,6 +229,8 @@ func decodeMiniBlockInt32(dst []int32, src []uint32, bitWidth uint) {
 		copy(dst, unsafecast.Uint32ToInt32(src))
 	case cpu.X86.HasAVX2 && bitWidth <= 16:
 		decodeMiniBlockInt32x1to16bitsAVX2(dst, src, bitWidth)
+	case cpu.X86.HasAVX2 && bitWidth <= 17:
+		decodeMiniBlockInt32x17to31bitsAVX2(dst, src, bitWidth)
 	default:
 		decodeMiniBlockInt32Default(dst, src, bitWidth)
 	}
