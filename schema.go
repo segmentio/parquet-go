@@ -430,7 +430,7 @@ func makeStructField(f reflect.StructField) structField {
 		compressed compress.Codec
 	)
 
-	if f.Type.Kind() == reflect.Pointer {
+	if f.Type.Kind() == reflect.Ptr {
 		f.Type = f.Type.Elem()
 	}
 
