@@ -12,6 +12,7 @@ func init() {
 		encodeInt64 = encodeInt64AVX2
 		decodeBlockInt32 = decodeBlockInt32AVX2
 
+		decodeMiniBlockInt32Table[0] = decodeMiniBlockInt32x1bitAVX2
 		decodeMiniBlockInt32Table[7] = decodeMiniBlockInt32x8bitsAVX2
 		decodeMiniBlockInt32Table[15] = decodeMiniBlockInt32x16bitsAVX2
 	}
@@ -207,6 +208,9 @@ func decodeBlockInt64Default(dst []int64, minDelta, lastValue int64) int64
 
 //go:noescape
 func decodeMiniBlockInt32Default(dst []int32, src []uint32, bitWidth uint)
+
+//go:noescape
+func decodeMiniBlockInt32x1bitAVX2(dst []int32, src []uint32)
 
 //go:noescape
 func decodeMiniBlockInt32x8bitsAVX2(dst []int32, src []uint32)

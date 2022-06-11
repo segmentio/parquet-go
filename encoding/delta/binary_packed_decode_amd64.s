@@ -134,6 +134,62 @@ test:
     JNE loop
     RET
 
+// func decodeMiniBlockInt32x1bit1AVX2(dst []int32, src []uint32)
+TEXT ·decodeMiniBlockInt32x1bitAVX2(SB), NOSPLIT, $0-48
+    MOVQ dst_base+0(FP), AX
+    MOVQ dst_len+8(FP), DX
+    MOVQ src_base+24(FP), BX
+    XORQ SI, SI
+
+    CMPQ DX, $8
+    JB test
+
+    MOVQ DX, CX
+    SHRQ $3, CX
+    SHLQ $3, CX
+    XORQ DI, DI
+    MOVQ $0x0101010101010101, R8
+
+    VPXOR X0, X0, X0
+    MOVQ $4, R9
+    MOVQ R9, X4
+    VPBROADCASTD X4, X4
+    VMOVDQU shuffleMask1bit<>(SB), X3
+    VPADDD X3, X4, X4
+loopAVX2:
+    MOVB (BX)(DI*1), R9
+    PDEPQ R8, R9, R9
+    MOVQ R9, X0
+    VPSHUFB X3, X0, X1
+    VPSHUFB X4, X0, X2
+    VMOVDQU X1, (AX)(SI*4)
+    VMOVDQU X2, 16(AX)(SI*4)
+    ADDQ $8, SI
+    INCQ DI
+    CMPQ SI, CX
+    JNE loopAVX2
+    JMP test
+loop: // dst[i] = (src[i/32] >> (i%32)) & 1
+    MOVQ SI, DI
+    MOVQ SI, CX
+    SHRQ $5, DI
+    ANDQ $0b11111, CX
+    MOVL (BX)(DI*4), DI
+    SHRL CX, DI
+    ANDL $1, DI
+    MOVL DI, (AX)(SI*4)
+    INCQ SI
+test:
+    CMPQ SI, DX
+    JNE loop
+    RET
+
+GLOBL shuffleMask1bit<>(SB), RODATA|NOPTR, $16
+DATA shuffleMask1bit<>+0(SB)/4, $0x80808000
+DATA shuffleMask1bit<>+4(SB)/4, $0x80808001
+DATA shuffleMask1bit<>+8(SB)/4, $0x80808002
+DATA shuffleMask1bit<>+12(SB)/4, $0x80808003
+
 // func decodeMiniBlockInt32x8bitsAVX2(dst []int32, src []uint32)
 TEXT ·decodeMiniBlockInt32x8bitsAVX2(SB), NOSPLIT, $0-48
     MOVQ dst_base+0(FP), AX
