@@ -347,7 +347,7 @@ func testDecodeMiniBlockInt32(t *testing.T, f func(dst []int32, src []uint32, bi
 			src := unsafecast.BytesToUint32(buf[:size])
 			dst := make([]int32, miniBlockSize)
 
-			for n := 1; n < miniBlockSize; n++ {
+			for n := 1; n <= miniBlockSize; n++ {
 				for i := range dst {
 					dst[i] = 0
 				}
@@ -384,7 +384,7 @@ func testDecodeMiniBlockInt64(t *testing.T, f func(dst []int64, src []uint32, bi
 			src := unsafecast.BytesToUint32(buf[:size])
 			dst := make([]int64, miniBlockSize)
 
-			for n := 1; n < miniBlockSize; n++ {
+			for n := 1; n <= miniBlockSize; n++ {
 				for i := range dst {
 					dst[i] = 0
 				}

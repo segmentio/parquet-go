@@ -134,6 +134,79 @@ test:
     JNE loop
     RET
 
+// func decodeMiniBlockInt32x8bitsAVX2(dst []int32, src []uint32)
+TEXT ·decodeMiniBlockInt32x8bitsAVX2(SB), NOSPLIT, $0-48
+    MOVQ dst_base+0(FP), AX
+    MOVQ dst_len+8(FP), DX
+    MOVQ src_base+24(FP), BX
+    XORQ SI, SI
+
+    CMPQ DX, $32
+    JB test
+
+    MOVQ DX, CX
+    SHRQ $5, CX
+    SHLQ $5, CX
+    XORQ DI, DI
+
+    MOVQ $4, R8
+    MOVQ R8, X4
+    VPBROADCASTD X4, Y4
+
+    VMOVDQU shuffleMask8bits<>(SB), Y6
+    VPADDD Y4, Y6, Y7
+    VPADDD Y4, Y7, Y8
+    VPADDD Y4, Y8, Y9
+loopAVX2:
+    VMOVDQU (BX)(DI*4), Y5            // [0..15]  [16..31]
+
+    VPSHUFB Y6, Y5, Y0                // [0..3]   [16..19]
+    VPSHUFB Y7, Y5, Y1                // [4..7]   [20..23]
+    VPSHUFB Y8, Y5, Y2                // [8..11]  [24..27]
+    VPSHUFB Y9, Y5, Y3                // [12..15] [28..31]
+
+    VPERM2I128 $0b100000, Y1, Y0, Y10 // [0..3]   [4..7]
+    VPERM2I128 $0b100000, Y3, Y2, Y11 // [8..11]  [12..15]
+    VPERM2I128 $0b110001, Y1, Y0, Y12 // [16..19] [20..23]
+    VPERM2I128 $0b110001, Y3, Y2, Y13 // [24..27] [28..31]
+
+    VMOVDQU Y10, (AX)(SI*4)
+    VMOVDQU Y11, 32(AX)(SI*4)
+    VMOVDQU Y12, 64(AX)(SI*4)
+    VMOVDQU Y13, 96(AX)(SI*4)
+
+    ADDQ $32, SI
+    ADDQ $8, DI
+    CMPQ SI, CX
+    JNE loopAVX2
+    VZEROUPPER
+    JMP test
+loop: // dst[i] = (src[i/4] >> (8 * (i%4))) & 0xFF
+    MOVQ SI, DI
+    MOVQ SI, CX
+    SHRQ $2, DI
+    ANDQ $0b11, CX
+    SHLQ $3, CX
+    MOVL (BX)(DI*4), DI
+    SHRL CX, DI
+    ANDL $0xFF, DI
+    MOVL DI, (AX)(SI*4)
+    INCQ SI
+test:
+    CMPQ SI, DX
+    JNE loop
+    RET
+
+GLOBL shuffleMask8bits<>(SB), RODATA|NOPTR, $32
+DATA shuffleMask8bits<>+0(SB)/4, $0x80808000
+DATA shuffleMask8bits<>+4(SB)/4, $0x80808001
+DATA shuffleMask8bits<>+8(SB)/4, $0x80808002
+DATA shuffleMask8bits<>+12(SB)/4, $0x80808003
+DATA shuffleMask8bits<>+16(SB)/4, $0x80808000
+DATA shuffleMask8bits<>+20(SB)/4, $0x80808001
+DATA shuffleMask8bits<>+24(SB)/4, $0x80808002
+DATA shuffleMask8bits<>+28(SB)/4, $0x80808003
+
 // -----------------------------------------------------------------------------
 // 64 bits
 // -----------------------------------------------------------------------------
