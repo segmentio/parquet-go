@@ -207,6 +207,67 @@ DATA shuffleMask8bits<>+20(SB)/4, $0x80808001
 DATA shuffleMask8bits<>+24(SB)/4, $0x80808002
 DATA shuffleMask8bits<>+28(SB)/4, $0x80808003
 
+// func decodeMiniBlockInt32x16bitsAVX2(dst []int32, src []uint32)
+TEXT ·decodeMiniBlockInt32x16bitsAVX2(SB), NOSPLIT, $0-48
+    MOVQ dst_base+0(FP), AX
+    MOVQ dst_len+8(FP), DX
+    MOVQ src_base+24(FP), BX
+    XORQ SI, SI
+
+    CMPQ DX, $16
+    JB test
+
+    MOVQ DX, CX
+    SHRQ $4, CX
+    SHLQ $4, CX
+    XORQ DI, DI
+
+    MOVQ $0x0808, R8
+    MOVQ R8, X4
+    VPBROADCASTD X4, Y4
+
+    VMOVDQU shuffleMask16bits<>(SB), Y6
+    VPADDB Y4, Y6, Y7
+loopAVX2:
+    VMOVDQU (BX)(DI*4), Y5
+    VPSHUFB Y6, Y5, Y0
+    VPSHUFB Y7, Y5, Y1
+    VPERM2I128 $0b100000, Y1, Y0, Y10
+    VPERM2I128 $0b110001, Y1, Y0, Y11
+    VMOVDQU Y10, (AX)(SI*4)
+    VMOVDQU Y11, 32(AX)(SI*4)
+    ADDQ $16, SI
+    ADDQ $8, DI
+    CMPQ SI, CX
+    JNE loopAVX2
+    VZEROUPPER
+    JMP test
+loop: // dst[i] = (src[i/2] >> (16 * (i%2))) & 0xFFFF
+    MOVQ SI, DI
+    MOVQ SI, CX
+    SHRQ $1, DI
+    ANDQ $0b1111, CX
+    SHLQ $4, CX
+    MOVL (BX)(DI*4), DI
+    SHRL CX, DI
+    ANDL $0xFFFF, DI
+    MOVL DI, (AX)(SI*4)
+    INCQ SI
+test:
+    CMPQ SI, DX
+    JNE loop
+    RET
+
+GLOBL shuffleMask16bits<>(SB), RODATA|NOPTR, $32
+DATA shuffleMask16bits<>+0(SB)/4, $0x80800100
+DATA shuffleMask16bits<>+4(SB)/4, $0x80800302
+DATA shuffleMask16bits<>+8(SB)/4, $0x80800504
+DATA shuffleMask16bits<>+12(SB)/4, $0x80800706
+DATA shuffleMask16bits<>+16(SB)/4, $0x80800100
+DATA shuffleMask16bits<>+20(SB)/4, $0x80800302
+DATA shuffleMask16bits<>+24(SB)/4, $0x80800504
+DATA shuffleMask16bits<>+28(SB)/4, $0x80800706
+
 // -----------------------------------------------------------------------------
 // 64 bits
 // -----------------------------------------------------------------------------
