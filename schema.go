@@ -438,10 +438,6 @@ func makeStructField(f reflect.StructField) structField {
 		compressed compress.Codec
 	)
 
-	if f.Type.Kind() == reflect.Ptr {
-		f.Type = f.Type.Elem()
-	}
-
 	setNode := func(node Node) {
 		if field.Node != nil {
 			throwInvalidStructField("struct field has multiple logical parquet types declared", f)
@@ -477,7 +473,7 @@ func makeStructField(f reflect.StructField) structField {
 		compressed = c
 	}
 
-	forEachStructTagOption(f.Tag, func(option, args string) {
+	forEachStructTagOption(f, func(t reflect.Type, option, args string) {
 		switch option {
 		case "optional":
 			setOptional()
@@ -507,19 +503,19 @@ func makeStructField(f reflect.StructField) structField {
 			setEncoding(&RLEDictionary)
 
 		case "delta":
-			switch f.Type.Kind() {
+			switch t.Kind() {
 			case reflect.Int, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint32, reflect.Uint64:
 				setEncoding(&DeltaBinaryPacked)
 			case reflect.String:
 				setEncoding(&DeltaByteArray)
 			case reflect.Slice:
-				if f.Type.Elem().Kind() == reflect.Uint8 { // []byte?
+				if t.Elem().Kind() == reflect.Uint8 { // []byte?
 					setEncoding(&DeltaByteArray)
 				} else {
 					throwInvalidFieldTag(f, option)
 				}
 			case reflect.Array:
-				if f.Type.Elem().Kind() == reflect.Uint8 { // [N]byte?
+				if t.Elem().Kind() == reflect.Uint8 { // [N]byte?
 					setEncoding(&DeltaByteArray)
 				} else {
 					throwInvalidFieldTag(f, option)
@@ -529,7 +525,7 @@ func makeStructField(f reflect.StructField) structField {
 			}
 
 		case "split":
-			switch f.Type.Kind() {
+			switch t.Kind() {
 			case reflect.Float32, reflect.Float64:
 				setEncoding(&ByteStreamSplit)
 			default:
@@ -537,9 +533,9 @@ func makeStructField(f reflect.StructField) structField {
 			}
 
 		case "list":
-			switch f.Type.Kind() {
+			switch t.Kind() {
 			case reflect.Slice:
-				element := nodeOf(f.Type.Elem())
+				element := nodeOf(t.Elem())
 				setNode(element)
 				setList()
 			default:
@@ -547,7 +543,7 @@ func makeStructField(f reflect.StructField) structField {
 			}
 
 		case "enum":
-			switch f.Type.Kind() {
+			switch t.Kind() {
 			case reflect.String:
 				setNode(Enum())
 			default:
@@ -555,9 +551,9 @@ func makeStructField(f reflect.StructField) structField {
 			}
 
 		case "uuid":
-			switch f.Type.Kind() {
+			switch t.Kind() {
 			case reflect.Array:
-				if f.Type.Elem().Kind() != reflect.Uint8 || f.Type.Len() != 16 {
+				if t.Elem().Kind() != reflect.Uint8 || t.Len() != 16 {
 					throwInvalidFieldTag(f, option)
 				}
 			default:
@@ -570,7 +566,7 @@ func makeStructField(f reflect.StructField) structField {
 				throwInvalidFieldTag(f, option+args)
 			}
 			var baseType Type
-			switch f.Type.Kind() {
+			switch t.Kind() {
 			case reflect.Int32:
 				baseType = Int32Type
 			case reflect.Int64:
@@ -583,14 +579,14 @@ func makeStructField(f reflect.StructField) structField {
 
 			setNode(Decimal(scale, precision, baseType))
 		case "date":
-			switch f.Type.Kind() {
+			switch t.Kind() {
 			case reflect.Int32:
 				setNode(Date())
 			default:
 				throwInvalidFieldTag(f, option)
 			}
 		case "timestamp":
-			switch f.Type.Kind() {
+			switch t.Kind() {
 			case reflect.Int64:
 				timeUnit, err := parseTimestampArgs(args)
 				if err != nil {
@@ -634,14 +630,18 @@ func decimalFixedLenByteArraySize(precision int) int {
 	return int(math.Ceil((math.Log10(2) + float64(precision)) / math.Log10(256)))
 }
 
-func forEachStructTagOption(st reflect.StructTag, do func(option, args string)) {
-	if tag := st.Get("parquet"); tag != "" {
+func forEachStructTagOption(sf reflect.StructField, do func(t reflect.Type, option, args string)) {
+	if tag := sf.Tag.Get("parquet"); tag != "" {
 		_, tag = split(tag) // skip the field name
 		for tag != "" {
 			option := ""
 			option, tag = split(tag)
 			option, args := splitOptionArgs(option)
-			do(option, args)
+			ft := sf.Type
+			if ft.Kind() == reflect.Ptr {
+				ft = ft.Elem()
+			}
+			do(ft, option, args)
 		}
 	}
 }
