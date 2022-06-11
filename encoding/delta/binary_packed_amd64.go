@@ -3,7 +3,15 @@
 package delta
 
 import (
+	"github.com/segmentio/parquet-go/internal/unsafecast"
 	"golang.org/x/sys/cpu"
+)
+
+var (
+	// These variables are used to hook optimized versions of the functions
+	// decoding delta encoded blocks and mini-blocks.
+	decodeBlockInt32 = decodeBlockInt32Default
+	decodeBlockInt64 = decodeBlockInt64Default
 )
 
 func init() {
@@ -11,12 +19,6 @@ func init() {
 		encodeInt32 = encodeInt32AVX2
 		encodeInt64 = encodeInt64AVX2
 		decodeBlockInt32 = decodeBlockInt32AVX2
-
-		decodeMiniBlockInt32Table[0] = decodeMiniBlockInt32x1bitAVX2
-		decodeMiniBlockInt32Table[1] = decodeMiniBlockInt32x2bitsAVX2
-		decodeMiniBlockInt32Table[3] = decodeMiniBlockInt32x4bitsAVX2
-		decodeMiniBlockInt32Table[7] = decodeMiniBlockInt32x8bitsAVX2
-		decodeMiniBlockInt32Table[15] = decodeMiniBlockInt32x16bitsAVX2
 	}
 }
 
@@ -212,19 +214,29 @@ func decodeBlockInt64Default(dst []int64, minDelta, lastValue int64) int64
 func decodeMiniBlockInt32Default(dst []int32, src []uint32, bitWidth uint)
 
 //go:noescape
-func decodeMiniBlockInt32x1bitAVX2(dst []int32, src []uint32)
-
-//go:noescape
-func decodeMiniBlockInt32x2bitsAVX2(dst []int32, src []uint32)
-
-//go:noescape
-func decodeMiniBlockInt32x4bitsAVX2(dst []int32, src []uint32)
-
-//go:noescape
-func decodeMiniBlockInt32x8bitsAVX2(dst []int32, src []uint32)
-
-//go:noescape
-func decodeMiniBlockInt32x16bitsAVX2(dst []int32, src []uint32)
+func decodeMiniBlockInt32x1to16bitsAVX2(dst []int32, src []uint32, bitWidth uint)
 
 //go:noescape
 func decodeMiniBlockInt64Default(dst []int64, src []uint32, bitWidth uint)
+
+func decodeMiniBlockInt32(dst []int32, src []uint32, bitWidth uint) {
+	switch {
+	case bitWidth == 0:
+	case bitWidth == 32:
+		copy(dst, unsafecast.Uint32ToInt32(src))
+	case cpu.X86.HasAVX2 && bitWidth <= 16:
+		decodeMiniBlockInt32x1to16bitsAVX2(dst, src, bitWidth)
+	default:
+		decodeMiniBlockInt32Default(dst, src, bitWidth)
+	}
+}
+
+func decodeMiniBlockInt64(dst []int64, src []uint32, bitWidth uint) {
+	switch {
+	case bitWidth == 0:
+	case bitWidth == 64:
+		copy(dst, unsafecast.Uint32ToInt64(src))
+	default:
+		decodeMiniBlockInt64Default(dst, src, bitWidth)
+	}
+}

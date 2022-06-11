@@ -302,51 +302,6 @@ func grow(buf []byte, size int) []byte {
 	return newBuf
 }
 
-var (
-	// These variables are used to hook optimized versions of the functions
-	// decoding delta encoded blocks and mini-blocks.
-	decodeBlockInt32 = decodeBlockInt32Default
-	decodeBlockInt64 = decodeBlockInt64Default
-
-	decodeMiniBlockInt32Table [32]func(dst []int32, src []uint32)
-	decodeMiniBlockInt64Table [64]func(dst []int64, src []uint32)
-)
-
-func init() {
-	for i := range decodeMiniBlockInt32Table {
-		bitWidth := uint(i + 1)
-		decodeMiniBlockInt32Table[i] = func(dst []int32, src []uint32) {
-			decodeMiniBlockInt32Default(dst, src, bitWidth)
-		}
-	}
-
-	for i := range decodeMiniBlockInt64Table {
-		bitWidth := uint(i + 1)
-		decodeMiniBlockInt64Table[i] = func(dst []int64, src []uint32) {
-			decodeMiniBlockInt64Default(dst, src, bitWidth)
-		}
-	}
-
-	decodeMiniBlockInt32Table[31] = decodeMiniBlockInt32x32bits
-	decodeMiniBlockInt64Table[63] = decodeMiniBlockInt64x64bits
-}
-
-func decodeMiniBlockInt32x32bits(dst []int32, src []uint32) {
-	copy(dst, unsafecast.Uint32ToInt32(src))
-}
-
-func decodeMiniBlockInt64x64bits(dst []int64, src []uint32) {
-	copy(dst, unsafecast.Uint32ToInt64(src))
-}
-
-func decodeMiniBlockInt32(dst []int32, src []uint32, bitWidth uint) {
-	decodeMiniBlockInt32Table[bitWidth-1](dst, src)
-}
-
-func decodeMiniBlockInt64(dst []int64, src []uint32, bitWidth uint) {
-	decodeMiniBlockInt64Table[bitWidth-1](dst, src)
-}
-
 func decodeInt32(dst, src []byte) ([]byte, []byte, error) {
 	blockSize, numMiniBlocks, totalValues, firstValue, src, err := decodeBinaryPackedHeader(src)
 	if err != nil {

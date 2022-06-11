@@ -355,7 +355,7 @@ func testDecodeMiniBlockInt32(t *testing.T, f func(dst []int32, src []uint32, bi
 				f(dst[:n], src, bitWidth)
 
 				if !reflect.DeepEqual(miniBlock[:n], dst[:n]) {
-					t.Errorf("values mismatch:\nwant = %v\ngot  = %v", miniBlock[:n], dst[:n])
+					t.Errorf("values mismatch for length=%d\nwant: %v\ngot:  %v", n, miniBlock[:n], dst[:n])
 				}
 			}
 		})
@@ -392,7 +392,7 @@ func testDecodeMiniBlockInt64(t *testing.T, f func(dst []int64, src []uint32, bi
 				f(dst[:n], src, bitWidth)
 
 				if !reflect.DeepEqual(miniBlock[:n], dst[:n]) {
-					t.Errorf("values mismatch:\nwant = %v\ngot  = %v", miniBlock[:n], dst[:n])
+					t.Errorf("values mismatch for length=%d\nwant: %v\ngot:  %v", n, miniBlock[:n], dst[:n])
 				}
 			}
 		})
@@ -472,7 +472,7 @@ func BenchmarkDecodeMiniBlockInt32(b *testing.B) {
 func benchmarkDecodeMiniBlockInt32(b *testing.B, f func(dst []int32, src []uint32, bitWidth uint)) {
 	for bitWidth := uint(1); bitWidth <= 32; bitWidth++ {
 		miniBlock := [miniBlockSize]int32{}
-		buf := [4 * miniBlockSize]byte{}
+		buf := [4*miniBlockSize + 64]byte{}
 		miniBlockPackInt32(buf[:], &miniBlock, bitWidth)
 
 		b.Run(fmt.Sprintf("bitWidth=%d", bitWidth), func(b *testing.B) {
@@ -495,7 +495,7 @@ func BenchmarkDecodeMiniBlockInt64(b *testing.B) {
 func benchmarkDecodeMiniBlockInt64(b *testing.B, f func(dst []int64, src []uint32, bitWidth uint)) {
 	for bitWidth := uint(1); bitWidth <= 64; bitWidth++ {
 		miniBlock := [miniBlockSize]int64{}
-		buf := [4 * miniBlockSize]byte{}
+		buf := [8*miniBlockSize + 64]byte{}
 		miniBlockPackInt64(buf[:], &miniBlock, bitWidth)
 
 		b.Run(fmt.Sprintf("bitWidth=%d", bitWidth), func(b *testing.B) {
