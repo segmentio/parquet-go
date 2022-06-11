@@ -151,11 +151,8 @@ TEXT ·decodeMiniBlockInt32x1bitAVX2(SB), NOSPLIT, $0-48
     MOVQ $0x0101010101010101, R8
 
     VPXOR X0, X0, X0
-    MOVQ $4, R9
-    MOVQ R9, X4
-    VPBROADCASTD X4, X4
-    VMOVDQU shuffleMask1bit<>(SB), X3
-    VPADDD X3, X4, X4
+    VMOVDQU shuffleMask8bits0to3<>(SB), X3
+    VMOVDQU shuffleMask8bits4to7<>(SB), X4
 loopAVX2:
     MOVB (BX)(DI*1), R9
     PDEPQ R8, R9, R9
@@ -184,11 +181,53 @@ test:
     JNE loop
     RET
 
-GLOBL shuffleMask1bit<>(SB), RODATA|NOPTR, $16
-DATA shuffleMask1bit<>+0(SB)/4, $0x80808000
-DATA shuffleMask1bit<>+4(SB)/4, $0x80808001
-DATA shuffleMask1bit<>+8(SB)/4, $0x80808002
-DATA shuffleMask1bit<>+12(SB)/4, $0x80808003
+// func decodeMiniBlockInt32x2bits1AVX2(dst []int32, src []uint32)
+TEXT ·decodeMiniBlockInt32x2bitsAVX2(SB), NOSPLIT, $0-48
+    MOVQ dst_base+0(FP), AX
+    MOVQ dst_len+8(FP), DX
+    MOVQ src_base+24(FP), BX
+    XORQ SI, SI
+
+    CMPQ DX, $8
+    JB test
+
+    MOVQ DX, CX
+    SHRQ $3, CX
+    SHLQ $3, CX
+    XORQ DI, DI
+    MOVQ $0x0303030303030303, R8
+
+    VPXOR X0, X0, X0
+    VMOVDQU shuffleMask8bits0to3<>(SB), X3
+    VMOVDQU shuffleMask8bits4to7<>(SB), X4
+loopAVX2:
+    MOVW (BX)(DI*2), R9
+    PDEPQ R8, R9, R9
+    MOVQ R9, X0
+    VPSHUFB X3, X0, X1
+    VPSHUFB X4, X0, X2
+    VMOVDQU X1, (AX)(SI*4)
+    VMOVDQU X2, 16(AX)(SI*4)
+    ADDQ $8, SI
+    INCQ DI
+    CMPQ SI, CX
+    JNE loopAVX2
+    JMP test
+loop: // dst[i] = (src[i/16] >> (2 * (i%16))) & 0b11
+    MOVQ SI, DI
+    MOVQ SI, CX
+    SHRQ $4, DI
+    ANDQ $0b1111, CX
+    SHLQ $1, CX
+    MOVL (BX)(DI*4), DI
+    SHRL CX, DI
+    ANDL $0b11, DI
+    MOVL DI, (AX)(SI*4)
+    INCQ SI
+test:
+    CMPQ SI, DX
+    JNE loop
+    RET
 
 // func decodeMiniBlockInt32x8bitsAVX2(dst []int32, src []uint32)
 TEXT ·decodeMiniBlockInt32x8bitsAVX2(SB), NOSPLIT, $0-48
@@ -205,14 +244,10 @@ TEXT ·decodeMiniBlockInt32x8bitsAVX2(SB), NOSPLIT, $0-48
     SHLQ $5, CX
     XORQ DI, DI
 
-    MOVQ $4, R8
-    MOVQ R8, X4
-    VPBROADCASTD X4, Y4
-
-    VMOVDQU shuffleMask8bits<>(SB), Y6
-    VPADDD Y4, Y6, Y7
-    VPADDD Y4, Y7, Y8
-    VPADDD Y4, Y8, Y9
+    VMOVDQU shuffleMask8bits0to3<>(SB), Y6
+    VMOVDQU shuffleMask8bits4to7<>(SB), Y7
+    VMOVDQU shuffleMask8bits8to11<>(SB), Y8
+    VMOVDQU shuffleMask8bits12to15<>(SB), Y9
 loopAVX2:
     VMOVDQU (BX)(DI*4), Y5            // [0..15]  [16..31]
 
@@ -253,16 +288,6 @@ test:
     JNE loop
     RET
 
-GLOBL shuffleMask8bits<>(SB), RODATA|NOPTR, $32
-DATA shuffleMask8bits<>+0(SB)/4, $0x80808000
-DATA shuffleMask8bits<>+4(SB)/4, $0x80808001
-DATA shuffleMask8bits<>+8(SB)/4, $0x80808002
-DATA shuffleMask8bits<>+12(SB)/4, $0x80808003
-DATA shuffleMask8bits<>+16(SB)/4, $0x80808000
-DATA shuffleMask8bits<>+20(SB)/4, $0x80808001
-DATA shuffleMask8bits<>+24(SB)/4, $0x80808002
-DATA shuffleMask8bits<>+28(SB)/4, $0x80808003
-
 // func decodeMiniBlockInt32x16bitsAVX2(dst []int32, src []uint32)
 TEXT ·decodeMiniBlockInt32x16bitsAVX2(SB), NOSPLIT, $0-48
     MOVQ dst_base+0(FP), AX
@@ -278,12 +303,8 @@ TEXT ·decodeMiniBlockInt32x16bitsAVX2(SB), NOSPLIT, $0-48
     SHLQ $4, CX
     XORQ DI, DI
 
-    MOVQ $0x0808, R8
-    MOVQ R8, X4
-    VPBROADCASTD X4, Y4
-
-    VMOVDQU shuffleMask16bits<>(SB), Y6
-    VPADDB Y4, Y6, Y7
+    VMOVDQU shuffleMask16bits0to3<>(SB), Y6
+    VMOVDQU shuffleMask16bits4to7<>(SB), Y7
 loopAVX2:
     VMOVDQU (BX)(DI*4), Y5
     VPSHUFB Y6, Y5, Y0
@@ -314,15 +335,65 @@ test:
     JNE loop
     RET
 
-GLOBL shuffleMask16bits<>(SB), RODATA|NOPTR, $32
-DATA shuffleMask16bits<>+0(SB)/4, $0x80800100
-DATA shuffleMask16bits<>+4(SB)/4, $0x80800302
-DATA shuffleMask16bits<>+8(SB)/4, $0x80800504
-DATA shuffleMask16bits<>+12(SB)/4, $0x80800706
-DATA shuffleMask16bits<>+16(SB)/4, $0x80800100
-DATA shuffleMask16bits<>+20(SB)/4, $0x80800302
-DATA shuffleMask16bits<>+24(SB)/4, $0x80800504
-DATA shuffleMask16bits<>+28(SB)/4, $0x80800706
+GLOBL shuffleMask8bits0to3<>(SB), RODATA|NOPTR, $32
+DATA shuffleMask8bits0to3<>+0(SB)/4, $0x80808000
+DATA shuffleMask8bits0to3<>+4(SB)/4, $0x80808001
+DATA shuffleMask8bits0to3<>+8(SB)/4, $0x80808002
+DATA shuffleMask8bits0to3<>+12(SB)/4, $0x80808003
+DATA shuffleMask8bits0to3<>+16(SB)/4, $0x80808000
+DATA shuffleMask8bits0to3<>+20(SB)/4, $0x80808001
+DATA shuffleMask8bits0to3<>+24(SB)/4, $0x80808002
+DATA shuffleMask8bits0to3<>+28(SB)/4, $0x80808003
+
+GLOBL shuffleMask8bits4to7<>(SB), RODATA|NOPTR, $32
+DATA shuffleMask8bits4to7<>+0(SB)/4, $0x80808004
+DATA shuffleMask8bits4to7<>+4(SB)/4, $0x80808005
+DATA shuffleMask8bits4to7<>+8(SB)/4, $0x80808006
+DATA shuffleMask8bits4to7<>+12(SB)/4, $0x80808007
+DATA shuffleMask8bits4to7<>+16(SB)/4, $0x80808004
+DATA shuffleMask8bits4to7<>+20(SB)/4, $0x80808005
+DATA shuffleMask8bits4to7<>+24(SB)/4, $0x80808006
+DATA shuffleMask8bits4to7<>+28(SB)/4, $0x80808007
+
+GLOBL shuffleMask8bits8to11<>(SB), RODATA|NOPTR, $32
+DATA shuffleMask8bits8to11<>+0(SB)/4, $0x80808008
+DATA shuffleMask8bits8to11<>+4(SB)/4, $0x80808009
+DATA shuffleMask8bits8to11<>+8(SB)/4, $0x8080800A
+DATA shuffleMask8bits8to11<>+12(SB)/4, $0x8080800B
+DATA shuffleMask8bits8to11<>+16(SB)/4, $0x80808008
+DATA shuffleMask8bits8to11<>+20(SB)/4, $0x80808009
+DATA shuffleMask8bits8to11<>+24(SB)/4, $0x8080800A
+DATA shuffleMask8bits8to11<>+28(SB)/4, $0x8080800B
+
+GLOBL shuffleMask8bits12to15<>(SB), RODATA|NOPTR, $32
+DATA shuffleMask8bits12to15<>+0(SB)/4, $0x8080800C
+DATA shuffleMask8bits12to15<>+4(SB)/4, $0x8080800D
+DATA shuffleMask8bits12to15<>+8(SB)/4, $0x8080800E
+DATA shuffleMask8bits12to15<>+12(SB)/4, $0x8080800F
+DATA shuffleMask8bits12to15<>+16(SB)/4, $0x8080800C
+DATA shuffleMask8bits12to15<>+20(SB)/4, $0x8080800D
+DATA shuffleMask8bits12to15<>+24(SB)/4, $0x8080800E
+DATA shuffleMask8bits12to15<>+28(SB)/4, $0x8080800F
+
+GLOBL shuffleMask16bits0to3<>(SB), RODATA|NOPTR, $32
+DATA shuffleMask16bits0to3<>+0(SB)/4, $0x80800100
+DATA shuffleMask16bits0to3<>+4(SB)/4, $0x80800302
+DATA shuffleMask16bits0to3<>+8(SB)/4, $0x80800504
+DATA shuffleMask16bits0to3<>+12(SB)/4, $0x80800706
+DATA shuffleMask16bits0to3<>+16(SB)/4, $0x80800100
+DATA shuffleMask16bits0to3<>+20(SB)/4, $0x80800302
+DATA shuffleMask16bits0to3<>+24(SB)/4, $0x80800504
+DATA shuffleMask16bits0to3<>+28(SB)/4, $0x80800706
+
+GLOBL shuffleMask16bits4to7<>(SB), RODATA|NOPTR, $32
+DATA shuffleMask16bits4to7<>+0(SB)/4, $0x80800908
+DATA shuffleMask16bits4to7<>+4(SB)/4, $0x80800B0A
+DATA shuffleMask16bits4to7<>+8(SB)/4, $0x80800D0C
+DATA shuffleMask16bits4to7<>+12(SB)/4, $0x80800F0E
+DATA shuffleMask16bits4to7<>+16(SB)/4, $0x80800908
+DATA shuffleMask16bits4to7<>+20(SB)/4, $0x80800B0A
+DATA shuffleMask16bits4to7<>+24(SB)/4, $0x80800D0C
+DATA shuffleMask16bits4to7<>+28(SB)/4, $0x80800F0E
 
 // -----------------------------------------------------------------------------
 // 64 bits
