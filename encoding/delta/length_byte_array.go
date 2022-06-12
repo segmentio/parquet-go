@@ -61,6 +61,8 @@ func (e *LengthByteArrayEncoding) EncodeByteArray(dst, src []byte) ([]byte, erro
 	return dst, nil
 }
 
+const lengthByteArrayPadding = 64
+
 func (e *LengthByteArrayEncoding) DecodeByteArray(dst, src []byte) ([]byte, error) {
 	dst = dst[:0]
 
@@ -82,19 +84,7 @@ func (e *LengthByteArrayEncoding) DecodeByteArray(dst, src []byte) ([]byte, erro
 
 	size := plain.ByteArrayLengthSize * len(length.values)
 	size += totalLength
-	dst = resize(dst, size)
-	decodeLengthByteArray(dst, src, length.values)
-	return dst, nil
-}
-
-func decodeLengthByteArray(dst, src []byte, lengths []int32) {
-	i := 0
-	j := 0
-
-	for _, n := range lengths {
-		plain.PutByteArrayLength(dst[i:], int(n))
-		i += plain.ByteArrayLengthSize
-		i += copy(dst[i:], src[j:j+int(n)])
-		j += int(n)
-	}
+	dst = resizeNoMemclr(dst, size+lengthByteArrayPadding)
+	decodeLengthByteArray(dst, src, length.values, totalLength)
+	return dst[:size], nil
 }

@@ -102,10 +102,56 @@ invalidNegativeValueLength:
     MOVQ $errInvalidNegativeValueLength, DX
     JMP done
 
-// func decodeLengthByteArray(dst, src []byte, lengths []int32)
-TEXT ·__decodeLengthByteArray(SB), NOSPLIT, $40-72
+// This function is an optimization of the decodeLengthByteArray using AVX2
+// instructions to implement an opportunistic copy strategy which improves
+// throughput compared to using runtime.memmove (via Go's copy).
+//
+// Parquet columns of type BYTE_ARRAY will often hold short strings, rarely
+// exceeding a couple hundred bytes in size. Making a function call to
+// runtime.memmove for each value results in spending most of the CPU time
+// on branching rather than actually copying bytes to the output buffer.
+//
+// This function works by always assuming it can copy 16 bytes of data between
+// the input and outputs, even in the event where a value is shorter than this.
+//
+// The pointers to the current positions for input and output pointers are
+// always adjusted by the right number of bytes so that the next writes
+// overwrite any extra bytes that were written in the previous iteration of the
+// copy loop.
+//
+// The throughput of this function is not as good as runtime.memmove for large
+// buffers, but it ends up being close to an order of magnitude higher for the
+// common case of working with short strings.
+//
+// func decodeLengthByteArrayAVX2(dst, src []byte, lengths []int32)
+TEXT ·decodeLengthByteArrayAVX2(SB), NOSPLIT, $40-72
     MOVQ dst_base+0(FP), AX
     MOVQ src_base+24(FP), BX
     MOVQ lengths_base+48(FP), DX
     MOVQ lengths_len+56(FP), DI
+
+    LEAQ (DX)(DI*4), DI
+    LEAQ 4(AX), AX
+    XORQ CX, CX
+    JMP test
+loop:
+    MOVL (DX), CX
+    MOVL CX, -4(AX)
+    XORQ SI, SI
+
+    CMPQ CX, $0
+    JE next
+copy:
+    VMOVDQU (BX)(SI*1), X0
+    VMOVDQU X0, (AX)(SI*1)
+    ADDQ $16, SI
+    CMPQ SI, CX
+    JB copy
+next:
+    LEAQ 4(AX)(CX*1), AX
+    LEAQ 0(BX)(CX*1), BX
+    LEAQ 4(DX), DX
+test:
+    CMPQ DX, DI
+    JNE loop
     RET

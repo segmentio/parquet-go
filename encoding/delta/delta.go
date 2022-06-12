@@ -46,6 +46,36 @@ func bytesToInt64(b []byte) []int64 {
 	return unsafe.Slice(*(**int64)(unsafe.Pointer(&b)), len(b)/8)
 }
 
+func resizeNoMemclr(buf []byte, size int) []byte {
+	if cap(buf) < size {
+		return grow(buf, size)
+	}
+	return buf[:size]
+}
+
+func resize(buf []byte, size int) []byte {
+	if cap(buf) < size {
+		return grow(buf, size)
+	}
+	if size > len(buf) {
+		clear := buf[len(buf):size]
+		for i := range clear {
+			clear[i] = 0
+		}
+	}
+	return buf[:size]
+}
+
+func grow(buf []byte, size int) []byte {
+	newCap := 2 * cap(buf)
+	if newCap < size {
+		newCap = size
+	}
+	newBuf := make([]byte, size, newCap)
+	copy(newBuf, buf)
+	return newBuf
+}
+
 func min(a, b int) int {
 	if a < b {
 		return a
