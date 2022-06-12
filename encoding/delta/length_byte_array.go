@@ -72,16 +72,29 @@ func (e *LengthByteArrayEncoding) DecodeByteArray(dst, src []byte) ([]byte, erro
 		return dst, err
 	}
 
-	for _, n := range length.values {
-		if int(n) < 0 {
-			return dst, encoding.Errorf(e, "invalid negative value length: %d", n)
-		}
-		if int(n) > len(src) {
-			return dst, encoding.Errorf(e, "value length is larger than the input size: %d > %d", n, len(src))
-		}
-		dst = plain.AppendByteArray(dst, src[:n])
-		src = src[n:]
+	totalLength, err := decodeLengthValues(length.values)
+	if err != nil {
+		return dst, encoding.Error(e, err)
+	}
+	if totalLength > len(src) {
+		return dst, encoding.Errorf(e, "value length is larger than the input size: %d > %d", totalLength, len(src))
 	}
 
+	size := plain.ByteArrayLengthSize * len(length.values)
+	size += totalLength
+	dst = resize(dst, size)
+	decodeLengthByteArray(dst, src, length.values)
 	return dst, nil
+}
+
+func decodeLengthByteArray(dst, src []byte, lengths []int32) {
+	i := 0
+	j := 0
+
+	for _, n := range lengths {
+		plain.PutByteArrayLength(dst[i:], int(n))
+		i += plain.ByteArrayLengthSize
+		i += copy(dst[i:], src[j:j+int(n)])
+		j += int(n)
+	}
 }

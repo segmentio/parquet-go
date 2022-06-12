@@ -1,6 +1,7 @@
 package delta
 
 import (
+	"errors"
 	"sync"
 	"unsafe"
 
@@ -51,3 +52,7 @@ func min(a, b int) int {
 	}
 	return b
 }
+
+var (
+	errInvalidNegativeValueLength = errors.New("invalid negative value length")
+)
