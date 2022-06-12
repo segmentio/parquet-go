@@ -7,18 +7,10 @@ import (
 	"golang.org/x/sys/cpu"
 )
 
-var (
-	// These variables are used to hook optimized versions of the functions
-	// decoding delta encoded blocks and mini-blocks.
-	decodeBlockInt32 = decodeBlockInt32Default
-	decodeBlockInt64 = decodeBlockInt64Default
-)
-
 func init() {
 	if cpu.X86.HasAVX2 {
 		encodeInt32 = encodeInt32AVX2
 		encodeInt64 = encodeInt64AVX2
-		decodeBlockInt32 = decodeBlockInt32AVX2
 	}
 }
 
@@ -207,8 +199,14 @@ func decodeBlockInt32Default(dst []int32, minDelta, lastValue int32) int32
 //go:noescape
 func decodeBlockInt32AVX2(dst []int32, minDelta, lastValue int32) int32
 
-//go:noescape
-func decodeBlockInt64Default(dst []int64, minDelta, lastValue int64) int64
+func decodeBlockInt32(dst []int32, minDelta, lastValue int32) int32 {
+	switch {
+	case cpu.X86.HasAVX2:
+		return decodeBlockInt32AVX2(dst, minDelta, lastValue)
+	default:
+		return decodeBlockInt32Default(dst, minDelta, lastValue)
+	}
+}
 
 //go:noescape
 func decodeMiniBlockInt32Default(dst []int32, src []uint32, bitWidth uint)
@@ -217,28 +215,39 @@ func decodeMiniBlockInt32Default(dst []int32, src []uint32, bitWidth uint)
 func decodeMiniBlockInt32x1to16bitsAVX2(dst []int32, src []uint32, bitWidth uint)
 
 //go:noescape
-func decodeMiniBlockInt32x17to31bitsAVX2(dst []int32, src []uint32, bitWidth uint)
+func decodeMiniBlockInt32x17to26bitsAVX2(dst []int32, src []uint32, bitWidth uint)
 
 //go:noescape
-func decodeMiniBlockInt64Default(dst []int64, src []uint32, bitWidth uint)
+func decodeMiniBlockInt32x27to31bitsAVX2(dst []int32, src []uint32, bitWidth uint)
 
 func decodeMiniBlockInt32(dst []int32, src []uint32, bitWidth uint) {
+	hasAVX2 := cpu.X86.HasAVX2
 	switch {
-	case bitWidth == 0:
+	case hasAVX2 && bitWidth <= 16:
+		decodeMiniBlockInt32x1to16bitsAVX2(dst, src, bitWidth)
+	case hasAVX2 && bitWidth <= 26:
+		decodeMiniBlockInt32x17to26bitsAVX2(dst, src, bitWidth)
+	case hasAVX2 && bitWidth <= 31:
+		decodeMiniBlockInt32x27to31bitsAVX2(dst, src, bitWidth)
 	case bitWidth == 32:
 		copy(dst, unsafecast.Uint32ToInt32(src))
-	case cpu.X86.HasAVX2 && bitWidth <= 16:
-		decodeMiniBlockInt32x1to16bitsAVX2(dst, src, bitWidth)
-	case cpu.X86.HasAVX2 && bitWidth <= 17:
-		decodeMiniBlockInt32x17to31bitsAVX2(dst, src, bitWidth)
 	default:
 		decodeMiniBlockInt32Default(dst, src, bitWidth)
 	}
 }
 
+//go:noescape
+func decodeBlockInt64Default(dst []int64, minDelta, lastValue int64) int64
+
+func decodeBlockInt64(dst []int64, minDelta, lastValue int64) int64 {
+	return decodeBlockInt64Default(dst, minDelta, lastValue)
+}
+
+//go:noescape
+func decodeMiniBlockInt64Default(dst []int64, src []uint32, bitWidth uint)
+
 func decodeMiniBlockInt64(dst []int64, src []uint32, bitWidth uint) {
 	switch {
-	case bitWidth == 0:
 	case bitWidth == 64:
 		copy(dst, unsafecast.Uint32ToInt64(src))
 	default:

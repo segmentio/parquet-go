@@ -341,7 +341,7 @@ func testDecodeMiniBlockInt32(t *testing.T, f func(dst []int32, src []uint32, bi
 			}
 
 			size := (miniBlockSize * bitWidth) / 8
-			buf := make([]byte, size+64)
+			buf := make([]byte, size+16)
 			miniBlockPackInt32(buf, &miniBlock, bitWidth)
 
 			src := unsafecast.BytesToUint32(buf[:size])
@@ -378,7 +378,7 @@ func testDecodeMiniBlockInt64(t *testing.T, f func(dst []int64, src []uint32, bi
 			}
 
 			size := (miniBlockSize * bitWidth) / 8
-			buf := make([]byte, size+64)
+			buf := make([]byte, size+16)
 			miniBlockPackInt64(buf, &miniBlock, bitWidth)
 
 			src := unsafecast.BytesToUint32(buf[:size])
