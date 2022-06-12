@@ -53,7 +53,7 @@ TEXT ·decodeLengthValuesAVX2(SB), NOSPLIT, $0-40
     SHLQ $4, DI
 
     VPXOR X0, X0, X0 // sums
-    VPXOR X1, X1, X1 // bits
+    VPXOR X1, X1, X1 // negative test
 loopAVX2:
     VMOVDQU (AX)(SI*4), Y2
     VMOVDQU 32(AX)(SI*4), Y3
@@ -65,6 +65,9 @@ loopAVX2:
     CMPQ SI, DI
     JNE loopAVX2
 
+    // If any of the 32 bit words has its most significant bit set to 1,
+    // then at least one of the values was negative, which must be reported as
+    // an error.
     VMOVMSKPS Y1, R8
     CMPQ R8, $0
     JNE invalidNegativeValueLength
