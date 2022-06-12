@@ -224,8 +224,8 @@ loop:
     VPSRLVD X3, X5, X5
     VPSRLVD X4, X6, X6
 
-    VPANDD X0, X5, X5
-    VPANDD X0, X6, X6
+    VPAND X0, X5, X5
+    VPAND X0, X6, X6
 
     VMOVDQU X5, (AX)(SI*4)
     VMOVDQU X6, 16(AX)(SI*4)
@@ -306,8 +306,8 @@ loop:
     VPSRLVD X4, X8, X8
     VPSRLVD X5, X9, X9
 
-    VPANDD X0, X8, X8
-    VPANDD X0, X9, X9
+    VPAND X0, X8, X8
+    VPAND X0, X9, X9
 
     VMOVDQU X8, (AX)(SI*4)
     VMOVDQU X9, 16(AX)(SI*4)
@@ -408,8 +408,8 @@ loop:
     VPOR X15, X14, X14
     VPOR X11, X14, X14
 
-    VPANDD X0, X12, X12
-    VPANDD X0, X14, X14
+    VPAND X0, X12, X12
+    VPAND X0, X14, X14
 
     VMOVDQU X12, (AX)(SI*4)
     VMOVDQU X14, 16(AX)(SI*4)
