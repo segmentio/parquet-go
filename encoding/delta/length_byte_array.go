@@ -85,6 +85,6 @@ func (e *LengthByteArrayEncoding) DecodeByteArray(dst, src []byte) ([]byte, erro
 	size := plain.ByteArrayLengthSize * len(length.values)
 	size += totalLength
 	dst = resizeNoMemclr(dst, size+lengthByteArrayPadding)
-	decodeLengthByteArray(dst, src, length.values, totalLength)
+	decodeLengthByteArray(dst, src[:totalLength], length.values)
 	return dst[:size], nil
 }

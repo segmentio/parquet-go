@@ -137,16 +137,12 @@ TEXT ·decodeLengthByteArrayAVX2(SB), NOSPLIT, $40-72
 loop:
     MOVL (DX), CX
     MOVL CX, -4(AX)
-    XORQ SI, SI
-
-    CMPQ CX, $0
-    JE next
-copy:
-    VMOVDQU (BX)(SI*1), X0
-    VMOVDQU X0, (AX)(SI*1)
-    ADDQ $16, SI
-    CMPQ SI, CX
-    JB copy
+    // First pass moves 16 bytes, this makes it a very fast path for short
+    // strings.
+    VMOVDQU (BX), X0
+    VMOVDQU X0, (AX)
+    CMPQ CX, $16
+    JA copy
 next:
     LEAQ 4(AX)(CX*1), AX
     LEAQ 0(BX)(CX*1), BX
@@ -155,3 +151,14 @@ test:
     CMPQ DX, DI
     JNE loop
     RET
+copy:
+    // Values longer than 16 bytes enter this loop and move 32 bytes chunks
+    // which helps improve throughput on larger chunks.
+    MOVQ $16, SI
+copyLoop32:
+    VMOVDQU (BX)(SI*1), Y0
+    VMOVDQU Y0, (AX)(SI*1)
+    ADDQ $32, SI
+    CMPQ SI, CX
+    JAE next
+    JMP copyLoop32

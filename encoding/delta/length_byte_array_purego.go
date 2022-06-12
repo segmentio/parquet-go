@@ -14,7 +14,7 @@ func decodeLengthValues(lengths []int32) (sum int, err error) {
 	return sum, nil
 }
 
-func decodeLengthByteArray(dst, src []byte, lengths []int32, _ int) {
+func decodeLengthByteArray(dst, src []byte, lengths []int32) {
 	i := 0
 	j := 0
 

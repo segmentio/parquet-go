@@ -48,7 +48,7 @@ func decodeLengthValues(lengths []int32) (int, error) {
 //go:noescape
 func decodeLengthByteArrayAVX2(dst, src []byte, lengths []int32)
 
-func decodeLengthByteArray(dst, src []byte, lengths []int32, totalLength int) {
+func decodeLengthByteArray(dst, src []byte, lengths []int32) {
 	i := 0
 	j := 0
 	k := 0
@@ -57,7 +57,7 @@ func decodeLengthByteArray(dst, src []byte, lengths []int32, totalLength int) {
 	// To leverage the SEE optimized implementation of the function we must
 	// create enough padding at the end to prevent the opportunisitic reads
 	// and writes from overflowing past the buffers limits.
-	if cpu.X86.HasAVX2 && totalLength > lengthByteArrayPadding {
+	if cpu.X86.HasAVX2 && len(src) > lengthByteArrayPadding {
 		k = len(lengths)
 
 		for k > 0 && n < lengthByteArrayPadding {
@@ -67,7 +67,7 @@ func decodeLengthByteArray(dst, src []byte, lengths []int32, totalLength int) {
 
 		if k > 0 && n >= lengthByteArrayPadding {
 			decodeLengthByteArrayAVX2(dst, src, lengths[:k])
-			j = totalLength - n
+			j = len(src) - n
 			i = plain.ByteArrayLengthSize*k + j
 		} else {
 			k = 0
