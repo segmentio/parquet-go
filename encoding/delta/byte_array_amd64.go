@@ -6,6 +6,9 @@ import (
 	"github.com/segmentio/parquet-go/encoding/plain"
 )
 
+//go:noescape
+func validatePrefixAndSuffixLengthValuesAVX2(prefix, suffix []int32, maxLength int) (totalPrefixLength, totalSuffixLength int, ok bool)
+
 func validatePrefixAndSuffixLengthValues(prefix, suffix []int32, maxLength int) (totalPrefixLength, totalSuffixLength int, err error) {
 	lastValueLength := 0
 

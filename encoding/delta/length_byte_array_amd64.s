@@ -3,15 +3,12 @@
 #include "funcdata.h"
 #include "textflag.h"
 
-#define ok 0
-#define errInvalidNegativeValueLength 1
-
-// func validateLengthValuesAVX2(lengths []int32) (sum int, err errno)
-TEXT ·validateLengthValuesAVX2(SB), NOSPLIT, $0-40
+// func validateLengthValuesAVX2(lengths []int32) (totalLength int, ok bool)
+TEXT ·validateLengthValuesAVX2(SB), NOSPLIT, $0-33
     MOVQ lengths_base+0(FP), AX
     MOVQ lengths_len+8(FP), CX
 
-    XORQ BX, BX // sum
+    XORQ BX, BX // totalLength
     XORQ DX, DX // err
     XORQ SI, SI
     XORQ DI, DI
@@ -24,7 +21,7 @@ TEXT ·validateLengthValuesAVX2(SB), NOSPLIT, $0-40
     SHRQ $4, DI
     SHLQ $4, DI
 
-    VPXOR X0, X0, X0 // sums
+    VPXOR X0, X0, X0 // totalLengths
     VPXOR X1, X1, X1 // negative test
 loopAVX2:
     VMOVDQU (AX)(SI*4), Y2
@@ -42,7 +39,7 @@ loopAVX2:
     // an error.
     VMOVMSKPS Y1, R8
     CMPQ R8, $0
-    JNE invalidNegativeValueLength
+    JNE done
 
     VPSRLDQ $4, Y0, Y1
     VPSRLDQ $8, Y0, Y2
@@ -68,14 +65,12 @@ test:
     CMPQ SI, CX
     JNE loop
     CMPL R8, $0
-    JL invalidNegativeValueLength
+    JL done
+    MOVB $1, DX
 done:
-    MOVQ BX, sum+24(FP)
-    MOVQ DX, err+32(FP)
+    MOVQ BX, totalLength+24(FP)
+    MOVB DX, ok+32(FP)
     RET
-invalidNegativeValueLength:
-    MOVQ $errInvalidNegativeValueLength, DX
-    JMP done
 
 // This function is an optimization of the decodeLengthByteArray using AVX2
 // instructions to implement an opportunistic copy strategy which improves

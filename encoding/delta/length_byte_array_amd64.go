@@ -8,31 +8,27 @@ import (
 )
 
 //go:noescape
-func validateLengthValuesAVX2(lengths []int32) (sum int, err errno)
+func validateLengthValuesAVX2(lengths []int32) (totalLength int, ok bool)
 
 func validateLengthValues(lengths []int32, maxLength int) (totalLength int, err error) {
 	if cpu.X86.HasAVX2 {
-		var errno errno
-		totalLength, errno = validateLengthValuesAVX2(lengths)
-		switch errno {
-		case ok:
-		case invalidNegativeValueLength:
-			err = errInvalidNegativeValueLength(findNegativeLength(lengths))
-		default:
-			err = errUnknownErrorCode(errno)
-		}
-	} else {
-		for i := range lengths {
-			n := int(lengths[i])
-			if n < 0 {
-				return 0, errInvalidNegativeValueLength(n)
-			}
-			if n > maxLength {
-				return 0, errValueLengthOutOfBounds(n, maxLength)
-			}
-			totalLength += n
+		totalLength, ok := validateLengthValuesAVX2(lengths)
+		if ok {
+			return totalLength, nil
 		}
 	}
+
+	for i := range lengths {
+		n := int(lengths[i])
+		if n < 0 {
+			return 0, errInvalidNegativeValueLength(n)
+		}
+		if n > maxLength {
+			return 0, errValueLengthOutOfBounds(n, maxLength)
+		}
+		totalLength += n
+	}
+
 	if totalLength > maxLength {
 		err = errValueLengthOutOfBounds(totalLength, maxLength)
 	}

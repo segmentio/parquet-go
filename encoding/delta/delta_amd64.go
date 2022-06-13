@@ -2,16 +2,6 @@
 
 package delta
 
-import "fmt"
-
-type errno int
-
-const (
-	ok errno = iota
-	invalidNegativeValueLength
-	invalidNegativePrefixLength
-)
-
 const (
 	padding = 64
 )
@@ -23,8 +13,4 @@ func findNegativeLength(lengths []int32) int {
 		}
 	}
 	return -1
-}
-
-func errUnknownErrorCode(e errno) error {
-	return fmt.Errorf("BUG: unknown error code: %d", e)
 }
