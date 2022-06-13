@@ -3,61 +3,51 @@
 package delta
 
 import (
-	"fmt"
-
 	"github.com/segmentio/parquet-go/encoding/plain"
 	"golang.org/x/sys/cpu"
 )
 
-type errno int
-
-const (
-	ok errno = iota
-	invalidNegativeValueLength
-)
-
-func (e errno) check() error {
-	switch e {
-	case ok:
-		return nil
-	case invalidNegativeValueLength:
-		return errInvalidNegativeValueLength
-	default:
-		return fmt.Errorf("BUG: unknown error code: %d", e)
-	}
-}
-
-//go:noescape
-func validateLengthValuesDefault(lengths []int32) (sum int, err errno)
-
 //go:noescape
 func validateLengthValuesAVX2(lengths []int32) (sum int, err errno)
 
-func validateLengthValues(lengths []int32) (int, error) {
-	var sum int
-	var err errno
-	switch {
-	case cpu.X86.HasAVX2:
-		sum, err = validateLengthValuesAVX2(lengths)
-	default:
-		sum, err = validateLengthValuesDefault(lengths)
+func validateLengthValues(lengths []int32, maxLength int) (totalLength int, err error) {
+	if cpu.X86.HasAVX2 {
+		var errno errno
+		totalLength, errno = validateLengthValuesAVX2(lengths)
+		switch errno {
+		case ok:
+		case invalidNegativeValueLength:
+			err = errInvalidNegativeValueLength(findNegativeLength(lengths))
+		default:
+			err = errUnknownErrorCode(errno)
+		}
+	} else {
+		for i := range lengths {
+			n := int(lengths[i])
+			if n < 0 {
+				return 0, errInvalidNegativeValueLength(n)
+			}
+			if n > maxLength {
+				return 0, errValueLengthOutOfBounds(n, maxLength)
+			}
+			totalLength += n
+		}
 	}
-	return sum, err.check()
+	if totalLength > maxLength {
+		err = errValueLengthOutOfBounds(totalLength, maxLength)
+	}
+	return totalLength, err
 }
 
 //go:noescape
 func decodeLengthByteArrayAVX2(dst, src []byte, lengths []int32)
 
 func decodeLengthByteArray(dst, src []byte, lengths []int32) ([]byte, error) {
-	totalLength, err := validateLengthValues(lengths)
+	totalLength, err := validateLengthValues(lengths, len(src))
 	if err != nil {
 		return dst, err
 	}
-	if totalLength > len(src) {
-		return dst, fmt.Errorf("value length is larger than the input size: %d > %d", totalLength, len(src))
-	}
 
-	const padding = 64
 	size := plain.ByteArrayLengthSize * len(lengths)
 	size += totalLength
 	src = src[:totalLength]

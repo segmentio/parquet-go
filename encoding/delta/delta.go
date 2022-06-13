@@ -1,7 +1,7 @@
 package delta
 
 import (
-	"errors"
+	"fmt"
 	"sync"
 	"unsafe"
 
@@ -83,6 +83,22 @@ func min(a, b int) int {
 	return b
 }
 
-var (
-	errInvalidNegativeValueLength = errors.New("invalid negative value length")
-)
+func errPrefixAndSuffixLengthMismatch(prefixLength, suffixLength int) error {
+	return fmt.Errorf("length of prefix and suffix mismatch: %d != %d", prefixLength, suffixLength)
+}
+
+func errInvalidNegativeValueLength(length int) error {
+	return fmt.Errorf("invalid negative value length: %d", length)
+}
+
+func errInvalidNegativePrefixLength(length int) error {
+	return fmt.Errorf("invalid negative prefix length: %d", length)
+}
+
+func errValueLengthOutOfBounds(length, maxLength int) error {
+	return fmt.Errorf("value length is larger than the input size: %d > %d", length, maxLength)
+}
+
+func errPrefixLengthOutOfBounds(length, maxLength int) error {
+	return fmt.Errorf("prefix length %d is larger than the last value of size %d", length, maxLength)
+}
