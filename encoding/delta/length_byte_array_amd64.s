@@ -6,8 +6,8 @@
 #define ok 0
 #define errInvalidNegativeValueLength 1
 
-// func decodeLengthValuesDefault(lengths []int32) (sum int, err errno)
-TEXT ·decodeLengthValuesDefault(SB), NOSPLIT, $0-40
+// func validateLengthValuesDefault(lengths []int32) (sum int, err errno)
+TEXT ·validateLengthValuesDefault(SB), NOSPLIT, $0-40
     MOVQ lengths_base+0(FP), AX
     MOVQ lengths_len+8(FP), CX
     XORQ BX, BX // sum
@@ -34,8 +34,8 @@ invalidNegativeValueLength:
     MOVQ $errInvalidNegativeValueLength, DX
     JMP done
 
-// func decodeLengthValuesAVX2(lengths []int32) (sum int, err errno)
-TEXT ·decodeLengthValuesAVX2(SB), NOSPLIT, $0-40
+// func validateLengthValuesAVX2(lengths []int32) (sum int, err errno)
+TEXT ·validateLengthValuesAVX2(SB), NOSPLIT, $0-40
     MOVQ lengths_base+0(FP), AX
     MOVQ lengths_len+8(FP), CX
 

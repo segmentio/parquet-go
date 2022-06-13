@@ -11,6 +11,7 @@ import (
 func TestDecodeLengthByteArray(t *testing.T) {
 	const characters = "1234567890qwertyuiopasdfghjklzxcvbnm"
 	const numValues = 1000
+
 	src := []byte{}
 	dst := []byte{}
 	lengths := []int32{}
@@ -21,12 +22,13 @@ func TestDecodeLengthByteArray(t *testing.T) {
 		lengths = append(lengths, int32(n))
 	}
 
-	size := plain.ByteArrayLengthSize*numValues + len(src)
-	dst = make([]byte, size, size+lengthByteArrayPadding)
-	decodeLengthByteArray(dst, src, lengths)
+	dst, err := decodeLengthByteArray(dst, src, lengths)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	index := 0
-	err := plain.RangeByteArrays(dst, func(got []byte) error {
+	err = plain.RangeByteArrays(dst, func(got []byte) error {
 		want := characters[:index%len(characters)]
 
 		if want != string(got) {
@@ -42,6 +44,8 @@ func TestDecodeLengthByteArray(t *testing.T) {
 }
 
 func BenchmarkDecodeLengthByteArray(b *testing.B) {
+	const padding = 64
+
 	for _, maxLen := range []int{0, 10, 20, 100, 1000} {
 		b.Run(fmt.Sprintf("maxLen=%d", maxLen), func(b *testing.B) {
 			lengths := make([]int32, 1000)
@@ -56,13 +60,13 @@ func BenchmarkDecodeLengthByteArray(b *testing.B) {
 			}
 
 			size := plain.ByteArrayLengthSize*len(lengths) + totalLength
-			dst := make([]byte, size, size+lengthByteArrayPadding)
+			dst := make([]byte, size+padding)
 			src := make([]byte, totalLength)
 			b.SetBytes(int64(size))
 			b.ResetTimer()
 
 			for i := 0; i < b.N; i++ {
-				decodeLengthByteArray(dst, src, lengths)
+				dst, _ = decodeLengthByteArray(dst[:0], src, lengths)
 			}
 		})
 	}

@@ -28,19 +28,19 @@ func (e errno) check() error {
 }
 
 //go:noescape
-func decodeLengthValuesDefault(lengths []int32) (sum int, err errno)
+func validateLengthValuesDefault(lengths []int32) (sum int, err errno)
 
 //go:noescape
-func decodeLengthValuesAVX2(lengths []int32) (sum int, err errno)
+func validateLengthValuesAVX2(lengths []int32) (sum int, err errno)
 
-func decodeLengthValues(lengths []int32) (int, error) {
+func validateLengthValues(lengths []int32) (int, error) {
 	var sum int
 	var err errno
 	switch {
 	case cpu.X86.HasAVX2:
-		sum, err = decodeLengthValuesAVX2(lengths)
+		sum, err = validateLengthValuesAVX2(lengths)
 	default:
-		sum, err = decodeLengthValuesDefault(lengths)
+		sum, err = validateLengthValuesDefault(lengths)
 	}
 	return sum, err.check()
 }
@@ -48,7 +48,21 @@ func decodeLengthValues(lengths []int32) (int, error) {
 //go:noescape
 func decodeLengthByteArrayAVX2(dst, src []byte, lengths []int32)
 
-func decodeLengthByteArray(dst, src []byte, lengths []int32) {
+func decodeLengthByteArray(dst, src []byte, lengths []int32) ([]byte, error) {
+	totalLength, err := validateLengthValues(lengths)
+	if err != nil {
+		return dst, err
+	}
+	if totalLength > len(src) {
+		return dst, fmt.Errorf("value length is larger than the input size: %d > %d", totalLength, len(src))
+	}
+
+	const padding = 64
+	size := plain.ByteArrayLengthSize * len(lengths)
+	size += totalLength
+	src = src[:totalLength]
+	dst = resizeNoMemclr(dst, size+padding)
+
 	i := 0
 	j := 0
 	k := 0
@@ -57,15 +71,15 @@ func decodeLengthByteArray(dst, src []byte, lengths []int32) {
 	// To leverage the SEE optimized implementation of the function we must
 	// create enough padding at the end to prevent the opportunisitic reads
 	// and writes from overflowing past the buffers limits.
-	if cpu.X86.HasAVX2 && len(src) > lengthByteArrayPadding {
+	if cpu.X86.HasAVX2 && len(src) > padding {
 		k = len(lengths)
 
-		for k > 0 && n < lengthByteArrayPadding {
+		for k > 0 && n < padding {
 			k--
 			n += int(lengths[k])
 		}
 
-		if k > 0 && n >= lengthByteArrayPadding {
+		if k > 0 && n >= padding {
 			decodeLengthByteArrayAVX2(dst, src, lengths[:k])
 			j = len(src) - n
 			i = plain.ByteArrayLengthSize*k + j
@@ -80,4 +94,6 @@ func decodeLengthByteArray(dst, src []byte, lengths []int32) {
 		i += copy(dst[i:], src[j:j+int(n)])
 		j += int(n)
 	}
+
+	return dst[:size], nil
 }
