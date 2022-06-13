@@ -25,7 +25,7 @@ TEXT ·blockDeltaInt32AVX2(SB), NOSPLIT, $0-24
     MOVL CX, ret+16(FP)
 
     VPBROADCASTD lastValue+8(FP), Y0
-    VMOVDQU deltaInt32Perm<>(SB), Y3
+    VMOVDQU ·rotateLeft32(SB), Y3
 
     XORQ SI, SI
 loop:
@@ -38,16 +38,6 @@ loop:
     JNE loop
     VZEROUPPER
     RET
-
-GLOBL deltaInt32Perm<>(SB), RODATA|NOPTR, $32
-DATA deltaInt32Perm<>+0(SB)/4, $7
-DATA deltaInt32Perm<>+4(SB)/4, $0
-DATA deltaInt32Perm<>+8(SB)/4, $1
-DATA deltaInt32Perm<>+12(SB)/4, $2
-DATA deltaInt32Perm<>+16(SB)/4, $3
-DATA deltaInt32Perm<>+20(SB)/4, $4
-DATA deltaInt32Perm<>+24(SB)/4, $5
-DATA deltaInt32Perm<>+28(SB)/4, $6
 
 // func blockMinInt32AVX2(block *[blockSize]int32) int32
 TEXT ·blockMinInt32AVX2(SB), NOSPLIT, $0-16

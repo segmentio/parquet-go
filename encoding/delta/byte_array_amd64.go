@@ -4,12 +4,20 @@ package delta
 
 import (
 	"github.com/segmentio/parquet-go/encoding/plain"
+	"golang.org/x/sys/cpu"
 )
 
 //go:noescape
 func validatePrefixAndSuffixLengthValuesAVX2(prefix, suffix []int32, maxLength int) (totalPrefixLength, totalSuffixLength int, ok bool)
 
 func validatePrefixAndSuffixLengthValues(prefix, suffix []int32, maxLength int) (totalPrefixLength, totalSuffixLength int, err error) {
+	if cpu.X86.HasAVX2 {
+		totalPrefixLength, totalSuffixLength, ok := validatePrefixAndSuffixLengthValuesAVX2(prefix, suffix, maxLength)
+		if ok {
+			return totalPrefixLength, totalSuffixLength, nil
+		}
+	}
+
 	lastValueLength := 0
 
 	for i := range prefix {
