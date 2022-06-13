@@ -136,25 +136,36 @@ func (e *ByteArrayEncoding) EncodeFixedLenByteArray(dst, src []byte, size int) (
 }
 
 func (e *ByteArrayEncoding) DecodeByteArray(dst, src []byte) ([]byte, error) {
-	dst, err := e.decode(dst[:0], src, decodeByteArray)
+	dst = dst[:0]
+
+	prefix := getInt32Buffer()
+	defer putInt32Buffer(prefix)
+
+	suffix := getInt32Buffer()
+	defer putInt32Buffer(suffix)
+
+	var err error
+	src, err = prefix.decode(src)
 	if err != nil {
-		err = encoding.Error(e, err)
+		return dst, encoding.Errorf(e, "decoding prefix lengths: %w", err)
 	}
-	return dst, err
+	src, err = suffix.decode(src)
+	if err != nil {
+		return dst, encoding.Errorf(e, "decoding suffix lengths: %w", err)
+	}
+	if len(prefix.values) != len(suffix.values) {
+		return dst, encoding.Error(e, errPrefixAndSuffixLengthMismatch(len(prefix.values), len(suffix.values)))
+	}
+	return decodeByteArray(dst, src, prefix.values, suffix.values)
 }
 
 func (e *ByteArrayEncoding) DecodeFixedLenByteArray(dst, src []byte, size int) ([]byte, error) {
-	if size < 0 || size > encoding.MaxFixedLenByteArraySize {
-		return dst[:0], encoding.Error(e, encoding.ErrInvalidArgument)
-	}
-	dst, err := e.decode(dst[:0], src, decodeFixedLenByteArray)
-	if err != nil {
-		err = encoding.Error(e, err)
-	}
-	return dst, err
-}
+	dst = dst[:0]
 
-func (e *ByteArrayEncoding) decode(dst, src []byte, decode func(dst, src []byte, prefix, suffix []int32) ([]byte, error)) ([]byte, error) {
+	if size < 0 || size > encoding.MaxFixedLenByteArraySize {
+		return dst, encoding.Error(e, encoding.ErrInvalidArgument)
+	}
+
 	prefix := getInt32Buffer()
 	defer putInt32Buffer(prefix)
 
@@ -173,7 +184,7 @@ func (e *ByteArrayEncoding) decode(dst, src []byte, decode func(dst, src []byte,
 	if len(prefix.values) != len(suffix.values) {
 		return dst, errPrefixAndSuffixLengthMismatch(len(prefix.values), len(suffix.values))
 	}
-	return decode(dst, src, prefix.values, suffix.values)
+	return decodeFixedLenByteArray(dst, src, prefix.values, suffix.values)
 }
 
 func linearSearchPrefixLength(base, data []byte) (n int) {
