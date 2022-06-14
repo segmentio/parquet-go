@@ -145,7 +145,7 @@ func BenchmarkDecompressor(b *testing.B) {
 }
 
 func benchmarkZeroAllocsPerRun(b *testing.B, f func()) {
-	if allocs := testing.AllocsPerRun(b.N, f); allocs != 0 && race.Off {
+	if allocs := testing.AllocsPerRun(b.N, f); allocs != 0 && !race.Enabled {
 		b.Errorf("too many memory allocations: %g > 0", allocs)
 	}
 }

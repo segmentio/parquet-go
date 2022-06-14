@@ -2,7 +2,4 @@
 
 package race
 
-const (
-	Off = true
-	On  = false
-)
+const Enabled = false
