@@ -68,16 +68,16 @@ test:
 //   describes how to use PMULLD to emulate the lack of variable bit shift
 //   for packed integers. Our version of the bit unpacking algorithms here
 //   uses AVX2 and can perform variable bit shifts using VPSRLVD, which yields
-//   better throughput since the instruction latency is a single CPU cycles,
+//   better throughput since the instruction latency is a single CPU cycle,
 //   vs 10 for VPMULLD.
 //
 // - The reference implementation at https://github.com/lemire/FastPFor/ uses
 //   specializations for each bit size, resulting in 32 unique functions.
-//   Our version here are more generic, we provide 3 declinaisons of the
-//   algorithms for bit widths 1 to 16, 17 to 26, and 27 to 31 (unpacking 32
+//   Our version here are more generic, we provide 3 variations of the
+//   algorithm for bit widths 1 to 16, 17 to 26, and 27 to 31 (unpacking 32
 //   bits values is a simple copy). In that regard, our implementation is
-//   somewhat an improvement over the reference, it uses less code and less
-//   memory to hold the shuffle masks and shift tables.
+//   somewhat an improvement over the reference, since it uses less code and
+//   less memory to hold the shuffle masks and shift tables.
 //
 // Technically, each specialization of our functions could be expressed by the
 // algorithm used for unpacking values of 27 to 31 bits. However, multiple steps
