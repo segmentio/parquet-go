@@ -22,10 +22,10 @@ const (
 	// This limit is intended to prevent unbounded memory allocations when
 	// decoding runs.
 	//
-	// We use a generous limit which allows for over a million values per page
+	// We use a generous limit which allows for over 16 million values per page
 	// if there is only one run to encode the repetition or definition levels
 	// (this should be uncommon).
-	maxSupportedValueCount = 1024 * 1024
+	maxSupportedValueCount = 16 * 1024 * 1024
 )
 
 type Encoding struct {
@@ -252,21 +252,11 @@ func decodeBits(dst, src []byte) ([]byte, error) {
 		}
 		i += n
 
-		count, bitpack := uint(u>>1), (u&1) != 0
+		count, bitpacked := uint(u>>1), (u&1) != 0
 		if count > maxSupportedValueCount {
 			return dst, fmt.Errorf("decoded run-length block cannot have more than %d values", maxSupportedValueCount)
 		}
-		if !bitpack {
-			word := byte(0)
-			if i < len(src) {
-				word = src[i]
-				i++
-			}
-
-			for n := uint(0); n < count; n += 8 {
-				dst = append(dst, word)
-			}
-		} else {
+		if bitpacked {
 			n := int(count)
 			j := i + n
 
@@ -276,6 +266,17 @@ func decodeBits(dst, src []byte) ([]byte, error) {
 
 			dst = append(dst, src[i:j]...)
 			i = j
+		} else {
+			word := byte(0)
+			if i < len(src) {
+				word = src[i]
+				i++
+			}
+
+			offset := len(dst)
+			length := bitpack.ByteCount(count)
+			dst = resize(dst, offset+length)
+			bytealg.Broadcast(dst[offset:], word)
 		}
 	}
 	return dst, nil
@@ -299,26 +300,11 @@ func decodeBytes(dst, src []byte, bitWidth uint) ([]byte, error) {
 		}
 		i += n
 
-		count, bitpack := uint(u>>1), (u&1) != 0
+		count, bitpacked := uint(u>>1), (u&1) != 0
 		if count > maxSupportedValueCount {
 			return dst, fmt.Errorf("decoded run-length block cannot have more than %d values", maxSupportedValueCount)
 		}
-		if !bitpack {
-			if bitWidth != 0 && (i+1) > len(src) {
-				return dst, fmt.Errorf("decoding run-length block of %d values: %w", count, io.ErrUnexpectedEOF)
-			}
-
-			word := byte(0)
-			if bitWidth != 0 {
-				word = src[i]
-				i++
-			}
-
-			for count > 0 {
-				dst = append(dst, word)
-				count--
-			}
-		} else {
+		if bitpacked {
 			for n := uint(0); n < count; n++ {
 				j := i + byteCount
 
@@ -343,6 +329,21 @@ func decodeBytes(dst, src []byte, bitWidth uint) ([]byte, error) {
 
 				i = j
 			}
+		} else {
+			if bitWidth != 0 && (i+1) > len(src) {
+				return dst, fmt.Errorf("decoding run-length block of %d values: %w", count, io.ErrUnexpectedEOF)
+			}
+
+			word := byte(0)
+			if bitWidth != 0 {
+				word = src[i]
+				i++
+			}
+
+			offset := len(dst)
+			length := int(count)
+			dst = resize(dst, offset+length)
+			bytealg.Broadcast(dst[offset:], word)
 		}
 	}
 
@@ -370,22 +371,7 @@ func decodeInt32(dst, src []byte, bitWidth uint) ([]byte, error) {
 		if count > maxSupportedValueCount {
 			return dst, fmt.Errorf("decoded run-length block cannot have more than %d values", maxSupportedValueCount)
 		}
-		if !bitpacked {
-			j := i + bitpack.ByteCount(bitWidth)
-
-			if j > len(src) {
-				return dst, fmt.Errorf("decoding run-length block of %d values: %w", count, io.ErrUnexpectedEOF)
-			}
-
-			bits := [4]byte{}
-			copy(bits[:], src[i:j])
-			i = j
-
-			for count > 0 {
-				dst = append(dst, bits[:]...)
-				count--
-			}
-		} else {
+		if bitpacked {
 			offset := len(dst)
 			length := int(count * bitWidth)
 			dst = resize(dst, offset+4*8*int(count))
@@ -406,6 +392,17 @@ func decodeInt32(dst, src []byte, bitWidth uint) ([]byte, error) {
 			out := unsafecast.BytesToInt32(dst[offset:])
 			bitpack.UnpackInt32(out, in, bitWidth)
 			i += length
+		} else {
+			j := i + bitpack.ByteCount(bitWidth)
+
+			if j > len(src) {
+				return dst, fmt.Errorf("decoding run-length block of %d values: %w", count, io.ErrUnexpectedEOF)
+			}
+
+			bits := [4]byte{}
+			copy(bits[:], src[i:j])
+			dst = appendRepeat(dst, bits[:], count)
+			i = j
 		}
 	}
 
@@ -422,6 +419,17 @@ func errDecodeInvalidBitWidth(typ string, bitWidth uint) error {
 
 func errInvalidBitWidth(op, typ string, bitWidth uint) error {
 	return fmt.Errorf("cannot %s %s with invalid bit-width=%d", op, typ, bitWidth)
+}
+
+func appendRepeat(dst, pattern []byte, count uint) []byte {
+	offset := len(dst)
+	length := int(count) * len(pattern)
+	dst = resize(dst, offset+length)
+	i := offset + copy(dst[offset:], pattern)
+	for i < len(dst) {
+		i += copy(dst[i:], dst[offset:i])
+	}
+	return dst
 }
 
 func appendUvarint(dst []byte, u uint64) []byte {
