@@ -32,6 +32,9 @@ jobs:
     - name: Run Tests
       run: go test -race -tags=${{ matrix.tags }} ./...
 
+    - name: Run Benchmarks
+      run: go test -race -tags=${{ matrix.tags }} -run '^$' -bench . -benchtime 1x ./...
+
   format:
     runs-on: ubuntu-latest
 
