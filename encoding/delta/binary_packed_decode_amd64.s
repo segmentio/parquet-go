@@ -150,7 +150,7 @@ test:
 //   describes how to use PMULLD to emulate the lack of variable bit shift
 //   for packed integers. Our version of the bit unpacking algorithms here
 //   uses AVX2 and can perform variable bit shifts using VPSRLVD, which yields
-//   better throughput since the instruction latency is a single CPU cycles,
+//   better throughput since the instruction latency is a single CPU cycle,
 //   vs 10 for VPMULLD.
 //
 // - The reference implementation at https://github.com/lemire/FastPFor/ uses
