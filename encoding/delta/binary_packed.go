@@ -112,7 +112,7 @@ func encodeInt32Default(dst []byte, src []int32) []byte {
 		for i, bitWidth := range bitWidths {
 			if bitWidth != 0 {
 				miniBlock := (*[miniBlockSize]int32)(block[i*miniBlockSize:])
-				miniBlockPackInt32(dst[n:], miniBlock, uint(bitWidth))
+				encodeMiniBlockInt32(dst[n:], miniBlock, uint(bitWidth))
 				n += (miniBlockSize * int(bitWidth)) / 8
 			}
 		}
@@ -158,7 +158,7 @@ func encodeInt64Default(dst []byte, src []int64) []byte {
 		for i, bitWidth := range bitWidths {
 			if bitWidth != 0 {
 				miniBlock := (*[miniBlockSize]int64)(block[i*miniBlockSize:])
-				miniBlockPackInt64(dst[n:], miniBlock, uint(bitWidth))
+				encodeMiniBlockInt64(dst[n:], miniBlock, uint(bitWidth))
 				n += (miniBlockSize * int(bitWidth)) / 8
 			}
 		}

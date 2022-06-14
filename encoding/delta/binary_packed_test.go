@@ -110,11 +110,11 @@ func testBlockBitWidthsInt32(t *testing.T, f func(*[numMiniBlocks]byte, *[blockS
 	}
 }
 
-func TestMiniBlockPackInt32(t *testing.T) {
-	testMiniBlockPackInt32(t, miniBlockPackInt32)
+func TestEncodeMiniBlockInt32(t *testing.T) {
+	testEncodeMiniBlockInt32(t, encodeMiniBlockInt32)
 }
 
-func testMiniBlockPackInt32(t *testing.T, f func([]byte, *[miniBlockSize]int32, uint)) {
+func testEncodeMiniBlockInt32(t *testing.T, f func([]byte, *[miniBlockSize]int32, uint)) {
 	t.Helper()
 	for bitWidth := uint(1); bitWidth <= 32; bitWidth++ {
 		t.Run(fmt.Sprintf("bitWidth=%d", bitWidth), func(t *testing.T) {
@@ -195,11 +195,11 @@ func benchmarkBlockBitWidthsInt32(b *testing.B, f func(*[numMiniBlocks]byte, *[b
 	}
 }
 
-func BenchmarkMiniBlockPackInt32(b *testing.B) {
-	benchmarkMiniBlockPackInt32(b, miniBlockPackInt32)
+func BenchmarkEncodeMiniBlockInt32(b *testing.B) {
+	benchmarkEncodeMiniBlockInt32(b, encodeMiniBlockInt32)
 }
 
-func benchmarkMiniBlockPackInt32(b *testing.B, f func([]byte, *[miniBlockSize]int32, uint)) {
+func benchmarkEncodeMiniBlockInt32(b *testing.B, f func([]byte, *[miniBlockSize]int32, uint)) {
 	for bitWidth := uint(1); bitWidth <= 32; bitWidth++ {
 		b.Run(fmt.Sprintf("bitWidth=%d", bitWidth), func(b *testing.B) {
 			b.SetBytes(4 * miniBlockSize)
@@ -290,11 +290,11 @@ func testBlockBitWidthsInt64(t *testing.T, f func(*[numMiniBlocks]byte, *[blockS
 	}
 }
 
-func TestMiniBlockPackInt64(t *testing.T) {
-	testMiniBlockPackInt64(t, miniBlockPackInt64)
+func TestEncodeMiniBlockInt64(t *testing.T) {
+	testEncodeMiniBlockInt64(t, encodeMiniBlockInt64)
 }
 
-func testMiniBlockPackInt64(t *testing.T, f func([]byte, *[miniBlockSize]int64, uint)) {
+func testEncodeMiniBlockInt64(t *testing.T, f func([]byte, *[miniBlockSize]int64, uint)) {
 	for bitWidth := uint(1); bitWidth <= 64; bitWidth++ {
 		t.Run(fmt.Sprintf("bitWidth=%d", bitWidth), func(t *testing.T) {
 			got := [8*miniBlockSize + 64]byte{}
@@ -342,7 +342,7 @@ func testDecodeMiniBlockInt32(t *testing.T, f func(dst []int32, src []uint32, bi
 
 			size := (miniBlockSize * bitWidth) / 8
 			buf := make([]byte, size+16)
-			miniBlockPackInt32(buf, &miniBlock, bitWidth)
+			encodeMiniBlockInt32(buf, &miniBlock, bitWidth)
 
 			src := unsafecast.BytesToUint32(buf[:size])
 			dst := make([]int32, miniBlockSize)
@@ -379,7 +379,7 @@ func testDecodeMiniBlockInt64(t *testing.T, f func(dst []int64, src []uint32, bi
 
 			size := (miniBlockSize * bitWidth) / 8
 			buf := make([]byte, size+16)
-			miniBlockPackInt64(buf, &miniBlock, bitWidth)
+			encodeMiniBlockInt64(buf, &miniBlock, bitWidth)
 
 			src := unsafecast.BytesToUint32(buf[:size])
 			dst := make([]int64, miniBlockSize)
@@ -448,11 +448,11 @@ func benchmarkBlockBitWidthsInt64(b *testing.B, f func(*[numMiniBlocks]byte, *[b
 	}
 }
 
-func BenchmarkMiniBlockPackInt64(b *testing.B) {
-	benchmarkMiniBlockPackInt64(b, miniBlockPackInt64)
+func BenchmarkEncodeMiniBlockInt64(b *testing.B) {
+	benchmarkEncodeMiniBlockInt64(b, encodeMiniBlockInt64)
 }
 
-func benchmarkMiniBlockPackInt64(b *testing.B, f func([]byte, *[miniBlockSize]int64, uint)) {
+func benchmarkEncodeMiniBlockInt64(b *testing.B, f func([]byte, *[miniBlockSize]int64, uint)) {
 	for bitWidth := uint(1); bitWidth <= 64; bitWidth++ {
 		b.Run(fmt.Sprintf("bitWidth=%d", bitWidth), func(b *testing.B) {
 			b.SetBytes(8 * miniBlockSize)
@@ -473,7 +473,7 @@ func benchmarkDecodeMiniBlockInt32(b *testing.B, f func(dst []int32, src []uint3
 	for bitWidth := uint(1); bitWidth <= 32; bitWidth++ {
 		miniBlock := [miniBlockSize]int32{}
 		buf := [4*miniBlockSize + 64]byte{}
-		miniBlockPackInt32(buf[:], &miniBlock, bitWidth)
+		encodeMiniBlockInt32(buf[:], &miniBlock, bitWidth)
 
 		b.Run(fmt.Sprintf("bitWidth=%d", bitWidth), func(b *testing.B) {
 			dst := miniBlock[:]
@@ -496,7 +496,7 @@ func benchmarkDecodeMiniBlockInt64(b *testing.B, f func(dst []int64, src []uint3
 	for bitWidth := uint(1); bitWidth <= 64; bitWidth++ {
 		miniBlock := [miniBlockSize]int64{}
 		buf := [8*miniBlockSize + 64]byte{}
-		miniBlockPackInt64(buf[:], &miniBlock, bitWidth)
+		encodeMiniBlockInt64(buf[:], &miniBlock, bitWidth)
 
 		b.Run(fmt.Sprintf("bitWidth=%d", bitWidth), func(b *testing.B) {
 			dst := miniBlock[:]
