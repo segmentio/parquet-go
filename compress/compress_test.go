@@ -12,6 +12,7 @@ import (
 	"github.com/segmentio/parquet-go/compress/snappy"
 	"github.com/segmentio/parquet-go/compress/uncompressed"
 	"github.com/segmentio/parquet-go/compress/zstd"
+	"github.com/segmentio/parquet-go/internal/race"
 )
 
 var tests = [...]struct {
@@ -144,7 +145,7 @@ func BenchmarkDecompressor(b *testing.B) {
 }
 
 func benchmarkZeroAllocsPerRun(b *testing.B, f func()) {
-	if allocs := testing.AllocsPerRun(b.N, f); allocs != 0 {
+	if allocs := testing.AllocsPerRun(b.N, f); allocs != 0 && race.Off {
 		b.Errorf("too many memory allocations: %g > 0", allocs)
 	}
 }
