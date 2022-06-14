@@ -6,7 +6,7 @@ import (
 	"encoding/binary"
 )
 
-func miniBlockPackInt32(dst []byte, src *[miniBlockSize]int32, bitWidth uint) {
+func encodeMiniBlockInt32(dst []byte, src *[miniBlockSize]int32, bitWidth uint) {
 	bitMask := uint32(1<<bitWidth) - 1
 	bitOffset := uint(0)
 
@@ -27,7 +27,7 @@ func miniBlockPackInt32(dst []byte, src *[miniBlockSize]int32, bitWidth uint) {
 	}
 }
 
-func miniBlockPackInt64(dst []byte, src *[miniBlockSize]int64, bitWidth uint) {
+func encodeMiniBlockInt64(dst []byte, src *[miniBlockSize]int64, bitWidth uint) {
 	bitMask := uint64(1<<bitWidth) - 1
 	bitOffset := uint(0)
 

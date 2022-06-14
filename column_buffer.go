@@ -9,6 +9,7 @@ import (
 
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding/plain"
+	"github.com/segmentio/parquet-go/internal/bitpack"
 	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
@@ -816,7 +817,7 @@ func (col *booleanColumnBuffer) WriteValues(values []Value) (int, error) {
 }
 
 func (col *booleanColumnBuffer) writeValues(rows array, size, offset uintptr, _ columnLevels) {
-	numBytes := byteCount(uint(col.numValues) + uint(rows.len))
+	numBytes := bitpack.ByteCount(uint(col.numValues) + uint(rows.len))
 	if cap(col.bits) < numBytes {
 		col.bits = append(make([]byte, 0, 2*cap(col.bits)), col.bits...)
 	}
@@ -890,7 +891,7 @@ func (col *booleanColumnBuffer) writeValues(rows array, size, offset uintptr, _ 
 		i++
 	}
 
-	col.bits = col.bits[:byteCount(uint(col.numValues))]
+	col.bits = col.bits[:bitpack.ByteCount(uint(col.numValues))]
 }
 
 func (col *booleanColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int, err error) {
