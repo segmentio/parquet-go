@@ -354,9 +354,7 @@ func decodeInt32(dst, src []byte, bitWidth uint) ([]byte, error) {
 		return dst, errDecodeInvalidBitWidth("INT32", bitWidth)
 	}
 
-	byteCount1 := bitpack.ByteCount(1 * bitWidth)
-	//byteCount8 := bitpack.ByteCount(8 * bitWidth)
-	buffer := make([]byte, 2*bitpack.Padding)
+	buf := make([]byte, 2*bitpack.Padding)
 
 	for i := 0; i < len(src); {
 		u, n := binary.Uvarint(src[i:])
@@ -373,7 +371,7 @@ func decodeInt32(dst, src []byte, bitWidth uint) ([]byte, error) {
 			return dst, fmt.Errorf("decoded run-length block cannot have more than %d values", maxSupportedValueCount)
 		}
 		if !bitpacked {
-			j := i + byteCount1
+			j := i + bitpack.ByteCount(bitWidth)
 
 			if j > len(src) {
 				return dst, fmt.Errorf("decoding run-length block of %d values: %w", count, io.ErrUnexpectedEOF)
@@ -400,9 +398,9 @@ func decodeInt32(dst, src []byte, bitWidth uint) ([]byte, error) {
 			if (cap(in) - len(in)) >= bitpack.Padding {
 				in = in[:cap(in)]
 			} else {
-				buffer = resize(buffer, len(in)+bitpack.Padding)
-				copy(buffer, in)
-				in = buffer
+				buf = resize(buf, len(in)+bitpack.Padding)
+				copy(buf, in)
+				in = buf
 			}
 
 			out := unsafecast.BytesToInt32(dst[offset:])
