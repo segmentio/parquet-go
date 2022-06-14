@@ -463,7 +463,7 @@ func appendRunLengthInt32(dst []byte, count int, value int32, bitWidth uint) []b
 	dst = resize(dst, n+binary.MaxVarintLen64+4)
 	n += binary.PutUvarint(dst[n:], uint64(count)<<1)
 	binary.LittleEndian.PutUint32(dst[n:], uint32(value))
-	return dst[:n+int((bitWidth+7)/8)]
+	return dst[:n+bitpack.ByteCount(bitWidth)]
 }
 
 func appendBitPackedInt32(dst []byte, words [][8]int32, bitWidth uint) []byte {
@@ -508,19 +508,7 @@ func grow(buf []byte, size int) []byte {
 }
 
 func encodeInt32BitpackDefault(dst []byte, src [][8]int32, bitWidth uint) int {
-	bits := unsafe.Slice((*uint32)(unsafe.Pointer(&dst[0])), len(dst)/4)
-	bitMask := uint32(1<<bitWidth) - 1
-	bitOffset := uint(0)
-
-	for k := range src {
-		for _, value := range src[k] {
-			i := bitOffset / 32
-			j := bitOffset % 32
-			bits[i+0] |= (uint32(value) & bitMask) << j
-			bits[i+1] |= (uint32(value) >> (32 - j))
-			bitOffset += bitWidth
-		}
-	}
-
-	return int(bitOffset / 8)
+	bits := unsafe.Slice((*int32)(unsafe.Pointer(&src[0])), len(src)*8)
+	bitpack.PackInt32(dst, bits, bitWidth)
+	return bitpack.ByteCount(uint(len(src)*8) * bitWidth)
 }

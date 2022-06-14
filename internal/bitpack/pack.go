@@ -14,6 +14,13 @@ func PackInt32(dst []byte, src []int32, bitWidth uint) {
 }
 
 func packInt32(dst []byte, src []int32, bitWidth uint) {
+	n := ByteCount(uint(len(src)) * bitWidth)
+	b := dst[:n]
+
+	for i := range b {
+		b[i] = 0
+	}
+
 	bitMask := uint32(1<<bitWidth) - 1
 	bitOffset := uint(0)
 
@@ -44,6 +51,13 @@ func PackInt64(dst []byte, src []int64, bitWidth uint) {
 }
 
 func packInt64(dst []byte, src []int64, bitWidth uint) {
+	n := ByteCount(uint(len(src)) * bitWidth)
+	b := dst[:n]
+
+	for i := range b {
+		b[i] = 0
+	}
+
 	bitMask := uint64(1<<bitWidth) - 1
 	bitOffset := uint(0)
 
