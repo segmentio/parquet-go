@@ -18,6 +18,7 @@ func init() {
 		encodeInt32Bitpack = encodeInt32BitpackAVX2
 	default:
 		encodeInt32IndexEqual8Contiguous = encodeInt32IndexEqual8ContiguousSSE
+		encodeInt32Bitpack = encodeInt32BitpackDefault
 	}
 }
 
