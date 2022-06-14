@@ -127,7 +127,7 @@ test:
     VZEROUPPER
     RET
 copy:
-    // Values longer than 16 bytes enter this loop and move 32 bytes chunks
+    // Values longer than 16 bytes enter this loop and move 32 byte chunks
     // which helps improve throughput on larger chunks.
     MOVQ $16, SI
 copyLoop32:
