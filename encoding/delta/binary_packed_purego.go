@@ -6,7 +6,7 @@ import (
 	"encoding/binary"
 )
 
-func miniBlockPackInt32(dst []byte, src *[miniBlockSize]int32, bitWidth uint) {
+func encodeMiniBlockInt32(dst []byte, src *[miniBlockSize]int32, bitWidth uint) {
 	bitMask := uint32(1<<bitWidth) - 1
 	bitOffset := uint(0)
 
@@ -27,7 +27,7 @@ func miniBlockPackInt32(dst []byte, src *[miniBlockSize]int32, bitWidth uint) {
 	}
 }
 
-func miniBlockPackInt64(dst []byte, src *[miniBlockSize]int64, bitWidth uint) {
+func encodeMiniBlockInt64(dst []byte, src *[miniBlockSize]int64, bitWidth uint) {
 	bitMask := uint64(1<<bitWidth) - 1
 	bitOffset := uint(0)
 
@@ -48,7 +48,7 @@ func miniBlockPackInt64(dst []byte, src *[miniBlockSize]int64, bitWidth uint) {
 	}
 }
 
-func decodeBlockInt32Default(block []int32, minDelta, lastValue int32) int32 {
+func decodeBlockInt32(block []int32, minDelta, lastValue int32) int32 {
 	for i := range block {
 		block[i] += minDelta
 		block[i] += lastValue
@@ -57,7 +57,7 @@ func decodeBlockInt32Default(block []int32, minDelta, lastValue int32) int32 {
 	return lastValue
 }
 
-func decodeBlockInt64Default(block []int64, minDelta, lastValue int64) int64 {
+func decodeBlockInt64(block []int64, minDelta, lastValue int64) int64 {
 	for i := range block {
 		block[i] += minDelta
 		block[i] += lastValue
@@ -66,7 +66,7 @@ func decodeBlockInt64Default(block []int64, minDelta, lastValue int64) int64 {
 	return lastValue
 }
 
-func decodeMiniBlockInt32Default(dst []int32, src []uint32, bitWidth uint) {
+func decodeMiniBlockInt32(dst []int32, src []uint32, bitWidth uint) {
 	bitMask := uint32(1<<bitWidth) - 1
 	bitOffset := uint(0)
 
@@ -83,7 +83,7 @@ func decodeMiniBlockInt32Default(dst []int32, src []uint32, bitWidth uint) {
 	}
 }
 
-func decodeMiniBlockInt64Default(dst []int64, src []uint32, bitWidth uint) {
+func decodeMiniBlockInt64(dst []int64, src []uint32, bitWidth uint) {
 	bitMask := uint64(1<<bitWidth) - 1
 	bitOffset := uint(0)
 
