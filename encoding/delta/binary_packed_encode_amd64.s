@@ -19,7 +19,7 @@
     VPERMD Y1, Y3, Y0
 
 // func blockDeltaInt32AVX2(block *[blockSize]int32, lastValue int32) int32
-TEXT ·blockDeltaInt32AVX2(SB), NOSPLIT, $0-24
+TEXT ·blockDeltaInt32AVX2(SB), NOSPLIT, $0-20
     MOVQ block+0(FP), AX
     MOVL 4*blockSize-4(AX), CX
     MOVL CX, ret+16(FP)
@@ -40,7 +40,7 @@ loop:
     RET
 
 // func blockMinInt32AVX2(block *[blockSize]int32) int32
-TEXT ·blockMinInt32AVX2(SB), NOSPLIT, $0-16
+TEXT ·blockMinInt32AVX2(SB), NOSPLIT, $0-12
     MOVQ block+0(FP), AX
     VPBROADCASTD (AX), Y15
 
@@ -110,7 +110,7 @@ TEXT ·blockMinInt32AVX2(SB), NOSPLIT, $0-16
     VMOVDQU Y4, offset+96(baseAddr)
 
 // func blockSubInt32AVX2(block *[blockSize]int32, value int32)
-TEXT ·blockSubInt32AVX2(SB), NOSPLIT, $0-16
+TEXT ·blockSubInt32AVX2(SB), NOSPLIT, $0-12
     MOVQ block+0(FP), AX
     VPBROADCASTD value+8(FP), Y0
     subInt32AVX2x32(AX, 0)
