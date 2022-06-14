@@ -23,5 +23,5 @@ func UnpackInt64(dst []int64, src []byte, bitWidth uint) {
 }
 
 func assertUnpack(src []byte, count int, bitWidth uint) {
-	_ = src[:byteCount(bitWidth*uint(count)+8*Padding)]
+	_ = src[:ByteCount(bitWidth*uint(count)+8*Padding)]
 }

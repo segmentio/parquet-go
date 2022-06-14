@@ -2,6 +2,7 @@
 // integers of various bit widths.
 package bitpack
 
-func byteCount(bitCount uint) uint {
-	return (bitCount + 7) / 8
+// ByteCount returns the number of bytes needed to hold the given bit count.
+func ByteCount(bitCount uint) int {
+	return int((bitCount + 7) / 8)
 }

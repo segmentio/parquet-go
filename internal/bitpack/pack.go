@@ -65,5 +65,5 @@ func packInt64(dst []byte, src []int64, bitWidth uint) {
 }
 
 func assertPack(dst []byte, count int, bitWidth uint) {
-	_ = dst[:byteCount(bitWidth*uint(count))]
+	_ = dst[:ByteCount(bitWidth*uint(count))]
 }
