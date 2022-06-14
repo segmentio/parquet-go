@@ -13,6 +13,7 @@ import (
 
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/format"
+	"github.com/segmentio/parquet-go/internal/bitpack"
 	"github.com/segmentio/parquet-go/internal/bytealg"
 	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
@@ -286,7 +287,7 @@ func decodeBytes(dst, src []byte, bitWidth uint) ([]byte, error) {
 	}
 
 	bitMask := uint64(1<<bitWidth) - 1
-	byteCount := byteCount(8 * bitWidth)
+	byteCount := bitpack.ByteCount(8 * bitWidth)
 
 	for i := 0; i < len(src); {
 		u, n := binary.Uvarint(src[i:])
@@ -353,9 +354,9 @@ func decodeInt32(dst, src []byte, bitWidth uint) ([]byte, error) {
 		return dst, errDecodeInvalidBitWidth("INT32", bitWidth)
 	}
 
-	bitMask := uint64(1<<bitWidth) - 1
-	byteCount1 := byteCount(1 * bitWidth)
-	byteCount8 := byteCount(8 * bitWidth)
+	byteCount1 := bitpack.ByteCount(1 * bitWidth)
+	//byteCount8 := bitpack.ByteCount(8 * bitWidth)
+	buffer := make([]byte, 2*bitpack.Padding)
 
 	for i := 0; i < len(src); {
 		u, n := binary.Uvarint(src[i:])
@@ -367,11 +368,11 @@ func decodeInt32(dst, src []byte, bitWidth uint) ([]byte, error) {
 		}
 		i += n
 
-		count, bitpack := uint(u>>1), (u&1) != 0
+		count, bitpacked := uint(u>>1), (u&1) != 0
 		if count > maxSupportedValueCount {
 			return dst, fmt.Errorf("decoded run-length block cannot have more than %d values", maxSupportedValueCount)
 		}
-		if !bitpack {
+		if !bitpacked {
 			j := i + byteCount1
 
 			if j > len(src) {
@@ -387,30 +388,26 @@ func decodeInt32(dst, src []byte, bitWidth uint) ([]byte, error) {
 				count--
 			}
 		} else {
-			for n := uint(0); n < count; n++ {
-				j := i + byteCount8
+			offset := len(dst)
+			length := int(count * bitWidth)
+			dst = resize(dst, offset+4*8*int(count))
 
-				if j > len(src) {
-					return dst, fmt.Errorf("decoding bit-packed block of %d values: %w", 8*count, io.ErrUnexpectedEOF)
-				}
-
-				value := uint64(0)
-				bitOffset := uint(0)
-
-				for _, b := range src[i:j] {
-					value |= uint64(b) << bitOffset
-
-					for bitOffset += 8; bitOffset >= bitWidth; {
-						buf := [4]byte{}
-						binary.LittleEndian.PutUint32(buf[:], uint32(value&bitMask))
-						dst = append(dst, buf[:]...)
-						value >>= bitWidth
-						bitOffset -= bitWidth
-					}
-				}
-
-				i = j
+			// The bitpack.UnpackInt32 function requires the input to be padded
+			// or the function panics. If there is enough room in the input
+			// buffer we can use it, otherwise we have to copy it to a larger
+			// location (which should rarely happen).
+			in := src[i : i+length]
+			if (cap(in) - len(in)) >= bitpack.Padding {
+				in = in[:cap(in)]
+			} else {
+				buffer = resize(buffer, len(in)+bitpack.Padding)
+				copy(buffer, in)
+				in = buffer
 			}
+
+			out := unsafecast.BytesToInt32(dst[offset:])
+			bitpack.UnpackInt32(out, in, bitWidth)
+			i += length
 		}
 	}
 
@@ -487,10 +484,6 @@ func broadcast8x4(v int32) [8]int32 {
 	return [8]int32{v, v, v, v, v, v, v, v}
 }
 
-func byteCount(numBits uint) int {
-	return int((numBits + 7) / 8)
-}
-
 func isZero(data []byte) bool {
 	return bytealg.Count(data, 0x00) == len(data)
 }
@@ -502,12 +495,6 @@ func isOnes(data []byte) bool {
 func resize(buf []byte, size int) []byte {
 	if cap(buf) < size {
 		return grow(buf, size)
-	}
-	if size > len(buf) {
-		clear := buf[len(buf):size]
-		for i := range clear {
-			clear[i] = 0
-		}
 	}
 	return buf[:size]
 }
