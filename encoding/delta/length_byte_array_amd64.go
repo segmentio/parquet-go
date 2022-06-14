@@ -56,7 +56,7 @@ func decodeLengthByteArray(dst, src []byte, lengths []int32) ([]byte, error) {
 
 	// To leverage the SEE optimized implementation of the function we must
 	// create enough padding at the end to prevent the opportunistic reads
-	// and writes from overflowing past the buffers limits.
+	// and writes from overflowing past the buffer's limits.
 	if cpu.X86.HasAVX2 && len(src) > padding {
 		k = len(lengths)
 
