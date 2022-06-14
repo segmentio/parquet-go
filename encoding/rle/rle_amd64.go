@@ -43,3 +43,6 @@ func encodeInt32BitpackAVX2(dst []byte, src [][8]int32, bitWidth uint) int {
 		return encodeInt32BitpackDefault(dst, src, bitWidth)
 	}
 }
+
+//go:noescape
+func decodeBytesBitpack(dst, src []byte, count, bitWidth uint)

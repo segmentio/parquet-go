@@ -287,9 +287,6 @@ func decodeBytes(dst, src []byte, bitWidth uint) ([]byte, error) {
 		return dst, errDecodeInvalidBitWidth("INT8", bitWidth)
 	}
 
-	bitMask := uint64(1<<bitWidth) - 1
-	byteCount := bitpack.ByteCount(8 * bitWidth)
-
 	for i := 0; i < len(src); {
 		u, n := binary.Uvarint(src[i:])
 		if n == 0 {
@@ -305,30 +302,19 @@ func decodeBytes(dst, src []byte, bitWidth uint) ([]byte, error) {
 			return dst, fmt.Errorf("decoded run-length block cannot have more than %d values", maxSupportedValueCount)
 		}
 		if bitpacked {
-			for n := uint(0); n < count; n++ {
-				j := i + byteCount
+			count *= 8
+			j := i + bitpack.ByteCount(count*bitWidth)
 
-				if j > len(src) {
-					return dst, fmt.Errorf("decoding bit-packed block of %d values: %w", 8*count, io.ErrUnexpectedEOF)
-				}
-
-				bits := [8]byte{}
-				copy(bits[:], src[i:j])
-				word := binary.LittleEndian.Uint64(bits[:])
-
-				dst = append(dst,
-					byte((word>>(0*bitWidth))&bitMask),
-					byte((word>>(1*bitWidth))&bitMask),
-					byte((word>>(2*bitWidth))&bitMask),
-					byte((word>>(3*bitWidth))&bitMask),
-					byte((word>>(4*bitWidth))&bitMask),
-					byte((word>>(5*bitWidth))&bitMask),
-					byte((word>>(6*bitWidth))&bitMask),
-					byte((word>>(7*bitWidth))&bitMask),
-				)
-
-				i = j
+			if j > len(src) {
+				return dst, fmt.Errorf("decoding bit-packed block of %d values: %w", 8*count, io.ErrUnexpectedEOF)
 			}
+
+			offset := len(dst)
+			length := int(count)
+			dst = resize(dst, offset+length)
+			decodeBytesBitpack(dst[offset:], src[i:j], count, bitWidth)
+
+			i = j
 		} else {
 			if bitWidth != 0 && (i+1) > len(src) {
 				return dst, fmt.Errorf("decoding run-length block of %d values: %w", count, io.ErrUnexpectedEOF)
