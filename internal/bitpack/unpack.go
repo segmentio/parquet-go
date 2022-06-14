@@ -13,7 +13,7 @@ func UnpackInt32(dst []int32, src []byte, bitWidth uint) {
 	unpackInt32(dst, src, bitWidth)
 }
 
-// UnpackInt64 unpackes 64 bit integers from src to dst.
+// UnpackInt64 unpacks 64 bit integers from src to dst.
 //
 // The function unpacked len(dst) integers, it panics if src is too short to
 // contain len(dst) values of the given bit width.
