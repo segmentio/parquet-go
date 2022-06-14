@@ -4,7 +4,7 @@ package bitpack
 // the unpacking algorithms to avoid reading beyond the end of the input.
 const Padding = 16
 
-// UnpackInt32 unpackes 32 bit integers from src to dst.
+// UnpackInt32 unpacks 32 bit integers from src to dst.
 //
 // The function unpacked len(dst) integers, it panics if src is too short to
 // contain len(dst) values of the given bit width.
