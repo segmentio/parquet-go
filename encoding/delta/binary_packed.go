@@ -9,6 +9,7 @@ import (
 
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/format"
+	"github.com/segmentio/parquet-go/internal/bitpack"
 	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
@@ -322,12 +323,12 @@ func decodeInt32(dst, src []byte) ([]byte, []byte, error) {
 					miniBlockData = miniBlockData[:miniBlockSize]
 				}
 				src = src[len(miniBlockData):]
-				if cap(miniBlockData) < miniBlockSize+padding {
-					miniBlockTemp = resize(miniBlockTemp[:0], miniBlockSize+padding)
+				if cap(miniBlockData) < miniBlockSize+bitpack.Padding {
+					miniBlockTemp = resize(miniBlockTemp[:0], miniBlockSize+bitpack.Padding)
 					miniBlockData = miniBlockTemp[:copy(miniBlockTemp, miniBlockData)]
 				}
-				in := unsafecast.BytesToUint32(miniBlockData[:miniBlockSize])
-				decodeMiniBlockInt32(out[writeOffset:writeOffset+n], in, uint(bitWidth))
+				miniBlockData = miniBlockData[:miniBlockSize]
+				bitpack.UnpackInt32(out[writeOffset:writeOffset+n], miniBlockData, uint(bitWidth))
 			}
 			writeOffset += n
 			totalValues -= n
@@ -385,12 +386,12 @@ func decodeInt64(dst, src []byte) ([]byte, []byte, error) {
 					miniBlockData = src[:miniBlockSize]
 				}
 				src = src[len(miniBlockData):]
-				if len(miniBlockData) < miniBlockSize+padding {
-					miniBlockTemp = resize(miniBlockTemp[:0], miniBlockSize+padding)
+				if len(miniBlockData) < miniBlockSize+bitpack.Padding {
+					miniBlockTemp = resize(miniBlockTemp[:0], miniBlockSize+bitpack.Padding)
 					miniBlockData = miniBlockTemp[:copy(miniBlockTemp, miniBlockData)]
 				}
-				in := unsafecast.BytesToUint32(miniBlockData[:miniBlockSize])
-				decodeMiniBlockInt64(out[writeOffset:writeOffset+n], in, uint(bitWidth))
+				miniBlockData = miniBlockData[:miniBlockSize]
+				bitpack.UnpackInt64(out[writeOffset:writeOffset+n], miniBlockData, uint(bitWidth))
 			}
 			writeOffset += n
 			totalValues -= n

@@ -4,11 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"math/bits"
-	"math/rand"
-	"reflect"
 	"testing"
-
-	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 func maxLen32(miniBlock []int32) (maxLen int) {
@@ -325,80 +321,6 @@ func testEncodeMiniBlockInt64(t *testing.T, f func([]byte, *[miniBlockSize]int64
 	}
 }
 
-func TestDecodeMiniBlockInt32(t *testing.T) {
-	testDecodeMiniBlockInt32(t, decodeMiniBlockInt32)
-}
-
-func testDecodeMiniBlockInt32(t *testing.T, f func(dst []int32, src []uint32, bitWidth uint)) {
-	for bitWidth := uint(1); bitWidth <= 32; bitWidth++ {
-		t.Run(fmt.Sprintf("bitWidth=%d", bitWidth), func(t *testing.T) {
-			miniBlock := [miniBlockSize]int32{}
-			bitMask := int32(bitWidth<<1) - 1
-
-			prng := rand.New(rand.NewSource(0))
-			for i := range miniBlock {
-				miniBlock[i] = prng.Int31() & bitMask
-			}
-
-			size := (miniBlockSize * bitWidth) / 8
-			buf := make([]byte, size+16)
-			encodeMiniBlockInt32(buf, &miniBlock, bitWidth)
-
-			src := unsafecast.BytesToUint32(buf[:size])
-			dst := make([]int32, miniBlockSize)
-
-			for n := 1; n <= miniBlockSize; n++ {
-				for i := range dst {
-					dst[i] = 0
-				}
-
-				f(dst[:n], src, bitWidth)
-
-				if !reflect.DeepEqual(miniBlock[:n], dst[:n]) {
-					t.Errorf("values mismatch for length=%d\nwant: %v\ngot:  %v", n, miniBlock[:n], dst[:n])
-				}
-			}
-		})
-	}
-}
-
-func TestDecodeMiniBlockInt64(t *testing.T) {
-	testDecodeMiniBlockInt64(t, decodeMiniBlockInt64)
-}
-
-func testDecodeMiniBlockInt64(t *testing.T, f func(dst []int64, src []uint32, bitWidth uint)) {
-	for bitWidth := uint(1); bitWidth <= 63; bitWidth++ {
-		t.Run(fmt.Sprintf("bitWidth=%d", bitWidth), func(t *testing.T) {
-			miniBlock := [miniBlockSize]int64{}
-			bitMask := int64(bitWidth<<1) - 1
-
-			prng := rand.New(rand.NewSource(0))
-			for i := range miniBlock {
-				miniBlock[i] = prng.Int63() & bitMask
-			}
-
-			size := (miniBlockSize * bitWidth) / 8
-			buf := make([]byte, size+16)
-			encodeMiniBlockInt64(buf, &miniBlock, bitWidth)
-
-			src := unsafecast.BytesToUint32(buf[:size])
-			dst := make([]int64, miniBlockSize)
-
-			for n := 1; n <= miniBlockSize; n++ {
-				for i := range dst {
-					dst[i] = 0
-				}
-
-				f(dst[:n], src, bitWidth)
-
-				if !reflect.DeepEqual(miniBlock[:n], dst[:n]) {
-					t.Errorf("values mismatch for length=%d\nwant: %v\ngot:  %v", n, miniBlock[:n], dst[:n])
-				}
-			}
-		})
-	}
-}
-
 func BenchmarkBlockDeltaInt64(b *testing.B) {
 	benchmarkBlockDeltaInt64(b, blockDeltaInt64)
 }
@@ -461,52 +383,6 @@ func benchmarkEncodeMiniBlockInt64(b *testing.B, f func([]byte, *[miniBlockSize]
 			for i := 0; i < b.N; i++ {
 				f(dst[:], &src, bitWidth)
 			}
-		})
-	}
-}
-
-func BenchmarkDecodeMiniBlockInt32(b *testing.B) {
-	benchmarkDecodeMiniBlockInt32(b, decodeMiniBlockInt32)
-}
-
-func benchmarkDecodeMiniBlockInt32(b *testing.B, f func(dst []int32, src []uint32, bitWidth uint)) {
-	for bitWidth := uint(1); bitWidth <= 32; bitWidth++ {
-		miniBlock := [miniBlockSize]int32{}
-		buf := [4*miniBlockSize + 64]byte{}
-		encodeMiniBlockInt32(buf[:], &miniBlock, bitWidth)
-
-		b.Run(fmt.Sprintf("bitWidth=%d", bitWidth), func(b *testing.B) {
-			dst := miniBlock[:]
-			src := unsafecast.BytesToUint32(buf[:])
-
-			for i := 0; i < b.N; i++ {
-				f(dst, src, bitWidth)
-			}
-
-			b.SetBytes(4 * miniBlockSize)
-		})
-	}
-}
-
-func BenchmarkDecodeMiniBlockInt64(b *testing.B) {
-	benchmarkDecodeMiniBlockInt64(b, decodeMiniBlockInt64)
-}
-
-func benchmarkDecodeMiniBlockInt64(b *testing.B, f func(dst []int64, src []uint32, bitWidth uint)) {
-	for bitWidth := uint(1); bitWidth <= 64; bitWidth++ {
-		miniBlock := [miniBlockSize]int64{}
-		buf := [8*miniBlockSize + 64]byte{}
-		encodeMiniBlockInt64(buf[:], &miniBlock, bitWidth)
-
-		b.Run(fmt.Sprintf("bitWidth=%d", bitWidth), func(b *testing.B) {
-			dst := miniBlock[:]
-			src := unsafecast.BytesToUint32(buf[:])
-
-			for i := 0; i < b.N; i++ {
-				f(dst, src, bitWidth)
-			}
-
-			b.SetBytes(4 * miniBlockSize)
 		})
 	}
 }
