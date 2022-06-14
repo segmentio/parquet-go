@@ -93,8 +93,8 @@ done:
 // buffers, but it ends up being close to an order of magnitude higher for the
 // common case of working with short strings.
 //
-// func decodeLengthByteArrayAVX2(dst, src []byte, lengths []int32)
-TEXT ·decodeLengthByteArrayAVX2(SB), NOSPLIT, $40-72
+// func decodeLengthByteArrayAVX2(dst, src []byte, lengths []int32) int
+TEXT ·decodeLengthByteArrayAVX2(SB), NOSPLIT, $0-80
     MOVQ dst_base+0(FP), AX
     MOVQ src_base+24(FP), BX
     MOVQ lengths_base+48(FP), DX
@@ -120,6 +120,11 @@ next:
 test:
     CMPQ DX, DI
     JNE loop
+    MOVQ dst_base+0(FP), BX
+    SUBQ BX, AX
+    SUBQ $4, AX
+    MOVQ AX, ret+72(FP)
+    VZEROUPPER
     RET
 copy:
     // Values longer than 16 bytes enter this loop and move 32 bytes chunks

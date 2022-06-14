@@ -184,7 +184,7 @@ func (e *ByteArrayEncoding) DecodeFixedLenByteArray(dst, src []byte, size int) (
 	if len(prefix.values) != len(suffix.values) {
 		return dst, errPrefixAndSuffixLengthMismatch(len(prefix.values), len(suffix.values))
 	}
-	return decodeFixedLenByteArray(dst, src, prefix.values, suffix.values)
+	return decodeFixedLenByteArray(dst, src, size, prefix.values, suffix.values)
 }
 
 func linearSearchPrefixLength(base, data []byte) (n int) {

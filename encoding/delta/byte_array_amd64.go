@@ -48,6 +48,9 @@ func validatePrefixAndSuffixLengthValues(prefix, suffix []int32, maxLength int) 
 	return totalPrefixLength, totalSuffixLength, nil
 }
 
+//go:noescape
+func decodeByteArrayAVX2(dst, src []byte, prefix, suffix []int32) int
+
 func decodeByteArray(dst, src []byte, prefix, suffix []int32) ([]byte, error) {
 	totalPrefixLength, totalSuffixLength, err := validatePrefixAndSuffixLengthValues(prefix, suffix, len(src))
 	if err != nil {
@@ -64,6 +67,24 @@ func decodeByteArray(dst, src []byte, prefix, suffix []int32) ([]byte, error) {
 	var i int
 	var j int
 
+	if cpu.X86.HasAVX2 && len(src) > padding {
+		k := len(suffix)
+		n := 0
+
+		for k > 0 && n < padding {
+			k--
+			n += int(suffix[k])
+		}
+
+		if k > 0 && n >= padding {
+			i = decodeByteArrayAVX2(dst, src, prefix[:k], suffix[:k])
+			j = len(src) - n
+			lastValue = dst[i-(int(prefix[k-1])+int(suffix[k-1])):]
+			prefix = prefix[k:]
+			suffix = suffix[k:]
+		}
+	}
+
 	for k := range prefix {
 		p := int(prefix[k])
 		n := int(suffix[k])
@@ -79,7 +100,13 @@ func decodeByteArray(dst, src []byte, prefix, suffix []int32) ([]byte, error) {
 	return dst[:totalLength], nil
 }
 
-func decodeFixedLenByteArray(dst, src []byte, prefix, suffix []int32) ([]byte, error) {
+//go:noescape
+func decodeFixedLenByteArrayAVX2(dst, src []byte, prefix, suffix []int32) int
+
+//go:noescape
+func decodeFixedLenByteArrayAVX2x128bits(dst, src []byte, prefix, suffix []int32) int
+
+func decodeFixedLenByteArray(dst, src []byte, size int, prefix, suffix []int32) ([]byte, error) {
 	totalPrefixLength, totalSuffixLength, err := validatePrefixAndSuffixLengthValues(prefix, suffix, len(src))
 	if err != nil {
 		return dst, err
@@ -94,6 +121,30 @@ func decodeFixedLenByteArray(dst, src []byte, prefix, suffix []int32) ([]byte, e
 	var lastValue []byte
 	var i int
 	var j int
+
+	if cpu.X86.HasAVX2 && len(src) > padding {
+		k := len(suffix)
+		n := 0
+
+		for k > 0 && n < padding {
+			k--
+			n += int(suffix[k])
+		}
+
+		if k > 0 && n >= padding {
+			if size == 16 {
+				i = decodeFixedLenByteArrayAVX2x128bits(dst, src, prefix[:k], suffix[:k])
+			} else {
+				i = decodeFixedLenByteArrayAVX2(dst, src, prefix[:k], suffix[:k])
+			}
+			j = len(src) - n
+			prefix = prefix[k:]
+			suffix = suffix[k:]
+			if i >= size {
+				lastValue = dst[i-size:]
+			}
+		}
+	}
 
 	for k := range prefix {
 		p := int(prefix[k])

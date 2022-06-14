@@ -36,7 +36,7 @@ func decodeByteArray(dst, src []byte, prefix, suffix []int32) ([]byte, error) {
 	return dst, nil
 }
 
-func decodeFixedLenByteArray(dst, src []byte, prefix, suffix []int32) ([]byte, error) {
+func decodeFixedLenByteArray(dst, src []byte, size int, prefix, suffix []int32) ([]byte, error) {
 	_ = prefix[:len(suffix)]
 	_ = suffix[:len(prefix)]
 

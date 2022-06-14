@@ -188,6 +188,8 @@ var fixedLenByteArrayTests = [...]struct {
 	{size: 2, data: []byte("ABCDEFGH")},
 	{size: 4, data: []byte("ABCDEFGH")},
 	{size: 8, data: []byte("ABCDEFGH")},
+	{size: 10, data: bytes.Repeat([]byte("123456789"), 100)},
+	{size: 16, data: bytes.Repeat([]byte("1234567890"), 160)},
 }
 
 var encodings = [...]encoding.Encoding{
@@ -885,13 +887,14 @@ func generateDoubleValues(n int, r *rand.Rand) []byte {
 }
 
 func generateByteArrayValues(n int, r *rand.Rand) []byte {
-	values := make([]byte, n*21)
+	const maxLen = 21
+	values := make([]byte, plain.ByteArrayLengthSize*n+n*maxLen)
 	length := 0
 
 	for i := 0; i < n; i++ {
-		k := r.Intn(20) + 1
+		k := r.Intn(maxLen) + 1
 		plain.PutByteArrayLength(values[length:], k)
-		length += 4
+		length += plain.ByteArrayLengthSize
 		io.ReadFull(r, values[length:length+k])
 		length += k
 	}

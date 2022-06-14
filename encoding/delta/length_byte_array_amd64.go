@@ -36,7 +36,7 @@ func validateLengthValues(lengths []int32, maxLength int) (totalLength int, err 
 }
 
 //go:noescape
-func decodeLengthByteArrayAVX2(dst, src []byte, lengths []int32)
+func decodeLengthByteArrayAVX2(dst, src []byte, lengths []int32) int
 
 func decodeLengthByteArray(dst, src []byte, lengths []int32) ([]byte, error) {
 	totalLength, err := validateLengthValues(lengths, len(src))
@@ -66,9 +66,8 @@ func decodeLengthByteArray(dst, src []byte, lengths []int32) ([]byte, error) {
 		}
 
 		if k > 0 && n >= padding {
-			decodeLengthByteArrayAVX2(dst, src, lengths[:k])
+			i = decodeLengthByteArrayAVX2(dst, src, lengths[:k])
 			j = len(src) - n
-			i = plain.ByteArrayLengthSize*k + j
 		} else {
 			k = 0
 		}
