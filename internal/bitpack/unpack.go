@@ -2,7 +2,7 @@ package bitpack
 
 // Padding is the padding expected to exist after the end of input buffers for
 // the unpacking algorithms to avoid reading beyond the end of the input.
-const Padding = 16
+const Padding = 32
 
 // UnpackInt32 unpacks 32 bit integers from src to dst.
 //
