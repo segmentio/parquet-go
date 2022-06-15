@@ -341,7 +341,7 @@ func decodeInt32(dst, src []byte, bitWidth uint) ([]byte, error) {
 		return dst, errDecodeInvalidBitWidth("INT32", bitWidth)
 	}
 
-	buf := make([]byte, 2*bitpack.Padding)
+	buf := make([]byte, 2*bitpack.PaddingInt32)
 
 	for i := 0; i < len(src); {
 		u, n := binary.Uvarint(src[i:])
@@ -367,10 +367,10 @@ func decodeInt32(dst, src []byte, bitWidth uint) ([]byte, error) {
 			// buffer we can use it, otherwise we have to copy it to a larger
 			// location (which should rarely happen).
 			in := src[i : i+length]
-			if (cap(in) - len(in)) >= bitpack.Padding {
+			if (cap(in) - len(in)) >= bitpack.PaddingInt32 {
 				in = in[:cap(in)]
 			} else {
-				buf = resize(buf, len(in)+bitpack.Padding)
+				buf = resize(buf, len(in)+bitpack.PaddingInt32)
 				copy(buf, in)
 				in = buf
 			}

@@ -68,6 +68,44 @@ test:
     JNE loop
     RET
 
+// This bit unpacking function was inspired from the 32 bit version, but
+// adapted to account for the fact that eight 64 bit values span across
+// two YMM registers, and across lanes of YMM registers.
+//
+// Because of the two lanes of YMM registers, we cannot use the VPSHUFB
+// instruction to dispatch bytes of the input to the registers. Instead we use
+// the VPERMD instruction, which has higher latency but supports dispatching
+// bytes across register lanes. Measurements show that throughput gains remain
+// very interesting despite the algorithm running on a few more CPU cycles per
+// loop.
+//
+// The initialization phase of this algorithm generates masks for
+// permutations and shifts used to decode the bit-packed values.
+//
+// The permutation masks are written to Y7 and Y8, and contain the results
+// of this formula:
+//
+//      temp[i] = (bitWidth * i) / 32
+//      mask[i] = temp[i] | ((temp[i] + 1) << 32)
+//
+// Since VPERMQ only supports reading the permutation combination from an
+// immediate value, we use VPERMD and generate permutation for pairs of two
+// consecutive 32 bit words, which is why we have set (x+1)<<32 to the upper
+// part of each 64 bit word.
+//
+// The masks for right shifts are written to Y5 and Y6, and computed with
+// this formula:
+//
+//      shift[i] = (bitWidth * i) - (32 * ((bitWidth * i) / 32))
+//
+// The amount to shift byte is the number of values previously unpacked,
+// offseted by the byte count of 32 bit words that we read from first bits
+// from.
+//
+// Technically the masks could be precomputed and declared in global tables;
+// however, declaring masks for all bit width is tedious and makes code
+// maintenance more costly for no measurable benefits on production workloads.
+//
 // func unpackInt64x1to32bitsAVX2(dst []int64, src []byte, bitWidth uint)
 TEXT ·unpackInt64x1to32bitsAVX2(SB), NOSPLIT, $56-56
     NO_LOCAL_POINTERS
@@ -83,29 +121,6 @@ TEXT ·unpackInt64x1to32bitsAVX2(SB), NOSPLIT, $56-56
     SHRQ $3, DI
     SHLQ $3, DI
     XORQ SI, SI
-
-    // The initialization phase of this algorithm generates masks for
-    // permutations and shifts used to decode the bit-packed values.
-    //
-    // The permutation masks are written to Y7 and Y8, and contain the results
-    // of this formula:
-    //
-    //      temp[i] = (bitWidth * i) / 32
-    //      mask[i] = temp[i] | ((temp[i] + 1) << 32)
-    //
-    // Since VPERMQ only supports reading the permutation combination from an
-    // immediate value, we use VPERMD and generate permutation for pairs of two
-    // consecutive 32 bit words, which is why we have set (x+1)<<32 to the upper
-    // part of each 64 bit word.
-    //
-    // The masks for right shifts are written to Y5 and Y6, and computed with
-    // this formula:
-    //
-    //      shift[i] = (bitWidth * i) - (32 * ((bitWidth * i) / 32))
-    //
-    // The amount to shift byte is the number of values previously unpacked,
-    // offseted by the byte count of 32 bit words that we read from first bits
-    // from.
 
     MOVQ $1, R8
     SHLQ CX, R8
