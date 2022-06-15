@@ -17,7 +17,6 @@ import (
 	"github.com/segmentio/parquet-go/encoding/delta"
 	"github.com/segmentio/parquet-go/encoding/plain"
 	"github.com/segmentio/parquet-go/encoding/rle"
-	"github.com/segmentio/parquet-go/internal/race"
 	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
@@ -828,7 +827,7 @@ func benchmarkDecodeFixedLenByteArray(b *testing.B, e encoding.Encoding) {
 }
 
 func benchmarkZeroAllocsPerRun(b *testing.B, f func()) {
-	if allocs := testing.AllocsPerRun(b.N, f); allocs != 0 && !race.Enabled {
+	if allocs := testing.AllocsPerRun(b.N, f); allocs != 0 && !testing.Short() {
 		b.Errorf("too many memory allocations: %g", allocs)
 	}
 }
