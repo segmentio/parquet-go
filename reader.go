@@ -30,7 +30,7 @@ import (
 //
 //
 // For programs building with Go 1.18 or later, the GenericReader[T] type
-// supercedes this one.
+// supersedes this one.
 type Reader struct {
 	seen     reflect.Type
 	file     reader
