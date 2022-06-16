@@ -2,6 +2,7 @@ package quick
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 	"reflect"
 	"strings"
@@ -77,7 +78,7 @@ func MakeValueFuncOf(t reflect.Type) MakeValueFunc {
 
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		return func(v reflect.Value, r *rand.Rand) {
-			v.SetInt(r.Int63())
+			v.SetInt(r.Int63n(math.MaxInt32))
 		}
 
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:

@@ -58,7 +58,7 @@ func (row int32Column) generate(prng *rand.Rand) int32Column {
 }
 
 type int64Column struct {
-	Value int64
+	Value int64 `parquet:",delta"`
 }
 
 func (row int64Column) generate(prng *rand.Rand) int64Column {
