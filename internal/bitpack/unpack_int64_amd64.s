@@ -89,17 +89,16 @@ test:
 //
 // Since VPERMQ only supports reading the permutation combination from an
 // immediate value, we use VPERMD and generate permutation for pairs of two
-// consecutive 32 bit words, which is why we have set (x+1)<<32 to the upper
-// part of each 64 bit word.
+// consecutive 32 bit words, which is why we have the upper part of each 64
+// bit word set with (x+1)<<32.
 //
 // The masks for right shifts are written to Y5 and Y6, and computed with
 // this formula:
 //
 //      shift[i] = (bitWidth * i) - (32 * ((bitWidth * i) / 32))
 //
-// The amount to shift byte is the number of values previously unpacked,
-// offseted by the byte count of 32 bit words that we read from first bits
-// from.
+// The amount to shift by is the number of values previously unpacked, offseted
+// by the byte count of 32 bit words that we read from first bits from.
 //
 // Technically the masks could be precomputed and declared in global tables;
 // however, declaring masks for all bit width is tedious and makes code
