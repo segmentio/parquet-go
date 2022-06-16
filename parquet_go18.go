@@ -7,7 +7,7 @@ import (
 	"os"
 )
 
-// Read reads ands returns rows from the parquet file in the given reader.
+// Read reads and returns rows from the parquet file in the given reader.
 //
 // The type T defines the type of rows read from r. T must be compatible with
 // the file's schema or an error will be returned. The row type might represent
