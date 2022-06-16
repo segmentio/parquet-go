@@ -64,6 +64,8 @@ of parquet files on the file system from a slice of Go values representing the
 rows to write to the file.
 
 ```go
+type RowType struct { FirstName, LastName string }
+
 if err := parquet.WriteFile("file.parquet", []RowType{
     {FirstName: "Bob"},
     {FirstName: "Alice"},
@@ -77,9 +79,13 @@ the columns into a parquet file, generating row groups, column chunks, and pages
 based on configurable heuristics.
 
 ```go
+type RowType struct { FirstName, LastName string }
+
 writer := parquet.NewGenericWriter[RowType](output)
 
-_, err := writer.Write(characters)
+_, err := writer.Write([]RowType{
+    ...
+})
 if err != nil {
     ...
 }
@@ -98,7 +104,7 @@ of parquet rows, translated from the type of Go values, and can be used for this
 purpose.
 
 ```go
-schema := parquet.SchemaOf(rows[0])
+schema := parquet.SchemaOf(new(RowType))
 writer := parquet.NewGenericWriter[any](output, schema)
 ...
 ```
@@ -110,42 +116,15 @@ read most rows of the file, the `parquet.ReadFile[T]` function returns a slice
 of Go values representing the rows read from the file.
 
 ```go
-characters, err := parquet.ReadFile[RowType]("file.parquet")
+type RowType struct { FirstName, LastName string }
+
+rows, err := parquet.ReadFile[RowType]("file.parquet")
 if err != nil {
     ...
 }
 
-for _, c := range characters {
+for _, c := range rows {
     fmt.Printf("%+v\n", c)
-}
-```
-
-The `parquet.GenericReader[T]` type supports more advanced use cases for reading
-rows of parquet files into Go values. When reading rows, the schema is already
-provided by metadata within the file; the reader knows how to leverage this
-information so the application does not need to explicitly declare the schema of
-values that will be read. However, the reader will validate that the schemas of
-the file and its type parameter are compatible.
-
-This example shows how a `parquet.GenericReader[T]` is typically used:
-
-```go
-reader := parquet.NewReader(file)
-
-for {
-    row := new(RowType)
-    err := reader.Read(row)
-    if err != nil {
-        if err == io.EOF {
-            break
-        }
-        ...
-    }
-    ...
-}
-
-if err := reader.Close(); err != nil {
-    ...
 }
 ```
 
@@ -210,8 +189,11 @@ rules from a source to a target schema. The function is used to build converted
 views of `parquet.RowReader` or `parquet.RowGroup`, for example:
 
 ```go
-source := parquet.NewSchema(&RowTypeV1{})
-target := parquet.NewSchema(&RowTypeV2{})
+type RowTypeV1 struct { ID int64; FirstName string }
+type RowTypeV2 struct { ID int64; FirstName, LastName string }
+
+source := parquet.NewSchema(RowTypeV1{})
+target := parquet.NewSchema(RowTypeV2{})
 
 conversion, err := parquet.Convert(target, source)
 if err != nil {
@@ -261,6 +243,8 @@ The following example shows how to use a `parquet.GenericBuffer[T]` to order row
 written to a parquet file:
 
 ```go
+type RowType struct { FirstName, LastName string }
+
 buffer := parquet.NewGenericBuffer[RowType](
     parquet.SortingColumns(
         parquet.Ascending("LastName"),
@@ -339,6 +323,11 @@ configure the list of columns to create filters for using the `parquet.BloomFilt
 option when instantiating writers; for example:
 
 ```go
+type RowType struct {
+    FirstName string `parquet:"first_name"`
+    LastName  string `parquet:"last_name"`
+}
+
 writer := parquet.NewGenericWriter[RowType](output,
     parquet.BloomFilters(
         // Configures the write to generate split-block bloom filters for the
@@ -469,6 +458,8 @@ The following examples demonstrate how to use these two models to write columns
 of Go values:
 
 ```go
+type RowType struct { FirstName, LastName string }
+
 func writeColumns(buffer *parquet.GenericBuffer[RowType], firstNames []string) error {
     values := make([]parquet.Value, len(firstNames))
     for i := range firstNames {
@@ -480,6 +471,8 @@ func writeColumns(buffer *parquet.GenericBuffer[RowType], firstNames []string) e
 ```
 
 ```go
+type RowType struct { ID int64; Value float32 }
+
 func writeColumns(buffer *parquet.GenericBuffer[RowType], ids []int64, values []float32) error {
     if len(ids) != len(values) {
         return fmt.Errorf("number of ids and values mismatch: ids=%d values=%d", len(ids), len(values))
@@ -533,6 +526,8 @@ utilization to a minimum. The following example demonstrates how to configure
 a parquet writer to use on-disk page buffers:
 
 ```go
+type RowType struct { ... }
+
 writer := parquet.NewGenericWriter[RowType](output,
     parquet.ColumnPageBuffers(
         parquet.NewFileBufferPool("", "buffers.*"),
