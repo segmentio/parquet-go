@@ -21,36 +21,29 @@ import (
 //
 // - The page suffix contains the concatenated byte array data.
 //
+// The zero-value is not a valid page, an empty page is at least 8 bytes long,
+// 4 bytes for the length prefix and 4 bytes for the zero offset.
+//
+// Because offsets are expressed as signed 32 bit integers, the maximum length
+// of the data section is 2 GiB.
 type ByteArrayPage []byte
 
 func (b ByteArrayPage) Len() int {
-	if len(b) > 0 {
-		return int(binary.LittleEndian.Uint32(b[:4]))
-	}
-	return 0
+	return int(binary.LittleEndian.Uint32(b[:4]))
 }
 
 func (b ByteArrayPage) Offsets() []int32 {
-	if n := b.Len(); n > 0 {
-		return unsafecast.BytesToInt32(b[8 : 8+4*n])
-	}
-	return nil
+	n := 8 + 4*b.Len()
+	return unsafecast.BytesToInt32(b[8:n:n])
 }
 
 func (b ByteArrayPage) Data() []byte {
-	if n := b.Len(); n > 0 {
-		return b[8+4*n:]
-	}
-	return nil
+	return b[8+4*b.Len():]
 }
 
 func (b ByteArrayPage) Region(i int) (baseOffset, endOffset int) {
-	if len(b) > 0 {
-		region := binary.LittleEndian.Uint64(b[4+4*i:])
-		baseOffset = int(region & 0xFFFFFFFF)
-		endOffset = int(region >> 32)
-	}
-	return baseOffset, endOffset
+	region := binary.LittleEndian.Uint64(b[4+4*i:])
+	return int(region & 0xFFFFFFFF), int(region >> 32)
 }
 
 func (b ByteArrayPage) Index(i int) []byte {
@@ -69,6 +62,8 @@ func (b ByteArrayPage) Range(f func([]byte) bool) {
 	}
 }
 
+// EncodeByteArrayPage encodes the values made of the offsets and buffer into
+// a ByteArray represetnation.
 func EncodeByteArrayPage(page ByteArrayPage, offsets []int32, values []byte) ByteArrayPage {
 	size := 8 + 4*len(offsets) + len(values)
 
@@ -83,20 +78,4 @@ func EncodeByteArrayPage(page ByteArrayPage, offsets []int32, values []byte) Byt
 	copy(page[8:], unsafecast.Int32ToBytes(offsets))
 	copy(page[8+4*len(offsets):], values)
 	return page
-}
-
-func ConvertLengthsToOffsets(offsets, lengths []int32) {
-	copy(offsets, lengths)
-
-	for i := 1; i < len(offsets); i++ {
-		offsets[i] += offsets[i-1]
-	}
-}
-
-func ConvertOffsetsToLengths(lengths, offsets []int32) {
-	copy(lengths, offsets)
-
-	for i := len(lengths) - 1; i > 0; i-- {
-		lengths[i] -= lengths[i-1]
-	}
 }
