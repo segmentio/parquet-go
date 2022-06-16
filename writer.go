@@ -43,7 +43,7 @@ import (
 // writing them to a Writer.
 //
 // For programs building with Go 1.18 or later, the GenericWriter[T] type
-// supercedes this one.
+// supersedes this one.
 type Writer struct {
 	output io.Writer
 	config *WriterConfig

@@ -236,7 +236,7 @@ columns, etc... More advanced conversion rules may be added in the future.
 ### Sorting Row Groups: [parquet.GenericBuffer[T]](https://pkg.go.dev/github.com/segmentio/parquet-go#Buffer)
 
 The `parquet.GenericWriter[T]` type is optimized for minimal memory usage,
-keeping the order rows unchanged and flushing pages as soon as they are filled.
+keeping the order of rows unchanged and flushing pages as soon as they are filled.
 
 Parquet supports expressing columns by which rows are sorted through the
 declaration of _sorting columns_ on row groups. Sorting row groups requires
