@@ -25,7 +25,7 @@ func TestUnpackInt32(t *testing.T) {
 			}
 
 			size := (blockSize * bitWidth) / 8
-			buf := make([]byte, size+bitpack.Padding)
+			buf := make([]byte, size+bitpack.PaddingInt32)
 			bitpack.PackInt32(buf, block[:], bitWidth)
 
 			src := buf[:size]
@@ -58,7 +58,7 @@ func TestUnpackInt64(t *testing.T) {
 			}
 
 			size := (blockSize * bitWidth) / 8
-			buf := make([]byte, size+bitpack.Padding)
+			buf := make([]byte, size+bitpack.PaddingInt64)
 			bitpack.PackInt64(buf, block[:], bitWidth)
 
 			src := buf[:size]
@@ -82,7 +82,7 @@ func TestUnpackInt64(t *testing.T) {
 func BenchmarkUnpackInt32(b *testing.B) {
 	for bitWidth := uint(1); bitWidth <= 32; bitWidth++ {
 		block := [blockSize]int32{}
-		buf := [4*blockSize + bitpack.Padding]byte{}
+		buf := [4*blockSize + bitpack.PaddingInt32]byte{}
 		bitpack.PackInt32(buf[:], block[:], bitWidth)
 
 		b.Run(fmt.Sprintf("bitWidth=%d", bitWidth), func(b *testing.B) {
@@ -101,7 +101,7 @@ func BenchmarkUnpackInt32(b *testing.B) {
 func BenchmarkUnpackInt64(b *testing.B) {
 	for bitWidth := uint(1); bitWidth <= 64; bitWidth++ {
 		block := [blockSize]int64{}
-		buf := [8*blockSize + bitpack.Padding]byte{}
+		buf := [8*blockSize + bitpack.PaddingInt64]byte{}
 		bitpack.PackInt64(buf[:], block[:], bitWidth)
 
 		b.Run(fmt.Sprintf("bitWidth=%d", bitWidth), func(b *testing.B) {
