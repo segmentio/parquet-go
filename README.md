@@ -35,8 +35,9 @@ dependency on and install with the following command:
 go get github.com/segmentio/parquet-go
 ```
 
-Go 1.17 is required to use the package, but some APIs and optimizations are only
-supported when building with Go 1.18 or later.
+Go 1.18 or later is required to use the package. As a backward-compatibility
+mechanism, the package can also be built with Go 1.17, in which case the APIs
+based on Generics are disabled.
 
 ### Compatibility Guarantees
 
