@@ -78,7 +78,7 @@ func Write[T any](w io.Writer, rows []T, options ...WriterOption) error {
 // This function is provided for convenience to facilitate writing parquet
 // files to the file system.
 func WriteFile[T any](path string, rows []T, options ...WriterOption) error {
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	f, err := os.Create(path)
 	if err != nil {
 		return err
 	}
