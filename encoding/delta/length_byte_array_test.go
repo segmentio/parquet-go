@@ -28,7 +28,7 @@ func TestDecodeLengthByteArray(t *testing.T) {
 	}
 
 	index := 0
-	err = plain.RangeByteArrays(dst, func(got []byte) error {
+	err = plain.RangeByteArray(dst, func(got []byte) error {
 		want := characters[:index%len(characters)]
 
 		if want != string(got) {
