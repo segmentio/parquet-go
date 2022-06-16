@@ -75,9 +75,8 @@ test:
 // Because of the two lanes of YMM registers, we cannot use the VPSHUFB
 // instruction to dispatch bytes of the input to the registers. Instead we use
 // the VPERMD instruction, which has higher latency but supports dispatching
-// bytes across register lanes. Measurements show that throughput gains remain
-// very interesting despite the algorithm running on a few more CPU cycles per
-// loop.
+// bytes across register lanes. Measurable throughput gains remain despite the
+// algorithm running on a few more CPU cycles per loop.
 //
 // The initialization phase of this algorithm generates masks for
 // permutations and shifts used to decode the bit-packed values.
