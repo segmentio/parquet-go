@@ -9,13 +9,13 @@ import (
 	"github.com/segmentio/parquet-go"
 )
 
-func Example_ReadFile() {
+func ExampleReadFile() {
 	type Row struct {
 		ID   int64  `parquet:"id"`
 		Name string `parquet:"name,zstd"`
 	}
 
-	Example_WriteFile()
+	ExampleWriteFile()
 
 	rows, err := parquet.ReadFile[Row]("/tmp/file.parquet")
 	if err != nil {
@@ -32,7 +32,7 @@ func Example_ReadFile() {
 	// 2: "Franky"
 }
 
-func Example_WriteFile() {
+func ExampleWriteFile() {
 	type Row struct {
 		ID   int64  `parquet:"id"`
 		Name string `parquet:"name,zstd"`
