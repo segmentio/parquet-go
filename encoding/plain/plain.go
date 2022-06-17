@@ -132,44 +132,42 @@ func (e *Encoding) DecodeDouble(dst, src []byte) ([]byte, error) {
 }
 
 func (e *Encoding) DecodeByteArray(dst, src []byte) ([]byte, error) {
-	n, err := countByteArrayValues(src)
-	if err != nil {
-		return dst[:0], encoding.Error(e, err)
-	}
+	numValues := 0
 
-	page := encoding.MakeByteArrayPage(dst, n, len(src)-(ByteArrayLengthSize*n))
-	offsets, values := page.Offsets(), page.Values()
-	i := 0
-	j := 0
-
-	RangeByteArray(src, func(value []byte) error {
-		i++
-		offsets[i] = offsets[i-1] + int32(len(value))
-		j += copy(values[j:], value)
-		return nil
-	})
-	return page, nil
-}
-
-func countByteArrayValues(b []byte) (count int, err error) {
-	for i := 0; i < len(b); {
-		r := len(b) - i
+	for i := 0; i < len(src); {
+		r := len(src) - i
 		if r < ByteArrayLengthSize {
-			return 0, ErrTooShort(r)
+			return dst, ErrTooShort(r)
 		}
-		n := ByteArrayLength(b[i:])
+		n := ByteArrayLength(src[i:])
 		i += ByteArrayLengthSize
 		r -= ByteArrayLengthSize
 		if n > r {
-			return 0, ErrTooShort(n)
+			return dst, ErrTooShort(n)
 		}
 		if n > MaxByteArrayLength {
-			return 0, ErrTooLarge(n)
+			return dst, ErrTooLarge(n)
 		}
 		i += n
-		count++
+		numValues++
 	}
-	return count, nil
+
+	page := encoding.MakeByteArrayPage(dst, numValues, len(src)-(ByteArrayLengthSize*numValues))
+	offsets, values := page.Offsets(), page.Values()
+	i := 0
+	j := 0
+	k := 0
+
+	for k < len(src) {
+		n := ByteArrayLength(src[k:])
+		k += ByteArrayLengthSize
+		i += 1
+		offsets[i] = offsets[i-1] + int32(n)
+		j += copy(values[j:], src[k:k+n])
+		k += n
+	}
+
+	return page, nil
 }
 
 func (e *Encoding) DecodeFixedLenByteArray(dst, src []byte, size int) ([]byte, error) {
