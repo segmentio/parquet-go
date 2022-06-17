@@ -280,25 +280,6 @@ func PutByteArrayLength(b []byte, n int) {
 	binary.LittleEndian.PutUint32(b, uint32(n))
 }
 
-type status int
-
-const (
-	ok status = iota
-	errTooShort
-	errTooLarge
-)
-
-func ValidateByteArray(b []byte) error {
-	switch validateByteArray(b) {
-	case errTooShort:
-		return ErrTooShort(len(b))
-	case errTooLarge:
-		return ErrTooLarge(len(b))
-	default: // ok
-		return nil
-	}
-}
-
 func RangeByteArray(b []byte, do func([]byte) error) (err error) {
 	for len(b) > 0 {
 		var v []byte
