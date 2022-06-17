@@ -2,6 +2,7 @@ package parquet
 
 import (
 	"fmt"
+	"math"
 	"reflect"
 	"strconv"
 	"strings"
@@ -22,7 +23,7 @@ type Schema struct {
 	root        Node
 	deconstruct deconstructFunc
 	reconstruct reconstructFunc
-	readRow     columnReadRowFunc
+	readRows    readRowsFunc
 	mapping     columnMapping
 	columns     [][]string
 }
@@ -55,9 +56,17 @@ type Schema struct {
 //	uuid      | for string and [16]byte types, use the parquet UUID logical type
 //	decimal   | for int32, int64 and [n]byte types, use the parquet DECIMAL logical type
 //	date      | for int32 types use the DATE logical type
-//	timestamp | for int64 types use the TIMESTAMP logical type with millisecond precision
+//	timestamp | for int64 types use the TIMESTAMP logical type with, by default, millisecond precision
+//	split     | for float32/float64, use the BYTE_STREAM_SPLIT encoding
 //
 // The date logical type is an int32 value of the number of days since the unix epoch
+//
+// The timestamp precision can be changed by defining which precision to use as an argument.
+// Supported precisions are: nanosecond, millisecond and microsecond. Example:
+//
+//  type Message struct {
+//    TimestrampMicros int64 `parquet:"timestamp_micros,timestamp(microsecond)"
+//  }
 //
 // The decimal tag must be followed by two integer parameters, the first integer
 // representing the scale and the second the precision; for example:
@@ -68,6 +77,10 @@ type Schema struct {
 //
 // Invalid combination of struct tags and Go types, or repeating options will
 // cause the function to panic.
+//
+// As a special case, if the field tag is "-", the field is omitted from the schema
+// and the data will not be written into the parquet file(s).
+// Note that a field with name "-" can still be generated using the tag "-,".
 //
 // The schema name is the Go type name of the value.
 func SchemaOf(model interface{}) *Schema {
@@ -103,14 +116,14 @@ func NewSchema(name string, root Node) *Schema {
 		root:        root,
 		deconstruct: makeDeconstructFunc(root),
 		reconstruct: makeReconstructFunc(root),
-		readRow:     makeColumnReadRowFunc(root),
+		readRows:    makeReadRowsFunc(root),
 		mapping:     mapping,
 		columns:     columns,
 	}
 }
 
 func dereference(t reflect.Type) reflect.Type {
-	if t.Kind() == reflect.Ptr {
+	for t.Kind() == reflect.Ptr {
 		t = t.Elem()
 	}
 	return t
@@ -136,9 +149,9 @@ func makeReconstructFunc(node Node) (reconstruct reconstructFunc) {
 	return reconstruct
 }
 
-func makeColumnReadRowFunc(node Node) columnReadRowFunc {
-	_, readRow := columnReadRowFuncOf(node, 0, 0)
-	return readRow
+func makeReadRowsFunc(node Node) readRowsFunc {
+	_, readRows := readRowsFuncOf(node, 0, 0)
+	return readRows
 }
 
 // ConfigureRowGroup satisfies the RowGroupOption interface, allowing Schema
@@ -196,12 +209,12 @@ func (s *Schema) GoType() reflect.Type { return s.root.GoType() }
 // parquet schema.
 func (s *Schema) Deconstruct(row Row, value interface{}) Row {
 	v := reflect.ValueOf(value)
-	if v.Kind() == reflect.Ptr {
+	for v.Kind() == reflect.Ptr {
 		if v.IsNil() {
 			v = reflect.Value{}
-		} else {
-			v = v.Elem()
+			break
 		}
+		v = v.Elem()
 	}
 	if s.deconstruct != nil {
 		row = s.deconstruct(row, levels{}, v)
@@ -227,9 +240,15 @@ func (s *Schema) Reconstruct(value interface{}, row Row) error {
 	if v.IsNil() {
 		panic("cannot reconstruct row into nil pointer of type " + v.Type().String())
 	}
+	for v.Kind() == reflect.Ptr {
+		if v.IsNil() {
+			v.Set(reflect.New(v.Type().Elem()))
+		}
+		v = v.Elem()
+	}
 	var err error
 	if s.reconstruct != nil {
-		row, err = s.reconstruct(v.Elem(), levels{}, row)
+		row, err = s.reconstruct(v, levels{}, row)
 		if len(row) > 0 && err == nil {
 			err = fmt.Errorf("%d values remain unused after reconstructing go value of type %s from parquet row", len(row), v.Type())
 		}
@@ -290,7 +309,7 @@ func structNodeOf(t reflect.Type) *structNode {
 }
 
 func structFieldsOf(t reflect.Type) []reflect.StructField {
-	fields := appendStructFields(t, nil, nil)
+	fields := appendStructFields(t, nil, nil, 0)
 
 	for i := range fields {
 		f := &fields[i]
@@ -306,13 +325,23 @@ func structFieldsOf(t reflect.Type) []reflect.StructField {
 	return fields
 }
 
-func appendStructFields(t reflect.Type, fields []reflect.StructField, index []int) []reflect.StructField {
+func appendStructFields(t reflect.Type, fields []reflect.StructField, index []int, offset uintptr) []reflect.StructField {
 	for i, n := 0, t.NumField(); i < n; i++ {
+		f := t.Field(i)
+		if tag := f.Tag.Get("parquet"); tag != "" {
+			name, _ := split(tag)
+			if tag != "-," && name == "-" {
+				continue
+			}
+		}
+
 		fieldIndex := index[:len(index):len(index)]
 		fieldIndex = append(fieldIndex, i)
 
-		if f := t.Field(i); f.Anonymous {
-			fields = appendStructFields(f.Type, fields, fieldIndex)
+		f.Offset += offset
+
+		if f.Anonymous {
+			fields = appendStructFields(f.Type, fields, fieldIndex, f.Offset)
 		} else if f.IsExported() {
 			f.Index = fieldIndex
 			fields = append(fields, f)
@@ -382,7 +411,6 @@ func (f *structField) Value(base reflect.Value) reflect.Value {
 			return fieldByIndex(base, f.index)
 		}
 	}
-	return reflect.Value{}
 }
 
 func structFieldString(f reflect.StructField) string {
@@ -445,130 +473,133 @@ func makeStructField(f reflect.StructField) structField {
 		compressed = c
 	}
 
-	if tag := f.Tag.Get("parquet"); tag != "" {
-		var element Node
-		_, tag = split(tag) // skip the field name
+	forEachStructTagOption(f, func(t reflect.Type, option, args string) {
+		switch option {
+		case "optional":
+			setOptional()
 
-		for tag != "" {
-			option := ""
-			option, tag = split(tag)
-			option, args := splitOptionArgs(option)
+		case "snappy":
+			setCompression(&Snappy)
 
-			switch option {
-			case "optional":
-				setOptional()
+		case "gzip":
+			setCompression(&Gzip)
 
-			case "snappy":
-				setCompression(&Snappy)
+		case "brotli":
+			setCompression(&Brotli)
 
-			case "gzip":
-				setCompression(&Gzip)
+		case "lz4":
+			setCompression(&Lz4Raw)
 
-			case "brotli":
-				setCompression(&Brotli)
+		case "zstd":
+			setCompression(&Zstd)
 
-			case "lz4":
-				setCompression(&Lz4Raw)
+		case "uncompressed":
+			setCompression(&Uncompressed)
 
-			case "zstd":
-				setCompression(&Zstd)
+		case "plain":
+			setEncoding(&Plain)
 
-			case "uncompressed":
-				setCompression(&Uncompressed)
+		case "dict":
+			setEncoding(&RLEDictionary)
 
-			case "plain":
-				setEncoding(&Plain)
-
-			case "dict":
-				setEncoding(&RLEDictionary)
-
-			case "delta":
-				switch f.Type.Kind() {
-				case reflect.Int, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint32, reflect.Uint64:
-					setEncoding(&DeltaBinaryPacked)
-				case reflect.String:
+		case "delta":
+			switch t.Kind() {
+			case reflect.Int, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint32, reflect.Uint64:
+				setEncoding(&DeltaBinaryPacked)
+			case reflect.String:
+				setEncoding(&DeltaByteArray)
+			case reflect.Slice:
+				if t.Elem().Kind() == reflect.Uint8 { // []byte?
 					setEncoding(&DeltaByteArray)
-				case reflect.Slice:
-					if f.Type.Elem().Kind() == reflect.Uint8 { // []byte?
-						setEncoding(&DeltaByteArray)
-					} else {
-						throwInvalidFieldTag(f, option)
-					}
-				case reflect.Array:
-					if f.Type.Elem().Kind() == reflect.Uint8 { // [N]byte?
-						setEncoding(&DeltaByteArray)
-					} else {
-						throwInvalidFieldTag(f, option)
-					}
-				default:
+				} else {
 					throwInvalidFieldTag(f, option)
 				}
-
-			case "list":
-				switch f.Type.Kind() {
-				case reflect.Slice:
-					element = nodeOf(f.Type.Elem())
-					setNode(element)
-					setList()
-				default:
-					throwInvalidFieldTag(f, option)
-				}
-
-			case "enum":
-				switch f.Type.Kind() {
-				case reflect.String:
-					setNode(Enum())
-				default:
-					throwInvalidFieldTag(f, option)
-				}
-
-			case "uuid":
-				switch f.Type.Kind() {
-				case reflect.Array:
-					if f.Type.Elem().Kind() != reflect.Uint8 || f.Type.Len() != 16 {
-						throwInvalidFieldTag(f, option)
-					}
-				default:
-					throwInvalidFieldTag(f, option)
-				}
-
-			case "decimal":
-				scale, precision, err := parseDecimalArgs(args)
-				if err != nil {
-					throwInvalidFieldTag(f, option+args)
-				}
-				var baseType Type
-				switch f.Type.Kind() {
-				case reflect.Int32:
-					baseType = Int32Type
-				case reflect.Int64:
-					baseType = Int64Type
-				case reflect.Array:
-					baseType = FixedLenByteArrayType(calcDecimalFixedLenByteArraySize(precision))
-				default:
-					throwInvalidFieldTag(f, option)
-				}
-
-				setNode(Decimal(scale, precision, baseType))
-			case "date":
-				switch f.Type.Kind() {
-				case reflect.Int32:
-					setNode(Date())
-				default:
-					throwInvalidFieldTag(f, option)
-				}
-			case "timestamp":
-				switch f.Type.Kind() {
-				case reflect.Int64:
-					setNode(Timestamp(Millisecond))
-				default:
+			case reflect.Array:
+				if t.Elem().Kind() == reflect.Uint8 { // [N]byte?
+					setEncoding(&DeltaByteArray)
+				} else {
 					throwInvalidFieldTag(f, option)
 				}
 			default:
-				throwUnknownFieldTag(f, option)
+				throwInvalidFieldTag(f, option)
 			}
+
+		case "split":
+			switch t.Kind() {
+			case reflect.Float32, reflect.Float64:
+				setEncoding(&ByteStreamSplit)
+			default:
+				throwInvalidFieldTag(f, option)
+			}
+
+		case "list":
+			switch t.Kind() {
+			case reflect.Slice:
+				element := nodeOf(t.Elem())
+				setNode(element)
+				setList()
+			default:
+				throwInvalidFieldTag(f, option)
+			}
+
+		case "enum":
+			switch t.Kind() {
+			case reflect.String:
+				setNode(Enum())
+			default:
+				throwInvalidFieldTag(f, option)
+			}
+
+		case "uuid":
+			switch t.Kind() {
+			case reflect.Array:
+				if t.Elem().Kind() != reflect.Uint8 || t.Len() != 16 {
+					throwInvalidFieldTag(f, option)
+				}
+			default:
+				throwInvalidFieldTag(f, option)
+			}
+
+		case "decimal":
+			scale, precision, err := parseDecimalArgs(args)
+			if err != nil {
+				throwInvalidFieldTag(f, option+args)
+			}
+			var baseType Type
+			switch t.Kind() {
+			case reflect.Int32:
+				baseType = Int32Type
+			case reflect.Int64:
+				baseType = Int64Type
+			case reflect.Array, reflect.Slice:
+				baseType = FixedLenByteArrayType(decimalFixedLenByteArraySize(precision))
+			default:
+				throwInvalidFieldTag(f, option)
+			}
+
+			setNode(Decimal(scale, precision, baseType))
+		case "date":
+			switch t.Kind() {
+			case reflect.Int32:
+				setNode(Date())
+			default:
+				throwInvalidFieldTag(f, option)
+			}
+		case "timestamp":
+			switch t.Kind() {
+			case reflect.Int64:
+				timeUnit, err := parseTimestampArgs(args)
+				if err != nil {
+					throwInvalidFieldTag(f, args)
+				}
+				setNode(Timestamp(timeUnit))
+			default:
+				throwInvalidFieldTag(f, option)
+			}
+		default:
+			throwUnknownFieldTag(f, option)
 		}
-	}
+	})
 
 	if field.Node == nil {
 		field.Node = nodeOf(f.Type)
@@ -591,6 +622,28 @@ func makeStructField(f reflect.StructField) structField {
 	}
 
 	return field
+}
+
+// FixedLenByteArray decimals are sized based on precision
+// this function calculates the necessary byte array size.
+func decimalFixedLenByteArraySize(precision int) int {
+	return int(math.Ceil((math.Log10(2) + float64(precision)) / math.Log10(256)))
+}
+
+func forEachStructTagOption(sf reflect.StructField, do func(t reflect.Type, option, args string)) {
+	if tag := sf.Tag.Get("parquet"); tag != "" {
+		_, tag = split(tag) // skip the field name
+		for tag != "" {
+			option := ""
+			option, tag = split(tag)
+			option, args := splitOptionArgs(option)
+			ft := sf.Type
+			if ft.Kind() == reflect.Ptr {
+				ft = ft.Elem()
+			}
+			do(ft, option, args)
+		}
+	}
 }
 
 func nodeOf(t reflect.Type) Node {
@@ -692,6 +745,31 @@ func parseDecimalArgs(args string) (scale, precision int, err error) {
 		return 0, 0, err
 	}
 	return int(s), int(p), nil
+}
+
+func parseTimestampArgs(args string) (TimeUnit, error) {
+	if !strings.HasPrefix(args, "(") || !strings.HasSuffix(args, ")") {
+		return nil, fmt.Errorf("malformed timestamp args: %s", args)
+	}
+
+	args = strings.TrimPrefix(args, "(")
+	args = strings.TrimSuffix(args, ")")
+
+	if len(args) == 0 {
+		return Millisecond, nil
+	}
+
+	switch args {
+	case "millisecond":
+		return Millisecond, nil
+	case "microsecond":
+		return Microsecond, nil
+	case "nanosecond":
+		return Nanosecond, nil
+	default:
+	}
+
+	return nil, fmt.Errorf("unknown time unit: %s", args)
 }
 
 type goNode struct {

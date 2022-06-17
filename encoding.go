@@ -1,13 +1,15 @@
 package parquet
 
 import (
+	"math/bits"
+
 	"github.com/segmentio/parquet-go/encoding"
+	"github.com/segmentio/parquet-go/encoding/bitpacked"
 	"github.com/segmentio/parquet-go/encoding/bytestreamsplit"
 	"github.com/segmentio/parquet-go/encoding/delta"
 	"github.com/segmentio/parquet-go/encoding/plain"
 	"github.com/segmentio/parquet-go/encoding/rle"
 	"github.com/segmentio/parquet-go/format"
-	"github.com/segmentio/parquet-go/internal/bits"
 )
 
 var (
@@ -16,6 +18,10 @@ var (
 
 	// RLE is the hybrid bit-pack/run-length parquet encoding.
 	RLE rle.Encoding
+
+	// BitPacked is the deprecated bit-packed encoding for repetition and
+	// definition levels.
+	BitPacked bitpacked.Encoding
 
 	// PlainDictionary is the plain dictionary parquet encoding.
 	//
@@ -43,6 +49,7 @@ var (
 	encodings = [...]encoding.Encoding{
 		format.Plain:                &Plain,
 		format.PlainDictionary:      &PlainDictionary,
+		format.BitPacked:            &BitPacked,
 		format.RLE:                  &RLE,
 		format.RLEDictionary:        &RLEDictionary,
 		format.DeltaBinaryPacked:    &DeltaBinaryPacked,
@@ -53,7 +60,18 @@ var (
 
 	// Table indexing RLE encodings for repetition and definition levels of
 	// all supported bit widths.
-	levelEncodings = [...]rle.Encoding{
+	levelEncodingsRLE = [...]rle.Encoding{
+		0: {BitWidth: 1},
+		1: {BitWidth: 2},
+		2: {BitWidth: 3},
+		3: {BitWidth: 4},
+		4: {BitWidth: 5},
+		5: {BitWidth: 6},
+		6: {BitWidth: 7},
+		7: {BitWidth: 8},
+	}
+
+	levelEncodingsBitPacked = [...]bitpacked.Encoding{
 		0: {BitWidth: 1},
 		1: {BitWidth: 2},
 		2: {BitWidth: 3},
@@ -66,12 +84,11 @@ var (
 )
 
 func isDictionaryEncoding(encoding encoding.Encoding) bool {
-	switch encoding.Encoding() {
-	case format.PlainDictionary, format.RLEDictionary:
-		return true
-	default:
-		return false
-	}
+	return isDictionaryFormat(encoding.Encoding())
+}
+
+func isDictionaryFormat(encoding format.Encoding) bool {
+	return encoding == format.PlainDictionary || encoding == format.RLEDictionary
 }
 
 // LookupEncoding returns the parquet encoding associated with the given code.
@@ -87,10 +104,13 @@ func LookupEncoding(enc format.Encoding) encoding.Encoding {
 	return encoding.NotSupported{}
 }
 
-func lookupLevelEncoding(enc format.Encoding, max int8) encoding.Encoding {
+func lookupLevelEncoding(enc format.Encoding, max byte) encoding.Encoding {
+	i := bits.Len8(max) - 1
 	switch enc {
 	case format.RLE:
-		return &levelEncodings[bits.Len8(max)-1]
+		return &levelEncodingsRLE[i]
+	case format.BitPacked:
+		return &levelEncodingsBitPacked[i]
 	default:
 		return encoding.NotSupported{}
 	}

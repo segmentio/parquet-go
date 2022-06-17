@@ -5,11 +5,10 @@ import (
 
 	"github.com/segmentio/parquet-go/bloom"
 	"github.com/segmentio/parquet-go/bloom/xxhash"
-	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/encoding/plain"
 	"github.com/segmentio/parquet-go/format"
-	"github.com/segmentio/parquet-go/internal/bits"
+	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 // BloomFilter is an interface allowing applications to test whether a key
@@ -144,33 +143,33 @@ type splitBlockEncoding struct {
 	encoding.NotSupported
 }
 
-func (splitBlockEncoding) EncodeBoolean(dst []byte, src []bool) ([]byte, error) {
-	splitBlockEncodeUint8(bloom.MakeSplitBlockFilter(dst), bits.BoolToBytes(src))
+func (splitBlockEncoding) EncodeBoolean(dst, src []byte) ([]byte, error) {
+	splitBlockEncodeUint8(bloom.MakeSplitBlockFilter(dst), src)
 	return dst, nil
 }
 
-func (splitBlockEncoding) EncodeInt32(dst []byte, src []int32) ([]byte, error) {
-	splitBlockEncodeUint32(bloom.MakeSplitBlockFilter(dst), bits.Int32ToUint32(src))
+func (splitBlockEncoding) EncodeInt32(dst, src []byte) ([]byte, error) {
+	splitBlockEncodeUint32(bloom.MakeSplitBlockFilter(dst), unsafecast.BytesToUint32(src))
 	return dst, nil
 }
 
-func (splitBlockEncoding) EncodeInt64(dst []byte, src []int64) ([]byte, error) {
-	splitBlockEncodeUint64(bloom.MakeSplitBlockFilter(dst), bits.Int64ToUint64(src))
+func (splitBlockEncoding) EncodeInt64(dst, src []byte) ([]byte, error) {
+	splitBlockEncodeUint64(bloom.MakeSplitBlockFilter(dst), unsafecast.BytesToUint64(src))
 	return dst, nil
 }
 
-func (e splitBlockEncoding) EncodeInt96(dst []byte, src []deprecated.Int96) ([]byte, error) {
-	splitBlockEncodeFixedLenByteArray(bloom.MakeSplitBlockFilter(dst), deprecated.Int96ToBytes(src), 12)
+func (e splitBlockEncoding) EncodeInt96(dst, src []byte) ([]byte, error) {
+	splitBlockEncodeFixedLenByteArray(bloom.MakeSplitBlockFilter(dst), src, 12)
 	return dst, nil
 }
 
-func (splitBlockEncoding) EncodeFloat(dst []byte, src []float32) ([]byte, error) {
-	splitBlockEncodeUint32(bloom.MakeSplitBlockFilter(dst), bits.Float32ToUint32(src))
+func (splitBlockEncoding) EncodeFloat(dst, src []byte) ([]byte, error) {
+	splitBlockEncodeUint32(bloom.MakeSplitBlockFilter(dst), unsafecast.BytesToUint32(src))
 	return dst, nil
 }
 
-func (splitBlockEncoding) EncodeDouble(dst []byte, src []float64) ([]byte, error) {
-	splitBlockEncodeUint64(bloom.MakeSplitBlockFilter(dst), bits.Float64ToUint64(src))
+func (splitBlockEncoding) EncodeDouble(dst, src []byte) ([]byte, error) {
+	splitBlockEncodeUint64(bloom.MakeSplitBlockFilter(dst), unsafecast.BytesToUint64(src))
 	return dst, nil
 }
 
@@ -178,7 +177,7 @@ func (splitBlockEncoding) EncodeByteArray(dst, src []byte) ([]byte, error) {
 	filter := bloom.MakeSplitBlockFilter(dst)
 	buffer := make([]uint64, 0, filterEncodeBufferSize)
 
-	err := plain.RangeByteArrays(src, func(value []byte) error {
+	err := plain.RangeByteArray(src, func(value []byte) error {
 		if len(buffer) == cap(buffer) {
 			filter.InsertBulk(buffer)
 			buffer = buffer[:0]
@@ -194,7 +193,7 @@ func (splitBlockEncoding) EncodeByteArray(dst, src []byte) ([]byte, error) {
 func (splitBlockEncoding) EncodeFixedLenByteArray(dst, src []byte, size int) ([]byte, error) {
 	filter := bloom.MakeSplitBlockFilter(dst)
 	if size == 16 {
-		splitBlockEncodeUint128(filter, bits.BytesToUint128(src))
+		splitBlockEncodeUint128(filter, unsafecast.BytesToUint128(src))
 	} else {
 		splitBlockEncodeFixedLenByteArray(filter, src, size)
 	}

@@ -8,109 +8,10 @@ import (
 	"math/rand"
 	"reflect"
 	"testing"
-	"testing/quick"
-	"time"
 
-	"github.com/google/uuid"
 	"github.com/segmentio/parquet-go"
-	"github.com/segmentio/parquet-go/deprecated"
+	"github.com/segmentio/parquet-go/internal/quick"
 )
-
-type booleanColumn struct {
-	Value bool
-}
-
-type int32Column struct {
-	Value int32
-}
-
-type int64Column struct {
-	Value int64
-}
-
-type int96Column struct {
-	Value deprecated.Int96
-}
-
-type floatColumn struct {
-	Value float32
-}
-
-type doubleColumn struct {
-	Value float64
-}
-
-type byteArrayColumn struct {
-	Value []byte
-}
-
-type fixedLenByteArrayColumn struct {
-	Value [10]byte
-}
-
-type stringColumn struct {
-	Value string
-}
-
-type indexedStringColumn struct {
-	Value string `parquet:",dict"`
-}
-
-type uuidColumn struct {
-	Value uuid.UUID `parquet:",delta"`
-}
-
-type decimalColumn struct {
-	Value int64 `parquet:",decimal(0:3)"`
-}
-
-type addressBook struct {
-	Owner             utf8string   `parquet:",plain"`
-	OwnerPhoneNumbers []utf8string `parquet:",plain"`
-	Contacts          []contact
-}
-
-type contact struct {
-	Name        utf8string `parquet:",plain"`
-	PhoneNumber utf8string `parquet:",plain"`
-}
-
-type listColumn2 struct {
-	Value utf8string `parquet:",optional"`
-}
-
-type listColumn1 struct {
-	List2 []listColumn2 `parquet:",list"`
-}
-
-type listColumn0 struct {
-	List1 []listColumn1 `parquet:",list"`
-}
-
-type nestedListColumn1 struct {
-	Level3 []utf8string `parquet:"level3"`
-}
-
-type nestedListColumn struct {
-	Level1 []nestedListColumn1 `parquet:"level1"`
-	Level2 []utf8string        `parquet:"level2"`
-}
-
-type utf8string string
-
-func (utf8string) Generate(rand *rand.Rand, size int) reflect.Value {
-	const characters = "abcdefghijklmnopqrstuvwxyz1234567890"
-	const maxSize = 10
-	if size > maxSize {
-		size = maxSize
-	}
-	n := rand.Intn(size)
-	b := make([]byte, n)
-	for i := range b {
-		b[i] = characters[rand.Intn(len(characters))]
-	}
-	return reflect.ValueOf(utf8string(b))
-}
 
 func rowsOf(numRows int, model interface{}) rows {
 	prng := rand.New(rand.NewSource(0))
@@ -120,11 +21,10 @@ func rowsOf(numRows int, model interface{}) rows {
 func randomRowsOf(prng *rand.Rand, numRows int, model interface{}) rows {
 	typ := reflect.TypeOf(model)
 	rows := make(rows, numRows)
+	makeValue := quick.MakeValueFuncOf(typ)
 	for i := range rows {
-		v, ok := quick.Value(typ, prng)
-		if !ok {
-			panic("cannot generate random value for test")
-		}
+		v := reflect.New(typ).Elem()
+		makeValue(v, prng)
 		rows[i] = v.Interface()
 	}
 	return rows
@@ -299,10 +199,6 @@ func TestReader(t *testing.T) {
 	}
 }
 
-const (
-	benchmarkReaderNumRows = 10e3
-)
-
 func BenchmarkReaderReadType(b *testing.B) {
 	buf := new(bytes.Buffer)
 	file := bytes.NewReader(nil)
@@ -310,7 +206,7 @@ func BenchmarkReaderReadType(b *testing.B) {
 	for _, test := range readerTests {
 		b.Run(test.scenario, func(b *testing.B) {
 			defer buf.Reset()
-			rows := rowsOf(benchmarkReaderNumRows, test.model)
+			rows := rowsOf(benchmarkNumRows, test.model)
 
 			if err := writeParquetFile(buf, rows); err != nil {
 				b.Fatal(err)
@@ -329,23 +225,21 @@ func BenchmarkReaderReadType(b *testing.B) {
 			r := parquet.NewReader(f)
 			p := rowPtr.Interface()
 
-			b.ResetTimer()
-			start := time.Now()
-
-			for i := 0; i < b.N; i++ {
-				if err := r.Read(p); err != nil {
-					if err == io.EOF {
-						r.Reset()
-					} else {
-						b.Fatalf("%d/%d: %v", i, b.N, err)
+			benchmarkRowsPerSecond(b, func() (n int) {
+				for i := 0; i < benchmarkRowsPerStep; i++ {
+					if err := r.Read(p); err != nil {
+						if err == io.EOF {
+							r.Reset()
+						} else {
+							b.Fatal(err)
+						}
 					}
 				}
 				rowValue.Set(rowZero)
-			}
+				return benchmarkRowsPerStep
+			})
 
-			seconds := time.Since(start).Seconds()
-			b.ReportMetric(float64(b.N)/seconds, "row/s")
-			b.SetBytes(int64(math.Ceil(float64(file.Size()) / benchmarkReaderNumRows)))
+			b.SetBytes(int64(math.Ceil(benchmarkRowsPerStep * float64(file.Size()) / benchmarkNumRows)))
 		})
 	}
 }
@@ -357,7 +251,7 @@ func BenchmarkReaderReadRow(b *testing.B) {
 	for _, test := range readerTests {
 		b.Run(test.scenario, func(b *testing.B) {
 			defer buf.Reset()
-			rows := rowsOf(benchmarkReaderNumRows, test.model)
+			rows := rowsOf(benchmarkNumRows, test.model)
 
 			if err := writeParquetFile(buf, rows); err != nil {
 				b.Fatal(err)
@@ -369,25 +263,21 @@ func BenchmarkReaderReadRow(b *testing.B) {
 			}
 
 			r := parquet.NewReader(f)
-			rowbuf := make(parquet.Row, 0, 16)
+			rowbuf := make([]parquet.Row, benchmarkRowsPerStep)
 
-			b.ResetTimer()
-			start := time.Now()
-
-			for i := 0; i < b.N; i++ {
-				var err error
-				if rowbuf, err = r.ReadRow(rowbuf[:0]); err != nil {
+			benchmarkRowsPerSecond(b, func() int {
+				n, err := r.ReadRows(rowbuf)
+				if err != nil {
 					if err == io.EOF {
 						r.Reset()
 					} else {
-						b.Fatalf("%d/%d: %v", i, b.N, err)
+						b.Fatal(err)
 					}
 				}
-			}
+				return n
+			})
 
-			seconds := time.Since(start).Seconds()
-			b.ReportMetric(float64(b.N)/seconds, "row/s")
-			b.SetBytes(int64(math.Ceil(float64(file.Size()) / benchmarkReaderNumRows)))
+			b.SetBytes(int64(math.Ceil(benchmarkRowsPerStep * float64(file.Size()) / benchmarkNumRows)))
 		})
 	}
 }
@@ -399,7 +289,7 @@ func TestReaderReadSubset(t *testing.T) {
 	type Point3D struct{ X, Y, Z int64 }
 	type Point2D struct{ X, Y int64 }
 
-	f := func(points3D []Point3D) bool {
+	err := quickCheck(func(points3D []Point3D) bool {
 		if len(points3D) == 0 {
 			return true
 		}
@@ -426,8 +316,8 @@ func TestReaderReadSubset(t *testing.T) {
 			}
 		}
 		return true
-	}
-	if err := quick.Check(f, nil); err != nil {
+	})
+	if err != nil {
 		t.Error(err)
 	}
 }
@@ -459,5 +349,152 @@ func TestReaderSeekToRow(t *testing.T) {
 		if *row != rows[i] {
 			t.Fatalf("row %d mismatch: got=%+v want=%+v", i, *row, rows[i])
 		}
+	}
+}
+
+func TestSeekToRowNoDict(t *testing.T) {
+	type rowType struct {
+		Name utf8string `parquet:","` // no dictionary encoding
+	}
+
+	// write samples to in-memory buffer
+	buf := new(bytes.Buffer)
+	schema := parquet.SchemaOf(new(rowType))
+	w := parquet.NewWriter(buf, schema)
+	sample := rowType{
+		Name: "foo1",
+	}
+	// write two rows
+	w.Write(sample)
+	sample.Name = "foo2"
+	w.Write(sample)
+	w.Close()
+
+	// create reader
+	r := parquet.NewReader(bytes.NewReader(buf.Bytes()))
+
+	// read second row
+	r.SeekToRow(1)
+	row := new(rowType)
+	err := r.Read(row)
+	if err != nil {
+		t.Fatalf("reading row: %v", err)
+	}
+	// fmt.Println(&sample, row)
+	if *row != sample {
+		t.Fatalf("read != write")
+	}
+}
+
+func TestSeekToRowReadAll(t *testing.T) {
+	type rowType struct {
+		Name utf8string `parquet:",dict"`
+	}
+
+	// write samples to in-memory buffer
+	buf := new(bytes.Buffer)
+	schema := parquet.SchemaOf(new(rowType))
+	w := parquet.NewWriter(buf, schema)
+	sample := rowType{
+		Name: "foo1",
+	}
+	// write two rows
+	w.Write(sample)
+	sample.Name = "foo2"
+	w.Write(sample)
+	w.Close()
+
+	// create reader
+	r := parquet.NewReader(bytes.NewReader(buf.Bytes()))
+
+	// read first row
+	r.SeekToRow(0)
+	row := new(rowType)
+	err := r.Read(row)
+	if err != nil {
+		t.Fatalf("reading row: %v", err)
+	}
+	// read second row
+	r.SeekToRow(1)
+	row = new(rowType)
+	err = r.Read(row)
+	if err != nil {
+		t.Fatalf("reading row: %v", err)
+	}
+	// fmt.Println(&sample, row)
+	if *row != sample {
+		t.Fatalf("read != write")
+	}
+}
+
+func TestSeekToRowDictReadSecond(t *testing.T) {
+	type rowType struct {
+		Name utf8string `parquet:",dict"`
+	}
+
+	// write samples to in-memory buffer
+	buf := new(bytes.Buffer)
+	schema := parquet.SchemaOf(new(rowType))
+	w := parquet.NewWriter(buf, schema)
+	sample := rowType{
+		Name: "foo1",
+	}
+	// write two rows
+	w.Write(sample)
+	sample.Name = "foo2"
+	w.Write(sample)
+	w.Close()
+
+	// create reader
+	r := parquet.NewReader(bytes.NewReader(buf.Bytes()))
+
+	// read second row
+	r.SeekToRow(1)
+	row := new(rowType)
+	err := r.Read(row)
+	if err != nil {
+		t.Fatalf("reading row: %v", err)
+	}
+	// fmt.Println(&sample, row)
+	if *row != sample {
+		t.Fatalf("read != write")
+	}
+}
+
+func TestSeekToRowDictReadMultiplePages(t *testing.T) {
+	type rowType struct {
+		Name utf8string `parquet:",dict"`
+	}
+
+	// write samples to in-memory buffer
+	buf := new(bytes.Buffer)
+	schema := parquet.SchemaOf(new(rowType))
+	w := parquet.NewWriter(buf, schema, &parquet.WriterConfig{
+		PageBufferSize: 10,
+	})
+	sample := rowType{
+		Name: "foo1",
+	}
+
+	// write enough rows to spill over a single page
+	for i := 0; i < 10; i++ {
+		w.Write(sample)
+	}
+	sample.Name = "foo2"
+	w.Write(sample)
+	w.Close()
+
+	// create reader
+	r := parquet.NewReader(bytes.NewReader(buf.Bytes()))
+
+	// read 11th row
+	r.SeekToRow(10)
+	row := new(rowType)
+	err := r.Read(row)
+	if err != nil {
+		t.Fatalf("reading row: %v", err)
+	}
+	if *row != sample {
+		t.Fatalf("read != write")
 	}
 }

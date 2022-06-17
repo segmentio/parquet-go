@@ -19,10 +19,10 @@ jobs:
     runs-on: ${{ matrix.label }}
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
 
     - name: Setup Go ${{ matrix.go }}
-      uses: actions/setup-go@v2
+      uses: actions/setup-go@v3
       with:
         go-version: ${{ matrix.go }}
 
@@ -32,16 +32,34 @@ jobs:
     - name: Run Tests
       run: go test -race -tags=${{ matrix.tags }} ./...
 
+    - name: Run Benchmarks
+      run: go test -short -tags=${{ matrix.tags }} -run '^$' -bench . -benchtime 1x ./...
+
   format:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
 
     - name: Setup Go ${{ matrix.go }}
-      uses: actions/setup-go@v2
+      uses: actions/setup-go@v3
       with:
-        go-version: '1.18.x'
+        go-version: 1.18.x
 
     - name: Validate formatting
       run: make format
+
+  # https://github.com/golangci/golangci-lint/issues/2649
+  # lint:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v3
+
+  #     - uses: actions/setup-go@v3
+  #       with:
+  #         go-version: 1.18.x
+
+  #     - name: golangci-lint
+  #       uses: golangci/golangci-lint-action@v3
+  #       with:
+  #         version: latest

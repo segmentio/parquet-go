@@ -2,10 +2,21 @@ package delta
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 )
 
-func TestPrefixLength(t *testing.T) {
+func TestLinearSearchPrefixLength(t *testing.T) {
+	testSearchPrefixLength(t, linearSearchPrefixLength)
+}
+
+func TestBinarySearchPrefixLength(t *testing.T) {
+	testSearchPrefixLength(t, func(base, data []byte) int {
+		return binarySearchPrefixLength(base, data)
+	})
+}
+
+func testSearchPrefixLength(t *testing.T, prefixLength func(base, data []byte) int) {
 	tests := []struct {
 		base string
 		data string
@@ -118,10 +129,27 @@ func TestPrefixLength(t *testing.T) {
 	}
 }
 
-func BenchmarkPrefixLength(b *testing.B) {
-	value := bytes.Repeat([]byte("0123456789"), 100)
+func BenchmarkLinearSearchPrefixLength(b *testing.B) {
+	benchmarkSearchPrefixLength(b, linearSearchPrefixLength)
+}
 
-	for i := 0; i < b.N; i++ {
-		prefixLength(value, value)
+func BenchmarkBinarySearchPrefixLength(b *testing.B) {
+	benchmarkSearchPrefixLength(b, func(base, data []byte) int {
+		return binarySearchPrefixLength(base, data)
+	})
+}
+
+func benchmarkSearchPrefixLength(b *testing.B, prefixLength func(base, data []byte) int) {
+	buffer := bytes.Repeat([]byte("0123456789"), 100)
+
+	for _, size := range []int{10, 100, 1000} {
+		b.Run(fmt.Sprintf("size=%d", size), func(b *testing.B) {
+			base := buffer[:size]
+			data := buffer[:size/2]
+
+			for i := 0; i < b.N; i++ {
+				_ = prefixLength(base, data)
+			}
+		})
 	}
 }

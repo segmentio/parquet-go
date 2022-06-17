@@ -3,11 +3,15 @@ package delta
 import (
 	"bytes"
 	"fmt"
-	"math"
+	"sort"
 
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/encoding/plain"
 	"github.com/segmentio/parquet-go/format"
+)
+
+const (
+	maxLinearSearchPrefixLength = 64 // arbitrary
 )
 
 type ByteArrayEncoding struct {
@@ -23,27 +27,64 @@ func (e *ByteArrayEncoding) Encoding() format.Encoding {
 }
 
 func (e *ByteArrayEncoding) EncodeByteArray(dst, src []byte) ([]byte, error) {
-	lastOffset := int32(0)
+	prefix := getInt32Buffer()
+	defer putInt32Buffer(prefix)
 
-	offset := getInt32Buffer()
-	defer putInt32Buffer(offset)
+	length := getInt32Buffer()
+	defer putInt32Buffer(length)
 
-	err := plain.RangeByteArrays(src, func(value []byte) error {
-		offset.values = append(offset.values, lastOffset)
-		lastOffset += 4 + int32(len(value))
-		return nil
-	})
-	if err != nil {
-		return dst[:0], encoding.Error(e, err)
+	totalSize := 0
+	lastValue := ([]byte)(nil)
+
+	for i := 0; i < len(src); {
+		r := len(src) - i
+		if r < plain.ByteArrayLengthSize {
+			return dst[:0], plain.ErrTooShort(r)
+		}
+		n := plain.ByteArrayLength(src[i:])
+		i += plain.ByteArrayLengthSize
+		r -= plain.ByteArrayLengthSize
+		if n > r {
+			return dst[:0], plain.ErrTooShort(n)
+		}
+		if n > plain.MaxByteArrayLength {
+			return dst[:0], plain.ErrTooLarge(n)
+		}
+		v := src[i : i+n : i+n]
+		p := 0
+
+		if len(v) <= maxLinearSearchPrefixLength {
+			p = linearSearchPrefixLength(lastValue, v)
+		} else {
+			p = binarySearchPrefixLength(lastValue, v)
+		}
+
+		prefix.values = append(prefix.values, int32(p))
+		length.values = append(length.values, int32(n-p))
+		lastValue = v
+		totalSize += n - p
+		i += n
 	}
 
-	return e.encode(dst[:0], len(offset.values), func(i int) []byte {
-		j := int(offset.values[i])
-		k := j + plain.ByteArrayLength(src[j:])
-		j += 4
-		k += 4
-		return src[j:k:k]
-	})
+	dst = dst[:0]
+	dst = encodeInt32(dst, prefix.values)
+	dst = encodeInt32(dst, length.values)
+	dst = resize(dst, len(dst)+totalSize)
+
+	b := dst[len(dst)-totalSize:]
+	i := plain.ByteArrayLengthSize
+	j := 0
+
+	_ = length.values[:len(prefix.values)]
+
+	for k, p := range prefix.values {
+		n := p + length.values[k]
+		j += copy(b[j:], src[i+int(p):i+int(n)])
+		i += plain.ByteArrayLengthSize
+		i += int(n)
+	}
+
+	return dst, nil
 }
 
 func (e *ByteArrayEncoding) EncodeFixedLenByteArray(dst, src []byte, size int) ([]byte, error) {
@@ -55,147 +96,110 @@ func (e *ByteArrayEncoding) EncodeFixedLenByteArray(dst, src []byte, size int) (
 		return dst[:0], encoding.Error(e, encoding.ErrInvalidArgument)
 	}
 	if (len(src) % size) != 0 {
-		return dst[:0], encoding.ErrInvalidInputSize(e, "FIXED_LEN_BYTE_ARRAY", len(src))
+		return dst[:0], encoding.ErrEncodeInvalidInputSize(e, "FIXED_LEN_BYTE_ARRAY", len(src))
 	}
-	return e.encode(dst[:0], len(src)/size, func(i int) []byte {
-		j := (i + 0) * size
-		k := (i + 1) * size
-		return src[j:k:k]
-	})
-}
 
-func (e *ByteArrayEncoding) encode(dst []byte, numValues int, valueAt func(int) []byte) ([]byte, error) {
 	prefix := getInt32Buffer()
 	defer putInt32Buffer(prefix)
 
 	length := getInt32Buffer()
 	defer putInt32Buffer(length)
 
-	var lastValue []byte
-	for i := 0; i < numValues; i++ {
-		value := valueAt(i)
-		if len(value) > math.MaxInt32 {
-			return dst, encoding.Errorf(e, "byte array of length %d is too large to be encoded", len(value))
-		}
-		n := prefixLength(lastValue, value)
-		prefix.values = append(prefix.values, int32(n))
-		length.values = append(length.values, int32(len(value)-n))
-		lastValue = value
+	totalSize := 0
+	lastValue := ([]byte)(nil)
+
+	for i := size; i <= len(src); i += size {
+		v := src[i-size : i : i]
+		p := linearSearchPrefixLength(lastValue, v)
+		n := size - p
+		prefix.values = append(prefix.values, int32(p))
+		length.values = append(length.values, int32(n))
+		lastValue = v
+		totalSize += n
 	}
 
-	var binpack BinaryPackedEncoding
-	var err error
-	dst, err = binpack.encodeInt32(dst, prefix.values)
-	if err != nil {
-		return dst, err
+	dst = dst[:0]
+	dst = encodeInt32(dst, prefix.values)
+	dst = encodeInt32(dst, length.values)
+	dst = resize(dst, len(dst)+totalSize)
+
+	b := dst[len(dst)-totalSize:]
+	i := 0
+	j := 0
+
+	for _, p := range prefix.values {
+		j += copy(b[j:], src[i+int(p):i+size])
+		i += size
 	}
-	dst, err = binpack.encodeInt32(dst, length.values)
-	if err != nil {
-		return dst, err
-	}
-	for i, p := range prefix.values {
-		dst = append(dst, valueAt(i)[p:]...)
-	}
+
 	return dst, nil
 }
 
 func (e *ByteArrayEncoding) DecodeByteArray(dst, src []byte) ([]byte, error) {
 	dst = dst[:0]
-	err := e.decode(src, func(value []byte) error {
-		dst = plain.AppendByteArray(dst, value)
-		return nil
-	})
-	if err != nil {
-		err = encoding.Error(e, err)
-	}
-	return dst, err
-}
 
-func (e *ByteArrayEncoding) DecodeFixedLenByteArray(dst, src []byte, size int) ([]byte, error) {
-	if size < 0 || size > encoding.MaxFixedLenByteArraySize {
-		return dst[:0], encoding.Error(e, encoding.ErrInvalidArgument)
-	}
-	dst = dst[:0]
-	err := e.decode(src, func(value []byte) error {
-		if len(value) != size {
-			return fmt.Errorf("cannot decode value of size %d into fixed-length byte array of size %d", len(value), size)
-		}
-		dst = append(dst, value...)
-		return nil
-	})
-	if err != nil {
-		err = encoding.Error(e, err)
-	}
-	return dst, err
-}
-
-func (e *ByteArrayEncoding) decode(src []byte, observe func([]byte) error) error {
 	prefix := getInt32Buffer()
 	defer putInt32Buffer(prefix)
 
-	length := getInt32Buffer()
-	defer putInt32Buffer(length)
+	suffix := getInt32Buffer()
+	defer putInt32Buffer(suffix)
 
-	var binpack BinaryPackedEncoding
 	var err error
-	prefix.values, src, err = binpack.decodeInt32(prefix.values, src)
+	src, err = prefix.decode(src)
 	if err != nil {
-		return err
+		return dst, encoding.Errorf(e, "decoding prefix lengths: %w", err)
 	}
-	length.values, src, err = binpack.decodeInt32(length.values, src)
+	src, err = suffix.decode(src)
 	if err != nil {
-		return err
+		return dst, encoding.Errorf(e, "decoding suffix lengths: %w", err)
 	}
-	if len(prefix.values) != len(length.values) {
-		return fmt.Errorf("number of prefix and lengths mismatch: %d != %d", len(prefix.values), len(length.values))
+	if len(prefix.values) != len(suffix.values) {
+		return dst, encoding.Error(e, errPrefixAndSuffixLengthMismatch(len(prefix.values), len(suffix.values)))
 	}
-
-	value := getBytesBuffer()
-	defer putBytesBuffer(value)
-
-	for i, n := range length.values {
-		if int(n) < 0 {
-			return fmt.Errorf("invalid negative value length: %d", n)
-		}
-		if int(n) > len(src) {
-			return fmt.Errorf("value length is larger than the input size: %d > %d", n, len(src))
-		}
-
-		p := prefix.values[i]
-		if int(p) < 0 {
-			return fmt.Errorf("invalid negative prefix length: %d", p)
-		}
-		if int(p) > value.Len() {
-			return fmt.Errorf("prefix length %d is larger than the last value of size %d", p, value.Len())
-		}
-
-		value.Truncate(int(p))
-		value.Write(src[:n])
-		src = src[n:]
-
-		if err := observe(value.Bytes()); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return decodeByteArray(dst, src, prefix.values, suffix.values)
 }
 
-func prefixLength(base, data []byte) int {
-	return binarySearchPrefixLength(len(base)/2, base, data)
+func (e *ByteArrayEncoding) DecodeFixedLenByteArray(dst, src []byte, size int) ([]byte, error) {
+	dst = dst[:0]
+
+	if size < 0 || size > encoding.MaxFixedLenByteArraySize {
+		return dst, encoding.Error(e, encoding.ErrInvalidArgument)
+	}
+
+	prefix := getInt32Buffer()
+	defer putInt32Buffer(prefix)
+
+	suffix := getInt32Buffer()
+	defer putInt32Buffer(suffix)
+
+	var err error
+	src, err = prefix.decode(src)
+	if err != nil {
+		return dst, fmt.Errorf("decoding prefix lengths: %w", err)
+	}
+	src, err = suffix.decode(src)
+	if err != nil {
+		return dst, fmt.Errorf("decoding suffix lengths: %w", err)
+	}
+	if len(prefix.values) != len(suffix.values) {
+		return dst, errPrefixAndSuffixLengthMismatch(len(prefix.values), len(suffix.values))
+	}
+	return decodeFixedLenByteArray(dst, src, size, prefix.values, suffix.values)
 }
 
-func binarySearchPrefixLength(max int, base, data []byte) int {
-	for len(base) > 0 {
-		if bytes.HasPrefix(data, base[:max]) {
-			if max == len(base) {
-				return max
-			}
-			max += (len(base)-max)/2 + 1
-		} else {
-			base = base[:max-1]
-			max /= 2
-		}
+func linearSearchPrefixLength(base, data []byte) (n int) {
+	for n < len(base) && n < len(data) && base[n] == data[n] {
+		n++
 	}
-	return 0
+	return n
+}
+
+func binarySearchPrefixLength(base, data []byte) int {
+	n := len(base)
+	if n > len(data) {
+		n = len(data)
+	}
+	return sort.Search(n, func(i int) bool {
+		return !bytes.Equal(base[:i+1], data[:i+1])
+	})
 }

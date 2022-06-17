@@ -5,18 +5,16 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"math/rand"
 	"sort"
 	"testing"
-	"time"
 
 	"github.com/segmentio/parquet-go"
 )
 
 const (
 	numRowGroups = 3
-	rowsPerGroup = benchmarkReaderNumRows
+	rowsPerGroup = benchmarkNumRows
 )
 
 func BenchmarkMergeRowGroups(b *testing.B) {
@@ -43,23 +41,22 @@ func BenchmarkMergeRowGroups(b *testing.B) {
 					if err != nil {
 						b.Fatal(err)
 					}
-					start := time.Now()
 
 					rows := mergedRowGroup.Rows()
-					rbuf := make(parquet.Row, 0, 16)
+					rbuf := make([]parquet.Row, benchmarkRowsPerStep)
+					defer func() { rows.Close() }()
 
-					for i := 0; i < b.N; i++ {
-						rbuf, err = rows.ReadRow(rbuf[:0])
+					benchmarkRowsPerSecond(b, func() int {
+						n, err := rows.ReadRows(rbuf)
 						if err != nil {
 							if !errors.Is(err, io.EOF) {
 								b.Fatal(err)
 							}
+							rows.Close()
 							rows = mergedRowGroup.Rows()
 						}
-					}
-
-					seconds := time.Since(start).Seconds()
-					b.ReportMetric(float64(b.N)/seconds, "row/s")
+						return n
+					})
 				})
 			}
 		})
@@ -91,7 +88,7 @@ func BenchmarkMergeFiles(b *testing.B) {
 				sort.Sort(buffer)
 				rowGroupBuffers[i].Reset()
 				writer := parquet.NewWriter(&rowGroupBuffers[i])
-				_, err := parquet.CopyRows(writer, buffer.Rows())
+				_, err := copyRowsAndClose(writer, buffer.Rows())
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -112,29 +109,27 @@ func BenchmarkMergeFiles(b *testing.B) {
 					if err != nil {
 						b.Fatal(err)
 					}
-					start := time.Now()
 
 					rows := mergedRowGroup.Rows()
-					rbuf := make(parquet.Row, 0, 16)
+					rbuf := make([]parquet.Row, benchmarkRowsPerStep)
+					defer func() { rows.Close() }()
 
-					for i := 0; i < b.N; i++ {
-						rbuf, err = rows.ReadRow(rbuf[:0])
+					benchmarkRowsPerSecond(b, func() int {
+						n, err := rows.ReadRows(rbuf)
 						if err != nil {
 							if !errors.Is(err, io.EOF) {
 								b.Fatal(err)
 							}
+							rows.Close()
 							rows = mergedRowGroup.Rows()
 						}
-					}
+						return n
+					})
 
 					totalSize := int64(0)
 					for _, f := range files[:n] {
 						totalSize += f.Size()
 					}
-
-					seconds := time.Since(start).Seconds()
-					b.ReportMetric(float64(b.N)/seconds, "row/s")
-					b.SetBytes(int64(math.Ceil(float64(totalSize) / benchmarkReaderNumRows)))
 				})
 			}
 		})

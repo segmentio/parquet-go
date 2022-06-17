@@ -1,42 +1,41 @@
-package parquet_test
+package parquet
 
-import (
-	"bytes"
-	"testing"
+import "testing"
 
-	"github.com/segmentio/parquet-go"
-)
+func TestBroadcastValueInt32(t *testing.T) {
+	buf := make([]int32, 123)
+	broadcastValueInt32(buf, 0x0A)
 
-type TestStruct struct {
-	A *string `parquet:"a,optional,dict"`
-}
-
-func TestOptionalDictWriteRowGroup(t *testing.T) {
-	s := parquet.SchemaOf(&TestStruct{})
-
-	str1 := "test1"
-	str2 := "test2"
-	records := []*TestStruct{
-		{A: nil},
-		{A: &str1},
-		{A: nil},
-		{A: &str2},
-		{A: nil},
-	}
-
-	buf := parquet.NewBuffer(s)
-	for _, rec := range records {
-		row := s.Deconstruct(nil, rec)
-		err := buf.WriteRow(row)
-		if err != nil {
-			t.Fatal(err)
+	for i, v := range buf {
+		if v != 0x0A0A0A0A {
+			t.Fatalf("wrong value at index %d: %v", i, v)
 		}
 	}
+}
 
-	b := bytes.NewBuffer(nil)
-	w := parquet.NewWriter(b)
-	_, err := w.WriteRowGroup(buf)
-	if err != nil {
-		t.Fatal(err)
+func TestBroadcastRangeInt32(t *testing.T) {
+	buf := make([]int32, 123)
+	broadcastRangeInt32(buf, 1)
+
+	for i, v := range buf {
+		if v != int32(1+i) {
+			t.Fatalf("wrong value at index %d: %v", i, v)
+		}
 	}
+}
+
+func BenchmarkBroadcastValueInt32(b *testing.B) {
+	buf := make([]int32, 1000)
+	for i := 0; i < b.N; i++ {
+		broadcastValueInt32(buf, -1)
+	}
+	b.SetBytes(4 * int64(len(buf)))
+}
+
+func BenchmarkBroadcastRangeInt32(b *testing.B) {
+	buf := make([]int32, 1000)
+	for i := 0; i < b.N; i++ {
+		broadcastRangeInt32(buf, 0)
+	}
+	b.SetBytes(4 * int64(len(buf)))
 }

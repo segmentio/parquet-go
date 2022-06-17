@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math/rand"
 	"testing"
-	"testing/quick"
 
 	"github.com/google/uuid"
 	"github.com/segmentio/parquet-go"
@@ -102,9 +101,7 @@ func TestColumnPageIndex(t *testing.T) {
 				},
 			} {
 				t.Run(test.scenario, func(t *testing.T) {
-					if err := quick.Check(test.function(t), &quick.Config{
-						Rand: rand.New(rand.NewSource(0)),
-					}); err != nil {
+					if err := quickCheck(test.function(t)); err != nil {
 						t.Error(err)
 					}
 				})
@@ -146,7 +143,10 @@ func checkColumnChunkColumnIndex(columnChunk parquet.ColumnChunk) error {
 	numPages := columnIndex.NumPages()
 	pagesRead := 0
 	stats := newColumnStats(columnType)
-	err := forEachPage(columnChunk.Pages(), func(page parquet.Page) error {
+	pages := columnChunk.Pages()
+	defer pages.Close()
+
+	err := forEachPage(pages, func(page parquet.Page) error {
 		pageMin, pageMax, hasBounds := page.Bounds()
 		if !hasBounds {
 			return fmt.Errorf("page bounds are missing")
@@ -230,7 +230,10 @@ func checkColumnChunkOffsetIndex(columnChunk parquet.ColumnChunk) error {
 	pagesRead := 0
 	rowIndex := int64(0)
 
-	err := forEachPage(columnChunk.Pages(), func(page parquet.Page) error {
+	pages := columnChunk.Pages()
+	defer pages.Close()
+
+	err := forEachPage(pages, func(page parquet.Page) error {
 		if firstRowIndex := offsetIndex.FirstRowIndex(pagesRead); firstRowIndex != rowIndex {
 			return fmt.Errorf("row number mismatch: index=%d page=%d", firstRowIndex, rowIndex)
 		}

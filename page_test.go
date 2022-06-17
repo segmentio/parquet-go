@@ -1,5 +1,3 @@
-//go:build !go1.18
-
 package parquet_test
 
 import (
@@ -11,7 +9,7 @@ import (
 	"github.com/segmentio/parquet-go"
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding/plain"
-	"github.com/segmentio/parquet-go/internal/bits"
+	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 func TestPage(t *testing.T) {
@@ -27,22 +25,6 @@ func TestPage(t *testing.T) {
 
 func testPageBoolean(t *testing.T) {
 	schema := parquet.SchemaOf(struct{ Value bool }{})
-
-	t.Run("io", func(t *testing.T) {
-		testBufferPage(t, schema, pageTest{
-			write: func(w parquet.ValueWriter) (interface{}, error) {
-				values := []bool{false, true}
-				n, err := w.(io.Writer).Write(bits.BoolToBytes(values))
-				return values[:n], err
-			},
-
-			read: func(r parquet.ValueReader) (interface{}, error) {
-				values := make([]bool, 2)
-				n, err := r.(io.Reader).Read(bits.BoolToBytes(values))
-				return values[:n], err
-			},
-		})
-	})
 
 	t.Run("parquet", func(t *testing.T) {
 		testPage(t, schema, pageTest{
@@ -68,13 +50,13 @@ func testPageInt32(t *testing.T) {
 		testBufferPage(t, schema, pageTest{
 			write: func(w parquet.ValueWriter) (interface{}, error) {
 				values := []int32{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
-				n, err := w.(io.Writer).Write(bits.Int32ToBytes(values))
+				n, err := w.(io.Writer).Write(unsafecast.Int32ToBytes(values))
 				return values[:n/4], err
 			},
 
 			read: func(r parquet.ValueReader) (interface{}, error) {
 				values := make([]int32, 10)
-				n, err := r.(io.Reader).Read(bits.Int32ToBytes(values))
+				n, err := r.(io.Reader).Read(unsafecast.Int32ToBytes(values))
 				return values[:n/4], err
 			},
 		})
@@ -104,13 +86,13 @@ func testPageInt64(t *testing.T) {
 		testBufferPage(t, schema, pageTest{
 			write: func(w parquet.ValueWriter) (interface{}, error) {
 				values := []int64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
-				n, err := w.(io.Writer).Write(bits.Int64ToBytes(values))
+				n, err := w.(io.Writer).Write(unsafecast.Int64ToBytes(values))
 				return values[:n/8], err
 			},
 
 			read: func(r parquet.ValueReader) (interface{}, error) {
 				values := make([]int64, 10)
-				n, err := r.(io.Reader).Read(bits.Int64ToBytes(values))
+				n, err := r.(io.Reader).Read(unsafecast.Int64ToBytes(values))
 				return values[:n/8], err
 			},
 		})
@@ -176,13 +158,13 @@ func testPageFloat(t *testing.T) {
 		testBufferPage(t, schema, pageTest{
 			write: func(w parquet.ValueWriter) (interface{}, error) {
 				values := []float32{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
-				n, err := w.(io.Writer).Write(bits.Float32ToBytes(values))
+				n, err := w.(io.Writer).Write(unsafecast.Float32ToBytes(values))
 				return values[:n/4], err
 			},
 
 			read: func(r parquet.ValueReader) (interface{}, error) {
 				values := make([]float32, 10)
-				n, err := r.(io.Reader).Read(bits.Float32ToBytes(values))
+				n, err := r.(io.Reader).Read(unsafecast.Float32ToBytes(values))
 				return values[:n/4], err
 			},
 		})
@@ -212,13 +194,13 @@ func testPageDouble(t *testing.T) {
 		testBufferPage(t, schema, pageTest{
 			write: func(w parquet.ValueWriter) (interface{}, error) {
 				values := []float64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
-				n, err := w.(io.Writer).Write(bits.Float64ToBytes(values))
+				n, err := w.(io.Writer).Write(unsafecast.Float64ToBytes(values))
 				return values[:n/8], err
 			},
 
 			read: func(r parquet.ValueReader) (interface{}, error) {
 				values := make([]float64, 10)
-				n, err := r.(io.Reader).Read(bits.Float64ToBytes(values))
+				n, err := r.(io.Reader).Read(unsafecast.Float64ToBytes(values))
 				return values[:n/8], err
 			},
 		})
@@ -375,7 +357,10 @@ func testFilePage(t *testing.T, schema *parquet.Schema, test pageTest) {
 		t.Fatal("opening parquet file:", err)
 	}
 
-	p, err := f.RowGroups()[0].ColumnChunks()[0].Pages().ReadPage()
+	pages := f.RowGroups()[0].ColumnChunks()[0].Pages()
+	defer pages.Close()
+
+	p, err := pages.ReadPage()
 	if err != nil {
 		t.Fatal("reading parquet page:", err)
 	}
@@ -411,22 +396,25 @@ func TestOptionalPageTrailingNulls(t *testing.T) {
 	}}
 
 	for _, row := range rows {
-		if err := buffer.WriteRow(schema.Deconstruct(nil, row)); err != nil {
+		_, err := buffer.WriteRows([]parquet.Row{schema.Deconstruct(nil, row)})
+		if err != nil {
 			t.Fatal("writing row:", err)
 		}
 	}
 
-	resultRows := []parquet.Row{}
+	resultRows := make([]parquet.Row, 0, len(rows))
+	bufferRows := make([]parquet.Row, 10)
 	reader := buffer.Rows()
+	defer reader.Close()
 	for {
-		row, err := reader.ReadRow(nil)
+		n, err := reader.ReadRows(bufferRows)
+		resultRows = append(resultRows, bufferRows[:n]...)
 		if err != nil {
 			if err == io.EOF {
 				break
 			}
 			t.Fatal("reading rows:", err)
 		}
-		resultRows = append(resultRows, row)
 	}
 
 	if len(resultRows) != len(rows) {
@@ -438,17 +426,26 @@ func TestOptionalPagePreserveIndex(t *testing.T) {
 	schema := parquet.SchemaOf(&testStruct{})
 	buffer := parquet.NewBuffer(schema)
 
-	if err := buffer.WriteRow(schema.Deconstruct(nil, &testStruct{Value: nil})); err != nil {
+	_, err := buffer.WriteRows([]parquet.Row{
+		schema.Deconstruct(nil, &testStruct{Value: nil}),
+	})
+	if err != nil {
 		t.Fatal("writing row:", err)
 	}
 
-	row, err := buffer.Rows().ReadRow(nil)
-	if err != nil {
+	rows := buffer.Rows()
+	defer rows.Close()
+
+	rowbuf := make([]parquet.Row, 2)
+	n, err := rows.ReadRows(rowbuf)
+	if err != io.EOF {
 		t.Fatal("reading rows:", err)
 	}
-
-	if row[0].Column() != 0 {
-		t.Errorf("wrong index: got=%d want=%d", row[0].Column(), 0)
+	if n != 1 {
+		t.Fatal("wrong number of rows returned:", n)
+	}
+	if rowbuf[0][0].Column() != 0 {
+		t.Errorf("wrong index: got=%d want=%d", rowbuf[0][0].Column(), 0)
 	}
 }
 
@@ -468,26 +465,22 @@ func TestRepeatedPageTrailingNulls(t *testing.T) {
 	buf := parquet.NewBuffer(s)
 	for _, rec := range records {
 		row := s.Deconstruct(nil, rec)
-		err := buf.WriteRow(row)
+		_, err := buf.WriteRows([]parquet.Row{row})
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	resultRows := []parquet.Row{}
+	rows := make([]parquet.Row, len(records)+1)
 	reader := buf.Rows()
-	for {
-		row, err := reader.ReadRow(nil)
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			t.Fatal("reading rows:", err)
-		}
-		resultRows = append(resultRows, row)
+	defer reader.Close()
+
+	n, err := reader.ReadRows(rows)
+	if err != io.EOF {
+		t.Fatal("reading rows:", err)
 	}
 
-	if len(resultRows) != len(records) {
-		t.Errorf("wrong number of rows read: got=%d want=%d", len(resultRows), len(records))
+	if n != len(records) {
+		t.Errorf("wrong number of rows read: got=%d want=%d", n, len(records))
 	}
 }

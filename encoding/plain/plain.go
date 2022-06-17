@@ -12,14 +12,15 @@ import (
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/format"
-	"github.com/segmentio/parquet-go/internal/bits"
 )
 
 const (
 	ByteArrayLengthSize = 4
+	MaxByteArrayLength  = math.MaxInt32
 )
 
 type Encoding struct {
+	encoding.NotSupported
 }
 
 func (e *Encoding) String() string {
@@ -30,82 +31,47 @@ func (e *Encoding) Encoding() format.Encoding {
 	return format.Plain
 }
 
-func (e *Encoding) EncodeBoolean(dst []byte, src []bool) ([]byte, error) {
-	dst = dst[:0]
-	b := byte(0)
-	i := 0
-	n := (len(src) / 8) * 8
+func (e *Encoding) EncodeBoolean(dst, src []byte) ([]byte, error) {
+	return append(dst[:0], src...), nil
+}
 
-	for i < n {
-		b = 0
-		if src[i+7] {
-			b |= 1 << 7
-		}
-		if src[i+6] {
-			b |= 1 << 6
-		}
-		if src[i+5] {
-			b |= 1 << 5
-		}
-		if src[i+4] {
-			b |= 1 << 4
-		}
-		if src[i+3] {
-			b |= 1 << 3
-		}
-		if src[i+2] {
-			b |= 1 << 2
-		}
-		if src[i+1] {
-			b |= 1 << 1
-		}
-		if src[i+0] {
-			b |= 1 << 0
-		}
-		dst = append(dst, b)
-		i += 8
+func (e *Encoding) EncodeInt32(dst, src []byte) ([]byte, error) {
+	if (len(src) % 4) != 0 {
+		return dst[:0], encoding.ErrEncodeInvalidInputSize(e, "INT32", len(src))
 	}
+	return append(dst[:0], src...), nil
+}
 
-	if i < len(src) {
-		b = 0
-		for j := uint(0); i < len(src); j++ {
-			if src[i] {
-				b |= 1 << j
-			}
-			i++
-		}
-		dst = append(dst, b)
+func (e *Encoding) EncodeInt64(dst, src []byte) ([]byte, error) {
+	if (len(src) % 8) != 0 {
+		return dst[:0], encoding.ErrEncodeInvalidInputSize(e, "INT64", len(src))
 	}
-
-	return dst, nil
+	return append(dst[:0], src...), nil
 }
 
-func (e *Encoding) EncodeInt8(dst []byte, src []int8) ([]byte, error) {
-	return append(dst[:0], bits.Int8ToBytes(src)...), nil
+func (e *Encoding) EncodeInt96(dst, src []byte) ([]byte, error) {
+	if (len(src) % 12) != 0 {
+		return dst[:0], encoding.ErrEncodeInvalidInputSize(e, "INT96", len(src))
+	}
+	return append(dst[:0], src...), nil
 }
 
-func (e *Encoding) EncodeInt32(dst []byte, src []int32) ([]byte, error) {
-	return append(dst[:0], bits.Int32ToBytes(src)...), nil
+func (e *Encoding) EncodeFloat(dst, src []byte) ([]byte, error) {
+	if (len(src) % 4) != 0 {
+		return dst[:0], encoding.ErrEncodeInvalidInputSize(e, "FLOAT", len(src))
+	}
+	return append(dst[:0], src...), nil
 }
 
-func (e *Encoding) EncodeInt64(dst []byte, src []int64) ([]byte, error) {
-	return append(dst[:0], bits.Int64ToBytes(src)...), nil
-}
-
-func (e *Encoding) EncodeInt96(dst []byte, src []deprecated.Int96) ([]byte, error) {
-	return append(dst[:0], deprecated.Int96ToBytes(src)...), nil
-}
-
-func (e *Encoding) EncodeFloat(dst []byte, src []float32) ([]byte, error) {
-	return append(dst[:0], bits.Float32ToBytes(src)...), nil
-}
-
-func (e *Encoding) EncodeDouble(dst []byte, src []float64) ([]byte, error) {
-	return append(dst[:0], bits.Float64ToBytes(src)...), nil
+func (e *Encoding) EncodeDouble(dst, src []byte) ([]byte, error) {
+	if (len(src) % 8) != 0 {
+		return dst[:0], encoding.ErrEncodeInvalidInputSize(e, "DOUBLE", len(src))
+	}
+	return append(dst[:0], src...), nil
 }
 
 func (e *Encoding) EncodeByteArray(dst []byte, src []byte) ([]byte, error) {
-	if err := RangeByteArrays(src, func([]byte) error { return nil }); err != nil {
+	if err := ValidateByteArray(src); err != nil {
 		return dst[:0], encoding.Error(e, err)
 	}
 	return append(dst[:0], src...), nil
@@ -118,64 +84,47 @@ func (e *Encoding) EncodeFixedLenByteArray(dst, src []byte, size int) ([]byte, e
 	return append(dst[:0], src...), nil
 }
 
-func (e *Encoding) DecodeBoolean(dst []bool, src []byte) ([]bool, error) {
-	dst = dst[:0]
-	for _, b := range src {
-		dst = append(dst,
-			((b>>0)&1) != 0,
-			((b>>1)&1) != 0,
-			((b>>2)&1) != 0,
-			((b>>3)&1) != 0,
-			((b>>4)&1) != 0,
-			((b>>5)&1) != 0,
-			((b>>6)&1) != 0,
-			((b>>7)&1) != 0,
-		)
-	}
-	return dst, nil
+func (e *Encoding) DecodeBoolean(dst, src []byte) ([]byte, error) {
+	return append(dst[:0], src...), nil
 }
 
-func (e *Encoding) DecodeInt8(dst []int8, src []byte) ([]int8, error) {
-	return append(dst[:0], bits.BytesToInt8(src)...), nil
-}
-
-func (e *Encoding) DecodeInt32(dst []int32, src []byte) ([]int32, error) {
+func (e *Encoding) DecodeInt32(dst, src []byte) ([]byte, error) {
 	if (len(src) % 4) != 0 {
-		return dst[:0], encoding.ErrInvalidInputSize(e, "INT32", len(src))
+		return dst[:0], encoding.ErrDecodeInvalidInputSize(e, "INT32", len(src))
 	}
-	return append(dst[:0], bits.BytesToInt32(src)...), nil
+	return append(dst[:0], src...), nil
 }
 
-func (e *Encoding) DecodeInt64(dst []int64, src []byte) ([]int64, error) {
+func (e *Encoding) DecodeInt64(dst, src []byte) ([]byte, error) {
 	if (len(src) % 8) != 0 {
-		return dst[:0], encoding.ErrInvalidInputSize(e, "INT64", len(src))
+		return dst[:0], encoding.ErrDecodeInvalidInputSize(e, "INT64", len(src))
 	}
-	return append(dst[:0], bits.BytesToInt64(src)...), nil
+	return append(dst[:0], src...), nil
 }
 
-func (e *Encoding) DecodeInt96(dst []deprecated.Int96, src []byte) ([]deprecated.Int96, error) {
+func (e *Encoding) DecodeInt96(dst, src []byte) ([]byte, error) {
 	if (len(src) % 12) != 0 {
-		return dst[:0], encoding.ErrInvalidInputSize(e, "INT96", len(src))
+		return dst[:0], encoding.ErrDecodeInvalidInputSize(e, "INT96", len(src))
 	}
-	return append(dst[:0], deprecated.BytesToInt96(src)...), nil
+	return append(dst[:0], src...), nil
 }
 
-func (e *Encoding) DecodeFloat(dst []float32, src []byte) ([]float32, error) {
+func (e *Encoding) DecodeFloat(dst, src []byte) ([]byte, error) {
 	if (len(src) % 4) != 0 {
-		return dst[:0], encoding.ErrInvalidInputSize(e, "FLOAT", len(src))
+		return dst[:0], encoding.ErrDecodeInvalidInputSize(e, "FLOAT", len(src))
 	}
-	return append(dst[:0], bits.BytesToFloat32(src)...), nil
+	return append(dst[:0], src...), nil
 }
 
-func (e *Encoding) DecodeDouble(dst []float64, src []byte) ([]float64, error) {
+func (e *Encoding) DecodeDouble(dst, src []byte) ([]byte, error) {
 	if (len(src) % 8) != 0 {
-		return dst[:0], encoding.ErrInvalidInputSize(e, "DOUBLE", len(src))
+		return dst[:0], encoding.ErrDecodeInvalidInputSize(e, "DOUBLE", len(src))
 	}
-	return append(dst[:0], bits.BytesToFloat64(src)...), nil
+	return append(dst[:0], src...), nil
 }
 
 func (e *Encoding) DecodeByteArray(dst, src []byte) ([]byte, error) {
-	if err := RangeByteArrays(src, func([]byte) error { return nil }); err != nil {
+	if err := ValidateByteArray(src); err != nil {
 		return dst[:0], encoding.Error(e, err)
 	}
 	return append(dst[:0], src...), nil
@@ -186,12 +135,12 @@ func (e *Encoding) DecodeFixedLenByteArray(dst, src []byte, size int) ([]byte, e
 		return dst[:0], encoding.Error(e, encoding.ErrInvalidArgument)
 	}
 	if (len(src) % size) != 0 {
-		return dst[:0], encoding.ErrInvalidInputSize(e, "FIXED_LEN_BYTE_ARRAY", len(src))
+		return dst[:0], encoding.ErrDecodeInvalidInputSize(e, "FIXED_LEN_BYTE_ARRAY", len(src))
 	}
 	return append(dst[:0], src...), nil
 }
 
-func Boolean(v bool) []byte { return AppendBoolean(nil, v) }
+func Boolean(v bool) []byte { return AppendBoolean(nil, 0, v) }
 
 func Int32(v int32) []byte { return AppendInt32(nil, v) }
 
@@ -205,12 +154,25 @@ func Double(v float64) []byte { return AppendDouble(nil, v) }
 
 func ByteArray(v []byte) []byte { return AppendByteArray(nil, v) }
 
-func AppendBoolean(b []byte, v bool) []byte {
-	if v {
-		b = append(b, 1)
+func AppendBoolean(b []byte, n int, v bool) []byte {
+	i := n / 8
+	j := n % 8
+
+	if cap(b) > i {
+		b = b[:i+1]
 	} else {
-		b = append(b, 0)
+		tmp := make([]byte, i+1, 2*(i+1))
+		copy(tmp, b)
+		b = tmp
 	}
+
+	k := uint(j)
+	x := byte(0)
+	if v {
+		x = 1
+	}
+
+	b[i] = (b[i] & ^(1 << k)) | (x << k)
 	return b
 }
 
@@ -247,12 +209,25 @@ func AppendDouble(b []byte, v float64) []byte {
 }
 
 func AppendByteArray(b, v []byte) []byte {
-	i := len(b)
-	j := i + 4
-	b = append(b, 0, 0, 0, 0)
+	length := [ByteArrayLengthSize]byte{}
+	PutByteArrayLength(length[:], len(v))
+	b = append(b, length[:]...)
 	b = append(b, v...)
-	PutByteArrayLength(b[i:j:j], len(v))
 	return b
+}
+
+func AppendByteArrayString(b []byte, v string) []byte {
+	length := [ByteArrayLengthSize]byte{}
+	PutByteArrayLength(length[:], len(v))
+	b = append(b, length[:]...)
+	b = append(b, v...)
+	return b
+}
+
+func AppendByteArrayLength(b []byte, n int) []byte {
+	length := [ByteArrayLengthSize]byte{}
+	PutByteArrayLength(length[:], n)
+	return append(b, length[:]...)
 }
 
 func ByteArrayLength(b []byte) int {
@@ -263,7 +238,26 @@ func PutByteArrayLength(b []byte, n int) {
 	binary.LittleEndian.PutUint32(b, uint32(n))
 }
 
-func RangeByteArrays(b []byte, do func([]byte) error) (err error) {
+type status int
+
+const (
+	ok status = iota
+	errTooShort
+	errTooLarge
+)
+
+func ValidateByteArray(b []byte) error {
+	switch validateByteArray(b) {
+	case errTooShort:
+		return ErrTooShort(len(b))
+	case errTooLarge:
+		return ErrTooLarge(len(b))
+	default: // ok
+		return nil
+	}
+}
+
+func RangeByteArray(b []byte, do func([]byte) error) (err error) {
 	for len(b) > 0 {
 		var v []byte
 		if v, b, err = NextByteArray(b); err != nil {
@@ -277,12 +271,24 @@ func RangeByteArrays(b []byte, do func([]byte) error) (err error) {
 }
 
 func NextByteArray(b []byte) (v, r []byte, err error) {
-	if len(b) < 4 {
-		return nil, b, fmt.Errorf("input of length %d is too short to contain a PLAIN encoded byte array: %w", len(b), io.ErrUnexpectedEOF)
+	if len(b) < ByteArrayLengthSize {
+		return nil, b, ErrTooShort(len(b))
 	}
-	n := 4 + int(binary.LittleEndian.Uint32(b))
-	if n > len(b) {
-		return nil, b, fmt.Errorf("input of length %d is too short to contain a PLAIN encoded byte array of length %d: %w", len(b)-4, n-4, io.ErrUnexpectedEOF)
+	n := ByteArrayLength(b)
+	if n > (len(b) - ByteArrayLengthSize) {
+		return nil, b, ErrTooShort(len(b))
 	}
-	return b[4:n:n], b[n:len(b):len(b)], nil
+	if n > MaxByteArrayLength {
+		return nil, b, ErrTooLarge(n)
+	}
+	n += ByteArrayLengthSize
+	return b[ByteArrayLengthSize:n:n], b[n:len(b):len(b)], nil
+}
+
+func ErrTooShort(length int) error {
+	return fmt.Errorf("input of length %d is too short to contain a PLAIN encoded byte array value: %w", length, io.ErrUnexpectedEOF)
+}
+
+func ErrTooLarge(length int) error {
+	return fmt.Errorf("byte array of length %d is too large to be encoded", length)
 }
