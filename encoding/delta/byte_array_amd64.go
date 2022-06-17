@@ -3,7 +3,6 @@
 package delta
 
 import (
-	"github.com/segmentio/parquet-go/encoding/plain"
 	"golang.org/x/sys/cpu"
 )
 
@@ -46,58 +45,6 @@ func validatePrefixAndSuffixLengthValues(prefix, suffix []int32, maxLength int) 
 	}
 
 	return totalPrefixLength, totalSuffixLength, nil
-}
-
-//go:noescape
-func decodeByteArrayAVX2(dst, src []byte, prefix, suffix []int32) int
-
-func decodeByteArray(dst, src []byte, prefix, suffix []int32) ([]byte, error) {
-	totalPrefixLength, totalSuffixLength, err := validatePrefixAndSuffixLengthValues(prefix, suffix, len(src))
-	if err != nil {
-		return dst, err
-	}
-
-	totalLength := plain.ByteArrayLengthSize*len(prefix) + totalPrefixLength + totalSuffixLength
-	dst = resizeNoMemclr(dst, totalLength+padding)
-
-	_ = prefix[:len(suffix)]
-	_ = suffix[:len(prefix)]
-
-	var lastValue []byte
-	var i int
-	var j int
-
-	if cpu.X86.HasAVX2 && len(src) > padding {
-		k := len(suffix)
-		n := 0
-
-		for k > 0 && n < padding {
-			k--
-			n += int(suffix[k])
-		}
-
-		if k > 0 && n >= padding {
-			i = decodeByteArrayAVX2(dst, src, prefix[:k], suffix[:k])
-			j = len(src) - n
-			lastValue = dst[i-(int(prefix[k-1])+int(suffix[k-1])):]
-			prefix = prefix[k:]
-			suffix = suffix[k:]
-		}
-	}
-
-	for k := range prefix {
-		p := int(prefix[k])
-		n := int(suffix[k])
-		plain.PutByteArrayLength(dst[i:], p+n)
-		i += plain.ByteArrayLengthSize
-		k := i
-		i += copy(dst[i:], lastValue[:p])
-		i += copy(dst[i:], src[j:j+n])
-		j += n
-		lastValue = dst[k:]
-	}
-
-	return dst[:totalLength], nil
 }
 
 //go:noescape

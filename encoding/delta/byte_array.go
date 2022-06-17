@@ -147,20 +147,6 @@ func (e *ByteArrayEncoding) DecodeByteArray(dst, src []byte) ([]byte, error) {
 	return encoding.EncodeByteArrayPage(dst, prefix.values, src), nil
 }
 
-func decodeByteArrayPrefixLengths(prefix, suffix []int32) {
-	offset := int32(0)
-
-	for i := range suffix {
-		p := prefix[i]
-		n := suffix[i]
-		prefix[i] = offset
-		offset += p
-		offset += n
-	}
-
-	prefix[len(suffix)] = offset
-}
-
 func (e *ByteArrayEncoding) DecodeFixedLenByteArray(dst, src []byte, size int) ([]byte, error) {
 	dst = dst[:0]
 
@@ -187,6 +173,20 @@ func (e *ByteArrayEncoding) DecodeFixedLenByteArray(dst, src []byte, size int) (
 		return dst, errPrefixAndSuffixLengthMismatch(len(prefix.values), len(suffix.values))
 	}
 	return decodeFixedLenByteArray(dst, src, size, prefix.values, suffix.values)
+}
+
+func decodeByteArrayPrefixLengths(prefix, suffix []int32) {
+	offset := int32(0)
+
+	for i := range suffix {
+		p := prefix[i]
+		n := suffix[i]
+		prefix[i] = offset
+		offset += p
+		offset += n
+	}
+
+	prefix[len(suffix)] = offset
 }
 
 func linearSearchPrefixLength(base, data []byte) (n int) {
