@@ -78,10 +78,14 @@ func (e *Encoding) EncodeByteArray(dst, src []byte) ([]byte, error) {
 		return dst, encoding.Error(e, err)
 	}
 
-	page.Range(func(value []byte) bool {
-		dst = AppendByteArray(dst, value)
-		return true
-	})
+	offsets := page.Offsets()[1:]
+	values := page.Values()
+	base := int32(0)
+
+	for _, end := range offsets {
+		dst = AppendByteArray(dst, values[base:end:end])
+		base = end
+	}
 	return dst, nil
 }
 
@@ -153,7 +157,8 @@ func (e *Encoding) DecodeByteArray(dst, src []byte) ([]byte, error) {
 	}
 
 	page := encoding.MakeByteArrayPage(dst, numValues, len(src)-(ByteArrayLengthSize*numValues))
-	offsets, values := page.Offsets(), page.Values()
+	offsets := page.Offsets()
+	values := page.Values()
 	i := 0
 	j := 0
 	k := 0

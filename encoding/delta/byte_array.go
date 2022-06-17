@@ -32,6 +32,7 @@ func (e *ByteArrayEncoding) EncodeByteArray(dst, src []byte) ([]byte, error) {
 	if err := page.Validate(); err != nil {
 		return dst, err
 	}
+	values := page.Values()
 
 	prefix := getInt32Buffer()
 	defer putInt32Buffer(prefix)
@@ -40,7 +41,11 @@ func (e *ByteArrayEncoding) EncodeByteArray(dst, src []byte) ([]byte, error) {
 	defer putInt32Buffer(length)
 
 	lastValue := ([]byte)(nil)
-	page.Range(func(v []byte) bool {
+	offsets := page.Offsets()[1:]
+	base := int32(0)
+
+	for _, end := range offsets {
+		v := values[base:end:end]
 		n := len(v)
 		p := 0
 
@@ -53,18 +58,17 @@ func (e *ByteArrayEncoding) EncodeByteArray(dst, src []byte) ([]byte, error) {
 		prefix.values = append(prefix.values, int32(p))
 		length.values = append(length.values, int32(n-p))
 		lastValue = v
-		return true
-	})
+		base = end
+	}
 
 	dst = encodeInt32(dst, prefix.values)
 	dst = encodeInt32(dst, length.values)
 
-	i := 0
-	page.Range(func(v []byte) bool {
-		dst = append(dst, v[prefix.values[i]:]...)
-		i++
-		return true
-	})
+	base = 0
+	for i, end := range offsets {
+		dst = append(dst, values[base+prefix.values[i]:end]...)
+		base = end
+	}
 	return dst, nil
 }
 
