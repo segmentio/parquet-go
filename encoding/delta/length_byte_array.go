@@ -2,7 +2,6 @@ package delta
 
 import (
 	"github.com/segmentio/parquet-go/encoding"
-	"github.com/segmentio/parquet-go/encoding/plain"
 	"github.com/segmentio/parquet-go/format"
 )
 
@@ -19,45 +18,21 @@ func (e *LengthByteArrayEncoding) Encoding() format.Encoding {
 }
 
 func (e *LengthByteArrayEncoding) EncodeByteArray(dst, src []byte) ([]byte, error) {
+	page := encoding.ByteArrayPage(src)
 	dst = dst[:0]
 
+	if err := page.Validate(); err != nil {
+		return dst, err
+	}
+	offsets := page.Offsets()
 	length := getInt32Buffer()
 	defer putInt32Buffer(length)
 
-	totalSize := 0
-
-	for i := 0; i < len(src); {
-		r := len(src) - i
-		if r < plain.ByteArrayLengthSize {
-			return dst, encoding.Error(e, plain.ErrTooShort(r))
-		}
-		n := plain.ByteArrayLength(src[i:])
-		i += plain.ByteArrayLengthSize
-		r -= plain.ByteArrayLengthSize
-		if n > r {
-			return dst, encoding.Error(e, plain.ErrTooShort(n))
-		}
-		if n > plain.MaxByteArrayLength {
-			return dst, encoding.Error(e, plain.ErrTooLarge(n))
-		}
-		length.values = append(length.values, int32(n))
-		totalSize += n
-		i += n
-	}
+	length.resize(len(offsets) - 1)
+	encodeLengths(length.values, offsets)
 
 	dst = encodeInt32(dst, length.values)
-	dst = resize(dst, len(dst)+totalSize)
-
-	b := dst[len(dst)-totalSize:]
-	i := plain.ByteArrayLengthSize
-	j := 0
-
-	for _, n := range length.values {
-		j += copy(b[j:], src[i:i+int(n)])
-		i += plain.ByteArrayLengthSize
-		i += int(n)
-	}
-
+	dst = append(dst, page.Values()...)
 	return dst, nil
 }
 
@@ -67,14 +42,31 @@ func (e *LengthByteArrayEncoding) DecodeByteArray(dst, src []byte) ([]byte, erro
 	length := getInt32Buffer()
 	defer putInt32Buffer(length)
 
-	src, err := length.decode(src)
+	values, err := length.decode(src)
 	if err != nil {
 		return dst, encoding.Error(e, err)
 	}
 
-	dst, err = decodeLengthByteArray(dst, src, length.values)
-	if err != nil {
-		err = encoding.Error(e, err)
+	length.values = append(length.values, 0)
+	offsets := length.values
+	decodeLengths(offsets, length.values[:len(offsets)-1])
+
+	return encoding.EncodeByteArrayPage(dst, offsets, values), nil
+}
+
+func encodeLengths(lengths, offsets []int32) {
+	for i := range lengths {
+		lengths[i] = offsets[i+1] - offsets[i]
 	}
-	return dst, err
+}
+
+func decodeLengths(offsets, lengths []int32) {
+	baseOffset := int32(0)
+
+	for i, n := range lengths {
+		offsets[i] = baseOffset
+		baseOffset += n
+	}
+
+	offsets[len(lengths)] = baseOffset
 }
