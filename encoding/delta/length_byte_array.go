@@ -51,18 +51,3 @@ func (e *LengthByteArrayEncoding) DecodeByteArray(dst, src []byte) ([]byte, erro
 	decodeByteArrayLengths(length.values)
 	return encoding.EncodeByteArrayPage(dst, length.values, src), nil
 }
-
-func encodeByteArrayLengths(length, offset []int32) {
-	for i := range length {
-		length[i] = offset[i+1] - offset[i]
-	}
-}
-
-func decodeByteArrayLengths(length []int32) {
-	offset := int32(0)
-
-	for i, n := range length {
-		length[i] = offset
-		offset += n
-	}
-}
