@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/segmentio/parquet-go/compress"
+	"github.com/segmentio/parquet-go/format"
 )
 
 const (
@@ -20,6 +21,10 @@ const (
 	DefaultSkipBloomFilters     = false
 )
 
+type ColumnChunkReader interface {
+	FromMetadata(format.ColumnMetaData) io.ReaderAt
+}
+
 // The FileConfig type carries configuration options for parquet files.
 //
 // FileConfig implements the FileOption interface so it can be used directly
@@ -31,9 +36,9 @@ const (
 //	})
 //
 type FileConfig struct {
-	SkipPageIndex       bool
-	SkipBloomFilters    bool
-	GetIOReaderFromPath func(filepath string) io.ReaderAt
+	SkipPageIndex     bool
+	SkipBloomFilters  bool
+	ColumnChunkReader ColumnChunkReader
 }
 
 // DefaultFileConfig returns a new FileConfig value initialized with the
@@ -136,7 +141,6 @@ func (c *ReaderConfig) Validate() error {
 //
 type WriterConfig struct {
 	CreatedBy            string
-	ColumnChunkFilePath  string
 	ColumnPageBuffers    PageBufferPool
 	ColumnIndexSizeLimit int
 	PageBufferSize       int
@@ -318,6 +322,15 @@ func SkipPageIndex(skip bool) FileOption {
 // Defaults to false.
 func SkipBloomFilters(skip bool) FileOption {
 	return fileOption(func(config *FileConfig) { config.SkipBloomFilters = skip })
+}
+
+// ConfigureColumnChunkReader is a file configuration option which allows using
+// secondary io readers for column chunk data. This can be useful as a caching
+// mechanism for the metadata or the column chunk data.
+//
+// Defaults to nil.
+func ConfigureColumnChunkReader(r ColumnChunkReader) FileOption {
+	return fileOption(func(config *FileConfig) { config.ColumnChunkReader = r })
 }
 
 // PageBufferSize configures the size of column page buffers on parquet writers.

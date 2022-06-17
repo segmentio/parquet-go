@@ -380,7 +380,6 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 
 	for i, c := range w.columns {
 		w.columnChunk[i] = format.ColumnChunk{
-			FilePath: config.ColumnChunkFilePath,
 			MetaData: format.ColumnMetaData{
 				Type:             format.Type(c.columnType.Kind()),
 				Encoding:         c.encodings,

@@ -22,16 +22,16 @@ const (
 // File represents a parquet file. The layout of a Parquet file can be found
 // here: https://github.com/apache/parquet-format#file-format
 type File struct {
-	metadata            format.FileMetaData
-	protocol            thrift.CompactProtocol
-	reader              io.ReaderAt
-	size                int64
-	schema              *Schema
-	root                *Column
-	columnIndexes       []format.ColumnIndex
-	offsetIndexes       []format.OffsetIndex
-	rowGroups           []RowGroup
-	GetIOReaderFromPath func(filepath string) io.ReaderAt
+	metadata          format.FileMetaData
+	protocol          thrift.CompactProtocol
+	reader            io.ReaderAt
+	size              int64
+	schema            *Schema
+	root              *Column
+	columnIndexes     []format.ColumnIndex
+	offsetIndexes     []format.OffsetIndex
+	rowGroups         []RowGroup
+	columnChunkReader ColumnChunkReader
 }
 
 // OpenFile opens a parquet file and reads the content between offset 0 and the given
@@ -48,10 +48,8 @@ func OpenFile(r io.ReaderAt, size int64, options ...FileOption) (*File, error) {
 		return nil, err
 	}
 
-	// used to get secondary io.ReaderAt interfaces for columnChunk page reads
-	if c.GetIOReaderFromPath != nil {
-		f.GetIOReaderFromPath = c.GetIOReaderFromPath
-	}
+	// used to get secondary readers for column chunks
+	f.columnChunkReader = c.ColumnChunkReader
 
 	if _, err := r.ReadAt(b[:4], 0); err != nil {
 		return nil, fmt.Errorf("reading magic header of parquet file: %w", err)
@@ -458,7 +456,14 @@ func (f *filePages) init(c *fileColumnChunk) {
 		f.dictOffset = f.baseOffset
 	}
 
-	f.section = *io.NewSectionReader(c.file, f.baseOffset, c.chunk.MetaData.TotalCompressedSize)
+	// fetch secondary readers for column chunk data
+	var reader io.ReaderAt
+	reader = c.file
+	if f.chunk.file.columnChunkReader != nil {
+		reader = f.chunk.file.columnChunkReader.FromMetadata(f.chunk.chunk.MetaData)
+	}
+
+	f.section = *io.NewSectionReader(reader, f.baseOffset, c.chunk.MetaData.TotalCompressedSize)
 	f.rbuf = acquireReadBuffer(&f.section)
 	f.decoder.Reset(f.protocol.NewReader(f.rbuf))
 }
