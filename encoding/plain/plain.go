@@ -70,11 +70,19 @@ func (e *Encoding) EncodeDouble(dst, src []byte) ([]byte, error) {
 	return append(dst[:0], src...), nil
 }
 
-func (e *Encoding) EncodeByteArray(dst []byte, src []byte) ([]byte, error) {
-	if err := ValidateByteArray(src); err != nil {
-		return dst[:0], encoding.Error(e, err)
+func (e *Encoding) EncodeByteArray(dst, src []byte) ([]byte, error) {
+	page := encoding.ByteArrayPage(src)
+	dst = dst[:0]
+
+	if err := page.Validate(); err != nil {
+		return dst, encoding.Error(e, err)
 	}
-	return append(dst[:0], src...), nil
+
+	page.Range(func(value []byte) bool {
+		dst = AppendByteArray(dst, value)
+		return true
+	})
+	return dst, nil
 }
 
 func (e *Encoding) EncodeFixedLenByteArray(dst, src []byte, size int) ([]byte, error) {
@@ -124,10 +132,44 @@ func (e *Encoding) DecodeDouble(dst, src []byte) ([]byte, error) {
 }
 
 func (e *Encoding) DecodeByteArray(dst, src []byte) ([]byte, error) {
-	if err := ValidateByteArray(src); err != nil {
+	n, err := countByteArrayValues(src)
+	if err != nil {
 		return dst[:0], encoding.Error(e, err)
 	}
-	return append(dst[:0], src...), nil
+
+	page := encoding.MakeByteArrayPage(dst, n, len(src)-(ByteArrayLengthSize*n))
+	offsets, values := page.Offsets(), page.Values()
+	i := 0
+	j := 0
+
+	RangeByteArray(src, func(value []byte) error {
+		i++
+		offsets[i] = offsets[i-1] + int32(len(value))
+		j += copy(values[j:], value)
+		return nil
+	})
+	return page, nil
+}
+
+func countByteArrayValues(b []byte) (count int, err error) {
+	for i := 0; i < len(b); {
+		r := len(b) - i
+		if r < ByteArrayLengthSize {
+			return 0, ErrTooShort(r)
+		}
+		n := ByteArrayLength(b[i:])
+		i += ByteArrayLengthSize
+		r -= ByteArrayLengthSize
+		if n > r {
+			return 0, ErrTooShort(n)
+		}
+		if n > MaxByteArrayLength {
+			return 0, ErrTooLarge(n)
+		}
+		i += n
+		count++
+	}
+	return count, nil
 }
 
 func (e *Encoding) DecodeFixedLenByteArray(dst, src []byte, size int) ([]byte, error) {

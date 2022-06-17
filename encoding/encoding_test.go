@@ -422,11 +422,7 @@ func testByteArrayEncoding(t *testing.T, e encoding.Encoding) {
 	byteArrays := []byte{}
 
 	for _, test := range byteArrayTests {
-		byteArrays = byteArrays[:0]
-
-		for _, value := range test {
-			byteArrays = plain.AppendByteArray(byteArrays, value)
-		}
+		byteArrays = encoding.JoinByteArrayPage(byteArrays, test)
 
 		t.Run("", func(t *testing.T) {
 			var err error
@@ -888,18 +884,18 @@ func generateDoubleValues(n int, r *rand.Rand) []byte {
 
 func generateByteArrayValues(n int, r *rand.Rand) []byte {
 	const maxLen = 21
-	values := make([]byte, plain.ByteArrayLengthSize*n+n*maxLen)
+	offsets := make([]int32, n+1)
+	values := make([]byte, n*maxLen)
 	length := 0
 
 	for i := 0; i < n; i++ {
 		k := r.Intn(maxLen) + 1
-		plain.PutByteArrayLength(values[length:], k)
-		length += plain.ByteArrayLengthSize
+		offsets[i+1] = offsets[i] + int32(k)
 		io.ReadFull(r, values[length:length+k])
 		length += k
 	}
 
-	return values[:length]
+	return encoding.EncodeByteArrayPage(nil, offsets, values[:length])
 }
 
 func generateFixedLenByteArrayValues(n int, r *rand.Rand, size int) []byte {
