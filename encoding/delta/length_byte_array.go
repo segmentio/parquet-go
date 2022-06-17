@@ -29,7 +29,7 @@ func (e *LengthByteArrayEncoding) EncodeByteArray(dst, src []byte) ([]byte, erro
 	defer putInt32Buffer(length)
 
 	length.resize(len(offsets) - 1)
-	encodeLengths(length.values, offsets)
+	encodeByteArrayLengths(length.values, offsets)
 
 	dst = encodeInt32(dst, length.values)
 	dst = append(dst, page.Values()...)
@@ -42,31 +42,27 @@ func (e *LengthByteArrayEncoding) DecodeByteArray(dst, src []byte) ([]byte, erro
 	length := getInt32Buffer()
 	defer putInt32Buffer(length)
 
-	values, err := length.decode(src)
+	src, err := length.decode(src)
 	if err != nil {
 		return dst, encoding.Error(e, err)
 	}
 
 	length.values = append(length.values, 0)
-	offsets := length.values
-	decodeLengths(offsets, length.values[:len(offsets)-1])
-
-	return encoding.EncodeByteArrayPage(dst, offsets, values), nil
+	decodeByteArrayLengths(length.values)
+	return encoding.EncodeByteArrayPage(dst, length.values, src), nil
 }
 
-func encodeLengths(lengths, offsets []int32) {
-	for i := range lengths {
-		lengths[i] = offsets[i+1] - offsets[i]
+func encodeByteArrayLengths(length, offset []int32) {
+	for i := range length {
+		length[i] = offset[i+1] - offset[i]
 	}
 }
 
-func decodeLengths(offsets, lengths []int32) {
-	baseOffset := int32(0)
+func decodeByteArrayLengths(length []int32) {
+	offset := int32(0)
 
-	for i, n := range lengths {
-		offsets[i] = baseOffset
-		baseOffset += n
+	for i, n := range length {
+		length[i] = offset
+		offset += n
 	}
-
-	offsets[len(lengths)] = baseOffset
 }

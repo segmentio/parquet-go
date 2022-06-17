@@ -6,7 +6,6 @@ import (
 	"sort"
 
 	"github.com/segmentio/parquet-go/encoding"
-	"github.com/segmentio/parquet-go/encoding/plain"
 	"github.com/segmentio/parquet-go/format"
 )
 
@@ -27,30 +26,22 @@ func (e *ByteArrayEncoding) Encoding() format.Encoding {
 }
 
 func (e *ByteArrayEncoding) EncodeByteArray(dst, src []byte) ([]byte, error) {
+	page := encoding.ByteArrayPage(src)
+	dst = dst[:0]
+
+	if err := page.Validate(); err != nil {
+		return dst, err
+	}
+
 	prefix := getInt32Buffer()
 	defer putInt32Buffer(prefix)
 
 	length := getInt32Buffer()
 	defer putInt32Buffer(length)
 
-	totalSize := 0
 	lastValue := ([]byte)(nil)
-
-	for i := 0; i < len(src); {
-		r := len(src) - i
-		if r < plain.ByteArrayLengthSize {
-			return dst[:0], plain.ErrTooShort(r)
-		}
-		n := plain.ByteArrayLength(src[i:])
-		i += plain.ByteArrayLengthSize
-		r -= plain.ByteArrayLengthSize
-		if n > r {
-			return dst[:0], plain.ErrTooShort(n)
-		}
-		if n > plain.MaxByteArrayLength {
-			return dst[:0], plain.ErrTooLarge(n)
-		}
-		v := src[i : i+n : i+n]
+	page.Range(func(v []byte) bool {
+		n := len(v)
 		p := 0
 
 		if len(v) <= maxLinearSearchPrefixLength {
@@ -62,28 +53,18 @@ func (e *ByteArrayEncoding) EncodeByteArray(dst, src []byte) ([]byte, error) {
 		prefix.values = append(prefix.values, int32(p))
 		length.values = append(length.values, int32(n-p))
 		lastValue = v
-		totalSize += n - p
-		i += n
-	}
+		return true
+	})
 
-	dst = dst[:0]
 	dst = encodeInt32(dst, prefix.values)
 	dst = encodeInt32(dst, length.values)
-	dst = resize(dst, len(dst)+totalSize)
 
-	b := dst[len(dst)-totalSize:]
-	i := plain.ByteArrayLengthSize
-	j := 0
-
-	_ = length.values[:len(prefix.values)]
-
-	for k, p := range prefix.values {
-		n := p + length.values[k]
-		j += copy(b[j:], src[i+int(p):i+int(n)])
-		i += plain.ByteArrayLengthSize
-		i += int(n)
-	}
-
+	i := 0
+	page.Range(func(v []byte) bool {
+		dst = append(dst, v[prefix.values[i]:]...)
+		i++
+		return true
+	})
 	return dst, nil
 }
 
@@ -156,7 +137,24 @@ func (e *ByteArrayEncoding) DecodeByteArray(dst, src []byte) ([]byte, error) {
 	if len(prefix.values) != len(suffix.values) {
 		return dst, encoding.Error(e, errPrefixAndSuffixLengthMismatch(len(prefix.values), len(suffix.values)))
 	}
-	return decodeByteArray(dst, src, prefix.values, suffix.values)
+
+	prefix.values = append(prefix.values, 0)
+	decodeByteArrayPrefixLengths(prefix.values, suffix.values)
+	return encoding.EncodeByteArrayPage(dst, prefix.values, src), nil
+}
+
+func decodeByteArrayPrefixLengths(prefix, suffix []int32) {
+	offset := int32(0)
+
+	for i := range suffix {
+		p := prefix[i]
+		n := suffix[i]
+		prefix[i] = offset
+		offset += p
+		offset += n
+	}
+
+	prefix[len(suffix)] = offset
 }
 
 func (e *ByteArrayEncoding) DecodeFixedLenByteArray(dst, src []byte, size int) ([]byte, error) {
