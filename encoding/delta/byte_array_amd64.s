@@ -122,6 +122,27 @@ done:
     MOVB R12, ok+72(FP)
     RET
 
+// This function is an optimization of the decodeFixedLengthByteArray using AVX2
+// instructions to implement an opportunistic copy strategy which improves
+// throughput compared to using runtime.memmove (via Go's copy).
+//
+// Parquet columns of type FIXED_LEN_BYTE_ARRAY will often hold short strings,
+// rarely exceeding a couple hundred bytes in size. Making a function call to
+// runtime.memmove for each value results in spending most of the CPU time
+// on branching rather than actually copying bytes to the output buffer.
+//
+// This function works by always assuming it can copy 16 bytes of data between
+// the input and outputs, even in the event where a value is shorter than this.
+//
+// The pointers to the current positions for input and output pointers are
+// always adjusted by the right number of bytes so that the next writes
+// overwrite any extra bytes that were written in the previous iteration of the
+// copy loop.
+//
+// The throughput of this function is not as good as runtime.memmove for large
+// buffers, but it ends up being close to an order of magnitude higher for the
+// common case of working with short strings.
+//
 // func decodeFixedLenByteArrayAVX2(dst, src []byte, prefix, suffix []int32) int
 TEXT ·decodeFixedLenByteArrayAVX2(SB), NOSPLIT, $0-104
     MOVQ dst_base+0(FP), AX
@@ -183,6 +204,9 @@ copySuffixLoop:
     JB copySuffixLoop
     JMP next
 
+// This function is a specialization of decodeFixedLenByteArrayAVX2 for 16 bytes
+// values.
+//
 // func decodeFixedLenByteArrayAVX2x128bits(dst, src []byte, prefix, suffix []int32) int
 TEXT ·decodeFixedLenByteArrayAVX2x128bits(SB), NOSPLIT, $0-104
     MOVQ dst_base+0(FP), AX
