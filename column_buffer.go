@@ -2,12 +2,14 @@ package parquet
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"sort"
 	"unsafe"
 
 	"github.com/segmentio/parquet-go/deprecated"
+	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/encoding/plain"
 	"github.com/segmentio/parquet-go/internal/bitpack"
 	"github.com/segmentio/parquet-go/internal/unsafecast"
@@ -422,7 +424,7 @@ type repeatedColumnBuffer struct {
 	reordered          bool
 	maxRepetitionLevel byte
 	maxDefinitionLevel byte
-	rows               []region
+	rows               []offsetMapping
 	repetitionLevels   []byte
 	definitionLevels   []byte
 	buffer             []Value
@@ -430,15 +432,13 @@ type repeatedColumnBuffer struct {
 	nullOrdering       nullOrdering
 }
 
-// The region type maps the logical offset of rows within the repetition and
-// definition levels, to the base offsets in the underlying column buffers
+// The offsetMapping type maps the logical offset of rows within the repetition
+// and definition levels, to the base offsets in the underlying column buffers
 // where the non-null values have been written.
-type region struct {
+type offsetMapping struct {
 	offset     uint32
 	baseOffset uint32
 }
-
-func sizeOfRegion(regions []region) int64 { return 8 * int64(len(regions)) }
 
 func newRepeatedColumnBuffer(base ColumnBuffer, maxRepetitionLevel, maxDefinitionLevel byte, nullOrdering nullOrdering) *repeatedColumnBuffer {
 	n := base.Cap()
@@ -446,7 +446,7 @@ func newRepeatedColumnBuffer(base ColumnBuffer, maxRepetitionLevel, maxDefinitio
 		base:               base,
 		maxRepetitionLevel: maxRepetitionLevel,
 		maxDefinitionLevel: maxDefinitionLevel,
-		rows:               make([]region, 0, n/8),
+		rows:               make([]offsetMapping, 0, n/8),
 		repetitionLevels:   make([]byte, 0, n),
 		definitionLevels:   make([]byte, 0, n),
 		nullOrdering:       nullOrdering,
@@ -459,7 +459,7 @@ func (col *repeatedColumnBuffer) Clone() ColumnBuffer {
 		reordered:          col.reordered,
 		maxRepetitionLevel: col.maxRepetitionLevel,
 		maxDefinitionLevel: col.maxDefinitionLevel,
-		rows:               append([]region{}, col.rows...),
+		rows:               append([]offsetMapping{}, col.rows...),
 		repetitionLevels:   append([]byte{}, col.repetitionLevels...),
 		definitionLevels:   append([]byte{}, col.definitionLevels...),
 		nullOrdering:       col.nullOrdering,
@@ -537,7 +537,7 @@ func (col *repeatedColumnBuffer) Page() BufferedPage {
 				}
 			}
 
-			column.rows = append(column.rows, region{
+			column.rows = append(column.rows, offsetMapping{
 				offset:     uint32(len(column.repetitionLevels)),
 				baseOffset: uint32(baseOffset),
 			})
@@ -575,7 +575,7 @@ func (col *repeatedColumnBuffer) Reset() {
 }
 
 func (col *repeatedColumnBuffer) Size() int64 {
-	return sizeOfRegion(col.rows) + int64(len(col.repetitionLevels)) + int64(len(col.definitionLevels)) + col.base.Size()
+	return int64(8*len(col.rows)) + int64(len(col.repetitionLevels)) + int64(len(col.definitionLevels)) + col.base.Size()
 }
 
 func (col *repeatedColumnBuffer) Cap() int { return cap(col.rows) }
@@ -665,7 +665,7 @@ func (col *repeatedColumnBuffer) writeRow(row []Value) error {
 	}
 
 	if row[0].repetitionLevel == 0 {
-		col.rows = append(col.rows, region{
+		col.rows = append(col.rows, offsetMapping{
 			offset:     uint32(len(col.repetitionLevels)),
 			baseOffset: uint32(baseOffset),
 		})
@@ -681,7 +681,7 @@ func (col *repeatedColumnBuffer) writeRow(row []Value) error {
 
 func (col *repeatedColumnBuffer) writeValues(row array, size, offset uintptr, levels columnLevels) {
 	if levels.repetitionLevel == 0 {
-		col.rows = append(col.rows, region{
+		col.rows = append(col.rows, offsetMapping{
 			offset:     uint32(len(col.repetitionLevels)),
 			baseOffset: uint32(col.base.NumValues()),
 		})
@@ -1407,91 +1407,128 @@ func (col *doubleColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int
 
 type byteArrayColumnBuffer struct {
 	byteArrayPage
-	offsets []uint32
+	buffer    encoding.ByteArrayPage
+	layout    []region
+	values    []byte
+	recompute bool
+	reordered bool
+}
+
+type region struct {
+	offset int32
+	length int32
 }
 
 func newByteArrayColumnBuffer(typ Type, columnIndex int16, numValues int32) *byteArrayColumnBuffer {
 	return &byteArrayColumnBuffer{
 		byteArrayPage: byteArrayPage{
 			typ:         typ,
-			values:      make([]byte, 0, typ.EstimateSize(int(numValues))),
+			values:      encoding.EmptyByteArraySlice(),
 			columnIndex: ^columnIndex,
 		},
-		offsets: make([]uint32, 0, numValues),
+		layout: make([]region, 0, numValues),
+		values: make([]byte, 0, typ.EstimateSize(int(numValues))),
 	}
 }
 
-func (col *byteArrayColumnBuffer) cloneOffsets() []uint32 {
-	offsets := make([]uint32, len(col.offsets))
-	copy(offsets, col.offsets)
-	return offsets
+func (col *byteArrayColumnBuffer) materializeByteArrayPage() {
+	size := 8 + 4*len(col.layout) + len(col.values)
+
+	if cap(col.buffer) < size {
+		col.buffer = make(encoding.ByteArrayPage, size)
+	} else {
+		col.buffer = col.buffer[:size]
+	}
+
+	binary.LittleEndian.PutUint32(col.buffer[0:], uint32(len(col.layout)))
+	binary.LittleEndian.PutUint32(col.buffer[4:], uint32(0))
+	offset := int32(0)
+
+	for i, r := range col.layout {
+		offset += r.length
+		binary.LittleEndian.PutUint32(col.buffer[8+4*i:], uint32(offset))
+	}
+
+	if col.reordered {
+		i := 8 + 4*len(col.layout)
+		for _, r := range col.layout {
+			i += copy(col.buffer[i:], col.values[r.offset:r.offset+r.length])
+		}
+	} else {
+		copy(col.buffer[8+4*len(col.layout):], col.values)
+	}
+
+	col.byteArrayPage.values = col.buffer.Slice(0, len(col.layout))
+}
+
+func (col *byteArrayColumnBuffer) page() *byteArrayPage {
+	if col.recompute {
+		col.recompute = false
+		col.materializeByteArrayPage()
+	}
+	return &col.byteArrayPage
+}
+
+func (col *byteArrayColumnBuffer) valueAt(i int) []byte {
+	s := &col.layout[i]
+	j := s.offset
+	k := s.offset + s.length
+	return col.values[j:k:k]
 }
 
 func (col *byteArrayColumnBuffer) Clone() ColumnBuffer {
 	return &byteArrayColumnBuffer{
 		byteArrayPage: byteArrayPage{
 			typ:         col.typ,
-			values:      col.cloneValues(),
-			numValues:   col.numValues,
+			values:      encoding.EmptyByteArraySlice(),
 			columnIndex: col.columnIndex,
 		},
-		offsets: col.cloneOffsets(),
+		layout:    append([]region{}, col.layout...),
+		values:    append([]byte{}, col.values...),
+		recompute: len(col.layout) > 0,
+		reordered: col.reordered,
 	}
 }
 
 func (col *byteArrayColumnBuffer) ColumnIndex() ColumnIndex {
-	return byteArrayColumnIndex{&col.byteArrayPage}
+	return byteArrayColumnIndex{col.page()}
 }
 
 func (col *byteArrayColumnBuffer) OffsetIndex() OffsetIndex {
-	return byteArrayOffsetIndex{&col.byteArrayPage}
+	return byteArrayOffsetIndex{col.page()}
 }
 
 func (col *byteArrayColumnBuffer) BloomFilter() BloomFilter { return nil }
 
 func (col *byteArrayColumnBuffer) Dictionary() Dictionary { return nil }
 
-func (col *byteArrayColumnBuffer) Pages() Pages { return onePage(col.Page()) }
+func (col *byteArrayColumnBuffer) Pages() Pages { return onePage(col.page()) }
 
-func (col *byteArrayColumnBuffer) Page() BufferedPage {
-	if len(col.offsets) > 0 && orderOfUint32(col.offsets) < 1 { // unordered?
-		values := make([]byte, 0, len(col.values)) // TODO: pool this buffer?
-
-		for _, offset := range col.offsets {
-			values = plain.AppendByteArray(values, col.valueAt(offset))
-		}
-
-		col.values = values
-		col.offsets = col.offsets[:0]
-
-		for i := 0; i < len(col.values); {
-			n := plain.ByteArrayLength(col.values[i:])
-			col.offsets = append(col.offsets, uint32(i))
-			i += plain.ByteArrayLengthSize
-			i += n
-		}
-	}
-	return &col.byteArrayPage
-}
+func (col *byteArrayColumnBuffer) Page() BufferedPage { return col.page() }
 
 func (col *byteArrayColumnBuffer) Reset() {
+	col.byteArrayPage.values = encoding.ByteArraySlice{}
+	col.buffer = col.buffer[:0]
+	col.layout = col.layout[:0]
 	col.values = col.values[:0]
-	col.offsets = col.offsets[:0]
-	col.numValues = 0
+	col.recompute = false
+	col.reordered = false
 }
 
-func (col *byteArrayColumnBuffer) Cap() int { return cap(col.offsets) }
+func (col *byteArrayColumnBuffer) NumValues() int64 { return int64(len(col.layout)) }
 
-func (col *byteArrayColumnBuffer) Len() int { return len(col.offsets) }
+func (col *byteArrayColumnBuffer) Cap() int { return cap(col.layout) }
+
+func (col *byteArrayColumnBuffer) Len() int { return len(col.layout) }
 
 func (col *byteArrayColumnBuffer) Less(i, j int) bool {
-	a := col.valueAt(col.offsets[i])
-	b := col.valueAt(col.offsets[j])
-	return bytes.Compare(a, b) < 0
+	return bytes.Compare(col.valueAt(i), col.valueAt(j)) < 0
 }
 
 func (col *byteArrayColumnBuffer) Swap(i, j int) {
-	col.offsets[i], col.offsets[j] = col.offsets[j], col.offsets[i]
+	col.layout[i], col.layout[j] = col.layout[j], col.layout[i]
+	col.recompute = true
+	col.reordered = true
 }
 
 func (col *byteArrayColumnBuffer) Write(b []byte) (int, error) {
@@ -1505,14 +1542,14 @@ func (col *byteArrayColumnBuffer) WriteByteArrays(values []byte) (int, error) {
 }
 
 func (col *byteArrayColumnBuffer) writeByteArrays(values []byte) (count, bytes int, err error) {
-	baseCount, baseBytes := len(col.offsets), len(col.values)
+	baseCount, baseBytes := len(col.layout), len(col.buffer)
 
 	err = plain.RangeByteArray(values, func(value []byte) error {
 		col.append(unsafecast.BytesToString(value))
 		return nil
 	})
 
-	return len(col.offsets) - baseCount, len(col.values) - baseBytes, err
+	return len(col.layout) - baseCount, len(col.buffer) - baseBytes, err
 }
 
 func (col *byteArrayColumnBuffer) WriteValues(values []Value) (int, error) {
@@ -1532,12 +1569,12 @@ func (col *byteArrayColumnBuffer) ReadValuesAt(values []Value, offset int64) (n 
 	i := int(offset)
 	switch {
 	case i < 0:
-		return 0, errRowIndexOutOfBounds(offset, int64(len(col.offsets)))
-	case i >= len(col.offsets):
+		return 0, errRowIndexOutOfBounds(offset, int64(len(col.layout)))
+	case i >= len(col.layout):
 		return 0, io.EOF
 	default:
-		for n < len(values) && i < len(col.offsets) {
-			values[n] = col.makeValueBytes(col.valueAt(col.offsets[i]))
+		for n < len(values) && i < len(col.layout) {
+			values[n] = col.makeValueBytes(col.valueAt(i))
 			n++
 			i++
 		}
@@ -1549,9 +1586,13 @@ func (col *byteArrayColumnBuffer) ReadValuesAt(values []Value, offset int64) (n 
 }
 
 func (col *byteArrayColumnBuffer) append(value string) {
-	col.offsets = append(col.offsets, uint32(len(col.values)))
-	col.values = plain.AppendByteArrayString(col.values, value)
-	col.numValues++
+	slice := region{
+		offset: int32(len(col.values)),
+		length: int32(len(value)),
+	}
+	col.layout = append(col.layout, slice)
+	col.values = append(col.values, value...)
+	col.recompute = true
 }
 
 type fixedLenByteArrayColumnBuffer struct {

@@ -129,6 +129,9 @@ func (e *ByteArrayEncoding) DecodeByteArray(dst, src []byte) ([]byte, error) {
 	suffix := getInt32Buffer()
 	defer putInt32Buffer(suffix)
 
+	offset := getInt32Buffer()
+	defer putInt32Buffer(offset)
+
 	var err error
 	src, err = prefix.decode(src)
 	if err != nil {
@@ -141,10 +144,50 @@ func (e *ByteArrayEncoding) DecodeByteArray(dst, src []byte) ([]byte, error) {
 	if len(prefix.values) != len(suffix.values) {
 		return dst, encoding.Error(e, errPrefixAndSuffixLengthMismatch(len(prefix.values), len(suffix.values)))
 	}
+	offset.values = decodeByteArrayPrefixLengths(offset.values, prefix.values, suffix.values)
+	dst = encoding.EncodeByteArrayPage(dst, offset.values, nil)
+	return decodeByteArray(dst, src, prefix.values, suffix.values)
+}
 
-	prefix.values = append(prefix.values, 0)
-	decodeByteArrayPrefixLengths(prefix.values, suffix.values)
-	return encoding.EncodeByteArrayPage(dst, prefix.values, src), nil
+func decodeByteArray(dst, src []byte, prefix, suffix []int32) ([]byte, error) {
+	_ = prefix[:len(suffix)]
+	_ = suffix[:len(prefix)]
+
+	var lastValue []byte
+	for i := range suffix {
+		p := int(prefix[i])
+		n := int(suffix[i])
+		if n < 0 {
+			return dst, errInvalidNegativeValueLength(n)
+		}
+		if n > len(src) {
+			return dst, errValueLengthOutOfBounds(n, len(src))
+		}
+		if p < 0 {
+			return dst, errInvalidNegativePrefixLength(p)
+		}
+		if p > len(lastValue) {
+			return dst, errPrefixLengthOutOfBounds(p, len(lastValue))
+		}
+		j := len(dst)
+		dst = append(dst, lastValue[:p]...)
+		dst = append(dst, src[:n]...)
+		lastValue = dst[j:]
+		src = src[n:]
+	}
+	return dst, nil
+}
+
+func decodeByteArrayPrefixLengths(offsets, prefix, suffix []int32) []int32 {
+	offset := int32(0)
+
+	for i := range suffix {
+		offsets = append(offsets, offset)
+		offset += prefix[i]
+		offset += suffix[i]
+	}
+
+	return append(offsets, offset)
 }
 
 func (e *ByteArrayEncoding) DecodeFixedLenByteArray(dst, src []byte, size int) ([]byte, error) {
@@ -173,20 +216,6 @@ func (e *ByteArrayEncoding) DecodeFixedLenByteArray(dst, src []byte, size int) (
 		return dst, errPrefixAndSuffixLengthMismatch(len(prefix.values), len(suffix.values))
 	}
 	return decodeFixedLenByteArray(dst, src, size, prefix.values, suffix.values)
-}
-
-func decodeByteArrayPrefixLengths(prefix, suffix []int32) {
-	offset := int32(0)
-
-	for i := range suffix {
-		p := prefix[i]
-		n := suffix[i]
-		prefix[i] = offset
-		offset += p
-		offset += n
-	}
-
-	prefix[len(suffix)] = offset
 }
 
 func linearSearchPrefixLength(base, data []byte) (n int) {

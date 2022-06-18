@@ -598,39 +598,48 @@ func (d *doubleDictionary) Page() BufferedPage {
 }
 
 type byteArrayDictionary struct {
-	byteArrayPage
-	offsets []uint32
+	page    byteArrayPage
+	offsets []int32
+	values  []byte
 	hashmap map[string]int32
 }
 
 func newByteArrayDictionary(typ Type, columnIndex int16, numValues int32, values []byte) *byteArrayDictionary {
 	d := &byteArrayDictionary{
-		offsets: make([]uint32, 0, numValues),
-		byteArrayPage: byteArrayPage{
+		page: byteArrayPage{
 			typ:         typ,
-			values:      values,
-			numValues:   numValues,
 			columnIndex: ^columnIndex,
 		},
 	}
 
-	for i := 0; i < len(values); {
-		n := plain.ByteArrayLength(values[i:])
-		d.offsets = append(d.offsets, uint32(i))
-		i += plain.ByteArrayLengthSize
-		i += n
+	if len(values) == 0 {
+		d.page.values = encoding.EmptyByteArraySlice()
+		d.offsets = d.page.values.Offsets()
+		d.values = values // in case the capacity isn't zero, we can use the buffer
+	} else {
+		page := encoding.ByteArrayPage(values)
+		if err := page.Validate(); err != nil {
+			panic(err)
+		}
+		d.offsets = page.Offsets()
+		d.values = page.Values()
+		d.page.values = encoding.MakeByteArraySlice(d.offsets, d.values)
 	}
 
 	return d
 }
 
-func (d *byteArrayDictionary) Type() Type { return newIndexedType(d.typ, d) }
+func (d *byteArrayDictionary) Type() Type { return newIndexedType(d.page.typ, d) }
 
-func (d *byteArrayDictionary) Len() int { return len(d.offsets) }
+func (d *byteArrayDictionary) Len() int { return len(d.offsets) - 1 }
 
-func (d *byteArrayDictionary) Index(i int32) Value { return d.makeValueBytes(d.index(i)) }
+func (d *byteArrayDictionary) Index(i int32) Value { return d.page.makeValueBytes(d.index(i)) }
 
-func (d *byteArrayDictionary) index(i int32) []byte { return d.valueAt(d.offsets[i]) }
+func (d *byteArrayDictionary) index(i int32) []byte {
+	j := d.offsets[i+0]
+	k := d.offsets[i+1]
+	return d.values[j:k:k]
+}
 
 func (d *byteArrayDictionary) Insert(indexes []int32, values []Value) {
 	var value Value
@@ -642,8 +651,8 @@ func (d *byteArrayDictionary) insert(indexes []int32, rows array, size, offset u
 
 	if d.hashmap == nil {
 		d.hashmap = make(map[string]int32, cap(d.offsets))
-		for index, offset := range d.offsets {
-			d.hashmap[string(d.valueAt(offset))] = int32(index)
+		for index := range d.offsets[1:] {
+			d.hashmap[string(d.index(int32(index)))] = int32(index)
 		}
 	}
 
@@ -652,25 +661,26 @@ func (d *byteArrayDictionary) insert(indexes []int32, rows array, size, offset u
 
 		index, exists := d.hashmap[value]
 		if !exists {
-			index = int32(len(d.offsets))
+			index = int32(d.Len())
 			value = d.append(value)
 			d.hashmap[value] = index
 		}
 
 		indexes[i] = index
 	}
+
+	d.page.values = encoding.MakeByteArraySlice(d.offsets, d.values)
 }
 
 func (d *byteArrayDictionary) append(value string) string {
-	offset := len(d.values)
-	d.values = plain.AppendByteArrayString(d.values, value)
-	d.offsets = append(d.offsets, uint32(offset))
-	d.numValues++
-	return string(d.values[offset+plain.ByteArrayLengthSize : len(d.values)])
+	i := len(d.values)
+	d.values = append(d.values, value...)
+	d.offsets = append(d.offsets, int32(len(d.values)))
+	return string(d.values[i:])
 }
 
 func (d *byteArrayDictionary) Lookup(indexes []int32, values []Value) {
-	model := d.makeValueString("")
+	model := d.page.makeValueString("")
 	memsetValues(values, model)
 	d.lookupString(indexes, makeArrayValue(values), unsafe.Sizeof(model), unsafe.Offsetof(model.ptr))
 }
@@ -700,21 +710,21 @@ func (d *byteArrayDictionary) Bounds(indexes []int32) (min, max Value) {
 			}
 		}
 
-		min = d.makeValueString(minValue)
-		max = d.makeValueString(maxValue)
+		min = d.page.makeValueString(minValue)
+		max = d.page.makeValueString(maxValue)
 	}
 	return min, max
 }
 
 func (d *byteArrayDictionary) Reset() {
+	d.page.values = encoding.ByteArraySlice{}
 	d.offsets = d.offsets[:0]
 	d.values = d.values[:0]
-	d.numValues = 0
 	d.hashmap = nil
 }
 
 func (d *byteArrayDictionary) Page() BufferedPage {
-	return &d.byteArrayPage
+	return &d.page
 }
 
 type fixedLenByteArrayDictionary struct {

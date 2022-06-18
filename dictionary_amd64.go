@@ -34,7 +34,7 @@ func dictionaryLookup32bits(dict []uint32, indexes []int32, rows array, size, of
 func dictionaryLookup64bits(dict []uint64, indexes []int32, rows array, size, offset uintptr) errno
 
 //go:noescape
-func dictionaryLookupByteArrayString(dict []uint32, page []byte, indexes []int32, rows array, size, offset uintptr) errno
+func dictionaryLookupByteArrayString(dict []int32, page []byte, indexes []int32, rows array, size, offset uintptr) errno
 
 //go:noescape
 func dictionaryLookupFixedLenByteArrayString(dict []byte, len int, indexes []int32, rows array, size, offset uintptr) errno

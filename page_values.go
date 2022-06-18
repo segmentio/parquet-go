@@ -1,6 +1,7 @@
 package parquet
 
 import (
+	"fmt"
 	"io"
 
 	"github.com/segmentio/parquet-go/deprecated"
@@ -307,36 +308,33 @@ func (r *byteArrayPageValues) ReadByteArrays(values []byte) (int, error) {
 }
 
 func (r *byteArrayPageValues) readByteArrays(values []byte) (c, n int, err error) {
-	for r.offset < len(r.page.values) {
-		b := r.page.valueAt(uint32(r.offset))
-		k := plain.ByteArrayLengthSize + len(b)
-		if k > (len(values) - n) {
-			break
+	r.page.values.Slice(r.offset, r.page.values.Len()).Range(func(value []byte) bool {
+		size := plain.ByteArrayLengthSize + len(value)
+		if (len(values) - n) < size {
+			return false
 		}
-		plain.PutByteArrayLength(values[n:], len(b))
+		plain.PutByteArrayLength(values[n:], len(value))
 		n += plain.ByteArrayLengthSize
-		n += copy(values[n:], b)
-		r.offset += plain.ByteArrayLengthSize
-		r.offset += len(b)
-		c++
-	}
-	if r.offset == len(r.page.values) {
+		n += copy(values[n:], value)
+		c += 1
+		return true
+	})
+	r.offset += c
+	if r.offset == r.page.values.Len() {
 		err = io.EOF
-	} else if n == 0 && len(values) > 0 {
-		err = io.ErrShortBuffer
 	}
+	fmt.Println(c, n, err)
 	return c, n, err
 }
 
 func (r *byteArrayPageValues) ReadValues(values []Value) (n int, err error) {
-	for n < len(values) && r.offset < len(r.page.values) {
-		value := r.page.valueAt(uint32(r.offset))
+	for n < len(values) && r.offset < r.page.values.Len() {
+		value := r.page.values.Index(r.offset)
 		values[n] = r.page.makeValueBytes(value)
-		r.offset += plain.ByteArrayLengthSize
-		r.offset += len(value)
+		r.offset++
 		n++
 	}
-	if r.offset == len(r.page.values) {
+	if r.offset == r.page.values.Len() {
 		err = io.EOF
 	}
 	return n, err

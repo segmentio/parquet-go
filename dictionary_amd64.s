@@ -384,7 +384,7 @@ indexOutOfBounds:
     MOVQ $errnoIndexOutOfBounds, R12
     JMP return
 
-// func dictionaryBoundsUint32(dict []uint32, indexes []int32) (min, max uint32, err errno)
+// func dictionaryBoundsUint32(dict []int32, indexes []int32) (min, max uint32, err errno)
 TEXT ·dictionaryBoundsUint32(SB), NOSPLIT, $0-64
     MOVQ dict_base+0(FP), AX
     MOVQ dict_len+8(FP), BX
@@ -793,7 +793,7 @@ indexOutOfBounds:
     MOVQ $errnoIndexOutOfBounds, AX
     JMP return
 
-// func dictionaryLookupByteArrayString(dict []uint32, page []byte, indexes []int32, rows array, size, offset uintptr) errno
+// func dictionaryLookupByteArrayString(dict []int32, page []byte, indexes []int32, rows array, size, offset uintptr) errno
 TEXT ·dictionaryLookupByteArrayString(SB), NOSPLIT, $0-112
     MOVQ dict_base+0(FP), AX
     MOVQ dict_len+8(FP), BX
@@ -821,18 +821,16 @@ loop:
     // We trust the offsets to be correct since they are generated internally by
     // the dictionary code, there is no need to check that they are within the
     // bounds of the dictionary page.
-    MOVL (AX)(DI*4), DI
-
-    // Load the value from the dictionary page. The page uses the PLAIN encoding
-    // where each byte array is prefixed with a 4 bytes little endian length.
-    LEAQ 4(CX)(DI*1), DX
-    MOVL (CX)(DI*1), DI
+    MOVL 0(AX)(DI*4), DX
+    MOVL 4(AX)(DI*4), DI
+    SUBL DX, DI // length
+    LEAQ (CX)(DX*1), DX
 
     // Store the length and pointer to the value into the output location.
     // The memory layout is expected to hold a pointer and length, which are
     // both 64 bits words. This is the layout used by parquet.Value and the Go
     // string value type.
-    MOVQ DX, (R10)
+    MOVQ DX, 0(R10)
     MOVQ DI, 8(R10)
 
     ADDQ R11, R10
