@@ -1,6 +1,7 @@
 package parquet_test
 
 import (
+	"bytes"
 	"io"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/segmentio/parquet-go"
+	"github.com/segmentio/parquet-go/format"
 )
 
 var testdataFiles []string
@@ -141,5 +143,82 @@ func TestFileKeyValueMetadata(t *testing.T) {
 		if found, ok := f.Lookup(key); !ok || found != value {
 			t.Errorf("key/value metadata mismatch: want %q=%q but got %q=%q (found=%t)", key, value, key, found, ok)
 		}
+	}
+}
+
+type CachedReader struct {
+	f     *bytes.Reader
+	count int
+}
+
+func (c *CachedReader) ReadAt(p []byte, off int64) (n int, err error) {
+	c.count++
+	return c.f.ReadAt(p, off)
+}
+
+type BackendReader struct {
+	f     *bytes.Reader
+	count int
+}
+
+func (b *BackendReader) ReadAt(p []byte, off int64) (n int, err error) {
+	b.count++
+	return b.f.ReadAt(p, off)
+}
+
+func (b *BackendReader) FromMetadata(_ format.ColumnMetaData) io.ReaderAt {
+	return b
+}
+
+func TestOpenFileWithCaching(t *testing.T) {
+	sampleSize := 10
+
+	buf := new(bytes.Buffer)
+	rows := rowsOf(sampleSize, int32Column{}) // randomly chosen model to write dummy data
+	if err := writeParquetFile(buf, rows); err != nil {
+		t.Fatal(err)
+	}
+	file := bytes.NewReader(buf.Bytes())
+
+	b := &BackendReader{f: file}
+	c := &CachedReader{f: file}
+
+	// read metadata and check counts
+	pf, err := parquet.OpenFile(c, int64(buf.Len()), parquet.ConfigureColumnChunkReader(b))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// backend reader should not have been called for metadata reads
+	if b.count > 0 {
+		t.Fatalf("reading directly from file even though cached reader is passed")
+	}
+	// cached reader should have been called
+	cacheCount := c.count
+	if cacheCount == 0 {
+		t.Fatalf("not reading from cached reader")
+	}
+
+	// read column chunk data and check counts again
+	for _, rg := range pf.RowGroups() {
+		for _, cc := range rg.ColumnChunks() {
+			page, err := cc.Pages().ReadPage()
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			v := make([]parquet.Value, sampleSize)
+			n, err := page.Values().ReadValues(v)
+			if n != sampleSize {
+				t.Fatalf("number of values written != number of values read")
+			}
+		}
+	}
+	// backend reader should have been called now
+	if b.count == 0 {
+		t.Fatalf("backend reader not called even for column chunk data")
+	}
+	// cached reader count should not have been called for columnChunk data reads
+	if c.count > cacheCount {
+		t.Fatalf("cached reader called even after reading metadata")
 	}
 }

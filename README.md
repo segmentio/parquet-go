@@ -432,55 +432,39 @@ in memory, and pairs well with the use of optimizations like SIMD vectorization.
 
 #### A. Caching parquet file metadata
 
-In certain cases, we may require caching parquet metadata for quick access.
-This can be achieved by using custom options on the File reader/writer to
-retrieve handlers for accessing data from a secondary storage.
+In certain cases caching parquet metadata might be effective for quick access -
+for ex: when using an object store backend. In such cases, we can pass a cached
+reader to `parquet.OpenFile()` with an optional to use a backend reader to
+retrieve column chunk data. This can be achieved by using the
+`ConfigureColumnChunkReader` option as shown below -
 
 ```
-// Option to apply filepath to column chunk configuration
-type ApplyColumnChunkFilePath struct {
-	filepath string
-}
-
-func (a *ApplyColumnChunkFilePath) ConfigureWriter(wc *pq.WriterConfig) {
-	wc.ColumnChunkFilePath = a.filepath
-}
-
-var _ WriterOption = (*ApplyColumnChunkFilePath)(nil)
-
-w := NewWriter(file, ..., &ApplyColumnChunkFilePath{filepath: "foobar"})
-
-```
-
-```
-// Custom reader can be used to fetch data from a secondary backend
-type CustomIOReader struct {
+type CachedReader struct {
     ...
 }
 
-func (c *CustomIOReader) ReadAt(p []byte, off int64) (int, error) {
-    // custom reader implementation
+func (c *CachedReader) ReadAt(p []byte, off int64) (n int, err error) {
+    // caching logic
+    ...
 }
 
-var _ io.ReaderAt = (*CustomIOReader)(nil)
-
-// Option to provide a way to get io reader given filepath
-type ApplyCustomIOReader struct {
-	reader CustomIOReader
+type BackendReader struct {
+    ...
 }
 
-func (a *ApplyCustomIOReader) ConfigureFile(fc *FileConfig) {
-    // callback function to fetch handlers to read data from secondary backend
-	fc.GetIOReaderFromPath = func(filepath string) io.ReaderAt {
-        ...
-        return &a.reader
-	}
+func (b *BackendReader) ReadAt(p []byte, off int64) (n int, err error) {
+    // raw read from backend
+    ...
 }
 
-var _ FileOption = (*ApplyCustomIOReader)(nil)
+var _ io.ReaderAt = (*BackendReader)(nil)
 
-f, _ = OpenFile(file, ..., &ApplyCustomIOReader{reader: CustomIOReader{ioRWFromBackendRW: *remoteFile}})
+func (b *BackendReader) FromMetadata(_ format.ColumnMetaData) io.ReaderAt {
+	return b
+}
 
+// cachedReader for metadata access and backendReader for columnchunk data access
+f, _ = OpenFile(cachedReader, size, parquet.ConfigureColumnChunkReader(backendReader))
 ```
 
 ### Optimizing Writes
