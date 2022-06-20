@@ -89,6 +89,10 @@ func SchemaOf(model interface{}) *Schema {
 
 var cachedSchemas sync.Map // map[reflect.Type]*Schema
 
+func SchemaOfReflectType(model reflect.Type) *Schema {
+	return schemaOf(model)
+}
+
 func schemaOf(model reflect.Type) *Schema {
 	cached, _ := cachedSchemas.Load(model)
 	schema, _ := cached.(*Schema)
