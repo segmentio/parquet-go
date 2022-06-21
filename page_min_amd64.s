@@ -560,13 +560,17 @@ loop16:
     //
     // This loop is also take if the CPU has no support for AVX-512.
 loop:
-    MOVBEQQ (AX), R8
-    MOVBEQQ (BX), R9
+    MOVQ (AX), R8
+    MOVQ (BX), R9
+    BSWAPQ R8
+    BSWAPQ R9
     CMPQ R8, R9
     JB less
     JA next
-    MOVBEQQ 8(AX), R8
-    MOVBEQQ 8(BX), R9
+    MOVQ 8(AX), R8
+    MOVQ 8(BX), R9
+    BSWAPQ R8
+    BSWAPQ R9
     CMPQ R8, R9
     JAE next
 less:
