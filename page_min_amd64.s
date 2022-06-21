@@ -558,7 +558,7 @@ loop16:
     // Unless the input was aligned on 256 bytes, we need to perform a few more
     // iterations on the remaining elements.
     //
-    // This loop is also take if the CPU has no support for AVX-512.
+    // This loop is also taken if the CPU has no support for AVX-512.
 loop:
     MOVQ (AX), R8
     MOVQ (BX), R9
