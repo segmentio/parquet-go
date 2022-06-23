@@ -2,12 +2,6 @@
 
 package rle
 
-import (
-	"encoding/binary"
-
-	"github.com/segmentio/parquet-go/internal/bitpack"
-)
-
 func encodeBytesBitpack(dst []byte, src []uint64, bitWidth uint) int {
 	return encodeBytesBitpackDefault(dst, src, bitWidth)
 }
@@ -24,5 +18,5 @@ func encodeInt32Bitpack(dst []byte, src [][8]int32, bitWidth uint) int {
 }
 
 func decodeBytesBitpack(dst, src []byte, count, bitWidth uint) {
-	return decodeBytesBitpackDefault(dst, src, count, bitWidth)
+	decodeBytesBitpackDefault(dst, src, count, bitWidth)
 }
