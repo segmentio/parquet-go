@@ -326,7 +326,7 @@ type SchemaElement struct {
 
 	// When the original schema supports field ids, this will save the
 	// original field id in the parquet schema.
-	FieldID int32 `thrift:"9,optional"`
+	FieldID *int32 `thrift:"9,optional"`
 
 	// The logical type of this SchemaElement
 	//

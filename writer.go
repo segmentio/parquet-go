@@ -269,6 +269,11 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 			typeLength = &n
 		}
 
+		fieldID := (*int32)(nil)
+		if c, _ := node.(*Column); c != nil {
+			fieldID = c.FieldID()
+		}
+
 		w.schemaElements = append(w.schemaElements, format.SchemaElement{
 			Type:           nodeType.PhysicalType(),
 			TypeLength:     typeLength,
@@ -278,6 +283,7 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 			ConvertedType:  nodeType.ConvertedType(),
 			Scale:          scale,
 			Precision:      precision,
+			FieldID:        fieldID,
 			LogicalType:    logicalType,
 		})
 	})
