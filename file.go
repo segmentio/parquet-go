@@ -47,6 +47,9 @@ func OpenFile(r io.ReaderAt, size int64, options ...FileOption) (*File, error) {
 		return nil, err
 	}
 
+	if cast, ok := f.reader.(interface{ SetMagicHeaderSection(offset, length int64) }); ok {
+		cast.SetMagicHeaderSection(0, 4)
+	}
 	if _, err := r.ReadAt(b[:4], 0); err != nil {
 		return nil, fmt.Errorf("reading magic header of parquet file: %w", err)
 	}
@@ -54,6 +57,9 @@ func OpenFile(r io.ReaderAt, size int64, options ...FileOption) (*File, error) {
 		return nil, fmt.Errorf("invalid magic header of parquet file: %q", b[:4])
 	}
 
+	if cast, ok := f.reader.(interface{ SetMagicFooterSection(offset, length int64) }); ok {
+		cast.SetMagicFooterSection(size-8, 8)
+	}
 	if _, err := r.ReadAt(b[:8], size-8); err != nil {
 		return nil, fmt.Errorf("reading magic footer of parquet file: %w", err)
 	}
@@ -64,6 +70,9 @@ func OpenFile(r io.ReaderAt, size int64, options ...FileOption) (*File, error) {
 	footerSize := int64(binary.LittleEndian.Uint32(b[:4]))
 	footerData := make([]byte, footerSize)
 
+	if cast, ok := f.reader.(interface{ SetFooterSection(offset, length int64) }); ok {
+		cast.SetFooterSection(size-(footerSize+8), footerSize)
+	}
 	if _, err := f.reader.ReadAt(footerData, size-(footerSize+8)); err != nil {
 		return nil, fmt.Errorf("reading footer of parquet file: %w", err)
 	}
@@ -192,6 +201,9 @@ func (f *File) ReadPageIndex() ([]format.ColumnIndex, []format.OffsetIndex, erro
 	if columnIndexOffset > 0 {
 		columnIndexData := indexBuffer[:columnIndexLength]
 
+		if cast, ok := f.reader.(interface{ SetColumnIndexSection(offset, length int64) }); ok {
+			cast.SetColumnIndexSection(columnIndexOffset, columnIndexLength)
+		}
 		if _, err := f.reader.ReadAt(columnIndexData, columnIndexOffset); err != nil {
 			return nil, nil, fmt.Errorf("reading %d bytes column index at offset %d: %w", columnIndexLength, columnIndexOffset, err)
 		}
@@ -213,6 +225,9 @@ func (f *File) ReadPageIndex() ([]format.ColumnIndex, []format.OffsetIndex, erro
 	if offsetIndexOffset > 0 {
 		offsetIndexData := indexBuffer[:offsetIndexLength]
 
+		if cast, ok := f.reader.(interface{ SetOffsetIndexSection(offset, length int64) }); ok {
+			cast.SetOffsetIndexSection(offsetIndexOffset, offsetIndexLength)
+		}
 		if _, err := f.reader.ReadAt(offsetIndexData, offsetIndexOffset); err != nil {
 			return nil, nil, fmt.Errorf("reading %d bytes offset index at offset %d: %w", offsetIndexLength, offsetIndexOffset, err)
 		}
