@@ -404,6 +404,11 @@ func (f *structField) Value(base reflect.Value) reflect.Value {
 	switch base.Kind() {
 	case reflect.Map:
 		return base.MapIndex(reflect.ValueOf(&f.name).Elem())
+	case reflect.Pointer:
+		if base.IsNil() {
+			base.Set(reflect.New(base.Type().Elem()))
+		}
+		return fieldByIndex(base.Elem(), f.index)
 	default:
 		if len(f.index) == 1 {
 			return base.Field(f.index[0])
