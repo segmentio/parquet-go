@@ -87,11 +87,7 @@ func CheckSplitBlock(r io.ReaderAt, n int64, x uint64) (bool, error) {
 	defer releaseBlock(block)
 	offset := BlockSize * fasthash1x64(x, int32(n/BlockSize))
 
-	buf := block.Bytes()
-	if cast, ok := r.(interface{ SetBloomFilterSection(offset, length int64) }); ok {
-		cast.SetBloomFilterSection(int64(offset), int64(len(buf)))
-	}
-	_, err := r.ReadAt(buf, int64(offset))
+	_, err := r.ReadAt(block.Bytes(), int64(offset))
 	return block.Check(uint32(x)), err
 }
 

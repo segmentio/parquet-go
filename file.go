@@ -47,9 +47,6 @@ func OpenFile(r io.ReaderAt, size int64, options ...FileOption) (*File, error) {
 		return nil, err
 	}
 
-	if cast, ok := f.reader.(interface{ SetMagicHeaderSection(offset, length int64) }); ok {
-		cast.SetMagicHeaderSection(0, 4)
-	}
 	if _, err := r.ReadAt(b[:4], 0); err != nil {
 		return nil, fmt.Errorf("reading magic header of parquet file: %w", err)
 	}
@@ -126,6 +123,10 @@ func OpenFile(r io.ReaderAt, size int64, options ...FileOption) (*File, error) {
 						return nil, err
 					}
 					offset, _ = s.Seek(0, io.SeekCurrent)
+					if cast, ok := r.(interface{ SetBloomFilterSection(offset, length int64) }); ok {
+						cast.SetBloomFilterSection(int64(offset), int64(h.NumBytes))
+					}
+
 					c.bloomFilter = newBloomFilter(r, offset, &h)
 				}
 			}
