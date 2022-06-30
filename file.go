@@ -124,7 +124,9 @@ func OpenFile(r io.ReaderAt, size int64, options ...FileOption) (*File, error) {
 					}
 					offset, _ = s.Seek(0, io.SeekCurrent)
 					if cast, ok := r.(interface{ SetBloomFilterSection(offset, length int64) }); ok {
-						cast.SetBloomFilterSection(int64(offset), int64(h.NumBytes))
+						bloomFilterOffset := c.chunk.MetaData.BloomFilterOffset
+						bloomFilterLength := (offset - bloomFilterOffset) + int64(h.NumBytes)
+						cast.SetBloomFilterSection(bloomFilterOffset, bloomFilterLength)
 					}
 
 					c.bloomFilter = newBloomFilter(r, offset, &h)
