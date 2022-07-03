@@ -7,7 +7,7 @@ import (
 )
 
 func TestUint64TableProbeOneByOne(t *testing.T) {
-	const N = 58
+	const N = 500
 	table := NewUint64Table(0, 0.9)
 
 	for n := 0; n < 2; n++ {

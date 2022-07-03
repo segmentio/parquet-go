@@ -3,13 +3,38 @@ package hashprobe
 import (
 	"math"
 	"math/bits"
+	"math/rand"
+
+	"github.com/segmentio/parquet-go/hashprobe/aeshash"
+	"github.com/segmentio/parquet-go/hashprobe/wyhash"
 )
+
+func hash64Uint64(value, seed uint64) uint64 {
+	if aeshash.Enabled() {
+		return aeshash.Sum64Uint64(value, seed)
+	} else {
+		return wyhash.Sum64Uint64(value, seed)
+	}
+}
+
+func multiHash64Uint64(hashes, values []uint64, seed uint64) {
+	if aeshash.Enabled() {
+		aeshash.MultiSum64Uint64(hashes, values, seed)
+	} else {
+		wyhash.MultiSum64Uint64(hashes, values, seed)
+	}
+}
+
+func nextPowerOf2(n int) int {
+	return 1 << (64 - bits.LeadingZeros64(uint64(n-1)))
+}
 
 type Uint64Table struct {
 	len     int
 	cap     int
 	maxLen  int
 	maxLoad float64
+	seed    uint64
 	table   []uint64
 }
 
@@ -32,6 +57,7 @@ func (t *Uint64Table) init(cap int, maxLoad float64) {
 		cap:     cap,
 		maxLen:  int(math.Ceil(maxLoad * float64(cap))),
 		maxLoad: maxLoad,
+		seed:    rand.Uint64(),
 		table:   make([]uint64, cap/64+2*cap),
 	}
 }
@@ -80,7 +106,7 @@ func (t *Uint64Table) insert(pairs []uint64) {
 	mod := uint64(t.cap) - 1
 
 	for i := 0; i < len(pairs); i += 2 {
-		hash := hash64(0, pairs[i])
+		hash := hash64Uint64(pairs[i], t.seed)
 
 		for {
 			position := hash & mod
@@ -114,9 +140,55 @@ func (t *Uint64Table) Probe(keys []uint64, values []int32) {
 	if totalValues := t.len + len(keys); totalValues > t.maxLen {
 		t.grow(totalValues)
 	}
-	t.len = probe64(t.table, t.len, t.cap, keys, values)
+
+	var hashes [512]uint64
+
+	for i := 0; i < len(keys); {
+		j := len(hashes) + i
+		n := len(hashes)
+
+		if j > len(keys) {
+			j = len(keys)
+			n = len(keys) - i
+		}
+
+		multiHash64Uint64(hashes[:n:n], keys[i:j:j], t.seed)
+		t.len = multiProbe64Uint64(t.table, t.cap, t.len, values[i:j:j], keys[i:j:j], hashes[:n:n])
+
+		i = j
+	}
 }
 
-func nextPowerOf2(n int) int {
-	return 1 << (64 - bits.LeadingZeros64(uint64(n-1)))
+func multiProbe64Uint64(table []uint64, cap, len int, values []int32, keys, hashes []uint64) int {
+	offset := uint64(cap / 64)
+	modulo := uint64(cap) - 1
+
+	for i, hash := range hashes {
+		for {
+			position := hash & modulo
+			index := position / 64
+			shift := position % 64
+
+			position *= 2
+			position += offset
+
+			if (table[index] & (1 << shift)) == 0 {
+				table[index] |= 1 << shift
+				table[position+0] = keys[i]
+				table[position+1] = uint64(len)
+				values[i] = int32(len)
+				len++
+				break
+			}
+
+			if table[position] == keys[i] {
+				values[i] = int32(table[position+1])
+				break
+			}
+
+			hash++
+		}
+	}
+
+	return len
 }
