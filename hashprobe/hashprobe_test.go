@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 	"testing"
+	"time"
 )
 
 func TestUint64TableProbeOneByOne(t *testing.T) {
@@ -80,9 +81,11 @@ func benchmarkUint64Loop(b *testing.B, f func([]uint64, []int32), keys []uint64,
 	const N = 100
 	i := 0
 	j := N
+	b.SetBytes(8 * N)
 
 	_ = keys[:len(values)]
 	_ = values[:len(keys)]
+	start := time.Now()
 
 	for k := 0; k < b.N; k++ {
 		if j > len(keys) {
@@ -95,6 +98,9 @@ func benchmarkUint64Loop(b *testing.B, f func([]uint64, []int32), keys []uint64,
 			i, j = j, j+N
 		}
 	}
+
+	seconds := time.Since(start).Seconds()
+	b.ReportMetric(float64(N*b.N)/seconds, "probe/s")
 }
 
 func generateUint64Table(n int) ([]uint64, []int32) {
