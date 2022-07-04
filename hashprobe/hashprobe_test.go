@@ -28,7 +28,7 @@ func TestUint64TableProbeOneByOne(t *testing.T) {
 }
 
 func TestUint64TableProbeBulk(t *testing.T) {
-	const N = 10
+	const N = 1000
 	table := NewUint64Table(0, 0.9)
 
 	k := make([]uint64, N)

@@ -2,7 +2,7 @@
 
 package hashprobe
 
-func multiProbe64Uint64(table []uint64, len, cap int, hashes, keys []uint64, values []int32) int {
+func multiProbe64bits(table []uint64, len, cap int, hashes, keys []uint64, values []int32) int {
 	offset := uint64(cap / 64)
 	modulo := uint64(cap) - 1
 
