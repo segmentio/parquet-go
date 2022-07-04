@@ -27,6 +27,36 @@ func TestUint64TableProbeOneByOne(t *testing.T) {
 	}
 }
 
+func TestUint64TableProbeBulk(t *testing.T) {
+	const N = 10
+	table := NewUint64Table(0, 0.9)
+
+	k := make([]uint64, N)
+	v := make([]int32, N)
+
+	for i := range k {
+		k[i] = uint64(i)
+	}
+
+	for n := 0; n < 2; n++ {
+		table.Probe(k, v)
+
+		for i := range v {
+			if v[i] != int32(i) {
+				t.Errorf("wrong value probed for key=%d: want=%d got=%d", k[i], i, v[i])
+			}
+		}
+
+		if t.Failed() {
+			break
+		}
+
+		for i := range v {
+			v[i] = 0
+		}
+	}
+}
+
 type uint64Table interface {
 	Reset()
 	Len() int
@@ -78,7 +108,7 @@ func benchmarkUint64Table(b *testing.B, newTable func(size int) uint64Table) {
 }
 
 func benchmarkUint64Loop(b *testing.B, f func([]uint64, []int32), keys []uint64, values []int32) {
-	const N = 100
+	const N = 128
 	i := 0
 	j := N
 	b.SetBytes(8 * N)
