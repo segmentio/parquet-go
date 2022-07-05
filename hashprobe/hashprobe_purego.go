@@ -2,9 +2,9 @@
 
 package hashprobe
 
-func multiProbe32bits(table []uint32, len, cap int, hashes, keys []uint32, values []int32) int {
-	offset := uint32(cap / 32)
-	modulo := uint32(cap) - 1
+func multiProbe32bits(table []uint32, len, cap int, hashes []uintptr, keys []uint32, values []int32) int {
+	offset := uintptr(cap) / 32
+	modulo := uintptr(cap) - 1
 
 	for i, hash := range hashes {
 		for {
@@ -36,9 +36,9 @@ func multiProbe32bits(table []uint32, len, cap int, hashes, keys []uint32, value
 	return len
 }
 
-func multiProbe64bits(table []uint64, len, cap int, hashes, keys []uint64, values []int32) int {
-	offset := uint64(cap / 64)
-	modulo := uint64(cap) - 1
+func multiProbe64bits(table []uint64, len, cap int, hashes []uintptr, keys []uint64, values []int32) int {
+	offset := uintptr(cap) / 64
+	modulo := uintptr(cap) - 1
 
 	for i, hash := range hashes {
 		for {

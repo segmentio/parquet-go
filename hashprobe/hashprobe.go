@@ -10,35 +10,39 @@ import (
 	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
-func hash32bits(value, seed uint32) uint32 {
+func randSeed() uintptr {
+	return uintptr(rand.Uint64())
+}
+
+func hash32bits(value uint32, seed uintptr) uintptr {
 	if aeshash.Enabled() {
-		return aeshash.Sum32Uint32(value, seed)
+		return aeshash.Hash32(value, seed)
 	} else {
-		return wyhash.Sum32Uint32(value, seed)
+		return wyhash.Hash32(value, seed)
 	}
 }
 
-func multiHash32bits(hashes, values []uint32, seed uint32) {
+func multiHash32bits(hashes []uintptr, values []uint32, seed uintptr) {
 	if aeshash.Enabled() {
-		aeshash.MultiSum32Uint32(hashes, values, seed)
+		aeshash.MultiHash32(hashes, values, seed)
 	} else {
-		wyhash.MultiSum32Uint32(hashes, values, seed)
+		wyhash.MultiHash32(hashes, values, seed)
 	}
 }
 
-func hash64bits(value, seed uint64) uint64 {
+func hash64bits(value uint64, seed uintptr) uintptr {
 	if aeshash.Enabled() {
-		return aeshash.Sum64Uint64(value, seed)
+		return aeshash.Hash64(value, seed)
 	} else {
-		return wyhash.Sum64Uint64(value, seed)
+		return wyhash.Hash64(value, seed)
 	}
 }
 
-func multiHash64bits(hashes, values []uint64, seed uint64) {
+func multiHash64bits(hashes []uintptr, values []uint64, seed uintptr) {
 	if aeshash.Enabled() {
-		aeshash.MultiSum64Uint64(hashes, values, seed)
+		aeshash.MultiHash64(hashes, values, seed)
 	} else {
-		wyhash.MultiSum64Uint64(hashes, values, seed)
+		wyhash.MultiHash64(hashes, values, seed)
 	}
 }
 
@@ -97,7 +101,7 @@ type table32bits struct {
 	cap     int
 	maxLen  int
 	maxLoad float64
-	seed    uint32
+	seed    uintptr
 	table   []uint32
 }
 
@@ -114,7 +118,7 @@ func (t *table32bits) init(cap int, maxLoad float64) {
 		cap:     cap,
 		maxLen:  int(math.Ceil(maxLoad * float64(cap))),
 		maxLoad: maxLoad,
-		seed:    rand.Uint32(),
+		seed:    randSeed(),
 		table:   make([]uint32, cap/32+2*cap),
 	}
 }
@@ -160,7 +164,7 @@ func (t *table32bits) grow(totalValues int) {
 
 func (t *table32bits) insert(pairs []uint32) {
 	flags, table := t.content()
-	mod := uint32(t.cap) - 1
+	mod := uintptr(t.cap) - 1
 
 	for i := 0; i < len(pairs); i += 2 {
 		hash := hash32bits(pairs[i], t.seed)
@@ -199,7 +203,7 @@ func (t *table32bits) probe(keys []uint32, values []int32) {
 		t.grow(totalValues)
 	}
 
-	var hashes [256]uint32
+	var hashes [128]uintptr
 
 	for i := 0; i < len(keys); {
 		j := len(hashes) + i
@@ -268,7 +272,7 @@ type table64bits struct {
 	cap     int
 	maxLen  int
 	maxLoad float64
-	seed    uint64
+	seed    uintptr
 	table   []uint64
 }
 
@@ -285,7 +289,7 @@ func (t *table64bits) init(cap int, maxLoad float64) {
 		cap:     cap,
 		maxLen:  int(math.Ceil(maxLoad * float64(cap))),
 		maxLoad: maxLoad,
-		seed:    rand.Uint64(),
+		seed:    randSeed(),
 		table:   make([]uint64, cap/64+2*cap),
 	}
 }
@@ -331,7 +335,7 @@ func (t *table64bits) grow(totalValues int) {
 
 func (t *table64bits) insert(pairs []uint64) {
 	flags, table := t.content()
-	mod := uint64(t.cap) - 1
+	mod := uintptr(t.cap) - 1
 
 	for i := 0; i < len(pairs); i += 2 {
 		hash := hash64bits(pairs[i], t.seed)
@@ -370,7 +374,7 @@ func (t *table64bits) probe(keys []uint64, values []int32) {
 		t.grow(totalValues)
 	}
 
-	var hashes [128]uint64
+	var hashes [128]uintptr
 
 	for i := 0; i < len(keys); {
 		j := len(hashes) + i

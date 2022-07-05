@@ -2,7 +2,7 @@
 
 #include "textflag.h"
 
-// func multiProbe32bits(table []uint32, len, cap int, hashes, keys []uint32, values []int32) int
+// func multiProbe32bits(table []uint32, len, cap int, hashes []uintptr, keys []uint32, values []int32) int
 TEXT ·multiProbe32bits(SB), NOSPLIT, $0-120
     MOVQ table_base+0(FP), AX
     MOVQ len+24(FP), BX
@@ -12,27 +12,27 @@ TEXT ·multiProbe32bits(SB), NOSPLIT, $0-120
     MOVQ keys_base+64(FP), R8
     MOVQ values_base+88(FP), R9
 
-    MOVL CX, R10
-    SHRL $5, R10 // offset = cap / 32
+    MOVQ CX, R10
+    SHRQ $5, R10 // offset = cap / 32
 
-    MOVL CX, R11
-    DECL R11 // modulo = cap - 1
+    MOVQ CX, R11
+    DECQ R11 // modulo = cap - 1
 
     XORQ SI, SI
     JMP test
 loop:
-    MOVL (DX)(SI*4), R12 // hash
+    MOVQ (DX)(SI*8), R12 // hash
 probe:
-    MOVL R12, R13
-    ANDL R11, R13 // position = hash & modulo
+    MOVQ R12, R13
+    ANDQ R11, R13 // position = hash & modulo
 
-    MOVL R13, R14
-    MOVL R13, R15
-    SHRL $5, R14       // index = position / 32
-    ANDL $0b11111, R15 // shift = position % 32
+    MOVQ R13, R14
+    MOVQ R13, R15
+    SHRQ $5, R14       // index = position / 32
+    ANDQ $0b11111, R15 // shift = position % 32
 
-    SHLL $1, R13  // position *= 2
-    ADDL R10, R13 // position += offset
+    SHLQ $1, R13  // position *= 2
+    ADDQ R10, R13 // position += offset
 
     MOVL (AX)(R14*4), CX
     BTSL R15, CX
@@ -56,13 +56,13 @@ insert:
     MOVL R14, (AX)(R13*4)
     MOVL BX, 4(AX)(R13*4)
     MOVL BX, (R9)(SI*4)
-    INCL BX // len++
+    INCQ BX // len++
     JMP next
 nextprobe:
-    INCL R12
+    INCQ R12
     JMP probe
 
-// func multiProbe64bits(table []uint64, len, cap int, hashes, keys []uint64, values []int32) int
+// func multiProbe64bits(table []uint64, len, cap int, hashes []uintptr, keys []uint64, values []int32) int
 TEXT ·multiProbe64bits(SB), NOSPLIT, $0-120
     MOVQ table_base+0(FP), AX
     MOVQ len+24(FP), BX
