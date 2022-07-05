@@ -10,6 +10,20 @@ import (
 	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
+const (
+	// Number of probes tested per iteration. This parameter balances between
+	// the amount of memory allocated on the stack to hold the computed hashes
+	// of the keys being probed, and amortizing the baseline cost of the probing
+	// algorithm.
+	//
+	// The larger the value, the more memory is required, but lower the baseline
+	// cost will be.
+	//
+	// We chose a value that is somewhat large, resulting in reserving 2KiB of
+	// stack but mostly erasing the baseline cost.
+	probesPerLoop = 256
+)
+
 var (
 	hash32 = wyhash.Hash32
 	hash64 = wyhash.Hash64
@@ -42,8 +56,8 @@ func (t *Int32Table) Len() int { return t.len }
 
 func (t *Int32Table) Cap() int { return t.cap }
 
-func (t *Int32Table) Probe(keys, values []int32) {
-	t.probe(unsafecast.Int32ToUint32(keys), values)
+func (t *Int32Table) Probe(keys, values []int32) int {
+	return t.probe(unsafecast.Int32ToUint32(keys), values)
 }
 
 type Float32Table struct{ table32 }
@@ -58,8 +72,8 @@ func (t *Float32Table) Len() int { return t.len }
 
 func (t *Float32Table) Cap() int { return t.cap }
 
-func (t *Float32Table) Probe(keys []float32, values []int32) {
-	t.probe(unsafecast.Float32ToUint32(keys), values)
+func (t *Float32Table) Probe(keys []float32, values []int32) int {
+	return t.probe(unsafecast.Float32ToUint32(keys), values)
 }
 
 type Uint32Table struct{ table32 }
@@ -74,7 +88,9 @@ func (t *Uint32Table) Len() int { return t.len }
 
 func (t *Uint32Table) Cap() int { return t.cap }
 
-func (t *Uint32Table) Probe(keys []uint32, values []int32) { t.probe(keys, values) }
+func (t *Uint32Table) Probe(keys []uint32, values []int32) int {
+	return t.probe(keys, values)
+}
 
 type table32 struct {
 	len     int
@@ -178,12 +194,13 @@ func (t *table32) reset() {
 	t.len = 0
 }
 
-func (t *table32) probe(keys []uint32, values []int32) {
+func (t *table32) probe(keys []uint32, values []int32) int {
 	if totalValues := t.len + len(keys); totalValues > t.maxLen {
 		t.grow(totalValues)
 	}
 
-	var hashes [128]uintptr
+	var hashes [probesPerLoop]uintptr
+	var baseLength = t.len
 	var useAesHash = aeshash.Enabled()
 
 	for i := 0; i < len(keys); {
@@ -208,6 +225,8 @@ func (t *table32) probe(keys []uint32, values []int32) {
 		t.len = multiProbe32(t.table, t.len, t.cap, h, k, v)
 		i = j
 	}
+
+	return t.len - baseLength
 }
 
 type Int64Table struct{ table64 }
@@ -222,8 +241,8 @@ func (t *Int64Table) Len() int { return t.len }
 
 func (t *Int64Table) Cap() int { return t.cap }
 
-func (t *Int64Table) Probe(keys []int64, values []int32) {
-	t.probe(unsafecast.Int64ToUint64(keys), values)
+func (t *Int64Table) Probe(keys []int64, values []int32) int {
+	return t.probe(unsafecast.Int64ToUint64(keys), values)
 }
 
 type Float64Table struct{ table64 }
@@ -238,8 +257,8 @@ func (t *Float64Table) Len() int { return t.len }
 
 func (t *Float64Table) Cap() int { return t.cap }
 
-func (t *Float64Table) Probe(keys []float64, values []int32) {
-	t.probe(unsafecast.Float64ToUint64(keys), values)
+func (t *Float64Table) Probe(keys []float64, values []int32) int {
+	return t.probe(unsafecast.Float64ToUint64(keys), values)
 }
 
 type Uint64Table struct{ table64 }
@@ -254,7 +273,9 @@ func (t *Uint64Table) Len() int { return t.len }
 
 func (t *Uint64Table) Cap() int { return t.cap }
 
-func (t *Uint64Table) Probe(keys []uint64, values []int32) { t.probe(keys, values) }
+func (t *Uint64Table) Probe(keys []uint64, values []int32) int {
+	return t.probe(keys, values)
+}
 
 type table64 struct {
 	len     int
@@ -358,12 +379,13 @@ func (t *table64) reset() {
 	t.len = 0
 }
 
-func (t *table64) probe(keys []uint64, values []int32) {
+func (t *table64) probe(keys []uint64, values []int32) int {
 	if totalValues := t.len + len(keys); totalValues > t.maxLen {
 		t.grow(totalValues)
 	}
 
-	var hashes [128]uintptr
+	var hashes [probesPerLoop]uintptr
+	var baseLength = t.len
 	var useAesHash = aeshash.Enabled()
 
 	for i := 0; i < len(keys); {
@@ -388,4 +410,6 @@ func (t *table64) probe(keys []uint64, values []int32) {
 		t.len = multiProbe64(t.table, t.len, t.cap, h, k, v)
 		i = j
 	}
+
+	return t.len - baseLength
 }

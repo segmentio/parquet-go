@@ -110,7 +110,7 @@ func TestUint64TableProbeBulk(t *testing.T) {
 type uint32Table interface {
 	Reset()
 	Len() int
-	Probe([]uint32, []int32)
+	Probe([]uint32, []int32) int
 }
 
 type uint32Map map[uint32]int32
@@ -125,7 +125,7 @@ func (m uint32Map) Len() int {
 	return len(m)
 }
 
-func (m uint32Map) Probe(keys []uint32, values []int32) {
+func (m uint32Map) Probe(keys []uint32, values []int32) (n int) {
 	_ = values[:len(keys)]
 
 	for i, k := range keys {
@@ -133,9 +133,12 @@ func (m uint32Map) Probe(keys []uint32, values []int32) {
 		if !ok {
 			v = int32(len(m))
 			m[k] = v
+			n++
 		}
 		values[i] = v
 	}
+
+	return n
 }
 
 func BenchmarkUint32Table(b *testing.B) {
@@ -157,7 +160,7 @@ func benchmarkUint32Table(b *testing.B, newTable func(size int) uint32Table) {
 	}
 }
 
-func benchmarkUint32Loop(b *testing.B, f func([]uint32, []int32), keys []uint32, values []int32) {
+func benchmarkUint32Loop(b *testing.B, f func([]uint32, []int32) int, keys []uint32, values []int32) {
 	const N = 500
 	i := 0
 	j := N
@@ -198,7 +201,7 @@ func generateUint32Table(n int) ([]uint32, []int32) {
 type uint64Table interface {
 	Reset()
 	Len() int
-	Probe([]uint64, []int32)
+	Probe([]uint64, []int32) int
 }
 
 type uint64Map map[uint64]int32
@@ -213,7 +216,7 @@ func (m uint64Map) Len() int {
 	return len(m)
 }
 
-func (m uint64Map) Probe(keys []uint64, values []int32) {
+func (m uint64Map) Probe(keys []uint64, values []int32) (n int) {
 	_ = values[:len(keys)]
 
 	for i, k := range keys {
@@ -221,9 +224,12 @@ func (m uint64Map) Probe(keys []uint64, values []int32) {
 		if !ok {
 			v = int32(len(m))
 			m[k] = v
+			n++
 		}
 		values[i] = v
 	}
+
+	return n
 }
 
 func BenchmarkUint64Table(b *testing.B) {
@@ -245,7 +251,7 @@ func benchmarkUint64Table(b *testing.B, newTable func(size int) uint64Table) {
 	}
 }
 
-func benchmarkUint64Loop(b *testing.B, f func([]uint64, []int32), keys []uint64, values []int32) {
+func benchmarkUint64Loop(b *testing.B, f func([]uint64, []int32) int, keys []uint64, values []int32) {
 	const N = 200
 	i := 0
 	j := N

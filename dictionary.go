@@ -8,11 +8,25 @@ import (
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/encoding/plain"
+	"github.com/segmentio/parquet-go/hashprobe"
 	"github.com/segmentio/parquet-go/internal/bitpack"
 	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 const (
+	// Number of values per loop iteration of the dictionary insert algorithm's
+	// inner loop.
+	//
+	// This value balances between the size of stack allocations and amortizing
+	// the baseline cost of the insert algorithm.
+	//
+	// The larger the value, the more memory is required, but the lower the
+	// baseline cost will be.
+	//
+	// We chose a value that is somewhat large and favors reducing the baseline
+	// compute cost.
+	insertsPerLoop = 256
+
 	// Completely arbitrary, feel free to adjust if a different value would be
 	// more representative of the map implementation in Go.
 	mapSizeOverheadPerItem = 8
@@ -200,7 +214,7 @@ func (d *booleanDictionary) Page() BufferedPage {
 
 type int32Dictionary struct {
 	int32Page
-	hashmap map[int32]int32
+	table *hashprobe.Int32Table
 }
 
 func newInt32Dictionary(typ Type, columnIndex int16, numValues int32, values []byte) *int32Dictionary {
@@ -226,27 +240,55 @@ func (d *int32Dictionary) Insert(indexes []int32, values []Value) {
 	d.insert(indexes, makeArrayValue(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
 }
 
+func (d *int32Dictionary) init(indexes []int32) {
+	d.table = hashprobe.NewInt32Table(cap(d.values), 0.9)
+
+	n := len(d.values)
+	if n > len(indexes) {
+		n = len(indexes)
+	}
+
+	for i := 0; i < len(d.values); i += n {
+		j := i + n
+		if j > len(d.values) {
+			j = len(d.values)
+		}
+		d.table.Probe(d.values[i:j:j], indexes[:n:n])
+	}
+}
+
 func (d *int32Dictionary) insert(indexes []int32, rows array, size, offset uintptr) {
 	_ = indexes[:rows.len]
 
-	if d.hashmap == nil {
-		d.hashmap = make(map[int32]int32, cap(d.values))
-		for i, v := range d.values {
-			d.hashmap[v] = int32(i)
-		}
+	if d.table == nil {
+		d.init(indexes)
 	}
 
-	for i := 0; i < rows.len; i++ {
-		value := *(*int32)(rows.index(i, size, offset))
+	var values [insertsPerLoop]int32
 
-		index, exists := d.hashmap[value]
-		if !exists {
-			index = int32(len(d.values))
-			d.values = append(d.values, value)
-			d.hashmap[value] = index
+	for i := 0; i < rows.len; {
+		j := len(values) + i
+		n := len(values)
+		if j > rows.len {
+			j = rows.len
+			n = rows.len - i
 		}
 
-		indexes[i] = index
+		slice := rows.slice(i, j, size, offset)
+		writeValuesInt32(values[:n], slice, size, offset)
+
+		lastIndex := int32(len(d.values))
+		inserted := d.table.Probe(values[:n:n], indexes[i:j:j])
+
+		if inserted > 0 {
+			for k, v := range values[:n] {
+				if indexes[i+k] >= lastIndex {
+					d.values = append(d.values, v)
+				}
+			}
+		}
+
+		i = j
 	}
 }
 
@@ -267,7 +309,9 @@ func (d *int32Dictionary) Bounds(indexes []int32) (min, max Value) {
 
 func (d *int32Dictionary) Reset() {
 	d.values = d.values[:0]
-	d.hashmap = nil
+	if d.table != nil {
+		d.table.Reset()
+	}
 }
 
 func (d *int32Dictionary) Page() BufferedPage {
