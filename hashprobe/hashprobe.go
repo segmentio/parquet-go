@@ -11,14 +11,14 @@ import (
 )
 
 var (
-	hash32bits = wyhash.Hash32
-	hash64bits = wyhash.Hash64
+	hash32 = wyhash.Hash32
+	hash64 = wyhash.Hash64
 )
 
 func init() {
 	if aeshash.Enabled() {
-		hash32bits = aeshash.Hash32
-		hash64bits = aeshash.Hash64
+		hash32 = aeshash.Hash32
+		hash64 = aeshash.Hash64
 	}
 }
 
@@ -30,10 +30,10 @@ func randSeed() uintptr {
 	return uintptr(rand.Uint64())
 }
 
-type Int32Table struct{ table32bits }
+type Int32Table struct{ table32 }
 
 func NewInt32Table(cap int, maxLoad float64) *Int32Table {
-	return &Int32Table{makeTable32bits(cap, maxLoad)}
+	return &Int32Table{makeTable32(cap, maxLoad)}
 }
 
 func (t *Int32Table) Reset() { t.reset() }
@@ -46,10 +46,10 @@ func (t *Int32Table) Probe(keys, values []int32) {
 	t.probe(unsafecast.Int32ToUint32(keys), values)
 }
 
-type Float32Table struct{ table32bits }
+type Float32Table struct{ table32 }
 
 func NewFloat32Table(cap int, maxLoad float64) *Float32Table {
-	return &Float32Table{makeTable32bits(cap, maxLoad)}
+	return &Float32Table{makeTable32(cap, maxLoad)}
 }
 
 func (t *Float32Table) Reset() { t.reset() }
@@ -62,10 +62,10 @@ func (t *Float32Table) Probe(keys []float32, values []int32) {
 	t.probe(unsafecast.Float32ToUint32(keys), values)
 }
 
-type Uint32Table struct{ table32bits }
+type Uint32Table struct{ table32 }
 
 func NewUint32Table(cap int, maxLoad float64) *Uint32Table {
-	return &Uint32Table{makeTable32bits(cap, maxLoad)}
+	return &Uint32Table{makeTable32(cap, maxLoad)}
 }
 
 func (t *Uint32Table) Reset() { t.reset() }
@@ -76,7 +76,7 @@ func (t *Uint32Table) Cap() int { return t.cap }
 
 func (t *Uint32Table) Probe(keys []uint32, values []int32) { t.probe(keys, values) }
 
-type table32bits struct {
+type table32 struct {
 	len     int
 	cap     int
 	maxLen  int
@@ -85,7 +85,7 @@ type table32bits struct {
 	table   []uint32
 }
 
-func makeTable32bits(cap int, maxLoad float64) (t table32bits) {
+func makeTable32(cap int, maxLoad float64) (t table32) {
 	if cap < 32 {
 		cap = 32
 	}
@@ -93,8 +93,8 @@ func makeTable32bits(cap int, maxLoad float64) (t table32bits) {
 	return t
 }
 
-func (t *table32bits) init(cap int, maxLoad float64) {
-	*t = table32bits{
+func (t *table32) init(cap int, maxLoad float64) {
+	*t = table32{
 		cap:     cap,
 		maxLen:  int(math.Ceil(maxLoad * float64(cap))),
 		maxLoad: maxLoad,
@@ -103,14 +103,14 @@ func (t *table32bits) init(cap int, maxLoad float64) {
 	}
 }
 
-func (t *table32bits) grow(totalValues int) {
+func (t *table32) grow(totalValues int) {
 	cap := 2 * t.cap
 	totalValues = nextPowerOf2(totalValues)
 	if totalValues > cap {
 		cap = totalValues
 	}
 
-	tmp := table32bits{}
+	tmp := table32{}
 	tmp.init(cap, t.maxLoad)
 	tmp.len = t.len
 
@@ -142,12 +142,12 @@ func (t *table32bits) grow(totalValues int) {
 	*t = tmp
 }
 
-func (t *table32bits) insert(pairs []uint32) {
+func (t *table32) insert(pairs []uint32) {
 	flags, table := t.content()
 	mod := uintptr(t.cap) - 1
 
 	for i := 0; i < len(pairs); i += 2 {
-		hash := hash32bits(pairs[i], t.seed)
+		hash := hash32(pairs[i], t.seed)
 
 		for {
 			position := hash & mod
@@ -166,19 +166,19 @@ func (t *table32bits) insert(pairs []uint32) {
 	}
 }
 
-func (t *table32bits) content() (flags, pairs []uint32) {
+func (t *table32) content() (flags, pairs []uint32) {
 	n := t.cap / 32
 	return t.table[:n:n], t.table[n:len(t.table):len(t.table)]
 }
 
-func (t *table32bits) reset() {
+func (t *table32) reset() {
 	for i := range t.table {
 		t.table[i] = 0
 	}
 	t.len = 0
 }
 
-func (t *table32bits) probe(keys []uint32, values []int32) {
+func (t *table32) probe(keys []uint32, values []int32) {
 	if totalValues := t.len + len(keys); totalValues > t.maxLen {
 		t.grow(totalValues)
 	}
@@ -205,15 +205,15 @@ func (t *table32bits) probe(keys []uint32, values []int32) {
 			wyhash.MultiHash32(h, k, t.seed)
 		}
 
-		t.len = multiProbe32bits(t.table, t.len, t.cap, h, k, v)
+		t.len = multiProbe32(t.table, t.len, t.cap, h, k, v)
 		i = j
 	}
 }
 
-type Int64Table struct{ table64bits }
+type Int64Table struct{ table64 }
 
 func NewInt64Table(cap int, maxLoad float64) *Int64Table {
-	return &Int64Table{makeTable64bits(cap, maxLoad)}
+	return &Int64Table{makeTable64(cap, maxLoad)}
 }
 
 func (t *Int64Table) Reset() { t.reset() }
@@ -226,10 +226,10 @@ func (t *Int64Table) Probe(keys []int64, values []int32) {
 	t.probe(unsafecast.Int64ToUint64(keys), values)
 }
 
-type Float64Table struct{ table64bits }
+type Float64Table struct{ table64 }
 
 func NewFloat64Table(cap int, maxLoad float64) *Float64Table {
-	return &Float64Table{makeTable64bits(cap, maxLoad)}
+	return &Float64Table{makeTable64(cap, maxLoad)}
 }
 
 func (t *Float64Table) Reset() { t.reset() }
@@ -242,10 +242,10 @@ func (t *Float64Table) Probe(keys []float64, values []int32) {
 	t.probe(unsafecast.Float64ToUint64(keys), values)
 }
 
-type Uint64Table struct{ table64bits }
+type Uint64Table struct{ table64 }
 
 func NewUint64Table(cap int, maxLoad float64) *Uint64Table {
-	return &Uint64Table{makeTable64bits(cap, maxLoad)}
+	return &Uint64Table{makeTable64(cap, maxLoad)}
 }
 
 func (t *Uint64Table) Reset() { t.reset() }
@@ -256,7 +256,7 @@ func (t *Uint64Table) Cap() int { return t.cap }
 
 func (t *Uint64Table) Probe(keys []uint64, values []int32) { t.probe(keys, values) }
 
-type table64bits struct {
+type table64 struct {
 	len     int
 	cap     int
 	maxLen  int
@@ -265,7 +265,7 @@ type table64bits struct {
 	table   []uint64
 }
 
-func makeTable64bits(cap int, maxLoad float64) (t table64bits) {
+func makeTable64(cap int, maxLoad float64) (t table64) {
 	if cap < 64 {
 		cap = 64
 	}
@@ -273,8 +273,8 @@ func makeTable64bits(cap int, maxLoad float64) (t table64bits) {
 	return t
 }
 
-func (t *table64bits) init(cap int, maxLoad float64) {
-	*t = table64bits{
+func (t *table64) init(cap int, maxLoad float64) {
+	*t = table64{
 		cap:     cap,
 		maxLen:  int(math.Ceil(maxLoad * float64(cap))),
 		maxLoad: maxLoad,
@@ -283,14 +283,14 @@ func (t *table64bits) init(cap int, maxLoad float64) {
 	}
 }
 
-func (t *table64bits) grow(totalValues int) {
+func (t *table64) grow(totalValues int) {
 	cap := 2 * t.cap
 	totalValues = nextPowerOf2(totalValues)
 	if totalValues > cap {
 		cap = totalValues
 	}
 
-	tmp := table64bits{}
+	tmp := table64{}
 	tmp.init(cap, t.maxLoad)
 	tmp.len = t.len
 
@@ -322,12 +322,12 @@ func (t *table64bits) grow(totalValues int) {
 	*t = tmp
 }
 
-func (t *table64bits) insert(pairs []uint64) {
+func (t *table64) insert(pairs []uint64) {
 	flags, table := t.content()
 	mod := uintptr(t.cap) - 1
 
 	for i := 0; i < len(pairs); i += 2 {
-		hash := hash64bits(pairs[i], t.seed)
+		hash := hash64(pairs[i], t.seed)
 
 		for {
 			position := hash & mod
@@ -346,19 +346,19 @@ func (t *table64bits) insert(pairs []uint64) {
 	}
 }
 
-func (t *table64bits) content() (flags, pairs []uint64) {
+func (t *table64) content() (flags, pairs []uint64) {
 	n := t.cap / 64
 	return t.table[:n:n], t.table[n:len(t.table):len(t.table)]
 }
 
-func (t *table64bits) reset() {
+func (t *table64) reset() {
 	for i := range t.table {
 		t.table[i] = 0
 	}
 	t.len = 0
 }
 
-func (t *table64bits) probe(keys []uint64, values []int32) {
+func (t *table64) probe(keys []uint64, values []int32) {
 	if totalValues := t.len + len(keys); totalValues > t.maxLen {
 		t.grow(totalValues)
 	}
@@ -385,7 +385,7 @@ func (t *table64bits) probe(keys []uint64, values []int32) {
 			wyhash.MultiHash64(h, k, t.seed)
 		}
 
-		t.len = multiProbe64bits(t.table, t.len, t.cap, h, k, v)
+		t.len = multiProbe64(t.table, t.len, t.cap, h, k, v)
 		i = j
 	}
 }

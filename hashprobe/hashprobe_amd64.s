@@ -2,8 +2,8 @@
 
 #include "textflag.h"
 
-// func multiProbe32bits(table []uint32, len, cap int, hashes []uintptr, keys []uint32, values []int32) int
-TEXT ·multiProbe32bits(SB), NOSPLIT, $0-120
+// func multiProbe32(table []uint32, len, cap int, hashes []uintptr, keys []uint32, values []int32) int
+TEXT ·multiProbe32(SB), NOSPLIT, $0-120
     MOVQ table_base+0(FP), AX
     MOVQ len+24(FP), BX
     MOVQ cap+32(FP), CX
@@ -62,8 +62,8 @@ nextprobe:
     INCQ R12
     JMP probe
 
-// func multiProbe64bits(table []uint64, len, cap int, hashes []uintptr, keys []uint64, values []int32) int
-TEXT ·multiProbe64bits(SB), NOSPLIT, $0-120
+// func multiProbe64(table []uint64, len, cap int, hashes []uintptr, keys []uint64, values []int32) int
+TEXT ·multiProbe64(SB), NOSPLIT, $0-120
     MOVQ table_base+0(FP), AX
     MOVQ len+24(FP), BX
     MOVQ cap+32(FP), CX
