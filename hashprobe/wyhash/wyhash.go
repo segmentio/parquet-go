@@ -1,3 +1,5 @@
+// Package wyhash implements a hashing algorithm derived from the Go runtime's
+// internal hashing fallback, which uses a variation of the wyhash algorithm.
 package wyhash
 
 import "math/bits"

@@ -1,3 +1,27 @@
+// Package hashprobe provides implementations of probing tables for various
+// data types.
+//
+// Probing tables are specialized hash tables supporting only a single
+// "probing" operation which behave like a "lookup or insert". When a key
+// is probed, either its value is retrieved if it already existed in the table,
+// or it is inserted and assigned its index in the insert sequence as value.
+//
+// Values are represented as signed 32 bits integers, which means that probing
+// tables defined in this package may contain at most 2^31-1 entries.
+//
+// Probing tables have a method named Probe with the following signature:
+//
+//	func (t *Int64Table) Probe(keys []int64, values []int32) int {
+//		...
+//	}
+//
+// The method takes an array of keys to probe as first argument, an array of
+// values where the indexes of each key will be written as second argument, and
+// returns the number of keys that were inserted during the call.
+//
+// Applications that need to determine which keys were inserted can capture the
+// length of the probing table prior to the call, and scan the list of values
+// looking for indexes greater or equal to the captured lenth.
 package hashprobe
 
 import (
