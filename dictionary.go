@@ -105,7 +105,7 @@ type booleanDictionary struct {
 	// dictionary, we ensure that an index exist for each boolean value,
 	// then use the value 0 or 1 (false or true) to perform a lookup in
 	// the dictionary's map.
-	hashmap [2]int32
+	table [2]int32
 }
 
 func newBooleanDictionary(typ Type, columnIndex int16, numValues int32, values []byte) *booleanDictionary {
@@ -128,7 +128,7 @@ func newBooleanDictionary(typ Type, columnIndex int16, numValues int32, values [
 			numValues:   numValues,
 			columnIndex: ^columnIndex,
 		},
-		hashmap: [2]int32{
+		table: [2]int32{
 			0: indexOfFalse,
 			1: indexOfTrue,
 		},
@@ -151,19 +151,19 @@ func (d *booleanDictionary) Insert(indexes []int32, values []Value) {
 func (d *booleanDictionary) insert(indexes []int32, rows array, size, offset uintptr) {
 	_ = indexes[:rows.len]
 
-	if d.hashmap[0] < 0 {
-		d.hashmap[0] = d.numValues
+	if d.table[0] < 0 {
+		d.table[0] = d.numValues
 		d.numValues++
-		d.bits = plain.AppendBoolean(d.bits, int(d.hashmap[0]), false)
+		d.bits = plain.AppendBoolean(d.bits, int(d.table[0]), false)
 	}
 
-	if d.hashmap[1] < 0 {
-		d.hashmap[1] = d.numValues
+	if d.table[1] < 0 {
+		d.table[1] = d.numValues
 		d.numValues++
-		d.bits = plain.AppendBoolean(d.bits, int(d.hashmap[1]), true)
+		d.bits = plain.AppendBoolean(d.bits, int(d.table[1]), true)
 	}
 
-	dict := d.hashmap
+	dict := d.table
 
 	for i := 0; i < rows.len; i++ {
 		v := *(*byte)(rows.index(i, size, offset)) & 1
@@ -210,7 +210,7 @@ func (d *booleanDictionary) Reset() {
 	d.bits = d.bits[:0]
 	d.offset = 0
 	d.numValues = 0
-	d.hashmap = [2]int32{-1, -1}
+	d.table = [2]int32{-1, -1}
 }
 
 func (d *booleanDictionary) Page() BufferedPage {
