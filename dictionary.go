@@ -35,10 +35,6 @@ const (
 	// We chose a value that is somewhat large and favors reducing the baseline
 	// compute cost.
 	insertsPerLoop = 256
-
-	// Completely arbitrary, feel free to adjust if a different value would be
-	// more representative of the map implementation in Go.
-	mapSizeOverheadPerItem = 8
 )
 
 // The Dictionary interface represents type-specific implementations of parquet
