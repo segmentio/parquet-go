@@ -10,44 +10,24 @@ import (
 	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
-func randSeed() uintptr {
-	return uintptr(rand.Uint64())
-}
+var (
+	hash32bits = wyhash.Hash32
+	hash64bits = wyhash.Hash64
+)
 
-func hash32bits(value uint32, seed uintptr) uintptr {
+func init() {
 	if aeshash.Enabled() {
-		return aeshash.Hash32(value, seed)
-	} else {
-		return wyhash.Hash32(value, seed)
-	}
-}
-
-func multiHash32bits(hashes []uintptr, values []uint32, seed uintptr) {
-	if aeshash.Enabled() {
-		aeshash.MultiHash32(hashes, values, seed)
-	} else {
-		wyhash.MultiHash32(hashes, values, seed)
-	}
-}
-
-func hash64bits(value uint64, seed uintptr) uintptr {
-	if aeshash.Enabled() {
-		return aeshash.Hash64(value, seed)
-	} else {
-		return wyhash.Hash64(value, seed)
-	}
-}
-
-func multiHash64bits(hashes []uintptr, values []uint64, seed uintptr) {
-	if aeshash.Enabled() {
-		aeshash.MultiHash64(hashes, values, seed)
-	} else {
-		wyhash.MultiHash64(hashes, values, seed)
+		hash32bits = aeshash.Hash32
+		hash64bits = aeshash.Hash64
 	}
 }
 
 func nextPowerOf2(n int) int {
 	return 1 << (64 - bits.LeadingZeros64(uint64(n-1)))
+}
+
+func randSeed() uintptr {
+	return uintptr(rand.Uint64())
 }
 
 type Int32Table struct{ table32bits }
@@ -204,6 +184,7 @@ func (t *table32bits) probe(keys []uint32, values []int32) {
 	}
 
 	var hashes [128]uintptr
+	var useAesHash = aeshash.Enabled()
 
 	for i := 0; i < len(keys); {
 		j := len(hashes) + i
@@ -214,9 +195,17 @@ func (t *table32bits) probe(keys []uint32, values []int32) {
 			n = len(keys) - i
 		}
 
-		multiHash32bits(hashes[:n:n], keys[i:j:j], t.seed)
-		t.len = multiProbe32bits(t.table, t.len, t.cap, hashes[:n:n], keys[i:j:j], values[i:j:j])
+		h := hashes[:n:n]
+		k := keys[i:j:j]
+		v := values[i:j:j]
 
+		if useAesHash {
+			aeshash.MultiHash32(h, k, t.seed)
+		} else {
+			wyhash.MultiHash32(h, k, t.seed)
+		}
+
+		t.len = multiProbe32bits(t.table, t.len, t.cap, h, k, v)
 		i = j
 	}
 }
@@ -375,6 +364,7 @@ func (t *table64bits) probe(keys []uint64, values []int32) {
 	}
 
 	var hashes [128]uintptr
+	var useAesHash = aeshash.Enabled()
 
 	for i := 0; i < len(keys); {
 		j := len(hashes) + i
@@ -385,9 +375,17 @@ func (t *table64bits) probe(keys []uint64, values []int32) {
 			n = len(keys) - i
 		}
 
-		multiHash64bits(hashes[:n:n], keys[i:j:j], t.seed)
-		t.len = multiProbe64bits(t.table, t.len, t.cap, hashes[:n:n], keys[i:j:j], values[i:j:j])
+		h := hashes[:n:n]
+		k := keys[i:j:j]
+		v := values[i:j:j]
 
+		if useAesHash {
+			aeshash.MultiHash64(h, k, t.seed)
+		} else {
+			wyhash.MultiHash64(h, k, t.seed)
+		}
+
+		t.len = multiProbe64bits(t.table, t.len, t.cap, h, k, v)
 		i = j
 	}
 }
