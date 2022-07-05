@@ -8,6 +8,40 @@
 #define m4 0x589965cc75374cc3
 #define m5 0x1d8e4e27c47d124f
 
+// func MultiSum32Uint32(hashes, values []uint32, seed uint32)
+TEXT ·MultiSum32Uint32(SB), NOSPLIT, $0-52
+    MOVQ hashes_base+0(FP), R12
+    MOVQ values_base+24(FP), DI
+    MOVQ values_len+32(FP), CX
+    MOVL seed+48(FP), R11
+
+    MOVQ $m1, R8
+    MOVQ $m2, R9
+    MOVQ $m5^8, R10
+
+    XORQ SI, SI
+    JMP test
+loop:
+    MOVL (DI)(SI*4), AX
+    MOVQ R11, BX
+
+    XORQ R8, BX
+    XORQ AX, BX
+    XORQ R9, AX
+
+    MULQ BX
+    XORQ DX, AX
+
+    MULQ R10
+    XORQ DX, AX
+
+    MOVL AX, (R12)(SI*4)
+    INCQ SI
+test:
+    CMPQ SI, CX
+    JNE loop
+    RET
+
 // func MultiSum64Uint64(hashes, values []uint64, seed uint64)
 TEXT ·MultiSum64Uint64(SB), NOSPLIT, $0-56
     MOVQ hashes_base+0(FP), R12

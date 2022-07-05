@@ -15,6 +15,12 @@ var useAesHash = cpu.X86.HasAES && cpu.X86.HasSSSE3 && cpu.X86.HasSSE41
 func Enabled() bool { return useAesHash }
 
 //go:noescape
+func Sum32Uint32(value, seed uint32) uint32
+
+//go:noescape
+func MultiSum32Uint32(hashes, values []uint32, seed uint32)
+
+//go:noescape
 func Sum64Uint64(value, seed uint64) uint64
 
 //go:noescape

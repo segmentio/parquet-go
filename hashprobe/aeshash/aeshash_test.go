@@ -6,11 +6,58 @@ import (
 	"unsafe"
 )
 
+//go:noescape
+//go:linkname runtime_memhash32 runtime.memhash32
+func runtime_memhash32(data unsafe.Pointer, seed uintptr) uintptr
+
+//go:noescape
 //go:linkname runtime_memhash64 runtime.memhash64
 func runtime_memhash64(data unsafe.Pointer, seed uintptr) uintptr
 
+func memhash32(data, seed uint32) uint32 {
+	return uint32(runtime_memhash32(unsafe.Pointer(&data), uintptr(seed)))
+}
+
 func memhash64(data, seed uint64) uint64 {
 	return uint64(runtime_memhash64(unsafe.Pointer(&data), uintptr(seed)))
+}
+
+func TestSum32Uint32(t *testing.T) {
+	if !Enabled() {
+		t.Skip("AES hash not supported on this platform")
+	}
+
+	h0 := memhash32(42, 1)
+	h1 := Sum32Uint32(42, 1)
+
+	if h0 != h1 {
+		t.Errorf("want=%016x got=%016x", h0, h1)
+	}
+}
+
+func TestMultiSum32Uint32(t *testing.T) {
+	if !Enabled() {
+		t.Skip("AES hash not supported on this platform")
+	}
+
+	const N = 10
+	hashes := [N]uint32{}
+	values := [N]uint32{}
+	seed := uint32(32)
+
+	for i := range values {
+		values[i] = uint32(i)
+	}
+
+	MultiSum32Uint32(hashes[:], values[:], seed)
+
+	for i := range values {
+		h := Sum32Uint32(values[i], seed)
+
+		if h != hashes[i] {
+			t.Errorf("hash(%d): want=%016x got=%016x", values[i], h, hashes[i])
+		}
+	}
 }
 
 func TestSum64Uint64(t *testing.T) {

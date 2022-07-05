@@ -6,6 +6,33 @@ import (
 	"time"
 )
 
+func TestSum32Uint32(t *testing.T) {
+	if h := Sum32Uint32(42, 1); h != 0xe6b5a25e {
+		t.Errorf("hash mismatch: %08x", h)
+	}
+}
+
+func TestMultiSum32Uint32(t *testing.T) {
+	const N = 10
+	hashes := [N]uint32{}
+	values := [N]uint32{}
+	seed := uint32(32)
+
+	for i := range values {
+		values[i] = uint32(i)
+	}
+
+	MultiSum32Uint32(hashes[:], values[:], seed)
+
+	for i := range values {
+		h := Sum32Uint32(values[i], seed)
+
+		if h != hashes[i] {
+			t.Errorf("hash(%d): want=%08x got=%08x", values[i], h, hashes[i])
+		}
+	}
+}
+
 func TestSum64Uint64(t *testing.T) {
 	if h := Sum64Uint64(42, 1); h != 0x6e69a6ede6b5a25e {
 		t.Errorf("hash mismatch: %016x", h)
