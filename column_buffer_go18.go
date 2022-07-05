@@ -142,7 +142,7 @@ func writeRowsFuncOfOptional(t reflect.Type, schema *Schema, path columnPath, wr
 			}
 
 			if i < j {
-				slice := rows.slice(i, j, size, offset)
+				slice := rows.slice(i, j, size)
 				if err := writeRows(columns, slice, size, offset, nullLevels); err != nil {
 					return err
 				}
@@ -173,7 +173,7 @@ func writeRowsFuncOfOptional(t reflect.Type, schema *Schema, path columnPath, wr
 			}
 
 			if i < j {
-				slice := rows.slice(i, j, size, offset)
+				slice := rows.slice(i, j, size)
 				if err := writeRows(columns, slice, size, offset, levels); err != nil {
 					return err
 				}

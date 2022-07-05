@@ -33,7 +33,7 @@ func (a array) index(i int, size, offset uintptr) unsafe.Pointer {
 	return unsafe.Add(a.ptr, uintptr(i)*size+offset)
 }
 
-func (a array) slice(i, j int, size, offset uintptr) array {
+func (a array) slice(i, j int, size uintptr) array {
 	if i < 0 || i > a.len || j < 0 || j > a.len {
 		panic("slice index out of bounds")
 	}
@@ -41,7 +41,7 @@ func (a array) slice(i, j int, size, offset uintptr) array {
 		panic("negative slice length")
 	}
 	return array{
-		ptr: a.index(i, size, offset),
+		ptr: a.index(i, size, 0),
 		len: j - i,
 	}
 }

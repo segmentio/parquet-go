@@ -14,6 +14,15 @@ import (
 )
 
 const (
+	// Maximum load of probing tables. This parameter configures the balance
+	// between memory density and compute time of probing operations.
+	//
+	// Smaller values result in lower collision probability when inserting
+	// values in probing tables, but also increase memory utilization.
+	//
+	// TODO: make this configurable by the application?
+	hashprobeTableMaxLoad = 0.9
+
 	// Number of values per loop iteration of the dictionary insert algorithm's
 	// inner loop.
 	//
@@ -241,7 +250,7 @@ func (d *int32Dictionary) Insert(indexes []int32, values []Value) {
 }
 
 func (d *int32Dictionary) init(indexes []int32) {
-	d.table = hashprobe.NewInt32Table(cap(d.values), 0.9)
+	d.table = hashprobe.NewInt32Table(cap(d.values), hashprobeTableMaxLoad)
 
 	n := len(d.values)
 	if n > len(indexes) {
@@ -274,15 +283,14 @@ func (d *int32Dictionary) insert(indexes []int32, rows array, size, offset uintp
 			n = rows.len - i
 		}
 
-		slice := rows.slice(i, j, size, offset)
-		writeValuesInt32(values[:n], slice, size, offset)
+		probe := values[:n:n]
+		slice := rows.slice(i, j, size)
+		writeValuesInt32(probe, slice, size, offset)
 
-		lastIndex := int32(len(d.values))
-		inserted := d.table.Probe(values[:n:n], indexes[i:j:j])
-
-		if inserted > 0 {
-			for k, v := range values[:n] {
-				if indexes[i+k] >= lastIndex {
+		if d.table.Probe(probe, indexes[i:j:j]) > 0 {
+			minIndex := int32(len(d.values))
+			for k, v := range probe {
+				if indexes[i+k] >= minIndex {
 					d.values = append(d.values, v)
 				}
 			}
@@ -320,7 +328,7 @@ func (d *int32Dictionary) Page() BufferedPage {
 
 type int64Dictionary struct {
 	int64Page
-	hashmap map[int64]int32
+	table *hashprobe.Int64Table
 }
 
 func newInt64Dictionary(typ Type, columnIndex int16, numValues int32, values []byte) *int64Dictionary {
@@ -346,27 +354,54 @@ func (d *int64Dictionary) Insert(indexes []int32, values []Value) {
 	d.insert(indexes, makeArrayValue(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
 }
 
+func (d *int64Dictionary) init(indexes []int32) {
+	d.table = hashprobe.NewInt64Table(cap(d.values), hashprobeTableMaxLoad)
+
+	n := len(d.values)
+	if n > len(indexes) {
+		n = len(indexes)
+	}
+
+	for i := 0; i < len(d.values); i += n {
+		j := i + n
+		if j > len(d.values) {
+			j = len(d.values)
+		}
+		d.table.Probe(d.values[i:j:j], indexes[:n:n])
+	}
+}
+
 func (d *int64Dictionary) insert(indexes []int32, rows array, size, offset uintptr) {
 	_ = indexes[:rows.len]
 
-	if d.hashmap == nil {
-		d.hashmap = make(map[int64]int32, cap(d.values))
-		for i, v := range d.values {
-			d.hashmap[v] = int32(i)
-		}
+	if d.table == nil {
+		d.init(indexes)
 	}
 
-	for i := 0; i < rows.len; i++ {
-		value := *(*int64)(rows.index(i, size, offset))
+	var values [insertsPerLoop]int64
 
-		index, exists := d.hashmap[value]
-		if !exists {
-			index = int32(len(d.values))
-			d.values = append(d.values, value)
-			d.hashmap[value] = index
+	for i := 0; i < rows.len; {
+		j := len(values) + i
+		n := len(values)
+		if j > rows.len {
+			j = rows.len
+			n = rows.len - i
 		}
 
-		indexes[i] = index
+		probe := values[:n:n]
+		slice := rows.slice(i, j, size)
+		writeValuesInt64(probe, slice, size, offset)
+
+		if d.table.Probe(probe, indexes[i:j:j]) > 0 {
+			minIndex := int32(len(d.values))
+			for k, v := range probe {
+				if indexes[i+k] >= minIndex {
+					d.values = append(d.values, v)
+				}
+			}
+		}
+
+		i = j
 	}
 }
 
@@ -387,7 +422,9 @@ func (d *int64Dictionary) Bounds(indexes []int32) (min, max Value) {
 
 func (d *int64Dictionary) Reset() {
 	d.values = d.values[:0]
-	d.hashmap = nil
+	if d.table != nil {
+		d.table.Reset()
+	}
 }
 
 func (d *int64Dictionary) Page() BufferedPage {
@@ -491,7 +528,7 @@ func (d *int96Dictionary) Page() BufferedPage {
 
 type floatDictionary struct {
 	floatPage
-	hashmap map[float32]int32
+	table *hashprobe.Float32Table
 }
 
 func newFloatDictionary(typ Type, columnIndex int16, numValues int32, values []byte) *floatDictionary {
@@ -517,27 +554,54 @@ func (d *floatDictionary) Insert(indexes []int32, values []Value) {
 	d.insert(indexes, makeArrayValue(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
 }
 
+func (d *floatDictionary) init(indexes []int32) {
+	d.table = hashprobe.NewFloat32Table(cap(d.values), hashprobeTableMaxLoad)
+
+	n := len(d.values)
+	if n > len(indexes) {
+		n = len(indexes)
+	}
+
+	for i := 0; i < len(d.values); i += n {
+		j := i + n
+		if j > len(d.values) {
+			j = len(d.values)
+		}
+		d.table.Probe(d.values[i:j:j], indexes[:n:n])
+	}
+}
+
 func (d *floatDictionary) insert(indexes []int32, rows array, size, offset uintptr) {
 	_ = indexes[:rows.len]
 
-	if d.hashmap == nil {
-		d.hashmap = make(map[float32]int32, cap(d.values))
-		for i, v := range d.values {
-			d.hashmap[v] = int32(i)
-		}
+	if d.table == nil {
+		d.init(indexes)
 	}
 
-	for i := 0; i < rows.len; i++ {
-		value := *(*float32)(rows.index(i, size, offset))
+	var values [insertsPerLoop]float32
 
-		index, exists := d.hashmap[value]
-		if !exists {
-			index = int32(len(d.values))
-			d.values = append(d.values, value)
-			d.hashmap[value] = index
+	for i := 0; i < rows.len; {
+		j := len(values) + i
+		n := len(values)
+		if j > rows.len {
+			j = rows.len
+			n = rows.len - i
 		}
 
-		indexes[i] = index
+		probe := values[:n:n]
+		slice := rows.slice(i, j, size)
+		writeValuesFloat32(probe, slice, size, offset)
+
+		if d.table.Probe(probe, indexes[i:j:j]) > 0 {
+			minIndex := int32(len(d.values))
+			for k, v := range probe {
+				if indexes[i+k] >= minIndex {
+					d.values = append(d.values, v)
+				}
+			}
+		}
+
+		i = j
 	}
 }
 
@@ -558,7 +622,9 @@ func (d *floatDictionary) Bounds(indexes []int32) (min, max Value) {
 
 func (d *floatDictionary) Reset() {
 	d.values = d.values[:0]
-	d.hashmap = nil
+	if d.table != nil {
+		d.table.Reset()
+	}
 }
 
 func (d *floatDictionary) Page() BufferedPage {
@@ -567,7 +633,7 @@ func (d *floatDictionary) Page() BufferedPage {
 
 type doubleDictionary struct {
 	doublePage
-	hashmap map[float64]int32
+	table *hashprobe.Float64Table
 }
 
 func newDoubleDictionary(typ Type, columnIndex int16, numValues int32, values []byte) *doubleDictionary {
@@ -593,27 +659,54 @@ func (d *doubleDictionary) Insert(indexes []int32, values []Value) {
 	d.insert(indexes, makeArrayValue(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
 }
 
+func (d *doubleDictionary) init(indexes []int32) {
+	d.table = hashprobe.NewFloat64Table(cap(d.values), hashprobeTableMaxLoad)
+
+	n := len(d.values)
+	if n > len(indexes) {
+		n = len(indexes)
+	}
+
+	for i := 0; i < len(d.values); i += n {
+		j := i + n
+		if j > len(d.values) {
+			j = len(d.values)
+		}
+		d.table.Probe(d.values[i:j:j], indexes[:n:n])
+	}
+}
+
 func (d *doubleDictionary) insert(indexes []int32, rows array, size, offset uintptr) {
 	_ = indexes[:rows.len]
 
-	if d.hashmap == nil {
-		d.hashmap = make(map[float64]int32, cap(d.values))
-		for i, v := range d.values {
-			d.hashmap[v] = int32(i)
-		}
+	if d.table == nil {
+		d.init(indexes)
 	}
 
-	for i := 0; i < rows.len; i++ {
-		value := *(*float64)(rows.index(i, size, offset))
+	var values [insertsPerLoop]float64
 
-		index, exists := d.hashmap[value]
-		if !exists {
-			index = int32(len(d.values))
-			d.values = append(d.values, value)
-			d.hashmap[value] = index
+	for i := 0; i < rows.len; {
+		j := len(values) + i
+		n := len(values)
+		if j > rows.len {
+			j = rows.len
+			n = rows.len - i
 		}
 
-		indexes[i] = index
+		probe := values[:n:n]
+		slice := rows.slice(i, j, size)
+		writeValuesFloat64(probe, slice, size, offset)
+
+		if d.table.Probe(probe, indexes[i:j:j]) > 0 {
+			minIndex := int32(len(d.values))
+			for k, v := range probe {
+				if indexes[i+k] >= minIndex {
+					d.values = append(d.values, v)
+				}
+			}
+		}
+
+		i = j
 	}
 }
 
@@ -634,7 +727,9 @@ func (d *doubleDictionary) Bounds(indexes []int32) (min, max Value) {
 
 func (d *doubleDictionary) Reset() {
 	d.values = d.values[:0]
-	d.hashmap = nil
+	if d.table != nil {
+		d.table.Reset()
+	}
 }
 
 func (d *doubleDictionary) Page() BufferedPage {
@@ -878,7 +973,7 @@ func (d *fixedLenByteArrayDictionary) Page() BufferedPage {
 
 type uint32Dictionary struct {
 	uint32Page
-	hashmap map[uint32]int32
+	table *hashprobe.Uint32Table
 }
 
 func newUint32Dictionary(typ Type, columnIndex int16, numValues int32, data []byte) *uint32Dictionary {
@@ -904,27 +999,54 @@ func (d *uint32Dictionary) Insert(indexes []int32, values []Value) {
 	d.insert(indexes, makeArrayValue(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
 }
 
+func (d *uint32Dictionary) init(indexes []int32) {
+	d.table = hashprobe.NewUint32Table(cap(d.values), hashprobeTableMaxLoad)
+
+	n := len(d.values)
+	if n > len(indexes) {
+		n = len(indexes)
+	}
+
+	for i := 0; i < len(d.values); i += n {
+		j := i + n
+		if j > len(d.values) {
+			j = len(d.values)
+		}
+		d.table.Probe(d.values[i:j:j], indexes[:n:n])
+	}
+}
+
 func (d *uint32Dictionary) insert(indexes []int32, rows array, size, offset uintptr) {
 	_ = indexes[:rows.len]
 
-	if d.hashmap == nil {
-		d.hashmap = make(map[uint32]int32, cap(d.values))
-		for i, v := range d.values {
-			d.hashmap[v] = int32(i)
-		}
+	if d.table == nil {
+		d.init(indexes)
 	}
 
-	for i := 0; i < rows.len; i++ {
-		value := *(*uint32)(rows.index(i, size, offset))
+	var values [insertsPerLoop]uint32
 
-		index, exists := d.hashmap[value]
-		if !exists {
-			index = int32(len(d.values))
-			d.values = append(d.values, value)
-			d.hashmap[value] = index
+	for i := 0; i < rows.len; {
+		j := len(values) + i
+		n := len(values)
+		if j > rows.len {
+			j = rows.len
+			n = rows.len - i
 		}
 
-		indexes[i] = index
+		probe := values[:n:n]
+		slice := rows.slice(i, j, size)
+		writeValuesUint32(probe, slice, size, offset)
+
+		if d.table.Probe(probe, indexes[i:j:j]) > 0 {
+			minIndex := int32(len(d.values))
+			for k, v := range probe {
+				if indexes[i+k] >= minIndex {
+					d.values = append(d.values, v)
+				}
+			}
+		}
+
+		i = j
 	}
 }
 
@@ -945,7 +1067,9 @@ func (d *uint32Dictionary) Bounds(indexes []int32) (min, max Value) {
 
 func (d *uint32Dictionary) Reset() {
 	d.values = d.values[:0]
-	d.hashmap = nil
+	if d.table != nil {
+		d.table.Reset()
+	}
 }
 
 func (d *uint32Dictionary) Page() BufferedPage {
@@ -954,7 +1078,7 @@ func (d *uint32Dictionary) Page() BufferedPage {
 
 type uint64Dictionary struct {
 	uint64Page
-	hashmap map[uint64]int32
+	table *hashprobe.Uint64Table
 }
 
 func newUint64Dictionary(typ Type, columnIndex int16, numValues int32, data []byte) *uint64Dictionary {
@@ -980,27 +1104,54 @@ func (d *uint64Dictionary) Insert(indexes []int32, values []Value) {
 	d.insert(indexes, makeArrayValue(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
 }
 
+func (d *uint64Dictionary) init(indexes []int32) {
+	d.table = hashprobe.NewUint64Table(cap(d.values), hashprobeTableMaxLoad)
+
+	n := len(d.values)
+	if n > len(indexes) {
+		n = len(indexes)
+	}
+
+	for i := 0; i < len(d.values); i += n {
+		j := i + n
+		if j > len(d.values) {
+			j = len(d.values)
+		}
+		d.table.Probe(d.values[i:j:j], indexes[:n:n])
+	}
+}
+
 func (d *uint64Dictionary) insert(indexes []int32, rows array, size, offset uintptr) {
 	_ = indexes[:rows.len]
 
-	if d.hashmap == nil {
-		d.hashmap = make(map[uint64]int32, cap(d.values))
-		for i, v := range d.values {
-			d.hashmap[v] = int32(i)
-		}
+	if d.table == nil {
+		d.init(indexes)
 	}
 
-	for i := 0; i < rows.len; i++ {
-		value := *(*uint64)(rows.index(i, size, offset))
+	var values [insertsPerLoop]uint64
 
-		index, exists := d.hashmap[value]
-		if !exists {
-			index = int32(len(d.values))
-			d.values = append(d.values, value)
-			d.hashmap[value] = index
+	for i := 0; i < rows.len; {
+		j := len(values) + i
+		n := len(values)
+		if j > rows.len {
+			j = rows.len
+			n = rows.len - i
 		}
 
-		indexes[i] = index
+		probe := values[:n:n]
+		slice := rows.slice(i, j, size)
+		writeValuesUint64(probe, slice, size, offset)
+
+		if d.table.Probe(probe, indexes[i:j:j]) > 0 {
+			minIndex := int32(len(d.values))
+			for k, v := range probe {
+				if indexes[i+k] >= minIndex {
+					d.values = append(d.values, v)
+				}
+			}
+		}
+
+		i = j
 	}
 }
 
@@ -1021,7 +1172,9 @@ func (d *uint64Dictionary) Bounds(indexes []int32) (min, max Value) {
 
 func (d *uint64Dictionary) Reset() {
 	d.values = d.values[:0]
-	d.hashmap = nil
+	if d.table != nil {
+		d.table.Reset()
+	}
 }
 
 func (d *uint64Dictionary) Page() BufferedPage {

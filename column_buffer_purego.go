@@ -16,9 +16,7 @@ func broadcastRangeInt32(dst []int32, base int32) {
 }
 
 func writeValuesBool(values []byte, rows array, size, offset uintptr) {
-	for i := range values {
-		values[i] = *(*bool)(rows.index(i, size, offset))
-	}
+	panic("unreachable")
 }
 
 func writeValuesInt32(values []int32, rows array, size, offset uintptr) {
@@ -41,7 +39,7 @@ func writeValuesUint32(values []uint32, rows array, size, offset uintptr) {
 
 func writeValuesUint64(values []uint64, rows array, size, offset uintptr) {
 	for i := range values {
-		values[i] = *(*uint32)(rows.index(i, size, offset))
+		values[i] = *(*uint64)(rows.index(i, size, offset))
 	}
 }
 
