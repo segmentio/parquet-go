@@ -13,3 +13,9 @@ func MultiHash64(hashes []uintptr, values []uint64, seed uintptr) {
 		hashes[i] = Hash64(value, seed)
 	}
 }
+
+func MultiHash128(hashes []uintptr, values [][16]byte, seed uintptr) {
+	for i, value := range values {
+		hashes[i] = Hash128(value, seed)
+	}
+}

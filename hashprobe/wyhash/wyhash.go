@@ -2,7 +2,10 @@
 // internal hashing fallback, which uses a variation of the wyhash algorithm.
 package wyhash
 
-import "math/bits"
+import (
+	"encoding/binary"
+	"math/bits"
+)
 
 const (
 	m1 = 0xa0761d6478bd642f
@@ -18,9 +21,15 @@ func mix(a, b uint64) uint64 {
 }
 
 func Hash32(value uint32, seed uintptr) uintptr {
-	return Hash64(uint64(value), seed)
+	return uintptr(mix(m5^4, mix(uint64(value)^m2, uint64(value)^uint64(seed)^m1)))
 }
 
 func Hash64(value uint64, seed uintptr) uintptr {
 	return uintptr(mix(m5^8, mix(value^m2, value^uint64(seed)^m1)))
+}
+
+func Hash128(value [16]byte, seed uintptr) uintptr {
+	a := binary.LittleEndian.Uint64(value[:8])
+	b := binary.LittleEndian.Uint64(value[8:])
+	return uintptr(mix(m5^16, mix(a^m2, b^uint64(seed)^m1)))
 }

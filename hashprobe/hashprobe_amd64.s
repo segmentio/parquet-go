@@ -121,3 +121,73 @@ insert:
 nextprobe:
     INCQ R12
     JMP probe
+
+// func multiProbe128(table []byte, len, cap int, hashes []uintptr, keys [][16]byte, values []int32) int
+TEXT ·multiProbe128(SB), NOSPLIT, $0-120
+    MOVQ table_base+0(FP), AX
+    MOVQ len+24(FP), BX
+    MOVQ cap+32(FP), CX
+    MOVQ hashes_base+40(FP), DX
+    MOVQ hashes_len+48(FP), DI
+    MOVQ keys_base+64(FP), R8
+    MOVQ values_base+88(FP), R9
+
+    MOVQ CX, R10
+    SHRQ $3, R10 // offset = cap / 8
+
+    MOVQ CX, R11
+    DECQ R11 // modulo = cap - 1
+
+    SHLQ $4, CX
+    ADDQ R10, CX // offset + 16*cap
+
+    LEAQ (AX)(R10*1), R13 // tableKeys
+    LEAQ (AX)(CX*1), R10  // tableValues
+
+    XORQ SI, SI
+    JMP test
+loop:
+    MOVQ (DX)(SI*8), R12
+probe:
+    ANDQ R11, R12 // hash & modulo
+    MOVQ R12, R14
+    MOVQ R12, R15
+    SHRQ $3, R14     // index = hash / 8
+    ANDQ $0b111, R15 // shift = hash % 8
+
+    MOVBQZX (AX)(R14*1), CX
+    BTSQ R15, CX
+    JNC insert // tableFlags[index] & 1<<shift == 0 ?
+
+    MOVQ R12, R14
+    SHLQ $4, R14
+    MOVOU (R13)(R14*1), X0
+    MOVOU (R8), X1
+    PCMPEQL X1, X0
+    MOVMSKPS X0, R14
+    CMPL R14, $0b1111
+    JNE nextprobe // tableKeys[hash] == keys[i]
+
+    MOVL (R10)(R12*4), R14
+    MOVL R14, (R9)(SI*4)
+next:
+    ADDQ $16, R8
+    INCQ SI
+test:
+    CMPQ SI, DI
+    JNE loop
+    MOVQ BX, ret+112(FP)
+    RET
+insert:
+    MOVQ R12, R15
+    SHLQ $4, R15
+    MOVB CX, (AX)(R14*1)
+    MOVOU (R8), X0
+    MOVOU X0, (R13)(R15*1)
+    MOVL BX, (R10)(R12*4)
+    MOVL BX, (R9)(SI*4)
+    INCQ BX // len++
+    JMP next
+nextprobe:
+    INCQ R12
+    JMP probe

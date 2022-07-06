@@ -16,10 +16,16 @@ func Enabled() bool { return cpu.X86.HasAES && cpu.X86.HasSSSE3 && cpu.X86.HasSS
 func Hash32(value uint32, seed uintptr) uintptr
 
 //go:noescape
-func MultiHash32(hashes []uintptr, values []uint32, seed uintptr)
-
-//go:noescape
 func Hash64(value uint64, seed uintptr) uintptr
 
 //go:noescape
+func Hash128(value [16]byte, seed uintptr) uintptr
+
+//go:noescape
+func MultiHash32(hashes []uintptr, values []uint32, seed uintptr)
+
+//go:noescape
 func MultiHash64(hashes []uintptr, values []uint64, seed uintptr)
+
+//go:noescape
+func MultiHash128(hashes []uintptr, values [][16]byte, seed uintptr)

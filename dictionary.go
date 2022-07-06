@@ -1179,7 +1179,7 @@ func (d *uint64Dictionary) Page() BufferedPage {
 
 type be128Dictionary struct {
 	be128Page
-	hashmap map[[16]byte]int32
+	table *hashprobe.Uint128Table
 }
 
 func newBE128Dictionary(typ Type, columnIndex int16, numValues int32, data []byte) *be128Dictionary {
@@ -1201,38 +1201,99 @@ func (d *be128Dictionary) Index(i int32) Value { return d.makeValue(d.index(i)) 
 func (d *be128Dictionary) index(i int32) *[16]byte { return &d.values[i] }
 
 func (d *be128Dictionary) Insert(indexes []int32, values []Value) {
-	d.insertValues(indexes, len(values), func(i int) [16]byte {
-		return *(*[16]byte)(values[i].ByteArray())
-	})
-}
+	_ = indexes[:len(values)]
 
-func (d *be128Dictionary) insert(indexes []int32, rows array, size, offset uintptr) {
-	d.insertValues(indexes, rows.len, func(i int) [16]byte {
-		return *(*[16]byte)(rows.index(i, size, offset))
-	})
-}
-
-func (d *be128Dictionary) insertValues(indexes []int32, count int, valueAt func(int) [16]byte) {
-	_ = indexes[:count]
-
-	if d.hashmap == nil {
-		d.hashmap = make(map[[16]byte]int32, cap(d.values))
-		for i, v := range d.values {
-			d.hashmap[v] = int32(i)
+	for _, v := range values {
+		if v.kind != ^int8(FixedLenByteArray) {
+			panic("values inserted in BE128 dictionary must be of type BYTE_ARRAY")
+		}
+		if v.u64 != 16 {
+			panic("values inserted in BE128 dictionary must be of length 16")
 		}
 	}
 
-	for i := 0; i < count; i++ {
-		value := valueAt(i)
+	if d.table == nil {
+		d.init(indexes)
+	}
 
-		index, exists := d.hashmap[value]
-		if !exists {
-			index = int32(len(d.values))
-			d.values = append(d.values, value)
-			d.hashmap[value] = index
+	for i := 0; i < len(values); {
+		j := insertsPerLoop + i
+		n := insertsPerLoop
+		if j > len(values) {
+			j = len(values)
+			n = len(values) - i
 		}
 
-		indexes[i] = index
+		probe := make([][16]byte, n, insertsPerLoop)
+		for k := range probe {
+			p := values[i+k].ptr
+
+			if p != nil {
+				probe[k] = *(*[16]byte)(unsafe.Pointer(p))
+			}
+		}
+
+		if d.table.Probe(probe, indexes[i:j:j]) > 0 {
+			minIndex := int32(len(d.values))
+			for k, v := range probe {
+				if indexes[i+k] >= minIndex {
+					d.values = append(d.values, v)
+				}
+			}
+		}
+
+		i = j
+	}
+}
+
+func (d *be128Dictionary) init(indexes []int32) {
+	d.table = hashprobe.NewUint128Table(cap(d.values), hashprobeTableMaxLoad)
+
+	n := len(d.values)
+	if n > len(indexes) {
+		n = len(indexes)
+	}
+
+	for i := 0; i < len(d.values); i += n {
+		j := i + n
+		if j > len(d.values) {
+			j = len(d.values)
+		}
+		d.table.Probe(d.values[i:j:j], indexes[:n:n])
+	}
+}
+
+func (d *be128Dictionary) insert(indexes []int32, rows array, size, offset uintptr) {
+	_ = indexes[:rows.len]
+
+	if d.table == nil {
+		d.init(indexes)
+	}
+
+	var values [insertsPerLoop][16]byte
+
+	for i := 0; i < rows.len; {
+		j := len(values) + i
+		n := len(values)
+		if j > rows.len {
+			j = rows.len
+			n = rows.len - i
+		}
+
+		probe := values[:n:n]
+		slice := rows.slice(i, j, size)
+		writeValuesBE128(probe, slice, size, offset)
+
+		if d.table.Probe(probe, indexes[i:j:j]) > 0 {
+			minIndex := int32(len(d.values))
+			for k, v := range probe {
+				if indexes[i+k] >= minIndex {
+					d.values = append(d.values, v)
+				}
+			}
+		}
+
+		i = j
 	}
 }
 
@@ -1253,7 +1314,9 @@ func (d *be128Dictionary) Bounds(indexes []int32) (min, max Value) {
 
 func (d *be128Dictionary) Reset() {
 	d.values = d.values[:0]
-	d.hashmap = nil
+	if d.table != nil {
+		d.table.Reset()
+	}
 }
 
 func (d *be128Dictionary) Page() BufferedPage {

@@ -49,14 +49,16 @@ const (
 )
 
 var (
-	hash32 = wyhash.Hash32
-	hash64 = wyhash.Hash64
+	hash32  = wyhash.Hash32
+	hash64  = wyhash.Hash64
+	hash128 = wyhash.Hash128
 )
 
 func init() {
 	if aeshash.Enabled() {
 		hash32 = aeshash.Hash32
 		hash64 = aeshash.Hash64
+		hash128 = aeshash.Hash128
 	}
 }
 
@@ -432,6 +434,139 @@ func (t *table64) probe(keys []uint64, values []int32) int {
 		}
 
 		t.len = multiProbe64(t.table, t.len, t.cap, h, k, v)
+		i = j
+	}
+
+	return t.len - baseLength
+}
+
+type Uint128Table struct{ table128 }
+
+func NewUint128Table(cap int, maxLoad float64) *Uint128Table {
+	return &Uint128Table{makeTable128(cap, maxLoad)}
+}
+
+func (t *Uint128Table) Reset() { t.reset() }
+
+func (t *Uint128Table) Len() int { return t.len }
+
+func (t *Uint128Table) Cap() int { return t.cap }
+
+func (t *Uint128Table) Probe(keys [][16]byte, values []int32) int {
+	return t.probe(keys, values)
+}
+
+type table128 struct {
+	len     int
+	cap     int
+	maxLen  int
+	maxLoad float64
+	seed    uintptr
+	table   []byte
+}
+
+func makeTable128(cap int, maxLoad float64) (t table128) {
+	if cap < 8 {
+		cap = 8
+	}
+	t.init(nextPowerOf2(cap), maxLoad)
+	return t
+}
+
+func (t *table128) init(cap int, maxLoad float64) {
+	*t = table128{
+		cap:     cap,
+		maxLen:  int(math.Ceil(maxLoad * float64(cap))),
+		maxLoad: maxLoad,
+		seed:    randSeed(),
+		table:   make([]byte, cap/8+16*cap+4*cap),
+	}
+}
+
+func (t *table128) grow(totalValues int) {
+	cap := 2 * t.cap
+	totalValues = nextPowerOf2(totalValues)
+	if totalValues > cap {
+		cap = totalValues
+	}
+
+	tmp := table128{}
+	tmp.init(cap, t.maxLoad)
+	tmp.len = t.len
+
+	oldFlags, oldKeys, oldValues := t.content()
+	newFlags, newKeys, newValues := tmp.content()
+	modulo := uintptr(tmp.cap) - 1
+
+	for i := range oldKeys {
+		x := i / 8
+		y := i % 8
+
+		if (oldFlags[x] & (1 << y)) == 0 {
+			continue
+		}
+
+		hash := hash128(oldKeys[i], tmp.seed) & modulo
+		for {
+			index := hash / 8
+			shift := hash % 8
+
+			if (newFlags[index] & (1 << shift)) == 0 {
+				newFlags[index] |= 1 << shift
+				newKeys[hash] = oldKeys[i]
+				newValues[hash] = oldValues[i]
+				break
+			}
+
+			hash = (hash + 1) & modulo
+		}
+	}
+
+	*t = tmp
+}
+
+func (t *table128) content() (flags []byte, keys [][16]byte, values []int32) {
+	i := t.cap / 8
+	j := 16*t.cap + i
+	return t.table[:i], unsafecast.BytesToUint128(t.table[i:j]), unsafecast.BytesToInt32(t.table[j:])
+}
+
+func (t *table128) reset() {
+	for i := range t.table {
+		t.table[i] = 0
+	}
+	t.len = 0
+}
+
+func (t *table128) probe(keys [][16]byte, values []int32) int {
+	if totalValues := t.len + len(keys); totalValues > t.maxLen {
+		t.grow(totalValues)
+	}
+
+	var hashes [probesPerLoop]uintptr
+	var baseLength = t.len
+	var useAesHash = aeshash.Enabled()
+
+	for i := 0; i < len(keys); {
+		j := len(hashes) + i
+		n := len(hashes)
+
+		if j > len(keys) {
+			j = len(keys)
+			n = len(keys) - i
+		}
+
+		h := hashes[:n:n]
+		k := keys[i:j:j]
+		v := values[i:j:j]
+
+		if useAesHash {
+			aeshash.MultiHash128(h, k, t.seed)
+		} else {
+			wyhash.MultiHash128(h, k, t.seed)
+		}
+
+		t.len = multiProbe128(t.table, t.len, t.cap, h, k, v)
 		i = j
 	}
 

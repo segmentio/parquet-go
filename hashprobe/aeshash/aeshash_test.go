@@ -1,6 +1,7 @@
 package aeshash
 
 import (
+	"encoding/binary"
 	"testing"
 	"time"
 	"unsafe"
@@ -14,12 +15,20 @@ func runtime_memhash32(data unsafe.Pointer, seed uintptr) uintptr
 //go:linkname runtime_memhash64 runtime.memhash64
 func runtime_memhash64(data unsafe.Pointer, seed uintptr) uintptr
 
+//go:noescape
+//go:linkname runtime_memhash runtime.memhash
+func runtime_memhash(data unsafe.Pointer, seed, size uintptr) uintptr
+
 func memhash32(data uint32, seed uintptr) uintptr {
 	return runtime_memhash32(unsafe.Pointer(&data), seed)
 }
 
 func memhash64(data uint64, seed uintptr) uintptr {
 	return runtime_memhash64(unsafe.Pointer(&data), seed)
+}
+
+func memhash128(data [16]byte, seed uintptr) uintptr {
+	return runtime_memhash(unsafe.Pointer(&data), seed, 16)
 }
 
 func TestHash32(t *testing.T) {
@@ -110,6 +119,44 @@ func BenchmarkMultiHash64(b *testing.B) {
 		MultiHash64(hashes[:], values[:], seed)
 		return len(hashes)
 	})
+}
+
+func TestHash128(t *testing.T) {
+	if !Enabled() {
+		t.Skip("AES hash not supported on this platform")
+	}
+
+	h0 := memhash128([16]byte{0: 42}, 1)
+	h1 := Hash128([16]byte{0: 42}, 1)
+
+	if h0 != h1 {
+		t.Errorf("want=%016x got=%016x", h0, h1)
+	}
+}
+
+func TestMultiHash128(t *testing.T) {
+	if !Enabled() {
+		t.Skip("AES hash not supported on this platform")
+	}
+
+	const N = 10
+	hashes := [N]uintptr{}
+	values := [N][16]byte{}
+	seed := uintptr(128)
+
+	for i := range values {
+		binary.LittleEndian.PutUint64(values[i][:8], uint64(i))
+	}
+
+	MultiHash128(hashes[:], values[:], seed)
+
+	for i := range values {
+		h := Hash128(values[i], seed)
+
+		if h != hashes[i] {
+			t.Errorf("hash(%d): want=%016x got=%016x", values[i], h, hashes[i])
+		}
+	}
 }
 
 func benchmarkHashThroughput(b *testing.B, f func(seed uintptr) int) {
