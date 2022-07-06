@@ -2,7 +2,9 @@
 
 package hashprobe
 
-import "github.com/segmentio/parquet-go/internal/unsafecast"
+import (
+	"github.com/segmentio/parquet-go/internal/unsafecast"
+)
 
 func multiProbe32(table []uint32, len, cap int, hashes []uintptr, keys []uint32, values []int32) int {
 	offset := uintptr(cap) / 32
@@ -77,7 +79,7 @@ func multiProbe128(table []byte, len, cap int, hashes []uintptr, keys [][16]byte
 	modulo := uintptr(cap) - 1
 
 	valuesOffset := offset + 16*uintptr(cap)
-	tableFlags := table[:offset]
+	tableFlags := unsafecast.BytesToUint64(table[:offset])
 	tableKeys := unsafecast.BytesToUint128(table[offset:valuesOffset])
 	tableValues := unsafecast.BytesToInt32(table[valuesOffset:])
 
@@ -85,8 +87,8 @@ func multiProbe128(table []byte, len, cap int, hashes []uintptr, keys [][16]byte
 		hash &= modulo
 
 		for {
-			index := hash / 8
-			shift := hash % 8
+			index := hash / 64
+			shift := hash % 64
 
 			if (tableFlags[index] & (1 << shift)) == 0 {
 				tableFlags[index] |= 1 << shift

@@ -152,10 +152,10 @@ probe:
     ANDQ R11, R12 // hash & modulo
     MOVQ R12, R14
     MOVQ R12, R15
-    SHRQ $3, R14     // index = hash / 8
-    ANDQ $0b111, R15 // shift = hash % 8
+    SHRQ $6, R14        // index = hash / 64
+    ANDQ $0b111111, R15 // shift = hash % 64
 
-    MOVBQZX (AX)(R14*1), CX
+    MOVQ (AX)(R14*8), CX
     BTSQ R15, CX
     JNC insert // tableFlags[index] & 1<<shift == 0 ?
 
@@ -181,7 +181,7 @@ test:
 insert:
     MOVQ R12, R15
     SHLQ $4, R15
-    MOVB CX, (AX)(R14*1)
+    MOVQ CX, (AX)(R14*8)
     MOVOU (R8), X0
     MOVOU X0, (R13)(R15*1)
     MOVL BX, (R10)(R12*4)
