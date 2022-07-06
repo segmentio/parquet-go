@@ -33,7 +33,7 @@ func writeValuesBitpackAVX2(values unsafe.Pointer, rows array, size, offset uint
 //go:noescape
 func writeValues32bitsAVX2(values unsafe.Pointer, rows array, size, offset uintptr)
 
-//go:noescpae
+//go:noescape
 func writeValues64bitsAVX2(values unsafe.Pointer, rows array, size, offset uintptr)
 
 //go:noescape
