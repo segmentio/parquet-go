@@ -48,18 +48,6 @@ const (
 	probesPerLoop = 256
 )
 
-var (
-	hash32 = wyhash.Hash32
-	hash64 = wyhash.Hash64
-)
-
-func init() {
-	if aeshash.Enabled() {
-		hash32 = aeshash.Hash32
-		hash64 = aeshash.Hash64
-	}
-}
-
 func nextPowerOf2(n int) int {
 	return 1 << (64 - bits.LeadingZeros64(uint64(n-1)))
 }
@@ -116,6 +104,37 @@ func (t *Uint32Table) Probe(keys []uint32, values []int32) int {
 	return t.probe(keys, values)
 }
 
+// table32 is the generic implementation of probing tables for 32 bit types.
+//
+// The table uses the following memory layout:
+//
+//		[bitmap][keys][values]
+//
+// - The bitmap is used to determine which slots of the table are occupied,
+//   when a bit is set to 1, the key and value at the corresponding index in
+//   the arrays of keys and values have been assigned.
+//
+// - The array of keys is written right after the bitmap. All keys are 32 bits
+//   values.
+//
+// - Values are written after the keys, with each slot of the keys array mapping
+//   to a value at the same slot in the values array.
+//
+// This memory layout is a combination between simplicity and performance; the
+// bitmap is required in order to differentiate between key slots with the zero
+// value, and key slots that have not yet been assigned.
+//
+// The memory layout is also optimized for fast probing of existing keys, in
+// which case the lookup can be performed with only 4 memory loads, and 1 store:
+// 1. load the bitmap location and test the bit to see that the slot is occupied
+// 2. load the key at the corresponding index, compare with the current key
+// 3. load the value at the corresponding index, save in the output buffer
+//
+// Conflicts are resolved by testing the next slot, until a free slot is found.
+// This strategy relies on having a good hashing function with fairly strong
+// resistance to attacks that would attempt to create a layout where all keys
+// conflict. The package uses hashing functions similar to the ones used by the
+// Go runtime for this purpose.
 type table32 struct {
 	len     int
 	cap     int
@@ -154,7 +173,7 @@ func (t *table32) grow(totalValues int) {
 	tmp.init(cap, t.maxLoad)
 	tmp.len = t.len
 
-	flags, pairs := t.content()
+	flags, keys, values := t.content()
 
 	for i, f := range flags {
 		if f != 0 {
@@ -166,7 +185,7 @@ func (t *table32) grow(totalValues int) {
 			for {
 				n := bits.TrailingZeros32(^f)
 				k := j + n
-				tmp.insert(pairs[2*j : 2*k : 2*k])
+				tmp.insert(keys[j:k:k], values[j:k:k])
 				j += n
 				f >>= uint(n)
 				if f == 0 {
@@ -182,22 +201,27 @@ func (t *table32) grow(totalValues int) {
 	*t = tmp
 }
 
-func (t *table32) insert(pairs []uint32) {
-	flags, table := t.content()
-	mod := uintptr(t.cap) - 1
+func (t *table32) insert(keys, values []uint32) {
+	tableFlags, tableKeys, tableValues := t.content()
+	hashes := make([]uintptr, len(keys), 32)
+	modulo := uintptr(t.cap) - 1
 
-	for i := 0; i < len(pairs); i += 2 {
-		hash := hash32(pairs[i], t.seed)
+	if aeshash.Enabled() {
+		aeshash.MultiHash32(hashes, keys, t.seed)
+	} else {
+		wyhash.MultiHash32(hashes, keys, t.seed)
+	}
 
+	for i, hash := range hashes {
 		for {
-			position := hash & mod
-			index := position / 32
-			shift := position % 32
+			hash &= modulo
+			index := hash / 32
+			shift := hash % 32
 
-			if (flags[index] & (1 << shift)) == 0 {
-				flags[index] |= 1 << shift
-				table[2*position+0] = pairs[i+0]
-				table[2*position+1] = pairs[i+1]
+			if (tableFlags[index] & (1 << shift)) == 0 {
+				tableFlags[index] |= 1 << shift
+				tableKeys[hash] = keys[i]
+				tableValues[hash] = values[i]
 				break
 			}
 
@@ -206,16 +230,19 @@ func (t *table32) insert(pairs []uint32) {
 	}
 }
 
-func (t *table32) content() (flags, pairs []uint32) {
-	n := t.cap / 32
-	return t.table[:n:n], t.table[n:len(t.table):len(t.table)]
+func (t *table32) content() (flags, keys, values []uint32) {
+	i := t.cap / 32
+	j := t.cap + i
+	k := len(t.table)
+	return t.table[:i:i], t.table[i:j:j], t.table[j:k:k]
 }
 
 func (t *table32) reset() {
+	t.len = 0
+
 	for i := range t.table {
 		t.table[i] = 0
 	}
-	t.len = 0
 }
 
 func (t *table32) probe(keys []uint32, values []int32) int {
@@ -301,13 +328,17 @@ func (t *Uint64Table) Probe(keys []uint64, values []int32) int {
 	return t.probe(keys, values)
 }
 
+// table64 is the generic implementation of probing tables for 64 bit types.
+//
+// The datastructure follows the same implementation as the one used by table32
+// but the keys are 64 bit values.
 type table64 struct {
 	len     int
 	cap     int
 	maxLen  int
 	maxLoad float64
 	seed    uintptr
-	table   []uint64
+	table   []byte
 }
 
 func makeTable64(cap int, maxLoad float64) (t table64) {
@@ -324,7 +355,7 @@ func (t *table64) init(cap int, maxLoad float64) {
 		maxLen:  int(math.Ceil(maxLoad * float64(cap))),
 		maxLoad: maxLoad,
 		seed:    randSeed(),
-		table:   make([]uint64, cap/64+2*cap),
+		table:   make([]byte, cap/8+8*cap+4*cap),
 	}
 }
 
@@ -339,7 +370,7 @@ func (t *table64) grow(totalValues int) {
 	tmp.init(cap, t.maxLoad)
 	tmp.len = t.len
 
-	flags, pairs := t.content()
+	flags, keys, values := t.content()
 
 	for i, f := range flags {
 		if f != 0 {
@@ -351,7 +382,7 @@ func (t *table64) grow(totalValues int) {
 			for {
 				n := bits.TrailingZeros64(^f)
 				k := j + n
-				tmp.insert(pairs[2*j : 2*k : 2*k])
+				tmp.insert(keys[j:k:k], values[j:k:k])
 				j += n
 				f >>= uint(n)
 				if f == 0 {
@@ -367,22 +398,27 @@ func (t *table64) grow(totalValues int) {
 	*t = tmp
 }
 
-func (t *table64) insert(pairs []uint64) {
-	flags, table := t.content()
-	mod := uintptr(t.cap) - 1
+func (t *table64) insert(keys []uint64, values []int32) {
+	tableFlags, tableKeys, tableValues := t.content()
+	hashes := make([]uintptr, len(keys), 64)
+	modulo := uintptr(t.cap) - 1
 
-	for i := 0; i < len(pairs); i += 2 {
-		hash := hash64(pairs[i], t.seed)
+	if aeshash.Enabled() {
+		aeshash.MultiHash64(hashes, keys, t.seed)
+	} else {
+		wyhash.MultiHash64(hashes, keys, t.seed)
+	}
 
+	for i, hash := range hashes {
 		for {
-			position := hash & mod
-			index := position / 64
-			shift := position % 64
+			hash &= modulo
+			index := hash / 64
+			shift := hash % 64
 
-			if (flags[index] & (1 << shift)) == 0 {
-				flags[index] |= 1 << shift
-				table[2*position+0] = pairs[i+0]
-				table[2*position+1] = pairs[i+1]
+			if (tableFlags[index] & (1 << shift)) == 0 {
+				tableFlags[index] |= 1 << shift
+				tableKeys[hash] = keys[i]
+				tableValues[hash] = values[i]
 				break
 			}
 
@@ -391,16 +427,19 @@ func (t *table64) insert(pairs []uint64) {
 	}
 }
 
-func (t *table64) content() (flags, pairs []uint64) {
-	n := t.cap / 64
-	return t.table[:n:n], t.table[n:len(t.table):len(t.table)]
+func (t *table64) content() (flags, keys []uint64, values []int32) {
+	i := t.cap / 8
+	j := 8*t.cap + i
+	k := len(t.table)
+	return unsafecast.BytesToUint64(t.table[:i:i]), unsafecast.BytesToUint64(t.table[i:j:j]), unsafecast.BytesToInt32(t.table[j:k:k])
 }
 
 func (t *table64) reset() {
+	t.len = 0
+
 	for i := range t.table {
 		t.table[i] = 0
 	}
-	t.len = 0
 }
 
 func (t *table64) probe(keys []uint64, values []int32) int {
@@ -454,6 +493,10 @@ func (t *Uint128Table) Probe(keys [][16]byte, values []int32) int {
 	return t.probe(keys, values)
 }
 
+// table128 is the generic implementation of probing tables for 128 bit types.
+//
+// The datastructure follows the same implementation as the one used by table32
+// but the keys are 128 bit values.
 type table128 struct {
 	len     int
 	cap     int
@@ -532,9 +575,8 @@ func (t *table128) insert(keys [][16]byte, values []int32) {
 	}
 
 	for i, hash := range hashes {
-		hash &= modulo
-
 		for {
+			hash &= modulo
 			index := hash / 64
 			shift := hash % 64
 
@@ -545,7 +587,7 @@ func (t *table128) insert(keys [][16]byte, values []int32) {
 				break
 			}
 
-			hash = (hash + 1) & modulo
+			hash++
 		}
 	}
 }
@@ -553,7 +595,8 @@ func (t *table128) insert(keys [][16]byte, values []int32) {
 func (t *table128) content() (flags []uint64, keys [][16]byte, values []int32) {
 	i := t.cap / 8
 	j := 16*t.cap + i
-	return unsafecast.BytesToUint64(t.table[:i]), unsafecast.BytesToUint128(t.table[i:j]), unsafecast.BytesToInt32(t.table[j:])
+	k := len(t.table)
+	return unsafecast.BytesToUint64(t.table[:i:i]), unsafecast.BytesToUint128(t.table[i:j:j]), unsafecast.BytesToInt32(t.table[j:k:k])
 }
 
 func (t *table128) reset() {
