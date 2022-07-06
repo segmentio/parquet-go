@@ -14,9 +14,9 @@ TEXT ·Hash32(SB), NOSPLIT, $0-24
     MOVQ BX, X0
     PINSRD $2, AX, X0
 
-	AESENC X1, X0
-	AESENC X2, X0
-	AESENC X3, X0
+    AESENC X1, X0
+    AESENC X2, X0
+    AESENC X3, X0
 
     MOVQ X0, ret+16(FP)
     RET
@@ -33,9 +33,9 @@ TEXT ·Hash64(SB), NOSPLIT, $0-24
     MOVQ BX, X0
     PINSRQ $1, AX, X0
 
-	AESENC X1, X0
-	AESENC X2, X0
-	AESENC X3, X0
+    AESENC X1, X0
+    AESENC X2, X0
+    AESENC X3, X0
 
     MOVQ X0, ret+16(FP)
     RET
@@ -54,9 +54,9 @@ TEXT ·Hash128(SB), NOSPLIT, $0-32
 
     MOVOU (AX), X1
     PXOR X0, X1
-	AESENC X1, X1
-	AESENC X1, X1
-	AESENC X1, X1
+    AESENC X1, X1
+    AESENC X1, X1
+    AESENC X1, X1
 
     MOVQ X1, ret+24(FP)
     RET
@@ -78,9 +78,9 @@ loop:
     MOVQ DX, X0
     PINSRD $2, (BX)(SI*4), X0
 
-	AESENC X1, X0
-	AESENC X2, X0
-	AESENC X3, X0
+    AESENC X1, X0
+    AESENC X2, X0
+    AESENC X3, X0
 
     MOVQ X0, (AX)(SI*8)
     INCQ SI
@@ -106,9 +106,9 @@ loop:
     MOVQ DX, X0
     PINSRQ $1, (BX)(SI*8), X0
 
-	AESENC X1, X0
-	AESENC X2, X0
-	AESENC X3, X0
+    AESENC X1, X0
+    AESENC X2, X0
+    AESENC X3, X0
 
     MOVQ X0, (AX)(SI*8)
     INCQ SI
@@ -137,9 +137,9 @@ loop:
     MOVOU (BX), X1
 
     PXOR X0, X1
-	AESENC X1, X1
-	AESENC X1, X1
-	AESENC X1, X1
+    AESENC X1, X1
+    AESENC X1, X1
+    AESENC X1, X1
 
     MOVQ X1, (AX)(SI*8)
     ADDQ $16, BX
