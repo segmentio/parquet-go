@@ -264,6 +264,9 @@ func (f *File) Root() *Column { return f.root }
 // Schema returns the schema of f.
 func (f *File) Schema() *Schema { return f.schema }
 
+// Metadata returns the metadata of f.
+func (f *File) Metadata() format.FileMetaData { return f.metadata }
+
 // Size returns the size of f (in bytes).
 func (f *File) Size() int64 { return f.size }
 
@@ -310,9 +313,7 @@ func (f *File) hasIndexes() bool {
 	return f.columnIndexes != nil && f.offsetIndexes != nil
 }
 
-var (
-	_ io.ReaderAt = (*File)(nil)
-)
+var _ io.ReaderAt = (*File)(nil)
 
 func sortKeyValueMetadata(keyValueMetadata []format.KeyValue) {
 	sort.Slice(keyValueMetadata, func(i, j int) bool {
