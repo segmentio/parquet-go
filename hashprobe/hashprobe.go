@@ -21,7 +21,8 @@
 //
 // Applications that need to determine which keys were inserted can capture the
 // length of the probing table prior to the call, and scan the list of values
-// looking for indexes greater or equal to the captured lenth.
+// looking for indexes greater or equal to the length of the table before the
+// call.
 package hashprobe
 
 import (
