@@ -4,7 +4,7 @@
 
 // func Hash32(value uint32, seed uintptr) uintptr
 TEXT ·Hash32(SB), NOSPLIT, $0-24
-    MOVQ value+0(FP), AX
+    MOVL value+0(FP), AX
     MOVQ seed+8(FP), BX
 
     MOVOU runtime·aeskeysched+0(SB), X1
@@ -23,7 +23,7 @@ TEXT ·Hash32(SB), NOSPLIT, $0-24
 
 // func Hash64(value uint64, seed uintptr) uintptr
 TEXT ·Hash64(SB), NOSPLIT, $0-24
-    MOVL value+0(FP), AX
+    MOVQ value+0(FP), AX
     MOVQ seed+8(FP), BX
 
     MOVOU runtime·aeskeysched+0(SB), X1
