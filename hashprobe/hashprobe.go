@@ -135,6 +135,8 @@ func (t *Uint32Table) Probe(keys []uint32, values []int32) int {
 // resistance to attacks that would attempt to create a layout where all keys
 // conflict. The package uses hashing functions similar to the ones used by the
 // Go runtime for this purpose.
+//
+// https://en.wikipedia.org/wiki/Linear_probing
 type table32 struct {
 	len     int
 	cap     int
