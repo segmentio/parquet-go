@@ -148,6 +148,9 @@ type table32 struct {
 }
 
 func makeTable32(cap int, maxLoad float64) (t table32) {
+	if maxLoad < 0 || maxLoad > 1 {
+		panic("max load of probing table must be a value between 0 and 1")
+	}
 	if cap < 32 {
 		cap = 32
 	}
@@ -345,6 +348,9 @@ type table64 struct {
 }
 
 func makeTable64(cap int, maxLoad float64) (t table64) {
+	if maxLoad < 0 || maxLoad > 1 {
+		panic("max load of probing table must be a value between 0 and 1")
+	}
 	if cap < 64 {
 		cap = 64
 	}
@@ -510,6 +516,9 @@ type table128 struct {
 }
 
 func makeTable128(cap int, maxLoad float64) (t table128) {
+	if maxLoad < 0 || maxLoad > 1 {
+		panic("max load of probing table must be a value between 0 and 1")
+	}
 	if cap < 64 {
 		cap = 64
 	}

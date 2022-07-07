@@ -15,7 +15,8 @@ import (
 
 const (
 	// Maximum load of probing tables. This parameter configures the balance
-	// between memory density and compute time of probing operations.
+	// between memory density and compute time of probing operations. Valid
+	// values are floating point numbers between 0 and 1.
 	//
 	// Smaller values result in lower collision probability when inserting
 	// values in probing tables, but also increase memory utilization.
