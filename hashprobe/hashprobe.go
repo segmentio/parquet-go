@@ -26,9 +26,12 @@
 package hashprobe
 
 import (
+	cryptoRand "crypto/rand"
+	"encoding/binary"
 	"math"
 	"math/bits"
 	"math/rand"
+	"sync"
 
 	"github.com/segmentio/parquet-go/hashprobe/aeshash"
 	"github.com/segmentio/parquet-go/hashprobe/wyhash"
@@ -49,12 +52,29 @@ const (
 	probesPerLoop = 256
 )
 
+var (
+	prngSeed   [8]byte
+	prngMutex  sync.Mutex
+	prngSource rand.Source64
+)
+
+func init() {
+	_, err := cryptoRand.Read(prngSeed[:])
+	if err != nil {
+		panic("cannot seed random number generator from system source: " + err.Error())
+	}
+	seed := int64(binary.LittleEndian.Uint64(prngSeed[:]))
+	prngSource = rand.NewSource(seed).(rand.Source64)
+}
+
 func nextPowerOf2(n int) int {
 	return 1 << (64 - bits.LeadingZeros64(uint64(n-1)))
 }
 
 func randSeed() uintptr {
-	return uintptr(rand.Uint64())
+	prngMutex.Lock()
+	defer prngMutex.Unlock()
+	return uintptr(prngSource.Uint64())
 }
 
 type Int32Table struct{ table32 }
