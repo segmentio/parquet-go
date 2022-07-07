@@ -7,7 +7,7 @@ import "golang.org/x/sys/cpu"
 // Enabled returns true if AES hash is available on the system.
 //
 // The function uses the same logic than the Go runtime since we depend on
-// it the AES hash state being initialized.
+// the AES hash state being initialized.
 //
 // See https://go.dev/src/runtime/alg.go
 func Enabled() bool { return cpu.X86.HasAES && cpu.X86.HasSSSE3 && cpu.X86.HasSSE41 }
