@@ -18,13 +18,16 @@ TEXT ·MultiHash32(SB), NOSPLIT, $0-56
     MOVQ $m1, R8
     MOVQ $m2, R9
     MOVQ $m5^4, R10
-    XORQ R11, R8
 
     XORQ SI, SI
     JMP test
 loop:
+    MOVQ R11, R13
+hash:
     MOVL (DI)(SI*4), AX
+
     MOVQ R8, BX
+    XORQ R13, BX
 
     XORQ AX, BX
     XORQ R9, AX
@@ -35,12 +38,18 @@ loop:
     MULQ R10
     XORQ DX, AX
 
+    CMPQ AX, $0
+    JE next
+
     MOVQ AX, (R12)(SI*8)
     INCQ SI
 test:
     CMPQ SI, CX
     JNE loop
     RET
+next:
+    INCQ R13
+    JMP hash
 
 // func MultiHash64(hashes []uintptr, values []uint64, seed uintptr)
 TEXT ·MultiHash64(SB), NOSPLIT, $0-56
@@ -52,13 +61,16 @@ TEXT ·MultiHash64(SB), NOSPLIT, $0-56
     MOVQ $m1, R8
     MOVQ $m2, R9
     MOVQ $m5^8, R10
-    XORQ R11, R8
 
     XORQ SI, SI
     JMP test
 loop:
+    MOVQ R11, R13
+hash:
     MOVQ (DI)(SI*8), AX
+
     MOVQ R8, BX
+    XORQ R13, BX
 
     XORQ AX, BX
     XORQ R9, AX
@@ -69,12 +81,18 @@ loop:
     MULQ R10
     XORQ DX, AX
 
+    CMPQ AX, $0
+    JE next
+
     MOVQ AX, (R12)(SI*8)
     INCQ SI
 test:
     CMPQ SI, CX
     JNE loop
     RET
+next:
+    INCQ R13
+    JMP hash
 
 // func MultiHash128(hashes []uintptr, values [][16]byte, seed uintptr)
 TEXT ·MultiHash128(SB), NOSPLIT, $0-56
@@ -86,14 +104,17 @@ TEXT ·MultiHash128(SB), NOSPLIT, $0-56
     MOVQ $m1, R8
     MOVQ $m2, R9
     MOVQ $m5^16, R10
-    XORQ R11, R8
 
     XORQ SI, SI
     JMP test
 loop:
+    MOVQ R11, R13
+hash:
     MOVQ 0(DI), AX
     MOVQ 8(DI), DX
+
     MOVQ R8, BX
+    XORQ R13, BX
 
     XORQ DX, BX
     XORQ R9, AX
@@ -111,3 +132,6 @@ test:
     CMPQ SI, CX
     JNE loop
     RET
+next:
+    INCQ R13
+    JMP hash

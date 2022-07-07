@@ -21,15 +21,33 @@ func mix(a, b uint64) uint64 {
 }
 
 func Hash32(value uint32, seed uintptr) uintptr {
-	return uintptr(mix(m5^4, mix(uint64(value)^m2, uint64(value)^uint64(seed)^m1)))
+	for {
+		h := uintptr(mix(m5^4, mix(uint64(value)^m2, uint64(value)^uint64(seed)^m1)))
+		if h != 0 {
+			return h
+		}
+		seed++
+	}
 }
 
 func Hash64(value uint64, seed uintptr) uintptr {
-	return uintptr(mix(m5^8, mix(value^m2, value^uint64(seed)^m1)))
+	for {
+		h := uintptr(mix(m5^8, mix(value^m2, value^uint64(seed)^m1)))
+		if h != 0 {
+			return h
+		}
+		seed++
+	}
 }
 
 func Hash128(value [16]byte, seed uintptr) uintptr {
-	a := binary.LittleEndian.Uint64(value[:8])
-	b := binary.LittleEndian.Uint64(value[8:])
-	return uintptr(mix(m5^16, mix(a^m2, b^uint64(seed)^m1)))
+	for {
+		a := binary.LittleEndian.Uint64(value[:8])
+		b := binary.LittleEndian.Uint64(value[8:])
+		h := uintptr(mix(m5^16, mix(a^m2, b^uint64(seed)^m1)))
+		if h != 0 {
+			return h
+		}
+		seed++
+	}
 }
