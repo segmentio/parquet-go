@@ -8,8 +8,8 @@
 
 #include "textflag.h"
 
-// func multiProbe32Default(table []table32Group, numKeys int, hashes []uintptr, keys []uint32, values []int32) (int, int)
-TEXT ·multiProbe32Default(SB), NOSPLIT, $0-120
+// func multiProbe32Default(table []table32Group, numKeys int, hashes []uintptr, keys []uint32, values []int32) int
+TEXT ·multiProbe32Default(SB), NOSPLIT, $0-112
     MOVQ table_base+0(FP), AX
     MOVQ table_len+8(FP), BX
     MOVQ numKeys+24(FP), CX
@@ -20,7 +20,6 @@ TEXT ·multiProbe32Default(SB), NOSPLIT, $0-120
     DECQ BX // modulo = len(table) - 1
 
     XORQ SI, SI
-    MOVQ SI, ret1+112(FP)
     JMP test
 loop:
     MOVQ (DX)(SI*8), R10 // hash
@@ -29,51 +28,55 @@ probe:
     MOVQ R10, R12
     ANDQ BX, R12 // hash & modulo
     SHLQ $6, R12 // x 64 (size of table32Group)
-    LEAQ (AX)(R12*1), R13
+    LEAQ (AX)(R12*1), R12
 
-    MOVL $0, R14
-    CMPL 4(R13), R11
+    MOVL $0, R13
+    CMPL 4(R12), R11
     JE testKeyIndexInRange
 
-    MOVL $1, R14
-    CMPL 8(R13), R11
+    MOVL $1, R13
+    CMPL 8(R12), R11
     JE testKeyIndexInRange
 
-    MOVL $2, R14
-    CMPL 12(R13), R11
+    MOVL $2, R13
+    CMPL 12(R12), R11
     JE testKeyIndexInRange
 
-    MOVL $3, R14
-    CMPL 16(R13), R11
+    MOVL $3, R13
+    CMPL 16(R12), R11
     JE testKeyIndexInRange
 
-    MOVL $4, R14
-    CMPL 20(R13), R11
+    MOVL $4, R13
+    CMPL 20(R12), R11
     JE testKeyIndexInRange
 
-    MOVL $5, R14
-    CMPL 24(R13), R11
+    MOVL $5, R13
+    CMPL 24(R12), R11
     JE testKeyIndexInRange
 
-    MOVL $6, R14
-    CMPL 28(R13), R11
+    MOVL $6, R13
+    CMPL 28(R12), R11
     JE testKeyIndexInRange
 
-    MOVL $7, R14
+    MOVL $7, R13
 testKeyIndexInRange:
-    MOVL 0(R13), R12
-    MOVL 32(R13)(R14*4), R15
-    CMPL R14, R12
+    MOVL (R12), R14
+    MOVL 32(R12)(R13*4), R15
+    POPCNTL R14, R14
+    CMPL R13, R14
     JL next
 
-    CMPL R12, $7
+    CMPL R14, $7
     JE probeNextGroup
 
-    MOVL R12, R14
-    INCL R12
-    MOVL R12, 0(R13)
-    MOVL R11, 4(R13)(R14*4)
-    MOVL CX, 32(R13)(R14*4)
+    MOVL (R12), R13
+    MOVL (R12), R14
+    POPCNTL R13, R13
+    SHLL $1, R14
+    ORL $1, R14
+    MOVL R14, (R12)
+    MOVL R11, 4(R12)(R13*4)
+    MOVL CX, 32(R12)(R13*4)
     MOVL CX, R15
     INCL CX
 next:
@@ -86,13 +89,12 @@ test:
     RET
 probeNextGroup:
     INCQ R10
-    INCQ ret1+112(FP)
     JMP probe
 
 GLOBL probeGroupMask<>(SB), RODATA|NOPTR, $32
-DATA probeGroupMask<>+0(SB)/4, $0x00000000
-DATA probeGroupMask<>+4(SB)/4, $0xFFFFFFFF
-DATA probeGroupMask<>+8(SB)/4, $0xFFFFFFFF
+DATA probeGroupMask<>+0(SB)/4,  $0x00000000
+DATA probeGroupMask<>+4(SB)/4,  $0xFFFFFFFF
+DATA probeGroupMask<>+8(SB)/4,  $0xFFFFFFFF
 DATA probeGroupMask<>+12(SB)/4, $0xFFFFFFFF
 DATA probeGroupMask<>+16(SB)/4, $0xFFFFFFFF
 DATA probeGroupMask<>+20(SB)/4, $0xFFFFFFFF
@@ -103,7 +105,7 @@ DATA probeGroupMask<>+28(SB)/4, $0xFFFFFFFF
 TEXT ·multiProbe32AVX2(SB), NOSPLIT, $0-112
     MOVQ table_base+0(FP), AX
     MOVQ table_len+8(FP), BX
-    MOVQ numKeys+24(FP), R13
+    MOVQ numKeys+24(FP), CX
     MOVQ hashes_base+32(FP), DX
     MOVQ hashes_len+40(FP), DI
     MOVQ keys_base+56(FP), R8
@@ -111,7 +113,6 @@ TEXT ·multiProbe32AVX2(SB), NOSPLIT, $0-112
     DECQ BX // modulo = len(table) - 1
 
     XORQ SI, SI
-    MOVQ SI, ret1+112(FP)
     JMP test
 loop:
     MOVQ (DX)(SI*8), R10        // hash
@@ -122,43 +123,37 @@ probe:
     SHLQ $6, R11 // x 64 (size of table32Group)
     LEAQ (AX)(R11*1), R12
 
-    VMOVDQU (R12), Y1
-    VPCMPEQD Y0, Y1, Y2
+    VPCMPEQD (R12), Y0, Y2
     VMOVMSKPS Y2, R11
     SHRL $1, R11
-
-    MOVL (R12), R14
-    MOVL $0x7F, R15
-    MOVL $7, CX
-    SUBL R14, CX
-    SHRL CX, R15
-    TESTL R11, R15
+    MOVL (R12), R13
+    TESTL R11, R13
     JZ insert
 
-    TZCNTL R11, R14
-    MOVL 32(R12)(R14*4), R15
+    TZCNTL R11, R13
+    MOVL 32(R12)(R13*4), R15
 next:
     MOVL R15, (R9)(SI*4)
     INCQ SI
 test:
     CMPQ SI, DI
     JNE loop
-    MOVQ R13, ret+104(FP)
+    MOVQ CX, ret+104(FP)
     RET
 insert:
-    MOVQ X1, CX // group.len
-    CMPL CX, $7
+    MOVL R13, R11
+    POPCNTL R13, R13
+    CMPL R13, $7
     JE probeNextGroup
 
     MOVQ X0, R14 // key
-    MOVL CX, R11
-    MOVL CX, CX
-    INCL R11
-    MOVL R11, (R12)         // group.len++
-    MOVL R14, 4(R12)(CX*4)  // group.keys[i] = key
-    MOVL R13, 32(R12)(CX*4) // group.values[i] = value
-    MOVL R13, R15
-    INCL R13
+    SHLL $1, R11
+    ORL $1, R11
+    MOVL R11, (R12)          // group.len = (group.len << 1) | 1
+    MOVL R14, 4(R12)(R13*4)  // group.keys[i] = key
+    MOVL CX, 32(R12)(R13*4)  // group.values[i] = value
+    MOVL CX, R15
+    INCL CX
     JMP next
 probeNextGroup:
     INCQ R10

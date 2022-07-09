@@ -167,7 +167,7 @@ type table32 struct {
 }
 
 type table32Group struct {
-	len    uint32
+	bits   uint32
 	keys   [7]uint32
 	values [7]uint32
 	_      uint32
@@ -213,7 +213,7 @@ func (t *table32) grow(totalValues int) {
 
 	for i := range t.table {
 		g := &t.table[i]
-		n := g.len
+		n := bits.OnesCount32(g.bits)
 
 		if aeshash.Enabled() {
 			aeshash.MultiHash32(hashes[:n], g.keys[:n], tmp.seed)
@@ -225,8 +225,8 @@ func (t *table32) grow(totalValues int) {
 			for {
 				group := &tmp.table[hash&modulo]
 
-				if n := group.len; n < 7 {
-					group.len++
+				if n := bits.OnesCount32(group.bits); n < 7 {
+					group.bits = (group.bits << 1) | 1
 					group.keys[n] = g.keys[j]
 					group.values[n] = g.values[j]
 					break
