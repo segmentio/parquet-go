@@ -280,6 +280,8 @@ func (t *table32) probe(keys []uint32, values []int32) int {
 	var baseLength = t.len
 	var useAesHash = aeshash.Enabled()
 
+	_ = values[:len(keys)]
+
 	for i := 0; i < len(keys); {
 		j := len(hashes) + i
 		n := len(hashes)
@@ -480,6 +482,8 @@ func (t *table64) probe(keys []uint64, values []int32) int {
 	var baseLength = t.len
 	var useAesHash = aeshash.Enabled()
 
+	_ = values[:len(keys)]
+
 	for i := 0; i < len(keys); {
 		j := len(hashes) + i
 		n := len(hashes)
@@ -647,6 +651,8 @@ func (t *table128) probe(keys [][16]byte, values []int32) int {
 	var hashes [probesPerLoop]uintptr
 	var baseLength = t.len
 	var useAesHash = aeshash.Enabled()
+
+	_ = values[:len(keys)]
 
 	for i := 0; i < len(keys); {
 		j := len(hashes) + i
