@@ -34,6 +34,25 @@ func TestMultiHash32(t *testing.T) {
 	}
 }
 
+func BenchmarkHash32(b *testing.B) {
+	b.SetBytes(8)
+	value := rand.Uint32()
+	benchmarkHashThroughput(b, func(seed uintptr) int {
+		value = uint32(Hash32(value, seed))
+		return 1
+	})
+}
+
+func BenchmarkMultiHash32(b *testing.B) {
+	hashes := [512]uintptr{}
+	values := [512]uint32{}
+	b.SetBytes(4 * int64(len(hashes)))
+	benchmarkHashThroughput(b, func(seed uintptr) int {
+		MultiHash32(hashes[:], values[:], seed)
+		return len(hashes)
+	})
+}
+
 func TestHash64(t *testing.T) {
 	if h := Hash64(42, 1); h != 0x6e69a6ede6b5a25e {
 		t.Errorf("hash mismatch: %016x", h)
@@ -123,7 +142,7 @@ func BenchmarkHash128(b *testing.B) {
 func BenchmarkMultiHash128(b *testing.B) {
 	hashes := [512]uintptr{}
 	values := [512][16]byte{}
-	b.SetBytes(8 * int64(len(hashes)))
+	b.SetBytes(16 * int64(len(hashes)))
 	benchmarkHashThroughput(b, func(seed uintptr) int {
 		MultiHash128(hashes[:], values[:], seed)
 		return len(hashes)
