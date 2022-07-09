@@ -6,40 +6,56 @@ import (
 	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
-func multiProbe32(table []uint32, len, cap int, hashes []uintptr, keys []uint32, values []int32) int {
-	offset := uintptr(cap) / 32
-	modulo := uintptr(cap) - 1
-
-	valuesOffset := offset + uintptr(cap)
-	tableFlags := table[:offset]
-	tableKeys := table[offset:valuesOffset]
-	tableValues := table[valuesOffset:]
+func multiProbe32(table []table32Group, numKeys int, hashes []uintptr, keys []uint32, values []int32) (int, int) {
+	modulo := uintptr(len(table)) - 1
+	collisions := 0
 
 	for i, hash := range hashes {
+		key := keys[i]
 		for {
-			hash &= modulo
-			index := hash / 32
-			shift := hash % 32
+			group := &table[hash&modulo]
+			index := 7
+			value := int32(0)
 
-			if (tableFlags[index] & (1 << shift)) == 0 {
-				tableFlags[index] |= 1 << shift
-				tableKeys[hash] = keys[i]
-				tableValues[hash] = uint32(len)
-				values[i] = int32(len)
-				len++
-				break
+			switch key {
+			case group.keys[0]:
+				index = 0
+			case group.keys[1]:
+				index = 1
+			case group.keys[2]:
+				index = 2
+			case group.keys[3]:
+				index = 3
+			case group.keys[4]:
+				index = 4
+			case group.keys[5]:
+				index = 5
+			case group.keys[6]:
+				index = 6
 			}
 
-			if tableKeys[hash] == keys[i] {
-				values[i] = int32(tableValues[hash])
-				break
+			if n := group.len; index < int(n) {
+				value = int32(group.values[index])
+			} else {
+				if n == 7 {
+					hash++
+					collisions++
+					continue
+				}
+
+				value = int32(numKeys)
+				group.len++
+				group.keys[n] = key
+				group.values[n] = uint32(value)
+				numKeys++
 			}
 
-			hash++
+			values[i] = value
+			break
 		}
 	}
 
-	return len
+	return numKeys, collisions
 }
 
 func multiProbe64(table []byte, len, cap int, hashes []uintptr, keys []uint64, values []int32) int {

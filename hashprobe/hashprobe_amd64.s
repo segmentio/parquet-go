@@ -8,65 +8,161 @@
 
 #include "textflag.h"
 
-// func multiProbe32(table []uint32, len, cap int, hashes []uintptr, keys []uint32, values []int32) int
-TEXT ·multiProbe32(SB), NOSPLIT, $0-120
+// func multiProbe32Default(table []table32Group, numKeys int, hashes []uintptr, keys []uint32, values []int32) (int, int)
+TEXT ·multiProbe32Default(SB), NOSPLIT, $0-120
     MOVQ table_base+0(FP), AX
-    MOVQ len+24(FP), BX
-    MOVQ cap+32(FP), CX
-    MOVQ hashes_base+40(FP), DX
-    MOVQ hashes_len+48(FP), DI
-    MOVQ keys_base+64(FP), R8
-    MOVQ values_base+88(FP), R9
-
-    MOVQ CX, R10
-    SHRQ $5, R10 // offset = cap / 32
-
-    MOVQ CX, R11
-    DECQ R11 // modulo = cap - 1
-
-    ADDQ R10, CX // offset + cap
-
-    LEAQ (AX)(R10*4), R13 // tableKeys
-    LEAQ (AX)(CX*4), R10  // tableValues
+    MOVQ table_len+8(FP), BX
+    MOVQ numKeys+24(FP), CX
+    MOVQ hashes_base+32(FP), DX
+    MOVQ hashes_len+40(FP), DI
+    MOVQ keys_base+56(FP), R8
+    MOVQ values_base+80(FP), R9
+    DECQ BX // modulo = len(table) - 1
 
     XORQ SI, SI
+    MOVQ SI, ret1+112(FP)
     JMP test
 loop:
-    MOVQ (DX)(SI*8), R12 // hash
+    MOVQ (DX)(SI*8), R10 // hash
+    MOVL (R8)(SI*4), R11 // key
 probe:
-    ANDQ R11, R12 // hash & modulo
-    MOVQ R12, R14
-    MOVQ R12, R15
-    SHRQ $5, R14       // index = position / 32
-    ANDQ $0b11111, R15 // shift = position % 32
+    MOVQ R10, R12
+    ANDQ BX, R12 // hash & modulo
+    SHLQ $6, R12 // x 64 (size of table32Group)
+    LEAQ (AX)(R12*1), R13
 
-    MOVL (AX)(R14*4), CX
-    BTSL R15, CX
-    JNC insert // table[index] & 1<<shift == 0 ?
+    MOVL $0, R14
+    CMPL 4(R13), R11
+    JE testKeyIndexInRange
 
-    MOVL (R13)(R12*4), CX
-    CMPL (R8)(SI*4), CX
-    JNE nextprobe // table[position] != keys[i] ?
+    MOVL $1, R14
+    CMPL 8(R13), R11
+    JE testKeyIndexInRange
 
-    MOVL (R10)(R12*4), R14
-    MOVL R14, (R9)(SI*4)
+    MOVL $2, R14
+    CMPL 12(R13), R11
+    JE testKeyIndexInRange
+
+    MOVL $3, R14
+    CMPL 16(R13), R11
+    JE testKeyIndexInRange
+
+    MOVL $4, R14
+    CMPL 20(R13), R11
+    JE testKeyIndexInRange
+
+    MOVL $5, R14
+    CMPL 24(R13), R11
+    JE testKeyIndexInRange
+
+    MOVL $6, R14
+    CMPL 28(R13), R11
+    JE testKeyIndexInRange
+
+    MOVL $7, R14
+testKeyIndexInRange:
+    MOVL 0(R13), R12
+    MOVL 32(R13)(R14*4), R15
+    CMPL R14, R12
+    JL next
+
+    CMPL R12, $7
+    JE probeNextGroup
+
+    MOVL R12, R14
+    INCL R12
+    MOVL R12, 0(R13)
+    MOVL R11, 4(R13)(R14*4)
+    MOVL CX, 32(R13)(R14*4)
+    MOVL CX, R15
+    INCL CX
 next:
+    MOVL R15, (R9)(SI*4)
     INCQ SI
 test:
     CMPQ SI, DI
     JNE loop
-    MOVQ BX, ret+112(FP)
+    MOVQ CX, ret+104(FP)
+    RET
+probeNextGroup:
+    INCQ R10
+    INCQ ret1+112(FP)
+    JMP probe
+
+GLOBL probeGroupMask<>(SB), RODATA|NOPTR, $32
+DATA probeGroupMask<>+0(SB)/4, $0x00000000
+DATA probeGroupMask<>+4(SB)/4, $0xFFFFFFFF
+DATA probeGroupMask<>+8(SB)/4, $0xFFFFFFFF
+DATA probeGroupMask<>+12(SB)/4, $0xFFFFFFFF
+DATA probeGroupMask<>+16(SB)/4, $0xFFFFFFFF
+DATA probeGroupMask<>+20(SB)/4, $0xFFFFFFFF
+DATA probeGroupMask<>+24(SB)/4, $0xFFFFFFFF
+DATA probeGroupMask<>+28(SB)/4, $0xFFFFFFFF
+
+// func multiProbe32AVX2(table []table32Group, numKeys int, hashes []uintptr, keys []uint32, values []int32) (int, int)
+TEXT ·multiProbe32AVX2(SB), NOSPLIT, $0-120
+    MOVQ table_base+0(FP), AX
+    MOVQ table_len+8(FP), BX
+    MOVQ numKeys+24(FP), R13
+    MOVQ hashes_base+32(FP), DX
+    MOVQ hashes_len+40(FP), DI
+    MOVQ keys_base+56(FP), R8
+    MOVQ values_base+80(FP), R9
+    DECQ BX // modulo = len(table) - 1
+
+    XORQ SI, SI
+    MOVQ SI, ret1+112(FP)
+    JMP test
+loop:
+    MOVQ (DX)(SI*8), R10        // hash
+    VPBROADCASTD (R8)(SI*4), Y0 // [key]
+probe:
+    MOVQ R10, R11
+    ANDQ BX, R11 // hash & modulo
+    SHLQ $6, R11 // x 64 (size of table32Group)
+    LEAQ (AX)(R11*1), R12
+
+    VMOVDQU (R12), Y1
+    VPCMPEQD Y0, Y1, Y2
+    VMOVMSKPS Y2, R11
+    SHRL $1, R11
+
+    MOVQ X1, R14 // group.len
+    MOVL $0x7F, R15
+    MOVL $7, CX
+    SUBL R14, CX
+    SHRL CX, R15
+    TESTL R11, R15
+    JZ insert
+
+    TZCNTL R11, R14
+    MOVL 32(R12)(R14*4), R15
+next:
+    MOVL R15, (R9)(SI*4)
+    INCQ SI
+test:
+    CMPQ SI, DI
+    JNE loop
+    MOVQ R13, ret+104(FP)
     RET
 insert:
-    MOVL CX, (AX)(R14*4)
-    MOVL (R8)(SI*4), R14
-    MOVL R14, (R13)(R12*4)
-    MOVL BX, (R10)(R12*4)
-    MOVL BX, (R9)(SI*4)
-    INCQ BX // len++
+    MOVQ X1, CX // group.len
+    CMPL CX, $7
+    JE probeNextGroup
+
+    MOVQ X0, R14 // key
+    MOVL CX, R11
+    MOVL CX, CX
+    INCL R11
+    MOVL R11, (R12)         // group.len++
+    MOVL R14, 4(R12)(CX*4)  // group.keys[i] = key
+    MOVL R13, 32(R12)(CX*4) // group.values[i] = value
+    MOVL R13, R15
+    INCL R13
     JMP next
-nextprobe:
-    INCQ R12
+probeNextGroup:
+    INCQ R10
+    INCQ ret1+112(FP)
     JMP probe
 
 // func multiProbe64(table []byte, len, cap int, hashes []uintptr, keys []uint64, values []int32) int

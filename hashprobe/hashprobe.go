@@ -87,7 +87,7 @@ func (t *Int32Table) Reset() { t.reset() }
 
 func (t *Int32Table) Len() int { return t.len }
 
-func (t *Int32Table) Cap() int { return t.cap }
+func (t *Int32Table) Cap() int { return t.size() }
 
 func (t *Int32Table) Probe(keys, values []int32) int {
 	return t.probe(unsafecast.Int32ToUint32(keys), values)
@@ -103,7 +103,7 @@ func (t *Float32Table) Reset() { t.reset() }
 
 func (t *Float32Table) Len() int { return t.len }
 
-func (t *Float32Table) Cap() int { return t.cap }
+func (t *Float32Table) Cap() int { return t.size() }
 
 func (t *Float32Table) Probe(keys []float32, values []int32) int {
 	return t.probe(unsafecast.Float32ToUint32(keys), values)
@@ -119,7 +119,9 @@ func (t *Uint32Table) Reset() { t.reset() }
 
 func (t *Uint32Table) Len() int { return t.len }
 
-func (t *Uint32Table) Cap() int { return t.cap }
+func (t *Uint32Table) Cap() int { return t.size() }
+
+func (t *Uint32Table) Collisions() int { return t.collisions }
 
 func (t *Uint32Table) Probe(keys []uint32, values []int32) int {
 	return t.probe(keys, values)
@@ -160,66 +162,82 @@ func (t *Uint32Table) Probe(keys []uint32, values []int32) int {
 // https://en.wikipedia.org/wiki/Linear_probing
 type table32 struct {
 	len     int
-	cap     int
 	maxLen  int
 	maxLoad float64
 	seed    uintptr
-	table   []uint32
+	table   []table32Group
+
+	collisions int
+}
+
+type table32Group struct {
+	len    uint32
+	keys   [7]uint32
+	values [7]uint32
+	_      uint32
 }
 
 func makeTable32(cap int, maxLoad float64) (t table32) {
 	if maxLoad < 0 || maxLoad > 1 {
 		panic("max load of probing table must be a value between 0 and 1")
 	}
-	if cap < 32 {
-		cap = 32
+	if cap < 7 {
+		cap = 7
 	}
-	t.init(nextPowerOf2(cap), maxLoad)
+	t.init(cap, maxLoad)
 	return t
 }
 
+func (t *table32) size() int {
+	return 7 * len(t.table)
+}
+
 func (t *table32) init(cap int, maxLoad float64) {
+	n := nextPowerOf2((cap + 6) / 7)
 	*t = table32{
-		cap:     cap,
-		maxLen:  int(math.Ceil(maxLoad * float64(cap))),
+		maxLen:  int(math.Ceil(maxLoad * float64(7*n))),
 		maxLoad: maxLoad,
 		seed:    randSeed(),
-		table:   make([]uint32, cap/32+2*cap),
+		table:   make([]table32Group, n),
 	}
 }
 
 func (t *table32) grow(totalValues int) {
-	cap := 2 * t.cap
-	totalValues = nextPowerOf2(totalValues)
-	if totalValues > cap {
+	cap := 2 * t.size()
+	if cap < totalValues {
 		cap = totalValues
 	}
 
 	tmp := table32{}
 	tmp.init(cap, t.maxLoad)
 	tmp.len = t.len
+	tmp.collisions = t.collisions
 
-	flags, keys, values := t.content()
+	hashes := make([]uintptr, 8)
+	modulo := uintptr(len(tmp.table)) - 1
 
-	for i, f := range flags {
-		if f != 0 {
-			j := 32 * i
-			n := bits.TrailingZeros32(f)
-			j += n
-			f >>= uint(n)
+	for i := range t.table {
+		g := &t.table[i]
+		n := g.len
 
+		if aeshash.Enabled() {
+			aeshash.MultiHash32(hashes[:n], g.keys[:n], tmp.seed)
+		} else {
+			wyhash.MultiHash32(hashes[:n], g.keys[:n], tmp.seed)
+		}
+
+		for j, hash := range hashes[:n] {
 			for {
-				n := bits.TrailingZeros32(^f)
-				k := j + n
-				tmp.insert(keys[j:k:k], values[j:k:k])
-				j += n
-				f >>= uint(n)
-				if f == 0 {
+				group := &tmp.table[hash&modulo]
+
+				if n := group.len; n < 7 {
+					group.len++
+					group.keys[n] = g.keys[j]
+					group.values[n] = g.values[j]
 					break
 				}
-				n = bits.TrailingZeros32(f)
-				j += n
-				f >>= uint(n)
+
+				hash++
 			}
 		}
 	}
@@ -227,47 +245,11 @@ func (t *table32) grow(totalValues int) {
 	*t = tmp
 }
 
-func (t *table32) insert(keys, values []uint32) {
-	tableFlags, tableKeys, tableValues := t.content()
-	hashes := make([]uintptr, len(keys), 32)
-	modulo := uintptr(t.cap) - 1
-
-	if aeshash.Enabled() {
-		aeshash.MultiHash32(hashes, keys, t.seed)
-	} else {
-		wyhash.MultiHash32(hashes, keys, t.seed)
-	}
-
-	for i, hash := range hashes {
-		for {
-			hash &= modulo
-			index := hash / 32
-			shift := hash % 32
-
-			if (tableFlags[index] & (1 << shift)) == 0 {
-				tableFlags[index] |= 1 << shift
-				tableKeys[hash] = keys[i]
-				tableValues[hash] = values[i]
-				break
-			}
-
-			hash++
-		}
-	}
-}
-
-func (t *table32) content() (flags, keys, values []uint32) {
-	i := t.cap / 32
-	j := t.cap + i
-	k := len(t.table)
-	return t.table[:i:i], t.table[i:j:j], t.table[j:k:k]
-}
-
 func (t *table32) reset() {
 	t.len = 0
 
 	for i := range t.table {
-		t.table[i] = 0
+		t.table[i] = table32Group{}
 	}
 }
 
@@ -299,7 +281,9 @@ func (t *table32) probe(keys []uint32, values []int32) int {
 			wyhash.MultiHash32(h, k, t.seed)
 		}
 
-		t.len = multiProbe32(t.table, t.len, t.cap, h, k, v)
+		var collisions int
+		t.len, collisions = multiProbe32(t.table, t.len, h, k, v)
+		t.collisions += collisions
 		i = j
 	}
 
