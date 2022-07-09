@@ -202,7 +202,7 @@ func (m uint32Map) Probe(keys []uint32, values []int32) (n int) {
 }
 
 func BenchmarkUint32Table(b *testing.B) {
-	benchmarkUint32Table(b, func(size int) uint32Table { return NewUint32Table(size, 0.7) })
+	benchmarkUint32Table(b, func(size int) uint32Table { return NewUint32Table(size, 0.9) })
 }
 
 func BenchmarkGoUint32Map(b *testing.B) {
@@ -215,17 +215,7 @@ func benchmarkUint32Table(b *testing.B, newTable func(size int) uint32Table) {
 		keys, values := generateUint32Table(n)
 
 		b.Run(fmt.Sprintf("N=%d", n), func(b *testing.B) {
-			collisions := 0
-			t, ok := table.(*Uint32Table)
-			if ok {
-				collisions = t.Collisions()
-			}
-
 			benchmarkUint32Loop(b, table.Probe, keys, values)
-
-			if ok {
-				b.Logf("collisions: %.3g", float64(t.Collisions()-collisions)/float64(b.N))
-			}
 		})
 	}
 }

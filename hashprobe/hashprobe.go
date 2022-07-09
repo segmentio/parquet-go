@@ -121,8 +121,6 @@ func (t *Uint32Table) Len() int { return t.len }
 
 func (t *Uint32Table) Cap() int { return t.size() }
 
-func (t *Uint32Table) Collisions() int { return t.collisions }
-
 func (t *Uint32Table) Probe(keys []uint32, values []int32) int {
 	return t.probe(keys, values)
 }
@@ -166,8 +164,6 @@ type table32 struct {
 	maxLoad float64
 	seed    uintptr
 	table   []table32Group
-
-	collisions int
 }
 
 type table32Group struct {
@@ -211,7 +207,6 @@ func (t *table32) grow(totalValues int) {
 	tmp := table32{}
 	tmp.init(cap, t.maxLoad)
 	tmp.len = t.len
-	tmp.collisions = t.collisions
 
 	hashes := make([]uintptr, 8)
 	modulo := uintptr(len(tmp.table)) - 1
@@ -281,9 +276,7 @@ func (t *table32) probe(keys []uint32, values []int32) int {
 			wyhash.MultiHash32(h, k, t.seed)
 		}
 
-		var collisions int
-		t.len, collisions = multiProbe32(t.table, t.len, h, k, v)
-		t.collisions += collisions
+		t.len = multiProbe32(t.table, t.len, h, k, v)
 		i = j
 	}
 

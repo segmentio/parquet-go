@@ -99,8 +99,8 @@ DATA probeGroupMask<>+20(SB)/4, $0xFFFFFFFF
 DATA probeGroupMask<>+24(SB)/4, $0xFFFFFFFF
 DATA probeGroupMask<>+28(SB)/4, $0xFFFFFFFF
 
-// func multiProbe32AVX2(table []table32Group, numKeys int, hashes []uintptr, keys []uint32, values []int32) (int, int)
-TEXT ·multiProbe32AVX2(SB), NOSPLIT, $0-120
+// func multiProbe32AVX2(table []table32Group, numKeys int, hashes []uintptr, keys []uint32, values []int32) int
+TEXT ·multiProbe32AVX2(SB), NOSPLIT, $0-112
     MOVQ table_base+0(FP), AX
     MOVQ table_len+8(FP), BX
     MOVQ numKeys+24(FP), R13
@@ -127,7 +127,7 @@ probe:
     VMOVMSKPS Y2, R11
     SHRL $1, R11
 
-    MOVQ X1, R14 // group.len
+    MOVL (R12), R14
     MOVL $0x7F, R15
     MOVL $7, CX
     SUBL R14, CX
@@ -162,7 +162,6 @@ insert:
     JMP next
 probeNextGroup:
     INCQ R10
-    INCQ ret1+112(FP)
     JMP probe
 
 // func multiProbe64(table []byte, len, cap int, hashes []uintptr, keys []uint64, values []int32) int

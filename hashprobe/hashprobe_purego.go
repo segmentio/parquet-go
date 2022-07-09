@@ -6,9 +6,8 @@ import (
 	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
-func multiProbe32(table []table32Group, numKeys int, hashes []uintptr, keys []uint32, values []int32) (int, int) {
+func multiProbe32(table []table32Group, numKeys int, hashes []uintptr, keys []uint32, values []int32) int {
 	modulo := uintptr(len(table)) - 1
-	collisions := 0
 
 	for i, hash := range hashes {
 		key := keys[i]
@@ -39,7 +38,6 @@ func multiProbe32(table []table32Group, numKeys int, hashes []uintptr, keys []ui
 			} else {
 				if n == 7 {
 					hash++
-					collisions++
 					continue
 				}
 
@@ -55,7 +53,7 @@ func multiProbe32(table []table32Group, numKeys int, hashes []uintptr, keys []ui
 		}
 	}
 
-	return numKeys, collisions
+	return numKeys
 }
 
 func multiProbe64(table []byte, len, cap int, hashes []uintptr, keys []uint64, values []int32) int {
