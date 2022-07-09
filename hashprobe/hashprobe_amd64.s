@@ -123,7 +123,8 @@ probe:
     SHLQ $6, R11 // x 64 (size of table32Group)
     LEAQ (AX)(R11*1), R12
 
-    VPCMPEQD (R12), Y0, Y2
+    VMOVDQU (R12), Y1
+    VPCMPEQD Y0, Y1, Y2
     VMOVMSKPS Y2, R11
     SHRL $1, R11
     MOVL (R12), R13
