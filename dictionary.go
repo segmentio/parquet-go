@@ -22,7 +22,7 @@ const (
 	// values in probing tables, but also increase memory utilization.
 	//
 	// TODO: make this configurable by the application?
-	hashprobeTableMaxLoad = 0.75
+	hashprobeTableMaxLoad = 0.85
 
 	// Number of values per loop iteration of the dictionary insert algorithm's
 	// inner loop.
