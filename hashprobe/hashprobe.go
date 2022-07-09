@@ -166,10 +166,12 @@ type table32 struct {
 	table   []table32Group
 }
 
+const table32GroupSize = 7
+
 type table32Group struct {
 	bits   uint32
-	keys   [7]uint32
-	values [7]uint32
+	keys   [table32GroupSize]uint32
+	values [table32GroupSize]uint32
 	_      uint32
 }
 
@@ -177,21 +179,21 @@ func makeTable32(cap int, maxLoad float64) (t table32) {
 	if maxLoad < 0 || maxLoad > 1 {
 		panic("max load of probing table must be a value between 0 and 1")
 	}
-	if cap < 7 {
-		cap = 7
+	if cap < table32GroupSize {
+		cap = table32GroupSize
 	}
 	t.init(cap, maxLoad)
 	return t
 }
 
 func (t *table32) size() int {
-	return 7 * len(t.table)
+	return table32GroupSize * len(t.table)
 }
 
 func (t *table32) init(cap int, maxLoad float64) {
-	n := nextPowerOf2((cap + 6) / 7)
+	n := nextPowerOf2((cap + (table32GroupSize - 1)) / table32GroupSize)
 	*t = table32{
-		maxLen:  int(math.Ceil(maxLoad * float64(7*n))),
+		maxLen:  int(math.Ceil(maxLoad * float64(table32GroupSize*n))),
 		maxLoad: maxLoad,
 		seed:    randSeed(),
 		table:   make([]table32Group, n),
@@ -208,7 +210,7 @@ func (t *table32) grow(totalValues int) {
 	tmp.init(cap, t.maxLoad)
 	tmp.len = t.len
 
-	hashes := make([]uintptr, 8)
+	hashes := make([]uintptr, table32GroupSize)
 	modulo := uintptr(len(tmp.table)) - 1
 
 	for i := range t.table {
@@ -225,7 +227,7 @@ func (t *table32) grow(totalValues int) {
 			for {
 				group := &tmp.table[hash&modulo]
 
-				if n := bits.OnesCount32(group.bits); n < 7 {
+				if n := bits.OnesCount32(group.bits); n < table32GroupSize {
 					group.bits = (group.bits << 1) | 1
 					group.keys[n] = g.keys[j]
 					group.values[n] = g.values[j]
@@ -281,6 +283,46 @@ func (t *table32) probe(keys []uint32, values []int32) int {
 	}
 
 	return t.len - baseLength
+}
+
+func multiProbe32Default(table []table32Group, numKeys int, hashes []uintptr, keys []uint32, values []int32) int {
+	modulo := uintptr(len(table)) - 1
+
+	for i, hash := range hashes {
+		key := keys[i]
+		for {
+			group := &table[hash&modulo]
+			index := table32GroupSize
+			value := int32(0)
+
+			for i, k := range group.keys {
+				if k == key {
+					index = i
+					break
+				}
+			}
+
+			if n := bits.OnesCount32(group.bits); index < n {
+				value = int32(group.values[index])
+			} else {
+				if n == table32GroupSize {
+					hash++
+					continue
+				}
+
+				value = int32(numKeys)
+				group.bits = (group.bits << 1) | 1
+				group.keys[n] = key
+				group.values[n] = uint32(value)
+				numKeys++
+			}
+
+			values[i] = value
+			break
+		}
+	}
+
+	return numKeys
 }
 
 type Int64Table struct{ table64 }

@@ -3,59 +3,11 @@
 package hashprobe
 
 import (
-	"math/bits"
-
 	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 func multiProbe32(table []table32Group, numKeys int, hashes []uintptr, keys []uint32, values []int32) int {
-	modulo := uintptr(len(table)) - 1
-
-	for i, hash := range hashes {
-		key := keys[i]
-		for {
-			group := &table[hash&modulo]
-			index := 7
-			value := int32(0)
-
-			switch key {
-			case group.keys[0]:
-				index = 0
-			case group.keys[1]:
-				index = 1
-			case group.keys[2]:
-				index = 2
-			case group.keys[3]:
-				index = 3
-			case group.keys[4]:
-				index = 4
-			case group.keys[5]:
-				index = 5
-			case group.keys[6]:
-				index = 6
-			}
-
-			if n := bits.OnesCount32(group.bits); index < int(n) {
-				value = int32(group.values[index])
-			} else {
-				if n == 7 {
-					hash++
-					continue
-				}
-
-				value = int32(numKeys)
-				group.bits = (group.bits << 1) | 1
-				group.keys[n] = key
-				group.values[n] = uint32(value)
-				numKeys++
-			}
-
-			values[i] = value
-			break
-		}
-	}
-
-	return numKeys
+	return multiProbe32Default(table, numKeys, hashes, keys, values)
 }
 
 func multiProbe64(table []byte, len, cap int, hashes []uintptr, keys []uint64, values []int32) int {
