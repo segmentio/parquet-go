@@ -47,6 +47,7 @@ test:
     CMPQ SI, DI
     JNE loop
     MOVQ CX, ret+104(FP)
+    VZEROUPPER
     RET
 insert:
     MOVL R13, R11
