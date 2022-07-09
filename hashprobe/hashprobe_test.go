@@ -62,8 +62,6 @@ func TestUint32TableProbeBulk(t *testing.T) {
 		for i := range v {
 			v[i] = 0
 		}
-
-		t.Logf("collisions: %d/%d", table.Collisions(), len(k))
 	}
 }
 
