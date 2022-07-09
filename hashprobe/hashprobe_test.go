@@ -165,6 +165,8 @@ func TestUint128TableProbeBulk(t *testing.T) {
 	}
 }
 
+const benchmarkProbesPerLoop = 500
+
 type uint32Table interface {
 	Reset()
 	Len() int
@@ -219,10 +221,9 @@ func benchmarkUint32Table(b *testing.B, newTable func(size int) uint32Table) {
 }
 
 func benchmarkUint32Loop(b *testing.B, f func([]uint32, []int32) int, keys []uint32, values []int32) {
-	const N = 500
 	i := 0
-	j := N
-	b.SetBytes(4 * N)
+	j := benchmarkProbesPerLoop
+	b.SetBytes(4 * int64(benchmarkProbesPerLoop))
 
 	_ = keys[:len(values)]
 	_ = values[:len(keys)]
@@ -234,14 +235,14 @@ func benchmarkUint32Loop(b *testing.B, f func([]uint32, []int32) int, keys []uin
 		}
 		f(keys[i:j:j], values[i:j:j])
 		if j == len(keys) {
-			i, j = 0, N
+			i, j = 0, benchmarkProbesPerLoop
 		} else {
-			i, j = j, j+N
+			i, j = j, j+benchmarkProbesPerLoop
 		}
 	}
 
 	seconds := time.Since(start).Seconds()
-	b.ReportMetric(float64(N*b.N)/seconds, "probe/s")
+	b.ReportMetric(float64(benchmarkProbesPerLoop*b.N)/seconds, "probe/s")
 }
 
 func generateUint32Table(n int) ([]uint32, []int32) {
@@ -310,10 +311,9 @@ func benchmarkUint64Table(b *testing.B, newTable func(size int) uint64Table) {
 }
 
 func benchmarkUint64Loop(b *testing.B, f func([]uint64, []int32) int, keys []uint64, values []int32) {
-	const N = 200
 	i := 0
-	j := N
-	b.SetBytes(8 * N)
+	j := benchmarkProbesPerLoop
+	b.SetBytes(8 * int64(benchmarkProbesPerLoop))
 
 	_ = keys[:len(values)]
 	_ = values[:len(keys)]
@@ -325,14 +325,14 @@ func benchmarkUint64Loop(b *testing.B, f func([]uint64, []int32) int, keys []uin
 		}
 		f(keys[i:j:j], values[i:j:j])
 		if j == len(keys) {
-			i, j = 0, N
+			i, j = 0, benchmarkProbesPerLoop
 		} else {
-			i, j = j, j+N
+			i, j = j, j+benchmarkProbesPerLoop
 		}
 	}
 
 	seconds := time.Since(start).Seconds()
-	b.ReportMetric(float64(N*b.N)/seconds, "probe/s")
+	b.ReportMetric(float64(benchmarkProbesPerLoop*b.N)/seconds, "probe/s")
 }
 
 func generateUint64Table(n int) ([]uint64, []int32) {
@@ -401,10 +401,9 @@ func benchmarkUint128Table(b *testing.B, newTable func(size int) uint128Table) {
 }
 
 func benchmarkUint128Loop(b *testing.B, f func([][16]byte, []int32) int, keys [][16]byte, values []int32) {
-	const N = 200
 	i := 0
-	j := N
-	b.SetBytes(16 * N)
+	j := benchmarkProbesPerLoop
+	b.SetBytes(16 * int64(benchmarkProbesPerLoop))
 
 	_ = keys[:len(values)]
 	_ = values[:len(keys)]
@@ -416,14 +415,14 @@ func benchmarkUint128Loop(b *testing.B, f func([][16]byte, []int32) int, keys []
 		}
 		f(keys[i:j:j], values[i:j:j])
 		if j == len(keys) {
-			i, j = 0, N
+			i, j = 0, benchmarkProbesPerLoop
 		} else {
-			i, j = j, j+N
+			i, j = j, j+benchmarkProbesPerLoop
 		}
 	}
 
 	seconds := time.Since(start).Seconds()
-	b.ReportMetric(float64(N*b.N)/seconds, "probe/s")
+	b.ReportMetric(float64(benchmarkProbesPerLoop*b.N)/seconds, "probe/s")
 }
 
 func generateUint128Table(n int) ([][16]byte, []int32) {
