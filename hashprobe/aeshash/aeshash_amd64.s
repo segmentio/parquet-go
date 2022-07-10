@@ -61,11 +61,12 @@ TEXT ·Hash128(SB), NOSPLIT, $0-32
     MOVQ X1, ret+24(FP)
     RET
 
-// func MultiHash32(hashes []uintptr, values []uint32, seed uintptr)
-TEXT ·MultiHash32(SB), NOSPLIT, $0-56
+// func MultiHashArray32(hashes []uintptr, values sparse.Array32, seed uintptr)
+TEXT ·MultiHashArray32(SB), NOSPLIT, $0-56
     MOVQ hashes_base+0(FP), AX
-    MOVQ values_base+24(FP), BX
+    MOVQ values_ptr+24(FP), BX
     MOVQ values_len+32(FP), CX
+    MOVQ values_off+40(FP), R8
     MOVQ seed+48(FP), DX
 
     MOVOU runtime·aeskeysched+0(SB), X1
@@ -76,7 +77,7 @@ TEXT ·MultiHash32(SB), NOSPLIT, $0-56
     JMP test
 loop:
     MOVQ DX, X0
-    PINSRD $2, (BX)(SI*4), X0
+    PINSRD $2, (BX), X0
 
     AESENC X1, X0
     AESENC X2, X0
@@ -84,16 +85,18 @@ loop:
 
     MOVQ X0, (AX)(SI*8)
     INCQ SI
+    ADDQ R8, BX
 test:
     CMPQ SI, CX
     JNE loop
     RET
 
-// func MultiHash64(hashes []uintptr, values []uint64, seed uintptr)
-TEXT ·MultiHash64(SB), NOSPLIT, $0-56
+// func MultiHashArray64(hashes []uintptr, values sparse.Array64, seed uintptr)
+TEXT ·MultiHashArray64(SB), NOSPLIT, $0-56
     MOVQ hashes_base+0(FP), AX
-    MOVQ values_base+24(FP), BX
+    MOVQ values_ptr+24(FP), BX
     MOVQ values_len+32(FP), CX
+    MOVQ values_off+40(FP), R8
     MOVQ seed+48(FP), DX
 
     MOVOU runtime·aeskeysched+0(SB), X1
@@ -104,7 +107,7 @@ TEXT ·MultiHash64(SB), NOSPLIT, $0-56
     JMP test
 loop:
     MOVQ DX, X0
-    PINSRQ $1, (BX)(SI*8), X0
+    PINSRQ $1, (BX), X0
 
     AESENC X1, X0
     AESENC X2, X0
@@ -112,16 +115,18 @@ loop:
 
     MOVQ X0, (AX)(SI*8)
     INCQ SI
+    ADDQ R8, BX
 test:
     CMPQ SI, CX
     JNE loop
     RET
 
-// func MultiHash128(hashes []uintptr, values [][16]byte, seed uintptr)
-TEXT ·MultiHash128(SB), NOSPLIT, $0-56
+// func MultiHashArray128(hashes []uintptr, values sparse.Array128, seed uintptr)
+TEXT ·MultiHashArray128(SB), NOSPLIT, $0-56
     MOVQ hashes_base+0(FP), AX
-    MOVQ values_base+24(FP), BX
+    MOVQ values_ptr+24(FP), BX
     MOVQ values_len+32(FP), CX
+    MOVQ values_off+40(FP), R8
     MOVQ seed+48(FP), DX
     MOVQ $16, DI
 
@@ -142,8 +147,8 @@ loop:
     AESENC X1, X1
 
     MOVQ X1, (AX)(SI*8)
-    ADDQ $16, BX
     INCQ SI
+    ADDQ R8, BX
 test:
     CMPQ SI, CX
     JNE loop

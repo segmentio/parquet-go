@@ -8,11 +8,12 @@
 #define m4 0x589965cc75374cc3
 #define m5 0x1d8e4e27c47d124f
 
-// func MultiHash32(hashes []uintptr, values []uint32, seed uintptr)
-TEXT ·MultiHash32(SB), NOSPLIT, $0-56
+// func MultiHashArray32(hashes []uintptr, values sparse.Array32, seed uintptr)
+TEXT ·MultiHashArray32(SB), NOSPLIT, $0-56
     MOVQ hashes_base+0(FP), R12
-    MOVQ values_base+24(FP), DI
-    MOVQ values_len+32(FP), CX
+    MOVQ values_ptr+24(FP), R13
+    MOVQ values_len+32(FP), R14
+    MOVQ values_off+40(FP), R15
     MOVQ seed+48(FP), R11
 
     MOVQ $m1, R8
@@ -23,7 +24,7 @@ TEXT ·MultiHash32(SB), NOSPLIT, $0-56
     XORQ SI, SI
     JMP test
 loop:
-    MOVL (DI)(SI*4), AX
+    MOVL (R13), AX
     MOVQ R8, BX
 
     XORQ AX, BX
@@ -37,16 +38,18 @@ loop:
 
     MOVQ AX, (R12)(SI*8)
     INCQ SI
+    ADDQ R15, R13
 test:
-    CMPQ SI, CX
+    CMPQ SI, R14
     JNE loop
     RET
 
-// func MultiHash64(hashes []uintptr, values []uint64, seed uintptr)
-TEXT ·MultiHash64(SB), NOSPLIT, $0-56
+// func MultiHashArray64(hashes []uintptr, values sparse.Array64, seed uintptr)
+TEXT ·MultiHashArray64(SB), NOSPLIT, $0-56
     MOVQ hashes_base+0(FP), R12
-    MOVQ values_base+24(FP), DI
-    MOVQ values_len+32(FP), CX
+    MOVQ values_ptr+24(FP), R13
+    MOVQ values_len+32(FP), R14
+    MOVQ values_off+40(FP), R15
     MOVQ seed+48(FP), R11
 
     MOVQ $m1, R8
@@ -57,7 +60,7 @@ TEXT ·MultiHash64(SB), NOSPLIT, $0-56
     XORQ SI, SI
     JMP test
 loop:
-    MOVQ (DI)(SI*8), AX
+    MOVQ (R13), AX
     MOVQ R8, BX
 
     XORQ AX, BX
@@ -71,16 +74,18 @@ loop:
 
     MOVQ AX, (R12)(SI*8)
     INCQ SI
+    ADDQ R15, R13
 test:
-    CMPQ SI, CX
+    CMPQ SI, R14
     JNE loop
     RET
 
-// func MultiHash128(hashes []uintptr, values [][16]byte, seed uintptr)
-TEXT ·MultiHash128(SB), NOSPLIT, $0-56
+// func MultiHashArray128(hashes []uintptr, values sparse.Array128, seed uintptr)
+TEXT ·MultiHashArray128(SB), NOSPLIT, $0-56
     MOVQ hashes_base+0(FP), R12
-    MOVQ values_base+24(FP), DI
-    MOVQ values_len+32(FP), CX
+    MOVQ values_ptr+24(FP), R13
+    MOVQ values_len+32(FP), R14
+    MOVQ values_off+40(FP), R15
     MOVQ seed+48(FP), R11
 
     MOVQ $m1, R8
@@ -91,8 +96,8 @@ TEXT ·MultiHash128(SB), NOSPLIT, $0-56
     XORQ SI, SI
     JMP test
 loop:
-    MOVQ 0(DI), AX
-    MOVQ 8(DI), DX
+    MOVQ 0(R13), AX
+    MOVQ 8(R13), DX
     MOVQ R8, BX
 
     XORQ DX, BX
@@ -105,9 +110,9 @@ loop:
     XORQ DX, AX
 
     MOVQ AX, (R12)(SI*8)
-    ADDQ $16, DI
     INCQ SI
+    ADDQ R15, R13
 test:
-    CMPQ SI, CX
+    CMPQ SI, R14
     JNE loop
     RET

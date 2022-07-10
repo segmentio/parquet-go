@@ -2,20 +2,22 @@
 
 package wyhash
 
-func MultiHash32(hashes []uintptr, values []uint32, seed uintptr) {
-	for i, value := range values {
-		hashes[i] = Hash32(value, seed)
+import "github.com/segmentio/parquet-go/hashprobe/sparse"
+
+func MultiHashArray32(hashes []uintptr, values sparse.Array32, seed uintptr) {
+	for i := range hashes {
+		hashes[i] = Hash32(values.Index(i))
 	}
 }
 
-func MultiHash64(hashes []uintptr, values []uint64, seed uintptr) {
-	for i, value := range values {
-		hashes[i] = Hash64(value, seed)
+func MultiHashArray64(hashes []uintptr, values sparse.Array64, seed uintptr) {
+	for i := range hashes {
+		hashes[i] = Hash64(values.Index(i))
 	}
 }
 
-func MultiHash128(hashes []uintptr, values [][16]byte, seed uintptr) {
-	for i, value := range values {
-		hashes[i] = Hash128(value, seed)
+func MultiHashArray128(hashes []uintptr, values sparse.Array128, seed uintptr) {
+	for i := range hashes {
+		hashes[i] = Hash128(values.Index(i))
 	}
 }

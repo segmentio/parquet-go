@@ -5,6 +5,8 @@ package wyhash
 import (
 	"encoding/binary"
 	"math/bits"
+
+	"github.com/segmentio/parquet-go/hashprobe/sparse"
 )
 
 const (
@@ -32,4 +34,16 @@ func Hash128(value [16]byte, seed uintptr) uintptr {
 	a := binary.LittleEndian.Uint64(value[:8])
 	b := binary.LittleEndian.Uint64(value[8:])
 	return uintptr(mix(m5^16, mix(a^m2, b^uint64(seed)^m1)))
+}
+
+func MultiHash32(hashes []uintptr, values []uint32, seed uintptr) {
+	MultiHashArray32(hashes, sparse.MakeArray32(values), seed)
+}
+
+func MultiHash64(hashes []uintptr, values []uint64, seed uintptr) {
+	MultiHashArray64(hashes, sparse.MakeArray64(values), seed)
+}
+
+func MultiHash128(hashes []uintptr, values [][16]byte, seed uintptr) {
+	MultiHashArray128(hashes, sparse.MakeArray128(values), seed)
 }
