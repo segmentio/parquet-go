@@ -173,9 +173,9 @@ search:
     SHLL $4, R13
     VMOVDQU 64(R12)(R13*1), X2
     VPCMPEQQ X0, X2, X2
-    VPSRLDQ $8, X1, X2
-    VPTEST X1, X2
-    JNZ load
+    VMOVMSKPD X2, R15
+    CMPL R15, $0b11
+    JE load
 
     BLSRL R11, R11
     JNZ search
