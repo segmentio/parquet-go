@@ -65,6 +65,12 @@ func TestUint32TableProbeBulk(t *testing.T) {
 	}
 }
 
+func TestTable64GroupSize(t *testing.T) {
+	if n := unsafe.Sizeof(table64Group{}); n != 64 {
+		t.Errorf("size of 64 bit table group is not 64 bytes: %d", n)
+	}
+}
+
 func TestUint64TableProbeOneByOne(t *testing.T) {
 	const N = 500
 	table := NewUint64Table(0, 0.9)
@@ -165,7 +171,10 @@ func TestUint128TableProbeBulk(t *testing.T) {
 	}
 }
 
-const benchmarkProbesPerLoop = 500
+const (
+	benchmarkProbesPerLoop = 500
+	benchmarkMaxLoad       = 0.9
+)
 
 type uint32Table interface {
 	Reset()
@@ -202,7 +211,7 @@ func (m uint32Map) Probe(keys []uint32, values []int32) (n int) {
 }
 
 func BenchmarkUint32Table(b *testing.B) {
-	benchmarkUint32Table(b, func(size int) uint32Table { return NewUint32Table(size, 0.9) })
+	benchmarkUint32Table(b, func(size int) uint32Table { return NewUint32Table(size, benchmarkMaxLoad) })
 }
 
 func BenchmarkGoUint32Map(b *testing.B) {
@@ -292,7 +301,7 @@ func (m uint64Map) Probe(keys []uint64, values []int32) (n int) {
 }
 
 func BenchmarkUint64Table(b *testing.B) {
-	benchmarkUint64Table(b, func(size int) uint64Table { return NewUint64Table(size, 0.9) })
+	benchmarkUint64Table(b, func(size int) uint64Table { return NewUint64Table(size, benchmarkMaxLoad) })
 }
 
 func BenchmarkGoUint64Map(b *testing.B) {
@@ -382,7 +391,7 @@ func (m uint128Map) Probe(keys [][16]byte, values []int32) (n int) {
 }
 
 func BenchmarkUint128Table(b *testing.B) {
-	benchmarkUint128Table(b, func(size int) uint128Table { return NewUint128Table(size, 0.9) })
+	benchmarkUint128Table(b, func(size int) uint128Table { return NewUint128Table(size, benchmarkMaxLoad) })
 }
 
 func BenchmarkGoUint128Map(b *testing.B) {

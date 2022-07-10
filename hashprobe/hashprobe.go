@@ -172,7 +172,8 @@ func (t *table32) size() int {
 }
 
 func (t *table32) init(cap int, maxLoad float64) {
-	n := nextPowerOf2((cap + (table32GroupSize - 1)) / table32GroupSize)
+	m := int(math.Ceil((1 / maxLoad) * float64(cap)))
+	n := nextPowerOf2((m + (table32GroupSize - 1)) / table32GroupSize)
 	*t = table32{
 		maxLen:  int(math.Ceil(maxLoad * float64(table32GroupSize*n))),
 		maxLoad: maxLoad,
@@ -182,13 +183,8 @@ func (t *table32) init(cap int, maxLoad float64) {
 }
 
 func (t *table32) grow(totalValues int) {
-	cap := 2 * t.size()
-	if cap < totalValues {
-		cap = totalValues
-	}
-
 	tmp := table32{}
-	tmp.init(cap, t.maxLoad)
+	tmp.init(totalValues, t.maxLoad)
 	tmp.len = t.len
 
 	hashes := make([]uintptr, table32GroupSize)
@@ -318,7 +314,7 @@ func (t *Int64Table) Reset() { t.reset() }
 
 func (t *Int64Table) Len() int { return t.len }
 
-func (t *Int64Table) Cap() int { return t.cap }
+func (t *Int64Table) Cap() int { return t.size() }
 
 func (t *Int64Table) Probe(keys []int64, values []int32) int {
 	return t.probe(unsafecast.Int64ToUint64(keys), values)
@@ -334,7 +330,7 @@ func (t *Float64Table) Reset() { t.reset() }
 
 func (t *Float64Table) Len() int { return t.len }
 
-func (t *Float64Table) Cap() int { return t.cap }
+func (t *Float64Table) Cap() int { return t.size() }
 
 func (t *Float64Table) Probe(keys []float64, values []int32) int {
 	return t.probe(unsafecast.Float64ToUint64(keys), values)
@@ -350,7 +346,7 @@ func (t *Uint64Table) Reset() { t.reset() }
 
 func (t *Uint64Table) Len() int { return t.len }
 
-func (t *Uint64Table) Cap() int { return t.cap }
+func (t *Uint64Table) Cap() int { return t.size() }
 
 func (t *Uint64Table) Probe(keys []uint64, values []int32) int {
 	return t.probe(keys, values)
@@ -362,66 +358,79 @@ func (t *Uint64Table) Probe(keys []uint64, values []int32) int {
 // but the keys are 64 bit values.
 type table64 struct {
 	len     int
-	cap     int
 	maxLen  int
 	maxLoad float64
 	seed    uintptr
-	table   []byte
+	table   []table64Group
+}
+
+const table64GroupSize = 4
+
+type table64Group struct {
+	keys   [table64GroupSize]uint64
+	values [table64GroupSize]uint32
+	bits   uint32
+	_      uint32
+	_      uint32
+	_      uint32
 }
 
 func makeTable64(cap int, maxLoad float64) (t table64) {
 	if maxLoad < 0 || maxLoad > 1 {
 		panic("max load of probing table must be a value between 0 and 1")
 	}
-	if cap < 64 {
-		cap = 64
+	if cap < table64GroupSize {
+		cap = table64GroupSize
 	}
 	t.init(nextPowerOf2(cap), maxLoad)
 	return t
 }
 
+func (t *table64) size() int {
+	return table64GroupSize * len(t.table)
+}
+
 func (t *table64) init(cap int, maxLoad float64) {
+	m := int(math.Ceil((1 / maxLoad) * float64(cap)))
+	n := nextPowerOf2((m + (table64GroupSize - 1)) / table64GroupSize)
 	*t = table64{
-		cap:     cap,
-		maxLen:  int(math.Ceil(maxLoad * float64(cap))),
+		maxLen:  int(math.Ceil(maxLoad * float64(table64GroupSize*n))),
 		maxLoad: maxLoad,
 		seed:    randSeed(),
-		table:   make([]byte, cap/8+8*cap+4*cap),
+		table:   make([]table64Group, n),
 	}
 }
 
 func (t *table64) grow(totalValues int) {
-	cap := 2 * t.cap
-	totalValues = nextPowerOf2(totalValues)
-	if totalValues > cap {
-		cap = totalValues
-	}
-
 	tmp := table64{}
-	tmp.init(cap, t.maxLoad)
+	tmp.init(totalValues, t.maxLoad)
 	tmp.len = t.len
 
-	flags, keys, values := t.content()
+	hashes := make([]uintptr, table64GroupSize)
+	modulo := uintptr(len(tmp.table)) - 1
 
-	for i, f := range flags {
-		if f != 0 {
-			j := 64 * i
-			n := bits.TrailingZeros64(f)
-			j += n
-			f >>= uint(n)
+	for i := range t.table {
+		g := &t.table[i]
+		n := bits.OnesCount32(g.bits)
 
+		if aeshash.Enabled() {
+			aeshash.MultiHash64(hashes[:n], g.keys[:n], tmp.seed)
+		} else {
+			wyhash.MultiHash64(hashes[:n], g.keys[:n], tmp.seed)
+		}
+
+		for j, hash := range hashes[:n] {
 			for {
-				n := bits.TrailingZeros64(^f)
-				k := j + n
-				tmp.insert(keys[j:k:k], values[j:k:k])
-				j += n
-				f >>= uint(n)
-				if f == 0 {
+				group := &tmp.table[hash&modulo]
+
+				if n := bits.OnesCount32(group.bits); n < table64GroupSize {
+					group.bits = (group.bits << 1) | 1
+					group.keys[n] = g.keys[j]
+					group.values[n] = g.values[j]
 					break
 				}
-				n = bits.TrailingZeros64(f)
-				j += n
-				f >>= uint(n)
+
+				hash++
 			}
 		}
 	}
@@ -429,47 +438,11 @@ func (t *table64) grow(totalValues int) {
 	*t = tmp
 }
 
-func (t *table64) insert(keys []uint64, values []int32) {
-	tableFlags, tableKeys, tableValues := t.content()
-	hashes := make([]uintptr, len(keys), 64)
-	modulo := uintptr(t.cap) - 1
-
-	if aeshash.Enabled() {
-		aeshash.MultiHash64(hashes, keys, t.seed)
-	} else {
-		wyhash.MultiHash64(hashes, keys, t.seed)
-	}
-
-	for i, hash := range hashes {
-		for {
-			hash &= modulo
-			index := hash / 64
-			shift := hash % 64
-
-			if (tableFlags[index] & (1 << shift)) == 0 {
-				tableFlags[index] |= 1 << shift
-				tableKeys[hash] = keys[i]
-				tableValues[hash] = values[i]
-				break
-			}
-
-			hash++
-		}
-	}
-}
-
-func (t *table64) content() (flags, keys []uint64, values []int32) {
-	i := t.cap / 8
-	j := 8*t.cap + i
-	k := len(t.table)
-	return unsafecast.BytesToUint64(t.table[:i:i]), unsafecast.BytesToUint64(t.table[i:j:j]), unsafecast.BytesToInt32(t.table[j:k:k])
-}
-
 func (t *table64) reset() {
 	t.len = 0
 
 	for i := range t.table {
-		t.table[i] = 0
+		t.table[i] = table64Group{}
 	}
 }
 
@@ -503,11 +476,51 @@ func (t *table64) probe(keys []uint64, values []int32) int {
 			wyhash.MultiHash64(h, k, t.seed)
 		}
 
-		t.len = multiProbe64(t.table, t.len, t.cap, h, k, v)
+		t.len = multiProbe64(t.table, t.len, h, k, v)
 		i = j
 	}
 
 	return t.len - baseLength
+}
+
+func multiProbe64Default(table []table64Group, numKeys int, hashes []uintptr, keys []uint64, values []int32) int {
+	modulo := uintptr(len(table)) - 1
+
+	for i, hash := range hashes {
+		key := keys[i]
+		for {
+			group := &table[hash&modulo]
+			index := table64GroupSize
+			value := int32(0)
+
+			for i, k := range group.keys {
+				if k == key {
+					index = i
+					break
+				}
+			}
+
+			if n := bits.OnesCount32(group.bits); index < n {
+				value = int32(group.values[index])
+			} else {
+				if n == table64GroupSize {
+					hash++
+					continue
+				}
+
+				value = int32(numKeys)
+				group.bits = (group.bits << 1) | 1
+				group.keys[n] = key
+				group.values[n] = uint32(value)
+				numKeys++
+			}
+
+			values[i] = value
+			break
+		}
+	}
+
+	return numKeys
 }
 
 type Uint128Table struct{ table128 }

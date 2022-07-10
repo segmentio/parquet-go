@@ -79,66 +79,62 @@ probeNextGroup:
     INCQ R10
     JMP probe
 
-// func multiProbe64(table []byte, len, cap int, hashes []uintptr, keys []uint64, values []int32) int
-TEXT ·multiProbe64(SB), NOSPLIT, $0-120
+// func multiProbe64AVX2(table []table64Group, numKeys int, hashes []uintptr, keys []uint64, values []int32) int
+TEXT ·multiProbe64AVX2(SB), NOSPLIT, $0-112
     MOVQ table_base+0(FP), AX
-    MOVQ len+24(FP), BX
-    MOVQ cap+32(FP), CX
-    MOVQ hashes_base+40(FP), DX
-    MOVQ hashes_len+48(FP), DI
-    MOVQ keys_base+64(FP), R8
-    MOVQ values_base+88(FP), R9
-
-    MOVQ CX, R10
-    SHRQ $3, R10 // offset = cap / 8
-
-    MOVQ CX, R11
-    DECQ R11 // modulo = cap - 1
-
-    SHLQ $3, CX
-    ADDQ R10, CX // offset + 8*cap
-
-    LEAQ (AX)(R10*1), R13 // tableKeys
-    LEAQ (AX)(CX*1), R10  // tableValues
+    MOVQ table_len+8(FP), BX
+    MOVQ numKeys+24(FP), CX
+    MOVQ hashes_base+32(FP), DX
+    MOVQ hashes_len+40(FP), DI
+    MOVQ keys_base+56(FP), R8
+    MOVQ values_base+80(FP), R9
+    DECQ BX // modulo = len(table) - 1
 
     XORQ SI, SI
     JMP test
 loop:
-    MOVQ (DX)(SI*8), R12 // hash
+    MOVQ (DX)(SI*8), R10        // hash
+    VPBROADCASTQ (R8)(SI*8), Y0 // [key]
 probe:
-    ANDQ R11, R12 // hash & modulo
-    MOVQ R12, R14
-    MOVQ R12, R15
-    SHRQ $6, R14        // index = hash / 64
-    ANDQ $0b111111, R15 // shift = hash % 64
+    MOVQ R10, R11
+    ANDQ BX, R11 // hash & modulo
+    SHLQ $6, R11 // x 64 (size of table64Group)
+    LEAQ (AX)(R11*1), R12
 
-    MOVQ (AX)(R14*8), CX
-    BTSQ R15, CX
-    JNC insert // tableFlags[index] & 1<<shift == 0 ?
+    VMOVDQU (R12), Y1
+    VPCMPEQQ Y0, Y1, Y2
+    VMOVMSKPD Y2, R11
+    MOVL 48(R12), R13
+    TESTL R11, R13
+    JZ insert
 
-    MOVQ (R13)(R12*8), CX
-    CMPQ (R8)(SI*8), CX
-    JNE nextprobe // tableKeys[hash] != keys[i] ?
-
-    MOVL (R10)(R12*4), R14
-    MOVL R14, (R9)(SI*4)
+    TZCNTL R11, R13
+    MOVL 32(R12)(R13*4), R15
 next:
+    MOVL R15, (R9)(SI*4)
     INCQ SI
 test:
     CMPQ SI, DI
     JNE loop
-    MOVQ BX, ret+112(FP)
+    MOVQ CX, ret+104(FP)
+    VZEROUPPER
     RET
 insert:
-    MOVQ CX, (AX)(R14*8)
-    MOVQ (R8)(SI*8), R14
-    MOVQ R14, (R13)(R12*8) // tableKeys[hash] = keys[i]
-    MOVL BX, (R10)(R12*4)  // tableValues[hash] = len
-    MOVL BX, (R9)(SI*4)    // values[i] = len
-    INCQ BX                // len++
+    MOVL R13, R11
+    POPCNTL R13, R13
+    CMPL R13, $4
+    JE probeNextGroup
+
+    SHLL $1, R11
+    ORL $1, R11
+    MOVL R11, 48(R12)       // group.len = (group.len << 1) | 1
+    MOVQ X0, (R12)(R13*8)   // group.keys[i] = key
+    MOVL CX, 32(R12)(R13*4) // group.values[i] = value
+    MOVL CX, R15
+    INCL CX
     JMP next
-nextprobe:
-    INCQ R12
+probeNextGroup:
+    INCQ R10
     JMP probe
 
 // func multiProbe128(table []byte, len, cap int, hashes []uintptr, keys [][16]byte, values []int32) int
