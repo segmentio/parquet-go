@@ -121,6 +121,12 @@ func TestUint64TableProbeBulk(t *testing.T) {
 	}
 }
 
+func TestTable128GroupSize(t *testing.T) {
+	if n := unsafe.Sizeof(table128Group{}); n != 192 {
+		t.Errorf("size of 128 bit table group is not 192 bytes: %d", n)
+	}
+}
+
 func TestUint128TableProbeOneByOne(t *testing.T) {
 	const N = 500
 	table := NewUint128Table(0, 0.9)
