@@ -150,9 +150,9 @@ type table32 struct {
 const table32GroupSize = 7
 
 type table32Group struct {
-	bits   uint32
 	keys   [table32GroupSize]uint32
 	values [table32GroupSize]uint32
+	bits   uint32
 	_      uint32
 }
 
@@ -354,8 +354,17 @@ func (t *Uint64Table) Probe(keys []uint64, values []int32) int {
 
 // table64 is the generic implementation of probing tables for 64 bit types.
 //
-// The datastructure follows the same implementation as the one used by table32
-// but the keys are 64 bit values.
+// The table uses a layout similar to the one documented on the table for 32 bit
+// keys (see table32). Each group holds up to 4 key/value pairs (instead of 7
+// like table32) so that each group fits in a single CPU cache line. This table
+// version has a bit lower memory density, with ~23% of table memory being used
+// for padding.
+//
+// Technically we could hold up to 5 entries per group and still fit within the
+// 64 bytes of a CPU cache line; on x86 platforms, AVX2 registers can only hold
+// four 64 bit values, we would need twice as many instructions per probe if the
+// groups were holding 5 values. The trade off of memory for compute efficiency
+// appeared to be the right choice at the time.
 type table64 struct {
 	len     int
 	maxLen  int

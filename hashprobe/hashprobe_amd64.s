@@ -44,13 +44,12 @@ probe:
     VMOVDQU (R12), Y1
     VPCMPEQD Y0, Y1, Y2
     VMOVMSKPS Y2, R11
-    SHRL $1, R11
-    MOVL (R12), R13
+    MOVL 56(R12), R13
     TESTL R11, R13
     JZ insert
 
     TZCNTL R11, R13
-    MOVL 32(R12)(R13*4), R15
+    MOVL 28(R12)(R13*4), R15
 next:
     MOVL R15, (R9)(SI*4)
     INCQ SI
@@ -69,9 +68,9 @@ insert:
     MOVQ X0, R14 // key
     SHLL $1, R11
     ORL $1, R11
-    MOVL R11, (R12)          // group.len = (group.len << 1) | 1
-    MOVL R14, 4(R12)(R13*4)  // group.keys[i] = key
-    MOVL CX, 32(R12)(R13*4)  // group.values[i] = value
+    MOVL R11, 56(R12)          // group.len = (group.len << 1) | 1
+    MOVL R14, (R12)(R13*4)  // group.keys[i] = key
+    MOVL CX, 28(R12)(R13*4)  // group.values[i] = value
     MOVL CX, R15
     INCL CX
     JMP next
