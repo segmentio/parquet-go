@@ -34,7 +34,7 @@ TEXT ·multiProbe32AVX2(SB), NOSPLIT, $0-112
     XORQ SI, SI
     JMP test
 loop:
-    MOVQ (DX)(SI*8), R10        // hash
+    MOVQ (DX)(SI*8), R10  // hash
     VPBROADCASTD (R8), Y0 // [key]
 probe:
     MOVQ R10, R11

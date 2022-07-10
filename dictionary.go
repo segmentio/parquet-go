@@ -25,18 +25,12 @@ const (
 	// TODO: make this configurable by the application?
 	hashprobeTableMaxLoad = 0.85
 
-	// Number of values per loop iteration of the dictionary insert algorithm's
-	// inner loop.
+	// An estimate of the CPU cache footprint used by insert operations.
 	//
-	// This value balances between the size of stack allocations and amortizing
-	// the baseline cost of the insert algorithm.
-	//
-	// The larger the value, the more memory is required, but the lower the
-	// baseline cost will be.
-	//
-	// We chose a value that is somewhat large and favors reducing the baseline
-	// compute cost.
-	insertsPerLoop = 256
+	// This constant is used to determine a useful chunk size depending on the
+	// size of values being inserted in dictionaries. More values of small size
+	// can fit in CPU caches, so the inserts can operation on larger chunks.
+	insertsTargetCacheFootprint = 8192
 )
 
 // The Dictionary interface represents type-specific implementations of parquet
@@ -250,31 +244,44 @@ func (d *int32Dictionary) Insert(indexes []int32, values []Value) {
 func (d *int32Dictionary) init(indexes []int32) {
 	d.table = hashprobe.NewInt32Table(cap(d.values), hashprobeTableMaxLoad)
 
-	n := len(d.values)
-	if n > len(indexes) {
-		n = len(indexes)
-	}
+	n := min(len(d.values), len(indexes))
 
 	for i := 0; i < len(d.values); i += n {
-		j := i + n
-		if j > len(d.values) {
-			j = len(d.values)
-		}
+		j := min(i+n, len(d.values))
 		d.table.Probe(d.values[i:j:j], indexes[:n:n])
 	}
 }
 
 func (d *int32Dictionary) insert(indexes []int32, rows array, size, offset uintptr) {
+	// Iterating over the input in chunks helps keep relevant data in CPU
+	// caches  when large number of values are inserted into the dictionary with
+	// a single method call.
+	//
+	// Without this chunking, memory areas from the head of the indexes and
+	// values arrays end up being evicted from CPU caches as the probing
+	// operation iterate through the array. The subsequent scan of the indexes
+	// required to determine which values must be inserted into the page then
+	// stalls on retrieving data from main memory.
+	//
+	// We measured as much as ~37% drop in throughput when disabling the
+	// chunking, and did not observe any penalties from having it on smaller
+	// inserts.
+	const chunkSize = insertsTargetCacheFootprint / 4
+
 	if d.table == nil {
 		d.init(indexes)
 	}
 
-	keys := sparse.UnsafeInt32Array(unsafe.Add(rows.ptr, offset), rows.len, size)
+	values := sparse.UnsafeInt32Array(unsafe.Add(rows.ptr, offset), rows.len, size)
 
-	if d.table.ProbeArray(keys, indexes) > 0 {
-		for i, index := range indexes {
-			if index == int32(len(d.values)) {
-				d.values = append(d.values, keys.Index(i))
+	for i := 0; i < values.Len(); i += chunkSize {
+		j := min(i+chunkSize, values.Len())
+
+		if d.table.ProbeArray(values.Slice(i, j), indexes[i:j:j]) > 0 {
+			for k, index := range indexes[i:j] {
+				if index == int32(len(d.values)) {
+					d.values = append(d.values, values.Index(i+k))
+				}
 			}
 		}
 	}
@@ -337,31 +344,31 @@ func (d *int64Dictionary) Insert(indexes []int32, values []Value) {
 func (d *int64Dictionary) init(indexes []int32) {
 	d.table = hashprobe.NewInt64Table(cap(d.values), hashprobeTableMaxLoad)
 
-	n := len(d.values)
-	if n > len(indexes) {
-		n = len(indexes)
-	}
+	n := min(len(d.values), len(indexes))
 
 	for i := 0; i < len(d.values); i += n {
-		j := i + n
-		if j > len(d.values) {
-			j = len(d.values)
-		}
+		j := min(i+n, len(d.values))
 		d.table.Probe(d.values[i:j:j], indexes[:n:n])
 	}
 }
 
 func (d *int64Dictionary) insert(indexes []int32, rows array, size, offset uintptr) {
+	const chunkSize = insertsTargetCacheFootprint / 8
+
 	if d.table == nil {
 		d.init(indexes)
 	}
 
-	keys := sparse.UnsafeInt64Array(unsafe.Add(rows.ptr, offset), rows.len, size)
+	values := sparse.UnsafeInt64Array(unsafe.Add(rows.ptr, offset), rows.len, size)
 
-	if d.table.ProbeArray(keys, indexes) > 0 {
-		for i, index := range indexes {
-			if index == int32(len(d.values)) {
-				d.values = append(d.values, keys.Index(i))
+	for i := 0; i < values.Len(); i += chunkSize {
+		j := min(i+chunkSize, values.Len())
+
+		if d.table.ProbeArray(values.Slice(i, j), indexes[i:j:j]) > 0 {
+			for k, index := range indexes[i:j] {
+				if index == int32(len(d.values)) {
+					d.values = append(d.values, values.Index(i+k))
+				}
 			}
 		}
 	}
@@ -519,31 +526,31 @@ func (d *floatDictionary) Insert(indexes []int32, values []Value) {
 func (d *floatDictionary) init(indexes []int32) {
 	d.table = hashprobe.NewFloat32Table(cap(d.values), hashprobeTableMaxLoad)
 
-	n := len(d.values)
-	if n > len(indexes) {
-		n = len(indexes)
-	}
+	n := min(len(d.values), len(indexes))
 
 	for i := 0; i < len(d.values); i += n {
-		j := i + n
-		if j > len(d.values) {
-			j = len(d.values)
-		}
+		j := min(i+n, len(d.values))
 		d.table.Probe(d.values[i:j:j], indexes[:n:n])
 	}
 }
 
 func (d *floatDictionary) insert(indexes []int32, rows array, size, offset uintptr) {
+	const chunkSize = insertsTargetCacheFootprint / 4
+
 	if d.table == nil {
 		d.init(indexes)
 	}
 
-	keys := sparse.UnsafeFloat32Array(unsafe.Add(rows.ptr, offset), rows.len, size)
+	values := sparse.UnsafeFloat32Array(unsafe.Add(rows.ptr, offset), rows.len, size)
 
-	if d.table.ProbeArray(keys, indexes) > 0 {
-		for i, index := range indexes {
-			if index == int32(len(d.values)) {
-				d.values = append(d.values, keys.Index(i))
+	for i := 0; i < values.Len(); i += chunkSize {
+		j := min(i+chunkSize, values.Len())
+
+		if d.table.ProbeArray(values.Slice(i, j), indexes[i:j:j]) > 0 {
+			for k, index := range indexes[i:j] {
+				if index == int32(len(d.values)) {
+					d.values = append(d.values, values.Index(i+k))
+				}
 			}
 		}
 	}
@@ -606,31 +613,31 @@ func (d *doubleDictionary) Insert(indexes []int32, values []Value) {
 func (d *doubleDictionary) init(indexes []int32) {
 	d.table = hashprobe.NewFloat64Table(cap(d.values), hashprobeTableMaxLoad)
 
-	n := len(d.values)
-	if n > len(indexes) {
-		n = len(indexes)
-	}
+	n := min(len(d.values), len(indexes))
 
 	for i := 0; i < len(d.values); i += n {
-		j := i + n
-		if j > len(d.values) {
-			j = len(d.values)
-		}
+		j := min(i+n, len(d.values))
 		d.table.Probe(d.values[i:j:j], indexes[:n:n])
 	}
 }
 
 func (d *doubleDictionary) insert(indexes []int32, rows array, size, offset uintptr) {
+	const chunkSize = insertsTargetCacheFootprint / 8
+
 	if d.table == nil {
 		d.init(indexes)
 	}
 
-	keys := sparse.UnsafeFloat64Array(unsafe.Add(rows.ptr, offset), rows.len, size)
+	values := sparse.UnsafeFloat64Array(unsafe.Add(rows.ptr, offset), rows.len, size)
 
-	if d.table.ProbeArray(keys, indexes) > 0 {
-		for i, index := range indexes {
-			if index == int32(len(d.values)) {
-				d.values = append(d.values, keys.Index(i))
+	for i := 0; i < values.Len(); i += chunkSize {
+		j := min(i+chunkSize, values.Len())
+
+		if d.table.ProbeArray(values.Slice(i, j), indexes[i:j:j]) > 0 {
+			for k, index := range indexes[i:j] {
+				if index == int32(len(d.values)) {
+					d.values = append(d.values, values.Index(i+k))
+				}
 			}
 		}
 	}
@@ -928,31 +935,31 @@ func (d *uint32Dictionary) Insert(indexes []int32, values []Value) {
 func (d *uint32Dictionary) init(indexes []int32) {
 	d.table = hashprobe.NewUint32Table(cap(d.values), hashprobeTableMaxLoad)
 
-	n := len(d.values)
-	if n > len(indexes) {
-		n = len(indexes)
-	}
+	n := min(len(d.values), len(indexes))
 
 	for i := 0; i < len(d.values); i += n {
-		j := i + n
-		if j > len(d.values) {
-			j = len(d.values)
-		}
+		j := min(i+n, len(d.values))
 		d.table.Probe(d.values[i:j:j], indexes[:n:n])
 	}
 }
 
 func (d *uint32Dictionary) insert(indexes []int32, rows array, size, offset uintptr) {
+	const chunkSize = insertsTargetCacheFootprint / 4
+
 	if d.table == nil {
 		d.init(indexes)
 	}
 
-	keys := sparse.UnsafeUint32Array(unsafe.Add(rows.ptr, offset), rows.len, size)
+	values := sparse.UnsafeUint32Array(unsafe.Add(rows.ptr, offset), rows.len, size)
 
-	if d.table.ProbeArray(keys, indexes) > 0 {
-		for i, index := range indexes {
-			if index == int32(len(d.values)) {
-				d.values = append(d.values, keys.Index(i))
+	for i := 0; i < values.Len(); i += chunkSize {
+		j := min(i+chunkSize, values.Len())
+
+		if d.table.ProbeArray(values.Slice(i, j), indexes[i:j:j]) > 0 {
+			for k, index := range indexes[i:j] {
+				if index == int32(len(d.values)) {
+					d.values = append(d.values, values.Index(i+k))
+				}
 			}
 		}
 	}
@@ -1015,31 +1022,31 @@ func (d *uint64Dictionary) Insert(indexes []int32, values []Value) {
 func (d *uint64Dictionary) init(indexes []int32) {
 	d.table = hashprobe.NewUint64Table(cap(d.values), hashprobeTableMaxLoad)
 
-	n := len(d.values)
-	if n > len(indexes) {
-		n = len(indexes)
-	}
+	n := min(len(d.values), len(indexes))
 
 	for i := 0; i < len(d.values); i += n {
-		j := i + n
-		if j > len(d.values) {
-			j = len(d.values)
-		}
+		j := min(i+n, len(d.values))
 		d.table.Probe(d.values[i:j:j], indexes[:n:n])
 	}
 }
 
 func (d *uint64Dictionary) insert(indexes []int32, rows array, size, offset uintptr) {
+	const chunkSize = insertsTargetCacheFootprint / 8
+
 	if d.table == nil {
 		d.init(indexes)
 	}
 
-	keys := sparse.UnsafeUint64Array(unsafe.Add(rows.ptr, offset), rows.len, size)
+	values := sparse.UnsafeUint64Array(unsafe.Add(rows.ptr, offset), rows.len, size)
 
-	if d.table.ProbeArray(keys, indexes) > 0 {
-		for i, index := range indexes {
-			if index == int32(len(d.values)) {
-				d.values = append(d.values, keys.Index(i))
+	for i := 0; i < values.Len(); i += chunkSize {
+		j := min(i+chunkSize, values.Len())
+
+		if d.table.ProbeArray(values.Slice(i, j), indexes[i:j:j]) > 0 {
+			for k, index := range indexes[i:j] {
+				if index == int32(len(d.values)) {
+					d.values = append(d.values, values.Index(i+k))
+				}
 			}
 		}
 	}
@@ -1110,15 +1117,12 @@ func (d *be128Dictionary) Insert(indexes []int32, values []Value) {
 		d.init(indexes)
 	}
 
-	var buffer [insertsPerLoop][16]byte
+	const chunkSize = insertsTargetCacheFootprint / 16
+	var buffer [chunkSize][16]byte
 
-	for i := 0; i < len(values); {
-		j := insertsPerLoop + i
-		n := insertsPerLoop
-		if j > len(values) {
-			j = len(values)
-			n = len(values) - i
-		}
+	for i := 0; i < len(values); i += chunkSize {
+		j := min(chunkSize+i, len(values))
+		n := min(chunkSize, len(values)-i)
 
 		probe := buffer[:n:n]
 		writePointersBE128(probe, makeArrayValue(values[i:j]), unsafe.Sizeof(values[i]), unsafe.Offsetof(values[i].ptr))
@@ -1130,39 +1134,37 @@ func (d *be128Dictionary) Insert(indexes []int32, values []Value) {
 				}
 			}
 		}
-
-		i = j
 	}
 }
 
 func (d *be128Dictionary) init(indexes []int32) {
 	d.table = hashprobe.NewUint128Table(cap(d.values), 0.75)
 
-	n := len(d.values)
-	if n > len(indexes) {
-		n = len(indexes)
-	}
+	n := min(len(d.values), len(indexes))
 
 	for i := 0; i < len(d.values); i += n {
-		j := i + n
-		if j > len(d.values) {
-			j = len(d.values)
-		}
+		j := min(i+n, len(d.values))
 		d.table.Probe(d.values[i:j:j], indexes[:n:n])
 	}
 }
 
 func (d *be128Dictionary) insert(indexes []int32, rows array, size, offset uintptr) {
+	const chunkSize = insertsTargetCacheFootprint / 16
+
 	if d.table == nil {
 		d.init(indexes)
 	}
 
-	keys := sparse.UnsafeUint128Array(unsafe.Add(rows.ptr, offset), rows.len, size)
+	values := sparse.UnsafeUint128Array(unsafe.Add(rows.ptr, offset), rows.len, size)
 
-	if d.table.ProbeArray(keys, indexes) > 0 {
-		for i, index := range indexes {
-			if index == int32(len(d.values)) {
-				d.values = append(d.values, keys.Index(i))
+	for i := 0; i < values.Len(); i += chunkSize {
+		j := min(i+chunkSize, values.Len())
+
+		if d.table.ProbeArray(values.Slice(i, j), indexes[i:j:j]) > 0 {
+			for k, index := range indexes[i:j] {
+				if index == int32(len(d.values)) {
+					d.values = append(d.values, values.Index(i+k))
+				}
 			}
 		}
 	}
