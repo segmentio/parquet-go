@@ -9,6 +9,7 @@ import (
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/encoding/plain"
 	"github.com/segmentio/parquet-go/hashprobe"
+	"github.com/segmentio/parquet-go/hashprobe/sparse"
 	"github.com/segmentio/parquet-go/internal/bitpack"
 	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
@@ -264,36 +265,19 @@ func (d *int32Dictionary) init(indexes []int32) {
 }
 
 func (d *int32Dictionary) insert(indexes []int32, rows array, size, offset uintptr) {
-	_ = indexes[:rows.len]
-
 	if d.table == nil {
 		d.init(indexes)
 	}
 
-	var values [insertsPerLoop]int32
+	keys := sparse.UnsafeInt32Array(unsafe.Add(rows.ptr, offset), rows.len, size)
 
-	for i := 0; i < rows.len; {
-		j := len(values) + i
-		n := len(values)
-		if j > rows.len {
-			j = rows.len
-			n = rows.len - i
-		}
-
-		probe := values[:n:n]
-		slice := rows.slice(i, j, size)
-		writeValuesInt32(probe, slice, size, offset)
-
-		if d.table.Probe(probe, indexes[i:j:j]) > 0 {
-			minIndex := int32(len(d.values))
-			for k, v := range probe {
-				if indexes[i+k] >= minIndex {
-					d.values = append(d.values, v)
-				}
+	if d.table.ProbeArray(keys, indexes) > 0 {
+		minIndex := int32(len(d.values))
+		for i, index := range indexes {
+			if index >= minIndex {
+				d.values = append(d.values, int32(keys.Index(i)))
 			}
 		}
-
-		i = j
 	}
 }
 
@@ -569,36 +553,19 @@ func (d *floatDictionary) init(indexes []int32) {
 }
 
 func (d *floatDictionary) insert(indexes []int32, rows array, size, offset uintptr) {
-	_ = indexes[:rows.len]
-
 	if d.table == nil {
 		d.init(indexes)
 	}
 
-	var values [insertsPerLoop]float32
+	keys := sparse.UnsafeFloat32Array(unsafe.Add(rows.ptr, offset), rows.len, size)
 
-	for i := 0; i < rows.len; {
-		j := len(values) + i
-		n := len(values)
-		if j > rows.len {
-			j = rows.len
-			n = rows.len - i
-		}
-
-		probe := values[:n:n]
-		slice := rows.slice(i, j, size)
-		writeValuesFloat32(probe, slice, size, offset)
-
-		if d.table.Probe(probe, indexes[i:j:j]) > 0 {
-			minIndex := int32(len(d.values))
-			for k, v := range probe {
-				if indexes[i+k] >= minIndex {
-					d.values = append(d.values, v)
-				}
+	if d.table.ProbeArray(keys, indexes) > 0 {
+		minIndex := int32(len(d.values))
+		for i, index := range indexes {
+			if index >= minIndex {
+				d.values = append(d.values, keys.Index(i))
 			}
 		}
-
-		i = j
 	}
 }
 
@@ -1014,36 +981,19 @@ func (d *uint32Dictionary) init(indexes []int32) {
 }
 
 func (d *uint32Dictionary) insert(indexes []int32, rows array, size, offset uintptr) {
-	_ = indexes[:rows.len]
-
 	if d.table == nil {
 		d.init(indexes)
 	}
 
-	var values [insertsPerLoop]uint32
+	keys := sparse.UnsafeUint32Array(unsafe.Add(rows.ptr, offset), rows.len, size)
 
-	for i := 0; i < rows.len; {
-		j := len(values) + i
-		n := len(values)
-		if j > rows.len {
-			j = rows.len
-			n = rows.len - i
-		}
-
-		probe := values[:n:n]
-		slice := rows.slice(i, j, size)
-		writeValuesUint32(probe, slice, size, offset)
-
-		if d.table.Probe(probe, indexes[i:j:j]) > 0 {
-			minIndex := int32(len(d.values))
-			for k, v := range probe {
-				if indexes[i+k] >= minIndex {
-					d.values = append(d.values, v)
-				}
+	if d.table.ProbeArray(keys, indexes) > 0 {
+		minIndex := int32(len(d.values))
+		for i, index := range indexes {
+			if index >= minIndex {
+				d.values = append(d.values, keys.Index(i))
 			}
 		}
-
-		i = j
 	}
 }
 

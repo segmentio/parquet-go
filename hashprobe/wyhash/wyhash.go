@@ -37,13 +37,13 @@ func Hash128(value [16]byte, seed uintptr) uintptr {
 }
 
 func MultiHash32(hashes []uintptr, values []uint32, seed uintptr) {
-	MultiHashArray32(hashes, sparse.MakeArray32(values), seed)
+	MultiHashUint32Array(hashes, sparse.MakeUint32Array(values), seed)
 }
 
 func MultiHash64(hashes []uintptr, values []uint64, seed uintptr) {
-	MultiHashArray64(hashes, sparse.MakeArray64(values), seed)
+	MultiHashUint64Array(hashes, sparse.MakeUint64Array(values), seed)
 }
 
 func MultiHash128(hashes []uintptr, values [][16]byte, seed uintptr) {
-	MultiHashArray128(hashes, sparse.MakeArray128(values), seed)
+	MultiHashUint128Array(hashes, sparse.MakeUint128Array(values), seed)
 }

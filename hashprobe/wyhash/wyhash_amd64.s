@@ -8,8 +8,8 @@
 #define m4 0x589965cc75374cc3
 #define m5 0x1d8e4e27c47d124f
 
-// func MultiHashArray32(hashes []uintptr, values sparse.Array32, seed uintptr)
-TEXT ·MultiHashArray32(SB), NOSPLIT, $0-56
+// func MultiHashUint32Array(hashes []uintptr, values sparse.Uint32Array, seed uintptr)
+TEXT ·MultiHashUint32Array(SB), NOSPLIT, $0-56
     MOVQ hashes_base+0(FP), R12
     MOVQ values_ptr+24(FP), R13
     MOVQ values_len+32(FP), R14
@@ -44,8 +44,8 @@ test:
     JNE loop
     RET
 
-// func MultiHashArray64(hashes []uintptr, values sparse.Array64, seed uintptr)
-TEXT ·MultiHashArray64(SB), NOSPLIT, $0-56
+// func MultiHashUint64Array(hashes []uintptr, values sparse.Uint64Array, seed uintptr)
+TEXT ·MultiHashUint64Array(SB), NOSPLIT, $0-56
     MOVQ hashes_base+0(FP), R12
     MOVQ values_ptr+24(FP), R13
     MOVQ values_len+32(FP), R14
@@ -80,8 +80,8 @@ test:
     JNE loop
     RET
 
-// func MultiHashArray128(hashes []uintptr, values sparse.Array128, seed uintptr)
-TEXT ·MultiHashArray128(SB), NOSPLIT, $0-56
+// func MultiHashUint128Array(hashes []uintptr, values sparse.Uint128Array, seed uintptr)
+TEXT ·MultiHashUint128Array(SB), NOSPLIT, $0-56
     MOVQ hashes_base+0(FP), R12
     MOVQ values_ptr+24(FP), R13
     MOVQ values_len+32(FP), R14

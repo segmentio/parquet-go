@@ -3,11 +3,12 @@
 package hashprobe
 
 import (
+	"github.com/segmentio/parquet-go/hashprobe/sparse"
 	"golang.org/x/sys/cpu"
 )
 
 //go:noescape
-func multiProbe32AVX2(table []table32Group, numKeys int, hashes []uintptr, keys []uint32, values []int32) int
+func multiProbe32AVX2(table []table32Group, numKeys int, hashes []uintptr, keys sparse.Uint32Array, values []int32) int
 
 //go:noescape
 func multiProbe64AVX2(table []table64Group, numKeys int, hashes []uintptr, keys []uint64, values []int32) int
@@ -15,7 +16,7 @@ func multiProbe64AVX2(table []table64Group, numKeys int, hashes []uintptr, keys 
 //go:noescape
 func multiProbe128SSE2(table []byte, tableCap, tableLen int, hashes []uintptr, keys [][16]byte, values []int32) int
 
-func multiProbe32(table []table32Group, numKeys int, hashes []uintptr, keys []uint32, values []int32) int {
+func multiProbe32(table []table32Group, numKeys int, hashes []uintptr, keys sparse.Uint32Array, values []int32) int {
 	if cpu.X86.HasAVX2 {
 		return multiProbe32AVX2(table, numKeys, hashes, keys, values)
 	}

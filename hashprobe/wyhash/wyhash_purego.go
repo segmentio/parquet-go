@@ -4,20 +4,20 @@ package wyhash
 
 import "github.com/segmentio/parquet-go/hashprobe/sparse"
 
-func MultiHashArray32(hashes []uintptr, values sparse.Array32, seed uintptr) {
+func MultiHashUint32Array(hashes []uintptr, values sparse.Uint32Array, seed uintptr) {
 	for i := range hashes {
-		hashes[i] = Hash32(values.Index(i))
+		hashes[i] = Hash32(values.Index(i), seed)
 	}
 }
 
-func MultiHashArray64(hashes []uintptr, values sparse.Array64, seed uintptr) {
+func MultiHashUint64Array(hashes []uintptr, values sparse.Uint64Array, seed uintptr) {
 	for i := range hashes {
-		hashes[i] = Hash64(values.Index(i))
+		hashes[i] = Hash64(values.Index(i), seed)
 	}
 }
 
-func MultiHashArray128(hashes []uintptr, values sparse.Array128, seed uintptr) {
+func MultiHashUint128Array(hashes []uintptr, values sparse.Uint128Array, seed uintptr) {
 	for i := range hashes {
-		hashes[i] = Hash128(values.Index(i))
+		hashes[i] = Hash128(values.Index(i), seed)
 	}
 }

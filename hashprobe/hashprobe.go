@@ -34,6 +34,7 @@ import (
 	"sync"
 
 	"github.com/segmentio/parquet-go/hashprobe/aeshash"
+	"github.com/segmentio/parquet-go/hashprobe/sparse"
 	"github.com/segmentio/parquet-go/hashprobe/wyhash"
 	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
@@ -93,6 +94,10 @@ func (t *Int32Table) Probe(keys, values []int32) int {
 	return t.probe(unsafecast.Int32ToUint32(keys), values)
 }
 
+func (t *Int32Table) ProbeArray(keys sparse.Int32Array, values []int32) int {
+	return t.probeArray(keys.Uint32Array(), values)
+}
+
 type Float32Table struct{ table32 }
 
 func NewFloat32Table(cap int, maxLoad float64) *Float32Table {
@@ -109,6 +114,10 @@ func (t *Float32Table) Probe(keys []float32, values []int32) int {
 	return t.probe(unsafecast.Float32ToUint32(keys), values)
 }
 
+func (t *Float32Table) ProbeArray(keys sparse.Float32Array, values []int32) int {
+	return t.probeArray(keys.Uint32Array(), values)
+}
+
 type Uint32Table struct{ table32 }
 
 func NewUint32Table(cap int, maxLoad float64) *Uint32Table {
@@ -123,6 +132,10 @@ func (t *Uint32Table) Cap() int { return t.size() }
 
 func (t *Uint32Table) Probe(keys []uint32, values []int32) int {
 	return t.probe(keys, values)
+}
+
+func (t *Uint32Table) ProbeArray(keys sparse.Uint32Array, values []int32) int {
+	return t.probeArray(keys, values)
 }
 
 // table32 is the generic implementation of probing tables for 32 bit types.
@@ -228,7 +241,13 @@ func (t *table32) reset() {
 }
 
 func (t *table32) probe(keys []uint32, values []int32) int {
-	if totalValues := t.len + len(keys); totalValues > t.maxLen {
+	return t.probeArray(sparse.MakeUint32Array(keys), values)
+}
+
+func (t *table32) probeArray(keys sparse.Uint32Array, values []int32) int {
+	numKeys := keys.Len()
+
+	if totalValues := t.len + numKeys; totalValues > t.maxLen {
 		t.grow(totalValues)
 	}
 
@@ -236,25 +255,25 @@ func (t *table32) probe(keys []uint32, values []int32) int {
 	var baseLength = t.len
 	var useAesHash = aeshash.Enabled()
 
-	_ = values[:len(keys)]
+	_ = values[:numKeys]
 
-	for i := 0; i < len(keys); {
+	for i := 0; i < numKeys; {
 		j := len(hashes) + i
 		n := len(hashes)
 
-		if j > len(keys) {
-			j = len(keys)
-			n = len(keys) - i
+		if j > numKeys {
+			j = numKeys
+			n = numKeys - i
 		}
 
-		h := hashes[:n:n]
-		k := keys[i:j:j]
+		k := keys.Slice(i, j)
 		v := values[i:j:j]
+		h := hashes[:n:n]
 
 		if useAesHash {
-			aeshash.MultiHash32(h, k, t.seed)
+			aeshash.MultiHashUint32Array(h, k, t.seed)
 		} else {
-			wyhash.MultiHash32(h, k, t.seed)
+			wyhash.MultiHashUint32Array(h, k, t.seed)
 		}
 
 		t.len = multiProbe32(t.table, t.len, h, k, v)
@@ -264,11 +283,11 @@ func (t *table32) probe(keys []uint32, values []int32) int {
 	return t.len - baseLength
 }
 
-func multiProbe32Default(table []table32Group, numKeys int, hashes []uintptr, keys []uint32, values []int32) int {
+func multiProbe32Default(table []table32Group, numKeys int, hashes []uintptr, keys sparse.Uint32Array, values []int32) int {
 	modulo := uintptr(len(table)) - 1
 
 	for i, hash := range hashes {
-		key := keys[i]
+		key := keys.Index(i)
 		for {
 			group := &table[hash&modulo]
 			index := table32GroupSize

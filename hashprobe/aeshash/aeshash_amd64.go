@@ -25,10 +25,10 @@ func Hash64(value uint64, seed uintptr) uintptr
 func Hash128(value [16]byte, seed uintptr) uintptr
 
 //go:noescape
-func MultiHashArray32(hashes []uintptr, values sparse.Array32, seed uintptr)
+func MultiHashUint32Array(hashes []uintptr, values sparse.Uint32Array, seed uintptr)
 
 //go:noescape
-func MultiHashArray64(hashes []uintptr, values sparse.Array64, seed uintptr)
+func MultiHashUint64Array(hashes []uintptr, values sparse.Uint64Array, seed uintptr)
 
 //go:noescape
-func MultiHashArray128(hashes []uintptr, values sparse.Array128, seed uintptr)
+func MultiHashUint128Array(hashes []uintptr, values sparse.Uint128Array, seed uintptr)
