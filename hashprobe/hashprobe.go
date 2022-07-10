@@ -129,33 +129,14 @@ func (t *Uint32Table) Probe(keys []uint32, values []int32) int {
 //
 // The table uses the following memory layout:
 //
-//		[bitmap][keys][values]
+//		[group 0][group 1][...][group N]
 //
-// - The bitmap is used to determine which slots of the table are occupied,
-//   when a bit is set to 1, the key and value at the corresponding index in
-//   the arrays of keys and values have been assigned.
+// Each group contains up to 7 key/value pairs, and is exactly 64 bytes in size,
+// which allows it to fit within a single cache line, and ensures that probes
+// can be performed with a single memory load per key.
 //
-// - The array of keys is written right after the bitmap. All keys are 32 bits
-//   values.
-//
-// - Values are written after the keys, with each slot of the keys array mapping
-//   to a value at the same slot in the values array.
-//
-// This memory layout is a combination between simplicity and performance; the
-// bitmap is required in order to differentiate between key slots with the zero
-// value, and key slots that have not yet been assigned.
-//
-// The memory layout is also optimized for fast probing of existing keys, in
-// which case the lookup can be performed with only 4 memory loads, and 1 store:
-// 1. load the bitmap location and test the bit to see that the slot is occupied
-// 2. load the key at the corresponding index, compare with the current key
-// 3. load the value at the corresponding index, save in the output buffer
-//
-// Conflicts are resolved by testing the next slot, until a free slot is found.
-// This strategy relies on having a good hashing function with fairly strong
-// resistance to attacks that would attempt to create a layout where all keys
-// conflict. The package uses hashing functions similar to the ones used by the
-// Go runtime for this purpose.
+// Groups fill up by appending new entries to the keys and values arrays. When a
+// group is full, the probe checks the next group.
 //
 // https://en.wikipedia.org/wiki/Linear_probing
 type table32 struct {
