@@ -64,9 +64,9 @@ TEXT ·Hash128(SB), NOSPLIT, $0-32
 // func MultiHashUint32Array(hashes []uintptr, values sparse.Uint32Array, seed uintptr)
 TEXT ·MultiHashUint32Array(SB), NOSPLIT, $0-56
     MOVQ hashes_base+0(FP), AX
-    MOVQ values_ptr+24(FP), BX
-    MOVQ values_len+32(FP), CX
-    MOVQ values_off+40(FP), R8
+    MOVQ values_array_ptr+24(FP), BX
+    MOVQ values_array_len+32(FP), CX
+    MOVQ values_array_off+40(FP), R8
     MOVQ seed+48(FP), DX
 
     MOVOU runtime·aeskeysched+0(SB), X1
@@ -94,9 +94,9 @@ test:
 // func MultiHashUint64Array(hashes []uintptr, values sparse.Uint64Array, seed uintptr)
 TEXT ·MultiHashUint64Array(SB), NOSPLIT, $0-56
     MOVQ hashes_base+0(FP), AX
-    MOVQ values_ptr+24(FP), BX
-    MOVQ values_len+32(FP), CX
-    MOVQ values_off+40(FP), R8
+    MOVQ values_array_ptr+24(FP), BX
+    MOVQ values_array_len+32(FP), CX
+    MOVQ values_array_off+40(FP), R8
     MOVQ seed+48(FP), DX
 
     MOVOU runtime·aeskeysched+0(SB), X1
@@ -124,9 +124,9 @@ test:
 // func MultiHashUint128Array(hashes []uintptr, values sparse.Uint128Array, seed uintptr)
 TEXT ·MultiHashUint128Array(SB), NOSPLIT, $0-56
     MOVQ hashes_base+0(FP), AX
-    MOVQ values_ptr+24(FP), BX
-    MOVQ values_len+32(FP), CX
-    MOVQ values_off+40(FP), R8
+    MOVQ values_array_ptr+24(FP), BX
+    MOVQ values_array_len+32(FP), CX
+    MOVQ values_array_off+40(FP), R8
     MOVQ seed+48(FP), DX
     MOVQ $16, DI
 

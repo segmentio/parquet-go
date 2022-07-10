@@ -293,9 +293,9 @@ func multiProbe32Default(table []table32Group, numKeys int, hashes []uintptr, ke
 			index := table32GroupSize
 			value := int32(0)
 
-			for i, k := range group.keys {
+			for j, k := range group.keys {
 				if k == key {
-					index = i
+					index = j
 					break
 				}
 			}

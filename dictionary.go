@@ -272,10 +272,9 @@ func (d *int32Dictionary) insert(indexes []int32, rows array, size, offset uintp
 	keys := sparse.UnsafeInt32Array(unsafe.Add(rows.ptr, offset), rows.len, size)
 
 	if d.table.ProbeArray(keys, indexes) > 0 {
-		minIndex := int32(len(d.values))
 		for i, index := range indexes {
-			if index >= minIndex {
-				d.values = append(d.values, int32(keys.Index(i)))
+			if index == int32(len(d.values)) {
+				d.values = append(d.values, keys.Index(i))
 			}
 		}
 	}
@@ -560,9 +559,8 @@ func (d *floatDictionary) insert(indexes []int32, rows array, size, offset uintp
 	keys := sparse.UnsafeFloat32Array(unsafe.Add(rows.ptr, offset), rows.len, size)
 
 	if d.table.ProbeArray(keys, indexes) > 0 {
-		minIndex := int32(len(d.values))
 		for i, index := range indexes {
-			if index >= minIndex {
+			if index == int32(len(d.values)) {
 				d.values = append(d.values, keys.Index(i))
 			}
 		}
@@ -988,9 +986,8 @@ func (d *uint32Dictionary) insert(indexes []int32, rows array, size, offset uint
 	keys := sparse.UnsafeUint32Array(unsafe.Add(rows.ptr, offset), rows.len, size)
 
 	if d.table.ProbeArray(keys, indexes) > 0 {
-		minIndex := int32(len(d.values))
 		for i, index := range indexes {
-			if index >= minIndex {
+			if index == int32(len(d.values)) {
 				d.values = append(d.values, keys.Index(i))
 			}
 		}

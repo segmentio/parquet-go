@@ -19,14 +19,15 @@
 // of keys in a group using the POPCNT instruction, and avoid recomputing the
 // mask during lookups.
 //
-// func multiProbe32AVX2(table []table32Group, numKeys int, hashes []uintptr, keys []uint32, values []int32) int
+// func multiProbe32AVX2(table []table32Group, numKeys int, hashes []uintptr, keys sparse.Uint32Array, values []int32) int
 TEXT ·multiProbe32AVX2(SB), NOSPLIT, $0-112
     MOVQ table_base+0(FP), AX
     MOVQ table_len+8(FP), BX
     MOVQ numKeys+24(FP), CX
     MOVQ hashes_base+32(FP), DX
     MOVQ hashes_len+40(FP), DI
-    MOVQ keys_base+56(FP), R8
+    MOVQ keys_array_ptr+56(FP), R8
+    MOVQ keys_array_off+72(FP), R15
     MOVQ values_base+80(FP), R9
     DECQ BX // modulo = len(table) - 1
 
@@ -34,7 +35,7 @@ TEXT ·multiProbe32AVX2(SB), NOSPLIT, $0-112
     JMP test
 loop:
     MOVQ (DX)(SI*8), R10        // hash
-    VPBROADCASTD (R8)(SI*4), Y0 // [key]
+    VPBROADCASTD (R8), Y0 // [key]
 probe:
     MOVQ R10, R11
     ANDQ BX, R11 // hash & modulo
@@ -49,10 +50,11 @@ probe:
     JZ insert
 
     TZCNTL R11, R13
-    MOVL 28(R12)(R13*4), R15
+    MOVL 28(R12)(R13*4), R14
 next:
-    MOVL R15, (R9)(SI*4)
+    MOVL R14, (R9)(SI*4)
     INCQ SI
+    ADDQ R15, R8
 test:
     CMPQ SI, DI
     JNE loop
@@ -71,7 +73,7 @@ insert:
     MOVL R11, 56(R12)       // group.len = (group.len << 1) | 1
     MOVL R14, (R12)(R13*4)  // group.keys[i] = key
     MOVL CX, 28(R12)(R13*4) // group.values[i] = value
-    MOVL CX, R15
+    MOVL CX, R14
     INCL CX
     JMP next
 probeNextGroup:
