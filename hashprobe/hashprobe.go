@@ -339,6 +339,10 @@ func (t *Int64Table) Probe(keys []int64, values []int32) int {
 	return t.probe(unsafecast.Int64ToUint64(keys), values)
 }
 
+func (t *Int64Table) ProbeArray(keys sparse.Int64Array, values []int32) int {
+	return t.probeArray(keys.Uint64Array(), values)
+}
+
 type Float64Table struct{ table64 }
 
 func NewFloat64Table(cap int, maxLoad float64) *Float64Table {
@@ -355,6 +359,10 @@ func (t *Float64Table) Probe(keys []float64, values []int32) int {
 	return t.probe(unsafecast.Float64ToUint64(keys), values)
 }
 
+func (t *Float64Table) ProbeArray(keys sparse.Float64Array, values []int32) int {
+	return t.probeArray(keys.Uint64Array(), values)
+}
+
 type Uint64Table struct{ table64 }
 
 func NewUint64Table(cap int, maxLoad float64) *Uint64Table {
@@ -369,6 +377,10 @@ func (t *Uint64Table) Cap() int { return t.size() }
 
 func (t *Uint64Table) Probe(keys []uint64, values []int32) int {
 	return t.probe(keys, values)
+}
+
+func (t *Uint64Table) ProbeArray(keys sparse.Uint64Array, values []int32) int {
+	return t.probeArray(keys, values)
 }
 
 // table64 is the generic implementation of probing tables for 64 bit types.
@@ -475,7 +487,13 @@ func (t *table64) reset() {
 }
 
 func (t *table64) probe(keys []uint64, values []int32) int {
-	if totalValues := t.len + len(keys); totalValues > t.maxLen {
+	return t.probeArray(sparse.MakeUint64Array(keys), values)
+}
+
+func (t *table64) probeArray(keys sparse.Uint64Array, values []int32) int {
+	numKeys := keys.Len()
+
+	if totalValues := t.len + numKeys; totalValues > t.maxLen {
 		t.grow(totalValues)
 	}
 
@@ -483,25 +501,25 @@ func (t *table64) probe(keys []uint64, values []int32) int {
 	var baseLength = t.len
 	var useAesHash = aeshash.Enabled()
 
-	_ = values[:len(keys)]
+	_ = values[:numKeys]
 
-	for i := 0; i < len(keys); {
+	for i := 0; i < numKeys; {
 		j := len(hashes) + i
 		n := len(hashes)
 
-		if j > len(keys) {
-			j = len(keys)
-			n = len(keys) - i
+		if j > numKeys {
+			j = numKeys
+			n = numKeys - i
 		}
 
-		h := hashes[:n:n]
-		k := keys[i:j:j]
+		k := keys.Slice(i, j)
 		v := values[i:j:j]
+		h := hashes[:n:n]
 
 		if useAesHash {
-			aeshash.MultiHash64(h, k, t.seed)
+			aeshash.MultiHashUint64Array(h, k, t.seed)
 		} else {
-			wyhash.MultiHash64(h, k, t.seed)
+			wyhash.MultiHashUint64Array(h, k, t.seed)
 		}
 
 		t.len = multiProbe64(t.table, t.len, h, k, v)
@@ -511,11 +529,11 @@ func (t *table64) probe(keys []uint64, values []int32) int {
 	return t.len - baseLength
 }
 
-func multiProbe64Default(table []table64Group, numKeys int, hashes []uintptr, keys []uint64, values []int32) int {
+func multiProbe64Default(table []table64Group, numKeys int, hashes []uintptr, keys sparse.Uint64Array, values []int32) int {
 	modulo := uintptr(len(table)) - 1
 
 	for i, hash := range hashes {
-		key := keys[i]
+		key := keys.Index(i)
 		for {
 			group := &table[hash&modulo]
 			index := table64GroupSize

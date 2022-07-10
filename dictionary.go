@@ -352,36 +352,18 @@ func (d *int64Dictionary) init(indexes []int32) {
 }
 
 func (d *int64Dictionary) insert(indexes []int32, rows array, size, offset uintptr) {
-	_ = indexes[:rows.len]
-
 	if d.table == nil {
 		d.init(indexes)
 	}
 
-	var values [insertsPerLoop]int64
+	keys := sparse.UnsafeInt64Array(unsafe.Add(rows.ptr, offset), rows.len, size)
 
-	for i := 0; i < rows.len; {
-		j := len(values) + i
-		n := len(values)
-		if j > rows.len {
-			j = rows.len
-			n = rows.len - i
-		}
-
-		probe := values[:n:n]
-		slice := rows.slice(i, j, size)
-		writeValuesInt64(probe, slice, size, offset)
-
-		if d.table.Probe(probe, indexes[i:j:j]) > 0 {
-			minIndex := int32(len(d.values))
-			for k, v := range probe {
-				if indexes[i+k] >= minIndex {
-					d.values = append(d.values, v)
-				}
+	if d.table.ProbeArray(keys, indexes) > 0 {
+		for i, index := range indexes {
+			if index == int32(len(d.values)) {
+				d.values = append(d.values, keys.Index(i))
 			}
 		}
-
-		i = j
 	}
 }
 
@@ -639,36 +621,18 @@ func (d *doubleDictionary) init(indexes []int32) {
 }
 
 func (d *doubleDictionary) insert(indexes []int32, rows array, size, offset uintptr) {
-	_ = indexes[:rows.len]
-
 	if d.table == nil {
 		d.init(indexes)
 	}
 
-	var values [insertsPerLoop]float64
+	keys := sparse.UnsafeFloat64Array(unsafe.Add(rows.ptr, offset), rows.len, size)
 
-	for i := 0; i < rows.len; {
-		j := len(values) + i
-		n := len(values)
-		if j > rows.len {
-			j = rows.len
-			n = rows.len - i
-		}
-
-		probe := values[:n:n]
-		slice := rows.slice(i, j, size)
-		writeValuesFloat64(probe, slice, size, offset)
-
-		if d.table.Probe(probe, indexes[i:j:j]) > 0 {
-			minIndex := int32(len(d.values))
-			for k, v := range probe {
-				if indexes[i+k] >= minIndex {
-					d.values = append(d.values, v)
-				}
+	if d.table.ProbeArray(keys, indexes) > 0 {
+		for i, index := range indexes {
+			if index == int32(len(d.values)) {
+				d.values = append(d.values, keys.Index(i))
 			}
 		}
-
-		i = j
 	}
 }
 
@@ -1066,36 +1030,18 @@ func (d *uint64Dictionary) init(indexes []int32) {
 }
 
 func (d *uint64Dictionary) insert(indexes []int32, rows array, size, offset uintptr) {
-	_ = indexes[:rows.len]
-
 	if d.table == nil {
 		d.init(indexes)
 	}
 
-	var values [insertsPerLoop]uint64
+	keys := sparse.UnsafeUint64Array(unsafe.Add(rows.ptr, offset), rows.len, size)
 
-	for i := 0; i < rows.len; {
-		j := len(values) + i
-		n := len(values)
-		if j > rows.len {
-			j = rows.len
-			n = rows.len - i
-		}
-
-		probe := values[:n:n]
-		slice := rows.slice(i, j, size)
-		writeValuesUint64(probe, slice, size, offset)
-
-		if d.table.Probe(probe, indexes[i:j:j]) > 0 {
-			minIndex := int32(len(d.values))
-			for k, v := range probe {
-				if indexes[i+k] >= minIndex {
-					d.values = append(d.values, v)
-				}
+	if d.table.ProbeArray(keys, indexes) > 0 {
+		for i, index := range indexes {
+			if index == int32(len(d.values)) {
+				d.values = append(d.values, keys.Index(i))
 			}
 		}
-
-		i = j
 	}
 }
 

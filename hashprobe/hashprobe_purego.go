@@ -8,7 +8,7 @@ func multiProbe32(table []table32Group, numKeys int, hashes []uintptr, keys spar
 	return multiProbe32Default(table, numKeys, hashes, keys, values)
 }
 
-func multiProbe64(table []table64Group, numKeys int, hashes []uintptr, keys []uint64, values []int32) int {
+func multiProbe64(table []table64Group, numKeys int, hashes []uintptr, keys sparse.Uint64Array, values []int32) int {
 	return multiProbe64Default(table, numKeys, hashes, keys, values)
 }
 
