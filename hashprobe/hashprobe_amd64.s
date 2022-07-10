@@ -140,14 +140,15 @@ probeNextGroup:
     INCQ R10
     JMP probe
 
-// func multiProbe128SSE2(table []byte, tableCap, tableLen int, hashes []uintptr, keys [][16]byte, values []int32) int
+// func multiProbe128SSE2(table []byte, tableCap, tableLen int, hashes []uintptr, keys sparse.Uint128Array, values []int32) int
 TEXT ·multiProbe128SSE2(SB), NOSPLIT, $0-120
     MOVQ table_base+0(FP), AX
     MOVQ tableCap+24(FP), BX
     MOVQ tableLen+32(FP), CX
     MOVQ hashes_base+40(FP), DX
     MOVQ hashes_len+48(FP), DI
-    MOVQ keys_base+64(FP), R8
+    MOVQ keys_array_ptr+64(FP), R8
+    MOVQ keys_array_off+80(FP), R15
     MOVQ values_base+88(FP), R9
 
     MOVQ BX, R10
@@ -162,28 +163,26 @@ loop:
     MOVOU (R8), X0       // key
 probe:
     MOVQ R11, R12
-    MOVQ R11, R13
     ANDQ BX, R12
-    ANDQ BX, R13
-    SHLQ $4, R13
 
-    MOVL (R10)(R12*4), R15
-    CMPL R15, $0
+    MOVL (R10)(R12*4), R14
+    CMPL R14, $0
     JE insert
 
-    MOVOU (AX)(R13*1), X1
+    SHLQ $4, R12
+    MOVOU (AX)(R12*1), X1
     PCMPEQL X0, X1
-    MOVMSKPS X1, R14
-    CMPL R14, $0b1111
+    MOVMSKPS X1, R13
+    CMPL R13, $0b1111
     JE next
 
     INCQ R11
     JMP probe
 next:
-    DECL R15
-    MOVL R15, (R9)(SI*4)
+    DECL R14
+    MOVL R14, (R9)(SI*4)
     INCQ SI
-    ADDQ $16, R8
+    ADDQ R15, R8
 test:
     CMPQ SI, DI
     JNE loop
@@ -191,7 +190,8 @@ test:
     RET
 insert:
     INCL CX
-    MOVOU X0, (AX)(R13*1)
     MOVL CX, (R10)(R12*4)
-    MOVL CX, R15
+    MOVL CX, R14
+    SHLQ $4, R12
+    MOVOU X0, (AX)(R12*1)
     JMP next

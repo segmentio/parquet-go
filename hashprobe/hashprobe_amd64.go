@@ -14,7 +14,7 @@ func multiProbe32AVX2(table []table32Group, numKeys int, hashes []uintptr, keys 
 func multiProbe64AVX2(table []table64Group, numKeys int, hashes []uintptr, keys sparse.Uint64Array, values []int32) int
 
 //go:noescape
-func multiProbe128SSE2(table []byte, tableCap, tableLen int, hashes []uintptr, keys [][16]byte, values []int32) int
+func multiProbe128SSE2(table []byte, tableCap, tableLen int, hashes []uintptr, keys sparse.Uint128Array, values []int32) int
 
 func multiProbe32(table []table32Group, numKeys int, hashes []uintptr, keys sparse.Uint32Array, values []int32) int {
 	if cpu.X86.HasAVX2 {
@@ -30,7 +30,7 @@ func multiProbe64(table []table64Group, numKeys int, hashes []uintptr, keys spar
 	return multiProbe64Default(table, numKeys, hashes, keys, values)
 }
 
-func multiProbe128(table []byte, tableCap, tableLen int, hashes []uintptr, keys [][16]byte, values []int32) int {
+func multiProbe128(table []byte, tableCap, tableLen int, hashes []uintptr, keys sparse.Uint128Array, values []int32) int {
 	if cpu.X86.HasSSE2 {
 		return multiProbe128SSE2(table, tableCap, tableLen, hashes, keys, values)
 	}

@@ -585,6 +585,10 @@ func (t *Uint128Table) Probe(keys [][16]byte, values []int32) int {
 	return t.probe(keys, values)
 }
 
+func (t *Uint128Table) ProbeArray(keys sparse.Uint128Array, values []int32) int {
+	return t.probeArray(keys, values)
+}
+
 // table128 is the generic implementation of probing tables for 128 bit types.
 //
 // This table uses the following memory layout:
@@ -700,7 +704,13 @@ func (t *table128) reset() {
 }
 
 func (t *table128) probe(keys [][16]byte, values []int32) int {
-	if totalValues := t.len + len(keys); totalValues > t.maxLen {
+	return t.probeArray(sparse.MakeUint128Array(keys), values)
+}
+
+func (t *table128) probeArray(keys sparse.Uint128Array, values []int32) int {
+	numKeys := keys.Len()
+
+	if totalValues := t.len + numKeys; totalValues > t.maxLen {
 		t.grow(totalValues)
 	}
 
@@ -708,25 +718,25 @@ func (t *table128) probe(keys [][16]byte, values []int32) int {
 	var baseLength = t.len
 	var useAesHash = aeshash.Enabled()
 
-	_ = values[:len(keys)]
+	_ = values[:numKeys]
 
-	for i := 0; i < len(keys); {
+	for i := 0; i < numKeys; {
 		j := len(hashes) + i
 		n := len(hashes)
 
-		if j > len(keys) {
-			j = len(keys)
-			n = len(keys) - i
+		if j > numKeys {
+			j = numKeys
+			n = numKeys - i
 		}
 
-		h := hashes[:n:n]
-		k := keys[i:j:j]
+		k := keys.Slice(i, j)
 		v := values[i:j:j]
+		h := hashes[:n:n]
 
 		if useAesHash {
-			aeshash.MultiHash128(h, k, t.seed)
+			aeshash.MultiHashUint128Array(h, k, t.seed)
 		} else {
-			wyhash.MultiHash128(h, k, t.seed)
+			wyhash.MultiHashUint128Array(h, k, t.seed)
 		}
 
 		t.len = multiProbe128(t.table, t.cap, t.len, h, k, v)
@@ -736,13 +746,14 @@ func (t *table128) probe(keys [][16]byte, values []int32) int {
 	return t.len - baseLength
 }
 
-func multiProbe128Default(table []byte, tableCap, tableLen int, hashes []uintptr, keys [][16]byte, values []int32) int {
+func multiProbe128Default(table []byte, tableCap, tableLen int, hashes []uintptr, keys sparse.Uint128Array, values []int32) int {
 	modulo := uintptr(tableCap) - 1
 	offset := uintptr(tableCap) * 16
 	tableKeys := unsafecast.BytesToUint128(table[:offset])
 	tableValues := unsafecast.BytesToInt32(table[offset:])
 
 	for i, hash := range hashes {
+		key := keys.Index(i)
 		for {
 			j := hash & modulo
 			v := tableValues[j]
@@ -750,12 +761,12 @@ func multiProbe128Default(table []byte, tableCap, tableLen int, hashes []uintptr
 			if v == 0 {
 				values[i] = int32(tableLen)
 				tableLen++
-				tableKeys[j] = keys[i]
+				tableKeys[j] = key
 				tableValues[j] = int32(tableLen)
 				break
 			}
 
-			if keys[i] == tableKeys[j] {
+			if key == tableKeys[j] {
 				values[i] = v - 1
 				break
 			}

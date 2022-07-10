@@ -1124,9 +1124,8 @@ func (d *be128Dictionary) Insert(indexes []int32, values []Value) {
 		writePointersBE128(probe, makeArrayValue(values[i:j]), unsafe.Sizeof(values[i]), unsafe.Offsetof(values[i].ptr))
 
 		if d.table.Probe(probe, indexes[i:j:j]) > 0 {
-			minIndex := int32(len(d.values))
 			for k, v := range probe {
-				if indexes[i+k] >= minIndex {
+				if indexes[i+k] == int32(len(d.values)) {
 					d.values = append(d.values, v)
 				}
 			}
@@ -1154,36 +1153,18 @@ func (d *be128Dictionary) init(indexes []int32) {
 }
 
 func (d *be128Dictionary) insert(indexes []int32, rows array, size, offset uintptr) {
-	_ = indexes[:rows.len]
-
 	if d.table == nil {
 		d.init(indexes)
 	}
 
-	var values [insertsPerLoop][16]byte
+	keys := sparse.UnsafeUint128Array(unsafe.Add(rows.ptr, offset), rows.len, size)
 
-	for i := 0; i < rows.len; {
-		j := len(values) + i
-		n := len(values)
-		if j > rows.len {
-			j = rows.len
-			n = rows.len - i
-		}
-
-		probe := values[:n:n]
-		slice := rows.slice(i, j, size)
-		writeValuesBE128(probe, slice, size, offset)
-
-		if d.table.Probe(probe, indexes[i:j:j]) > 0 {
-			minIndex := int32(len(d.values))
-			for k, v := range probe {
-				if indexes[i+k] >= minIndex {
-					d.values = append(d.values, v)
-				}
+	if d.table.ProbeArray(keys, indexes) > 0 {
+		for i, index := range indexes {
+			if index == int32(len(d.values)) {
+				d.values = append(d.values, keys.Index(i))
 			}
 		}
-
-		i = j
 	}
 }
 
