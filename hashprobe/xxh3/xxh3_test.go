@@ -7,7 +7,7 @@ import (
 )
 
 func TestHash32(t *testing.T) {
-	if h := Hash32(42, 1); h != 0x2132b64814a1ad5d {
+	if h := Hash32(42, 0); h != 0x2132b64814a1ad5d {
 		t.Errorf("hash mismatch: %08x", h)
 	}
 }

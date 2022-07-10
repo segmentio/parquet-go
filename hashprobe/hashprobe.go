@@ -35,6 +35,7 @@ import (
 
 	"github.com/segmentio/parquet-go/hashprobe/aeshash"
 	"github.com/segmentio/parquet-go/hashprobe/wyhash"
+	"github.com/segmentio/parquet-go/hashprobe/xxh3"
 	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
@@ -232,11 +233,13 @@ func (t *table32) insert(keys, values []uint32) {
 	hashes := make([]uintptr, len(keys), 32)
 	modulo := uintptr(t.cap) - 1
 
-	if aeshash.Enabled() {
-		aeshash.MultiHash32(hashes, keys, t.seed)
-	} else {
-		wyhash.MultiHash32(hashes, keys, t.seed)
-	}
+	xxh3.MultiHash32(hashes, keys, t.seed)
+
+	// if aeshash.Enabled() {
+	// 	aeshash.MultiHash32(hashes, keys, t.seed)
+	// } else {
+	// 	wyhash.MultiHash32(hashes, keys, t.seed)
+	// }
 
 	for i, hash := range hashes {
 		for {
@@ -278,7 +281,7 @@ func (t *table32) probe(keys []uint32, values []int32) int {
 
 	var hashes [probesPerLoop]uintptr
 	var baseLength = t.len
-	var useAesHash = aeshash.Enabled()
+	//var useAesHash = aeshash.Enabled()
 
 	_ = values[:len(keys)]
 
@@ -295,11 +298,13 @@ func (t *table32) probe(keys []uint32, values []int32) int {
 		k := keys[i:j:j]
 		v := values[i:j:j]
 
-		if useAesHash {
-			aeshash.MultiHash32(h, k, t.seed)
-		} else {
-			wyhash.MultiHash32(h, k, t.seed)
-		}
+		xxh3.MultiHash32(h, k, t.seed)
+
+		// if useAesHash {
+		// 	aeshash.MultiHash32(h, k, t.seed)
+		// } else {
+		// 	wyhash.MultiHash32(h, k, t.seed)
+		// }
 
 		t.len = multiProbe32(t.table, t.len, t.cap, h, k, v)
 		i = j

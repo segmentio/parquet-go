@@ -8,7 +8,7 @@ const (
 )
 
 func Hash32(value uint32, seed uintptr) uintptr {
-	hash := uint64(value)
+	hash := uint64(value) // ^ uint64(seed)
 	hash += uint64(value) << 32
 	hash ^= key008 ^ key016
 	hash ^= bits.RotateLeft64(hash, 49) ^ bits.RotateLeft64(hash, 24)
@@ -25,10 +25,4 @@ func Hash64(value uint64, seed uintptr) uintptr {
 
 func Hash128(value [16]byte, seed uintptr) uintptr {
 	return 0
-}
-
-func MultiHash32(hashes []uintptr, values []uint32, seed uintptr) {
-	for i := range hashes {
-		hashes[i] = Hash32(values[i], seed)
-	}
 }
