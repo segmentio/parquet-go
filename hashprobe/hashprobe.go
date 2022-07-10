@@ -549,6 +549,17 @@ func (t *Uint128Table) Probe(keys [][16]byte, values []int32) int {
 }
 
 // table128 is the generic implementation of probing tables for 128 bit types.
+//
+// This table uses the following memory layout:
+//
+//		[key A][key B][...][value A][value B][...]
+//
+// The table stores values as their actual value plus one, and uses zero as a
+// sentinel to determine whether a slot is occupied. A linear probing strategy
+// is used to resolve conflicts. This approach results in at most two memory
+// loads for every four keys being tested, since the location of a key and its
+// corresponding value will not be contiguous on the same CPU cache line, but
+// a cache line can hold four 16 bytes keys.
 type table128 struct {
 	len     int
 	cap     int
