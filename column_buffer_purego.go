@@ -63,7 +63,7 @@ func writeValuesBE128(values [][16]byte, rows array, size, offset uintptr) {
 
 func writePointersBE128(values [][16]byte, rows array, size, offset uintptr) {
 	for i := range values {
-		p := (**[16]byte)(rows.index(i, size, offset))
+		p := *(**[16]byte)(rows.index(i, size, offset))
 
 		if p != nil {
 			values[i] = *p
