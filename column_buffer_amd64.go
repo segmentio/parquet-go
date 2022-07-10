@@ -70,3 +70,10 @@ func writeValuesFloat64(values []float64, rows array, size, offset uintptr) {
 func writeValuesBE128(values [][16]byte, rows array, size, offset uintptr) {
 	writeValues128bits(*(*unsafe.Pointer)(unsafe.Pointer(&values)), rows, size, offset)
 }
+
+//go:noescape
+func writePointers128bits(values *[16]byte, rows array, size, offset uintptr)
+
+func writePointersBE128(values [][16]byte, rows array, size, offset uintptr) {
+	writePointers128bits(*(**[16]byte)(unsafe.Pointer(&values)), rows, size, offset)
+}

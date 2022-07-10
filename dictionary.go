@@ -1217,6 +1217,8 @@ func (d *be128Dictionary) Insert(indexes []int32, values []Value) {
 		d.init(indexes)
 	}
 
+	var buffer [insertsPerLoop][16]byte
+
 	for i := 0; i < len(values); {
 		j := insertsPerLoop + i
 		n := insertsPerLoop
@@ -1225,14 +1227,8 @@ func (d *be128Dictionary) Insert(indexes []int32, values []Value) {
 			n = len(values) - i
 		}
 
-		probe := make([][16]byte, n, insertsPerLoop)
-		for k := range probe {
-			p := values[i+k].ptr
-
-			if p != nil {
-				probe[k] = *(*[16]byte)(unsafe.Pointer(p))
-			}
-		}
+		probe := buffer[:n:n]
+		writePointersBE128(probe, makeArrayValue(values[i:j]), unsafe.Sizeof(values[i]), unsafe.Offsetof(values[i].ptr))
 
 		if d.table.Probe(probe, indexes[i:j:j]) > 0 {
 			minIndex := int32(len(d.values))
@@ -1248,7 +1244,7 @@ func (d *be128Dictionary) Insert(indexes []int32, values []Value) {
 }
 
 func (d *be128Dictionary) init(indexes []int32) {
-	d.table = hashprobe.NewUint128Table(cap(d.values), hashprobeTableMaxLoad)
+	d.table = hashprobe.NewUint128Table(cap(d.values), 0.75)
 
 	n := len(d.values)
 	if n > len(indexes) {

@@ -270,6 +270,32 @@ tail:
 done:
     RET
 
+// func writePointers128bits(values *[16]byte, rows array, size, offset uintptr)
+TEXT ·writePointers128bits(SB), NOSPLIT, $0-40
+    MOVQ values+0(FP), AX
+    MOVQ rows_ptr+8(FP), BX
+    MOVQ rows_len+16(FP), CX
+    MOVQ size+24(FP), DX
+    ADDQ offset+32(FP), BX
+
+    XORQ SI, SI
+    JMP test
+loop:
+    PXOR X0, X0
+    MOVQ (BX), DI // *[16]byte
+    CMPQ DI, $0
+    JE next
+    MOVOU (DI), X0
+next:
+    MOVOU X0, (AX)
+    ADDQ $16, AX
+    ADDQ DX, BX
+    INCQ SI
+test:
+    CMPQ SI, CX
+    JNE loop
+    RET
+
 GLOBL ·scale4x8(SB), RODATA|NOPTR, $32
 DATA ·scale4x8+0(SB)/8,  $0
 DATA ·scale4x8+8(SB)/8,  $1
