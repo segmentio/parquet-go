@@ -121,12 +121,6 @@ func TestUint64TableProbeBulk(t *testing.T) {
 	}
 }
 
-func TestTable128SlotSize(t *testing.T) {
-	if n := unsafe.Sizeof(table128Slot{}); n != 24 {
-		t.Errorf("size of 128 bit table slot is not 24 bytes: %d", n)
-	}
-}
-
 func TestUint128TableProbeOneByOne(t *testing.T) {
 	const N = 500
 	table := NewUint128Table(0, 0.9)

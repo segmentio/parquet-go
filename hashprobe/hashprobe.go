@@ -542,7 +542,7 @@ func (t *Uint128Table) Reset() { t.reset() }
 
 func (t *Uint128Table) Len() int { return t.len }
 
-func (t *Uint128Table) Cap() int { return t.size() }
+func (t *Uint128Table) Cap() int { return t.cap }
 
 func (t *Uint128Table) Probe(keys [][16]byte, values []int32) int {
 	return t.probe(keys, values)
@@ -551,16 +551,11 @@ func (t *Uint128Table) Probe(keys [][16]byte, values []int32) int {
 // table128 is the generic implementation of probing tables for 128 bit types.
 type table128 struct {
 	len     int
+	cap     int
 	maxLen  int
 	maxLoad float64
 	seed    uintptr
-	table   []table128Slot
-}
-
-type table128Slot struct {
-	key   [16]byte
-	exist uint32
-	value uint32
+	table   []byte
 }
 
 func makeTable128(cap int, maxLoad float64) (t table128) {
@@ -574,19 +569,21 @@ func makeTable128(cap int, maxLoad float64) (t table128) {
 	return t
 }
 
-func (t *table128) size() int {
-	return len(t.table)
-}
-
 func (t *table128) init(cap int, maxLoad float64) {
 	m := int(math.Ceil((1 / maxLoad) * float64(cap)))
 	n := nextPowerOf2(m)
 	*t = table128{
+		cap:     n,
 		maxLen:  int(math.Ceil(maxLoad * float64(n))),
 		maxLoad: maxLoad,
 		seed:    randSeed(),
-		table:   make([]table128Slot, n),
+		table:   make([]byte, 16*n+4*n),
 	}
+}
+
+func (t *table128) kv() (keys [][16]byte, values []int32) {
+	i := t.cap * 16
+	return unsafecast.BytesToUint128(t.table[:i]), unsafecast.BytesToInt32(t.table[i:])
 }
 
 func (t *table128) grow(totalValues int) {
@@ -594,36 +591,63 @@ func (t *table128) grow(totalValues int) {
 	tmp.init(totalValues, t.maxLoad)
 	tmp.len = t.len
 
-	hashFunc := wyhash.Hash128
-	if aeshash.Enabled() {
-		hashFunc = aeshash.Hash128
-	}
+	keys, values := t.kv()
+	hashes := make([]uintptr, probesPerLoop)
+	useAesHash := aeshash.Enabled()
 
-	modulo := uintptr(len(tmp.table)) - 1
+	_ = values[:len(keys)]
 
-	for i := range t.table {
-		if s := &t.table[i]; s.exist != 0 {
-			hash := hashFunc(s.key, tmp.seed)
-			for {
-				if slot := &tmp.table[hash&modulo]; slot.exist == 0 {
-					slot.key = s.key
-					slot.exist = 1
-					slot.value = s.value
-					break
-				}
-				hash++
-			}
+	for i := 0; i < len(keys); {
+		j := len(hashes) + i
+		n := len(hashes)
+
+		if j > len(keys) {
+			j = len(keys)
+			n = len(keys) - i
 		}
+
+		h := hashes[:n:n]
+		k := keys[i:j:j]
+		v := values[i:j:j]
+
+		if useAesHash {
+			aeshash.MultiHash128(h, k, tmp.seed)
+		} else {
+			wyhash.MultiHash128(h, k, tmp.seed)
+		}
+
+		tmp.insert(h, k, v)
+		i = j
 	}
 
 	*t = tmp
+}
+
+func (t *table128) insert(hashes []uintptr, keys [][16]byte, values []int32) {
+	tableKeys, tableValues := t.kv()
+	modulo := uintptr(t.cap) - 1
+
+	for i, hash := range hashes {
+		for {
+			j := hash & modulo
+			v := tableValues[j]
+
+			if v == 0 {
+				tableKeys[j] = keys[i]
+				tableValues[j] = values[i]
+				break
+			}
+
+			hash++
+		}
+	}
 }
 
 func (t *table128) reset() {
 	t.len = 0
 
 	for i := range t.table {
-		t.table[i] = table128Slot{}
+		t.table[i] = 0
 	}
 }
 
@@ -657,31 +681,34 @@ func (t *table128) probe(keys [][16]byte, values []int32) int {
 			wyhash.MultiHash128(h, k, t.seed)
 		}
 
-		t.len = multiProbe128(t.table, t.len, h, k, v)
+		t.len = multiProbe128(t.table, t.cap, t.len, h, k, v)
 		i = j
 	}
 
 	return t.len - baseLength
 }
 
-func multiProbe128Default(table []table128Slot, numKeys int, hashes []uintptr, keys [][16]byte, values []int32) int {
-	modulo := uintptr(len(table)) - 1
+func multiProbe128Default(table []byte, tableCap, tableLen int, hashes []uintptr, keys [][16]byte, values []int32) int {
+	modulo := uintptr(tableCap) - 1
+	offset := uintptr(tableCap) * 16
+	tableKeys := unsafecast.BytesToUint128(table[:offset])
+	tableValues := unsafecast.BytesToInt32(table[offset:])
 
 	for i, hash := range hashes {
 		for {
-			slot := &table[hash&modulo]
+			j := hash & modulo
+			v := tableValues[j]
 
-			if slot.exist == 0 {
-				slot.key = keys[i]
-				slot.exist = 1
-				slot.value = uint32(numKeys)
-				values[i] = int32(numKeys)
-				numKeys++
+			if v == 0 {
+				values[i] = int32(tableLen)
+				tableLen++
+				tableKeys[j] = keys[i]
+				tableValues[j] = int32(tableLen)
 				break
 			}
 
-			if slot.key == keys[i] {
-				values[i] = int32(slot.value)
+			if keys[i] == tableKeys[j] {
+				values[i] = v - 1
 				break
 			}
 
@@ -689,5 +716,5 @@ func multiProbe128Default(table []table128Slot, numKeys int, hashes []uintptr, k
 		}
 	}
 
-	return numKeys
+	return tableLen
 }

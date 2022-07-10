@@ -136,55 +136,58 @@ probeNextGroup:
     INCQ R10
     JMP probe
 
-// func multiProbe128AVX2(table []table128Slot, numKeys int, hashes []uintptr, keys [][16]byte, values []int32) int
-TEXT ·multiProbe128AVX2(SB), NOSPLIT, $0-112
+// func multiProbe128SSE2(table []byte, tableCap, tableLen int, hashes []uintptr, keys [][16]byte, values []int32) int
+TEXT ·multiProbe128SSE2(SB), NOSPLIT, $0-120
     MOVQ table_base+0(FP), AX
-    MOVQ table_len+8(FP), BX
-    MOVQ numKeys+24(FP), CX
-    MOVQ hashes_base+32(FP), DX
-    MOVQ hashes_len+40(FP), DI
-    MOVQ keys_base+56(FP), R8
-    MOVQ values_base+80(FP), R9
-    DECQ BX // modulo = len(table) - 1
+    MOVQ tableCap+24(FP), BX
+    MOVQ tableLen+32(FP), CX
+    MOVQ hashes_base+40(FP), DX
+    MOVQ hashes_len+48(FP), DI
+    MOVQ keys_base+64(FP), R8
+    MOVQ values_base+88(FP), R9
+
+    MOVQ BX, R10
+    SHLQ $4, R10
+    LEAQ (AX)(R10*1), R10
+    DECQ BX // modulo = tableCap - 1
 
     XORQ SI, SI
     JMP test
 loop:
-    VMOVDQU (R8), X0     // key
-    MOVQ (DX)(SI*8), R10 // hash
+    MOVQ (DX)(SI*8), R11 // hash
+    MOVOU (R8), X0       // key
 probe:
-    MOVQ R10, R11
-    ANDQ BX, R11
-    IMUL3Q $24, R11, R11
+    MOVQ R11, R12
+    MOVQ R11, R13
+    ANDQ BX, R12
+    ANDQ BX, R13
+    SHLQ $4, R13
 
-    VMOVDQU (AX)(R11*1), Y1
-    VPCMPEQD Y0, Y1, Y2
-    VMOVMSKPS Y2, R12
-    ANDB $0b00011111, R12
-    CMPB R12, $0b00001111
-    JE load
+    MOVL (R10)(R12*4), R15
+    CMPL R15, $0
+    JE insert
 
-    ANDB $0b00010000, R12
-    JNZ insert
+    MOVOU (AX)(R13*1), X1
+    PCMPEQL X0, X1
+    MOVMSKPS X1, R14
+    CMPL R14, $0b1111
+    JE next
 
-    INCQ R10
+    INCQ R11
     JMP probe
-load:
-    MOVL 20(AX)(R11*1), R15
 next:
+    DECL R15
     MOVL R15, (R9)(SI*4)
     INCQ SI
     ADDQ $16, R8
 test:
     CMPQ SI, DI
     JNE loop
-    MOVQ CX, ret+104(FP)
-    VZEROUPPER
+    MOVQ CX, ret+112(FP)
     RET
 insert:
-    VMOVDQU X0, (AX)(R11*1)
-    MOVL $1, 16(AX)(R11*1)
-    MOVL CX, 20(AX)(R11*1)
-    MOVL CX, R15
     INCL CX
+    MOVOU X0, (AX)(R13*1)
+    MOVL CX, (R10)(R12*4)
+    MOVL CX, R15
     JMP next
