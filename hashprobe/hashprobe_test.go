@@ -121,9 +121,9 @@ func TestUint64TableProbeBulk(t *testing.T) {
 	}
 }
 
-func TestTable128GroupSize(t *testing.T) {
-	if n := unsafe.Sizeof(table128Group{}); n != 192 {
-		t.Errorf("size of 128 bit table group is not 192 bytes: %d", n)
+func TestTable128SlotSize(t *testing.T) {
+	if n := unsafe.Sizeof(table128Slot{}); n != 24 {
+		t.Errorf("size of 128 bit table slot is not 24 bytes: %d", n)
 	}
 }
 

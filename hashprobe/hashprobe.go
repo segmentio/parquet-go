@@ -549,52 +549,43 @@ func (t *Uint128Table) Probe(keys [][16]byte, values []int32) int {
 }
 
 // table128 is the generic implementation of probing tables for 128 bit types.
-//
-// The datastructure follows the same implementation as the one used by table32
-// but the keys are 128 bit values.
 type table128 struct {
 	len     int
 	maxLen  int
 	maxLoad float64
 	seed    uintptr
-	table   []table128Group
+	table   []table128Slot
 }
 
-const table128GroupSize = 7
-
-type table128Group struct {
-	hashes [table128GroupSize]uint32
-	bits   uint32
-	values [table128GroupSize]uint32
-	_      uint32
-	keys   [table128GroupSize][16]byte
-	_      uint64
-	_      uint64
+type table128Slot struct {
+	key   [16]byte
+	exist uint32
+	value uint32
 }
 
 func makeTable128(cap int, maxLoad float64) (t table128) {
 	if maxLoad < 0 || maxLoad > 1 {
 		panic("max load of probing table must be a value between 0 and 1")
 	}
-	if cap < table128GroupSize {
-		cap = table128GroupSize
+	if cap < 8 {
+		cap = 8
 	}
 	t.init(cap, maxLoad)
 	return t
 }
 
 func (t *table128) size() int {
-	return table128GroupSize * len(t.table)
+	return len(t.table)
 }
 
 func (t *table128) init(cap int, maxLoad float64) {
 	m := int(math.Ceil((1 / maxLoad) * float64(cap)))
-	n := nextPowerOf2((m + (table128GroupSize - 1)) / table128GroupSize)
+	n := nextPowerOf2(m)
 	*t = table128{
-		maxLen:  int(math.Ceil(maxLoad * float64(table128GroupSize*n))),
+		maxLen:  int(math.Ceil(maxLoad * float64(n))),
 		maxLoad: maxLoad,
 		seed:    randSeed(),
-		table:   make([]table128Group, n),
+		table:   make([]table128Slot, n),
 	}
 }
 
@@ -603,33 +594,24 @@ func (t *table128) grow(totalValues int) {
 	tmp.init(totalValues, t.maxLoad)
 	tmp.len = t.len
 
-	hashes := make([]uintptr, table128GroupSize)
+	hashFunc := wyhash.Hash128
+	if aeshash.Enabled() {
+		hashFunc = aeshash.Hash128
+	}
+
 	modulo := uintptr(len(tmp.table)) - 1
 
 	for i := range t.table {
-		g := &t.table[i]
-		n := bits.OnesCount32(g.bits)
-
-		if aeshash.Enabled() {
-			aeshash.MultiHash128(hashes[:n], g.keys[:n], tmp.seed)
-		} else {
-			wyhash.MultiHash128(hashes[:n], g.keys[:n], tmp.seed)
-		}
-
-		for j, hash := range hashes[:n] {
-			slot := hash
+		if s := &t.table[i]; s.exist != 0 {
+			hash := hashFunc(s.key, tmp.seed)
 			for {
-				group := &tmp.table[slot&modulo]
-
-				if n := bits.OnesCount32(group.bits); n < table128GroupSize {
-					group.bits = (group.bits << 1) | 1
-					group.hashes[n] = uint32(hash)
-					group.values[n] = g.values[j]
-					group.keys[n] = g.keys[j]
+				if slot := &tmp.table[hash&modulo]; slot.exist == 0 {
+					slot.key = s.key
+					slot.exist = 1
+					slot.value = s.value
 					break
 				}
-
-				slot++
+				hash++
 			}
 		}
 	}
@@ -641,7 +623,7 @@ func (t *table128) reset() {
 	t.len = 0
 
 	for i := range t.table {
-		t.table[i] = table128Group{}
+		t.table[i] = table128Slot{}
 	}
 }
 
@@ -682,41 +664,28 @@ func (t *table128) probe(keys [][16]byte, values []int32) int {
 	return t.len - baseLength
 }
 
-func multiProbe128Default(table []table128Group, numKeys int, hashes []uintptr, keys [][16]byte, values []int32) int {
+func multiProbe128Default(table []table128Slot, numKeys int, hashes []uintptr, keys [][16]byte, values []int32) int {
 	modulo := uintptr(len(table)) - 1
 
 	for i, hash := range hashes {
-		slot, key := hash, keys[i]
 		for {
-			group := &table[slot&modulo]
-			index := table128GroupSize
-			value := int32(0)
+			slot := &table[hash&modulo]
 
-			for i, h := range group.hashes {
-				if h == uint32(hash) && group.keys[i] == key {
-					index = i
-					break
-				}
-			}
-
-			if n := bits.OnesCount32(group.bits); index < n {
-				value = int32(group.values[index])
-			} else {
-				if n == table128GroupSize {
-					slot++
-					continue
-				}
-
-				value = int32(numKeys)
-				group.bits = (group.bits << 1) | 1
-				group.hashes[n] = uint32(hash)
-				group.values[n] = uint32(value)
-				group.keys[n] = key
+			if slot.exist == 0 {
+				slot.key = keys[i]
+				slot.exist = 1
+				slot.value = uint32(numKeys)
+				values[i] = int32(numKeys)
 				numKeys++
+				break
 			}
 
-			values[i] = value
-			break
+			if slot.key == keys[i] {
+				values[i] = int32(slot.value)
+				break
+			}
+
+			hash++
 		}
 	}
 

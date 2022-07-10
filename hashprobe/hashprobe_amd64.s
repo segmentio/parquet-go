@@ -136,7 +136,7 @@ probeNextGroup:
     INCQ R10
     JMP probe
 
-// func multiProbe128AVX2(table []table128Group, numKeys int, hashes []uintptr, keys [][16]byte, values []int32) int
+// func multiProbe128AVX2(table []table128Slot, numKeys int, hashes []uintptr, keys [][16]byte, values []int32) int
 TEXT ·multiProbe128AVX2(SB), NOSPLIT, $0-112
     MOVQ table_base+0(FP), AX
     MOVQ table_len+8(FP), BX
@@ -152,37 +152,25 @@ TEXT ·multiProbe128AVX2(SB), NOSPLIT, $0-112
 loop:
     VMOVDQU (R8), X0     // key
     MOVQ (DX)(SI*8), R10 // hash
-    VPBROADCASTD (DX)(SI*8), Y1
 probe:
     MOVQ R10, R11
     ANDQ BX, R11
-    IMUL3Q $192, R11, R11 // x 192 (size of table128Group)
-    LEAQ (AX)(R11*1), R12
+    IMUL3Q $24, R11, R11
 
-    VMOVDQU (AX)(R11*1), Y2
-    VPCMPEQD Y1, Y2, Y2
-    VMOVMSKPS Y2, R11
-    MOVL 28(R12), R13
-    ANDL R13, R11
-    CMPL R11, $0
-    JE insert
-search:
-    TZCNTL R11, R13
-    SHLL $4, R13
-    VMOVDQU 64(R12)(R13*1), X2
-    VPCMPEQQ X0, X2, X2
-    VMOVMSKPD X2, R15
-    CMPL R15, $0b11
+    VMOVDQU (AX)(R11*1), Y1
+    VPCMPEQD Y0, Y1, Y2
+    VMOVMSKPS Y2, R12
+    ANDB $0b00011111, R12
+    CMPB R12, $0b00001111
     JE load
 
-    BLSRL R11, R11
-    JNZ search
+    ANDB $0b00010000, R12
+    JNZ insert
 
-    MOVL 28(R12), R13
-    JMP insert
+    INCQ R10
+    JMP probe
 load:
-    SHRL $4, R13
-    MOVL 32(R12)(R13*4), R15
+    MOVL 20(AX)(R11*1), R15
 next:
     MOVL R15, (R9)(SI*4)
     INCQ SI
@@ -194,24 +182,9 @@ test:
     VZEROUPPER
     RET
 insert:
-    CMPL R13, $0b1111111
-    JE probeNextGroup
-
-    MOVQ X1, R14
-    MOVL R13, R11
-    POPCNTL R13, R13
-    SHLL $1, R11
-    ORL $1, R11
-    MOVL R11, 28(R12)       // group.len = (group.len << 1) | 1
-    MOVL R14, (R12)(R13*4)  // group.hashes[i] = hash
-    MOVL CX, 32(R12)(R13*4) // group.values[i] = value
+    VMOVDQU X0, (AX)(R11*1)
+    MOVL $1, 16(AX)(R11*1)
+    MOVL CX, 20(AX)(R11*1)
     MOVL CX, R15
     INCL CX
-
-    SHLL $4, R13
-    VMOVDQU X0, 64(R12)(R13*1) // group.keys[i] = key
-
     JMP next
-probeNextGroup:
-    INCQ R10
-    JMP probe
