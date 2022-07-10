@@ -152,22 +152,20 @@ TEXT ·multiProbe128AVX2(SB), NOSPLIT, $0-112
 loop:
     VMOVDQU (R8), X0     // key
     MOVQ (DX)(SI*8), R10 // hash
-    MOVQ R10, X1
-    VPBROADCASTD X1, Y1
-    MOVQ R10, R14 // save hash for insert
+    VPBROADCASTD (DX)(SI*8), Y1
 probe:
     MOVQ R10, R11
     ANDQ BX, R11
     IMUL3Q $192, R11, R11 // x 192 (size of table128Group)
     LEAQ (AX)(R11*1), R12
 
-    VMOVDQU (R12), Y2
+    VMOVDQU (AX)(R11*1), Y2
     VPCMPEQD Y1, Y2, Y2
     VMOVMSKPS Y2, R11
     MOVL 28(R12), R13
-    TESTL R11, R13
-    JZ insert
     ANDL R13, R11
+    CMPL R11, $0
+    JE insert
 search:
     TZCNTL R11, R13
     SHLL $4, R13
@@ -199,6 +197,7 @@ insert:
     CMPL R13, $0b1111111
     JE probeNextGroup
 
+    MOVQ X1, R14
     MOVL R13, R11
     POPCNTL R13, R13
     SHLL $1, R11
