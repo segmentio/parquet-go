@@ -265,7 +265,7 @@ func (f *File) Root() *Column { return f.root }
 func (f *File) Schema() *Schema { return f.schema }
 
 // Metadata returns the metadata of f.
-func (f *File) Metadata() format.FileMetaData { return f.metadata }
+func (f *File) Metadata() *format.FileMetaData { return &f.metadata }
 
 // Size returns the size of f (in bytes).
 func (f *File) Size() int64 { return f.size }
