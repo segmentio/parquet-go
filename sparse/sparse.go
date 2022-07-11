@@ -7,7 +7,7 @@
 // integers of the same size, in which case the conversion is similar to using
 // the standard library's math.Float32bits and math.Float64bits functions.
 //
-// All array types can be converted to a generic Array type can be used to erase
+// All array types can be converted to a generic Array type that can be used to erase
 // type information and bypass type conversion rules. This conversion is similar
 // to using Go's unsafe package to bypass Go's type system and should usually be
 // avoided and a sign that the application is attempting to break type safety
