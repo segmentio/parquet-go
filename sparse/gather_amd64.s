@@ -9,14 +9,7 @@ TEXT ·gatherBitsAVX2(SB), NOSPLIT, $0-48
     MOVQ src_array_len+32(FP), CX
     MOVQ src_array_off+40(FP), DX
     XORQ SI, SI
-
-    // Make sure `offset` is at least 4 bytes, otherwise VPGATHERDD may read
-    // data beyond the end of the program memory and trigger a fault.
-    //
-    // If the boolean values do not have enough padding we must fallback to the
-    // scalar algorithm to be able to load single bytes from memory.
-    CMPQ DX, $4
-    JB loop
+    SHRQ $3, CX
 
     VPBROADCASTD src_array_off+40(FP), Y0
     VPMULLD range0n7x32<>(SB), Y0, Y0
@@ -36,6 +29,15 @@ avx2loop:
     JNE avx2loop
     VZEROUPPER
     RET
+
+// func gatherBitsDefault(dst []byte, src Uint8Array)
+TEXT ·gatherBitsDefault(SB), NOSPLIT, $0-48
+    MOVQ dst_base+0(FP), AX
+    MOVQ src_array_ptr+24(FP), BX
+    MOVQ src_array_len+32(FP), CX
+    MOVQ src_array_off+40(FP), DX
+    XORQ SI, SI
+    SHRQ $3, CX
 loop:
     LEAQ (BX)(DX*2), DI
     MOVBQZX (BX), R8

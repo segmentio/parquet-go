@@ -8,9 +8,18 @@ func gatherBits(dst []byte, src Uint8Array) int {
 	n := min(len(dst)*8, src.Len())
 	i := 0
 
-	if n >= 8 && cpu.X86.HasAVX2 {
+	if n >= 8 {
 		i = (n / 8) * 8
-		gatherBitsAVX2(dst, src.Slice(0, i))
+		// Make sure `offset` is at least 4 bytes, otherwise VPGATHERDD may read
+		// data beyond the end of the program memory and trigger a fault.
+		//
+		// If the boolean values do not have enough padding we must fallback to
+		// the scalar algorithm to be able to load single bytes from memory.
+		if src.off >= 4 && cpu.X86.HasAVX2 {
+			gatherBitsAVX2(dst, src.Slice(0, i))
+		} else {
+			gatherBitsDefault(dst, src.Slice(0, i))
+		}
 	}
 
 	for i < n {
@@ -60,6 +69,9 @@ func gather64(dst []uint64, src Uint64Array) int {
 
 //go:noescape
 func gatherBitsAVX2(dst []byte, src Uint8Array)
+
+//go:noescape
+func gatherBitsDefault(dst []byte, src Uint8Array)
 
 //go:noescape
 func gather32AVX2(dst []uint32, src Uint32Array)
