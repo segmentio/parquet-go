@@ -1,6 +1,7 @@
 package parquet_test
 
 import (
+	"fmt"
 	"math/rand"
 	"testing"
 	"time"
@@ -24,15 +25,16 @@ var dictionaryTypes = [...]parquet.Type{
 
 func TestDictionary(t *testing.T) {
 	for _, typ := range dictionaryTypes {
-		t.Run(typ.String(), func(t *testing.T) {
-			testDictionary(t, typ)
-		})
+		for _, numValues := range []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1e2, 1e3, 1e4} {
+			t.Run(fmt.Sprintf("%s/N=%d", typ, numValues), func(t *testing.T) {
+				testDictionary(t, typ, numValues)
+			})
+		}
 	}
 }
 
-func testDictionary(t *testing.T, typ parquet.Type) {
+func testDictionary(t *testing.T, typ parquet.Type, numValues int) {
 	const columnIndex = 1
-	const numValues = 500
 
 	dict := typ.NewDictionary(columnIndex, 0, nil)
 	values := make([]parquet.Value, numValues)
@@ -40,7 +42,7 @@ func testDictionary(t *testing.T, typ parquet.Type) {
 	lookups := make([]parquet.Value, numValues)
 
 	f := randValueFuncOf(typ)
-	r := rand.New(rand.NewSource(0))
+	r := rand.New(rand.NewSource(int64(numValues)))
 
 	for i := range values {
 		values[i] = f(r)
@@ -122,8 +124,6 @@ func testDictionary(t *testing.T, typ parquet.Type) {
 }
 
 func BenchmarkDictionary(b *testing.B) {
-	const numValues = 1000
-
 	tests := []struct {
 		scenario string
 		init     func(parquet.Dictionary, []int32, []parquet.Value)
@@ -149,34 +149,36 @@ func BenchmarkDictionary(b *testing.B) {
 		},
 	}
 
-	for _, test := range tests {
+	for i, test := range tests {
 		b.Run(test.scenario, func(b *testing.B) {
-			for _, typ := range dictionaryTypes {
-				dict := typ.NewDictionary(0, 0, make([]byte, 0, 4*numValues))
-				values := make([]parquet.Value, numValues)
+			for j, typ := range dictionaryTypes {
+				for _, numValues := range []int{1e2, 1e3, 1e4, 1e5, 1e6} {
+					dict := typ.NewDictionary(0, 0, make([]byte, 0, 4*numValues))
+					values := make([]parquet.Value, numValues)
 
-				f := randValueFuncOf(typ)
-				r := rand.New(rand.NewSource(0))
+					f := randValueFuncOf(typ)
+					r := rand.New(rand.NewSource(int64(i * j * numValues)))
 
-				for i := range values {
-					values[i] = f(r)
-				}
-
-				indexes := make([]int32, len(values))
-				if test.init != nil {
-					test.init(dict, indexes, values)
-				}
-
-				b.Run(typ.String(), func(b *testing.B) {
-					start := time.Now()
-
-					for i := 0; i < b.N; i++ {
-						test.test(dict, indexes, values)
+					for i := range values {
+						values[i] = f(r)
 					}
 
-					seconds := time.Since(start).Seconds()
-					b.ReportMetric(float64(numValues*b.N)/seconds, "value/s")
-				})
+					indexes := make([]int32, len(values))
+					if test.init != nil {
+						test.init(dict, indexes, values)
+					}
+
+					b.Run(fmt.Sprintf("%s/N=%d", typ, numValues), func(b *testing.B) {
+						start := time.Now()
+
+						for i := 0; i < b.N; i++ {
+							test.test(dict, indexes, values)
+						}
+
+						seconds := time.Since(start).Seconds()
+						b.ReportMetric(float64(numValues*b.N)/seconds, "value/s")
+					})
+				}
 			}
 		})
 	}
