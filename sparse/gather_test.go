@@ -2,6 +2,7 @@ package sparse_test
 
 import (
 	"encoding/binary"
+	"fmt"
 	"math"
 	"testing"
 	"time"
@@ -13,6 +14,101 @@ import (
 const (
 	benchmarkGatherPerLoop = 1000
 )
+
+func ExampleGatherUint32() {
+	type point2D struct{ X, Y uint32 }
+
+	buf := make([]point2D, 10)
+	dst := make([]uint32, 10)
+	src := sparse.UnsafeUint32Array(unsafe.Pointer(&buf[0].Y), len(buf), unsafe.Sizeof(buf[0]))
+
+	for i := range buf {
+		buf[i].X = math.MaxUint32
+		buf[i].Y = uint32(2 * i)
+	}
+
+	n := sparse.GatherUint32(dst, src)
+
+	for i, v := range dst[:n] {
+		fmt.Printf("points[%d].Y = %d\n", i, v)
+	}
+
+	// Output:
+	// points[0].Y = 0
+	// points[1].Y = 2
+	// points[2].Y = 4
+	// points[3].Y = 6
+	// points[4].Y = 8
+	// points[5].Y = 10
+	// points[6].Y = 12
+	// points[7].Y = 14
+	// points[8].Y = 16
+	// points[9].Y = 18
+}
+
+func ExampleGatherUint64() {
+	type point2D struct{ X, Y uint64 }
+
+	buf := make([]point2D, 10)
+	dst := make([]uint64, 10)
+	src := sparse.UnsafeUint64Array(unsafe.Pointer(&buf[0].Y), len(buf), unsafe.Sizeof(buf[0]))
+
+	for i := range buf {
+		buf[i].X = math.MaxUint64
+		buf[i].Y = uint64(2 * i)
+	}
+
+	n := sparse.GatherUint64(dst, src)
+
+	for i, v := range dst[:n] {
+		fmt.Printf("points[%d].Y = %v\n", i, v)
+	}
+
+	// Output:
+	// points[0].Y = 0
+	// points[1].Y = 2
+	// points[2].Y = 4
+	// points[3].Y = 6
+	// points[4].Y = 8
+	// points[5].Y = 10
+	// points[6].Y = 12
+	// points[7].Y = 14
+	// points[8].Y = 16
+	// points[9].Y = 18
+}
+
+func ExampleGatherUint128() {
+	type point2D struct{ X, Y [16]byte }
+
+	buf := make([]point2D, 10)
+	dst := make([][16]byte, 10)
+	src := sparse.UnsafeUint128Array(unsafe.Pointer(&buf[0].Y), len(buf), unsafe.Sizeof(buf[0]))
+
+	for i := range buf {
+		x := uint64(math.MaxUint64)
+		y := uint64(2 * i)
+		binary.LittleEndian.PutUint64(buf[i].X[:], x)
+		binary.LittleEndian.PutUint64(buf[i].Y[:], y)
+	}
+
+	n := sparse.GatherUint128(dst, src)
+
+	for i, v := range dst[:n] {
+		fmt.Printf("points[%d].Y = %v\n", i, binary.LittleEndian.Uint64(v[:]))
+	}
+
+	// Output:
+	// points[0].Y = 0
+	// points[1].Y = 2
+	// points[2].Y = 4
+	// points[3].Y = 6
+	// points[4].Y = 8
+	// points[5].Y = 10
+	// points[6].Y = 12
+	// points[7].Y = 14
+	// points[8].Y = 16
+	// points[9].Y = 18
+}
 
 func TestGatherUint32(t *testing.T) {
 	type point2D struct{ X, Y uint32 }
