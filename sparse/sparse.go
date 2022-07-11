@@ -1,6 +1,15 @@
+// Package sparse contains abstractions to help work on arrays of values in
+// sparse memory locations.
+//
+// On platorms that support it, gather operations are optimized using SIMD
+// instructions.
 package sparse
 
-import "unsafe"
+import (
+	"unsafe"
+
+	"github.com/segmentio/parquet-go/internal/unsafecast"
+)
 
 type Int32Array struct{ array }
 
@@ -148,4 +157,77 @@ func (a *array) slice(i, j int) array {
 		len: uintptr(j - i),
 		off: a.off,
 	}
+}
+
+func GatherInt32(dst []int32, src Int32Array) int {
+	return GatherUint32(unsafecast.Int32ToUint32(dst), src.Uint32Array())
+}
+
+func GatherInt64(dst []int64, src Int64Array) int {
+	return GatherUint64(unsafecast.Int64ToUint64(dst), src.Uint64Array())
+}
+
+func GatherFloat32(dst []float32, src Float32Array) int {
+	return GatherUint32(unsafecast.Float32ToUint32(dst), src.Uint32Array())
+}
+
+func GatherFloat64(dst []float64, src Float64Array) int {
+	return GatherUint64(unsafecast.Float64ToUint64(dst), src.Uint64Array())
+}
+
+func GatherUint32(dst []uint32, src Uint32Array) int { return gather32(dst, src) }
+
+func GatherUint64(dst []uint64, src Uint64Array) int { return gather64(dst, src) }
+
+func GatherUint128(dst [][16]byte, src Uint128Array) int { return gather128(dst, src) }
+
+type uint128 = [16]byte
+
+func gather32Default(dst []uint32, src Uint32Array) int {
+	if src.off == 4 {
+		return copy(dst, unsafe.Slice((*uint32)(src.ptr), src.len))
+	}
+
+	n := min(len(dst), src.Len())
+
+	for i := range dst[:n] {
+		dst[i] = src.Index(i)
+	}
+
+	return n
+}
+
+func gather64Default(dst []uint64, src Uint64Array) int {
+	if src.off == 8 {
+		return copy(dst, unsafe.Slice((*uint64)(src.ptr), src.len))
+	}
+
+	n := min(len(dst), src.Len())
+
+	for i := range dst[:n] {
+		dst[i] = src.Index(i)
+	}
+
+	return n
+}
+
+func gather128Default(dst []uint128, src Uint128Array) int {
+	if src.off == 16 {
+		return copy(dst, unsafe.Slice((*uint128)(src.ptr), src.len))
+	}
+
+	n := min(len(dst), src.Len())
+
+	for i := range dst[:n] {
+		dst[i] = src.Index(i)
+	}
+
+	return n
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
