@@ -85,7 +85,7 @@ func OpenFile(r io.ReaderAt, size int64, options ...FileOption) (*File, error) {
 	}
 
 	schema := NewSchema(f.root.Name(), f.root)
-	columns := make([]*Column, 0, MaxColumnIndex+1)
+	columns := make([]*Column, 0, numLeafColumnsOf(f.root))
 	f.schema = schema
 	f.root.forEachLeaf(func(c *Column) { columns = append(columns, c) })
 
@@ -292,9 +292,7 @@ func (f *File) hasIndexes() bool {
 	return f.columnIndexes != nil && f.offsetIndexes != nil
 }
 
-var (
-	_ io.ReaderAt = (*File)(nil)
-)
+var _ io.ReaderAt = (*File)(nil)
 
 func sortKeyValueMetadata(keyValueMetadata []format.KeyValue) {
 	sort.Slice(keyValueMetadata, func(i, j int) bool {
