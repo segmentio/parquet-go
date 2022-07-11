@@ -559,7 +559,7 @@ func (t *Uint128Table) Probe(keys [][16]byte, values []int32) int {
 // is used to resolve conflicts. This approach results in at most two memory
 // loads for every four keys being tested, since the location of a key and its
 // corresponding value will not be contiguous on the same CPU cache line, but
-// a cache line can hold four 16 bytes keys.
+// a cache line can hold four 16 byte keys.
 type table128 struct {
 	len     int
 	cap     int
