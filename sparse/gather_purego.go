@@ -7,13 +7,31 @@ func gatherBits(dst []byte, src Uint8Array) int {
 }
 
 func gather32(dst []uint32, src Uint32Array) int {
-	return gather32Default(dst, src)
+	n := min(len(dst), src.Len())
+
+	for i := range dst[:n] {
+		dst[i] = src.Index(i)
+	}
+
+	return n
 }
 
 func gather64(dst []uint64, src Uint64Array) int {
-	return gather64Default(dst, src)
+	n := min(len(dst), src.Len())
+
+	for i := range dst[:n] {
+		dst[i] = src.Index(i)
+	}
+
+	return n
 }
 
 func gather128(dst [][16]byte, src Uint128Array) int {
-	return gather128Default(dst, src)
+	n := min(len(dst), src.Len())
+
+	for i := range dst[:n] {
+		dst[i] = src.Index(i)
+	}
+
+	return n
 }
