@@ -1,7 +1,7 @@
 // Package sparse contains abstractions to help work on arrays of values in
 // sparse memory locations.
 //
-// Conversion between array types are supported when converting integers to a
+// Conversion between array types is supported when converting integers to a
 // lower size (e.g. int32 to int16, or uint64 to uint8), or converting from
 // signed integers to unsigned. Float types can also be converted to unsigned
 // integers of the same size, in which case the conversion is similar to using
