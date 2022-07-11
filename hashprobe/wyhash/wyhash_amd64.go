@@ -2,11 +2,13 @@
 
 package wyhash
 
-//go:noescape
-func MultiHash32(hashes []uintptr, values []uint32, seed uintptr)
+import "github.com/segmentio/parquet-go/sparse"
 
 //go:noescape
-func MultiHash64(hashes []uintptr, values []uint64, seed uintptr)
+func MultiHashUint32Array(hashes []uintptr, values sparse.Uint32Array, seed uintptr)
 
 //go:noescape
-func MultiHash128(hashes []uintptr, values [][16]byte, seed uintptr)
+func MultiHashUint64Array(hashes []uintptr, values sparse.Uint64Array, seed uintptr)
+
+//go:noescape
+func MultiHashUint128Array(hashes []uintptr, values sparse.Uint128Array, seed uintptr)

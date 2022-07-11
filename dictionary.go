@@ -11,6 +11,7 @@ import (
 	"github.com/segmentio/parquet-go/hashprobe"
 	"github.com/segmentio/parquet-go/internal/bitpack"
 	"github.com/segmentio/parquet-go/internal/unsafecast"
+	"github.com/segmentio/parquet-go/sparse"
 )
 
 const (
@@ -24,18 +25,12 @@ const (
 	// TODO: make this configurable by the application?
 	hashprobeTableMaxLoad = 0.85
 
-	// Number of values per loop iteration of the dictionary insert algorithm's
-	// inner loop.
+	// An estimate of the CPU cache footprint used by insert operations.
 	//
-	// This value balances between the size of stack allocations and amortizing
-	// the baseline cost of the insert algorithm.
-	//
-	// The larger the value, the more memory is required, but the lower the
-	// baseline cost will be.
-	//
-	// We chose a value that is somewhat large and favors reducing the baseline
-	// compute cost.
-	insertsPerLoop = 256
+	// This constant is used to determine a useful chunk size depending on the
+	// size of values being inserted in dictionaries. More values of small size
+	// can fit in CPU caches, so the inserts can operation on larger chunks.
+	insertsTargetCacheFootprint = 8192
 )
 
 // The Dictionary interface represents type-specific implementations of parquet
@@ -87,12 +82,12 @@ type Dictionary interface {
 
 	// See ColumnBuffer.writeValues for details on the use of unexported methods
 	// on interfaces.
-	insert(indexes []int32, rows array, size, offset uintptr)
-	//lookup(indexes []int32, rows array, size, offset uintptr)
+	insert(indexes []int32, rows sparse.Array)
+	//lookup(indexes []int32, rows sparse.Array)
 }
 
-func checkLookupIndexBounds(indexes []int32, rows array) {
-	if rows.len < len(indexes) {
+func checkLookupIndexBounds(indexes []int32, rows sparse.Array) {
+	if rows.Len() < len(indexes) {
 		panic("dictionary lookup with more indexes than values")
 	}
 }
@@ -145,12 +140,12 @@ func (d *booleanDictionary) Index(i int32) Value { return d.makeValue(d.index(i)
 func (d *booleanDictionary) index(i int32) bool { return d.valueAt(int(i)) }
 
 func (d *booleanDictionary) Insert(indexes []int32, values []Value) {
-	var value Value
-	d.insert(indexes, makeArrayValue(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
+	model := Value{}
+	d.insert(indexes, makeArrayValue(values, unsafe.Offsetof(model.u64)))
 }
 
-func (d *booleanDictionary) insert(indexes []int32, rows array, size, offset uintptr) {
-	_ = indexes[:rows.len]
+func (d *booleanDictionary) insert(indexes []int32, rows sparse.Array) {
+	_ = indexes[:rows.Len()]
 
 	if d.table[0] < 0 {
 		d.table[0] = d.numValues
@@ -166,8 +161,8 @@ func (d *booleanDictionary) insert(indexes []int32, rows array, size, offset uin
 
 	dict := d.table
 
-	for i := 0; i < rows.len; i++ {
-		v := *(*byte)(rows.index(i, size, offset)) & 1
+	for i := 0; i < rows.Len(); i++ {
+		v := *(*byte)(rows.Index(i)) & 1
 		indexes[i] = dict[v]
 	}
 }
@@ -175,13 +170,13 @@ func (d *booleanDictionary) insert(indexes []int32, rows array, size, offset uin
 func (d *booleanDictionary) Lookup(indexes []int32, values []Value) {
 	model := d.makeValue(false)
 	memsetValues(values, model)
-	d.lookup(indexes, makeArrayValue(values), unsafe.Sizeof(model), unsafe.Offsetof(model.u64))
+	d.lookup(indexes, makeArrayValue(values, unsafe.Offsetof(model.u64)))
 }
 
-func (d *booleanDictionary) lookup(indexes []int32, rows array, size, offset uintptr) {
+func (d *booleanDictionary) lookup(indexes []int32, rows sparse.Array) {
 	checkLookupIndexBounds(indexes, rows)
 	for i, j := range indexes {
-		*(*bool)(rows.index(i, size, offset)) = d.index(j)
+		*(*bool)(rows.Index(i)) = d.index(j)
 	}
 }
 
@@ -242,65 +237,60 @@ func (d *int32Dictionary) Index(i int32) Value { return d.makeValue(d.index(i)) 
 func (d *int32Dictionary) index(i int32) int32 { return d.values[i] }
 
 func (d *int32Dictionary) Insert(indexes []int32, values []Value) {
-	var value Value
-	d.insert(indexes, makeArrayValue(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
+	model := Value{}
+	d.insert(indexes, makeArrayValue(values, unsafe.Offsetof(model.u64)))
 }
 
 func (d *int32Dictionary) init(indexes []int32) {
 	d.table = hashprobe.NewInt32Table(cap(d.values), hashprobeTableMaxLoad)
 
-	n := len(d.values)
-	if n > len(indexes) {
-		n = len(indexes)
-	}
+	n := min(len(d.values), len(indexes))
 
 	for i := 0; i < len(d.values); i += n {
-		j := i + n
-		if j > len(d.values) {
-			j = len(d.values)
-		}
+		j := min(i+n, len(d.values))
 		d.table.Probe(d.values[i:j:j], indexes[:n:n])
 	}
 }
 
-func (d *int32Dictionary) insert(indexes []int32, rows array, size, offset uintptr) {
-	_ = indexes[:rows.len]
+func (d *int32Dictionary) insert(indexes []int32, rows sparse.Array) {
+	// Iterating over the input in chunks helps keep relevant data in CPU
+	// caches when a large number of values are inserted into the dictionary with
+	// a single method call.
+	//
+	// Without this chunking, memory areas from the head of the indexes and
+	// values arrays end up being evicted from CPU caches as the probing
+	// operation iterates through the array. The subsequent scan of the indexes
+	// required to determine which values must be inserted into the page then
+	// stalls on retrieving data from main memory.
+	//
+	// We measured as much as ~37% drop in throughput when disabling the
+	// chunking, and did not observe any penalties from having it on smaller
+	// inserts.
+	const chunkSize = insertsTargetCacheFootprint / 4
 
 	if d.table == nil {
 		d.init(indexes)
 	}
 
-	var values [insertsPerLoop]int32
+	values := rows.Int32Array()
 
-	for i := 0; i < rows.len; {
-		j := len(values) + i
-		n := len(values)
-		if j > rows.len {
-			j = rows.len
-			n = rows.len - i
-		}
+	for i := 0; i < values.Len(); i += chunkSize {
+		j := min(i+chunkSize, values.Len())
 
-		probe := values[:n:n]
-		slice := rows.slice(i, j, size)
-		writeValuesInt32(probe, slice, size, offset)
-
-		if d.table.Probe(probe, indexes[i:j:j]) > 0 {
-			minIndex := int32(len(d.values))
-			for k, v := range probe {
-				if indexes[i+k] >= minIndex {
-					d.values = append(d.values, v)
+		if d.table.ProbeArray(values.Slice(i, j), indexes[i:j:j]) > 0 {
+			for k, index := range indexes[i:j] {
+				if index == int32(len(d.values)) {
+					d.values = append(d.values, values.Index(i+k))
 				}
 			}
 		}
-
-		i = j
 	}
 }
 
 func (d *int32Dictionary) Lookup(indexes []int32, values []Value) {
 	model := d.makeValue(0)
 	memsetValues(values, model)
-	d.lookup(indexes, makeArrayValue(values), unsafe.Sizeof(model), unsafe.Offsetof(model.u64))
+	d.lookup(indexes, makeArrayValue(values, unsafe.Offsetof(model.u64)))
 }
 
 func (d *int32Dictionary) Bounds(indexes []int32) (min, max Value) {
@@ -347,65 +337,47 @@ func (d *int64Dictionary) Index(i int32) Value { return d.makeValue(d.index(i)) 
 func (d *int64Dictionary) index(i int32) int64 { return d.values[i] }
 
 func (d *int64Dictionary) Insert(indexes []int32, values []Value) {
-	var value Value
-	d.insert(indexes, makeArrayValue(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
+	model := Value{}
+	d.insert(indexes, makeArrayValue(values, unsafe.Offsetof(model.u64)))
 }
 
 func (d *int64Dictionary) init(indexes []int32) {
 	d.table = hashprobe.NewInt64Table(cap(d.values), hashprobeTableMaxLoad)
 
-	n := len(d.values)
-	if n > len(indexes) {
-		n = len(indexes)
-	}
+	n := min(len(d.values), len(indexes))
 
 	for i := 0; i < len(d.values); i += n {
-		j := i + n
-		if j > len(d.values) {
-			j = len(d.values)
-		}
+		j := min(i+n, len(d.values))
 		d.table.Probe(d.values[i:j:j], indexes[:n:n])
 	}
 }
 
-func (d *int64Dictionary) insert(indexes []int32, rows array, size, offset uintptr) {
-	_ = indexes[:rows.len]
+func (d *int64Dictionary) insert(indexes []int32, rows sparse.Array) {
+	const chunkSize = insertsTargetCacheFootprint / 8
 
 	if d.table == nil {
 		d.init(indexes)
 	}
 
-	var values [insertsPerLoop]int64
+	values := rows.Int64Array()
 
-	for i := 0; i < rows.len; {
-		j := len(values) + i
-		n := len(values)
-		if j > rows.len {
-			j = rows.len
-			n = rows.len - i
-		}
+	for i := 0; i < values.Len(); i += chunkSize {
+		j := min(i+chunkSize, values.Len())
 
-		probe := values[:n:n]
-		slice := rows.slice(i, j, size)
-		writeValuesInt64(probe, slice, size, offset)
-
-		if d.table.Probe(probe, indexes[i:j:j]) > 0 {
-			minIndex := int32(len(d.values))
-			for k, v := range probe {
-				if indexes[i+k] >= minIndex {
-					d.values = append(d.values, v)
+		if d.table.ProbeArray(values.Slice(i, j), indexes[i:j:j]) > 0 {
+			for k, index := range indexes[i:j] {
+				if index == int32(len(d.values)) {
+					d.values = append(d.values, values.Index(i+k))
 				}
 			}
 		}
-
-		i = j
 	}
 }
 
 func (d *int64Dictionary) Lookup(indexes []int32, values []Value) {
 	model := d.makeValue(0)
 	memsetValues(values, model)
-	d.lookup(indexes, makeArrayValue(values), unsafe.Sizeof(model), unsafe.Offsetof(model.u64))
+	d.lookup(indexes, makeArrayValue(values, unsafe.Offsetof(model.u64)))
 }
 
 func (d *int64Dictionary) Bounds(indexes []int32) (min, max Value) {
@@ -457,9 +429,9 @@ func (d *int96Dictionary) Insert(indexes []int32, values []Value) {
 	})
 }
 
-func (d *int96Dictionary) insert(indexes []int32, rows array, size, offset uintptr) {
-	d.insertValues(indexes, rows.len, func(i int) deprecated.Int96 {
-		return *(*deprecated.Int96)(rows.index(i, size, offset))
+func (d *int96Dictionary) insert(indexes []int32, rows sparse.Array) {
+	d.insertValues(indexes, rows.Len(), func(i int) deprecated.Int96 {
+		return *(*deprecated.Int96)(rows.Index(i))
 	})
 }
 
@@ -547,65 +519,47 @@ func (d *floatDictionary) Index(i int32) Value { return d.makeValue(d.index(i)) 
 func (d *floatDictionary) index(i int32) float32 { return d.values[i] }
 
 func (d *floatDictionary) Insert(indexes []int32, values []Value) {
-	var value Value
-	d.insert(indexes, makeArrayValue(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
+	model := Value{}
+	d.insert(indexes, makeArrayValue(values, unsafe.Offsetof(model.u64)))
 }
 
 func (d *floatDictionary) init(indexes []int32) {
 	d.table = hashprobe.NewFloat32Table(cap(d.values), hashprobeTableMaxLoad)
 
-	n := len(d.values)
-	if n > len(indexes) {
-		n = len(indexes)
-	}
+	n := min(len(d.values), len(indexes))
 
 	for i := 0; i < len(d.values); i += n {
-		j := i + n
-		if j > len(d.values) {
-			j = len(d.values)
-		}
+		j := min(i+n, len(d.values))
 		d.table.Probe(d.values[i:j:j], indexes[:n:n])
 	}
 }
 
-func (d *floatDictionary) insert(indexes []int32, rows array, size, offset uintptr) {
-	_ = indexes[:rows.len]
+func (d *floatDictionary) insert(indexes []int32, rows sparse.Array) {
+	const chunkSize = insertsTargetCacheFootprint / 4
 
 	if d.table == nil {
 		d.init(indexes)
 	}
 
-	var values [insertsPerLoop]float32
+	values := rows.Float32Array()
 
-	for i := 0; i < rows.len; {
-		j := len(values) + i
-		n := len(values)
-		if j > rows.len {
-			j = rows.len
-			n = rows.len - i
-		}
+	for i := 0; i < values.Len(); i += chunkSize {
+		j := min(i+chunkSize, values.Len())
 
-		probe := values[:n:n]
-		slice := rows.slice(i, j, size)
-		writeValuesFloat32(probe, slice, size, offset)
-
-		if d.table.Probe(probe, indexes[i:j:j]) > 0 {
-			minIndex := int32(len(d.values))
-			for k, v := range probe {
-				if indexes[i+k] >= minIndex {
-					d.values = append(d.values, v)
+		if d.table.ProbeArray(values.Slice(i, j), indexes[i:j:j]) > 0 {
+			for k, index := range indexes[i:j] {
+				if index == int32(len(d.values)) {
+					d.values = append(d.values, values.Index(i+k))
 				}
 			}
 		}
-
-		i = j
 	}
 }
 
 func (d *floatDictionary) Lookup(indexes []int32, values []Value) {
 	model := d.makeValue(0)
 	memsetValues(values, model)
-	d.lookup(indexes, makeArrayValue(values), unsafe.Sizeof(model), unsafe.Offsetof(model.u64))
+	d.lookup(indexes, makeArrayValue(values, unsafe.Offsetof(model.u64)))
 }
 
 func (d *floatDictionary) Bounds(indexes []int32) (min, max Value) {
@@ -652,65 +606,47 @@ func (d *doubleDictionary) Index(i int32) Value { return d.makeValue(d.index(i))
 func (d *doubleDictionary) index(i int32) float64 { return d.values[i] }
 
 func (d *doubleDictionary) Insert(indexes []int32, values []Value) {
-	var value Value
-	d.insert(indexes, makeArrayValue(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
+	model := Value{}
+	d.insert(indexes, makeArrayValue(values, unsafe.Offsetof(model.u64)))
 }
 
 func (d *doubleDictionary) init(indexes []int32) {
 	d.table = hashprobe.NewFloat64Table(cap(d.values), hashprobeTableMaxLoad)
 
-	n := len(d.values)
-	if n > len(indexes) {
-		n = len(indexes)
-	}
+	n := min(len(d.values), len(indexes))
 
 	for i := 0; i < len(d.values); i += n {
-		j := i + n
-		if j > len(d.values) {
-			j = len(d.values)
-		}
+		j := min(i+n, len(d.values))
 		d.table.Probe(d.values[i:j:j], indexes[:n:n])
 	}
 }
 
-func (d *doubleDictionary) insert(indexes []int32, rows array, size, offset uintptr) {
-	_ = indexes[:rows.len]
+func (d *doubleDictionary) insert(indexes []int32, rows sparse.Array) {
+	const chunkSize = insertsTargetCacheFootprint / 8
 
 	if d.table == nil {
 		d.init(indexes)
 	}
 
-	var values [insertsPerLoop]float64
+	values := rows.Float64Array()
 
-	for i := 0; i < rows.len; {
-		j := len(values) + i
-		n := len(values)
-		if j > rows.len {
-			j = rows.len
-			n = rows.len - i
-		}
+	for i := 0; i < values.Len(); i += chunkSize {
+		j := min(i+chunkSize, values.Len())
 
-		probe := values[:n:n]
-		slice := rows.slice(i, j, size)
-		writeValuesFloat64(probe, slice, size, offset)
-
-		if d.table.Probe(probe, indexes[i:j:j]) > 0 {
-			minIndex := int32(len(d.values))
-			for k, v := range probe {
-				if indexes[i+k] >= minIndex {
-					d.values = append(d.values, v)
+		if d.table.ProbeArray(values.Slice(i, j), indexes[i:j:j]) > 0 {
+			for k, index := range indexes[i:j] {
+				if index == int32(len(d.values)) {
+					d.values = append(d.values, values.Index(i+k))
 				}
 			}
 		}
-
-		i = j
 	}
 }
 
 func (d *doubleDictionary) Lookup(indexes []int32, values []Value) {
 	model := d.makeValue(0)
 	memsetValues(values, model)
-	d.lookup(indexes, makeArrayValue(values), unsafe.Sizeof(model), unsafe.Offsetof(model.u64))
+	d.lookup(indexes, makeArrayValue(values, unsafe.Offsetof(model.u64)))
 }
 
 func (d *doubleDictionary) Bounds(indexes []int32) (min, max Value) {
@@ -769,12 +705,12 @@ func (d *byteArrayDictionary) Index(i int32) Value { return d.makeValueBytes(d.i
 func (d *byteArrayDictionary) index(i int32) []byte { return d.valueAt(d.offsets[i]) }
 
 func (d *byteArrayDictionary) Insert(indexes []int32, values []Value) {
-	var value Value
-	d.insert(indexes, makeArrayValue(values), unsafe.Sizeof(value), unsafe.Offsetof(value.ptr))
+	model := Value{}
+	d.insert(indexes, makeArrayValue(values, unsafe.Offsetof(model.ptr)))
 }
 
-func (d *byteArrayDictionary) insert(indexes []int32, rows array, size, offset uintptr) {
-	_ = indexes[:rows.len]
+func (d *byteArrayDictionary) insert(indexes []int32, rows sparse.Array) {
+	_ = indexes[:rows.Len()]
 
 	if d.hashmap == nil {
 		d.hashmap = make(map[string]int32, cap(d.offsets))
@@ -783,8 +719,8 @@ func (d *byteArrayDictionary) insert(indexes []int32, rows array, size, offset u
 		}
 	}
 
-	for i := 0; i < rows.len; i++ {
-		value := *(*string)(rows.index(i, size, offset))
+	for i := 0; i < rows.Len(); i++ {
+		value := *(*string)(rows.Index(i))
 
 		index, exists := d.hashmap[value]
 		if !exists {
@@ -808,7 +744,7 @@ func (d *byteArrayDictionary) append(value string) string {
 func (d *byteArrayDictionary) Lookup(indexes []int32, values []Value) {
 	model := d.makeValueString("")
 	memsetValues(values, model)
-	d.lookupString(indexes, makeArrayValue(values), unsafe.Sizeof(model), unsafe.Offsetof(model.ptr))
+	d.lookupString(indexes, makeArrayValue(values, unsafe.Offsetof(model.ptr)))
 }
 
 func (d *byteArrayDictionary) Bounds(indexes []int32) (min, max Value) {
@@ -824,7 +760,7 @@ func (d *byteArrayDictionary) Bounds(indexes []int32) (min, max Value) {
 				n = len(values)
 			}
 			j := i + n
-			d.lookupString(indexes[i:j:j], makeArrayString(values[:n:n]), unsafe.Sizeof(values[0]), 0)
+			d.lookupString(indexes[i:j:j], makeArrayString(values[:n:n]))
 
 			for _, value := range values[:n:n] {
 				switch {
@@ -890,9 +826,9 @@ func (d *fixedLenByteArrayDictionary) Insert(indexes []int32, values []Value) {
 	})
 }
 
-func (d *fixedLenByteArrayDictionary) insert(indexes []int32, rows array, size, offset uintptr) {
-	d.insertValues(indexes, rows.len, func(i int) *byte {
-		return (*byte)(rows.index(i, size, offset))
+func (d *fixedLenByteArrayDictionary) insert(indexes []int32, rows sparse.Array) {
+	d.insertValues(indexes, rows.Len(), func(i int) *byte {
+		return (*byte)(rows.Index(i))
 	})
 }
 
@@ -925,7 +861,7 @@ func (d *fixedLenByteArrayDictionary) insertValues(indexes []int32, count int, v
 func (d *fixedLenByteArrayDictionary) Lookup(indexes []int32, values []Value) {
 	model := d.makeValueString("")
 	memsetValues(values, model)
-	d.lookupString(indexes, makeArrayValue(values), unsafe.Sizeof(model), unsafe.Offsetof(model.ptr))
+	d.lookupString(indexes, makeArrayValue(values, unsafe.Offsetof(model.ptr)))
 }
 
 func (d *fixedLenByteArrayDictionary) Bounds(indexes []int32) (min, max Value) {
@@ -941,7 +877,7 @@ func (d *fixedLenByteArrayDictionary) Bounds(indexes []int32) (min, max Value) {
 				n = len(values)
 			}
 			j := i + n
-			d.lookupString(indexes[i:j:j], makeArrayString(values[:n:n]), unsafe.Sizeof(values[0]), 0)
+			d.lookupString(indexes[i:j:j], makeArrayString(values[:n:n]))
 
 			for _, value := range values[:n:n] {
 				switch {
@@ -992,65 +928,47 @@ func (d *uint32Dictionary) Index(i int32) Value { return d.makeValue(d.index(i))
 func (d *uint32Dictionary) index(i int32) uint32 { return d.values[i] }
 
 func (d *uint32Dictionary) Insert(indexes []int32, values []Value) {
-	var value Value
-	d.insert(indexes, makeArrayValue(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
+	model := Value{}
+	d.insert(indexes, makeArrayValue(values, unsafe.Offsetof(model.u64)))
 }
 
 func (d *uint32Dictionary) init(indexes []int32) {
 	d.table = hashprobe.NewUint32Table(cap(d.values), hashprobeTableMaxLoad)
 
-	n := len(d.values)
-	if n > len(indexes) {
-		n = len(indexes)
-	}
+	n := min(len(d.values), len(indexes))
 
 	for i := 0; i < len(d.values); i += n {
-		j := i + n
-		if j > len(d.values) {
-			j = len(d.values)
-		}
+		j := min(i+n, len(d.values))
 		d.table.Probe(d.values[i:j:j], indexes[:n:n])
 	}
 }
 
-func (d *uint32Dictionary) insert(indexes []int32, rows array, size, offset uintptr) {
-	_ = indexes[:rows.len]
+func (d *uint32Dictionary) insert(indexes []int32, rows sparse.Array) {
+	const chunkSize = insertsTargetCacheFootprint / 4
 
 	if d.table == nil {
 		d.init(indexes)
 	}
 
-	var values [insertsPerLoop]uint32
+	values := rows.Uint32Array()
 
-	for i := 0; i < rows.len; {
-		j := len(values) + i
-		n := len(values)
-		if j > rows.len {
-			j = rows.len
-			n = rows.len - i
-		}
+	for i := 0; i < values.Len(); i += chunkSize {
+		j := min(i+chunkSize, values.Len())
 
-		probe := values[:n:n]
-		slice := rows.slice(i, j, size)
-		writeValuesUint32(probe, slice, size, offset)
-
-		if d.table.Probe(probe, indexes[i:j:j]) > 0 {
-			minIndex := int32(len(d.values))
-			for k, v := range probe {
-				if indexes[i+k] >= minIndex {
-					d.values = append(d.values, v)
+		if d.table.ProbeArray(values.Slice(i, j), indexes[i:j:j]) > 0 {
+			for k, index := range indexes[i:j] {
+				if index == int32(len(d.values)) {
+					d.values = append(d.values, values.Index(i+k))
 				}
 			}
 		}
-
-		i = j
 	}
 }
 
 func (d *uint32Dictionary) Lookup(indexes []int32, values []Value) {
 	model := d.makeValue(0)
 	memsetValues(values, model)
-	d.lookup(indexes, makeArrayValue(values), unsafe.Sizeof(model), unsafe.Offsetof(model.u64))
+	d.lookup(indexes, makeArrayValue(values, unsafe.Offsetof(model.u64)))
 }
 
 func (d *uint32Dictionary) Bounds(indexes []int32) (min, max Value) {
@@ -1097,65 +1015,47 @@ func (d *uint64Dictionary) Index(i int32) Value { return d.makeValue(d.index(i))
 func (d *uint64Dictionary) index(i int32) uint64 { return d.values[i] }
 
 func (d *uint64Dictionary) Insert(indexes []int32, values []Value) {
-	var value Value
-	d.insert(indexes, makeArrayValue(values), unsafe.Sizeof(value), unsafe.Offsetof(value.u64))
+	model := Value{}
+	d.insert(indexes, makeArrayValue(values, unsafe.Offsetof(model.u64)))
 }
 
 func (d *uint64Dictionary) init(indexes []int32) {
 	d.table = hashprobe.NewUint64Table(cap(d.values), hashprobeTableMaxLoad)
 
-	n := len(d.values)
-	if n > len(indexes) {
-		n = len(indexes)
-	}
+	n := min(len(d.values), len(indexes))
 
 	for i := 0; i < len(d.values); i += n {
-		j := i + n
-		if j > len(d.values) {
-			j = len(d.values)
-		}
+		j := min(i+n, len(d.values))
 		d.table.Probe(d.values[i:j:j], indexes[:n:n])
 	}
 }
 
-func (d *uint64Dictionary) insert(indexes []int32, rows array, size, offset uintptr) {
-	_ = indexes[:rows.len]
+func (d *uint64Dictionary) insert(indexes []int32, rows sparse.Array) {
+	const chunkSize = insertsTargetCacheFootprint / 8
 
 	if d.table == nil {
 		d.init(indexes)
 	}
 
-	var values [insertsPerLoop]uint64
+	values := rows.Uint64Array()
 
-	for i := 0; i < rows.len; {
-		j := len(values) + i
-		n := len(values)
-		if j > rows.len {
-			j = rows.len
-			n = rows.len - i
-		}
+	for i := 0; i < values.Len(); i += chunkSize {
+		j := min(i+chunkSize, values.Len())
 
-		probe := values[:n:n]
-		slice := rows.slice(i, j, size)
-		writeValuesUint64(probe, slice, size, offset)
-
-		if d.table.Probe(probe, indexes[i:j:j]) > 0 {
-			minIndex := int32(len(d.values))
-			for k, v := range probe {
-				if indexes[i+k] >= minIndex {
-					d.values = append(d.values, v)
+		if d.table.ProbeArray(values.Slice(i, j), indexes[i:j:j]) > 0 {
+			for k, index := range indexes[i:j] {
+				if index == int32(len(d.values)) {
+					d.values = append(d.values, values.Index(i+k))
 				}
 			}
 		}
-
-		i = j
 	}
 }
 
 func (d *uint64Dictionary) Lookup(indexes []int32, values []Value) {
 	model := d.makeValue(0)
 	memsetValues(values, model)
-	d.lookup(indexes, makeArrayValue(values), unsafe.Sizeof(model), unsafe.Offsetof(model.u64))
+	d.lookup(indexes, makeArrayValue(values, unsafe.Offsetof(model.u64)))
 }
 
 func (d *uint64Dictionary) Bounds(indexes []int32) (min, max Value) {
@@ -1217,87 +1117,63 @@ func (d *be128Dictionary) Insert(indexes []int32, values []Value) {
 		d.init(indexes)
 	}
 
-	var buffer [insertsPerLoop][16]byte
+	const chunkSize = insertsTargetCacheFootprint / 16
+	var buffer [chunkSize][16]byte
 
-	for i := 0; i < len(values); {
-		j := insertsPerLoop + i
-		n := insertsPerLoop
-		if j > len(values) {
-			j = len(values)
-			n = len(values) - i
-		}
+	for i := 0; i < len(values); i += chunkSize {
+		j := min(chunkSize+i, len(values))
+		n := min(chunkSize, len(values)-i)
 
 		probe := buffer[:n:n]
-		writePointersBE128(probe, makeArrayValue(values[i:j]), unsafe.Sizeof(values[i]), unsafe.Offsetof(values[i].ptr))
+		writePointersBE128(probe, makeArrayValue(values[i:j], unsafe.Offsetof(values[i].ptr)))
 
 		if d.table.Probe(probe, indexes[i:j:j]) > 0 {
-			minIndex := int32(len(d.values))
 			for k, v := range probe {
-				if indexes[i+k] >= minIndex {
+				if indexes[i+k] == int32(len(d.values)) {
 					d.values = append(d.values, v)
 				}
 			}
 		}
-
-		i = j
 	}
 }
 
 func (d *be128Dictionary) init(indexes []int32) {
 	d.table = hashprobe.NewUint128Table(cap(d.values), 0.75)
 
-	n := len(d.values)
-	if n > len(indexes) {
-		n = len(indexes)
-	}
+	n := min(len(d.values), len(indexes))
 
 	for i := 0; i < len(d.values); i += n {
-		j := i + n
-		if j > len(d.values) {
-			j = len(d.values)
-		}
+		j := min(i+n, len(d.values))
 		d.table.Probe(d.values[i:j:j], indexes[:n:n])
 	}
 }
 
-func (d *be128Dictionary) insert(indexes []int32, rows array, size, offset uintptr) {
-	_ = indexes[:rows.len]
+func (d *be128Dictionary) insert(indexes []int32, rows sparse.Array) {
+	const chunkSize = insertsTargetCacheFootprint / 16
 
 	if d.table == nil {
 		d.init(indexes)
 	}
 
-	var values [insertsPerLoop][16]byte
+	values := rows.Uint128Array()
 
-	for i := 0; i < rows.len; {
-		j := len(values) + i
-		n := len(values)
-		if j > rows.len {
-			j = rows.len
-			n = rows.len - i
-		}
+	for i := 0; i < values.Len(); i += chunkSize {
+		j := min(i+chunkSize, values.Len())
 
-		probe := values[:n:n]
-		slice := rows.slice(i, j, size)
-		writeValuesBE128(probe, slice, size, offset)
-
-		if d.table.Probe(probe, indexes[i:j:j]) > 0 {
-			minIndex := int32(len(d.values))
-			for k, v := range probe {
-				if indexes[i+k] >= minIndex {
-					d.values = append(d.values, v)
+		if d.table.ProbeArray(values.Slice(i, j), indexes[i:j:j]) > 0 {
+			for k, index := range indexes[i:j] {
+				if index == int32(len(d.values)) {
+					d.values = append(d.values, values.Index(i+k))
 				}
 			}
 		}
-
-		i = j
 	}
 }
 
 func (d *be128Dictionary) Lookup(indexes []int32, values []Value) {
 	model := d.makeValueString("")
 	memsetValues(values, model)
-	d.lookupString(indexes, makeArrayValue(values), unsafe.Sizeof(model), unsafe.Offsetof(model.ptr))
+	d.lookupString(indexes, makeArrayValue(values, unsafe.Offsetof(model.ptr)))
 }
 
 func (d *be128Dictionary) Bounds(indexes []int32) (min, max Value) {
@@ -1527,9 +1403,9 @@ func (col *indexedColumnBuffer) WriteValues(values []Value) (int, error) {
 	return len(values), nil
 }
 
-func (col *indexedColumnBuffer) writeValues(rows array, size, offset uintptr, _ columnLevels) {
+func (col *indexedColumnBuffer) writeValues(rows sparse.Array, _ columnLevels) {
 	i := len(col.values)
-	j := len(col.values) + rows.len
+	j := len(col.values) + rows.Len()
 
 	if j <= cap(col.values) {
 		col.values = col.values[:j]
@@ -1539,7 +1415,7 @@ func (col *indexedColumnBuffer) writeValues(rows array, size, offset uintptr, _ 
 		col.values = tmp
 	}
 
-	col.typ.dict.insert(col.values[i:], rows, size, offset)
+	col.typ.dict.insert(col.values[i:], rows)
 }
 
 func (col *indexedColumnBuffer) ReadValuesAt(values []Value, offset int64) (n int, err error) {

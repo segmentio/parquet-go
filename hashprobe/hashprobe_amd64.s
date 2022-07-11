@@ -19,22 +19,23 @@
 // of keys in a group using the POPCNT instruction, and avoid recomputing the
 // mask during lookups.
 //
-// func multiProbe32AVX2(table []table32Group, numKeys int, hashes []uintptr, keys []uint32, values []int32) int
+// func multiProbe32AVX2(table []table32Group, numKeys int, hashes []uintptr, keys sparse.Uint32Array, values []int32) int
 TEXT ·multiProbe32AVX2(SB), NOSPLIT, $0-112
     MOVQ table_base+0(FP), AX
     MOVQ table_len+8(FP), BX
     MOVQ numKeys+24(FP), CX
     MOVQ hashes_base+32(FP), DX
     MOVQ hashes_len+40(FP), DI
-    MOVQ keys_base+56(FP), R8
+    MOVQ keys_array_ptr+56(FP), R8
+    MOVQ keys_array_off+72(FP), R15
     MOVQ values_base+80(FP), R9
     DECQ BX // modulo = len(table) - 1
 
     XORQ SI, SI
     JMP test
 loop:
-    MOVQ (DX)(SI*8), R10        // hash
-    VPBROADCASTD (R8)(SI*4), Y0 // [key]
+    MOVQ (DX)(SI*8), R10  // hash
+    VPBROADCASTD (R8), Y0 // [key]
 probe:
     MOVQ R10, R11
     ANDQ BX, R11 // hash & modulo
@@ -49,10 +50,11 @@ probe:
     JZ insert
 
     TZCNTL R11, R13
-    MOVL 28(R12)(R13*4), R15
+    MOVL 28(R12)(R13*4), R14
 next:
-    MOVL R15, (R9)(SI*4)
+    MOVL R14, (R9)(SI*4)
     INCQ SI
+    ADDQ R15, R8
 test:
     CMPQ SI, DI
     JNE loop
@@ -71,21 +73,22 @@ insert:
     MOVL R11, 56(R12)       // group.len = (group.len << 1) | 1
     MOVL R14, (R12)(R13*4)  // group.keys[i] = key
     MOVL CX, 28(R12)(R13*4) // group.values[i] = value
-    MOVL CX, R15
+    MOVL CX, R14
     INCL CX
     JMP next
 probeNextGroup:
     INCQ R10
     JMP probe
 
-// func multiProbe64AVX2(table []table64Group, numKeys int, hashes []uintptr, keys []uint64, values []int32) int
+// func multiProbe64AVX2(table []table64Group, numKeys int, hashes []uintptr, keys sparse.Uint64Array, values []int32) int
 TEXT ·multiProbe64AVX2(SB), NOSPLIT, $0-112
     MOVQ table_base+0(FP), AX
     MOVQ table_len+8(FP), BX
     MOVQ numKeys+24(FP), CX
     MOVQ hashes_base+32(FP), DX
     MOVQ hashes_len+40(FP), DI
-    MOVQ keys_base+56(FP), R8
+    MOVQ keys_array_ptr+56(FP), R8
+    MOVQ keys_array_off+72(FP), R15
     MOVQ values_base+80(FP), R9
     DECQ BX // modulo = len(table) - 1
 
@@ -93,7 +96,7 @@ TEXT ·multiProbe64AVX2(SB), NOSPLIT, $0-112
     JMP test
 loop:
     MOVQ (DX)(SI*8), R10        // hash
-    VPBROADCASTQ (R8)(SI*8), Y0 // [key]
+    VPBROADCASTQ (R8), Y0 // [key]
 probe:
     MOVQ R10, R11
     ANDQ BX, R11 // hash & modulo
@@ -108,10 +111,11 @@ probe:
     JZ insert
 
     TZCNTL R11, R13
-    MOVL 32(R12)(R13*4), R15
+    MOVL 32(R12)(R13*4), R14
 next:
-    MOVL R15, (R9)(SI*4)
+    MOVL R14, (R9)(SI*4)
     INCQ SI
+    ADDQ R15, R8
 test:
     CMPQ SI, DI
     JNE loop
@@ -129,21 +133,22 @@ insert:
     MOVL R11, 48(R12)       // group.len = (group.len << 1) | 1
     MOVQ X0, (R12)(R13*8)   // group.keys[i] = key
     MOVL CX, 32(R12)(R13*4) // group.values[i] = value
-    MOVL CX, R15
+    MOVL CX, R14
     INCL CX
     JMP next
 probeNextGroup:
     INCQ R10
     JMP probe
 
-// func multiProbe128SSE2(table []byte, tableCap, tableLen int, hashes []uintptr, keys [][16]byte, values []int32) int
+// func multiProbe128SSE2(table []byte, tableCap, tableLen int, hashes []uintptr, keys sparse.Uint128Array, values []int32) int
 TEXT ·multiProbe128SSE2(SB), NOSPLIT, $0-120
     MOVQ table_base+0(FP), AX
     MOVQ tableCap+24(FP), BX
     MOVQ tableLen+32(FP), CX
     MOVQ hashes_base+40(FP), DX
     MOVQ hashes_len+48(FP), DI
-    MOVQ keys_base+64(FP), R8
+    MOVQ keys_array_ptr+64(FP), R8
+    MOVQ keys_array_off+80(FP), R15
     MOVQ values_base+88(FP), R9
 
     MOVQ BX, R10
@@ -158,28 +163,26 @@ loop:
     MOVOU (R8), X0       // key
 probe:
     MOVQ R11, R12
-    MOVQ R11, R13
     ANDQ BX, R12
-    ANDQ BX, R13
-    SHLQ $4, R13
 
-    MOVL (R10)(R12*4), R15
-    CMPL R15, $0
+    MOVL (R10)(R12*4), R14
+    CMPL R14, $0
     JE insert
 
-    MOVOU (AX)(R13*1), X1
+    SHLQ $4, R12
+    MOVOU (AX)(R12*1), X1
     PCMPEQL X0, X1
-    MOVMSKPS X1, R14
-    CMPL R14, $0b1111
+    MOVMSKPS X1, R13
+    CMPL R13, $0b1111
     JE next
 
     INCQ R11
     JMP probe
 next:
-    DECL R15
-    MOVL R15, (R9)(SI*4)
+    DECL R14
+    MOVL R14, (R9)(SI*4)
     INCQ SI
-    ADDQ $16, R8
+    ADDQ R15, R8
 test:
     CMPQ SI, DI
     JNE loop
@@ -187,7 +190,8 @@ test:
     RET
 insert:
     INCL CX
-    MOVOU X0, (AX)(R13*1)
     MOVL CX, (R10)(R12*4)
-    MOVL CX, R15
+    MOVL CX, R14
+    SHLQ $4, R12
+    MOVOU X0, (AX)(R12*1)
     JMP next

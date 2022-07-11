@@ -36,6 +36,7 @@ import (
 	"github.com/segmentio/parquet-go/hashprobe/aeshash"
 	"github.com/segmentio/parquet-go/hashprobe/wyhash"
 	"github.com/segmentio/parquet-go/internal/unsafecast"
+	"github.com/segmentio/parquet-go/sparse"
 )
 
 const (
@@ -93,6 +94,10 @@ func (t *Int32Table) Probe(keys, values []int32) int {
 	return t.probe(unsafecast.Int32ToUint32(keys), values)
 }
 
+func (t *Int32Table) ProbeArray(keys sparse.Int32Array, values []int32) int {
+	return t.probeArray(keys.Uint32Array(), values)
+}
+
 type Float32Table struct{ table32 }
 
 func NewFloat32Table(cap int, maxLoad float64) *Float32Table {
@@ -109,6 +114,10 @@ func (t *Float32Table) Probe(keys []float32, values []int32) int {
 	return t.probe(unsafecast.Float32ToUint32(keys), values)
 }
 
+func (t *Float32Table) ProbeArray(keys sparse.Float32Array, values []int32) int {
+	return t.probeArray(keys.Uint32Array(), values)
+}
+
 type Uint32Table struct{ table32 }
 
 func NewUint32Table(cap int, maxLoad float64) *Uint32Table {
@@ -123,6 +132,10 @@ func (t *Uint32Table) Cap() int { return t.size() }
 
 func (t *Uint32Table) Probe(keys []uint32, values []int32) int {
 	return t.probe(keys, values)
+}
+
+func (t *Uint32Table) ProbeArray(keys sparse.Uint32Array, values []int32) int {
+	return t.probeArray(keys, values)
 }
 
 // table32 is the generic implementation of probing tables for 32 bit types.
@@ -228,7 +241,13 @@ func (t *table32) reset() {
 }
 
 func (t *table32) probe(keys []uint32, values []int32) int {
-	if totalValues := t.len + len(keys); totalValues > t.maxLen {
+	return t.probeArray(sparse.MakeUint32Array(keys), values)
+}
+
+func (t *table32) probeArray(keys sparse.Uint32Array, values []int32) int {
+	numKeys := keys.Len()
+
+	if totalValues := t.len + numKeys; totalValues > t.maxLen {
 		t.grow(totalValues)
 	}
 
@@ -236,25 +255,25 @@ func (t *table32) probe(keys []uint32, values []int32) int {
 	var baseLength = t.len
 	var useAesHash = aeshash.Enabled()
 
-	_ = values[:len(keys)]
+	_ = values[:numKeys]
 
-	for i := 0; i < len(keys); {
+	for i := 0; i < numKeys; {
 		j := len(hashes) + i
 		n := len(hashes)
 
-		if j > len(keys) {
-			j = len(keys)
-			n = len(keys) - i
+		if j > numKeys {
+			j = numKeys
+			n = numKeys - i
 		}
 
-		h := hashes[:n:n]
-		k := keys[i:j:j]
+		k := keys.Slice(i, j)
 		v := values[i:j:j]
+		h := hashes[:n:n]
 
 		if useAesHash {
-			aeshash.MultiHash32(h, k, t.seed)
+			aeshash.MultiHashUint32Array(h, k, t.seed)
 		} else {
-			wyhash.MultiHash32(h, k, t.seed)
+			wyhash.MultiHashUint32Array(h, k, t.seed)
 		}
 
 		t.len = multiProbe32(t.table, t.len, h, k, v)
@@ -264,19 +283,19 @@ func (t *table32) probe(keys []uint32, values []int32) int {
 	return t.len - baseLength
 }
 
-func multiProbe32Default(table []table32Group, numKeys int, hashes []uintptr, keys []uint32, values []int32) int {
+func multiProbe32Default(table []table32Group, numKeys int, hashes []uintptr, keys sparse.Uint32Array, values []int32) int {
 	modulo := uintptr(len(table)) - 1
 
 	for i, hash := range hashes {
-		key := keys[i]
+		key := keys.Index(i)
 		for {
 			group := &table[hash&modulo]
 			index := table32GroupSize
 			value := int32(0)
 
-			for i, k := range group.keys {
+			for j, k := range group.keys {
 				if k == key {
-					index = i
+					index = j
 					break
 				}
 			}
@@ -320,6 +339,10 @@ func (t *Int64Table) Probe(keys []int64, values []int32) int {
 	return t.probe(unsafecast.Int64ToUint64(keys), values)
 }
 
+func (t *Int64Table) ProbeArray(keys sparse.Int64Array, values []int32) int {
+	return t.probeArray(keys.Uint64Array(), values)
+}
+
 type Float64Table struct{ table64 }
 
 func NewFloat64Table(cap int, maxLoad float64) *Float64Table {
@@ -336,6 +359,10 @@ func (t *Float64Table) Probe(keys []float64, values []int32) int {
 	return t.probe(unsafecast.Float64ToUint64(keys), values)
 }
 
+func (t *Float64Table) ProbeArray(keys sparse.Float64Array, values []int32) int {
+	return t.probeArray(keys.Uint64Array(), values)
+}
+
 type Uint64Table struct{ table64 }
 
 func NewUint64Table(cap int, maxLoad float64) *Uint64Table {
@@ -350,6 +377,10 @@ func (t *Uint64Table) Cap() int { return t.size() }
 
 func (t *Uint64Table) Probe(keys []uint64, values []int32) int {
 	return t.probe(keys, values)
+}
+
+func (t *Uint64Table) ProbeArray(keys sparse.Uint64Array, values []int32) int {
+	return t.probeArray(keys, values)
 }
 
 // table64 is the generic implementation of probing tables for 64 bit types.
@@ -456,7 +487,13 @@ func (t *table64) reset() {
 }
 
 func (t *table64) probe(keys []uint64, values []int32) int {
-	if totalValues := t.len + len(keys); totalValues > t.maxLen {
+	return t.probeArray(sparse.MakeUint64Array(keys), values)
+}
+
+func (t *table64) probeArray(keys sparse.Uint64Array, values []int32) int {
+	numKeys := keys.Len()
+
+	if totalValues := t.len + numKeys; totalValues > t.maxLen {
 		t.grow(totalValues)
 	}
 
@@ -464,25 +501,25 @@ func (t *table64) probe(keys []uint64, values []int32) int {
 	var baseLength = t.len
 	var useAesHash = aeshash.Enabled()
 
-	_ = values[:len(keys)]
+	_ = values[:numKeys]
 
-	for i := 0; i < len(keys); {
+	for i := 0; i < numKeys; {
 		j := len(hashes) + i
 		n := len(hashes)
 
-		if j > len(keys) {
-			j = len(keys)
-			n = len(keys) - i
+		if j > numKeys {
+			j = numKeys
+			n = numKeys - i
 		}
 
-		h := hashes[:n:n]
-		k := keys[i:j:j]
+		k := keys.Slice(i, j)
 		v := values[i:j:j]
+		h := hashes[:n:n]
 
 		if useAesHash {
-			aeshash.MultiHash64(h, k, t.seed)
+			aeshash.MultiHashUint64Array(h, k, t.seed)
 		} else {
-			wyhash.MultiHash64(h, k, t.seed)
+			wyhash.MultiHashUint64Array(h, k, t.seed)
 		}
 
 		t.len = multiProbe64(t.table, t.len, h, k, v)
@@ -492,11 +529,11 @@ func (t *table64) probe(keys []uint64, values []int32) int {
 	return t.len - baseLength
 }
 
-func multiProbe64Default(table []table64Group, numKeys int, hashes []uintptr, keys []uint64, values []int32) int {
+func multiProbe64Default(table []table64Group, numKeys int, hashes []uintptr, keys sparse.Uint64Array, values []int32) int {
 	modulo := uintptr(len(table)) - 1
 
 	for i, hash := range hashes {
-		key := keys[i]
+		key := keys.Index(i)
 		for {
 			group := &table[hash&modulo]
 			index := table64GroupSize
@@ -546,6 +583,10 @@ func (t *Uint128Table) Cap() int { return t.cap }
 
 func (t *Uint128Table) Probe(keys [][16]byte, values []int32) int {
 	return t.probe(keys, values)
+}
+
+func (t *Uint128Table) ProbeArray(keys sparse.Uint128Array, values []int32) int {
+	return t.probeArray(keys, values)
 }
 
 // table128 is the generic implementation of probing tables for 128 bit types.
@@ -663,7 +704,13 @@ func (t *table128) reset() {
 }
 
 func (t *table128) probe(keys [][16]byte, values []int32) int {
-	if totalValues := t.len + len(keys); totalValues > t.maxLen {
+	return t.probeArray(sparse.MakeUint128Array(keys), values)
+}
+
+func (t *table128) probeArray(keys sparse.Uint128Array, values []int32) int {
+	numKeys := keys.Len()
+
+	if totalValues := t.len + numKeys; totalValues > t.maxLen {
 		t.grow(totalValues)
 	}
 
@@ -671,25 +718,25 @@ func (t *table128) probe(keys [][16]byte, values []int32) int {
 	var baseLength = t.len
 	var useAesHash = aeshash.Enabled()
 
-	_ = values[:len(keys)]
+	_ = values[:numKeys]
 
-	for i := 0; i < len(keys); {
+	for i := 0; i < numKeys; {
 		j := len(hashes) + i
 		n := len(hashes)
 
-		if j > len(keys) {
-			j = len(keys)
-			n = len(keys) - i
+		if j > numKeys {
+			j = numKeys
+			n = numKeys - i
 		}
 
-		h := hashes[:n:n]
-		k := keys[i:j:j]
+		k := keys.Slice(i, j)
 		v := values[i:j:j]
+		h := hashes[:n:n]
 
 		if useAesHash {
-			aeshash.MultiHash128(h, k, t.seed)
+			aeshash.MultiHashUint128Array(h, k, t.seed)
 		} else {
-			wyhash.MultiHash128(h, k, t.seed)
+			wyhash.MultiHashUint128Array(h, k, t.seed)
 		}
 
 		t.len = multiProbe128(t.table, t.cap, t.len, h, k, v)
@@ -699,13 +746,14 @@ func (t *table128) probe(keys [][16]byte, values []int32) int {
 	return t.len - baseLength
 }
 
-func multiProbe128Default(table []byte, tableCap, tableLen int, hashes []uintptr, keys [][16]byte, values []int32) int {
+func multiProbe128Default(table []byte, tableCap, tableLen int, hashes []uintptr, keys sparse.Uint128Array, values []int32) int {
 	modulo := uintptr(tableCap) - 1
 	offset := uintptr(tableCap) * 16
 	tableKeys := unsafecast.BytesToUint128(table[:offset])
 	tableValues := unsafecast.BytesToInt32(table[offset:])
 
 	for i, hash := range hashes {
+		key := keys.Index(i)
 		for {
 			j := hash & modulo
 			v := tableValues[j]
@@ -713,12 +761,12 @@ func multiProbe128Default(table []byte, tableCap, tableLen int, hashes []uintptr
 			if v == 0 {
 				values[i] = int32(tableLen)
 				tableLen++
-				tableKeys[j] = keys[i]
+				tableKeys[j] = key
 				tableValues[j] = int32(tableLen)
 				break
 			}
 
-			if keys[i] == tableKeys[j] {
+			if key == tableKeys[j] {
 				values[i] = v - 1
 				break
 			}
