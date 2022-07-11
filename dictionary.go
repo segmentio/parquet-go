@@ -254,7 +254,7 @@ func (d *int32Dictionary) init(indexes []int32) {
 
 func (d *int32Dictionary) insert(indexes []int32, rows array, size, offset uintptr) {
 	// Iterating over the input in chunks helps keep relevant data in CPU
-	// caches  when large number of values are inserted into the dictionary with
+	// caches when a large number of values are inserted into the dictionary with
 	// a single method call.
 	//
 	// Without this chunking, memory areas from the head of the indexes and
