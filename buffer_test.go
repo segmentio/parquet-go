@@ -522,6 +522,51 @@ func TestBufferRoundtripNestedRepeatedPointer(t *testing.T) {
 	}
 }
 
+func TestRoundtripNestedRepeatedBytes(t *testing.T) {
+	type B struct {
+		C []byte
+	}
+	type A struct {
+		A string
+		B []B
+	}
+
+	var objs []A
+	for i := 0; i < 2; i++ {
+		o := A{
+			"test" + strconv.Itoa(i),
+			[]B{
+				{[]byte{byte(i)}},
+			},
+		}
+		objs = append(objs, o)
+	}
+
+	buf := new(bytes.Buffer)
+	w := parquet.NewWriter(buf, parquet.PageBufferSize(100))
+	for _, o := range objs {
+		w.Write(&o)
+	}
+	w.Close()
+
+	file := bytes.NewReader(buf.Bytes())
+
+	r := parquet.NewReader(file)
+	for i := 0; ; i++ {
+		o := new(A)
+		err := r.Read(o)
+		if errors.Is(err, io.EOF) {
+			if i < len(objs) {
+				t.Errorf("too few rows were read: %d<%d", i, len(objs))
+			}
+			break
+		}
+		if !reflect.DeepEqual(*o, objs[i]) {
+			t.Errorf("points mismatch at row index %d: want=%v got=%v", i, objs[i], o)
+		}
+	}
+}
+
 func TestBufferSeekToRow(t *testing.T) {
 	type B struct {
 		I int
