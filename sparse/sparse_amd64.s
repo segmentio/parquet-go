@@ -2,7 +2,7 @@
 
 #include "textflag.h"
 
-// func gather128(dst []uint128, src Uint128Array) int
+// func gather128(dst [][16]byte, src Uint128Array) int
 TEXT ·gather128(SB), NOSPLIT, $0-56
     MOVQ dst_base+0(FP), AX
     MOVQ dst_len+8(FP), CX
