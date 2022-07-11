@@ -2,7 +2,10 @@
 
 package aeshash
 
-import "golang.org/x/sys/cpu"
+import (
+	"github.com/segmentio/parquet-go/sparse"
+	"golang.org/x/sys/cpu"
+)
 
 // Enabled returns true if AES hash is available on the system.
 //
@@ -22,10 +25,10 @@ func Hash64(value uint64, seed uintptr) uintptr
 func Hash128(value [16]byte, seed uintptr) uintptr
 
 //go:noescape
-func MultiHash32(hashes []uintptr, values []uint32, seed uintptr)
+func MultiHashUint32Array(hashes []uintptr, values sparse.Uint32Array, seed uintptr)
 
 //go:noescape
-func MultiHash64(hashes []uintptr, values []uint64, seed uintptr)
+func MultiHashUint64Array(hashes []uintptr, values sparse.Uint64Array, seed uintptr)
 
 //go:noescape
-func MultiHash128(hashes []uintptr, values [][16]byte, seed uintptr)
+func MultiHashUint128Array(hashes []uintptr, values sparse.Uint128Array, seed uintptr)

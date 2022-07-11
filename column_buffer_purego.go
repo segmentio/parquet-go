@@ -2,6 +2,8 @@
 
 package parquet
 
+import "github.com/segmentio/parquet-go/sparse"
+
 func broadcastValueInt32(dst []int32, src int8) {
 	value := 0x01010101 * int32(src)
 	for i := range dst {
@@ -15,48 +17,14 @@ func broadcastRangeInt32(dst []int32, base int32) {
 	}
 }
 
-func writeValuesBool(values []byte, rows array, size, offset uintptr) {
-	panic("unreachable")
-}
-
-func writeValuesInt32(values []int32, rows array, size, offset uintptr) {
+func writePointersBE128(values [][16]byte, rows sparse.Array) {
 	for i := range values {
-		values[i] = *(*int32)(rows.index(i, size, offset))
-	}
-}
+		p := *(**[16]byte)(rows.Index(i))
 
-func writeValuesInt64(values []int64, rows array, size, offset uintptr) {
-	for i := range values {
-		values[i] = *(*int64)(rows.index(i, size, offset))
-	}
-}
-
-func writeValuesUint32(values []uint32, rows array, size, offset uintptr) {
-	for i := range values {
-		values[i] = *(*uint32)(rows.index(i, size, offset))
-	}
-}
-
-func writeValuesUint64(values []uint64, rows array, size, offset uintptr) {
-	for i := range values {
-		values[i] = *(*uint64)(rows.index(i, size, offset))
-	}
-}
-
-func writeValuesFloat32(values []float32, rows array, size, offset uintptr) {
-	for i := range values {
-		values[i] = *(*float32)(rows.index(i, size, offset))
-	}
-}
-
-func writeValuesFloat64(values []float64, rows array, size, offset uintptr) {
-	for i := range values {
-		values[i] = *(*float64)(rows.index(i, size, offset))
-	}
-}
-
-func writeValuesBE128(values [][16]byte, rows array, size, offset uintptr) {
-	for i := range values {
-		values[i] = *(*[16]byte)(rows.index(i, size, offset))
+		if p != nil {
+			values[i] = *p
+		} else {
+			values[i] = [16]byte{}
+		}
 	}
 }
