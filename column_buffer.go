@@ -800,7 +800,7 @@ func (col *booleanColumnBuffer) Swap(i, j int) {
 }
 
 func (col *booleanColumnBuffer) WriteBooleans(values []bool) (int, error) {
-	col.writeValues(makeArrayBool(values), columnLevels{})
+	col.writeValues(sparse.MakeBoolArray(values).UnsafeArray(), columnLevels{})
 	return len(values), nil
 }
 

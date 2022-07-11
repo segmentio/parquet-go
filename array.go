@@ -6,11 +6,6 @@ import (
 	"github.com/segmentio/parquet-go/sparse"
 )
 
-func makeArrayBool(values []bool) sparse.Array {
-	ptr := *(*unsafe.Pointer)(unsafe.Pointer(&values))
-	return sparse.UnsafeArray(ptr, len(values), 1)
-}
-
 func makeArrayValue(values []Value, offset uintptr) sparse.Array {
 	ptr := *(*unsafe.Pointer)(unsafe.Pointer(&values))
 	return sparse.UnsafeArray(unsafe.Add(ptr, offset), len(values), unsafe.Sizeof(Value{}))

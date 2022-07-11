@@ -17,7 +17,7 @@ func broadcastValueInt32(dst []int32, src int8) {
 func broadcastRangeInt32AVX2(dst []int32, base int32)
 
 func broadcastRangeInt32(dst []int32, base int32) {
-	if len(dst) >= minLenAVX2 && cpu.X86.HasAVX2 {
+	if len(dst) >= 8 && cpu.X86.HasAVX2 {
 		broadcastRangeInt32AVX2(dst, base)
 	} else {
 		for i := range dst {
