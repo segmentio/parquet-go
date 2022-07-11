@@ -91,7 +91,7 @@ func OpenFile(r io.ReaderAt, size int64, options ...FileOption) (*File, error) {
 	}
 
 	schema := NewSchema(f.root.Name(), f.root)
-	columns := make([]*Column, 0, MaxColumnIndex+1)
+	columns := make([]*Column, 0, numLeafColumnsOf(f.root))
 	f.schema = schema
 	f.root.forEachLeaf(func(c *Column) { columns = append(columns, c) })
 
