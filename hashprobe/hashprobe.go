@@ -34,7 +34,7 @@ import (
 	"sync"
 
 	"github.com/segmentio/parquet-go/hashprobe/aeshash"
-	"github.com/segmentio/parquet-go/hashprobe/sparse"
+	"github.com/segmentio/parquet-go/sparse"
 	"github.com/segmentio/parquet-go/hashprobe/wyhash"
 	"github.com/segmentio/parquet-go/internal/unsafecast"
 )

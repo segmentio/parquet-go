@@ -9,7 +9,7 @@ import (
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/encoding/plain"
 	"github.com/segmentio/parquet-go/hashprobe"
-	"github.com/segmentio/parquet-go/hashprobe/sparse"
+	"github.com/segmentio/parquet-go/sparse"
 	"github.com/segmentio/parquet-go/internal/bitpack"
 	"github.com/segmentio/parquet-go/internal/unsafecast"
 )

@@ -2,7 +2,7 @@
 
 package aeshash
 
-import "github.com/segmentio/parquet-go/hashprobe/sparse"
+import "github.com/segmentio/parquet-go/sparse"
 
 // Enabled always returns false since we assume that AES instructions are not
 // available by default.
