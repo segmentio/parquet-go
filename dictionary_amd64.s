@@ -655,17 +655,16 @@ indexOutOfBounds:
 // values in the dictionary, then VPSCATTER* to do 8 parallel writes to the
 // sparse output buffer.
 
-// func dictionaryLookup32bits(dict []uint32, indexes []int32, rows array, size, offset uintptr) errno
-TEXT ·dictionaryLookup32bits(SB), NOSPLIT, $0-88
+// func dictionaryLookup32(dict []uint32, indexes []int32, rows sparse.Array) errno
+TEXT ·dictionaryLookup32(SB), NOSPLIT, $0-80
     MOVQ dict_base+0(FP), AX
     MOVQ dict_len+8(FP), BX
 
     MOVQ indexes_base+24(FP), CX
     MOVQ indexes_len+32(FP), DX
 
-    MOVQ rows_ptr+48(FP), R8
-    MOVQ size+64(FP), R9
-    ADDQ offset+72(FP), R8
+    MOVQ rows_array_ptr+48(FP), R8
+    MOVQ rows_array_off+64(FP), R9
 
     XORQ SI, SI
 
@@ -718,23 +717,22 @@ test:
     JNE loop
     XORQ AX, AX
 return:
-    MOVQ AX, ret+80(FP)
+    MOVQ AX, ret+72(FP)
     RET
 indexOutOfBounds:
     MOVQ $errnoIndexOutOfBounds, AX
     JMP return
 
-// func dictionaryLookup64bits(dict []uint64, indexes []int32, rows array, size, offset uintptr) errno
-TEXT ·dictionaryLookup64bits(SB), NOSPLIT, $0-88
+// func dictionaryLookup64(dict []uint64, indexes []int32, rows sparse.Array) errno
+TEXT ·dictionaryLookup64(SB), NOSPLIT, $0-80
     MOVQ dict_base+0(FP), AX
     MOVQ dict_len+8(FP), BX
 
     MOVQ indexes_base+24(FP), CX
     MOVQ indexes_len+32(FP), DX
 
-    MOVQ rows_ptr+48(FP), R8
-    MOVQ size+64(FP), R9
-    ADDQ offset+72(FP), R8
+    MOVQ rows_array_ptr+48(FP), R8
+    MOVQ rows_array_off+64(FP), R9
 
     XORQ SI, SI
 
@@ -787,14 +785,14 @@ test:
     JNE loop
     XORQ AX, AX
 return:
-    MOVQ AX, ret+80(FP)
+    MOVQ AX, ret+72(FP)
     RET
 indexOutOfBounds:
     MOVQ $errnoIndexOutOfBounds, AX
     JMP return
 
-// func dictionaryLookupByteArrayString(dict []uint32, page []byte, indexes []int32, rows array, size, offset uintptr) errno
-TEXT ·dictionaryLookupByteArrayString(SB), NOSPLIT, $0-112
+// func dictionaryLookupByteArrayString(dict []uint32, page []byte, indexes []int32, rows sparse.Array) errno
+TEXT ·dictionaryLookupByteArrayString(SB), NOSPLIT, $0-104
     MOVQ dict_base+0(FP), AX
     MOVQ dict_len+8(FP), BX
 
@@ -803,9 +801,8 @@ TEXT ·dictionaryLookupByteArrayString(SB), NOSPLIT, $0-112
     MOVQ indexes_base+48(FP), R8
     MOVQ indexes_len+56(FP), R9
 
-    MOVQ rows_ptr+72(FP), R10
-    MOVQ size+88(FP), R11
-    ADDQ offset+96(FP), R10
+    MOVQ rows_array_ptr+72(FP), R10
+    MOVQ rows_array_off+88(FP), R11
 
     XORQ DI, DI
     XORQ SI, SI
@@ -842,14 +839,14 @@ test:
     JNE loop
     XORQ AX, AX
 return:
-    MOVQ AX, ret+104(FP)
+    MOVQ AX, ret+96(FP)
     RET
 indexOutOfBounds:
     MOVQ $errnoIndexOutOfBounds, AX
     JMP return
 
-// func dictionaryLookupFixedLenByteArrayString(dict []byte, len int, indexes []int32, rows array, size, offset uintptr) errno
-TEXT ·dictionaryLookupFixedLenByteArrayString(SB), NOSPLIT, $0-96
+// func dictionaryLookupFixedLenByteArrayString(dict []byte, len int, indexes []int32, rows sparse.Array) errno
+TEXT ·dictionaryLookupFixedLenByteArrayString(SB), NOSPLIT, $0-88
     MOVQ dict_base+0(FP), AX
     MOVQ dict_len+8(FP), BX
 
@@ -858,9 +855,8 @@ TEXT ·dictionaryLookupFixedLenByteArrayString(SB), NOSPLIT, $0-96
     MOVQ indexes_base+32(FP), DX
     MOVQ indexes_len+40(FP), R8
 
-    MOVQ rows_ptr+56(FP), R9
-    MOVQ size+72(FP), R10
-    ADDQ offset+80(FP), R9
+    MOVQ rows_array_ptr+56(FP), R9
+    MOVQ rows_array_off+72(FP), R10
 
     XORQ DI, DI
     XORQ SI, SI
@@ -881,7 +877,7 @@ test:
     JNE loop
     XORQ AX, AX
 return:
-    MOVQ AX, ret+88(FP)
+    MOVQ AX, ret+80(FP)
     RET
 indexOutOfBounds:
     MOVQ $errnoIndexOutOfBounds, AX
@@ -892,8 +888,8 @@ indexOutOfBounds:
 // the pair of pointer and length. Since the length is fixed for this dictionary
 // type, the application can assume it at the call site.
 //
-// func dictionaryLookupFixedLenByteArrayPointer(dict []byte, len int, indexes []int32, rows array, size, offset uintptr) errno
-TEXT ·dictionaryLookupFixedLenByteArrayPointer(SB), NOSPLIT, $0-96
+// func dictionaryLookupFixedLenByteArrayPointer(dict []byte, len int, indexes []int32, rows sparse.Array) errno
+TEXT ·dictionaryLookupFixedLenByteArrayPointer(SB), NOSPLIT, $0-88
     MOVQ dict_base+0(FP), AX
     MOVQ dict_len+8(FP), BX
 
@@ -902,9 +898,8 @@ TEXT ·dictionaryLookupFixedLenByteArrayPointer(SB), NOSPLIT, $0-96
     MOVQ indexes_base+32(FP), DX
     MOVQ indexes_len+40(FP), R8
 
-    MOVQ rows_ptr+56(FP), R9
-    MOVQ size+72(FP), R10
-    ADDQ offset+80(FP), R9
+    MOVQ rows_array_ptr+56(FP), R9
+    MOVQ rows_array_off+72(FP), R10
 
     XORQ DI, DI
     XORQ SI, SI
@@ -924,7 +919,7 @@ test:
     JNE loop
     XORQ AX, AX
 return:
-    MOVQ AX, ret+88(FP)
+    MOVQ AX, ret+80(FP)
     RET
 indexOutOfBounds:
     MOVQ $errnoIndexOutOfBounds, AX

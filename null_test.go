@@ -5,7 +5,6 @@ package parquet
 import (
 	"reflect"
 	"testing"
-	"unsafe"
 
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/internal/quick"
@@ -37,7 +36,6 @@ func testNullIndex[T comparable](t *testing.T) {
 				return true
 			}
 
-			size := unsafe.Sizeof(zero)
 			want := make([]uint64, (len(data)+63)/64)
 			got := make([]uint64, (len(data)+63)/64)
 
@@ -48,8 +46,8 @@ func testNullIndex[T comparable](t *testing.T) {
 			}
 
 			array := makeArrayOf(data)
-			nullIndex[T](want, array, size, 0)
-			nullIndexFuncOf(reflect.TypeOf(zero))(got, array, size, 0)
+			nullIndex[T](want, array)
+			nullIndexFuncOf(reflect.TypeOf(zero))(got, array)
 
 			if !reflect.DeepEqual(want, got) {
 				t.Errorf("unexpected null index\nwant = %064b\ngot  = %064b", want, got)
@@ -86,15 +84,14 @@ func benchmarkNullIndex[T any](b *testing.B) {
 
 	var zero T
 	typ := reflect.TypeOf(zero)
-	size := unsafe.Sizeof(zero)
 	null := nullIndexFuncOf(typ)
 	data := makeArrayOf(make([]T, N))
 	bits := make([]uint64, (N+63)/64)
 
 	b.Run(typ.String(), func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			null(bits, data, size, 0)
+			null(bits, data)
 		}
-		b.SetBytes(int64(size * N))
+		b.SetBytes(int64(typ.Size() * N))
 	})
 }
