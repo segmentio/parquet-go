@@ -259,7 +259,7 @@ func (d *int32Dictionary) insert(indexes []int32, rows array, size, offset uintp
 	//
 	// Without this chunking, memory areas from the head of the indexes and
 	// values arrays end up being evicted from CPU caches as the probing
-	// operation iterate through the array. The subsequent scan of the indexes
+	// operation iterates through the array. The subsequent scan of the indexes
 	// required to determine which values must be inserted into the page then
 	// stalls on retrieving data from main memory.
 	//
