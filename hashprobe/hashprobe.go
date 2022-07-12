@@ -926,7 +926,7 @@ func (t *StringTable) lookup(offset uint32) string {
 }
 
 func (t *StringTable) hash(key string) uintptr {
-	return runtime_memhash(*(*unsafe.Pointer)(unsafe.Pointer(&key)), t.seed, uintptr(len(key)))
+	return memhash(*(*unsafe.Pointer)(unsafe.Pointer(&key)), t.seed, uintptr(len(key)))
 }
 
 func (t *StringTable) Reset() {
@@ -1007,5 +1007,5 @@ func (t *StringTable) probe(key string) (value int32, inserted int) {
 }
 
 //go:noescape
-//go:linkname runtime_memhash runtime.memhash
-func runtime_memhash(data unsafe.Pointer, seed, size uintptr) uintptr
+//go:linkname memhash runtime.memhash
+func memhash(data unsafe.Pointer, seed, size uintptr) uintptr
