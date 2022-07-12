@@ -82,6 +82,13 @@ type Schema struct {
 // and the data will not be written into the parquet file(s).
 // Note that a field with name "-" can still be generated using the tag "-,".
 //
+// Map key configuration can be pass using one or multiple tags prefixed with `key=`.
+// For example:
+//
+//  type Actions struct {
+//    Action map[int64]string `parquet:",key=timestamp"`
+//  }
+//
 // The schema name is the Go type name of the value.
 func SchemaOf(model interface{}) *Schema {
 	return schemaOf(dereference(reflect.TypeOf(model)))

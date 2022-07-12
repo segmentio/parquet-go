@@ -1,7 +1,6 @@
 package parquet_test
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/segmentio/parquet-go"
@@ -143,33 +142,5 @@ func TestSchemaOf(t *testing.T) {
 				t.Errorf("\nexpected:\n\n%s\n\nfound:\n\n%s\n", test.print, s)
 			}
 		})
-	}
-}
-
-func TestNode(t *testing.T) {
-	v := new(struct {
-		M map[int64]string `parquet:",key=timestamp"`
-		//M map[string]int64 `parquet:","`
-	})
-
-	schema := parquet.SchemaOf(v)
-	println(schema.String())
-	println()
-
-	for _, f := range schema.Fields() {
-		printChildren(f, "")
-	}
-}
-
-func printChildren(field parquet.Field, sep string) {
-	fmt.Printf("%sfield: %s, type: %s\n",
-		sep,
-		field.Name(),
-		field.Type(),
-	)
-
-	for _, c := range field.Fields() {
-		sep = sep + " "
-		printChildren(c, sep)
 	}
 }
