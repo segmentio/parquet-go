@@ -28,10 +28,12 @@ package hashprobe
 import (
 	cryptoRand "crypto/rand"
 	"encoding/binary"
+	"hash/maphash"
 	"math"
 	"math/bits"
 	"math/rand"
 	"sync"
+	"unsafe"
 
 	"github.com/segmentio/parquet-go/hashprobe/aeshash"
 	"github.com/segmentio/parquet-go/hashprobe/wyhash"
@@ -66,6 +68,13 @@ func init() {
 	}
 	seed := int64(binary.LittleEndian.Uint64(prngSeed[:]))
 	prngSource = rand.NewSource(seed).(rand.Source64)
+}
+
+func tableSizeAndMaxLen(groupSize, numValues int, maxLoad float64) (size, maxLen int) {
+	n := int(math.Ceil((1 / maxLoad) * float64(numValues)))
+	size = nextPowerOf2((n + (groupSize - 1)) / groupSize)
+	maxLen = int(math.Ceil(maxLoad * float64(groupSize*size)))
+	return
 }
 
 func nextPowerOf2(n int) int {
@@ -185,13 +194,12 @@ func (t *table32) size() int {
 }
 
 func (t *table32) init(cap int, maxLoad float64) {
-	m := int(math.Ceil((1 / maxLoad) * float64(cap)))
-	n := nextPowerOf2((m + (table32GroupSize - 1)) / table32GroupSize)
+	size, maxLen := tableSizeAndMaxLen(table32GroupSize, cap, maxLoad)
 	*t = table32{
-		maxLen:  int(math.Ceil(maxLoad * float64(table32GroupSize*n))),
+		maxLen:  maxLen,
 		maxLoad: maxLoad,
 		seed:    randSeed(),
-		table:   make([]table32Group, n),
+		table:   make([]table32Group, size),
 	}
 }
 
@@ -431,13 +439,12 @@ func (t *table64) size() int {
 }
 
 func (t *table64) init(cap int, maxLoad float64) {
-	m := int(math.Ceil((1 / maxLoad) * float64(cap)))
-	n := nextPowerOf2((m + (table64GroupSize - 1)) / table64GroupSize)
+	size, maxLen := tableSizeAndMaxLen(table64GroupSize, cap, maxLoad)
 	*t = table64{
-		maxLen:  int(math.Ceil(maxLoad * float64(table64GroupSize*n))),
+		maxLen:  maxLen,
 		maxLoad: maxLoad,
 		seed:    randSeed(),
-		table:   make([]table64Group, n),
+		table:   make([]table64Group, size),
 	}
 }
 
@@ -622,14 +629,13 @@ func makeTable128(cap int, maxLoad float64) (t table128) {
 }
 
 func (t *table128) init(cap int, maxLoad float64) {
-	m := int(math.Ceil((1 / maxLoad) * float64(cap)))
-	n := nextPowerOf2(m)
+	size, maxLen := tableSizeAndMaxLen(1, cap, maxLoad)
 	*t = table128{
-		cap:     n,
-		maxLen:  int(math.Ceil(maxLoad * float64(n))),
+		cap:     size,
+		maxLen:  maxLen,
 		maxLoad: maxLoad,
 		seed:    randSeed(),
-		table:   make([]byte, 16*n+4*n),
+		table:   make([]byte, 16*size+4*size),
 	}
 }
 
@@ -776,4 +782,215 @@ func multiProbe128Default(table []byte, tableCap, tableLen int, hashes []uintptr
 	}
 
 	return tableLen
+}
+
+type StringTable struct {
+	len     int
+	maxLen  int
+	maxLoad float64
+	words   []byte
+	table   []stringGroup
+	maphash maphash.Hash
+}
+
+const stringGroupSize = 7
+
+type stringGroup struct {
+	hashes  [8]uint8
+	offsets [7]uint32
+	values  [7]uint32
+}
+
+func makeHash() (hash maphash.Hash) {
+	hash.SetSeed(maphash.MakeSeed())
+	return
+}
+
+func NewStringTable(cap int, maxLoad float64) *StringTable {
+	size, maxLen := tableSizeAndMaxLen(stringGroupSize, cap, maxLoad)
+	return &StringTable{
+		maxLen:  maxLen,
+		maxLoad: maxLoad,
+		words:   make([]byte, 0, 8*size),
+		table:   make([]stringGroup, size),
+		maphash: makeHash(),
+	}
+}
+
+func NewStringTableWith(words []byte, maxLoad float64) *StringTable {
+	numValues := 0
+
+	for i := 0; i < len(words); {
+		n := int(binary.LittleEndian.Uint32(words[i:]))
+		i += 4
+		i += n
+		numValues++
+	}
+
+	size, maxLen := tableSizeAndMaxLen(stringGroupSize, numValues, maxLoad)
+	t := &StringTable{
+		maxLen:  maxLen,
+		maxLoad: maxLoad,
+		words:   words[:0],
+		table:   make([]stringGroup, size),
+		maphash: makeHash(),
+	}
+
+	for i := 0; i < len(words); {
+		n := int(binary.LittleEndian.Uint32(words[i:]))
+		k := words[i+4 : i+4+n]
+		i += 4
+		i += n
+		t.probe(*(*string)(unsafe.Pointer(&k)))
+	}
+
+	return t
+}
+
+func (t *StringTable) grow(totalValues int) {
+	size, maxLen := tableSizeAndMaxLen(stringGroupSize, totalValues, t.maxLoad)
+
+	tmp := StringTable{
+		len:     t.len,
+		maxLen:  maxLen,
+		maxLoad: t.maxLoad,
+		words:   make([]byte, len(t.words), 2*len(t.words)),
+		table:   make([]stringGroup, size),
+		maphash: makeHash(),
+	}
+
+	copy(tmp.words, t.words)
+
+	for i := range t.table {
+		group := &t.table[i]
+		count := bits.OnesCount8(group.hashes[stringGroupSize])
+
+		for j := 0; j < count; j++ {
+			tmp.insert(t.lookup(group.offsets[j]), group.offsets[j], group.values[j])
+		}
+	}
+
+	*t = tmp
+}
+
+func (t *StringTable) insert(key string, offset, value uint32) {
+	hash := t.hash(key)
+	slot := hash
+
+	modulo := uintptr(len(t.table)) - 1
+	for {
+		group := &t.table[slot&modulo]
+		count := bits.OnesCount8(group.hashes[stringGroupSize])
+
+		if count < stringGroupSize {
+			group.hashes[stringGroupSize] |= 1 << uint8(count)
+			group.hashes[count] = uint8(hash)
+			group.offsets[count] = offset
+			group.values[count] = value
+			break
+		}
+
+		slot++
+	}
+}
+
+func (t *StringTable) append(key string) uint32 {
+	offset := uint32(len(t.words))
+	length := [4]byte{}
+	binary.LittleEndian.PutUint32(length[:], uint32(len(key)))
+	t.words = append(t.words, length[:]...)
+	t.words = append(t.words, key...)
+	return offset
+}
+
+func (t *StringTable) lookup(offset uint32) string {
+	n := binary.LittleEndian.Uint32(t.words[offset:])
+	i := 4 + offset
+	j := 4 + offset + uint32(n)
+	s := t.words[i:j:j]
+	return *(*string)(unsafe.Pointer(&s))
+}
+
+func (t *StringTable) hash(key string) uintptr {
+	t.maphash.Reset()
+	t.maphash.WriteString(key)
+	return uintptr(t.maphash.Sum64())
+}
+
+func (t *StringTable) Reset() {
+	for i := range t.table {
+		t.table[i] = stringGroup{}
+	}
+	t.len = 0
+	t.words = t.words[:0]
+	t.maphash.SetSeed(maphash.MakeSeed())
+}
+
+func (t *StringTable) Len() int {
+	return t.len
+}
+
+func (t *StringTable) Cap() int {
+	return stringGroupSize * len(t.table)
+}
+
+func (t *StringTable) Words() []byte {
+	return t.words
+}
+
+func (t *StringTable) Probe(keys []string, values []int32) int {
+	return t.ProbeArray(sparse.MakeStringArray(keys), values)
+}
+
+func (t *StringTable) ProbeArray(keys sparse.StringArray, values []int32) int {
+	if totalValues := t.len + keys.Len(); totalValues > t.maxLen {
+		t.grow(totalValues)
+	}
+	return t.probeArray(keys, values)
+}
+
+func (t *StringTable) probeArray(keys sparse.StringArray, values []int32) int {
+	_ = values[:keys.Len()]
+	inserts := 0
+
+	for i := 0; i < keys.Len(); i++ {
+		n := 0
+		values[i], n = t.probe(keys.Index(i))
+		inserts += n
+	}
+
+	return inserts
+}
+
+func (t *StringTable) probe(key string) (value int32, inserted int) {
+	hash := t.hash(key)
+	slot := hash
+	modulo := uintptr(len(t.table)) - 1
+
+	for {
+		group := &t.table[slot&modulo]
+		count := bits.OnesCount8(group.hashes[stringGroupSize])
+
+		for j := 0; j < count; j++ {
+			if group.hashes[j] == uint8(hash) {
+				if t.lookup(group.offsets[j]) == key {
+					value = int32(group.values[j])
+					return
+				}
+			}
+		}
+
+		if count < stringGroupSize {
+			offset := t.append(key)
+			group.hashes[stringGroupSize] = 1 << uint8(count)
+			group.hashes[count] = uint8(hash)
+			group.offsets[count] = offset
+			group.values[count] = uint32(t.len)
+			value, inserted = int32(t.len), 1
+			t.len++
+			return
+		}
+
+		slot++
+	}
 }
