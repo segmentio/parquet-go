@@ -671,8 +671,8 @@ func (d *doubleDictionary) Page() BufferedPage {
 
 type byteArrayDictionary struct {
 	byteArrayPage
+	table   *hashprobe.StringTable
 	offsets []uint32
-	hashmap map[string]int32
 }
 
 func newByteArrayDictionary(typ Type, columnIndex int16, numValues int32, values []byte) *byteArrayDictionary {
@@ -681,18 +681,18 @@ func newByteArrayDictionary(typ Type, columnIndex int16, numValues int32, values
 		byteArrayPage: byteArrayPage{
 			typ:         typ,
 			values:      values,
-			numValues:   numValues,
 			columnIndex: ^columnIndex,
 		},
 	}
 
 	for i := 0; i < len(values); {
-		n := plain.ByteArrayLength(values[i:])
 		d.offsets = append(d.offsets, uint32(i))
+		n := plain.ByteArrayLength(values[i:])
 		i += plain.ByteArrayLengthSize
 		i += n
 	}
 
+	d.numValues = int32(len(d.offsets))
 	return d
 }
 
@@ -702,7 +702,9 @@ func (d *byteArrayDictionary) Len() int { return len(d.offsets) }
 
 func (d *byteArrayDictionary) Index(i int32) Value { return d.makeValueBytes(d.index(i)) }
 
-func (d *byteArrayDictionary) index(i int32) []byte { return d.valueAt(d.offsets[i]) }
+func (d *byteArrayDictionary) index(i int32) []byte {
+	return d.valueAt(d.offsets[i])
+}
 
 func (d *byteArrayDictionary) Insert(indexes []int32, values []Value) {
 	model := Value{}
@@ -710,35 +712,30 @@ func (d *byteArrayDictionary) Insert(indexes []int32, values []Value) {
 }
 
 func (d *byteArrayDictionary) insert(indexes []int32, rows sparse.Array) {
-	_ = indexes[:rows.Len()]
+	const chunkSize = insertsTargetCacheFootprint / 32
 
-	if d.hashmap == nil {
-		d.hashmap = make(map[string]int32, cap(d.offsets))
-		for index, offset := range d.offsets {
-			d.hashmap[string(d.valueAt(offset))] = int32(index)
-		}
+	if d.table == nil {
+		d.table = hashprobe.NewStringTableWith(d.values, hashprobeTableMaxLoad)
 	}
 
-	for i := 0; i < rows.Len(); i++ {
-		value := *(*string)(rows.Index(i))
+	values := rows.StringArray()
 
-		index, exists := d.hashmap[value]
-		if !exists {
-			index = int32(len(d.offsets))
-			value = d.append(value)
-			d.hashmap[value] = index
+	for i := 0; i < values.Len(); i += chunkSize {
+		j := min(i+chunkSize, values.Len())
+		lastOffset := uint32(len(d.values))
+
+		if d.table.ProbeArray(values.Slice(i, j), indexes[i:j:j]) > 0 {
+			for k, index := range indexes[i:j] {
+				if index == int32(len(d.offsets)) {
+					d.offsets = append(d.offsets, lastOffset)
+					lastOffset += plain.ByteArrayLengthSize
+					lastOffset += uint32(len(values.Index(i + k)))
+				}
+			}
+			d.values = d.table.Words()
+			d.numValues = int32(len(d.offsets))
 		}
-
-		indexes[i] = index
 	}
-}
-
-func (d *byteArrayDictionary) append(value string) string {
-	offset := len(d.values)
-	d.values = plain.AppendByteArrayString(d.values, value)
-	d.offsets = append(d.offsets, uint32(offset))
-	d.numValues++
-	return string(d.values[offset+plain.ByteArrayLengthSize : len(d.values)])
 }
 
 func (d *byteArrayDictionary) Lookup(indexes []int32, values []Value) {
@@ -782,7 +779,9 @@ func (d *byteArrayDictionary) Reset() {
 	d.offsets = d.offsets[:0]
 	d.values = d.values[:0]
 	d.numValues = 0
-	d.hashmap = nil
+	if d.table != nil {
+		d.table.Reset()
+	}
 }
 
 func (d *byteArrayDictionary) Page() BufferedPage {
