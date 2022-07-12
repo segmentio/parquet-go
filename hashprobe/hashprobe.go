@@ -28,7 +28,6 @@ package hashprobe
 import (
 	cryptoRand "crypto/rand"
 	"encoding/binary"
-	"hash/maphash"
 	"math"
 	"math/bits"
 	"math/rand"
@@ -788,22 +787,18 @@ type StringTable struct {
 	len     int
 	maxLen  int
 	maxLoad float64
+	seed    uintptr
 	words   []byte
 	table   []stringGroup
-	maphash maphash.Hash
 }
 
-const stringGroupSize = 7
+const stringGroupSize = 5
 
 type stringGroup struct {
-	hashes  [8]uint8
-	offsets [7]uint32
-	values  [7]uint32
-}
-
-func makeHash() (hash maphash.Hash) {
-	hash.SetSeed(maphash.MakeSeed())
-	return
+	hashes  [stringGroupSize]uint32
+	offsets [stringGroupSize]uint32
+	values  [stringGroupSize]uint32
+	bits    uint32
 }
 
 func NewStringTable(cap int, maxLoad float64) *StringTable {
@@ -811,9 +806,9 @@ func NewStringTable(cap int, maxLoad float64) *StringTable {
 	return &StringTable{
 		maxLen:  maxLen,
 		maxLoad: maxLoad,
+		seed:    randSeed(),
 		words:   make([]byte, 0, 8*size),
 		table:   make([]stringGroup, size),
-		maphash: makeHash(),
 	}
 }
 
@@ -832,8 +827,8 @@ func NewStringTableWith(words []byte, maxLoad float64) *StringTable {
 		maxLen:  maxLen,
 		maxLoad: maxLoad,
 		words:   words[:0],
+		seed:    randSeed(),
 		table:   make([]stringGroup, size),
-		maphash: makeHash(),
 	}
 
 	for i := 0; i < len(words); {
@@ -854,16 +849,16 @@ func (t *StringTable) grow(totalValues int) {
 		len:     t.len,
 		maxLen:  maxLen,
 		maxLoad: t.maxLoad,
+		seed:    randSeed(),
 		words:   make([]byte, len(t.words), 2*len(t.words)),
 		table:   make([]stringGroup, size),
-		maphash: makeHash(),
 	}
 
 	copy(tmp.words, t.words)
 
 	for i := range t.table {
 		group := &t.table[i]
-		count := bits.OnesCount8(group.hashes[stringGroupSize])
+		count := bits.OnesCount32(group.bits)
 
 		for j := 0; j < count; j++ {
 			tmp.insert(t.lookup(group.offsets[j]), group.offsets[j], group.values[j])
@@ -880,13 +875,13 @@ func (t *StringTable) insert(key string, offset, value uint32) {
 	modulo := uintptr(len(t.table)) - 1
 	for {
 		group := &t.table[slot&modulo]
-		count := bits.OnesCount8(group.hashes[stringGroupSize])
+		count := bits.OnesCount32(group.bits)
 
 		if count < stringGroupSize {
-			group.hashes[stringGroupSize] |= 1 << uint8(count)
-			group.hashes[count] = uint8(hash)
+			group.hashes[count] = uint32(hash)
 			group.offsets[count] = offset
 			group.values[count] = value
+			group.bits |= 1 << uint32(count)
 			break
 		}
 
@@ -912,9 +907,7 @@ func (t *StringTable) lookup(offset uint32) string {
 }
 
 func (t *StringTable) hash(key string) uintptr {
-	t.maphash.Reset()
-	t.maphash.WriteString(key)
-	return uintptr(t.maphash.Sum64())
+	return runtime_memhash(*(*unsafe.Pointer)(unsafe.Pointer(&key)), t.seed, uintptr(len(key)))
 }
 
 func (t *StringTable) Reset() {
@@ -923,7 +916,6 @@ func (t *StringTable) Reset() {
 	}
 	t.len = 0
 	t.words = t.words[:0]
-	t.maphash.SetSeed(maphash.MakeSeed())
 }
 
 func (t *StringTable) Len() int {
@@ -969,10 +961,14 @@ func (t *StringTable) probe(key string) (value int32, inserted int) {
 
 	for {
 		group := &t.table[slot&modulo]
-		count := bits.OnesCount8(group.hashes[stringGroupSize])
+		count := bits.OnesCount32(group.bits)
+
+		if count > stringGroupSize {
+			count = stringGroupSize
+		}
 
 		for j := 0; j < count; j++ {
-			if group.hashes[j] == uint8(hash) {
+			if group.hashes[j] == uint32(hash) {
 				if t.lookup(group.offsets[j]) == key {
 					value = int32(group.values[j])
 					return
@@ -982,10 +978,10 @@ func (t *StringTable) probe(key string) (value int32, inserted int) {
 
 		if count < stringGroupSize {
 			offset := t.append(key)
-			group.hashes[stringGroupSize] = 1 << uint8(count)
-			group.hashes[count] = uint8(hash)
+			group.hashes[count] = uint32(hash)
 			group.offsets[count] = offset
 			group.values[count] = uint32(t.len)
+			group.bits = 1 << uint32(count)
 			value, inserted = int32(t.len), 1
 			t.len++
 			return
@@ -994,3 +990,7 @@ func (t *StringTable) probe(key string) (value int32, inserted int) {
 		slot++
 	}
 }
+
+//go:noescape
+//go:linkname runtime_memhash runtime.memhash
+func runtime_memhash(data unsafe.Pointer, seed, size uintptr) uintptr
