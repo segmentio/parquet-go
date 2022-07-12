@@ -109,6 +109,15 @@ func TestSchemaOf(t *testing.T) {
 	}
 }`,
 		},
+
+		{
+			value: new(struct {
+				Name string `parquet:",json"`
+			}),
+			print: `message {
+	required binary Name (JSON);
+}`,
+		},
 	}
 
 	for _, test := range tests {

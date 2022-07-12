@@ -502,6 +502,9 @@ func makeStructField(f reflect.StructField) structField {
 		case "dict":
 			setEncoding(&RLEDictionary)
 
+		case "json":
+			setNode(JSON())
+
 		case "delta":
 			switch t.Kind() {
 			case reflect.Int, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint32, reflect.Uint64:
