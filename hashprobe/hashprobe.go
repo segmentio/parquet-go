@@ -792,6 +792,12 @@ type StringTable struct {
 	table   []stringGroup
 }
 
+/*
+
+   [16 x 1: hashes][16 x 1: lengths][16 x 4: values][data chunks...]
+
+*/
+
 const stringGroupSize = 5
 
 type stringGroup struct {
@@ -898,11 +904,24 @@ func (t *StringTable) append(key string) uint32 {
 	return offset
 }
 
+type stringHeader struct {
+	ptr unsafe.Pointer
+	len int
+}
+
 func (t *StringTable) lookup(offset uint32) string {
-	n := binary.LittleEndian.Uint32(t.words[offset:])
-	i := 4 + offset
-	j := 4 + offset + uint32(n)
-	s := t.words[i:j:j]
+	/*
+		This function is equivalent to the following code but compiles down to
+		just a few memory loads.
+
+		n := binary.LittleEndian.Uint32(t.words[offset:])
+		i := 4 + offset
+		j := 4 + offset + uint32(n)
+		s := t.words[i:j:j]
+		return string(s)
+	*/
+	p := unsafe.Add(*(*unsafe.Pointer)(unsafe.Pointer(&t.words)), offset)
+	s := stringHeader{ptr: unsafe.Add(p, 4), len: int(*(*uint32)(p))}
 	return *(*string)(unsafe.Pointer(&s))
 }
 
