@@ -963,10 +963,6 @@ func (t *StringTable) probe(key string) (value int32, inserted int) {
 		group := &t.table[slot&modulo]
 		count := bits.OnesCount32(group.bits)
 
-		if count > stringGroupSize {
-			count = stringGroupSize
-		}
-
 		for j := 0; j < count; j++ {
 			if group.hashes[j] == uint32(hash) {
 				if t.lookup(group.offsets[j]) == key {
