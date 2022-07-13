@@ -83,7 +83,9 @@ type Schema struct {
 // Note that a field with name "-" can still be generated using the tag "-,".
 //
 // Map key configuration can be pass using one or multiple tags prefixed with `key=`.
-// For example:
+// If the tag doesn't contain the `key=` prefix, the configuration will be applied on the value.
+//
+// For example, the following will set the int64 key of the map to be a timestamp:
 //
 //  type Actions struct {
 //    Action map[int64]string `parquet:",key=timestamp"`
