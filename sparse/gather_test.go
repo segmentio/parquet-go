@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"strconv"
 	"testing"
 	"time"
 	"unsafe"
@@ -108,6 +109,35 @@ func ExampleGatherUint128() {
 	// points[7].Y = 14
 	// points[8].Y = 16
 	// points[9].Y = 18
+}
+
+func ExampleGatherString() {
+	buf := make([][2]string, 10)
+	dst := make([]string, 10)
+	src := sparse.UnsafeStringArray(unsafe.Pointer(&buf[0][1]), len(buf), unsafe.Sizeof(buf[0]))
+
+	for i := range buf {
+		buf[i][0] = "-"
+		buf[i][1] = strconv.Itoa(i)
+	}
+
+	n := sparse.GatherString(dst, src)
+
+	for i, v := range dst[:n] {
+		fmt.Printf("points[%d].Y = %v\n", i, v)
+	}
+
+	// Output:
+	// points[0].Y = 0
+	// points[1].Y = 1
+	// points[2].Y = 2
+	// points[3].Y = 3
+	// points[4].Y = 4
+	// points[5].Y = 5
+	// points[6].Y = 6
+	// points[7].Y = 7
+	// points[8].Y = 8
+	// points[9].Y = 9
 }
 
 func TestGatherUint32(t *testing.T) {

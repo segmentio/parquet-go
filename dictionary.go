@@ -242,7 +242,7 @@ func (d *int32Dictionary) Insert(indexes []int32, values []Value) {
 }
 
 func (d *int32Dictionary) init(indexes []int32) {
-	d.table = hashprobe.NewInt32Table(cap(d.values), hashprobeTableMaxLoad)
+	d.table = hashprobe.NewInt32Table(len(d.values), hashprobeTableMaxLoad)
 
 	n := min(len(d.values), len(indexes))
 
@@ -342,7 +342,7 @@ func (d *int64Dictionary) Insert(indexes []int32, values []Value) {
 }
 
 func (d *int64Dictionary) init(indexes []int32) {
-	d.table = hashprobe.NewInt64Table(cap(d.values), hashprobeTableMaxLoad)
+	d.table = hashprobe.NewInt64Table(len(d.values), hashprobeTableMaxLoad)
 
 	n := min(len(d.values), len(indexes))
 
@@ -439,7 +439,7 @@ func (d *int96Dictionary) insertValues(indexes []int32, count int, valueAt func(
 	_ = indexes[:count]
 
 	if d.hashmap == nil {
-		d.hashmap = make(map[deprecated.Int96]int32, cap(d.values))
+		d.hashmap = make(map[deprecated.Int96]int32, len(d.values))
 		for i, v := range d.values {
 			d.hashmap[v] = int32(i)
 		}
@@ -524,7 +524,7 @@ func (d *floatDictionary) Insert(indexes []int32, values []Value) {
 }
 
 func (d *floatDictionary) init(indexes []int32) {
-	d.table = hashprobe.NewFloat32Table(cap(d.values), hashprobeTableMaxLoad)
+	d.table = hashprobe.NewFloat32Table(len(d.values), hashprobeTableMaxLoad)
 
 	n := min(len(d.values), len(indexes))
 
@@ -611,7 +611,7 @@ func (d *doubleDictionary) Insert(indexes []int32, values []Value) {
 }
 
 func (d *doubleDictionary) init(indexes []int32) {
-	d.table = hashprobe.NewFloat64Table(cap(d.values), hashprobeTableMaxLoad)
+	d.table = hashprobe.NewFloat64Table(len(d.values), hashprobeTableMaxLoad)
 
 	n := min(len(d.values), len(indexes))
 
@@ -677,12 +677,12 @@ type byteArrayDictionary struct {
 
 func newByteArrayDictionary(typ Type, columnIndex int16, numValues int32, values []byte) *byteArrayDictionary {
 	d := &byteArrayDictionary{
-		offsets: make([]uint32, 0, numValues),
 		byteArrayPage: byteArrayPage{
 			typ:         typ,
 			values:      values,
 			columnIndex: ^columnIndex,
 		},
+		offsets: make([]uint32, 0, numValues),
 	}
 
 	for i := 0; i < len(values); {
@@ -711,28 +711,46 @@ func (d *byteArrayDictionary) Insert(indexes []int32, values []Value) {
 	d.insert(indexes, makeArrayValue(values, unsafe.Offsetof(model.ptr)))
 }
 
+func (d *byteArrayDictionary) init(indexes []int32) {
+	d.table = hashprobe.NewStringTable(int(d.numValues), hashprobeTableMaxLoad)
+
+	const chunkSize = insertsTargetCacheFootprint / 32
+	values := make([]string, min(chunkSize, len(indexes)), chunkSize)
+
+	for i := 0; i < len(d.values); {
+		j := 0
+
+		for j < len(values) && i < len(d.values) {
+			n := plain.ByteArrayLength(d.values[i:])
+			i += plain.ByteArrayLengthSize
+			s := d.values[i : i+n]
+			i += n
+			values[j] = *(*string)(unsafe.Pointer(&s))
+		}
+
+		d.table.Probe(values[:j], indexes[:j])
+	}
+}
+
 func (d *byteArrayDictionary) insert(indexes []int32, rows sparse.Array) {
 	const chunkSize = insertsTargetCacheFootprint / 32
 
 	if d.table == nil {
-		d.table = hashprobe.NewStringTableWith(d.values, hashprobeTableMaxLoad)
+		d.init(indexes)
 	}
 
 	values := rows.StringArray()
 
 	for i := 0; i < values.Len(); i += chunkSize {
 		j := min(i+chunkSize, values.Len())
-		lastOffset := uint32(len(d.values))
 
 		if d.table.ProbeArray(values.Slice(i, j), indexes[i:j:j]) > 0 {
 			for k, index := range indexes[i:j] {
 				if index == int32(len(d.offsets)) {
-					d.offsets = append(d.offsets, lastOffset)
-					lastOffset += plain.ByteArrayLengthSize
-					lastOffset += uint32(len(values.Index(i + k)))
+					d.offsets = append(d.offsets, uint32(len(d.values)))
+					d.values = plain.AppendByteArrayString(d.values, values.Index(i+k))
 				}
 			}
-			d.values = d.table.Words()
 			d.numValues = int32(len(d.offsets))
 		}
 	}
@@ -932,7 +950,7 @@ func (d *uint32Dictionary) Insert(indexes []int32, values []Value) {
 }
 
 func (d *uint32Dictionary) init(indexes []int32) {
-	d.table = hashprobe.NewUint32Table(cap(d.values), hashprobeTableMaxLoad)
+	d.table = hashprobe.NewUint32Table(len(d.values), hashprobeTableMaxLoad)
 
 	n := min(len(d.values), len(indexes))
 
@@ -1019,7 +1037,7 @@ func (d *uint64Dictionary) Insert(indexes []int32, values []Value) {
 }
 
 func (d *uint64Dictionary) init(indexes []int32) {
-	d.table = hashprobe.NewUint64Table(cap(d.values), hashprobeTableMaxLoad)
+	d.table = hashprobe.NewUint64Table(len(d.values), hashprobeTableMaxLoad)
 
 	n := min(len(d.values), len(indexes))
 
@@ -1137,7 +1155,7 @@ func (d *be128Dictionary) Insert(indexes []int32, values []Value) {
 }
 
 func (d *be128Dictionary) init(indexes []int32) {
-	d.table = hashprobe.NewUint128Table(cap(d.values), 0.75)
+	d.table = hashprobe.NewUint128Table(len(d.values), 0.75)
 
 	n := min(len(d.values), len(indexes))
 
