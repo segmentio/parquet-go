@@ -413,7 +413,7 @@ func randValueFuncOf(t parquet.Type) func(*rand.Rand) parquet.Value {
 		return func(r *rand.Rand) parquet.Value {
 			n := r.Intn(49) + 1
 			b := make([]byte, n)
-			const characters = "1234567890qwertyuiopasdfghjklzxcvbnm "
+			const characters = "1234567890qwertyuiopasdfghjklzxcvbnm"
 			for i := range b {
 				b[i] = characters[r.Intn(len(characters))]
 			}

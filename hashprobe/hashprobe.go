@@ -28,9 +28,11 @@ package hashprobe
 import (
 	cryptoRand "crypto/rand"
 	"encoding/binary"
+	"fmt"
 	"math"
 	"math/bits"
 	"math/rand"
+	"strings"
 	"sync"
 	"unsafe"
 
@@ -784,27 +786,12 @@ func multiProbe128Default(table []byte, tableCap, tableLen int, hashes []uintptr
 }
 
 type StringTable struct {
-	len     int
-	maxLen  int
-	maxLoad float64
-	seed    uintptr
-	words   []byte
-	table   []stringGroup
-}
-
-/*
-
-   [16 x 1: hashes][16 x 1: lengths][16 x 4: values][data chunks...]
-
-*/
-
-const stringGroupSize = 5
-
-type stringGroup struct {
-	hashes  [stringGroupSize]uint32
-	offsets [stringGroupSize]uint32
-	values  [stringGroupSize]uint32
-	bits    uint32
+	len      int
+	maxLen   int
+	maxLoad  float64
+	seed     uintptr
+	table    []*stringGroup
+	fallback map[string]int32
 }
 
 func NewStringTable(cap int, maxLoad float64) *StringTable {
@@ -813,39 +800,8 @@ func NewStringTable(cap int, maxLoad float64) *StringTable {
 		maxLen:  maxLen,
 		maxLoad: maxLoad,
 		seed:    randSeed(),
-		words:   make([]byte, 0, 8*size),
-		table:   make([]stringGroup, size),
+		table:   make([]*stringGroup, size),
 	}
-}
-
-func NewStringTableWith(words []byte, maxLoad float64) *StringTable {
-	numValues := 0
-
-	for i := 0; i < len(words); {
-		n := int(binary.LittleEndian.Uint32(words[i:]))
-		i += 4
-		i += n
-		numValues++
-	}
-
-	size, maxLen := tableSizeAndMaxLen(stringGroupSize, numValues, maxLoad)
-	t := &StringTable{
-		maxLen:  maxLen,
-		maxLoad: maxLoad,
-		words:   words[:0],
-		seed:    randSeed(),
-		table:   make([]stringGroup, size),
-	}
-
-	for i := 0; i < len(words); {
-		n := int(binary.LittleEndian.Uint32(words[i:]))
-		k := words[i+4 : i+4+n]
-		i += 4
-		i += n
-		t.probe(*(*string)(unsafe.Pointer(&k)))
-	}
-
-	return t
 }
 
 func (t *StringTable) grow(totalValues int) {
@@ -855,39 +811,43 @@ func (t *StringTable) grow(totalValues int) {
 		len:     t.len,
 		maxLen:  maxLen,
 		maxLoad: t.maxLoad,
-		seed:    randSeed(),
-		words:   make([]byte, len(t.words), 2*len(t.words)),
-		table:   make([]stringGroup, size),
+		seed:    t.seed,
+		table:   make([]*stringGroup, size),
 	}
 
-	copy(tmp.words, t.words)
-
 	for i := range t.table {
-		group := &t.table[i]
-		count := bits.OnesCount32(group.bits)
+		if group := t.table[i]; group != nil {
+			for j := 0; j < int(group.len); j++ {
+				tmp.insert(group.hashes[j], group.lookup(j), group.values[j])
+			}
+		}
+	}
 
-		for j := 0; j < count; j++ {
-			tmp.insert(t.lookup(group.offsets[j]), group.offsets[j], group.values[j])
+	if t.fallback != nil {
+		tmp.fallback = make(map[string]int32, len(t.fallback))
+
+		for k, v := range t.fallback {
+			tmp.fallback[k] = v
 		}
 	}
 
 	*t = tmp
 }
 
-func (t *StringTable) insert(key string, offset, value uint32) {
-	hash := t.hash(key)
+func (t *StringTable) insert(hash uintptr, key stringKey, value uint32) {
 	slot := hash
 
 	modulo := uintptr(len(t.table)) - 1
 	for {
-		group := &t.table[slot&modulo]
-		count := bits.OnesCount32(group.bits)
+		group := t.table[slot&modulo]
 
-		if count < stringGroupSize {
-			group.hashes[count] = uint32(hash)
-			group.offsets[count] = offset
-			group.values[count] = value
-			group.bits |= 1 << uint32(count)
+		if group == nil {
+			group = newStringGroup()
+			t.table[slot&modulo] = group
+		}
+
+		if group.len < stringGroupSize {
+			group.append(hash, key, value)
 			break
 		}
 
@@ -895,46 +855,18 @@ func (t *StringTable) insert(key string, offset, value uint32) {
 	}
 }
 
-func (t *StringTable) append(key string) uint32 {
-	offset := uint32(len(t.words))
-	length := [4]byte{}
-	binary.LittleEndian.PutUint32(length[:], uint32(len(key)))
-	t.words = append(t.words, length[:]...)
-	t.words = append(t.words, key...)
-	return offset
-}
-
-type stringHeader struct {
-	ptr unsafe.Pointer
-	len int
-}
-
-func (t *StringTable) lookup(offset uint32) string {
-	/*
-		This function is equivalent to the following code but compiles down to
-		just a few memory loads.
-
-		n := binary.LittleEndian.Uint32(t.words[offset:])
-		i := 4 + offset
-		j := 4 + offset + uint32(n)
-		s := t.words[i:j:j]
-		return string(s)
-	*/
-	p := unsafe.Add(*(*unsafe.Pointer)(unsafe.Pointer(&t.words)), offset)
-	s := stringHeader{ptr: unsafe.Add(p, 4), len: int(*(*uint32)(p))}
-	return *(*string)(unsafe.Pointer(&s))
-}
-
 func (t *StringTable) hash(key string) uintptr {
 	return memhash(*(*unsafe.Pointer)(unsafe.Pointer(&key)), t.seed, uintptr(len(key)))
 }
 
 func (t *StringTable) Reset() {
-	for i := range t.table {
-		t.table[i] = stringGroup{}
-	}
 	t.len = 0
-	t.words = t.words[:0]
+
+	for _, group := range t.table {
+		if group != nil {
+			group.clear()
+		}
+	}
 }
 
 func (t *StringTable) Len() int {
@@ -945,10 +877,6 @@ func (t *StringTable) Cap() int {
 	return stringGroupSize * len(t.table)
 }
 
-func (t *StringTable) Words() []byte {
-	return t.words
-}
-
 func (t *StringTable) Probe(keys []string, values []int32) int {
 	return t.ProbeArray(sparse.MakeStringArray(keys), values)
 }
@@ -957,46 +885,94 @@ func (t *StringTable) ProbeArray(keys sparse.StringArray, values []int32) int {
 	if totalValues := t.len + keys.Len(); totalValues > t.maxLen {
 		t.grow(totalValues)
 	}
-	return t.probeArray(keys, values)
-}
 
-func (t *StringTable) probeArray(keys sparse.StringArray, values []int32) int {
-	_ = values[:keys.Len()]
-	inserts := 0
+	// defer func() {
+	// 	fmt.Println(t)
+	// }()
 
-	for i := 0; i < keys.Len(); i++ {
-		n := 0
-		values[i], n = t.probe(keys.Index(i))
-		inserts += n
+	inserts, lookups := t.probeArray(keys, values)
+
+	if lookups < keys.Len() {
+		for i, v := range values {
+			if v < 0 {
+				k := keys.Index(i)
+				v, exist := t.fallback[k]
+				if !exist {
+					if t.fallback == nil {
+						t.fallback = make(map[string]int32)
+					}
+					v = int32(t.len)
+					t.fallback[stringClone(k)] = v
+					t.len++
+					inserts++
+				}
+			}
+		}
 	}
 
 	return inserts
 }
 
-func (t *StringTable) probe(key string) (value int32, inserted int) {
-	hash := t.hash(key)
+func (t *StringTable) probeArray(keys sparse.StringArray, values []int32) (inserts, lookups int) {
+	_ = values[:keys.Len()]
+
+	for i := 0; i < keys.Len(); i++ {
+		n := 0
+		k := 0
+		v := int32(-1)
+
+		key := keys.Index(i)
+		buf := [4][stringAlignment]byte{}
+
+		if len(key) < int(unsafe.Sizeof(buf)) {
+			for j := range buf {
+				k += copy(buf[j][:], key[k:])
+				n += 1
+
+				if k == len(key) {
+					break
+				}
+			}
+
+			x := k / stringAlignment
+			y := k % stringAlignment
+			buf[x][y] = byte(len(key))
+
+			hash := t.hash(key)
+			v, n = t.probe(hash, buf[:n:n])
+			inserts += n
+			lookups += 1
+		}
+
+		values[i] = v
+	}
+
+	return inserts, lookups
+}
+
+func (t *StringTable) probe(hash uintptr, key stringKey) (value int32, inserted int) {
 	slot := hash
 	modulo := uintptr(len(t.table)) - 1
 
 	for {
-		group := &t.table[slot&modulo]
-		count := bits.OnesCount32(group.bits)
+		group := t.table[slot&modulo]
 
-		for j := 0; j < count; j++ {
-			if group.hashes[j] == uint32(hash) {
-				if t.lookup(group.offsets[j]) == key {
-					value = int32(group.values[j])
+		if group == nil {
+			group = newStringGroup()
+			t.table[slot&modulo] = group
+		}
+
+		for i := 0; i < int(group.len); i++ {
+			if group.sentinels[i] == uint8(hash) {
+				if stringKeyEqual(group.lookup(i), key) {
+					value = int32(group.values[i])
 					return
 				}
 			}
 		}
 
-		if count < stringGroupSize {
-			offset := t.append(key)
-			group.hashes[count] = uint32(hash)
-			group.offsets[count] = offset
-			group.values[count] = uint32(t.len)
-			group.bits = 1 << uint32(count)
+		if group.len < stringGroupSize {
+			group.append(hash, key, uint32(t.len))
 			value, inserted = int32(t.len), 1
 			t.len++
 			return
@@ -1004,6 +980,177 @@ func (t *StringTable) probe(key string) (value int32, inserted int) {
 
 		slot++
 	}
+}
+
+func (t *StringTable) String() string {
+	s := new(strings.Builder)
+	fmt.Fprintf(s, "[length:%d max-length:%d max-load:%g]{\n", t.len, t.maxLen, t.maxLoad)
+
+	for i := range t.table {
+		t.table[i].format(s, "\t")
+		s.WriteByte('\n')
+	}
+
+	if len(t.fallback) > 0 {
+		fmt.Fprintf(s, "\t(%d large keys)\n", len(t.fallback))
+
+		for k, v := range t.fallback {
+			fmt.Fprintf(s, "\tkey:%q\tvalue:%d\n", k, v)
+		}
+	}
+
+	s.WriteString("}")
+	return s.String()
+}
+
+const stringGroupSize = 16
+const stringAlignment = 16
+
+type stringKey [][stringAlignment]byte
+
+func (k stringKey) String() string {
+	s := new(strings.Builder)
+	s.WriteByte('|')
+	for i := range k {
+		if i != 0 {
+			s.WriteByte('|')
+		}
+		for _, c := range k[i] {
+			if c < 0x20 || c > 0x7F {
+				c = '.'
+			}
+			s.WriteByte(c)
+		}
+	}
+	s.WriteByte('|')
+	return s.String()
+}
+
+type sliceHeader struct {
+	ptr unsafe.Pointer
+	len int
+	cap int
+}
+
+type stringHeader struct {
+	ptr unsafe.Pointer
+	len int
+}
+
+type stringGroup struct {
+	sentinels [stringGroupSize]uint8
+	limits    [stringGroupSize]uint8
+	size      uint32
+	len       uint32
+	_         uint32
+	_         uint32
+	values    [stringGroupSize]uint32
+	hashes    [stringGroupSize]uintptr
+}
+
+func newStringGroup() *stringGroup {
+	b := make([]byte, unsafe.Sizeof(stringGroup{})+stringGroupSize*stringAlignment)
+	g := *(**stringGroup)(unsafe.Pointer(&b))
+	g.size = uint32(cap(b))
+	return g
+}
+
+func (g *stringGroup) append(hash uintptr, key stringKey, value uint32) *stringGroup {
+	offset := uintptr(0)
+	if g.len > 0 {
+		offset = uintptr(g.limits[g.len-1]) * stringAlignment
+	}
+
+	b := *(*[]byte)(unsafe.Pointer(&sliceHeader{
+		ptr: unsafe.Pointer(g),
+		len: int(unsafe.Sizeof(*g) + offset),
+		cap: int(g.size),
+	}))
+
+	if len(key) > 0 {
+		k := unsafe.Slice(&key[0][0], stringAlignment*len(key))
+		b = append(b, k...)
+	}
+
+	g = *(**stringGroup)(unsafe.Pointer(&b))
+	g.sentinels[g.len] = uint8(hash)
+	g.limits[g.len] = uint8(len(key))
+	if g.len > 0 {
+		g.limits[g.len] += g.limits[g.len-1]
+	}
+	g.values[g.len] = value
+	g.hashes[g.len] = hash
+	g.size = uint32(cap(b))
+	g.len++
+	return g
+}
+
+func (g *stringGroup) lookup(i int) stringKey {
+	offset := uintptr(0)
+	length := uintptr(g.limits[i])
+
+	if i > 0 {
+		offset += uintptr(g.limits[i-1])
+	}
+
+	length -= offset
+	offset *= stringAlignment
+
+	ptr := unsafe.Add(unsafe.Pointer(g), unsafe.Sizeof(*g)+offset)
+	len := int(length)
+	return unsafe.Slice((*[stringAlignment]byte)(ptr), len)
+}
+
+func (g *stringGroup) clear() {
+	*g = stringGroup{size: g.size}
+}
+
+func (g *stringGroup) format(s *strings.Builder, indent string) {
+	if g == nil {
+		s.WriteString(indent)
+		s.WriteString("<nil>")
+		return
+	}
+
+	s.WriteString(indent)
+	fmt.Fprintf(s, "[size:%d length:%d]{\n", g.size, g.len)
+
+	for i := range g.hashes[:g.len] {
+		s.WriteString(indent)
+		fmt.Fprintf(s, "\thash: %02X\tlimit: %d\tvalue: %d\tkey: %s\n",
+			g.hashes[i],
+			g.limits[i],
+			g.values[i],
+			g.lookup(i),
+		)
+	}
+
+	s.WriteString(indent)
+	s.WriteString("}")
+}
+
+func (g *stringGroup) String() string {
+	s := new(strings.Builder)
+	g.format(s, "")
+	return s.String()
+}
+
+func stringClone(s string) string {
+	b := make([]byte, len(s))
+	copy(b, s)
+	return *(*string)(unsafe.Pointer(&b))
+}
+
+func stringKeyEqual(k1, k2 stringKey) bool {
+	if len(k1) != len(k2) {
+		return false
+	}
+	for i := range k1 {
+		if k1[i] != k2[i] {
+			return false
+		}
+	}
+	return true
 }
 
 //go:noescape

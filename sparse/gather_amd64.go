@@ -2,7 +2,11 @@
 
 package sparse
 
-import "golang.org/x/sys/cpu"
+import (
+	_ "unsafe" // needed for go:linkname
+
+	"golang.org/x/sys/cpu"
+)
 
 func gatherBits(dst []byte, src Uint8Array) int {
 	n := min(len(dst)*8, src.Len())
@@ -81,3 +85,7 @@ func gather64AVX2(dst []uint64, src Uint64Array)
 
 //go:noescape
 func gather128(dst [][16]byte, src Uint128Array) int
+
+//go:noescape
+//go:linkname gatherString github.com/segmentio/parquet-go/sparse.gather128
+func gatherString(dst []string, src StringArray) int
