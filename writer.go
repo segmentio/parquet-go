@@ -893,9 +893,10 @@ func (c *writerColumn) flushFilterPages() error {
 		// If there is a dictionary, it contains all the values that we need to
 		// write to the filter.
 		if dict := c.dictionary; dict != nil {
-			if c.filter.bits == nil {
-				c.resizeBloomFilter(int64(dict.Len()))
-			}
+			// Need to always attempt to resize the filter, as the writer might
+			// be reused after resetting which would have reset the length of
+			// the filter to 0.
+			c.resizeBloomFilter(int64(dict.Len()))
 			if err := c.writePageToFilter(dict.Page()); err != nil {
 				return err
 			}
