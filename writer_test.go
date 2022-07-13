@@ -652,3 +652,33 @@ func TestWriterRepeatedUUIDDict(t *testing.T) {
 		t.Errorf("expected to get UUID %q back out, got %q", inputID, rowbuf[0][0].Bytes())
 	}
 }
+
+func TestWriterResetWithBloomFilters(t *testing.T) {
+	type Test struct {
+		Value string `parquet:"value,dict"`
+	}
+
+	writer := parquet.NewWriter(new(bytes.Buffer),
+		parquet.BloomFilters(
+			parquet.SplitBlockFilter("value"),
+		),
+	)
+
+	if err := writer.Write(&Test{Value: "foo"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	writer.Reset(new(bytes.Buffer))
+
+	if err := writer.Write(&Test{Value: "bar"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
