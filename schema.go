@@ -310,7 +310,8 @@ func structNodeOf(t reflect.Type) *structNode {
 
 	for i := range fields {
 		field := structField{name: fields[i].Name, index: fields[i].Index}
-		field.Node = makeNodeOf(fields[i].Type, fields[i].Name, fields[i].Tag.Get("parquet"))
+		node := makeNodeOf(fields[i].Type, fields[i].Name, fields[i].Tag.Get("parquet"))
+		field.Node = node
 		s.fields[i] = field
 	}
 
@@ -623,7 +624,7 @@ var (
 
 func makeNodeOf(t reflect.Type, name, tag string) Node {
 	var (
-		node       = nodeOf(t, tag)
+		node       Node
 		optional   bool
 		list       bool
 		encoded    encoding.Encoding
@@ -631,10 +632,10 @@ func makeNodeOf(t reflect.Type, name, tag string) Node {
 	)
 
 	setNode := func(n Node) {
-		//if node != nil {
-		//	throwInvalidNode(t,
-		//		"struct field has multiple logical parquet types declared", name, tag)
-		//}
+		if node != nil {
+			throwInvalidNode(t,
+				"struct field has multiple logical parquet types declared", name, tag)
+		}
 		node = n
 	}
 
@@ -668,6 +669,7 @@ func makeNodeOf(t reflect.Type, name, tag string) Node {
 
 	forEachTagOption(tag, func(option, args string) {
 		if t.Kind() == reflect.Map {
+			node = nodeOf(t, tag)
 			return
 		}
 		switch option {
@@ -801,6 +803,10 @@ func makeNodeOf(t reflect.Type, name, tag string) Node {
 			throwUnknownTag(t, name, option)
 		}
 	})
+
+	if node == nil {
+		node = nodeOf(t, tag)
+	}
 
 	if compressed != nil {
 		node = Compressed(node, compressed)
