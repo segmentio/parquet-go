@@ -946,7 +946,7 @@ func (t *stringTable16) probe(hash uintptr, key string, newValue int32) (value i
 	return
 }
 
-func probeStringKey(table []stringGroup16, hash uintptr, key string, newValue int32) (value int32, insert int) {
+func probeStringKeyDefault(table []stringGroup16, hash uintptr, key string, newValue int32) (value int32, insert int) {
 	slot := hash
 	modulo := uintptr(len(table)) - 1
 

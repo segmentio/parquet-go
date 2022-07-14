@@ -195,3 +195,103 @@ insert:
     SHLQ $4, R12
     MOVOU X0, (AX)(R12*1)
     JMP next
+
+GLOBL keymask<>(SB), RODATA|NOPTR, $32
+DATA keymask<>+0(SB)/8,  $0xFFFFFFFFFFFFFFFF
+DATA keymask<>+8(SB)/8,  $0xFFFFFFFFFFFFFFFF
+DATA keymask<>+16(SB)/8, $0x0000000000000000
+DATA keymask<>+24(SB)/8, $0x0000000000000000
+
+// func probeStringKeyAVX2(table []stringGroup16, hash uintptr, key string, newValue int32) (value int32, insert int)
+TEXT ·probeStringKeyAVX2(SB), NOSPLIT, $0-72
+    MOVQ table_base+0(FP), AX
+    MOVQ table_len+8(FP), BX
+    MOVQ hash+24(FP), SI
+    MOVQ key_base+32(FP), DX
+    MOVQ key_len+40(FP), DI
+
+    MOVL SI, R15 // slot
+    DECL BX      // modulo = len(table) - 1
+
+    MOVQ SI, X0
+    MOVQ DI, X1
+    VPBROADCASTB X0, X2
+    VPBROADCASTB X1, X3
+
+    MOVL $0xFFFF, R11
+    MOVL DI, CX
+    SUBL $16, CX
+    SHRL CX, R11
+
+    LEAQ keymask<>(SB), R9
+    MOVQ DI, R10
+    NEGQ R10
+    VMOVDQU 16(R9)(R10*1), X4
+
+loop:
+    MOVQ R15, R8
+    ANDQ BX, R8
+    IMUL3Q $384, R8, R8
+    LEAQ (AX)(R8*1), R8 // group = table[slot & modulo]
+
+    VMOVDQU (R8), X0   // group.hashes
+    VMOVDQU 16(R8), X1 // group.lengths
+    MOVL 32(R8), R9    // group.bits
+
+    VPCMPEQB X2, X0, X0
+    VPCMPEQB X3, X1, X1
+    VPAND X1, X0, X0
+    VPMOVMSKB X0, R10
+    ANDL R9, R10
+    JZ insert
+
+test:
+    TZCNTL R10, R12
+    MOVL R12, R13
+    SHLL $4, R13
+
+    VMOVDQU 128(R8)(R13*1), X0
+    VMOVDQU (DX), X1
+    VPAND X4, X1, X1
+    VPCMPEQB X1, X0, X0
+    VPMOVMSKB X0, R13
+    CMPL R11, R13
+    JE match
+
+    BLSRL R10, R10
+    JNZ test
+    JMP insert
+
+match:
+    MOVL 64(R8)(R12*4), R8
+    MOVQ R8, value+56(FP)
+    MOVQ $0, insert+64(FP)
+    RET
+
+insert:
+    POPCNTL R9, R9 // count
+    CMPL R9, $16
+    JE next
+
+    MOVL R9, CX
+    MOVL $1, R10
+    SHLL CX, R10
+    MOVL R10, 32(R8) // group.bits |= 1 << count
+
+    MOVB SI, (R8)(R9*1)   // group.hashes[count] = hash
+    MOVB DI, 16(R8)(R9*1) // group.lengths[count] = len(key)
+
+    MOVL newValue+48(FP), R11
+    MOVL R11, 64(R8)(R9*4)
+    MOVQ R11, value+56(FP)
+    MOVQ $1, insert+64(FP)
+
+    SHLL $4, R9
+    VMOVDQU (DX), X0
+    VPAND X4, X0, X0
+    VMOVDQU X0, 128(R8)(R9*1)
+    RET
+
+next:
+    INCQ R15
+    JMP loop

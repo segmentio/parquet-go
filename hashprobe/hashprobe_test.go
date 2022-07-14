@@ -171,9 +171,9 @@ func TestUint128TableProbeBulk(t *testing.T) {
 	}
 }
 
-func TestStringGroupSize(t *testing.T) {
-	if n := unsafe.Sizeof(stringGroup{}); n != 112 {
-		t.Errorf("size of string group is not 112 bytes: %d", n)
+func TestStringGroup16Size(t *testing.T) {
+	if n := unsafe.Sizeof(stringGroup16{}); n != 384 {
+		t.Errorf("size of string group is not 384 bytes: %d", n)
 	}
 }
 
