@@ -800,8 +800,16 @@ func NewStringTable(cap int, maxLoad float64) *StringTable {
 		maxLen:  maxLen,
 		maxLoad: maxLoad,
 		seed:    randSeed(),
-		table:   make([]*stringGroup, size),
+		table:   makeStringGroupTable(size),
 	}
+}
+
+func makeStringGroupTable(size int) []*stringGroup {
+	table := make([]*stringGroup, size)
+	for i := range table {
+		table[i] = newStringGroup()
+	}
+	return table
 }
 
 func (t *StringTable) grow(totalValues int) {
@@ -812,13 +820,13 @@ func (t *StringTable) grow(totalValues int) {
 		maxLen:  maxLen,
 		maxLoad: t.maxLoad,
 		seed:    t.seed,
-		table:   make([]*stringGroup, size),
+		table:   makeStringGroupTable(size),
 	}
 
 	for i := range t.table {
 		if group := t.table[i]; group != nil {
 			for j := 0; j < int(group.len); j++ {
-				tmp.insert(group.hashes[j], group.lookup(j), group.values[j])
+				tmp.insert(group.lookup(j), group.values[j])
 			}
 		}
 	}
@@ -834,17 +842,13 @@ func (t *StringTable) grow(totalValues int) {
 	*t = tmp
 }
 
-func (t *StringTable) insert(hash uintptr, key stringKey, value uint32) {
+func (t *StringTable) insert(key stringKey, value uint32) {
+	hash := t.hash(key)
 	slot := hash
 
 	modulo := uintptr(len(t.table)) - 1
 	for {
 		group := t.table[slot&modulo]
-
-		if group == nil {
-			group = newStringGroup()
-			t.table[slot&modulo] = group
-		}
 
 		if group.len < stringGroupSize {
 			group.append(hash, key, value)
@@ -855,17 +859,15 @@ func (t *StringTable) insert(hash uintptr, key stringKey, value uint32) {
 	}
 }
 
-func (t *StringTable) hash(key string) uintptr {
-	return memhash(*(*unsafe.Pointer)(unsafe.Pointer(&key)), t.seed, uintptr(len(key)))
+func (t *StringTable) hash(key stringKey) uintptr {
+	return memhash(*(*unsafe.Pointer)(unsafe.Pointer(&key)), t.seed, uintptr(key.size()))
 }
 
 func (t *StringTable) Reset() {
 	t.len = 0
 
 	for _, group := range t.table {
-		if group != nil {
-			group.clear()
-		}
+		group.clear()
 	}
 }
 
@@ -890,7 +892,8 @@ func (t *StringTable) ProbeArray(keys sparse.StringArray, values []int32) int {
 	// 	fmt.Println(t)
 	// }()
 
-	inserts, lookups := t.probeArray(keys, values)
+	inserts, lookups := multiProbeString(t.table, t.len, t.seed, keys, values)
+	t.len += inserts
 
 	if lookups < keys.Len() {
 		for i, v := range values {
@@ -913,73 +916,79 @@ func (t *StringTable) ProbeArray(keys sparse.StringArray, values []int32) int {
 	return inserts
 }
 
-func (t *StringTable) probeArray(keys sparse.StringArray, values []int32) (inserts, lookups int) {
+func multiProbeString(table []*stringGroup, tableLen int, seed uintptr, keys sparse.StringArray, values []int32) (inserts, lookups int) {
 	_ = values[:keys.Len()]
+	modulo := uintptr(len(table)) - 1
 
+probeKeys:
 	for i := 0; i < keys.Len(); i++ {
-		n := 0
-		k := 0
-		v := int32(-1)
-
 		key := keys.Index(i)
 		buf := [4][stringAlignment]byte{}
 
-		if len(key) < int(unsafe.Sizeof(buf)) {
-			for j := range buf {
-				k += copy(buf[j][:], key[k:])
-				n += 1
+		if len(key) >= int(unsafe.Sizeof(buf)) {
+			values[i] = -1
+		} else {
+			lookups++
 
-				if k == len(key) {
-					break
-				}
+			n := 0
+			k := 0
+			switch {
+			case len(key) < 1*stringAlignment:
+				k = copy(buf[0][:], key)
+				n = 1
+
+			case len(key) < 2*stringAlignment:
+				k += copy(buf[0][:], key[0:])
+				k += copy(buf[1][:], key[stringAlignment:])
+				n = 2
+
+			case len(key) < 3*stringAlignment:
+				k += copy(buf[0][:], key[0:])
+				k += copy(buf[1][:], key[1*stringAlignment:])
+				k += copy(buf[2][:], key[2*stringAlignment:])
+				n = 3
+
+			default:
+				k += copy(buf[0][:], key[0:])
+				k += copy(buf[1][:], key[1*stringAlignment:])
+				k += copy(buf[2][:], key[2*stringAlignment:])
+				k += copy(buf[3][:], key[3*stringAlignment:])
+				n = 4
 			}
 
 			x := k / stringAlignment
 			y := k % stringAlignment
 			buf[x][y] = byte(len(key))
 
-			hash := t.hash(key)
-			v, n = t.probe(hash, buf[:n:n])
-			inserts += n
-			lookups += 1
-		}
+			hash := memhash(unsafe.Pointer(&buf), seed, stringAlignment*uintptr(n))
+			slot := hash
 
-		values[i] = v
+			for {
+				group := table[slot&modulo]
+
+				for j := 0; j < int(group.len); j++ {
+					if group.hashes[j] == uint8(hash) {
+						if stringKeyEqual(group.lookup(j), buf[:n]) {
+							values[i] = int32(group.values[j])
+							continue probeKeys
+						}
+					}
+				}
+
+				if group.len < stringGroupSize {
+					group.append(hash, buf[:n], uint32(tableLen))
+					values[i] = int32(tableLen)
+					tableLen++
+					inserts++
+					continue probeKeys
+				}
+
+				slot++
+			}
+		}
 	}
 
 	return inserts, lookups
-}
-
-func (t *StringTable) probe(hash uintptr, key stringKey) (value int32, inserted int) {
-	slot := hash
-	modulo := uintptr(len(t.table)) - 1
-
-	for {
-		group := t.table[slot&modulo]
-
-		if group == nil {
-			group = newStringGroup()
-			t.table[slot&modulo] = group
-		}
-
-		for i := 0; i < int(group.len); i++ {
-			if group.sentinels[i] == uint8(hash) {
-				if stringKeyEqual(group.lookup(i), key) {
-					value = int32(group.values[i])
-					return
-				}
-			}
-		}
-
-		if group.len < stringGroupSize {
-			group.append(hash, key, uint32(t.len))
-			value, inserted = int32(t.len), 1
-			t.len++
-			return
-		}
-
-		slot++
-	}
 }
 
 func (t *StringTable) String() string {
@@ -1007,6 +1016,10 @@ const stringGroupSize = 16
 const stringAlignment = 16
 
 type stringKey [][stringAlignment]byte
+
+func (k stringKey) size() int {
+	return stringAlignment * len(k)
+}
 
 func (k stringKey) String() string {
 	s := new(strings.Builder)
@@ -1038,14 +1051,13 @@ type stringHeader struct {
 }
 
 type stringGroup struct {
-	sentinels [stringGroupSize]uint8
-	limits    [stringGroupSize]uint8
-	size      uint32
-	len       uint32
-	_         uint32
-	_         uint32
-	values    [stringGroupSize]uint32
-	hashes    [stringGroupSize]uintptr
+	hashes [stringGroupSize]uint8
+	limits [stringGroupSize]uint8
+	size   uint32
+	len    uint32
+	_      uint32
+	_      uint32
+	values [stringGroupSize]uint32
 }
 
 func newStringGroup() *stringGroup {
@@ -1073,13 +1085,12 @@ func (g *stringGroup) append(hash uintptr, key stringKey, value uint32) *stringG
 	}
 
 	g = *(**stringGroup)(unsafe.Pointer(&b))
-	g.sentinels[g.len] = uint8(hash)
+	g.hashes[g.len] = uint8(hash)
 	g.limits[g.len] = uint8(len(key))
 	if g.len > 0 {
 		g.limits[g.len] += g.limits[g.len-1]
 	}
 	g.values[g.len] = value
-	g.hashes[g.len] = hash
 	g.size = uint32(cap(b))
 	g.len++
 	return g
@@ -1106,12 +1117,6 @@ func (g *stringGroup) clear() {
 }
 
 func (g *stringGroup) format(s *strings.Builder, indent string) {
-	if g == nil {
-		s.WriteString(indent)
-		s.WriteString("<nil>")
-		return
-	}
-
 	s.WriteString(indent)
 	fmt.Fprintf(s, "[size:%d length:%d]{\n", g.size, g.len)
 
