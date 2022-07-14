@@ -930,31 +930,8 @@ probeKeys:
 		} else {
 			lookups++
 
-			n := 0
-			k := 0
-			switch {
-			case len(key) < 1*stringAlignment:
-				k = copy(buf[0][:], key)
-				n = 1
-
-			case len(key) < 2*stringAlignment:
-				k += copy(buf[0][:], key[0:])
-				k += copy(buf[1][:], key[stringAlignment:])
-				n = 2
-
-			case len(key) < 3*stringAlignment:
-				k += copy(buf[0][:], key[0:])
-				k += copy(buf[1][:], key[1*stringAlignment:])
-				k += copy(buf[2][:], key[2*stringAlignment:])
-				n = 3
-
-			default:
-				k += copy(buf[0][:], key[0:])
-				k += copy(buf[1][:], key[1*stringAlignment:])
-				k += copy(buf[2][:], key[2*stringAlignment:])
-				k += copy(buf[3][:], key[3*stringAlignment:])
-				n = 4
-			}
+			k := copy(stringKey(buf[:]).bytes(), key)
+			n := (len(key) + (stringAlignment - 1)) / stringAlignment
 
 			x := k / stringAlignment
 			y := k % stringAlignment
@@ -1016,6 +993,10 @@ const stringGroupSize = 16
 const stringAlignment = 16
 
 type stringKey [][stringAlignment]byte
+
+func (k stringKey) bytes() []byte {
+	return unsafecast.Uint128ToBytes(k)
+}
 
 func (k stringKey) size() int {
 	return stringAlignment * len(k)
