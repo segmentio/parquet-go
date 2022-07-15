@@ -18,6 +18,6 @@ func multiProbe128(table []byte, tableCap, tableLen int, hashes []uintptr, keys 
 	return multiProbe128Default(table, tableCap, tableLen, hashes, keys, values)
 }
 
-func probeStringKey(table []stringGroup16, hash uintptr, key string, newValue int32) (value int32, insert int) {
-	return probeStringKeyDefault(table, hash, key, newValue)
+func probeStringTable16(table []stringGroup16, hash uintptr, key string, newValue int32) (value int32, insert int) {
+	return probeStringTable16Default(table, hash, key, newValue)
 }

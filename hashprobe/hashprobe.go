@@ -910,7 +910,7 @@ func (t *stringTable16) insert(length int, key [16]byte, value int32, seed uintp
 		count := bits.OnesCount32(group.bits)
 
 		if count < stringGroupSize {
-			group.bits |= 1 << uint32(count)
+			group.bits = (group.bits << 1) | 1
 			group.hashes[count] = uint8(hash)
 			group.lengths[count] = uint8(length)
 			group.values[count] = value
@@ -941,12 +941,12 @@ func (t *stringTable16) reserve(numValues int, maxLoad float64, seed uintptr) {
 }
 
 func (t *stringTable16) probe(hash uintptr, key string, newValue int32) (value int32, insert int) {
-	value, insert = probeStringKey(t.groups, hash, key, newValue)
+	value, insert = probeStringTable16(t.groups, hash, key, newValue)
 	t.len += insert
 	return
 }
 
-func probeStringKeyDefault(table []stringGroup16, hash uintptr, key string, newValue int32) (value int32, insert int) {
+func probeStringTable16Default(table []stringGroup16, hash uintptr, key string, newValue int32) (value int32, insert int) {
 	slot := hash
 	modulo := uintptr(len(table)) - 1
 
@@ -967,7 +967,7 @@ func probeStringKeyDefault(table []stringGroup16, hash uintptr, key string, newV
 		}
 
 		if count < stringGroupSize {
-			group.bits |= 1 << uint32(count)
+			group.bits = (group.bits << 1) | 1
 			group.hashes[count] = uint8(hash)
 			group.lengths[count] = uint8(len(key))
 			group.values[count] = newValue

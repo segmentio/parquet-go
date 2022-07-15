@@ -196,14 +196,18 @@ insert:
     MOVOU X0, (AX)(R12*1)
     JMP next
 
-GLOBL keymask<>(SB), RODATA|NOPTR, $32
+GLOBL keymask<>(SB), RODATA|NOPTR, $64
 DATA keymask<>+0(SB)/8,  $0xFFFFFFFFFFFFFFFF
 DATA keymask<>+8(SB)/8,  $0xFFFFFFFFFFFFFFFF
-DATA keymask<>+16(SB)/8, $0x0000000000000000
-DATA keymask<>+24(SB)/8, $0x0000000000000000
+DATA keymask<>+16(SB)/8, $0xFFFFFFFFFFFFFFFF
+DATA keymask<>+24(SB)/8, $0xFFFFFFFFFFFFFFFF
+DATA keymask<>+32(SB)/8, $0x0000000000000000
+DATA keymask<>+40(SB)/8, $0x0000000000000000
+DATA keymask<>+48(SB)/8, $0x0000000000000000
+DATA keymask<>+56(SB)/8, $0x0000000000000000
 
-// func probeStringKeyAVX2(table []stringGroup16, hash uintptr, key string, newValue int32) (value int32, insert int)
-TEXT ·probeStringKeyAVX2(SB), NOSPLIT, $0-72
+// func probeStringTable16AVX2(table []stringGroup16, hash uintptr, key string, newValue int32) (value int32, insert int)
+TEXT ·probeStringTable16AVX2(SB), NOSPLIT, $0-72
     MOVQ table_base+0(FP), AX
     MOVQ table_len+8(FP), BX
     MOVQ hash+24(FP), SI
@@ -219,14 +223,11 @@ TEXT ·probeStringKeyAVX2(SB), NOSPLIT, $0-72
     VPBROADCASTB X1, X3
 
     MOVL $0xFFFF, R11
-    MOVL DI, CX
-    SUBL $16, CX
+    MOVL $16, CX
+    SUBL DI, CX
     SHRL CX, R11
 
-    LEAQ keymask<>(SB), R9
-    MOVQ DI, R10
-    NEGQ R10
-    VMOVDQU 16(R9)(R10*1), X4
+    VMOVDQU (DX), X4
 
 loop:
     MOVQ R15, R8
@@ -250,11 +251,10 @@ test:
     MOVL R12, R13
     SHLL $4, R13
 
-    VMOVDQU 128(R8)(R13*1), X0
-    VMOVDQU (DX), X1
-    VPAND X4, X1, X1
-    VPCMPEQB X1, X0, X0
-    VPMOVMSKB X0, R13
+    VMOVDQU 128(R8)(R13*1), X5
+    VPCMPEQB X4, X5, X6
+    VPMOVMSKB X6, R13
+    ANDL R11, R13
     CMPL R11, R13
     JE match
 
@@ -264,32 +264,34 @@ test:
 
 match:
     MOVL 64(R8)(R12*4), R8
-    MOVQ R8, value+56(FP)
+    MOVL R8, value+56(FP)
     MOVQ $0, insert+64(FP)
     RET
 
 insert:
-    POPCNTL R9, R9 // count
-    CMPL R9, $16
+    POPCNTL R9, R10 // count
+    CMPL R10, $16
     JE next
 
-    MOVL R9, CX
-    MOVL $1, R10
-    SHLL CX, R10
-    MOVL R10, 32(R8) // group.bits |= 1 << count
-
-    MOVB SI, (R8)(R9*1)   // group.hashes[count] = hash
-    MOVB DI, 16(R8)(R9*1) // group.lengths[count] = len(key)
+    SHLL $1, R9
+    ORL $1, R9
+    MOVL R9, 32(R8)        // group.bits = (group.bits << 1) | 1
+    MOVB SI, (R8)(R10*1)   // group.hashes[count] = hash
+    MOVB DI, 16(R8)(R10*1) // group.lengths[count] = len(key)
 
     MOVL newValue+48(FP), R11
-    MOVL R11, 64(R8)(R9*4)
-    MOVQ R11, value+56(FP)
+    MOVL R11, 64(R8)(R10*4)
+    MOVL R11, value+56(FP)
     MOVQ $1, insert+64(FP)
 
-    SHLL $4, R9
+    LEAQ keymask<>(SB), R12
+    NEGQ DI
+    VMOVDQU 32(R12)(DI*1), X1
+
+    SHLL $4, R10
     VMOVDQU (DX), X0
-    VPAND X4, X0, X0
-    VMOVDQU X0, 128(R8)(R9*1)
+    VPAND X1, X0, X0
+    VMOVDQU X0, 128(R8)(R10*1)
     RET
 
 next:
