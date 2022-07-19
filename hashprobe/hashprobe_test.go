@@ -171,6 +171,12 @@ func TestUint128TableProbeBulk(t *testing.T) {
 	}
 }
 
+func TestStringGroup16Size(t *testing.T) {
+	if n := unsafe.Sizeof(stringGroup16{}); n != 384 {
+		t.Errorf("size of string group is not 384 bytes: %d", n)
+	}
+}
+
 const (
 	benchmarkProbesPerLoop = 500
 	benchmarkMaxLoad       = 0.9
