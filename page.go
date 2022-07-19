@@ -1004,7 +1004,6 @@ func (page *byteArrayPage) valueAt(offset uint32) []byte {
 	length := binary.LittleEndian.Uint32(page.values[offset:])
 	i := 4 + offset
 	j := 4 + offset + length
-	//fmt.Printf("valueAt(%d) => [%d:%d]\n", offset, i, j)
 	return page.values[i:j:j]
 }
 
