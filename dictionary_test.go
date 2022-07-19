@@ -70,9 +70,10 @@ func testDictionary(t *testing.T, typ parquet.Type, numValues int) {
 		}
 
 		// second insert is a no-op since all the values are already in the dictionary
+		lastDictLen := dict.Len()
 		dict.Insert(indexes[i:j], values[i:j])
 
-		if dict.Len() != len(mapping) {
+		if dict.Len() != lastDictLen {
 			for k, index := range indexes[i:j] {
 				if index >= int32(len(mapping)) {
 					t.Log(values[i+k])
