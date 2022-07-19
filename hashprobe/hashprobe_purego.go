@@ -21,3 +21,7 @@ func multiProbe128(table []byte, tableCap, tableLen int, hashes []uintptr, keys 
 func probeStringTable16(table []stringGroup16, hash uintptr, key string, newValue int32) (value int32, insert int) {
 	return probeStringTable16Default(table, hash, key, newValue)
 }
+
+func probeStringTable32(table []stringGroup32, hash uintptr, key string, newValue int32) (value int32, insert int) {
+	return probeStringTable32Default(table, hash, key, newValue)
+}

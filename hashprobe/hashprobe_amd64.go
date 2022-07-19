@@ -40,9 +40,17 @@ func multiProbe128(table []byte, tableCap, tableLen int, hashes []uintptr, keys 
 //go:noescape
 func probeStringTable16AVX2(table []stringGroup16, hash uintptr, key string, newValue int32) (value int32, insert int)
 
-func probeStringTable16(table []stringGroup16, hash uintptr, key string, newValue int32) (value int32, insert int) {
+//go:noescape
+func probeStringTable32AVX2(table []stringGroup32, hash uintptr, key string, newValue int32) (value int32, insert int)
+
+var (
+	probeStringTable16 = probeStringTable16Default
+	probeStringTable32 = probeStringTable32Default
+)
+
+func init() {
 	if cpu.X86.HasAVX2 {
-		return probeStringTable16AVX2(table, hash, key, newValue)
+		probeStringTable16 = probeStringTable16AVX2
+		probeStringTable32 = probeStringTable32AVX2
 	}
-	return probeStringTable16Default(table, hash, key, newValue)
 }

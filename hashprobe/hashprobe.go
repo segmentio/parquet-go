@@ -788,20 +788,26 @@ type StringTable struct {
 	maxLoad float64
 	seed    uintptr
 	table16 stringTable16
+	table32 stringTable32
 	table   map[string]int32
 }
 
 func NewStringTable(cap int, maxLoad float64) *StringTable {
+	if cap < (2 * stringGroupSize) {
+		cap = 2 * stringGroupSize
+	}
 	return &StringTable{
 		maxLoad: maxLoad,
 		seed:    randSeed(),
-		table16: makeStringTable16(cap, maxLoad),
+		table16: makeStringTable16(cap/2, maxLoad),
+		table32: makeStringTable32(cap/2, maxLoad),
 	}
 }
 
 func (t *StringTable) Reset() {
 	t.len = 0
 	t.table16.reset()
+	t.table32.reset()
 
 	for k := range t.table {
 		delete(t.table, k)
@@ -813,7 +819,7 @@ func (t *StringTable) Len() int {
 }
 
 func (t *StringTable) Cap() int {
-	return t.table16.size() + len(t.table)
+	return t.table16.size() + t.table32.size() + len(t.table)
 }
 
 func (t *StringTable) Probe(keys []string, values []int32) int {
@@ -822,17 +828,36 @@ func (t *StringTable) Probe(keys []string, values []int32) int {
 
 func (t *StringTable) ProbeArray(keys sparse.StringArray, values []int32) int {
 	t.table16.reserve(keys.Len(), t.maxLoad, t.seed)
+	t.table32.reserve(keys.Len(), t.maxLoad, t.seed)
 	inserts := 0
+
+	// fmt.Println("PROBE!")
+	// defer func() {
+	// 	fmt.Println("(16)")
+	// 	for i := range t.table16.groups {
+	// 		fmt.Printf("%+v\n", t.table16.groups[i])
+	// 	}
+	// 	fmt.Println("(32)")
+	// 	for i := range t.table32.groups {
+	// 		fmt.Printf("%+v\n", t.table32.groups[i])
+	// 	}
+	// }()
 
 	for i := range values[:keys.Len()] {
 		key := keys.Index(i)
 
 		switch {
-		case len(key) <= 16:
-			value, insert := t.table16.probe(strhash(key, t.seed), key, int32(t.len))
-			values[i] = value
-			t.len += insert
-			inserts += insert
+		// case len(key) <= 16:
+		// 	value, insert := t.table16.probe(strhash(key, t.seed), key, int32(t.len))
+		// 	values[i] = value
+		// 	t.len += insert
+		// 	inserts += insert
+
+		// case len(key) <= 32:
+		// 	value, insert := t.table32.probe(strhash(key, t.seed), key, int32(t.len))
+		// 	values[i] = value
+		// 	t.len += insert
+		// 	inserts += insert
 
 		default:
 			value, exist := t.table[key]
@@ -947,6 +972,125 @@ func (t *stringTable16) probe(hash uintptr, key string, newValue int32) (value i
 }
 
 func probeStringTable16Default(table []stringGroup16, hash uintptr, key string, newValue int32) (value int32, insert int) {
+	slot := hash
+	modulo := uintptr(len(table)) - 1
+
+	for {
+		group := &table[slot&modulo]
+		count := bits.OnesCount32(group.bits)
+
+		for i := range group.hashes[:count] {
+			h := group.hashes[i]
+			n := group.lengths[i]
+
+			if h == uint8(hash) && n == uint8(len(key)) {
+				if string(group.keys[i][:n]) == key {
+					value = group.values[i]
+					return
+				}
+			}
+		}
+
+		if count < stringGroupSize {
+			group.bits = (group.bits << 1) | 1
+			group.hashes[count] = uint8(hash)
+			group.lengths[count] = uint8(len(key))
+			group.values[count] = newValue
+			copy(group.keys[count][:], key)
+			value, insert = newValue, 1
+			return
+		}
+
+		slot++
+	}
+}
+
+type stringTable32 struct {
+	len    int
+	maxLen int
+	groups []stringGroup32
+}
+
+type stringGroup32 struct {
+	hashes  [stringGroupSize]uint8
+	lengths [stringGroupSize]uint8
+	bits    uint32
+	_       [7]uint32
+	values  [stringGroupSize]int32
+	keys    [stringGroupSize][32]byte
+}
+
+func makeStringTable32(numValues int, maxLoad float64) stringTable32 {
+	size, maxLen := tableSizeAndMaxLen(stringGroupSize, numValues, maxLoad)
+	return stringTable32{
+		maxLen: maxLen,
+		groups: make([]stringGroup32, size),
+	}
+}
+
+func (t *stringTable32) grow(numValues int, maxLoad float64, seed uintptr) {
+	tmp := makeStringTable32(numValues, maxLoad)
+	tmp.len = t.len
+
+	for i := range t.groups {
+		group := &t.groups[i]
+		count := bits.OnesCount32(group.bits)
+
+		for j, n := range group.lengths[:count] {
+			tmp.insert(int(n), group.keys[j], group.values[j], seed)
+		}
+	}
+
+	*t = tmp
+}
+
+func (t *stringTable32) insert(length int, key [32]byte, value int32, seed uintptr) {
+	hash := hash(key[:length], seed)
+	slot := hash
+	modulo := uintptr(len(t.groups)) - 1
+
+	for {
+		group := &t.groups[slot&modulo]
+		count := bits.OnesCount32(group.bits)
+
+		if count < stringGroupSize {
+			group.bits = (group.bits << 1) | 1
+			group.hashes[count] = uint8(hash)
+			group.lengths[count] = uint8(length)
+			group.values[count] = value
+			group.keys[count] = key
+			break
+		}
+
+		slot++
+	}
+}
+
+func (t *stringTable32) size() int {
+	return stringGroupSize * len(t.groups)
+}
+
+func (t *stringTable32) reset() {
+	t.len = 0
+
+	for i := range t.groups {
+		t.groups[i] = stringGroup32{}
+	}
+}
+
+func (t *stringTable32) reserve(numValues int, maxLoad float64, seed uintptr) {
+	if numValues += t.len; numValues > t.maxLen {
+		t.grow(numValues, maxLoad, seed)
+	}
+}
+
+func (t *stringTable32) probe(hash uintptr, key string, newValue int32) (value int32, insert int) {
+	value, insert = probeStringTable32(t.groups, hash, key, newValue)
+	t.len += insert
+	return
+}
+
+func probeStringTable32Default(table []stringGroup32, hash uintptr, key string, newValue int32) (value int32, insert int) {
 	slot := hash
 	modulo := uintptr(len(table)) - 1
 
