@@ -160,10 +160,11 @@ func (d *booleanDictionary) insert(indexes []int32, rows sparse.Array) {
 		d.bits = plain.AppendBoolean(d.bits, int(d.table[1]), true)
 	}
 
+	values := rows.Uint8Array()
 	dict := d.table
 
 	for i := 0; i < rows.Len(); i++ {
-		v := *(*byte)(rows.Index(i)) & 1
+		v := values.Index(i) & 1
 		indexes[i] = dict[v]
 	}
 }
