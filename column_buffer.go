@@ -722,10 +722,12 @@ func (col *repeatedColumnBuffer) ReadValuesAt(values []Value, offset int64) (int
 type booleanColumnBuffer struct{ booleanPage }
 
 func newBooleanColumnBuffer(typ Type, columnIndex int16, numValues int32) *booleanColumnBuffer {
+	// Boolean values are bit-packed, we can fit up to 8 values per byte.
+	bufferSize := (numValues + 7) / 8
 	return &booleanColumnBuffer{
 		booleanPage: booleanPage{
 			typ:         typ,
-			bits:        make([]byte, 0, numValues),
+			bits:        make([]byte, 0, bufferSize),
 			columnIndex: ^columnIndex,
 		},
 	}
