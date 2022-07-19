@@ -1002,9 +1002,9 @@ func (page *byteArrayPage) Buffer() BufferedPage { return page }
 
 func (page *byteArrayPage) valueAt(offset uint32) []byte {
 	length := binary.LittleEndian.Uint32(page.values[offset:])
-	j := 4 + offset
-	k := 4 + offset + length
-	return page.values[j:k:k]
+	i := 4 + offset
+	j := 4 + offset + length
+	return page.values[i:j:j]
 }
 
 func (page *byteArrayPage) min() (min []byte) {

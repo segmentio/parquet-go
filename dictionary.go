@@ -3,6 +3,7 @@ package parquet
 import (
 	"io"
 	"math/bits"
+	"strings"
 	"unsafe"
 
 	"github.com/segmentio/parquet-go/deprecated"
@@ -159,10 +160,11 @@ func (d *booleanDictionary) insert(indexes []int32, rows sparse.Array) {
 		d.bits = plain.AppendBoolean(d.bits, int(d.table[1]), true)
 	}
 
+	values := rows.Uint8Array()
 	dict := d.table
 
 	for i := 0; i < rows.Len(); i++ {
-		v := *(*byte)(rows.Index(i)) & 1
+		v := values.Index(i) & 1
 		indexes[i] = dict[v]
 	}
 }
@@ -242,7 +244,7 @@ func (d *int32Dictionary) Insert(indexes []int32, values []Value) {
 }
 
 func (d *int32Dictionary) init(indexes []int32) {
-	d.table = hashprobe.NewInt32Table(cap(d.values), hashprobeTableMaxLoad)
+	d.table = hashprobe.NewInt32Table(len(d.values), hashprobeTableMaxLoad)
 
 	n := min(len(d.values), len(indexes))
 
@@ -342,7 +344,7 @@ func (d *int64Dictionary) Insert(indexes []int32, values []Value) {
 }
 
 func (d *int64Dictionary) init(indexes []int32) {
-	d.table = hashprobe.NewInt64Table(cap(d.values), hashprobeTableMaxLoad)
+	d.table = hashprobe.NewInt64Table(len(d.values), hashprobeTableMaxLoad)
 
 	n := min(len(d.values), len(indexes))
 
@@ -439,7 +441,7 @@ func (d *int96Dictionary) insertValues(indexes []int32, count int, valueAt func(
 	_ = indexes[:count]
 
 	if d.hashmap == nil {
-		d.hashmap = make(map[deprecated.Int96]int32, cap(d.values))
+		d.hashmap = make(map[deprecated.Int96]int32, len(d.values))
 		for i, v := range d.values {
 			d.hashmap[v] = int32(i)
 		}
@@ -524,7 +526,7 @@ func (d *floatDictionary) Insert(indexes []int32, values []Value) {
 }
 
 func (d *floatDictionary) init(indexes []int32) {
-	d.table = hashprobe.NewFloat32Table(cap(d.values), hashprobeTableMaxLoad)
+	d.table = hashprobe.NewFloat32Table(len(d.values), hashprobeTableMaxLoad)
 
 	n := min(len(d.values), len(indexes))
 
@@ -611,7 +613,7 @@ func (d *doubleDictionary) Insert(indexes []int32, values []Value) {
 }
 
 func (d *doubleDictionary) init(indexes []int32) {
-	d.table = hashprobe.NewFloat64Table(cap(d.values), hashprobeTableMaxLoad)
+	d.table = hashprobe.NewFloat64Table(len(d.values), hashprobeTableMaxLoad)
 
 	n := min(len(d.values), len(indexes))
 
@@ -671,28 +673,28 @@ func (d *doubleDictionary) Page() BufferedPage {
 
 type byteArrayDictionary struct {
 	byteArrayPage
+	table   map[string]int32
 	offsets []uint32
-	hashmap map[string]int32
 }
 
 func newByteArrayDictionary(typ Type, columnIndex int16, numValues int32, values []byte) *byteArrayDictionary {
 	d := &byteArrayDictionary{
-		offsets: make([]uint32, 0, numValues),
 		byteArrayPage: byteArrayPage{
 			typ:         typ,
 			values:      values,
-			numValues:   numValues,
 			columnIndex: ^columnIndex,
 		},
+		offsets: make([]uint32, 0, numValues),
 	}
 
 	for i := 0; i < len(values); {
-		n := plain.ByteArrayLength(values[i:])
 		d.offsets = append(d.offsets, uint32(i))
+		n := plain.ByteArrayLength(values[i:])
 		i += plain.ByteArrayLengthSize
 		i += n
 	}
 
+	d.numValues = int32(len(d.offsets))
 	return d
 }
 
@@ -709,36 +711,46 @@ func (d *byteArrayDictionary) Insert(indexes []int32, values []Value) {
 	d.insert(indexes, makeArrayValue(values, unsafe.Offsetof(model.ptr)))
 }
 
-func (d *byteArrayDictionary) insert(indexes []int32, rows sparse.Array) {
-	_ = indexes[:rows.Len()]
+func (d *byteArrayDictionary) init() {
+	d.table = make(map[string]int32, d.numValues)
 
-	if d.hashmap == nil {
-		d.hashmap = make(map[string]int32, cap(d.offsets))
-		for index, offset := range d.offsets {
-			d.hashmap[string(d.valueAt(offset))] = int32(index)
-		}
+	for i := 0; i < len(d.values); {
+		n := plain.ByteArrayLength(d.values[i:])
+		i += plain.ByteArrayLengthSize
+		s := d.values[i : i+n]
+		i += n
+		d.table[string(s)] = int32(len(d.table))
+	}
+}
+
+func (d *byteArrayDictionary) insert(indexes []int32, rows sparse.Array) {
+	if d.table == nil {
+		d.init()
 	}
 
-	for i := 0; i < rows.Len(); i++ {
-		value := *(*string)(rows.Index(i))
+	values := rows.StringArray()
 
-		index, exists := d.hashmap[value]
+	for i := range indexes {
+		value := values.Index(i)
+
+		index, exists := d.table[value]
 		if !exists {
-			index = int32(len(d.offsets))
-			value = d.append(value)
-			d.hashmap[value] = index
+			value = cloneString(value)
+			index = d.numValues
+			d.numValues++
+			d.table[value] = index
+			d.offsets = append(d.offsets, uint32(len(d.values)))
+			d.values = plain.AppendByteArrayString(d.values, value)
 		}
 
 		indexes[i] = index
 	}
 }
 
-func (d *byteArrayDictionary) append(value string) string {
-	offset := len(d.values)
-	d.values = plain.AppendByteArrayString(d.values, value)
-	d.offsets = append(d.offsets, uint32(offset))
-	d.numValues++
-	return string(d.values[offset+plain.ByteArrayLengthSize : len(d.values)])
+func cloneString(s string) string {
+	b := new(strings.Builder)
+	b.WriteString(s)
+	return b.String()
 }
 
 func (d *byteArrayDictionary) Lookup(indexes []int32, values []Value) {
@@ -782,7 +794,10 @@ func (d *byteArrayDictionary) Reset() {
 	d.offsets = d.offsets[:0]
 	d.values = d.values[:0]
 	d.numValues = 0
-	d.hashmap = nil
+
+	for k := range d.table {
+		delete(d.table, k)
+	}
 }
 
 func (d *byteArrayDictionary) Page() BufferedPage {
@@ -933,7 +948,7 @@ func (d *uint32Dictionary) Insert(indexes []int32, values []Value) {
 }
 
 func (d *uint32Dictionary) init(indexes []int32) {
-	d.table = hashprobe.NewUint32Table(cap(d.values), hashprobeTableMaxLoad)
+	d.table = hashprobe.NewUint32Table(len(d.values), hashprobeTableMaxLoad)
 
 	n := min(len(d.values), len(indexes))
 
@@ -1020,7 +1035,7 @@ func (d *uint64Dictionary) Insert(indexes []int32, values []Value) {
 }
 
 func (d *uint64Dictionary) init(indexes []int32) {
-	d.table = hashprobe.NewUint64Table(cap(d.values), hashprobeTableMaxLoad)
+	d.table = hashprobe.NewUint64Table(len(d.values), hashprobeTableMaxLoad)
 
 	n := min(len(d.values), len(indexes))
 
@@ -1138,7 +1153,7 @@ func (d *be128Dictionary) Insert(indexes []int32, values []Value) {
 }
 
 func (d *be128Dictionary) init(indexes []int32) {
-	d.table = hashprobe.NewUint128Table(cap(d.values), 0.75)
+	d.table = hashprobe.NewUint128Table(len(d.values), 0.75)
 
 	n := min(len(d.values), len(indexes))
 

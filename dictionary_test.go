@@ -25,7 +25,7 @@ var dictionaryTypes = [...]parquet.Type{
 
 func TestDictionary(t *testing.T) {
 	for _, typ := range dictionaryTypes {
-		for _, numValues := range []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 1e2, 1e3, 1e4} {
+		for _, numValues := range []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 17, 1e2, 1e3, 1e4} {
 			t.Run(fmt.Sprintf("%s/N=%d", typ, numValues), func(t *testing.T) {
 				testDictionary(t, typ, numValues)
 			})
@@ -67,6 +67,20 @@ func testDictionary(t *testing.T, typ parquet.Type, numValues int) {
 			if index < 0 || index >= int32(dict.Len()) {
 				t.Fatalf("index out of bounds: %d", index)
 			}
+		}
+
+		// second insert is a no-op since all the values are already in the dictionary
+		lastDictLen := dict.Len()
+		dict.Insert(indexes[i:j], values[i:j])
+
+		if dict.Len() != lastDictLen {
+			for k, index := range indexes[i:j] {
+				if index >= int32(len(mapping)) {
+					t.Log(values[i+k])
+				}
+			}
+
+			t.Fatalf("%d values were inserted on the second pass", dict.Len()-len(mapping))
 		}
 
 		r.Shuffle(j-i, func(a, b int) {
