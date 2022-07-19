@@ -3,6 +3,7 @@ package parquet
 import (
 	"io"
 	"math/bits"
+	"strings"
 	"unsafe"
 
 	"github.com/segmentio/parquet-go/deprecated"
@@ -671,7 +672,7 @@ func (d *doubleDictionary) Page() BufferedPage {
 
 type byteArrayDictionary struct {
 	byteArrayPage
-	table   *hashprobe.StringTable
+	table   map[string]int32
 	offsets []uint32
 }
 
@@ -711,24 +712,15 @@ func (d *byteArrayDictionary) Insert(indexes []int32, values []Value) {
 	d.insert(indexes, makeArrayValue(values, unsafe.Offsetof(model.ptr)))
 }
 
-func (d *byteArrayDictionary) init(indexes []int32) {
-	d.table = hashprobe.NewStringTable(int(d.numValues), hashprobeTableMaxLoad)
-
-	const chunkSize = insertsTargetCacheFootprint / 32
-	values := make([]string, min(chunkSize, len(indexes)), chunkSize)
+func (d *byteArrayDictionary) init() {
+	d.table = make(map[string]int32, d.numValues)
 
 	for i := 0; i < len(d.values); {
-		j := 0
-
-		for j < len(values) && i < len(d.values) {
-			n := plain.ByteArrayLength(d.values[i:])
-			i += plain.ByteArrayLengthSize
-			s := d.values[i : i+n]
-			i += n
-			values[j] = *(*string)(unsafe.Pointer(&s))
-		}
-
-		d.table.Probe(values[:j], indexes[:j])
+		n := plain.ByteArrayLength(d.values[i:])
+		i += plain.ByteArrayLengthSize
+		s := d.values[i : i+n]
+		i += n
+		d.table[string(s)] = int32(len(d.table))
 	}
 }
 
@@ -736,7 +728,7 @@ func (d *byteArrayDictionary) insert(indexes []int32, rows sparse.Array) {
 	const chunkSize = insertsTargetCacheFootprint / 32
 
 	if d.table == nil {
-		d.init(indexes)
+		d.init()
 	}
 
 	values := rows.StringArray()
@@ -744,16 +736,24 @@ func (d *byteArrayDictionary) insert(indexes []int32, rows sparse.Array) {
 	for i := 0; i < values.Len(); i += chunkSize {
 		j := min(i+chunkSize, values.Len())
 
-		if d.table.ProbeArray(values.Slice(i, j), indexes[i:j:j]) > 0 {
-			for k, index := range indexes[i:j] {
-				if index == int32(len(d.offsets)) {
-					d.offsets = append(d.offsets, uint32(len(d.values)))
-					d.values = plain.AppendByteArrayString(d.values, values.Index(i+k))
-				}
+		for k := range indexes[i:j] {
+			v := values.Index(i + k)
+
+			index, exists := d.table[v]
+			if !exists {
+				index = int32(len(d.table))
+				d.table[cloneString(v)] = index
 			}
-			d.numValues = int32(len(d.offsets))
+
+			indexes[k] = index
 		}
 	}
+}
+
+func cloneString(s string) string {
+	b := new(strings.Builder)
+	b.WriteString(s)
+	return b.String()
 }
 
 func (d *byteArrayDictionary) Lookup(indexes []int32, values []Value) {
@@ -797,8 +797,9 @@ func (d *byteArrayDictionary) Reset() {
 	d.offsets = d.offsets[:0]
 	d.values = d.values[:0]
 	d.numValues = 0
-	if d.table != nil {
-		d.table.Reset()
+
+	for k := range d.table {
+		delete(d.table, k)
 	}
 }
 
