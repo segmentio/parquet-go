@@ -164,6 +164,24 @@ func TestDeconstructionReconstruction(t *testing.T) {
 		},
 
 		{
+			scenario: "top level slice pointer",
+			input: struct {
+				List []*List2
+			}{
+				List: []*List2{
+					{Value: "foo"},
+					{Value: "bar"},
+				},
+			},
+			values: [][]parquet.Value{
+				0: {
+					parquet.ValueOf("foo").Level(0, 2, 0),
+					parquet.ValueOf("bar").Level(1, 2, 0),
+				},
+			},
+		},
+
+		{
 			scenario: "sub level nil pointer field",
 			input: User{
 				ID: uuid.MustParse("A65B576D-9299-4769-9D93-04BE0583F027"),
