@@ -703,9 +703,7 @@ func (d *byteArrayDictionary) Len() int { return len(d.offsets) }
 
 func (d *byteArrayDictionary) Index(i int32) Value { return d.makeValueBytes(d.index(i)) }
 
-func (d *byteArrayDictionary) index(i int32) []byte {
-	return d.valueAt(d.offsets[i])
-}
+func (d *byteArrayDictionary) index(i int32) []byte { return d.valueAt(d.offsets[i]) }
 
 func (d *byteArrayDictionary) Insert(indexes []int32, values []Value) {
 	model := Value{}
