@@ -88,7 +88,7 @@ func gather128(dst [][16]byte, src Uint128Array) int
 
 // On AMD64 the `string` type is made of a 64 bit pointer and a 64 bit integer,
 // for a total of 128 bit which means that we can use the same algorithm as
-// gather128 to lookup string values, the memory layout of the arguments being
+// gather128 to lookup string values, since the memory layout of the arguments is
 // the same.
 func gatherString(dst []string, src StringArray) int {
 	return gather128(*(*[][16]byte)(unsafe.Pointer(&dst)), *(*Uint128Array)(unsafe.Pointer(&src)))
