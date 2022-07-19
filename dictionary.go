@@ -735,15 +735,19 @@ func (d *byteArrayDictionary) insert(indexes []int32, rows sparse.Array) {
 		j := min(i+chunkSize, values.Len())
 
 		for k := range indexes[i:j] {
-			v := values.Index(i + k)
+			value := values.Index(i + k)
 
-			index, exists := d.table[v]
+			index, exists := d.table[value]
 			if !exists {
-				index = int32(len(d.table))
-				d.table[cloneString(v)] = index
+				value = cloneString(value)
+				index = d.numValues
+				d.numValues++
+				d.table[value] = index
+				d.offsets = append(d.offsets, uint32(len(d.values)))
+				d.values = plain.AppendByteArrayString(d.values, value)
 			}
 
-			indexes[k] = index
+			indexes[i+k] = index
 		}
 	}
 }
