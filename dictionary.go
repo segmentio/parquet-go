@@ -724,32 +724,26 @@ func (d *byteArrayDictionary) init() {
 }
 
 func (d *byteArrayDictionary) insert(indexes []int32, rows sparse.Array) {
-	const chunkSize = insertsTargetCacheFootprint / 32
-
 	if d.table == nil {
 		d.init()
 	}
 
 	values := rows.StringArray()
 
-	for i := 0; i < values.Len(); i += chunkSize {
-		j := min(i+chunkSize, values.Len())
+	for i := range indexes {
+		value := values.Index(i)
 
-		for k := range indexes[i:j] {
-			value := values.Index(i + k)
-
-			index, exists := d.table[value]
-			if !exists {
-				value = cloneString(value)
-				index = d.numValues
-				d.numValues++
-				d.table[value] = index
-				d.offsets = append(d.offsets, uint32(len(d.values)))
-				d.values = plain.AppendByteArrayString(d.values, value)
-			}
-
-			indexes[i+k] = index
+		index, exists := d.table[value]
+		if !exists {
+			value = cloneString(value)
+			index = d.numValues
+			d.numValues++
+			d.table[value] = index
+			d.offsets = append(d.offsets, uint32(len(d.values)))
+			d.values = plain.AppendByteArrayString(d.values, value)
 		}
+
+		indexes[i] = index
 	}
 }
 
