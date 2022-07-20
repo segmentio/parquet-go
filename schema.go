@@ -82,13 +82,13 @@ type Schema struct {
 // and the data will not be written into the parquet file(s).
 // Note that a field with name "-" can still be generated using the tag "-,".
 //
-// Map key configuration can be pass using one or multiple tags prefixed with `key=`.
-// If the tag doesn't contain the `key=` prefix, the configuration will be applied on the value.
+// Map key configuration can be pass using the `parquet-key` tag. This tag will follow the
+// same properties than the `parquet` tag.
 //
 // For example, the following will set the int64 key of the map to be a timestamp:
 //
 //  type Actions struct {
-//    Action map[int64]string `parquet:",key=timestamp"`
+//    Action map[int64]string `parquet-key:",timestamp"`
 //  }
 //
 // The schema name is the Go type name of the value.
@@ -107,7 +107,7 @@ func schemaOf(model reflect.Type) *Schema {
 	if model.Kind() != reflect.Struct {
 		panic("cannot construct parquet schema from value of type " + model.String())
 	}
-	schema = NewSchema(model.Name(), nodeOf(model))
+	schema = NewSchema(model.Name(), nodeOf(model, nil))
 	if actual, loaded := cachedSchemas.LoadOrStore(model, schema); loaded {
 		schema = actual.(*Schema)
 	}
@@ -312,8 +312,10 @@ func structNodeOf(t reflect.Type) *structNode {
 
 	for i := range fields {
 		field := structField{name: fields[i].Name, index: fields[i].Index}
-		node := makeNodeOf(fields[i].Type, fields[i].Name, fields[i].Tag.Get("parquet"))
-		field.Node = node
+		field.Node = makeNodeOf(fields[i].Type, fields[i].Name, []string{
+			fields[i].Tag.Get("parquet"),
+			fields[i].Tag.Get("parquet-key"),
+		})
 		s.fields[i] = field
 	}
 
@@ -425,20 +427,20 @@ func (f *structField) Value(base reflect.Value) reflect.Value {
 	}
 }
 
-func nodeString(t reflect.Type, name, tag string) string {
-	return name + " " + t.String() + " " + tag
+func nodeString(t reflect.Type, name string, tag ...string) string {
+	return fmt.Sprintf("%s %s %v", name, t.String(), tag)
 }
 
-func throwInvalidTag(t reflect.Type, name, tag string) {
+func throwInvalidTag(t reflect.Type, name string, tag string) {
 	panic(tag + " is an invalid parquet tag: " + nodeString(t, name, tag))
 }
 
-func throwUnknownTag(t reflect.Type, name, tag string) {
+func throwUnknownTag(t reflect.Type, name string, tag string) {
 	panic(tag + " is an unrecognized parquet tag: " + nodeString(t, name, tag))
 }
 
-func throwInvalidNode(t reflect.Type, msg, name, tag string) {
-	panic(msg + ": " + nodeString(t, name, tag))
+func throwInvalidNode(t reflect.Type, msg, name string, tag ...string) {
+	panic(msg + ": " + nodeString(t, name, tag...))
 }
 
 // FixedLenByteArray decimals are sized based on precision
@@ -464,7 +466,7 @@ func forEachStructTagOption(sf reflect.StructField, do func(t reflect.Type, opti
 	}
 }
 
-func nodeOf(t reflect.Type, tag ...string) Node {
+func nodeOf(t reflect.Type, tag []string) Node {
 	switch t {
 	case reflect.TypeOf(deprecated.Int96{}):
 		return Leaf(Int96Type)
@@ -499,13 +501,13 @@ func nodeOf(t reflect.Type, tag ...string) Node {
 		n = String()
 
 	case reflect.Ptr:
-		n = Optional(nodeOf(t.Elem()))
+		n = Optional(nodeOf(t.Elem(), nil))
 
 	case reflect.Slice:
 		if elem := t.Elem(); elem.Kind() == reflect.Uint8 { // []byte?
 			n = Leaf(ByteArrayType)
 		} else {
-			n = Repeated(nodeOf(elem))
+			n = Repeated(nodeOf(elem, nil))
 		}
 
 	case reflect.Array:
@@ -514,11 +516,17 @@ func nodeOf(t reflect.Type, tag ...string) Node {
 		}
 
 	case reflect.Map:
-		var keyTag, valueTag string
+		var valueTag, keyTag string
 		if len(tag) > 0 {
-			keyTag, valueTag = splitKeyValueTag(tag[0])
+			valueTag = tag[0]
+			if len(tag) > 1 {
+				keyTag = tag[1]
+			}
 		}
-		n = Map(makeNodeOf(t.Key(), t.Name(), keyTag), makeNodeOf(t.Elem(), t.Name(), valueTag))
+		n = Map(
+			makeNodeOf(t.Key(), t.Name(), []string{keyTag}),
+			makeNodeOf(t.Elem(), t.Name(), []string{valueTag}),
+		)
 
 	case reflect.Struct:
 		return structNodeOf(t)
@@ -624,7 +632,7 @@ var (
 	_ WriterOption   = (*Schema)(nil)
 )
 
-func makeNodeOf(t reflect.Type, name, tag string) Node {
+func makeNodeOf(t reflect.Type, name string, tag []string) Node {
 	var (
 		node       Node
 		optional   bool
@@ -635,36 +643,35 @@ func makeNodeOf(t reflect.Type, name, tag string) Node {
 
 	setNode := func(n Node) {
 		if node != nil {
-			throwInvalidNode(t,
-				"struct field has multiple logical parquet types declared", name, tag)
+			throwInvalidNode(t, "struct field has multiple logical parquet types declared", name, tag...)
 		}
 		node = n
 	}
 
 	setOptional := func() {
 		if optional {
-			throwInvalidNode(t, "struct field has multiple declaration of the optional tag", name, tag)
+			throwInvalidNode(t, "struct field has multiple declaration of the optional tag", name, tag...)
 		}
 		optional = true
 	}
 
 	setList := func() {
 		if list {
-			throwInvalidNode(t, "struct field has multiple declaration of the list tag", name, tag)
+			throwInvalidNode(t, "struct field has multiple declaration of the list tag", name, tag...)
 		}
 		list = true
 	}
 
 	setEncoding := func(e encoding.Encoding) {
 		if encoded != nil {
-			throwInvalidNode(t, "struct field has encoding declared multiple time", name, tag)
+			throwInvalidNode(t, "struct field has encoding declared multiple time", name, tag...)
 		}
 		encoded = e
 	}
 
 	setCompression := func(c compress.Codec) {
 		if compressed != nil {
-			throwInvalidNode(t, "struct field has compression codecs declared multiple times", name, tag)
+			throwInvalidNode(t, "struct field has compression codecs declared multiple times", name, tag...)
 		}
 		compressed = c
 	}
@@ -740,7 +747,7 @@ func makeNodeOf(t reflect.Type, name, tag string) Node {
 		case "list":
 			switch t.Kind() {
 			case reflect.Slice:
-				element := nodeOf(t.Elem())
+				element := nodeOf(t.Elem(), nil)
 				setNode(element)
 				setList()
 			default:
@@ -829,8 +836,8 @@ func makeNodeOf(t reflect.Type, name, tag string) Node {
 	return node
 }
 
-func forEachTagOption(tag string, do func(option, args string)) {
-	if tag != "" {
+func forEachTagOption(tags []string, do func(option, args string)) {
+	for _, tag := range tags {
 		_, tag = split(tag) // skip the field name
 		for tag != "" {
 			option := ""

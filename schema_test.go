@@ -121,12 +121,19 @@ func TestSchemaOf(t *testing.T) {
 
 		{
 			value: new(struct {
-				M map[int64]string `parquet:",key=timestamp"`
+				A map[int64]string `parquet:"," parquet-key:",timestamp"`
+				B map[int64]string
 			}),
 			print: `message {
-	required group M (MAP) {
+	required group A (MAP) {
 		repeated group key_value {
 			required int64 key (TIMESTAMP(isAdjustedToUTC=true,unit=MILLIS));
+			required binary value (STRING);
+		}
+	}
+	required group B (MAP) {
+		repeated group key_value {
+			required int64 key (INT(64,true));
 			required binary value (STRING);
 		}
 	}
