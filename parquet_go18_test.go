@@ -3,6 +3,7 @@
 package parquet_test
 
 import (
+	"bytes"
 	"fmt"
 	"log"
 
@@ -47,4 +48,71 @@ func ExampleWriteFile() {
 	}
 
 	// Output:
+}
+
+func ExampleRead_any() {
+	type Row struct{ FirstName, LastName string }
+
+	buf := new(bytes.Buffer)
+	err := parquet.Write(buf, []Row{
+		{FirstName: "Luke", LastName: "Skywalker"},
+		{FirstName: "Han", LastName: "Solo"},
+		{FirstName: "R2", LastName: "D2"},
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	file := bytes.NewReader(buf.Bytes())
+
+	rows, err := parquet.Read[any](file, file.Size())
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, row := range rows {
+		fmt.Printf("%q\n", row)
+	}
+
+	// Output:
+	// map["FirstName":"Luke" "LastName":"Skywalker"]
+	// map["FirstName":"Han" "LastName":"Solo"]
+	// map["FirstName":"R2" "LastName":"D2"]
+}
+
+func ExampleWrite_any() {
+	schema := parquet.SchemaOf(struct {
+		FirstName string
+		LastName  string
+	}{})
+
+	buf := new(bytes.Buffer)
+	err := parquet.Write[any](
+		buf,
+		[]any{
+			map[string]string{"FirstName": "Luke", "LastName": "Skywalker"},
+			map[string]string{"FirstName": "Han", "LastName": "Solo"},
+			map[string]string{"FirstName": "R2", "LastName": "D2"},
+		},
+		schema,
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	file := bytes.NewReader(buf.Bytes())
+
+	rows, err := parquet.Read[any](file, file.Size())
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, row := range rows {
+		fmt.Printf("%q\n", row)
+	}
+
+	// Output:
+	// map["FirstName":"Luke" "LastName":"Skywalker"]
+	// map["FirstName":"Han" "LastName":"Solo"]
+	// map["FirstName":"R2" "LastName":"D2"]
 }
