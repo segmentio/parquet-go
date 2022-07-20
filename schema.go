@@ -88,7 +88,7 @@ type Schema struct {
 // For example, the following will set the int64 key of the map to be a timestamp:
 //
 //  type Actions struct {
-//    Action map[int64]string `parquet-key:",timestamp"`
+//    Action map[int64]string `parquet:"," parquet-key:",timestamp"`
 //  }
 //
 // The schema name is the Go type name of the value.
@@ -557,20 +557,6 @@ func splitOptionArgs(s string) (option, args string) {
 		args = "()"
 	}
 	return
-}
-
-func splitKeyValueTag(s string) (key, value string) {
-	_, tag := split(s)
-	for _, w := range strings.Split(tag, ",") {
-		if strings.HasPrefix(w, "key=") {
-			key += "," + strings.TrimPrefix(w, "key=")
-		} else {
-			value += "," + w
-		}
-
-	}
-	return key, value
-
 }
 
 func parseDecimalArgs(args string) (scale, precision int, err error) {
