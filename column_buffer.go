@@ -337,7 +337,7 @@ func (col *optionalColumnBuffer) writeValues(rows sparse.Array, levels columnLev
 	// we still need to output a row to the buffer to record the definition
 	// level.
 	if rows.Len() == 0 {
-		col.definitionLevels = append(col.definitionLevels, 0)
+		col.definitionLevels = append(col.definitionLevels, levels.definitionLevel)
 		col.rows = append(col.rows, -1)
 		return
 	}
