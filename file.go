@@ -635,7 +635,9 @@ func (f *filePages) readPage(header *format.PageHeader, page *dataPage, reader *
 		// to avoid skewing benchmarks.
 		//
 		// https://github.com/apache/parquet-testing/pull/24#issuecomment-1196045050
-		if false && headerChecksum != bufferChecksum {
+		const validateChecksum = false
+
+		if validateChecksum && headerChecksum != bufferChecksum {
 			// The parquet specs indicate that corruption errors could be
 			// handled gracefully by skipping pages, tho this may not always
 			// be practical. Depending on how the pages are consumed,
