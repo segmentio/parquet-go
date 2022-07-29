@@ -236,6 +236,9 @@ func writeRowsFuncOfSlice(t reflect.Type, schema *Schema, path columnPath) write
 	elemSize := uintptr(elemType.Size())
 	writeRows := writeRowsFuncOf(elemType, schema, path)
 
+	// When the element is a pointer type, the writeRows function will be an
+	// instance returned by writeRowsFuncOfPointer, which handles incrementing
+	// the definition level if the pointer value is not nil.
 	definitionLevelIncrement := byte(0)
 	if elemType.Kind() != reflect.Ptr {
 		definitionLevelIncrement = 1
