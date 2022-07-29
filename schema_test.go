@@ -139,6 +139,48 @@ func TestSchemaOf(t *testing.T) {
 	}
 }`,
 		},
+
+		{
+			value: new(struct {
+				A map[int64]string `parquet:",optional" parquet-value:",json"`
+			}),
+			print: `message {
+	optional group A (MAP) {
+		repeated group key_value {
+			required int64 key (INT(64,true));
+			required binary value (JSON);
+		}
+	}
+}`,
+		},
+
+		{
+			value: new(struct {
+				A map[int64]string `parquet:",optional"`
+			}),
+			print: `message {
+	optional group A (MAP) {
+		repeated group key_value {
+			required int64 key (INT(64,true));
+			required binary value (STRING);
+		}
+	}
+}`,
+		},
+
+		{
+			value: new(struct {
+				A map[int64]string `parquet:",optional" parquet-value:",json" parquet-key:",timestamp(microsecond)"`
+			}),
+			print: `message {
+	optional group A (MAP) {
+		repeated group key_value {
+			required int64 key (TIMESTAMP(isAdjustedToUTC=true,unit=MICROS));
+			required binary value (JSON);
+		}
+	}
+}`,
+		},
 	}
 
 	for _, test := range tests {

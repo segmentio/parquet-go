@@ -235,13 +235,56 @@ func fieldRepetitionTypeOf(node Node) format.FieldRepetitionType {
 	}
 }
 
-type Group map[string]Node
+type Group struct {
+	nodes    map[string]Node
+	optional bool
+}
+
+type GroupNodes map[string]Node
+
+func NewGroup(n map[string]Node) Group {
+	return Group{nodes: n}
+}
+
+func groupWith(t reflect.Type, tag string) Group {
+	var (
+		group    Group
+		optional bool
+	)
+
+	setOptional := func() {
+		if optional {
+			throwInvalidNode(t, "group has multiple declaration of the optional tag", "", tag)
+		}
+		optional = true
+	}
+
+	forEachTagOption([]string{tag}, func(option, args string) {
+		switch option {
+		case "":
+			return
+		case "optional":
+			setOptional()
+		default:
+			throwUnknownTag(t, "", tag)
+		}
+
+	})
+
+	group = Group{nodes: make(map[string]Node)}
+
+	if optional {
+		group.optional = true
+	}
+
+	return group
+}
 
 func (g Group) String() string { return sprint("", g) }
 
 func (g Group) Type() Type { return groupType{} }
 
-func (g Group) Optional() bool { return false }
+func (g Group) Optional() bool { return g.optional }
 
 func (g Group) Repeated() bool { return false }
 
@@ -250,8 +293,8 @@ func (g Group) Required() bool { return true }
 func (g Group) Leaf() bool { return false }
 
 func (g Group) Fields() []Field {
-	groupFields := make([]groupField, 0, len(g))
-	for name, node := range g {
+	groupFields := make([]groupField, 0, len(g.nodes))
+	for name, node := range g.nodes {
 		groupFields = append(groupFields, groupField{
 			Node: node,
 			name: name,

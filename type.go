@@ -1395,7 +1395,18 @@ func (t *timestampType) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, 
 //
 // https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#lists
 func List(of Node) Node {
-	return listNode{Group{"list": Repeated(Group{"element": of})}}
+	l := listNode{
+		Group: Group{
+			nodes: map[string]Node{
+				"list": Repeated(Group{
+					nodes: map[string]Node{
+						"element": of,
+					},
+				}),
+			},
+		},
+	}
+	return l
 }
 
 type listNode struct{ Group }
@@ -1454,12 +1465,22 @@ func (t *listType) Decode(dst, _ []byte, _ encoding.Encoding) ([]byte, error) {
 //
 // https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#maps
 func Map(key, value Node) Node {
-	return mapNode{Group{
-		"key_value": Repeated(Group{
+	return mapNode{NewGroup(GroupNodes{
+		"key_values": Repeated(NewGroup(GroupNodes{
 			"key":   Required(key),
 			"value": value,
-		}),
-	}}
+		})),
+	})}
+}
+
+func MapWith(key, value Node, g Group) Node {
+	g.nodes = GroupNodes{
+		"key_value": Repeated(NewGroup(GroupNodes{
+			"key":   Required(key),
+			"value": value,
+		})),
+	}
+	return mapNode{g}
 }
 
 type mapNode struct{ Group }

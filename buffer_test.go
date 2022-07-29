@@ -200,9 +200,11 @@ func TestBuffer(t *testing.T) {
 								{scenario: "descending", sorting: parquet.Descending("data"), sortFunc: descending},
 							} {
 								t.Run(ordering.scenario, func(t *testing.T) {
-									schema := parquet.NewSchema("test", parquet.Group{
-										"data": mod.function(parquet.Leaf(config.typ)),
-									})
+									schema := parquet.NewSchema("test", parquet.NewGroup(
+										map[string]parquet.Node{
+											"data": mod.function(parquet.Leaf(config.typ)),
+										},
+									))
 
 									options := []parquet.RowGroupOption{
 										schema,

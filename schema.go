@@ -315,6 +315,7 @@ func structNodeOf(t reflect.Type) *structNode {
 		field.Node = makeNodeOf(fields[i].Type, fields[i].Name, []string{
 			fields[i].Tag.Get("parquet"),
 			fields[i].Tag.Get("parquet-key"),
+			fields[i].Tag.Get("parquet-value"),
 		})
 		s.fields[i] = field
 	}
@@ -521,16 +522,21 @@ func nodeOf(t reflect.Type, tag []string) Node {
 		}
 
 	case reflect.Map:
-		var valueTag, keyTag string
+		var mapTag, valueTag, keyTag string
 		if len(tag) > 0 {
-			valueTag = tag[0]
+			mapTag = tag[0]
 			if len(tag) > 1 {
 				keyTag = tag[1]
 			}
+			if len(tag) >= 2 {
+				valueTag = tag[2]
+			}
 		}
-		n = Map(
+
+		n = MapWith(
 			makeNodeOf(t.Key(), t.Name(), []string{keyTag}),
 			makeNodeOf(t.Elem(), t.Name(), []string{valueTag}),
+			groupWith(t, mapTag),
 		)
 
 	case reflect.Struct:
