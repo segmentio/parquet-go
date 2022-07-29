@@ -286,10 +286,10 @@ value 10: R:0 D:0 V:10.0
 		dump: `row group 0
 --------------------------------------------------------------------------------
 owner:              BINARY ZSTD DO:0 FPO:4 SZ:81/73/0.90 VC:2 ENC:DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column]
-ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:85 SZ:179/129/0.72 VC:3 ENC:DELTA_LENGTH_BYTE_ARRAY,RLE ST:[no stats for this column]
+ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:85 SZ:179/129/0.72 VC:3 ENC:RLE,DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column]
 contacts:
-.name:              BINARY UNCOMPRESSED DO:0 FPO:264 SZ:138/138/1.00 VC:3 ENC:DELTA_LENGTH_BYTE_ARRAY,RLE ST:[no stats for this column]
-.phoneNumber:       BINARY ZSTD DO:0 FPO:402 SZ:113/95/0.84 VC:3 ENC:DELTA_LENGTH_BYTE_ARRAY,RLE ST:[no stats for this column]
+.name:              BINARY UNCOMPRESSED DO:0 FPO:264 SZ:138/138/1.00 VC:3 ENC:RLE,DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column]
+.phoneNumber:       BINARY ZSTD DO:0 FPO:402 SZ:113/95/0.84 VC:3 ENC:RLE,DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column]
 
     owner TV=2 RL=0 DL=0
     ----------------------------------------------------------------------------
@@ -368,10 +368,10 @@ value 3: R:0 D:0 V:<null>
 		dump: `row group 0
 --------------------------------------------------------------------------------
 owner:              BINARY ZSTD DO:0 FPO:4 SZ:86/78/0.91 VC:2 ENC:DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column]
-ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:90 SZ:172/122/0.71 VC:3 ENC:DELTA_LENGTH_BYTE_ARRAY,RLE ST:[no stats for this column]
+ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:90 SZ:172/122/0.71 VC:3 ENC:RLE,DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column]
 contacts:
-.name:              BINARY UNCOMPRESSED DO:0 FPO:262 SZ:132/132/1.00 VC:3 ENC:DELTA_LENGTH_BYTE_ARRAY,RLE ST:[no stats for this column]
-.phoneNumber:       BINARY ZSTD DO:0 FPO:394 SZ:108/90/0.83 VC:3 ENC:DELTA_LENGTH_BYTE_ARRAY,RLE ST:[no stats for this column]
+.name:              BINARY UNCOMPRESSED DO:0 FPO:262 SZ:132/132/1.00 VC:3 ENC:RLE,DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column]
+.phoneNumber:       BINARY ZSTD DO:0 FPO:394 SZ:108/90/0.83 VC:3 ENC:RLE,DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column]
 
     owner TV=2 RL=0 DL=0
     ----------------------------------------------------------------------------
