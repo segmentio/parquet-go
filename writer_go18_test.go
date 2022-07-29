@@ -143,3 +143,66 @@ func TestIssue272(t *testing.T) {
 		}
 	}
 }
+
+func TestIssue279(t *testing.T) {
+	type T2 struct {
+		Id   int    `parquet:",plain,optional"`
+		Name string `parquet:",plain,optional"`
+	}
+
+	type T1 struct {
+		TA []*T2
+	}
+
+	type T struct {
+		T1 *T1
+	}
+
+	const nRows = 1
+
+	row := T{
+		T1: &T1{
+			TA: []*T2{
+				&T2{
+					Id:   43,
+					Name: "john",
+				},
+			},
+		},
+	}
+
+	rows := make([]T, nRows)
+	for i := range rows {
+		rows[i] = row
+	}
+
+	b := new(bytes.Buffer)
+	w := parquet.NewGenericWriter[T](b)
+
+	if _, err := w.Write(rows); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	f := bytes.NewReader(b.Bytes())
+	r := parquet.NewGenericReader[T](f)
+
+	parquetRows := make([]parquet.Row, nRows)
+	n, err := r.ReadRows(parquetRows)
+	if err != nil && err != io.EOF {
+		t.Fatal(err)
+	}
+	if n != nRows {
+		t.Fatalf("wrong number of rows read: want=%d got=%d", nRows, n)
+	}
+	for _, r := range parquetRows {
+		if d := r[0].DefinitionLevel(); d != 3 {
+			t.Errorf("wrong definition level for column 0: %d", d)
+		}
+		if d := r[1].DefinitionLevel(); d != 3 {
+			t.Errorf("wrong definition level for column 1: %d", d)
+		}
+	}
+}
