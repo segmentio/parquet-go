@@ -82,8 +82,11 @@ type Schema struct {
 // and the data will not be written into the parquet file(s).
 // Note that a field with name "-" can still be generated using the tag "-,".
 //
-// Map key configuration can be pass using the `parquet-key` tag. This tag will follow the
-// same properties than the `parquet` tag.
+// The configuration of Parquet maps are done via two tags:
+//   - The `parquet-key` tag allows to configure the key of a map.
+//   - The `parquet-value` tag allows to configure the values of a map.
+//
+// When configuring a Parquet map, the `parquet` tag will configure map itself.
 //
 // For example, the following will set the int64 key of the map to be a timestamp:
 //
