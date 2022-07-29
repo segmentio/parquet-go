@@ -201,7 +201,7 @@ func TestBuffer(t *testing.T) {
 							} {
 								t.Run(ordering.scenario, func(t *testing.T) {
 									schema := parquet.NewSchema("test", parquet.NewGroup(
-										map[string]parquet.Node{
+										parquet.GroupNodes{
 											"data": mod.function(parquet.Leaf(config.typ)),
 										},
 									))

@@ -1395,18 +1395,14 @@ func (t *timestampType) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, 
 //
 // https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#lists
 func List(of Node) Node {
-	l := listNode{
-		Group: Group{
-			nodes: map[string]Node{
-				"list": Repeated(Group{
-					nodes: map[string]Node{
-						"element": of,
-					},
-				}),
-			},
-		},
+	return listNode{
+		Group: NewGroup(GroupNodes{
+			"list": Repeated(NewGroup(GroupNodes{
+				"element": of,
+			})),
+
+		}),
 	}
-	return l
 }
 
 type listNode struct{ Group }
