@@ -62,7 +62,7 @@ func (values *Values) assertKind(kind Kind) {
 
 func (values *Values) assertSize(size int) {
 	if size != values.size {
-		panic(fmt.Sprintf("cannot convert values of size %s to size %s", values.size, size))
+		panic(fmt.Sprintf("cannot convert values of size %d to size %d", values.size, size))
 	}
 }
 
