@@ -7,7 +7,7 @@ import (
 	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
-type Kind int
+type Kind int32
 
 const (
 	Undefined Kind = iota
@@ -49,7 +49,7 @@ func (kind Kind) String() string {
 
 type Values struct {
 	kind    Kind
-	size    int
+	size    int32
 	data    []byte
 	offsets []uint32
 }
@@ -61,7 +61,7 @@ func (values *Values) assertKind(kind Kind) {
 }
 
 func (values *Values) assertSize(size int) {
-	if size != values.size {
+	if size != int(values.size) {
 		panic(fmt.Sprintf("cannot convert values of size %d to size %d", values.size, size))
 	}
 }
@@ -121,7 +121,7 @@ func (values *Values) ByteArray() (data []byte, offsets []uint32) {
 
 func (values *Values) FixedLenByteArray() (data []byte, size int) {
 	values.assertKind(FixedLenByteArray)
-	return values.data, values.size
+	return values.data, int(values.size)
 }
 
 func (values *Values) Uint32() []uint32 {
@@ -200,7 +200,7 @@ func ByteArrayValues(values []byte, offsets []uint32) Values {
 func FixedLenByteArrayValues(values []byte, size int) Values {
 	return Values{
 		kind: FixedLenByteArray,
-		size: size,
+		size: int32(size),
 		data: values,
 	}
 }

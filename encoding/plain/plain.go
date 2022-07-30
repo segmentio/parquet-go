@@ -72,8 +72,7 @@ func (e *Encoding) EncodeFixedLenByteArray(dst []byte, src encoding.Values) ([]b
 }
 
 func (e *Encoding) DecodeBoolean(dst encoding.Values, src []byte) (encoding.Values, error) {
-	values := append(dst.Boolean()[:0], src...)
-	return encoding.BooleanValues(values), nil
+	return encoding.BooleanValues(append(dst.Boolean()[:0], src...)), nil
 }
 
 func (e *Encoding) DecodeInt32(dst encoding.Values, src []byte) (encoding.Values, error) {
