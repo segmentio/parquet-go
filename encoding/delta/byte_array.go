@@ -26,7 +26,7 @@ func (e *ByteArrayEncoding) Encoding() format.Encoding {
 	return format.DeltaByteArray
 }
 
-func (e *ByteArrayEncoding) EncodeByteArray(dst, src []byte) ([]byte, error) {
+func (e *ByteArrayEncoding) EncodeByteArray(dst []byte, src encoding.Values) ([]byte, error) {
 	prefix := getInt32Buffer()
 	defer putInt32Buffer(prefix)
 
@@ -35,13 +35,14 @@ func (e *ByteArrayEncoding) EncodeByteArray(dst, src []byte) ([]byte, error) {
 
 	totalSize := 0
 	lastValue := ([]byte)(nil)
+	values, _ := src.ByteArray()
 
-	for i := 0; i < len(src); {
-		r := len(src) - i
+	for i := 0; i < len(values); {
+		r := len(values) - i
 		if r < plain.ByteArrayLengthSize {
 			return dst[:0], plain.ErrTooShort(r)
 		}
-		n := plain.ByteArrayLength(src[i:])
+		n := plain.ByteArrayLength(values[i:])
 		i += plain.ByteArrayLengthSize
 		r -= plain.ByteArrayLengthSize
 		if n > r {
@@ -50,7 +51,7 @@ func (e *ByteArrayEncoding) EncodeByteArray(dst, src []byte) ([]byte, error) {
 		if n > plain.MaxByteArrayLength {
 			return dst[:0], plain.ErrTooLarge(n)
 		}
-		v := src[i : i+n : i+n]
+		v := values[i : i+n : i+n]
 		p := 0
 
 		if len(v) <= maxLinearSearchPrefixLength {
@@ -79,7 +80,7 @@ func (e *ByteArrayEncoding) EncodeByteArray(dst, src []byte) ([]byte, error) {
 
 	for k, p := range prefix.values {
 		n := p + length.values[k]
-		j += copy(b[j:], src[i+int(p):i+int(n)])
+		j += copy(b[j:], values[i+int(p):i+int(n)])
 		i += plain.ByteArrayLengthSize
 		i += int(n)
 	}
@@ -87,16 +88,17 @@ func (e *ByteArrayEncoding) EncodeByteArray(dst, src []byte) ([]byte, error) {
 	return dst, nil
 }
 
-func (e *ByteArrayEncoding) EncodeFixedLenByteArray(dst, src []byte, size int) ([]byte, error) {
+func (e *ByteArrayEncoding) EncodeFixedLenByteArray(dst []byte, src encoding.Values) ([]byte, error) {
 	// The parquet specs say that this encoding is only supported for BYTE_ARRAY
 	// values, but the reference Java implementation appears to support
 	// FIXED_LEN_BYTE_ARRAY as well:
 	// https://github.com/apache/parquet-mr/blob/5608695f5777de1eb0899d9075ec9411cfdf31d3/parquet-column/src/main/java/org/apache/parquet/column/Encoding.java#L211
+	data, size := src.FixedLenByteArray()
 	if size < 0 || size > encoding.MaxFixedLenByteArraySize {
 		return dst[:0], encoding.Error(e, encoding.ErrInvalidArgument)
 	}
-	if (len(src) % size) != 0 {
-		return dst[:0], encoding.ErrEncodeInvalidInputSize(e, "FIXED_LEN_BYTE_ARRAY", len(src))
+	if (len(data) % size) != 0 {
+		return dst[:0], encoding.ErrEncodeInvalidInputSize(e, "FIXED_LEN_BYTE_ARRAY", len(data))
 	}
 
 	prefix := getInt32Buffer()
@@ -108,8 +110,8 @@ func (e *ByteArrayEncoding) EncodeFixedLenByteArray(dst, src []byte, size int) (
 	totalSize := 0
 	lastValue := ([]byte)(nil)
 
-	for i := size; i <= len(src); i += size {
-		v := src[i-size : i : i]
+	for i := size; i <= len(data); i += size {
+		v := data[i-size : i : i]
 		p := linearSearchPrefixLength(lastValue, v)
 		n := size - p
 		prefix.values = append(prefix.values, int32(p))
@@ -128,16 +130,14 @@ func (e *ByteArrayEncoding) EncodeFixedLenByteArray(dst, src []byte, size int) (
 	j := 0
 
 	for _, p := range prefix.values {
-		j += copy(b[j:], src[i+int(p):i+size])
+		j += copy(b[j:], data[i+int(p):i+size])
 		i += size
 	}
 
 	return dst, nil
 }
 
-func (e *ByteArrayEncoding) DecodeByteArray(dst, src []byte) ([]byte, error) {
-	dst = dst[:0]
-
+func (e *ByteArrayEncoding) DecodeByteArray(dst encoding.Values, src []byte) (encoding.Values, error) {
 	prefix := getInt32Buffer()
 	defer putInt32Buffer(prefix)
 
@@ -156,11 +156,13 @@ func (e *ByteArrayEncoding) DecodeByteArray(dst, src []byte) ([]byte, error) {
 	if len(prefix.values) != len(suffix.values) {
 		return dst, encoding.Error(e, errPrefixAndSuffixLengthMismatch(len(prefix.values), len(suffix.values)))
 	}
-	return decodeByteArray(dst, src, prefix.values, suffix.values)
+	values, _ := dst.ByteArray()
+	values, err = decodeByteArray(values[:0], src, prefix.values, suffix.values)
+	return encoding.ByteArrayValues(values, nil), err
 }
 
-func (e *ByteArrayEncoding) DecodeFixedLenByteArray(dst, src []byte, size int) ([]byte, error) {
-	dst = dst[:0]
+func (e *ByteArrayEncoding) DecodeFixedLenByteArray(dst encoding.Values, src []byte) (encoding.Values, error) {
+	data, size := dst.FixedLenByteArray()
 
 	if size < 0 || size > encoding.MaxFixedLenByteArraySize {
 		return dst, encoding.Error(e, encoding.ErrInvalidArgument)
@@ -184,7 +186,8 @@ func (e *ByteArrayEncoding) DecodeFixedLenByteArray(dst, src []byte, size int) (
 	if len(prefix.values) != len(suffix.values) {
 		return dst, errPrefixAndSuffixLengthMismatch(len(prefix.values), len(suffix.values))
 	}
-	return decodeFixedLenByteArray(dst, src, size, prefix.values, suffix.values)
+	data, err = decodeFixedLenByteArray(data[:0], src, size, prefix.values, suffix.values)
+	return encoding.FixedLenByteArrayValues(data, size), err
 }
 
 func linearSearchPrefixLength(base, data []byte) (n int) {

@@ -18,14 +18,14 @@ func (e *Encoding) Encoding() format.Encoding {
 	return format.BitPacked
 }
 
-func (e *Encoding) EncodeLevels(dst, src []byte) ([]byte, error) {
-	dst, err := encodeLevels(dst[:0], src, uint(e.BitWidth))
+func (e *Encoding) EncodeLevels(dst []byte, src encoding.Values) ([]byte, error) {
+	dst, err := encodeLevels(dst[:0], src.Level(), uint(e.BitWidth))
 	return dst, e.wrap(err)
 }
 
-func (e *Encoding) DecodeLevels(dst, src []byte) ([]byte, error) {
-	dst, err := decodeLevels(dst[:0], src, uint(e.BitWidth))
-	return dst, e.wrap(err)
+func (e *Encoding) DecodeLevels(dst encoding.Values, src []byte) (encoding.Values, error) {
+	lvl, err := decodeLevels(dst.Level()[:0], src, uint(e.BitWidth))
+	return encoding.LevelValues(lvl), e.wrap(err)
 }
 
 func (e *Encoding) wrap(err error) error {

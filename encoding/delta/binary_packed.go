@@ -25,28 +25,22 @@ func (e *BinaryPackedEncoding) Encoding() format.Encoding {
 	return format.DeltaBinaryPacked
 }
 
-func (e *BinaryPackedEncoding) EncodeInt32(dst, src []byte) ([]byte, error) {
-	if (len(src) % 4) != 0 {
-		return dst[:0], encoding.ErrEncodeInvalidInputSize(e, "INT64", len(src))
-	}
-	return encodeInt32(dst[:0], bytesToInt32(src)), nil
+func (e *BinaryPackedEncoding) EncodeInt32(dst []byte, src encoding.Values) ([]byte, error) {
+	return encodeInt32(dst[:0], src.Int32()), nil
 }
 
-func (e *BinaryPackedEncoding) EncodeInt64(dst, src []byte) ([]byte, error) {
-	if (len(src) % 8) != 0 {
-		return dst[:0], encoding.ErrEncodeInvalidInputSize(e, "INT64", len(src))
-	}
-	return encodeInt64(dst[:0], bytesToInt64(src)), nil
+func (e *BinaryPackedEncoding) EncodeInt64(dst []byte, src encoding.Values) ([]byte, error) {
+	return encodeInt64(dst[:0], src.Int64()), nil
 }
 
-func (e *BinaryPackedEncoding) DecodeInt32(dst, src []byte) ([]byte, error) {
-	dst, _, err := decodeInt32(dst[:0], src)
-	return dst, e.wrap(err)
+func (e *BinaryPackedEncoding) DecodeInt32(dst encoding.Values, src []byte) (encoding.Values, error) {
+	buf, _, err := decodeInt32(dst.Bytes(encoding.Int32)[:0], src)
+	return encoding.Int32ValuesFromBytes(buf), e.wrap(err)
 }
 
-func (e *BinaryPackedEncoding) DecodeInt64(dst, src []byte) ([]byte, error) {
-	dst, _, err := decodeInt64(dst[:0], src)
-	return dst, e.wrap(err)
+func (e *BinaryPackedEncoding) DecodeInt64(dst encoding.Values, src []byte) (encoding.Values, error) {
+	buf, _, err := decodeInt64(dst.Bytes(encoding.Int64)[:0], src)
+	return encoding.Int64ValuesFromBytes(buf), e.wrap(err)
 }
 
 func (e *BinaryPackedEncoding) wrap(err error) error {

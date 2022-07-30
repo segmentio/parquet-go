@@ -19,40 +19,36 @@ func (e *Encoding) Encoding() format.Encoding {
 	return format.ByteStreamSplit
 }
 
-func (e *Encoding) EncodeFloat(dst, src []byte) ([]byte, error) {
+func (e *Encoding) EncodeFloat(dst []byte, src encoding.Values) ([]byte, error) {
+	buf := src.Bytes(encoding.Float)
+	dst = resize(dst, len(buf))
+	encodeFloat(dst, buf)
+	return dst, nil
+}
+
+func (e *Encoding) EncodeDouble(dst []byte, src encoding.Values) ([]byte, error) {
+	buf := src.Bytes(encoding.Double)
+	dst = resize(dst, len(buf))
+	encodeDouble(dst, buf)
+	return dst, nil
+}
+
+func (e *Encoding) DecodeFloat(dst encoding.Values, src []byte) (encoding.Values, error) {
 	if (len(src) % 4) != 0 {
-		return dst[:0], encoding.ErrEncodeInvalidInputSize(e, "FLOAT", len(src))
+		return dst, encoding.ErrDecodeInvalidInputSize(e, "FLOAT", len(src))
 	}
-	dst = resize(dst, len(src))
-	encodeFloat(dst, src)
-	return dst, nil
+	buf := resize(dst.Bytes(encoding.Float), len(src))
+	decodeFloat(buf, src)
+	return encoding.FloatValuesFromBytes(buf), nil
 }
 
-func (e *Encoding) EncodeDouble(dst, src []byte) ([]byte, error) {
+func (e *Encoding) DecodeDouble(dst encoding.Values, src []byte) (encoding.Values, error) {
 	if (len(src) % 8) != 0 {
-		return dst[:0], encoding.ErrEncodeInvalidInputSize(e, "DOUBLE", len(src))
+		return dst, encoding.ErrDecodeInvalidInputSize(e, "DOUBLE", len(src))
 	}
-	dst = resize(dst, len(src))
-	encodeDouble(dst, src)
-	return dst, nil
-}
-
-func (e *Encoding) DecodeFloat(dst, src []byte) ([]byte, error) {
-	if (len(src) % 4) != 0 {
-		return dst[:0], encoding.ErrDecodeInvalidInputSize(e, "FLOAT", len(src))
-	}
-	dst = resize(dst, len(src))
-	decodeFloat(dst, src)
-	return dst, nil
-}
-
-func (e *Encoding) DecodeDouble(dst, src []byte) ([]byte, error) {
-	if (len(src) % 8) != 0 {
-		return dst[:0], encoding.ErrDecodeInvalidInputSize(e, "DOUBLE", len(src))
-	}
-	dst = resize(dst, len(src))
-	decodeDouble(dst, src)
-	return dst, nil
+	buf := resize(dst.Bytes(encoding.Double), len(src))
+	decodeDouble(buf, src)
+	return encoding.DoubleValuesFromBytes(buf), nil
 }
 
 func resize(buf []byte, size int) []byte {

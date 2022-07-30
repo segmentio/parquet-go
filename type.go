@@ -170,13 +170,13 @@ type Type interface {
 	// called on, applies the given encoding and produces the output to the dst
 	// buffer passed as first argument by dispatching the call to one of the
 	// encoding methods.
-	Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error)
+	Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error)
 
 	// Assuming the src buffer contains values encoding in the given encoding,
-	// decodes the input and produces the PLAIN encoded values into the dst
-	// output buffer passed as first argument by dispatching the call to one
-	// of the encoding methods.
-	Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error)
+	// decodes the input and produces the encoded values into the dst output
+	// buffer passed as first argument by dispatching the call to one of the
+	// encoding methods.
+	Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error)
 }
 
 var (
@@ -259,11 +259,11 @@ func (t booleanType) NewPage(columnIndex, numValues int, data []byte) Page {
 	return newBooleanPage(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
-func (t booleanType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+func (t booleanType) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
 	return enc.EncodeBoolean(dst, src)
 }
 
-func (t booleanType) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+func (t booleanType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
 	return enc.DecodeBoolean(dst, src)
 }
 
@@ -295,11 +295,11 @@ func (t int32Type) NewPage(columnIndex, numValues int, data []byte) Page {
 	return newInt32Page(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
-func (t int32Type) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+func (t int32Type) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
 	return enc.EncodeInt32(dst, src)
 }
 
-func (t int32Type) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+func (t int32Type) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
 	return enc.DecodeInt32(dst, src)
 }
 
@@ -331,11 +331,11 @@ func (t int64Type) NewPage(columnIndex, numValues int, data []byte) Page {
 	return newInt64Page(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
-func (t int64Type) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+func (t int64Type) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
 	return enc.EncodeInt64(dst, src)
 }
 
-func (t int64Type) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+func (t int64Type) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
 	return enc.DecodeInt64(dst, src)
 }
 
@@ -368,11 +368,11 @@ func (t int96Type) NewPage(columnIndex, numValues int, data []byte) Page {
 	return newInt96Page(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
-func (t int96Type) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+func (t int96Type) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
 	return enc.EncodeInt96(dst, src)
 }
 
-func (t int96Type) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+func (t int96Type) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
 	return enc.DecodeInt96(dst, src)
 }
 
@@ -404,11 +404,11 @@ func (t floatType) NewPage(columnIndex, numValues int, data []byte) Page {
 	return newFloatPage(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
-func (t floatType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+func (t floatType) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
 	return enc.EncodeFloat(dst, src)
 }
 
-func (t floatType) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+func (t floatType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
 	return enc.DecodeFloat(dst, src)
 }
 
@@ -440,11 +440,11 @@ func (t doubleType) NewPage(columnIndex, numValues int, data []byte) Page {
 	return newDoublePage(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
-func (t doubleType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+func (t doubleType) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
 	return enc.EncodeDouble(dst, src)
 }
 
-func (t doubleType) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+func (t doubleType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
 	return enc.DecodeDouble(dst, src)
 }
 
@@ -476,11 +476,11 @@ func (t byteArrayType) NewPage(columnIndex, numValues int, data []byte) Page {
 	return newByteArrayPage(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
-func (t byteArrayType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+func (t byteArrayType) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
 	return enc.EncodeByteArray(dst, src)
 }
 
-func (t byteArrayType) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+func (t byteArrayType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
 	return enc.DecodeByteArray(dst, src)
 }
 
@@ -524,12 +524,22 @@ func (t fixedLenByteArrayType) NewPage(columnIndex, numValues int, data []byte) 
 	return newFixedLenByteArrayPage(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
-func (t fixedLenByteArrayType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
-	return enc.EncodeFixedLenByteArray(dst, src, t.length)
+func (t fixedLenByteArrayType) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
+	_, size := src.FixedLenByteArray()
+	assertFixedLenByteArraySize(t.length, size)
+	return enc.EncodeFixedLenByteArray(dst, src)
 }
 
-func (t fixedLenByteArrayType) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
-	return enc.DecodeFixedLenByteArray(dst, src, t.length)
+func (t fixedLenByteArrayType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
+	_, size := dst.FixedLenByteArray()
+	assertFixedLenByteArraySize(t.length, size)
+	return enc.DecodeFixedLenByteArray(dst, src)
+}
+
+func assertFixedLenByteArraySize(want, got int) {
+	if want != got {
+		panic(fmt.Sprintf("BUG: cannot encode fixed length byte array values of size %d with type of size %d", got, want))
+	}
 }
 
 // BE128 stands for "big-endian 128 bits". This type is used as a special case
@@ -581,12 +591,16 @@ func (t be128Type) NewPage(columnIndex, numValues int, data []byte) Page {
 	return newBE128Page(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
-func (t be128Type) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
-	return enc.EncodeFixedLenByteArray(dst, src, 16)
+func (t be128Type) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
+	_, size := src.FixedLenByteArray()
+	assertFixedLenByteArraySize(16, size)
+	return enc.EncodeFixedLenByteArray(dst, src)
 }
 
-func (t be128Type) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
-	return enc.DecodeFixedLenByteArray(dst, src, 16)
+func (t be128Type) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
+	_, size := dst.FixedLenByteArray()
+	assertFixedLenByteArraySize(16, size)
+	return enc.DecodeFixedLenByteArray(dst, src)
 }
 
 // FixedLenByteArrayType constructs a type for fixed-length values of the given
@@ -771,7 +785,7 @@ func (t *intType) NewPage(columnIndex, numValues int, data []byte) Page {
 	}
 }
 
-func (t *intType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+func (t *intType) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
 	if t.BitWidth == 64 {
 		return enc.EncodeInt64(dst, src)
 	} else {
@@ -779,7 +793,7 @@ func (t *intType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error)
 	}
 }
 
-func (t *intType) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+func (t *intType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
 	if t.BitWidth == 64 {
 		return enc.DecodeInt64(dst, src)
 	} else {
@@ -872,11 +886,11 @@ func (t *stringType) NewPage(columnIndex, numValues int, data []byte) Page {
 	return newByteArrayPage(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
-func (t *stringType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+func (t *stringType) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
 	return enc.EncodeByteArray(dst, src)
 }
 
-func (t *stringType) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+func (t *stringType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
 	return enc.DecodeByteArray(dst, src)
 }
 
@@ -925,12 +939,16 @@ func (t *uuidType) NewPage(columnIndex, numValues int, data []byte) Page {
 	return newBE128Page(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
-func (t *uuidType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
-	return enc.EncodeFixedLenByteArray(dst, src, 16)
+func (t *uuidType) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
+	_, size := src.FixedLenByteArray()
+	assertFixedLenByteArraySize(16, size)
+	return enc.EncodeFixedLenByteArray(dst, src)
 }
 
-func (t *uuidType) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
-	return enc.DecodeFixedLenByteArray(dst, src, 16)
+func (t *uuidType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
+	_, size := dst.FixedLenByteArray()
+	assertFixedLenByteArraySize(16, size)
+	return enc.DecodeFixedLenByteArray(dst, src)
 }
 
 // Enum constructs a leaf node with a logical type representing enumerations.
@@ -984,11 +1002,11 @@ func (t *enumType) NewPage(columnIndex, numValues int, data []byte) Page {
 	return newByteArrayPage(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
-func (t *enumType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+func (t *enumType) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
 	return enc.EncodeByteArray(dst, src)
 }
 
-func (t *enumType) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+func (t *enumType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
 	return enc.DecodeByteArray(dst, src)
 }
 
@@ -1043,11 +1061,11 @@ func (t *jsonType) NewPage(columnIndex, numValues int, data []byte) Page {
 	return newByteArrayPage(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
-func (t *jsonType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+func (t *jsonType) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
 	return enc.EncodeByteArray(dst, src)
 }
 
-func (t *jsonType) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+func (t *jsonType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
 	return enc.DecodeByteArray(dst, src)
 }
 
@@ -1102,11 +1120,11 @@ func (t *bsonType) NewPage(columnIndex, numValues int, data []byte) Page {
 	return newByteArrayPage(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
-func (t *bsonType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+func (t *bsonType) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
 	return enc.EncodeByteArray(dst, src)
 }
 
-func (t *bsonType) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+func (t *bsonType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
 	return enc.DecodeByteArray(dst, src)
 }
 
@@ -1157,11 +1175,11 @@ func (t *dateType) NewPage(columnIndex, numValues int, data []byte) Page {
 	return newInt32Page(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
-func (t *dateType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+func (t *dateType) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
 	return enc.EncodeInt32(dst, src)
 }
 
-func (t *dateType) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+func (t *dateType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
 	return enc.DecodeInt32(dst, src)
 }
 
@@ -1313,7 +1331,7 @@ func (t *timeType) NewPage(columnIndex, numValues int, data []byte) Page {
 	}
 }
 
-func (t *timeType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+func (t *timeType) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
 	if t.useInt32() {
 		return enc.EncodeInt32(dst, src)
 	} else {
@@ -1321,7 +1339,7 @@ func (t *timeType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error
 	}
 }
 
-func (t *timeType) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+func (t *timeType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
 	if t.useInt32() {
 		return enc.DecodeInt32(dst, src)
 	} else {
@@ -1383,11 +1401,11 @@ func (t *timestampType) NewPage(columnIndex, numValues int, data []byte) Page {
 	return newInt64Page(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
-func (t *timestampType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+func (t *timestampType) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
 	return enc.EncodeInt64(dst, src)
 }
 
-func (t *timestampType) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+func (t *timestampType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
 	return enc.DecodeInt64(dst, src)
 }
 
@@ -1442,11 +1460,11 @@ func (t *listType) NewPage(int, int, []byte) Page {
 	panic("cannot create page from parquet LIST type")
 }
 
-func (t *listType) Encode(dst, _ []byte, _ encoding.Encoding) ([]byte, error) {
+func (t *listType) Encode(_ []byte, _ encoding.Values, _ encoding.Encoding) ([]byte, error) {
 	panic("cannot encode parquet LIST type")
 }
 
-func (t *listType) Decode(dst, _ []byte, _ encoding.Encoding) ([]byte, error) {
+func (t *listType) Decode(_ encoding.Values, _ []byte, _ encoding.Encoding) (encoding.Values, error) {
 	panic("cannot decode parquet LIST type")
 }
 
@@ -1506,11 +1524,11 @@ func (t *mapType) NewPage(int, int, []byte) Page {
 	panic("cannot create page from parquet MAP type")
 }
 
-func (t *mapType) Encode(dst, _ []byte, _ encoding.Encoding) ([]byte, error) {
+func (t *mapType) Encode(_ []byte, _ encoding.Values, _ encoding.Encoding) ([]byte, error) {
 	panic("cannot encode parquet MAP type")
 }
 
-func (t *mapType) Decode(dst, _ []byte, _ encoding.Encoding) ([]byte, error) {
+func (t *mapType) Decode(_ encoding.Values, _ []byte, _ encoding.Encoding) (encoding.Values, error) {
 	panic("cannot decode parquet MAP type")
 }
 
@@ -1552,12 +1570,12 @@ func (t *nullType) NewPage(columnIndex, numValues int, _ []byte) Page {
 	return newNullPage(t, makeColumnIndex(columnIndex), makeNumValues(numValues))
 }
 
-func (t *nullType) Encode(dst, _ []byte, _ encoding.Encoding) ([]byte, error) {
+func (t *nullType) Encode(dst []byte, _ encoding.Values, _ encoding.Encoding) ([]byte, error) {
 	return dst[:0], nil
 }
 
-func (t *nullType) Decode(dst, _ []byte, _ encoding.Encoding) ([]byte, error) {
-	return dst[:0], nil
+func (t *nullType) Decode(dst encoding.Values, _ []byte, _ encoding.Encoding) (encoding.Values, error) {
+	return dst, nil
 }
 
 type groupType struct{}
@@ -1588,11 +1606,11 @@ func (t groupType) NewPage(int, int, []byte) Page {
 	panic("cannot create page from parquet group")
 }
 
-func (groupType) Encode(_, _ []byte, _ encoding.Encoding) ([]byte, error) {
+func (groupType) Encode(_ []byte, _ encoding.Values, _ encoding.Encoding) ([]byte, error) {
 	panic("cannot encode parquet group")
 }
 
-func (groupType) Decode(_, _ []byte, _ encoding.Encoding) ([]byte, error) {
+func (groupType) Decode(_ encoding.Values, _ []byte, _ encoding.Encoding) (encoding.Values, error) {
 	panic("cannot decode parquet group")
 }
 

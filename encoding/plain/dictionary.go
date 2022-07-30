@@ -18,10 +18,10 @@ func (e *DictionaryEncoding) Encoding() format.Encoding {
 	return format.PlainDictionary
 }
 
-func (e *DictionaryEncoding) EncodeInt32(dst, src []byte) ([]byte, error) {
+func (e *DictionaryEncoding) EncodeInt32(dst []byte, src encoding.Values) ([]byte, error) {
 	return e.plain.EncodeInt32(dst, src)
 }
 
-func (e *DictionaryEncoding) DecodeInt32(dst, src []byte) ([]byte, error) {
+func (e *DictionaryEncoding) DecodeInt32(dst encoding.Values, src []byte) (encoding.Values, error) {
 	return e.plain.DecodeInt32(dst, src)
 }

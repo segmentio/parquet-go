@@ -7,6 +7,7 @@ import (
 	"io"
 
 	"github.com/segmentio/parquet-go/deprecated"
+	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/encoding/plain"
 	"github.com/segmentio/parquet-go/internal/bitpack"
 	"github.com/segmentio/parquet-go/internal/unsafecast"
@@ -90,14 +91,13 @@ type BufferedPage interface {
 
 	// Returns the in-memory buffer holding the page values.
 	//
-	// The buffer has the page values serialized in the PLAIN encoding.
-	//
 	// The intent is for the returned value to be used as input parameter when
 	// calling the Encode method of the associated Type.
 	//
-	// The returned slice may be the same across multiple calls to this method,
-	// applications must treat the content as immutable.
-	Data() []byte
+	// The slices referenced by the encoding.Values may be the same across
+	// multiple calls to this method, applications must treat the content as
+	// immutable.
+	Data() encoding.Values
 }
 
 // CompressedPage is an extension of the Page interface implemented by pages
@@ -264,7 +264,7 @@ func (page *errorPage) Slice(i, j int64) BufferedPage     { return page }
 func (page *errorPage) Size() int64                       { return 1 }
 func (page *errorPage) RepetitionLevels() []byte          { return nil }
 func (page *errorPage) DefinitionLevels() []byte          { return nil }
-func (page *errorPage) Data() []byte                      { return nil }
+func (page *errorPage) Data() encoding.Values             { return encoding.Values{} }
 func (page *errorPage) Values() ValueReader               { return errorPageValues{page: page} }
 func (page *errorPage) Buffer() BufferedPage              { return page }
 
@@ -313,7 +313,7 @@ func (page *optionalPage) RepetitionLevels() []byte { return nil }
 
 func (page *optionalPage) DefinitionLevels() []byte { return page.definitionLevels }
 
-func (page *optionalPage) Data() []byte { return page.base.Data() }
+func (page *optionalPage) Data() encoding.Values { return page.base.Data() }
 
 func (page *optionalPage) Values() ValueReader {
 	return &optionalPageValues{
@@ -384,7 +384,7 @@ func (page *repeatedPage) RepetitionLevels() []byte { return page.repetitionLeve
 
 func (page *repeatedPage) DefinitionLevels() []byte { return page.definitionLevels }
 
-func (page *repeatedPage) Data() []byte { return page.base.Data() }
+func (page *repeatedPage) Data() encoding.Values { return page.base.Data() }
 
 func (page *repeatedPage) Values() ValueReader {
 	return &repeatedPageValues{
@@ -491,7 +491,7 @@ func (page *booleanPage) RepetitionLevels() []byte { return nil }
 
 func (page *booleanPage) DefinitionLevels() []byte { return nil }
 
-func (page *booleanPage) Data() []byte { return page.bits }
+func (page *booleanPage) Data() encoding.Values { return encoding.BooleanValues(page.bits) }
 
 func (page *booleanPage) Values() ValueReader { return &booleanPageValues{page: page} }
 
@@ -615,7 +615,7 @@ func (page *int32Page) RepetitionLevels() []byte { return nil }
 
 func (page *int32Page) DefinitionLevels() []byte { return nil }
 
-func (page *int32Page) Data() []byte { return unsafecast.Int32ToBytes(page.values) }
+func (page *int32Page) Data() encoding.Values { return encoding.Int32Values(page.values) }
 
 func (page *int32Page) Values() ValueReader { return &int32PageValues{page: page} }
 
@@ -690,7 +690,7 @@ func (page *int64Page) RepetitionLevels() []byte { return nil }
 
 func (page *int64Page) DefinitionLevels() []byte { return nil }
 
-func (page *int64Page) Data() []byte { return unsafecast.Int64ToBytes(page.values) }
+func (page *int64Page) Data() encoding.Values { return encoding.Int64Values(page.values) }
 
 func (page *int64Page) Values() ValueReader { return &int64PageValues{page: page} }
 
@@ -765,7 +765,7 @@ func (page *int96Page) RepetitionLevels() []byte { return nil }
 
 func (page *int96Page) DefinitionLevels() []byte { return nil }
 
-func (page *int96Page) Data() []byte { return deprecated.Int96ToBytes(page.values) }
+func (page *int96Page) Data() encoding.Values { return encoding.Int96Values(page.values) }
 
 func (page *int96Page) Values() ValueReader { return &int96PageValues{page: page} }
 
@@ -842,7 +842,7 @@ func (page *floatPage) RepetitionLevels() []byte { return nil }
 
 func (page *floatPage) DefinitionLevels() []byte { return nil }
 
-func (page *floatPage) Data() []byte { return unsafecast.Float32ToBytes(page.values) }
+func (page *floatPage) Data() encoding.Values { return encoding.FloatValues(page.values) }
 
 func (page *floatPage) Values() ValueReader { return &floatPageValues{page: page} }
 
@@ -917,7 +917,7 @@ func (page *doublePage) RepetitionLevels() []byte { return nil }
 
 func (page *doublePage) DefinitionLevels() []byte { return nil }
 
-func (page *doublePage) Data() []byte { return unsafecast.Float64ToBytes(page.values) }
+func (page *doublePage) Data() encoding.Values { return encoding.DoubleValues(page.values) }
 
 func (page *doublePage) Values() ValueReader { return &doublePageValues{page: page} }
 
@@ -994,7 +994,7 @@ func (page *byteArrayPage) RepetitionLevels() []byte { return nil }
 
 func (page *byteArrayPage) DefinitionLevels() []byte { return nil }
 
-func (page *byteArrayPage) Data() []byte { return page.values }
+func (page *byteArrayPage) Data() encoding.Values { return encoding.ByteArrayValues(page.values, nil) }
 
 func (page *byteArrayPage) Values() ValueReader { return &byteArrayPageValues{page: page} }
 
@@ -1168,7 +1168,9 @@ func (page *fixedLenByteArrayPage) RepetitionLevels() []byte { return nil }
 
 func (page *fixedLenByteArrayPage) DefinitionLevels() []byte { return nil }
 
-func (page *fixedLenByteArrayPage) Data() []byte { return page.data }
+func (page *fixedLenByteArrayPage) Data() encoding.Values {
+	return encoding.FixedLenByteArrayValues(page.data, page.size)
+}
 
 func (page *fixedLenByteArrayPage) Values() ValueReader {
 	return &fixedLenByteArrayPageValues{page: page}
@@ -1255,7 +1257,7 @@ func (page *uint32Page) RepetitionLevels() []byte { return nil }
 
 func (page *uint32Page) DefinitionLevels() []byte { return nil }
 
-func (page *uint32Page) Data() []byte { return unsafecast.Uint32ToBytes(page.values) }
+func (page *uint32Page) Data() encoding.Values { return encoding.Uint32Values(page.values) }
 
 func (page *uint32Page) Values() ValueReader { return &uint32PageValues{page: page} }
 
@@ -1330,7 +1332,7 @@ func (page *uint64Page) RepetitionLevels() []byte { return nil }
 
 func (page *uint64Page) DefinitionLevels() []byte { return nil }
 
-func (page *uint64Page) Data() []byte { return unsafecast.Uint64ToBytes(page.values) }
+func (page *uint64Page) Data() encoding.Values { return encoding.Uint64Values(page.values) }
 
 func (page *uint64Page) Values() ValueReader { return &uint64PageValues{page: page} }
 
@@ -1411,7 +1413,7 @@ func (page *be128Page) RepetitionLevels() []byte { return nil }
 
 func (page *be128Page) DefinitionLevels() []byte { return nil }
 
-func (page *be128Page) Data() []byte { return unsafecast.Uint128ToBytes(page.values) }
+func (page *be128Page) Data() encoding.Values { return encoding.Uint128Values(page.values) }
 
 func (page *be128Page) Values() ValueReader { return &be128PageValues{page: page} }
 
@@ -1496,4 +1498,4 @@ func (page *nullPage) Slice(i, j int64) BufferedPage {
 }
 func (page *nullPage) RepetitionLevels() []byte { return nil }
 func (page *nullPage) DefinitionLevels() []byte { return nil }
-func (page *nullPage) Data() []byte             { return nil }
+func (page *nullPage) Data() encoding.Values    { return encoding.Values{} }

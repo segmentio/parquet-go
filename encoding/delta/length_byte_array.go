@@ -18,20 +18,21 @@ func (e *LengthByteArrayEncoding) Encoding() format.Encoding {
 	return format.DeltaLengthByteArray
 }
 
-func (e *LengthByteArrayEncoding) EncodeByteArray(dst, src []byte) ([]byte, error) {
+func (e *LengthByteArrayEncoding) EncodeByteArray(dst []byte, src encoding.Values) ([]byte, error) {
 	dst = dst[:0]
 
 	length := getInt32Buffer()
 	defer putInt32Buffer(length)
 
 	totalSize := 0
+	values, _ := src.ByteArray()
 
-	for i := 0; i < len(src); {
-		r := len(src) - i
+	for i := 0; i < len(values); {
+		r := len(values) - i
 		if r < plain.ByteArrayLengthSize {
 			return dst, encoding.Error(e, plain.ErrTooShort(r))
 		}
-		n := plain.ByteArrayLength(src[i:])
+		n := plain.ByteArrayLength(values[i:])
 		i += plain.ByteArrayLengthSize
 		r -= plain.ByteArrayLengthSize
 		if n > r {
@@ -53,7 +54,7 @@ func (e *LengthByteArrayEncoding) EncodeByteArray(dst, src []byte) ([]byte, erro
 	j := 0
 
 	for _, n := range length.values {
-		j += copy(b[j:], src[i:i+int(n)])
+		j += copy(b[j:], values[i:i+int(n)])
 		i += plain.ByteArrayLengthSize
 		i += int(n)
 	}
@@ -61,9 +62,7 @@ func (e *LengthByteArrayEncoding) EncodeByteArray(dst, src []byte) ([]byte, erro
 	return dst, nil
 }
 
-func (e *LengthByteArrayEncoding) DecodeByteArray(dst, src []byte) ([]byte, error) {
-	dst = dst[:0]
-
+func (e *LengthByteArrayEncoding) DecodeByteArray(dst encoding.Values, src []byte) (encoding.Values, error) {
 	length := getInt32Buffer()
 	defer putInt32Buffer(length)
 
@@ -72,9 +71,10 @@ func (e *LengthByteArrayEncoding) DecodeByteArray(dst, src []byte) ([]byte, erro
 		return dst, encoding.Error(e, err)
 	}
 
-	dst, err = decodeLengthByteArray(dst, src, length.values)
+	values, _ := dst.ByteArray()
+	values, err = decodeLengthByteArray(values[:0], src, length.values)
 	if err != nil {
 		err = encoding.Error(e, err)
 	}
-	return dst, err
+	return encoding.ByteArrayValues(values, nil), err
 }

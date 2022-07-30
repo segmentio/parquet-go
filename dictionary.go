@@ -1285,7 +1285,7 @@ func (page *indexedPage) RepetitionLevels() []byte { return nil }
 
 func (page *indexedPage) DefinitionLevels() []byte { return nil }
 
-func (page *indexedPage) Data() []byte { return unsafecast.Int32ToBytes(page.values) }
+func (page *indexedPage) Data() encoding.Values { return encoding.Int32Values(page.values) }
 
 func (page *indexedPage) Values() ValueReader { return &indexedPageValues{page: page} }
 
@@ -1322,11 +1322,11 @@ func (page *indexedPage) Slice(i, j int64) BufferedPage {
 // its dictionary instead of plain values.
 type indexedPageType struct{ *indexedType }
 
-func (t indexedPageType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+func (t indexedPageType) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
 	return enc.EncodeInt32(dst, src)
 }
 
-func (t indexedPageType) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
+func (t indexedPageType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
 	return enc.DecodeInt32(dst, src)
 }
 

@@ -602,23 +602,32 @@ func (c *Column) decodeDataPageV2(header DataPageHeaderV2, page *dataPage) (Page
 }
 
 func (c *Column) decodeDataPage(header DataPageHeader, numValues int64, page *dataPage, data []byte) (Page, error) {
-	encoding := LookupEncoding(header.Encoding())
+	pageEncoding := LookupEncoding(header.Encoding())
 	pageType := c.Type()
+	pageKind := pageType.Kind()
 
-	if isDictionaryEncoding(encoding) {
+	if isDictionaryEncoding(pageEncoding) {
 		// In some legacy configurations, the PLAIN_DICTIONARY encoding is used
 		// on data page headers to indicate that the page contains indexes into
 		// the dictionary page, but the page is still encoded using the RLE
 		// encoding in this case, so we convert it to RLE_DICTIONARY.
-		encoding = &RLEDictionary
+		pageEncoding = &RLEDictionary
 		pageType = indexedPageType{newIndexedType(pageType, page.dictionary)}
+		pageKind = Int32
 	}
 
-	var err error
-	page.values, err = pageType.Decode(page.values, data, encoding)
+	values := encoding.MakeValues(
+		encoding.Kind(pageKind+1),
+		page.values,
+		nil,
+		pageType.Length(),
+	)
+
+	values, err := pageType.Decode(values, data, pageEncoding)
 	if err != nil {
 		return nil, err
 	}
+	page.values = values.Bytes(values.Kind())
 
 	newPage := pageType.NewPage(c.Index(), int(numValues), page.values)
 	switch {
@@ -655,7 +664,8 @@ func decodeLevels(enc encoding.Encoding, numValues int64, levels, data []byte) (
 	if cap(levels) < int(numValues) {
 		levels = make([]byte, numValues)
 	}
-	levels, err := enc.DecodeLevels(levels, data)
+	values, err := enc.DecodeLevels(encoding.LevelValues(levels), data)
+	levels = values.Level()
 	if err == nil {
 		switch {
 		case len(levels) < int(numValues):
@@ -681,17 +691,23 @@ func (c *Column) decodeDictionary(header DictionaryPageHeader, page *dataPage, d
 	}
 
 	pageType := c.Type()
-	encoding := header.Encoding()
-	if encoding == format.PlainDictionary {
-		encoding = format.Plain
+	pageEncoding := header.Encoding()
+	if pageEncoding == format.PlainDictionary {
+		pageEncoding = format.Plain
 	}
 
-	var err error
-	page.values, err = pageType.Decode(page.values, page.data, LookupEncoding(encoding))
+	values := encoding.MakeValues(
+		encoding.Kind(pageType.Kind()+1),
+		page.values,
+		nil,
+		pageType.Length(),
+	)
+
+	values, err := pageType.Decode(values, page.data, LookupEncoding(pageEncoding))
 	if err != nil {
 		return nil, err
 	}
-
+	page.values = values.Bytes(values.Kind())
 	dict.values = append(dict.values[:0], page.values...)
 	return pageType.NewDictionary(int(c.index), int(header.NumValues()), dict.values), nil
 }

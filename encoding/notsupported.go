@@ -53,58 +53,58 @@ func errInvalidInputSize(e Encoding, op, typ string, size int) error {
 	return Errorf(e, "cannot %s %s from input of size %d: %w", op, typ, size, ErrInvalidArgument)
 }
 
-// CanEncodeBoolean reports whether e can encode BOOLEAN values.
-func CanEncodeBoolean(e Encoding) bool {
-	_, err := e.EncodeBoolean(nil, nil)
+// CanEncodeInt8 reports whether e can encode LEVELS values.
+func CanEncodeLevels(e Encoding) bool {
+	_, err := e.EncodeLevels(nil, LevelValues(nil))
 	return !errors.Is(err, ErrNotSupported)
 }
 
-// CanEncodeInt8 reports whether e can encode LEVELS values.
-func CanEncodeLevels(e Encoding) bool {
-	_, err := e.EncodeLevels(nil, nil)
+// CanEncodeBoolean reports whether e can encode BOOLEAN values.
+func CanEncodeBoolean(e Encoding) bool {
+	_, err := e.EncodeBoolean(nil, BooleanValues(nil))
 	return !errors.Is(err, ErrNotSupported)
 }
 
 // CanEncodeInt32 reports whether e can encode INT32 values.
 func CanEncodeInt32(e Encoding) bool {
-	_, err := e.EncodeInt32(nil, nil)
+	_, err := e.EncodeInt32(nil, Int32Values(nil))
 	return !errors.Is(err, ErrNotSupported)
 }
 
 // CanEncodeInt64 reports whether e can encode INT64 values.
 func CanEncodeInt64(e Encoding) bool {
-	_, err := e.EncodeInt64(nil, nil)
+	_, err := e.EncodeInt64(nil, Int64Values(nil))
 	return !errors.Is(err, ErrNotSupported)
 }
 
 // CanEncodeInt96 reports whether e can encode INT96 values.
 func CanEncodeInt96(e Encoding) bool {
-	_, err := e.EncodeInt96(nil, nil)
+	_, err := e.EncodeInt96(nil, Int96Values(nil))
 	return !errors.Is(err, ErrNotSupported)
 }
 
 // CanEncodeFloat reports whether e can encode FLOAT values.
 func CanEncodeFloat(e Encoding) bool {
-	_, err := e.EncodeFloat(nil, nil)
+	_, err := e.EncodeFloat(nil, FloatValues(nil))
 	return !errors.Is(err, ErrNotSupported)
 }
 
 // CanEncodeDouble reports whether e can encode DOUBLE values.
 func CanEncodeDouble(e Encoding) bool {
-	_, err := e.EncodeDouble(nil, nil)
+	_, err := e.EncodeDouble(nil, DoubleValues(nil))
 	return !errors.Is(err, ErrNotSupported)
 }
 
 // CanEncodeByteArray reports whether e can encode BYTE_ARRAY values.
 func CanEncodeByteArray(e Encoding) bool {
-	_, err := e.EncodeByteArray(nil, nil)
+	_, err := e.EncodeByteArray(nil, ByteArrayValues(nil, nil))
 	return !errors.Is(err, ErrNotSupported)
 }
 
 // CanEncodeFixedLenByteArray reports whether e can encode
 // FIXED_LEN_BYTE_ARRAY values.
 func CanEncodeFixedLenByteArray(e Encoding) bool {
-	_, err := e.EncodeFixedLenByteArray(nil, nil, 1)
+	_, err := e.EncodeFixedLenByteArray(nil, FixedLenByteArrayValues(nil, 1))
 	return !errors.Is(err, ErrNotSupported)
 }
 
@@ -121,76 +121,76 @@ func (NotSupported) Encoding() format.Encoding {
 	return -1
 }
 
-func (NotSupported) EncodeLevels(dst, src []byte) ([]byte, error) {
+func (NotSupported) EncodeLevels(dst []byte, src Values) ([]byte, error) {
 	return dst[:0], errNotSupported("LEVELS")
 }
 
-func (NotSupported) EncodeBoolean(dst, src []byte) ([]byte, error) {
+func (NotSupported) EncodeBoolean(dst []byte, src Values) ([]byte, error) {
 	return dst[:0], errNotSupported("BOOLEAN")
 }
 
-func (NotSupported) EncodeInt32(dst, src []byte) ([]byte, error) {
+func (NotSupported) EncodeInt32(dst []byte, src Values) ([]byte, error) {
 	return dst[:0], errNotSupported("INT32")
 }
 
-func (NotSupported) EncodeInt64(dst, src []byte) ([]byte, error) {
+func (NotSupported) EncodeInt64(dst []byte, src Values) ([]byte, error) {
 	return dst[:0], errNotSupported("INT64")
 }
 
-func (NotSupported) EncodeInt96(dst, src []byte) ([]byte, error) {
+func (NotSupported) EncodeInt96(dst []byte, src Values) ([]byte, error) {
 	return dst[:0], errNotSupported("INT96")
 }
 
-func (NotSupported) EncodeFloat(dst, src []byte) ([]byte, error) {
+func (NotSupported) EncodeFloat(dst []byte, src Values) ([]byte, error) {
 	return dst[:0], errNotSupported("FLOAT")
 }
 
-func (NotSupported) EncodeDouble(dst, src []byte) ([]byte, error) {
+func (NotSupported) EncodeDouble(dst []byte, src Values) ([]byte, error) {
 	return dst[:0], errNotSupported("DOUBLE")
 }
 
-func (NotSupported) EncodeByteArray(dst, src []byte) ([]byte, error) {
+func (NotSupported) EncodeByteArray(dst []byte, src Values) ([]byte, error) {
 	return dst[:0], errNotSupported("BYTE_ARRAY")
 }
 
-func (NotSupported) EncodeFixedLenByteArray(dst, src []byte, size int) ([]byte, error) {
+func (NotSupported) EncodeFixedLenByteArray(dst []byte, src Values) ([]byte, error) {
 	return dst[:0], errNotSupported("FIXED_LEN_BYTE_ARRAY")
 }
 
-func (NotSupported) DecodeLevels(dst, src []byte) ([]byte, error) {
-	return dst[:0], errNotSupported("LEVELS")
+func (NotSupported) DecodeLevels(dst Values, src []byte) (Values, error) {
+	return dst, errNotSupported("LEVELS")
 }
 
-func (NotSupported) DecodeBoolean(dst, src []byte) ([]byte, error) {
-	return dst[:0], errNotSupported("BOOLEAN")
+func (NotSupported) DecodeBoolean(dst Values, src []byte) (Values, error) {
+	return dst, errNotSupported("BOOLEAN")
 }
 
-func (NotSupported) DecodeInt32(dst, src []byte) ([]byte, error) {
-	return dst[:0], errNotSupported("INT32")
+func (NotSupported) DecodeInt32(dst Values, src []byte) (Values, error) {
+	return dst, errNotSupported("INT32")
 }
 
-func (NotSupported) DecodeInt64(dst, src []byte) ([]byte, error) {
-	return dst[:0], errNotSupported("INT64")
+func (NotSupported) DecodeInt64(dst Values, src []byte) (Values, error) {
+	return dst, errNotSupported("INT64")
 }
 
-func (NotSupported) DecodeInt96(dst, src []byte) ([]byte, error) {
-	return dst[:0], errNotSupported("INT96")
+func (NotSupported) DecodeInt96(dst Values, src []byte) (Values, error) {
+	return dst, errNotSupported("INT96")
 }
 
-func (NotSupported) DecodeFloat(dst, src []byte) ([]byte, error) {
-	return dst[:0], errNotSupported("FLOAT")
+func (NotSupported) DecodeFloat(dst Values, src []byte) (Values, error) {
+	return dst, errNotSupported("FLOAT")
 }
 
-func (NotSupported) DecodeDouble(dst, src []byte) ([]byte, error) {
-	return dst[:0], errNotSupported("DOUBLE")
+func (NotSupported) DecodeDouble(dst Values, src []byte) (Values, error) {
+	return dst, errNotSupported("DOUBLE")
 }
 
-func (NotSupported) DecodeByteArray(dst, src []byte) ([]byte, error) {
-	return dst[:0], errNotSupported("BYTE_ARRAY")
+func (NotSupported) DecodeByteArray(dst Values, src []byte) (Values, error) {
+	return dst, errNotSupported("BYTE_ARRAY")
 }
 
-func (NotSupported) DecodeFixedLenByteArray(dst, src []byte, size int) ([]byte, error) {
-	return dst[:0], errNotSupported("FIXED_LEN_BYTE_ARRAY")
+func (NotSupported) DecodeFixedLenByteArray(dst Values, src []byte) (Values, error) {
+	return dst, errNotSupported("FIXED_LEN_BYTE_ARRAY")
 }
 
 func errNotSupported(typ string) error {
