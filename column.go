@@ -604,7 +604,6 @@ func (c *Column) decodeDataPageV2(header DataPageHeaderV2, page *dataPage) (Page
 func (c *Column) decodeDataPage(header DataPageHeader, numValues int64, page *dataPage, data []byte) (Page, error) {
 	pageEncoding := LookupEncoding(header.Encoding())
 	pageType := c.Type()
-	pageKind := pageType.Kind()
 
 	if isDictionaryEncoding(pageEncoding) {
 		// In some legacy configurations, the PLAIN_DICTIONARY encoding is used
@@ -613,23 +612,16 @@ func (c *Column) decodeDataPage(header DataPageHeader, numValues int64, page *da
 		// encoding in this case, so we convert it to RLE_DICTIONARY.
 		pageEncoding = &RLEDictionary
 		pageType = indexedPageType{newIndexedType(pageType, page.dictionary)}
-		pageKind = Int32
 	}
 
-	values := encoding.MakeValues(
-		encoding.Kind(pageKind+1),
-		page.values,
-		nil,
-		pageType.Length(),
-	)
-
+	values := pageType.NewValues(page.values, nil)
 	values, err := pageType.Decode(values, data, pageEncoding)
 	if err != nil {
 		return nil, err
 	}
 	page.values = values.Bytes(values.Kind())
 
-	newPage := pageType.NewPage(c.Index(), int(numValues), page.values)
+	newPage := pageType.NewPage(c.Index(), int(numValues), values)
 	switch {
 	case c.maxRepetitionLevel > 0:
 		newPage = newRepeatedPage(newPage.Buffer(), c.maxRepetitionLevel, c.maxDefinitionLevel, page.repetitionLevels, page.definitionLevels)
@@ -696,20 +688,14 @@ func (c *Column) decodeDictionary(header DictionaryPageHeader, page *dataPage, d
 		pageEncoding = format.Plain
 	}
 
-	values := encoding.MakeValues(
-		encoding.Kind(pageType.Kind()+1),
-		page.values,
-		nil,
-		pageType.Length(),
-	)
-
+	values := pageType.NewValues(page.values, nil)
 	values, err := pageType.Decode(values, page.data, LookupEncoding(pageEncoding))
 	if err != nil {
 		return nil, err
 	}
 	page.values = values.Bytes(values.Kind())
 	dict.values = append(dict.values[:0], page.values...)
-	return pageType.NewDictionary(int(c.index), int(header.NumValues()), dict.values), nil
+	return pageType.NewDictionary(int(c.index), int(header.NumValues()), pageType.NewValues(dict.values, nil)), nil
 }
 
 var (

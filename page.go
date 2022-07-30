@@ -10,7 +10,6 @@ import (
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/encoding/plain"
 	"github.com/segmentio/parquet-go/internal/bitpack"
-	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 // Page values represent sequences of parquet values. From the Parquet
@@ -464,10 +463,10 @@ type booleanPage struct {
 	columnIndex int16
 }
 
-func newBooleanPage(typ Type, columnIndex int16, numValues int32, values []byte) *booleanPage {
+func newBooleanPage(typ Type, columnIndex int16, numValues int32, values encoding.Values) *booleanPage {
 	return &booleanPage{
 		typ:         typ,
-		bits:        values[:bitpack.ByteCount(uint(numValues))],
+		bits:        values.Boolean()[:bitpack.ByteCount(uint(numValues))],
 		numValues:   numValues,
 		columnIndex: ^columnIndex,
 	}
@@ -589,10 +588,10 @@ type int32Page struct {
 	columnIndex int16
 }
 
-func newInt32Page(typ Type, columnIndex int16, numValues int32, values []byte) *int32Page {
+func newInt32Page(typ Type, columnIndex int16, numValues int32, values encoding.Values) *int32Page {
 	return &int32Page{
 		typ:         typ,
-		values:      unsafecast.BytesToInt32(values)[:numValues],
+		values:      values.Int32()[:numValues],
 		columnIndex: ^columnIndex,
 	}
 }
@@ -664,10 +663,10 @@ type int64Page struct {
 	columnIndex int16
 }
 
-func newInt64Page(typ Type, columnIndex int16, numValues int32, values []byte) *int64Page {
+func newInt64Page(typ Type, columnIndex int16, numValues int32, values encoding.Values) *int64Page {
 	return &int64Page{
 		typ:         typ,
-		values:      unsafecast.BytesToInt64(values)[:numValues],
+		values:      values.Int64()[:numValues],
 		columnIndex: ^columnIndex,
 	}
 }
@@ -739,10 +738,10 @@ type int96Page struct {
 	columnIndex int16
 }
 
-func newInt96Page(typ Type, columnIndex int16, numValues int32, values []byte) *int96Page {
+func newInt96Page(typ Type, columnIndex int16, numValues int32, values encoding.Values) *int96Page {
 	return &int96Page{
 		typ:         typ,
-		values:      deprecated.BytesToInt96(values)[:numValues],
+		values:      values.Int96()[:numValues],
 		columnIndex: ^columnIndex,
 	}
 }
@@ -816,10 +815,10 @@ type floatPage struct {
 	columnIndex int16
 }
 
-func newFloatPage(typ Type, columnIndex int16, numValues int32, values []byte) *floatPage {
+func newFloatPage(typ Type, columnIndex int16, numValues int32, values encoding.Values) *floatPage {
 	return &floatPage{
 		typ:         typ,
-		values:      unsafecast.BytesToFloat32(values)[:numValues],
+		values:      values.Float()[:numValues],
 		columnIndex: ^columnIndex,
 	}
 }
@@ -891,10 +890,10 @@ type doublePage struct {
 	columnIndex int16
 }
 
-func newDoublePage(typ Type, columnIndex int16, numValues int32, values []byte) *doublePage {
+func newDoublePage(typ Type, columnIndex int16, numValues int32, values encoding.Values) *doublePage {
 	return &doublePage{
 		typ:         typ,
-		values:      unsafecast.BytesToFloat64(values)[:numValues],
+		values:      values.Double()[:numValues],
 		columnIndex: ^columnIndex,
 	}
 }
@@ -967,10 +966,11 @@ type byteArrayPage struct {
 	columnIndex int16
 }
 
-func newByteArrayPage(typ Type, columnIndex int16, numValues int32, values []byte) *byteArrayPage {
+func newByteArrayPage(typ Type, columnIndex int16, numValues int32, values encoding.Values) *byteArrayPage {
+	data, _ := values.ByteArray()
 	return &byteArrayPage{
 		typ:         typ,
-		values:      values,
+		values:      data,
 		numValues:   numValues,
 		columnIndex: ^columnIndex,
 	}
@@ -1134,17 +1134,12 @@ type fixedLenByteArrayPage struct {
 	columnIndex int16
 }
 
-func newFixedLenByteArrayPage(typ Type, columnIndex int16, numValues int32, data []byte) *fixedLenByteArrayPage {
-	size := typ.Length()
-	if (len(data) % size) != 0 {
-		panic("cannot create fixed-length byte array page from input which is not a multiple of the type size")
-	}
-	if int(numValues) != len(data)/size {
-		panic(fmt.Errorf("number of values mismatch in numValues and data arguments: %d != %d", numValues, len(data)/size))
-	}
+func newFixedLenByteArrayPage(typ Type, columnIndex int16, numValues int32, values encoding.Values) *fixedLenByteArrayPage {
+	data, size := values.FixedLenByteArray()
+	assertFixedLenByteArraySize(typ.Length(), size)
 	return &fixedLenByteArrayPage{
 		typ:         typ,
-		data:        data,
+		data:        data[:int(numValues)*size],
 		size:        size,
 		columnIndex: ^columnIndex,
 	}
@@ -1231,10 +1226,10 @@ type uint32Page struct {
 	columnIndex int16
 }
 
-func newUint32Page(typ Type, columnIndex int16, numValues int32, values []byte) *uint32Page {
+func newUint32Page(typ Type, columnIndex int16, numValues int32, values encoding.Values) *uint32Page {
 	return &uint32Page{
 		typ:         typ,
-		values:      unsafecast.BytesToUint32(values)[:numValues],
+		values:      values.Uint32()[:numValues],
 		columnIndex: ^columnIndex,
 	}
 }
@@ -1306,10 +1301,10 @@ type uint64Page struct {
 	columnIndex int16
 }
 
-func newUint64Page(typ Type, columnIndex int16, numValues int32, values []byte) *uint64Page {
+func newUint64Page(typ Type, columnIndex int16, numValues int32, values encoding.Values) *uint64Page {
 	return &uint64Page{
 		typ:         typ,
-		values:      unsafecast.BytesToUint64(values)[:numValues],
+		values:      values.Uint64()[:numValues],
 		columnIndex: ^columnIndex,
 	}
 }
@@ -1381,16 +1376,10 @@ type be128Page struct {
 	columnIndex int16
 }
 
-func newBE128Page(typ Type, columnIndex int16, numValues int32, data []byte) *be128Page {
-	if (len(data) % 16) != 0 {
-		panic("cannot create fixed-length byte array page from input which is not a multiple of the type size")
-	}
-	if int(numValues) != len(data)/16 {
-		panic(fmt.Errorf("number of values mismatch in numValues and data arguments: %d != %d", numValues, len(data)/16))
-	}
+func newBE128Page(typ Type, columnIndex int16, numValues int32, values encoding.Values) *be128Page {
 	return &be128Page{
 		typ:         typ,
-		values:      unsafecast.BytesToUint128(data),
+		values:      values.Uint128()[:numValues],
 		columnIndex: ^columnIndex,
 	}
 }

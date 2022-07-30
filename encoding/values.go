@@ -60,6 +60,12 @@ func (values *Values) assertKind(kind Kind) {
 	}
 }
 
+func (values *Values) assertSize(size int) {
+	if size != values.size {
+		panic(fmt.Sprintf("cannot convert values of size %s to size %s", values.size, size))
+	}
+}
+
 func (values *Values) Size() int64 {
 	return int64(len(values.data))
 }
@@ -118,13 +124,20 @@ func (values *Values) FixedLenByteArray() (data []byte, size int) {
 	return values.data, values.size
 }
 
-func MakeValues(kind Kind, data []byte, offsets []uint32, size int) Values {
-	return Values{
-		kind:    kind,
-		size:    size,
-		data:    data,
-		offsets: offsets,
-	}
+func (values *Values) Uint32() []uint32 {
+	values.assertKind(Int32)
+	return unsafecast.BytesToUint32(values.data)
+}
+
+func (values *Values) Uint64() []uint64 {
+	values.assertKind(Int64)
+	return unsafecast.BytesToUint64(values.data)
+}
+
+func (values *Values) Uint128() [][16]byte {
+	values.assertKind(FixedLenByteArray)
+	values.assertSize(16)
+	return unsafecast.BytesToUint128(values.data)
 }
 
 func BooleanValues(values []byte) Values {
