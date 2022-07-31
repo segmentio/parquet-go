@@ -6,21 +6,20 @@ package rle
 import (
 	"testing"
 
-	"github.com/segmentio/parquet-go/encoding/fuzz"
 	"github.com/segmentio/parquet-go/internal/quick"
 )
 
-func FuzzEncodeBoolean(f *testing.F) {
-	fuzz.EncodeBoolean(f, &Encoding{BitWidth: 1})
-}
+// func FuzzEncodeBoolean(f *testing.F) {
+// 	fuzz.EncodeBoolean(f, &Encoding{BitWidth: 1})
+// }
 
-func FuzzEncodeLevels(f *testing.F) {
-	fuzz.EncodeLevels(f, &Encoding{BitWidth: 8})
-}
+// func FuzzEncodeLevels(f *testing.F) {
+// 	fuzz.EncodeLevels(f, &Encoding{BitWidth: 8})
+// }
 
-func FuzzEncodeInt32(f *testing.F) {
-	fuzz.EncodeInt32(f, &Encoding{BitWidth: 32})
-}
+// func FuzzEncodeInt32(f *testing.F) {
+// 	fuzz.EncodeInt32(f, &Encoding{BitWidth: 32})
+// }
 
 func TestEncodeInt32IndexEqual8Contiguous(t *testing.T) {
 	testEncodeInt32IndexEqual8Contiguous(t, encodeInt32IndexEqual8Contiguous)

@@ -1136,7 +1136,6 @@ type fixedLenByteArrayPage struct {
 
 func newFixedLenByteArrayPage(typ Type, columnIndex int16, numValues int32, values encoding.Values) *fixedLenByteArrayPage {
 	data, size := values.FixedLenByteArray()
-	assertFixedLenByteArraySize(typ.Length(), size)
 	return &fixedLenByteArrayPage{
 		typ:         typ,
 		data:        data[:int(numValues)*size],

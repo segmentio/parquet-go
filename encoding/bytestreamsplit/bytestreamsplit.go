@@ -3,6 +3,7 @@ package bytestreamsplit
 import (
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/format"
+	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 // This encoder implements a version of the Byte Stream Split encoding as described
@@ -19,36 +20,34 @@ func (e *Encoding) Encoding() format.Encoding {
 	return format.ByteStreamSplit
 }
 
-func (e *Encoding) EncodeFloat(dst []byte, src encoding.Values) ([]byte, error) {
-	buf := src.Bytes(encoding.Float)
-	dst = resize(dst, len(buf))
-	encodeFloat(dst, buf)
+func (e *Encoding) EncodeFloat(dst []byte, src []float32) ([]byte, error) {
+	dst = resize(dst, 4*len(src))
+	encodeFloat(dst, unsafecast.Float32ToBytes(src))
 	return dst, nil
 }
 
-func (e *Encoding) EncodeDouble(dst []byte, src encoding.Values) ([]byte, error) {
-	buf := src.Bytes(encoding.Double)
-	dst = resize(dst, len(buf))
-	encodeDouble(dst, buf)
+func (e *Encoding) EncodeDouble(dst []byte, src []float64) ([]byte, error) {
+	dst = resize(dst, 8*len(src))
+	encodeDouble(dst, unsafecast.Float64ToBytes(src))
 	return dst, nil
 }
 
-func (e *Encoding) DecodeFloat(dst encoding.Values, src []byte) (encoding.Values, error) {
+func (e *Encoding) DecodeFloat(dst []float32, src []byte) ([]float32, error) {
 	if (len(src) % 4) != 0 {
 		return dst, encoding.ErrDecodeInvalidInputSize(e, "FLOAT", len(src))
 	}
-	buf := resize(dst.Bytes(encoding.Float), len(src))
+	buf := resize(unsafecast.Float32ToBytes(dst), len(src))
 	decodeFloat(buf, src)
-	return encoding.FloatValuesFromBytes(buf), nil
+	return unsafecast.BytesToFloat32(buf), nil
 }
 
-func (e *Encoding) DecodeDouble(dst encoding.Values, src []byte) (encoding.Values, error) {
+func (e *Encoding) DecodeDouble(dst []float64, src []byte) ([]float64, error) {
 	if (len(src) % 8) != 0 {
 		return dst, encoding.ErrDecodeInvalidInputSize(e, "DOUBLE", len(src))
 	}
-	buf := resize(dst.Bytes(encoding.Double), len(src))
+	buf := resize(unsafecast.Float64ToBytes(dst), len(src))
 	decodeDouble(buf, src)
-	return encoding.DoubleValuesFromBytes(buf), nil
+	return unsafecast.BytesToFloat64(buf), nil
 }
 
 func resize(buf []byte, size int) []byte {

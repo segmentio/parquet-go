@@ -5,6 +5,7 @@ import (
 
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/format"
+	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 type DictionaryEncoding struct {
@@ -19,21 +20,20 @@ func (e *DictionaryEncoding) Encoding() format.Encoding {
 	return format.RLEDictionary
 }
 
-func (e *DictionaryEncoding) EncodeInt32(dst []byte, src encoding.Values) ([]byte, error) {
-	values := src.Int32()
-	bitWidth := maxLenInt32(values)
+func (e *DictionaryEncoding) EncodeInt32(dst []byte, src []int32) ([]byte, error) {
+	bitWidth := maxLenInt32(src)
 	dst = append(dst[:0], byte(bitWidth))
-	dst, err := encodeInt32(dst, values, uint(bitWidth))
+	dst, err := encodeInt32(dst, src, uint(bitWidth))
 	return dst, e.wrap(err)
 }
 
-func (e *DictionaryEncoding) DecodeInt32(dst encoding.Values, src []byte) (encoding.Values, error) {
-	values := dst.Bytes(encoding.Int32)[:0]
+func (e *DictionaryEncoding) DecodeInt32(dst []int32, src []byte) ([]int32, error) {
 	if len(src) == 0 {
-		return encoding.Int32ValuesFromBytes(values), nil
+		return dst[:0], nil
 	}
-	buf, err := decodeInt32(values, src[1:], uint(src[0]))
-	return encoding.Int32ValuesFromBytes(buf), e.wrap(err)
+	buf := unsafecast.Int32ToBytes(dst)
+	buf, err := decodeInt32(buf[:0], src[1:], uint(src[0]))
+	return unsafecast.BytesToInt32(buf), e.wrap(err)
 }
 
 func (e *DictionaryEncoding) wrap(err error) error {

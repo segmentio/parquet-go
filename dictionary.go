@@ -813,7 +813,6 @@ type fixedLenByteArrayDictionary struct {
 
 func newFixedLenByteArrayDictionary(typ Type, columnIndex int16, numValues int32, values encoding.Values) *fixedLenByteArrayDictionary {
 	data, size := values.FixedLenByteArray()
-	assertFixedLenByteArraySize(typ.Length(), size)
 	return &fixedLenByteArrayDictionary{
 		fixedLenByteArrayPage: fixedLenByteArrayPage{
 			typ:         typ,
@@ -1331,11 +1330,11 @@ func (page *indexedPage) Slice(i, j int64) BufferedPage {
 type indexedPageType struct{ *indexedType }
 
 func (t indexedPageType) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
-	return enc.EncodeInt32(dst, src)
+	return encoding.EncodeInt32(dst, src, enc)
 }
 
 func (t indexedPageType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
-	return enc.DecodeInt32(dst, src)
+	return encoding.DecodeInt32(dst, src, enc)
 }
 
 type indexedPageValues struct {

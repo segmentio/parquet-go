@@ -11,6 +11,14 @@ type int32Buffer struct {
 	values []int32
 }
 
+func (buf *int32Buffer) resize(size int) {
+	if cap(buf.values) < size {
+		buf.values = make([]int32, size, 2*size)
+	} else {
+		buf.values = buf.values[:size]
+	}
+}
+
 func (buf *int32Buffer) decode(src []byte) ([]byte, error) {
 	values, remain, err := decodeInt32(unsafecast.Int32ToBytes(buf.values[:0]), src)
 	buf.values = unsafecast.BytesToInt32(values)

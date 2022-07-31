@@ -19,13 +19,10 @@ const (
 	Double
 	ByteArray
 	FixedLenByteArray
-	Level
 )
 
 func (kind Kind) String() string {
 	switch kind {
-	case Level:
-		return "LEVEL"
 	case Boolean:
 		return "BOOLEAN"
 	case Int32:
@@ -54,102 +51,90 @@ type Values struct {
 	offsets []uint32
 }
 
-func (values *Values) assertKind(kind Kind) {
-	if kind != values.kind {
-		panic(fmt.Sprintf("cannot convert values of type %s to type %s", values.kind, kind))
+func (v *Values) assertKind(kind Kind) {
+	if kind != v.kind {
+		panic(fmt.Sprintf("cannot convert values of type %s to type %s", v.kind, kind))
 	}
 }
 
-func (values *Values) assertSize(size int) {
-	if size != int(values.size) {
-		panic(fmt.Sprintf("cannot convert values of size %d to size %d", values.size, size))
+func (v *Values) assertSize(size int) {
+	if size != int(v.size) {
+		panic(fmt.Sprintf("cannot convert values of size %d to size %d", v.size, size))
 	}
 }
 
-func (values *Values) Size() int64 {
-	return int64(len(values.data))
+func (v *Values) Size() int64 {
+	return int64(len(v.data))
 }
 
-func (values *Values) Kind() Kind {
-	return values.kind
+func (v *Values) Kind() Kind {
+	return v.kind
 }
 
-func (values *Values) Bytes(kind Kind) []byte {
-	values.assertKind(kind)
-	return values.data
+func (v *Values) Bytes(kind Kind) []byte {
+	v.assertKind(kind)
+	return v.data
 }
 
-func (values *Values) Level() []byte {
-	values.assertKind(Level)
-	return values.data
+func (v *Values) Boolean() []byte {
+	v.assertKind(Boolean)
+	return v.data
 }
 
-func (values *Values) Boolean() []byte {
-	values.assertKind(Boolean)
-	return values.data
+func (v *Values) Int32() []int32 {
+	v.assertKind(Int32)
+	return unsafecast.BytesToInt32(v.data)
 }
 
-func (values *Values) Int32() []int32 {
-	values.assertKind(Int32)
-	return unsafecast.BytesToInt32(values.data)
+func (v *Values) Int64() []int64 {
+	v.assertKind(Int64)
+	return unsafecast.BytesToInt64(v.data)
 }
 
-func (values *Values) Int64() []int64 {
-	values.assertKind(Int64)
-	return unsafecast.BytesToInt64(values.data)
+func (v *Values) Int96() []deprecated.Int96 {
+	v.assertKind(Int96)
+	return deprecated.BytesToInt96(v.data)
 }
 
-func (values *Values) Int96() []deprecated.Int96 {
-	values.assertKind(Int96)
-	return deprecated.BytesToInt96(values.data)
+func (v *Values) Float() []float32 {
+	v.assertKind(Float)
+	return unsafecast.BytesToFloat32(v.data)
 }
 
-func (values *Values) Float() []float32 {
-	values.assertKind(Float)
-	return unsafecast.BytesToFloat32(values.data)
+func (v *Values) Double() []float64 {
+	v.assertKind(Double)
+	return unsafecast.BytesToFloat64(v.data)
 }
 
-func (values *Values) Double() []float64 {
-	values.assertKind(Double)
-	return unsafecast.BytesToFloat64(values.data)
+func (v *Values) ByteArray() (data []byte, offsets []uint32) {
+	v.assertKind(ByteArray)
+	return v.data, v.offsets
 }
 
-func (values *Values) ByteArray() (data []byte, offsets []uint32) {
-	values.assertKind(ByteArray)
-	return values.data, values.offsets
+func (v *Values) FixedLenByteArray() (data []byte, size int) {
+	v.assertKind(FixedLenByteArray)
+	return v.data, int(v.size)
 }
 
-func (values *Values) FixedLenByteArray() (data []byte, size int) {
-	values.assertKind(FixedLenByteArray)
-	return values.data, int(values.size)
+func (v *Values) Uint32() []uint32 {
+	v.assertKind(Int32)
+	return unsafecast.BytesToUint32(v.data)
 }
 
-func (values *Values) Uint32() []uint32 {
-	values.assertKind(Int32)
-	return unsafecast.BytesToUint32(values.data)
+func (v *Values) Uint64() []uint64 {
+	v.assertKind(Int64)
+	return unsafecast.BytesToUint64(v.data)
 }
 
-func (values *Values) Uint64() []uint64 {
-	values.assertKind(Int64)
-	return unsafecast.BytesToUint64(values.data)
-}
-
-func (values *Values) Uint128() [][16]byte {
-	values.assertKind(FixedLenByteArray)
-	values.assertSize(16)
-	return unsafecast.BytesToUint128(values.data)
+func (v *Values) Uint128() [][16]byte {
+	v.assertKind(FixedLenByteArray)
+	v.assertSize(16)
+	return unsafecast.BytesToUint128(v.data)
 }
 
 func BooleanValues(values []byte) Values {
 	return Values{
 		kind: Boolean,
-		data: values,
-	}
-}
-
-func LevelValues(values []byte) Values {
-	return Values{
-		kind: Level,
 		data: values,
 	}
 }
@@ -250,4 +235,80 @@ func DoubleValuesFromBytes(values []byte) Values {
 		kind: Double,
 		data: values,
 	}
+}
+
+func EncodeBoolean(dst []byte, src Values, enc Encoding) ([]byte, error) {
+	return enc.EncodeBoolean(dst, src.Boolean())
+}
+
+func EncodeInt32(dst []byte, src Values, enc Encoding) ([]byte, error) {
+	return enc.EncodeInt32(dst, src.Int32())
+}
+
+func EncodeInt64(dst []byte, src Values, enc Encoding) ([]byte, error) {
+	return enc.EncodeInt64(dst, src.Int64())
+}
+
+func EncodeInt96(dst []byte, src Values, enc Encoding) ([]byte, error) {
+	return enc.EncodeInt96(dst, src.Int96())
+}
+
+func EncodeFloat(dst []byte, src Values, enc Encoding) ([]byte, error) {
+	return enc.EncodeFloat(dst, src.Float())
+}
+
+func EncodeDouble(dst []byte, src Values, enc Encoding) ([]byte, error) {
+	return enc.EncodeDouble(dst, src.Double())
+}
+
+func EncodeByteArray(dst []byte, src Values, enc Encoding) ([]byte, error) {
+	values, offsets := src.ByteArray()
+	return enc.EncodeByteArray(dst, values, offsets)
+}
+
+func EncodeFixedLenByteArray(dst []byte, src Values, enc Encoding) ([]byte, error) {
+	data, size := src.FixedLenByteArray()
+	return enc.EncodeFixedLenByteArray(dst, data, size)
+}
+
+func DecodeBoolean(dst Values, src []byte, enc Encoding) (Values, error) {
+	values, err := enc.DecodeBoolean(dst.Boolean(), src)
+	return BooleanValues(values), err
+}
+
+func DecodeInt32(dst Values, src []byte, enc Encoding) (Values, error) {
+	values, err := enc.DecodeInt32(dst.Int32(), src)
+	return Int32Values(values), err
+}
+
+func DecodeInt64(dst Values, src []byte, enc Encoding) (Values, error) {
+	values, err := enc.DecodeInt64(dst.Int64(), src)
+	return Int64Values(values), err
+}
+
+func DecodeInt96(dst Values, src []byte, enc Encoding) (Values, error) {
+	values, err := enc.DecodeInt96(dst.Int96(), src)
+	return Int96Values(values), err
+}
+
+func DecodeFloat(dst Values, src []byte, enc Encoding) (Values, error) {
+	values, err := enc.DecodeFloat(dst.Float(), src)
+	return FloatValues(values), err
+}
+
+func DecodeDouble(dst Values, src []byte, enc Encoding) (Values, error) {
+	values, err := enc.DecodeDouble(dst.Double(), src)
+	return DoubleValues(values), err
+}
+
+func DecodeByteArray(dst Values, src []byte, enc Encoding) (Values, error) {
+	values, offsets := dst.ByteArray()
+	values, offsets, err := enc.DecodeByteArray(values, src, offsets)
+	return ByteArrayValues(values, offsets), err
+}
+
+func DecodeFixedLenByteArray(dst Values, src []byte, enc Encoding) (Values, error) {
+	data, size := dst.FixedLenByteArray()
+	values, err := enc.DecodeFixedLenByteArray(data, src, size)
+	return FixedLenByteArrayValues(values, size), err
 }

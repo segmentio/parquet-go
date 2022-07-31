@@ -656,8 +656,7 @@ func decodeLevels(enc encoding.Encoding, numValues int64, levels, data []byte) (
 	if cap(levels) < int(numValues) {
 		levels = make([]byte, numValues)
 	}
-	values, err := enc.DecodeLevels(encoding.LevelValues(levels), data)
-	levels = values.Level()
+	levels, err := enc.DecodeLevels(levels, data)
 	if err == nil {
 		switch {
 		case len(levels) < int(numValues):

@@ -271,11 +271,11 @@ func (t booleanType) NewValues(values []byte, _ []uint32) encoding.Values {
 }
 
 func (t booleanType) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
-	return enc.EncodeBoolean(dst, src)
+	return encoding.EncodeBoolean(dst, src, enc)
 }
 
 func (t booleanType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
-	return enc.DecodeBoolean(dst, src)
+	return encoding.DecodeBoolean(dst, src, enc)
 }
 
 type int32Type struct{}
@@ -311,11 +311,11 @@ func (t int32Type) NewValues(values []byte, _ []uint32) encoding.Values {
 }
 
 func (t int32Type) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
-	return enc.EncodeInt32(dst, src)
+	return encoding.EncodeInt32(dst, src, enc)
 }
 
 func (t int32Type) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
-	return enc.DecodeInt32(dst, src)
+	return encoding.DecodeInt32(dst, src, enc)
 }
 
 type int64Type struct{}
@@ -351,11 +351,11 @@ func (t int64Type) NewValues(values []byte, _ []uint32) encoding.Values {
 }
 
 func (t int64Type) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
-	return enc.EncodeInt64(dst, src)
+	return encoding.EncodeInt64(dst, src, enc)
 }
 
 func (t int64Type) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
-	return enc.DecodeInt64(dst, src)
+	return encoding.DecodeInt64(dst, src, enc)
 }
 
 type int96Type struct{}
@@ -392,11 +392,11 @@ func (t int96Type) NewValues(values []byte, _ []uint32) encoding.Values {
 }
 
 func (t int96Type) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
-	return enc.EncodeInt96(dst, src)
+	return encoding.EncodeInt96(dst, src, enc)
 }
 
 func (t int96Type) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
-	return enc.DecodeInt96(dst, src)
+	return encoding.DecodeInt96(dst, src, enc)
 }
 
 type floatType struct{}
@@ -432,11 +432,11 @@ func (t floatType) NewValues(values []byte, _ []uint32) encoding.Values {
 }
 
 func (t floatType) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
-	return enc.EncodeFloat(dst, src)
+	return encoding.EncodeFloat(dst, src, enc)
 }
 
 func (t floatType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
-	return enc.DecodeFloat(dst, src)
+	return encoding.DecodeFloat(dst, src, enc)
 }
 
 type doubleType struct{}
@@ -472,11 +472,11 @@ func (t doubleType) NewValues(values []byte, _ []uint32) encoding.Values {
 }
 
 func (t doubleType) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
-	return enc.EncodeDouble(dst, src)
+	return encoding.EncodeDouble(dst, src, enc)
 }
 
 func (t doubleType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
-	return enc.DecodeDouble(dst, src)
+	return encoding.DecodeDouble(dst, src, enc)
 }
 
 type byteArrayType struct{}
@@ -512,11 +512,11 @@ func (t byteArrayType) NewValues(values []byte, offsets []uint32) encoding.Value
 }
 
 func (t byteArrayType) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
-	return enc.EncodeByteArray(dst, src)
+	return encoding.EncodeByteArray(dst, src, enc)
 }
 
 func (t byteArrayType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
-	return enc.DecodeByteArray(dst, src)
+	return encoding.DecodeByteArray(dst, src, enc)
 }
 
 type fixedLenByteArrayType struct{ length int }
@@ -564,21 +564,11 @@ func (t fixedLenByteArrayType) NewValues(values []byte, _ []uint32) encoding.Val
 }
 
 func (t fixedLenByteArrayType) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
-	_, size := src.FixedLenByteArray()
-	assertFixedLenByteArraySize(t.length, size)
-	return enc.EncodeFixedLenByteArray(dst, src)
+	return encoding.EncodeFixedLenByteArray(dst, src, enc)
 }
 
 func (t fixedLenByteArrayType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
-	_, size := dst.FixedLenByteArray()
-	assertFixedLenByteArraySize(t.length, size)
-	return enc.DecodeFixedLenByteArray(dst, src)
-}
-
-func assertFixedLenByteArraySize(want, got int) {
-	if want != got {
-		panic(fmt.Sprintf("BUG: cannot encode fixed length byte array values of size %d with type of size %d", got, want))
-	}
+	return encoding.DecodeFixedLenByteArray(dst, src, enc)
 }
 
 // BE128 stands for "big-endian 128 bits". This type is used as a special case
@@ -635,15 +625,11 @@ func (t be128Type) NewValues(values []byte, _ []uint32) encoding.Values {
 }
 
 func (t be128Type) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
-	_, size := src.FixedLenByteArray()
-	assertFixedLenByteArraySize(16, size)
-	return enc.EncodeFixedLenByteArray(dst, src)
+	return encoding.EncodeFixedLenByteArray(dst, src, enc)
 }
 
 func (t be128Type) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
-	_, size := dst.FixedLenByteArray()
-	assertFixedLenByteArraySize(16, size)
-	return enc.DecodeFixedLenByteArray(dst, src)
+	return encoding.DecodeFixedLenByteArray(dst, src, enc)
 }
 
 // FixedLenByteArrayType constructs a type for fixed-length values of the given
@@ -838,17 +824,17 @@ func (t *intType) NewValues(values []byte, _ []uint32) encoding.Values {
 
 func (t *intType) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
 	if t.BitWidth == 64 {
-		return enc.EncodeInt64(dst, src)
+		return encoding.EncodeInt64(dst, src, enc)
 	} else {
-		return enc.EncodeInt32(dst, src)
+		return encoding.EncodeInt32(dst, src, enc)
 	}
 }
 
 func (t *intType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
 	if t.BitWidth == 64 {
-		return enc.DecodeInt64(dst, src)
+		return encoding.DecodeInt64(dst, src, enc)
 	} else {
-		return enc.DecodeInt32(dst, src)
+		return encoding.DecodeInt32(dst, src, enc)
 	}
 }
 
@@ -942,11 +928,11 @@ func (t *stringType) NewValues(values []byte, offsets []uint32) encoding.Values 
 }
 
 func (t *stringType) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
-	return enc.EncodeByteArray(dst, src)
+	return encoding.EncodeByteArray(dst, src, enc)
 }
 
 func (t *stringType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
-	return enc.DecodeByteArray(dst, src)
+	return encoding.DecodeByteArray(dst, src, enc)
 }
 
 // UUID constructs a leaf node of UUID logical type.
@@ -999,15 +985,11 @@ func (t *uuidType) NewValues(values []byte, _ []uint32) encoding.Values {
 }
 
 func (t *uuidType) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
-	_, size := src.FixedLenByteArray()
-	assertFixedLenByteArraySize(16, size)
-	return enc.EncodeFixedLenByteArray(dst, src)
+	return encoding.EncodeFixedLenByteArray(dst, src, enc)
 }
 
 func (t *uuidType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
-	_, size := dst.FixedLenByteArray()
-	assertFixedLenByteArraySize(16, size)
-	return enc.DecodeFixedLenByteArray(dst, src)
+	return encoding.DecodeFixedLenByteArray(dst, src, enc)
 }
 
 // Enum constructs a leaf node with a logical type representing enumerations.
@@ -1066,11 +1048,11 @@ func (t *enumType) NewValues(values []byte, offsets []uint32) encoding.Values {
 }
 
 func (t *enumType) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
-	return enc.EncodeByteArray(dst, src)
+	return encoding.EncodeByteArray(dst, src, enc)
 }
 
 func (t *enumType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
-	return enc.DecodeByteArray(dst, src)
+	return encoding.DecodeByteArray(dst, src, enc)
 }
 
 // JSON constructs a leaf node of JSON logical type.
@@ -1129,11 +1111,11 @@ func (t *jsonType) NewValues(values []byte, offsets []uint32) encoding.Values {
 }
 
 func (t *jsonType) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
-	return enc.EncodeByteArray(dst, src)
+	return encoding.EncodeByteArray(dst, src, enc)
 }
 
 func (t *jsonType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
-	return enc.DecodeByteArray(dst, src)
+	return encoding.DecodeByteArray(dst, src, enc)
 }
 
 // BSON constructs a leaf node of BSON logical type.
@@ -1192,11 +1174,11 @@ func (t *bsonType) NewValues(values []byte, offsets []uint32) encoding.Values {
 }
 
 func (t *bsonType) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
-	return enc.EncodeByteArray(dst, src)
+	return encoding.EncodeByteArray(dst, src, enc)
 }
 
 func (t *bsonType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
-	return enc.DecodeByteArray(dst, src)
+	return encoding.DecodeByteArray(dst, src, enc)
 }
 
 // Date constructs a leaf node of DATE logical type.
@@ -1251,11 +1233,11 @@ func (t *dateType) NewValues(values []byte, _ []uint32) encoding.Values {
 }
 
 func (t *dateType) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
-	return enc.EncodeInt32(dst, src)
+	return encoding.EncodeInt32(dst, src, enc)
 }
 
 func (t *dateType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
-	return enc.DecodeInt32(dst, src)
+	return encoding.DecodeInt32(dst, src, enc)
 }
 
 // TimeUnit represents units of time in the parquet type system.
@@ -1416,17 +1398,17 @@ func (t *timeType) NewValues(values []byte, _ []uint32) encoding.Values {
 
 func (t *timeType) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
 	if t.useInt32() {
-		return enc.EncodeInt32(dst, src)
+		return encoding.EncodeInt32(dst, src, enc)
 	} else {
-		return enc.EncodeInt64(dst, src)
+		return encoding.EncodeInt64(dst, src, enc)
 	}
 }
 
 func (t *timeType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
 	if t.useInt32() {
-		return enc.DecodeInt32(dst, src)
+		return encoding.DecodeInt32(dst, src, enc)
 	} else {
-		return enc.DecodeInt64(dst, src)
+		return encoding.DecodeInt64(dst, src, enc)
 	}
 }
 
@@ -1489,11 +1471,11 @@ func (t *timestampType) NewValues(values []byte, _ []uint32) encoding.Values {
 }
 
 func (t *timestampType) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
-	return enc.EncodeInt64(dst, src)
+	return encoding.EncodeInt64(dst, src, enc)
 }
 
 func (t *timestampType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
-	return enc.DecodeInt64(dst, src)
+	return encoding.DecodeInt64(dst, src, enc)
 }
 
 // List constructs a node of LIST logical type.

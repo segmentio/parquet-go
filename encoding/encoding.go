@@ -5,6 +5,7 @@ package encoding
 import (
 	"math"
 
+	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/format"
 )
 
@@ -29,28 +30,28 @@ type Encoding interface {
 	//
 	// The methods panic if the type of src values differ from the type of
 	// values being encoded.
-	EncodeLevels(dst []byte, src Values) ([]byte, error)
-	EncodeBoolean(dst []byte, src Values) ([]byte, error)
-	EncodeInt32(dst []byte, src Values) ([]byte, error)
-	EncodeInt64(dst []byte, src Values) ([]byte, error)
-	EncodeInt96(dst []byte, src Values) ([]byte, error)
-	EncodeFloat(dst []byte, src Values) ([]byte, error)
-	EncodeDouble(dst []byte, src Values) ([]byte, error)
-	EncodeByteArray(dst []byte, src Values) ([]byte, error)
-	EncodeFixedLenByteArray(dst []byte, src Values) ([]byte, error)
+	EncodeLevels(dst []byte, src []uint8) ([]byte, error)
+	EncodeBoolean(dst []byte, src []byte) ([]byte, error)
+	EncodeInt32(dst []byte, src []int32) ([]byte, error)
+	EncodeInt64(dst []byte, src []int64) ([]byte, error)
+	EncodeInt96(dst []byte, src []deprecated.Int96) ([]byte, error)
+	EncodeFloat(dst []byte, src []float32) ([]byte, error)
+	EncodeDouble(dst []byte, src []float64) ([]byte, error)
+	EncodeByteArray(dst []byte, src []byte, offsets []uint32) ([]byte, error)
+	EncodeFixedLenByteArray(dst []byte, src []byte, size int) ([]byte, error)
 
 	// Decode methods deserialize from the source buffer into the destination
 	// slice, potentially growing it if it was too short to contain the result.
 	//
 	// The methods panic if the type of dst values differ from the type of
 	// values being decoded.
-	DecodeLevels(dst Values, src []byte) (Values, error)
-	DecodeBoolean(dst Values, src []byte) (Values, error)
-	DecodeInt32(dst Values, src []byte) (Values, error)
-	DecodeInt64(dst Values, src []byte) (Values, error)
-	DecodeInt96(dst Values, src []byte) (Values, error)
-	DecodeFloat(dst Values, src []byte) (Values, error)
-	DecodeDouble(dst Values, src []byte) (Values, error)
-	DecodeByteArray(dst Values, src []byte) (Values, error)
-	DecodeFixedLenByteArray(dst Values, src []byte) (Values, error)
+	DecodeLevels(dst []uint8, src []byte) ([]uint8, error)
+	DecodeBoolean(dst []byte, src []byte) ([]byte, error)
+	DecodeInt32(dst []int32, src []byte) ([]int32, error)
+	DecodeInt64(dst []int64, src []byte) ([]int64, error)
+	DecodeInt96(dst []deprecated.Int96, src []byte) ([]deprecated.Int96, error)
+	DecodeFloat(dst []float32, src []byte) ([]float32, error)
+	DecodeDouble(dst []float64, src []byte) ([]float64, error)
+	DecodeByteArray(dst []byte, src []byte, offsets []uint32) ([]byte, []uint32, error)
+	DecodeFixedLenByteArray(dst []byte, src []byte, size int) ([]byte, error)
 }

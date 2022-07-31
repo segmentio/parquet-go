@@ -3,7 +3,6 @@
 package delta
 
 import (
-	"github.com/segmentio/parquet-go/encoding/plain"
 	"golang.org/x/sys/cpu"
 )
 
@@ -51,6 +50,7 @@ func validatePrefixAndSuffixLengthValues(prefix, suffix []int32, maxLength int) 
 //go:noescape
 func decodeByteArrayAVX2(dst, src []byte, prefix, suffix []int32) int
 
+/*
 func decodeByteArray(dst, src []byte, prefix, suffix []int32) ([]byte, error) {
 	totalPrefixLength, totalSuffixLength, err := validatePrefixAndSuffixLengthValues(prefix, suffix, len(src))
 	if err != nil {
@@ -99,6 +99,7 @@ func decodeByteArray(dst, src []byte, prefix, suffix []int32) ([]byte, error) {
 
 	return dst[:totalLength], nil
 }
+*/
 
 //go:noescape
 func decodeFixedLenByteArrayAVX2(dst, src []byte, prefix, suffix []int32) int
