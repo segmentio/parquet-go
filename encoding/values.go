@@ -71,9 +71,8 @@ func (v *Values) Kind() Kind {
 	return v.kind
 }
 
-func (v *Values) Bytes(kind Kind) []byte {
-	v.assertKind(kind)
-	return v.data
+func (v *Values) Data() (data []byte, offsets []uint32) {
+	return v.data, v.offsets
 }
 
 func (v *Values) Boolean() []byte {

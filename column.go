@@ -487,11 +487,13 @@ func schemaRepetitionTypeOf(s *format.SchemaElement) format.FieldRepetitionType 
 }
 
 type dictPage struct {
-	values []byte
+	values  []byte
+	offsets []uint32
 }
 
 func (p *dictPage) reset() {
 	p.values = p.values[:0]
+	p.offsets = p.offsets[:0]
 }
 
 type dataPage struct {
@@ -499,6 +501,7 @@ type dataPage struct {
 	definitionLevels []byte
 	data             []byte
 	values           []byte
+	offsets          []uint32
 	dictionary       Dictionary
 }
 
@@ -507,6 +510,7 @@ func (p *dataPage) reset() {
 	p.definitionLevels = p.definitionLevels[:0]
 	p.data = p.data[:0]
 	p.values = p.values[:0]
+	p.offsets = p.offsets[:0]
 	p.dictionary = nil
 }
 
@@ -614,12 +618,12 @@ func (c *Column) decodeDataPage(header DataPageHeader, numValues int64, page *da
 		pageType = indexedPageType{newIndexedType(pageType, page.dictionary)}
 	}
 
-	values := pageType.NewValues(page.values, nil)
+	values := pageType.NewValues(page.values, page.offsets)
 	values, err := pageType.Decode(values, data, pageEncoding)
 	if err != nil {
 		return nil, err
 	}
-	page.values = values.Bytes(values.Kind())
+	page.values, page.offsets = values.Data()
 
 	newPage := pageType.NewPage(c.Index(), int(numValues), values)
 	switch {
@@ -687,14 +691,14 @@ func (c *Column) decodeDictionary(header DictionaryPageHeader, page *dataPage, d
 		pageEncoding = format.Plain
 	}
 
-	values := pageType.NewValues(page.values, nil)
+	values := pageType.NewValues(dict.values, dict.offsets)
 	values, err := pageType.Decode(values, page.data, LookupEncoding(pageEncoding))
 	if err != nil {
 		return nil, err
 	}
-	page.values = values.Bytes(values.Kind())
-	dict.values = append(dict.values[:0], page.values...)
-	return pageType.NewDictionary(int(c.index), int(header.NumValues()), pageType.NewValues(dict.values, nil)), nil
+	dict.values, dict.offsets = values.Data()
+	values = pageType.NewValues(dict.values, dict.offsets)
+	return pageType.NewDictionary(int(c.index), int(header.NumValues()), values), nil
 }
 
 var (

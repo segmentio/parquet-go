@@ -6,8 +6,6 @@ import (
 
 	"github.com/segmentio/parquet-go/bloom"
 	"github.com/segmentio/parquet-go/deprecated"
-	"github.com/segmentio/parquet-go/encoding"
-	"github.com/segmentio/parquet-go/encoding/plain"
 	"github.com/segmentio/parquet-go/internal/quick"
 	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
@@ -31,8 +29,7 @@ func TestSplitBlockFilter(t *testing.T) {
 			scenario: "BOOLEAN",
 			function: func(values []bool) bool {
 				filter := newFilter(len(values))
-				bits := unsafecast.BoolToBytes(values)
-				enc.EncodeBoolean(filter.Bytes(), encoding.BooleanValues(bits))
+				enc.EncodeBoolean(filter.Bytes(), unsafecast.BoolToBytes(values))
 				for _, v := range values {
 					if !check(filter, ValueOf(v)) {
 						return false
@@ -46,7 +43,7 @@ func TestSplitBlockFilter(t *testing.T) {
 			scenario: "INT32",
 			function: func(values []int32) bool {
 				filter := newFilter(len(values))
-				enc.EncodeInt32(filter.Bytes(), encoding.Int32Values(values))
+				enc.EncodeInt32(filter.Bytes(), values)
 				for _, v := range values {
 					if !check(filter, ValueOf(v)) {
 						return false
@@ -60,7 +57,7 @@ func TestSplitBlockFilter(t *testing.T) {
 			scenario: "INT64",
 			function: func(values []int64) bool {
 				filter := newFilter(len(values))
-				enc.EncodeInt64(filter.Bytes(), encoding.Int64Values(values))
+				enc.EncodeInt64(filter.Bytes(), values)
 				for _, v := range values {
 					if !check(filter, ValueOf(v)) {
 						return false
@@ -74,7 +71,7 @@ func TestSplitBlockFilter(t *testing.T) {
 			scenario: "INT96",
 			function: func(values []deprecated.Int96) bool {
 				filter := newFilter(len(values))
-				enc.EncodeInt96(filter.Bytes(), encoding.Int96Values(values))
+				enc.EncodeInt96(filter.Bytes(), values)
 				for _, v := range values {
 					if !check(filter, ValueOf(v)) {
 						return false
@@ -88,7 +85,7 @@ func TestSplitBlockFilter(t *testing.T) {
 			scenario: "FLOAT",
 			function: func(values []float32) bool {
 				filter := newFilter(len(values))
-				enc.EncodeFloat(filter.Bytes(), encoding.FloatValues(values))
+				enc.EncodeFloat(filter.Bytes(), values)
 				for _, v := range values {
 					if !check(filter, ValueOf(v)) {
 						return false
@@ -102,7 +99,7 @@ func TestSplitBlockFilter(t *testing.T) {
 			scenario: "DOUBLE",
 			function: func(values []float64) bool {
 				filter := newFilter(len(values))
-				enc.EncodeDouble(filter.Bytes(), encoding.DoubleValues(values))
+				enc.EncodeDouble(filter.Bytes(), values)
 				for _, v := range values {
 					if !check(filter, ValueOf(v)) {
 						return false
@@ -115,12 +112,15 @@ func TestSplitBlockFilter(t *testing.T) {
 		{
 			scenario: "BYTE_ARRAY",
 			function: func(values [][]byte) bool {
-				byteArrays := make([]byte, 0)
+				content := make([]byte, 0, 512)
+				offsets := make([]uint32, len(values))
 				for _, value := range values {
-					byteArrays = plain.AppendByteArray(byteArrays, value)
+					offsets = append(offsets, uint32(len(content)))
+					content = append(content, value...)
 				}
+				offsets = append(offsets, uint32(len(content)))
 				filter := newFilter(len(values))
-				enc.EncodeByteArray(filter.Bytes(), encoding.ByteArrayValues(byteArrays, nil))
+				enc.EncodeByteArray(filter.Bytes(), content, offsets)
 				for _, v := range values {
 					if !check(filter, ValueOf(v)) {
 						return false
@@ -134,7 +134,7 @@ func TestSplitBlockFilter(t *testing.T) {
 			scenario: "FIXED_LEN_BYTE_ARRAY",
 			function: func(values []byte) bool {
 				filter := newFilter(len(values))
-				enc.EncodeFixedLenByteArray(filter.Bytes(), encoding.FixedLenByteArrayValues(values, 1))
+				enc.EncodeFixedLenByteArray(filter.Bytes(), values, 1)
 				for _, v := range values {
 					if !check(filter, ValueOf([1]byte{v})) {
 						return false
@@ -165,9 +165,8 @@ func BenchmarkSplitBlockFilter(b *testing.B) {
 		v[i] = r.Int63()
 	}
 
-	v64 := encoding.Int64Values(v)
 	for i := 0; i < b.N; i++ {
-		e.EncodeInt64(f, v64)
+		e.EncodeInt64(f, v)
 	}
 
 	b.SetBytes(8 * N)

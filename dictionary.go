@@ -673,40 +673,37 @@ func (d *doubleDictionary) Page() BufferedPage {
 
 type byteArrayDictionary struct {
 	byteArrayPage
-	table   map[string]int32
-	offsets []uint32
+	table map[string]int32
 }
 
 func newByteArrayDictionary(typ Type, columnIndex int16, numValues int32, data encoding.Values) *byteArrayDictionary {
-	values, _ := data.ByteArray()
-
-	d := &byteArrayDictionary{
+	values, offsets := data.ByteArray()
+	// The first offset must always be zero, and the last offset is the length
+	// of the values in bytes.
+	//
+	// As an optimization we make the assumption that the backing array of the
+	// offsets slice belongs to the dictionary.
+	switch {
+	case cap(offsets) == 0:
+		offsets = make([]uint32, 1, 8)
+	case len(offsets) == 0:
+		offsets = append(offsets[:0], 0)
+	}
+	return &byteArrayDictionary{
 		byteArrayPage: byteArrayPage{
 			typ:         typ,
 			values:      values,
+			offsets:     offsets,
 			columnIndex: ^columnIndex,
 		},
-		offsets: make([]uint32, 0, numValues),
 	}
-
-	for i := 0; i < len(values); {
-		d.offsets = append(d.offsets, uint32(i))
-		n := plain.ByteArrayLength(values[i:])
-		i += plain.ByteArrayLengthSize
-		i += n
-	}
-
-	d.numValues = int32(len(d.offsets))
-	return d
 }
 
 func (d *byteArrayDictionary) Type() Type { return newIndexedType(d.typ, d) }
 
-func (d *byteArrayDictionary) Len() int { return len(d.offsets) }
+func (d *byteArrayDictionary) Len() int { return d.len() }
 
-func (d *byteArrayDictionary) Index(i int32) Value { return d.makeValueBytes(d.index(i)) }
-
-func (d *byteArrayDictionary) index(i int32) []byte { return d.valueAt(d.offsets[i]) }
+func (d *byteArrayDictionary) Index(i int32) Value { return d.makeValueBytes(d.index(int(i))) }
 
 func (d *byteArrayDictionary) Insert(indexes []int32, values []Value) {
 	model := Value{}
@@ -714,14 +711,11 @@ func (d *byteArrayDictionary) Insert(indexes []int32, values []Value) {
 }
 
 func (d *byteArrayDictionary) init() {
-	d.table = make(map[string]int32, d.numValues)
+	numValues := d.len()
+	d.table = make(map[string]int32, numValues)
 
-	for i := 0; i < len(d.values); {
-		n := plain.ByteArrayLength(d.values[i:])
-		i += plain.ByteArrayLengthSize
-		s := d.values[i : i+n]
-		i += n
-		d.table[string(s)] = int32(len(d.table))
+	for i := 0; i < numValues; i++ {
+		d.table[string(d.index(i))] = int32(len(d.table))
 	}
 }
 
@@ -738,11 +732,10 @@ func (d *byteArrayDictionary) insert(indexes []int32, rows sparse.Array) {
 		index, exists := d.table[value]
 		if !exists {
 			value = cloneString(value)
-			index = d.numValues
-			d.numValues++
+			index = int32(len(d.table))
 			d.table[value] = index
+			d.values = append(d.values, value...)
 			d.offsets = append(d.offsets, uint32(len(d.values)))
-			d.values = plain.AppendByteArrayString(d.values, value)
 		}
 
 		indexes[i] = index
@@ -763,7 +756,7 @@ func (d *byteArrayDictionary) Lookup(indexes []int32, values []Value) {
 
 func (d *byteArrayDictionary) Bounds(indexes []int32) (min, max Value) {
 	if len(indexes) > 0 {
-		base := d.index(indexes[0])
+		base := d.index(int(indexes[0]))
 		minValue := unsafecast.BytesToString(base)
 		maxValue := minValue
 		values := [64]string{}
@@ -793,9 +786,8 @@ func (d *byteArrayDictionary) Bounds(indexes []int32) (min, max Value) {
 }
 
 func (d *byteArrayDictionary) Reset() {
-	d.offsets = d.offsets[:0]
+	d.offsets = d.offsets[:1]
 	d.values = d.values[:0]
-	d.numValues = 0
 
 	for k := range d.table {
 		delete(d.table, k)
