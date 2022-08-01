@@ -1453,13 +1453,26 @@ func (t *listType) Decode(dst, _ []byte, _ encoding.Encoding) ([]byte, error) {
 // Map constructs a node of MAP logical type.
 //
 // https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#maps
-func Map(key, value Node) Node {
-	return mapNode{Group{
+func Map(key, value Node, tag ...string) Node {
+	var node Node = mapNode{Group{
 		"key_value": Repeated(Group{
 			"key":   Required(key),
 			"value": value,
 		}),
 	}}
+
+	forEachTagOption(tag, func(option, args string) {
+		switch option {
+		case "":
+			return
+		case "optional":
+			node = Optional(node)
+		default:
+			throwUnknownTag(key.GoType(), "map", option)
+		}
+	})
+
+	return node
 }
 
 type mapNode struct{ Group }
