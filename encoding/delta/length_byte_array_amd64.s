@@ -12,13 +12,14 @@ TEXT ·decodeByteArrayLengths(SB), NOSPLIT, $0-56
     XORQ DI, DI // invalidLength
     XORQ SI, SI
 
-    CMPQ BX, $4
-    JB test
+    CMPQ CX, $4
+    JL test
 
-    MOVQ CX, R9
-    SHRQ $2, R9
-    SHLQ $2, R9
+    MOVQ CX, R8
+    SHRQ $2, R8
+    SHLQ $2, R8
 
+    MOVL $0, (AX)
     PXOR X0, X0
     PXOR X3, X3
     // This loops computes the prefix sum of the lengths array in order to
@@ -48,12 +49,12 @@ loopSSE2:
     PADDD X2, X1
 
     PADDD X1, X0
-    MOVOU X0, (AX)(SI*4)
+    MOVOU X0, 4(AX)(SI*4)
 
     PSHUFD $0b11111111, X0, X0
 
     ADDQ $4, SI
-    CMPQ SI, R9
+    CMPQ SI, R8
     JNE loopSSE2
 
     // If any of the most significant bits of double words in the X3 register
@@ -63,11 +64,12 @@ loopSSE2:
     // TODO: we report the invalid length as -1, effectively losing the original
     // value due to the aggregation within X3. This is something that we might
     // want to address in the future to provide better error reporting.
-    MOVMSKPS X3, R9
-    MOVL $-1, R10
-    CMPL R9, $0
-    CMOVLNE R10, DI
+    MOVMSKPS X3, R8
+    MOVL $-1, R9
+    CMPL R8, $0
+    CMOVLNE R9, DI
 
+    MOVQ X0, DX
     JMP test
 loop:
     MOVL (BX)(SI*4), R8
