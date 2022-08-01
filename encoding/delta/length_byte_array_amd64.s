@@ -32,6 +32,9 @@ TEXT ·decodeByteArrayLengths(SB), NOSPLIT, $0-56
     // The X3 register also accumulates a mask of all length values, which is
     // checked after the loop to determine whether any of the lengths were
     // negative.
+    //
+    // The following article contains a description of the prefix sum algorithm
+    // used in this function: https://en.algorithmica.org/hpc/algorithms/prefix/
 loopSSE2:
     MOVOU (BX)(SI*4), X1
     POR X1, X3
