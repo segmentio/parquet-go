@@ -3,6 +3,13 @@
 
 package bitpacked_test
 
-// func FuzzEncodeLevels(f *testing.F) {
-// 	fuzz.EncodeLevels(f, &rle.Encoding{BitWidth: 8})
-// }
+import (
+	"testing"
+
+	"github.com/segmentio/parquet-go/encoding/fuzz"
+	"github.com/segmentio/parquet-go/encoding/rle"
+)
+
+func FuzzEncodeLevels(f *testing.F) {
+	fuzz.EncodeLevels(f, &rle.Encoding{BitWidth: 8})
+}
