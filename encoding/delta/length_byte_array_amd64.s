@@ -22,7 +22,7 @@ TEXT ·decodeByteArrayLengths(SB), NOSPLIT, $0-56
     MOVL $0, (AX)
     PXOR X0, X0
     PXOR X3, X3
-    // This loops computes the prefix sum of the lengths array in order to
+    // This loop computes the prefix sum of the lengths array in order to
     // generate values of the offsets array.
     //
     // We stick to SSE2 to keep the code simple (the Go compiler appears to
