@@ -18,6 +18,10 @@ func (e *LengthByteArrayEncoding) Encoding() format.Encoding {
 }
 
 func (e *LengthByteArrayEncoding) EncodeByteArray(dst []byte, src []byte, offsets []uint32) ([]byte, error) {
+	if len(offsets) == 0 {
+		return dst[:0], nil
+	}
+
 	length := getInt32Buffer()
 	defer putInt32Buffer(length)
 
@@ -63,10 +67,4 @@ func (e *LengthByteArrayEncoding) wrap(err error) error {
 		err = encoding.Error(e, err)
 	}
 	return err
-}
-
-func encodeByteArrayLengths(lengths []int32, offsets []uint32) {
-	for i := range lengths {
-		lengths[i] = int32(offsets[i+1] - offsets[i])
-	}
 }

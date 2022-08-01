@@ -2,6 +2,40 @@
 
 #include "textflag.h"
 
+// func encodeByteArrayLengths(lengths []int32, offsets []uint32)
+TEXT ·encodeByteArrayLengths(SB), NOSPLIT, $0-48
+    MOVQ lengths_base+0(FP), AX
+    MOVQ lengths_len+8(FP), CX
+    MOVQ offsets_base+24(FP), BX
+    XORQ SI, SI
+
+    CMPQ CX, $4
+    JB test
+
+    MOVQ CX, DX
+    SHRQ $2, DX
+    SHLQ $2, DX
+
+loopSSE2:
+    MOVOU 0(BX)(SI*4), X0
+    MOVOU 4(BX)(SI*4), X1
+    PSUBL X0, X1
+    MOVOU X1, (AX)(SI*4)
+    ADDQ $4, SI
+    CMPQ SI, DX
+    JNE loopSSE2
+    JMP test
+loop:
+    MOVL 0(BX)(SI*4), R8
+    MOVL 4(BX)(SI*4), R9
+    SUBL R8, R9
+    MOVL R9, (AX)(SI*4)
+    INCQ SI
+test:
+    CMPQ SI, CX
+    JNE loop
+    RET
+
 // func decodeByteArrayLengths(offsets []uint32, length []int32) (lastOffset uint32, invalidLength int32)
 TEXT ·decodeByteArrayLengths(SB), NOSPLIT, $0-56
     MOVQ offsets_base+0(FP), AX

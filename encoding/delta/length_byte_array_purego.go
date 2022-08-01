@@ -2,6 +2,12 @@
 
 package delta
 
+func encodeByteArrayLengths(lengths []int32, offsets []uint32) {
+	for i := range lengths {
+		lengths[i] = int32(offsets[i+1] - offsets[i])
+	}
+}
+
 func decodeByteArrayLengths(offsets []uint32, lengths []int32) (uint32, int32) {
 	lastOffset := uint32(0)
 
