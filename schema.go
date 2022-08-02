@@ -82,8 +82,11 @@ type Schema struct {
 // and the data will not be written into the parquet file(s).
 // Note that a field with name "-" can still be generated using the tag "-,".
 //
-// Map key configuration can be pass using the `parquet-key` tag. This tag will follow the
-// same properties than the `parquet` tag.
+// The configuration of Parquet maps are done via two tags:
+//   - The `parquet-key` tag allows to configure the key of a map.
+//   - The parquet-value tag allows users to configure a map's values, for example to declare their native Parquet types.
+//
+// When configuring a Parquet map, the `parquet` tag will configure the map itself.
 //
 // For example, the following will set the int64 key of the map to be a timestamp:
 //
@@ -315,6 +318,7 @@ func structNodeOf(t reflect.Type) *structNode {
 		field.Node = makeNodeOf(fields[i].Type, fields[i].Name, []string{
 			fields[i].Tag.Get("parquet"),
 			fields[i].Tag.Get("parquet-key"),
+			fields[i].Tag.Get("parquet-value"),
 		})
 		s.fields[i] = field
 	}
@@ -521,17 +525,32 @@ func nodeOf(t reflect.Type, tag []string) Node {
 		}
 
 	case reflect.Map:
-		var valueTag, keyTag string
+		var mapTag, valueTag, keyTag string
 		if len(tag) > 0 {
-			valueTag = tag[0]
+			mapTag = tag[0]
 			if len(tag) > 1 {
 				keyTag = tag[1]
 			}
+			if len(tag) >= 2 {
+				valueTag = tag[2]
+			}
 		}
+
 		n = Map(
 			makeNodeOf(t.Key(), t.Name(), []string{keyTag}),
 			makeNodeOf(t.Elem(), t.Name(), []string{valueTag}),
 		)
+
+		forEachTagOption([]string{mapTag}, func(option, args string) {
+			switch option {
+			case "":
+				return
+			case "optional":
+				n = Optional(n)
+			default:
+				throwUnknownTag(t, "map", option)
+			}
+		})
 
 	case reflect.Struct:
 		return structNodeOf(t)
