@@ -18,6 +18,10 @@ func (e *LengthByteArrayEncoding) Encoding() format.Encoding {
 }
 
 func (e *LengthByteArrayEncoding) EncodeByteArray(dst []byte, src []byte, offsets []uint32) ([]byte, error) {
+	if len(offsets) == 0 {
+		return dst[:0], nil
+	}
+
 	length := getInt32Buffer()
 	defer putInt32Buffer(length)
 
@@ -41,17 +45,16 @@ func (e *LengthByteArrayEncoding) DecodeByteArray(dst []byte, src []byte, offset
 		return dst, offsets, e.wrap(err)
 	}
 
-	if err := validateByteArrayLengths(length.values); err != nil {
-		return dst, offsets, e.wrap(err)
-	}
-
 	if size := len(length.values) + 1; cap(offsets) < size {
 		offsets = make([]uint32, size)
 	} else {
 		offsets = offsets[:size]
 	}
 
-	lastOffset := decodeByteArrayLengths(offsets, length.values)
+	lastOffset, invalidLength := decodeByteArrayLengths(offsets, length.values)
+	if invalidLength != 0 {
+		return dst, offsets, e.wrap(errInvalidNegativeValueLength(int(invalidLength)))
+	}
 	if int(lastOffset) > len(src) {
 		return dst, offsets, e.wrap(errValueLengthOutOfBounds(int(lastOffset), len(src)))
 	}
@@ -64,31 +67,4 @@ func (e *LengthByteArrayEncoding) wrap(err error) error {
 		err = encoding.Error(e, err)
 	}
 	return err
-}
-
-func validateByteArrayLengths(lengths []int32) error {
-	for _, n := range lengths {
-		if n < 0 {
-			return errInvalidNegativeValueLength(int(n))
-		}
-	}
-	return nil
-}
-
-func encodeByteArrayLengths(lengths []int32, offsets []uint32) {
-	for i := range lengths {
-		lengths[i] = int32(offsets[i+1] - offsets[i])
-	}
-}
-
-func decodeByteArrayLengths(offsets []uint32, lengths []int32) uint32 {
-	lastOffset := uint32(0)
-
-	for i, n := range lengths {
-		offsets[i] = lastOffset
-		lastOffset += uint32(n)
-	}
-
-	offsets[len(lengths)] = lastOffset
-	return lastOffset
 }
