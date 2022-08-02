@@ -539,8 +539,18 @@ func nodeOf(t reflect.Type, tag []string) Node {
 		n = Map(
 			makeNodeOf(t.Key(), t.Name(), []string{keyTag}),
 			makeNodeOf(t.Elem(), t.Name(), []string{valueTag}),
-			mapTag,
 		)
+
+		forEachTagOption([]string{mapTag}, func(option, args string) {
+			switch option {
+			case "":
+				return
+			case "optional":
+				n = Optional(n)
+			default:
+				throwUnknownTag(t, "map", option)
+			}
+		})
 
 	case reflect.Struct:
 		return structNodeOf(t)
