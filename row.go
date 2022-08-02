@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"github.com/segmentio/parquet-go/utils"
 	"io"
 	"reflect"
 )
@@ -487,11 +488,18 @@ func deconstructFuncOfLeaf(columnIndex int16, node Node) (int16, deconstructFunc
 		panic("row cannot be deconstructed because it has more than 127 columns")
 	}
 	kind := node.Type().Kind()
+	logicalType := node.Type().LogicalType()
 	valueColumnIndex := ^columnIndex
 	return columnIndex + 1, func(row Row, levels levels, value reflect.Value) Row {
 		v := Value{}
 
 		if value.IsValid() {
+			switch {
+			case value.Kind() == reflect.String && logicalType.Timestamp != nil:
+				value = reflect.ValueOf(utils.StringToTimeMs(value.String()))
+			case value.Kind() == reflect.String && logicalType.Date != nil:
+				value = reflect.ValueOf(utils.StringToDate(value.String()))
+			}
 			v = makeValue(kind, value)
 		}
 
@@ -702,9 +710,22 @@ func reconstructFuncOfGroup(columnIndex int16, node Node) (int16, reconstructFun
 
 //go:noinline
 func reconstructFuncOfLeaf(columnIndex int16, node Node) (int16, reconstructFunc) {
+	logicalType := node.Type().LogicalType()
 	return columnIndex + 1, func(value reflect.Value, _ levels, row Row) (Row, error) {
 		if !row.startsWith(columnIndex) {
 			return row, fmt.Errorf("no values found in parquet row for column %d", columnIndex)
+		}
+		switch {
+		case value.Kind() == reflect.String && logicalType.Timestamp != nil:
+			{
+				value.SetString(utils.TimeMsToString(row[0].Int64()))
+				return row[1:], nil
+			}
+		case value.Kind() == reflect.String && logicalType.Date != nil:
+			{
+				value.SetString(utils.DateToString(row[0].Int32()))
+				return row[1:], nil
+			}
 		}
 		return row[1:], assignValue(value, row[0])
 	}

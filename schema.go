@@ -802,14 +802,14 @@ func makeNodeOf(t reflect.Type, name string, tag []string) Node {
 			setNode(Decimal(scale, precision, baseType))
 		case "date":
 			switch t.Kind() {
-			case reflect.Int32:
+			case reflect.Int32, reflect.String:
 				setNode(Date())
 			default:
 				throwInvalidTag(t, name, option)
 			}
 		case "timestamp":
 			switch t.Kind() {
-			case reflect.Int64:
+			case reflect.Int64, reflect.String:
 				timeUnit, err := parseTimestampArgs(args)
 				if err != nil {
 					throwInvalidTag(t, name, option)
