@@ -105,8 +105,8 @@ type booleanDictionary struct {
 	table [2]int32
 }
 
-func newBooleanDictionary(typ Type, columnIndex int16, numValues int32, values []byte) *booleanDictionary {
-	indexOfFalse, indexOfTrue := int32(-1), int32(-1)
+func newBooleanDictionary(typ Type, columnIndex int16, numValues int32, data encoding.Values) *booleanDictionary {
+	indexOfFalse, indexOfTrue, values := int32(-1), int32(-1), data.Boolean()
 
 	for i := int32(0); i < numValues && indexOfFalse < 0 && indexOfTrue < 0; i += 8 {
 		v := values[i]
@@ -220,11 +220,11 @@ type int32Dictionary struct {
 	table *hashprobe.Int32Table
 }
 
-func newInt32Dictionary(typ Type, columnIndex int16, numValues int32, values []byte) *int32Dictionary {
+func newInt32Dictionary(typ Type, columnIndex int16, numValues int32, data encoding.Values) *int32Dictionary {
 	return &int32Dictionary{
 		int32Page: int32Page{
 			typ:         typ,
-			values:      unsafecast.BytesToInt32(values)[:numValues],
+			values:      data.Int32()[:numValues],
 			columnIndex: ^columnIndex,
 		},
 	}
@@ -320,11 +320,11 @@ type int64Dictionary struct {
 	table *hashprobe.Int64Table
 }
 
-func newInt64Dictionary(typ Type, columnIndex int16, numValues int32, values []byte) *int64Dictionary {
+func newInt64Dictionary(typ Type, columnIndex int16, numValues int32, data encoding.Values) *int64Dictionary {
 	return &int64Dictionary{
 		int64Page: int64Page{
 			typ:         typ,
-			values:      unsafecast.BytesToInt64(values)[:numValues],
+			values:      data.Int64()[:numValues],
 			columnIndex: ^columnIndex,
 		},
 	}
@@ -407,11 +407,11 @@ type int96Dictionary struct {
 	hashmap map[deprecated.Int96]int32
 }
 
-func newInt96Dictionary(typ Type, columnIndex int16, numValues int32, values []byte) *int96Dictionary {
+func newInt96Dictionary(typ Type, columnIndex int16, numValues int32, data encoding.Values) *int96Dictionary {
 	return &int96Dictionary{
 		int96Page: int96Page{
 			typ:         typ,
-			values:      deprecated.BytesToInt96(values)[:numValues],
+			values:      data.Int96()[:numValues],
 			columnIndex: ^columnIndex,
 		},
 	}
@@ -502,11 +502,11 @@ type floatDictionary struct {
 	table *hashprobe.Float32Table
 }
 
-func newFloatDictionary(typ Type, columnIndex int16, numValues int32, values []byte) *floatDictionary {
+func newFloatDictionary(typ Type, columnIndex int16, numValues int32, data encoding.Values) *floatDictionary {
 	return &floatDictionary{
 		floatPage: floatPage{
 			typ:         typ,
-			values:      unsafecast.BytesToFloat32(values)[:numValues],
+			values:      data.Float()[:numValues],
 			columnIndex: ^columnIndex,
 		},
 	}
@@ -589,11 +589,11 @@ type doubleDictionary struct {
 	table *hashprobe.Float64Table
 }
 
-func newDoubleDictionary(typ Type, columnIndex int16, numValues int32, values []byte) *doubleDictionary {
+func newDoubleDictionary(typ Type, columnIndex int16, numValues int32, data encoding.Values) *doubleDictionary {
 	return &doubleDictionary{
 		doublePage: doublePage{
 			typ:         typ,
-			values:      unsafecast.BytesToFloat64(values)[:numValues],
+			values:      data.Double()[:numValues],
 			columnIndex: ^columnIndex,
 		},
 	}
@@ -673,38 +673,37 @@ func (d *doubleDictionary) Page() BufferedPage {
 
 type byteArrayDictionary struct {
 	byteArrayPage
-	table   map[string]int32
-	offsets []uint32
+	table map[string]int32
 }
 
-func newByteArrayDictionary(typ Type, columnIndex int16, numValues int32, values []byte) *byteArrayDictionary {
-	d := &byteArrayDictionary{
+func newByteArrayDictionary(typ Type, columnIndex int16, numValues int32, data encoding.Values) *byteArrayDictionary {
+	values, offsets := data.ByteArray()
+	// The first offset must always be zero, and the last offset is the length
+	// of the values in bytes.
+	//
+	// As an optimization we make the assumption that the backing array of the
+	// offsets slice belongs to the dictionary.
+	switch {
+	case cap(offsets) == 0:
+		offsets = make([]uint32, 1, 8)
+	case len(offsets) == 0:
+		offsets = append(offsets[:0], 0)
+	}
+	return &byteArrayDictionary{
 		byteArrayPage: byteArrayPage{
 			typ:         typ,
 			values:      values,
+			offsets:     offsets,
 			columnIndex: ^columnIndex,
 		},
-		offsets: make([]uint32, 0, numValues),
 	}
-
-	for i := 0; i < len(values); {
-		d.offsets = append(d.offsets, uint32(i))
-		n := plain.ByteArrayLength(values[i:])
-		i += plain.ByteArrayLengthSize
-		i += n
-	}
-
-	d.numValues = int32(len(d.offsets))
-	return d
 }
 
 func (d *byteArrayDictionary) Type() Type { return newIndexedType(d.typ, d) }
 
-func (d *byteArrayDictionary) Len() int { return len(d.offsets) }
+func (d *byteArrayDictionary) Len() int { return d.len() }
 
-func (d *byteArrayDictionary) Index(i int32) Value { return d.makeValueBytes(d.index(i)) }
-
-func (d *byteArrayDictionary) index(i int32) []byte { return d.valueAt(d.offsets[i]) }
+func (d *byteArrayDictionary) Index(i int32) Value { return d.makeValueBytes(d.index(int(i))) }
 
 func (d *byteArrayDictionary) Insert(indexes []int32, values []Value) {
 	model := Value{}
@@ -712,14 +711,11 @@ func (d *byteArrayDictionary) Insert(indexes []int32, values []Value) {
 }
 
 func (d *byteArrayDictionary) init() {
-	d.table = make(map[string]int32, d.numValues)
+	numValues := d.len()
+	d.table = make(map[string]int32, numValues)
 
-	for i := 0; i < len(d.values); {
-		n := plain.ByteArrayLength(d.values[i:])
-		i += plain.ByteArrayLengthSize
-		s := d.values[i : i+n]
-		i += n
-		d.table[string(s)] = int32(len(d.table))
+	for i := 0; i < numValues; i++ {
+		d.table[string(d.index(i))] = int32(len(d.table))
 	}
 }
 
@@ -736,11 +732,10 @@ func (d *byteArrayDictionary) insert(indexes []int32, rows sparse.Array) {
 		index, exists := d.table[value]
 		if !exists {
 			value = cloneString(value)
-			index = d.numValues
-			d.numValues++
+			index = int32(len(d.table))
 			d.table[value] = index
+			d.values = append(d.values, value...)
 			d.offsets = append(d.offsets, uint32(len(d.values)))
-			d.values = plain.AppendByteArrayString(d.values, value)
 		}
 
 		indexes[i] = index
@@ -761,7 +756,7 @@ func (d *byteArrayDictionary) Lookup(indexes []int32, values []Value) {
 
 func (d *byteArrayDictionary) Bounds(indexes []int32) (min, max Value) {
 	if len(indexes) > 0 {
-		base := d.index(indexes[0])
+		base := d.index(int(indexes[0]))
 		minValue := unsafecast.BytesToString(base)
 		maxValue := minValue
 		values := [64]string{}
@@ -791,9 +786,8 @@ func (d *byteArrayDictionary) Bounds(indexes []int32) (min, max Value) {
 }
 
 func (d *byteArrayDictionary) Reset() {
-	d.offsets = d.offsets[:0]
+	d.offsets = d.offsets[:1]
 	d.values = d.values[:0]
-	d.numValues = 0
 
 	for k := range d.table {
 		delete(d.table, k)
@@ -809,8 +803,8 @@ type fixedLenByteArrayDictionary struct {
 	hashmap map[string]int32
 }
 
-func newFixedLenByteArrayDictionary(typ Type, columnIndex int16, numValues int32, data []byte) *fixedLenByteArrayDictionary {
-	size := typ.Length()
+func newFixedLenByteArrayDictionary(typ Type, columnIndex int16, numValues int32, values encoding.Values) *fixedLenByteArrayDictionary {
+	data, size := values.FixedLenByteArray()
 	return &fixedLenByteArrayDictionary{
 		fixedLenByteArrayPage: fixedLenByteArrayPage{
 			typ:         typ,
@@ -924,11 +918,11 @@ type uint32Dictionary struct {
 	table *hashprobe.Uint32Table
 }
 
-func newUint32Dictionary(typ Type, columnIndex int16, numValues int32, data []byte) *uint32Dictionary {
+func newUint32Dictionary(typ Type, columnIndex int16, numValues int32, data encoding.Values) *uint32Dictionary {
 	return &uint32Dictionary{
 		uint32Page: uint32Page{
 			typ:         typ,
-			values:      unsafecast.BytesToUint32(data)[:numValues],
+			values:      data.Uint32()[:numValues],
 			columnIndex: ^columnIndex,
 		},
 	}
@@ -1011,11 +1005,11 @@ type uint64Dictionary struct {
 	table *hashprobe.Uint64Table
 }
 
-func newUint64Dictionary(typ Type, columnIndex int16, numValues int32, data []byte) *uint64Dictionary {
+func newUint64Dictionary(typ Type, columnIndex int16, numValues int32, data encoding.Values) *uint64Dictionary {
 	return &uint64Dictionary{
 		uint64Page: uint64Page{
 			typ:         typ,
-			values:      unsafecast.BytesToUint64(data),
+			values:      data.Uint64()[:numValues],
 			columnIndex: ^columnIndex,
 		},
 	}
@@ -1098,11 +1092,11 @@ type be128Dictionary struct {
 	table *hashprobe.Uint128Table
 }
 
-func newBE128Dictionary(typ Type, columnIndex int16, numValues int32, data []byte) *be128Dictionary {
+func newBE128Dictionary(typ Type, columnIndex int16, numValues int32, data encoding.Values) *be128Dictionary {
 	return &be128Dictionary{
 		be128Page: be128Page{
 			typ:         typ,
-			values:      unsafecast.BytesToUint128(data),
+			values:      data.Uint128()[:numValues],
 			columnIndex: ^columnIndex,
 		},
 	}
@@ -1227,8 +1221,12 @@ func (t *indexedType) NewColumnBuffer(columnIndex, numValues int) ColumnBuffer {
 	return newIndexedColumnBuffer(t, makeColumnIndex(columnIndex), makeNumValues(numValues))
 }
 
-func (t *indexedType) NewPage(columnIndex, numValues int, data []byte) Page {
+func (t *indexedType) NewPage(columnIndex, numValues int, data encoding.Values) Page {
 	return newIndexedPage(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
+}
+
+func (t *indexedType) NewValues(values []byte, _ []uint32) encoding.Values {
+	return encoding.Int32ValuesFromBytes(values)
 }
 
 // indexedPage is an implementation of the BufferedPage interface which stores
@@ -1240,16 +1238,17 @@ type indexedPage struct {
 	columnIndex int16
 }
 
-func newIndexedPage(typ *indexedType, columnIndex int16, numValues int32, values []byte) *indexedPage {
+func newIndexedPage(typ *indexedType, columnIndex int16, numValues int32, data encoding.Values) *indexedPage {
 	// RLE encoded values that contain dictionary indexes in data pages are
 	// sometimes truncated when they contain only zeros. We account for this
 	// special case here and extend the values buffer if it is shorter than
 	// needed to hold `numValues`.
-	size := 4 * int(numValues)
+	size := int(numValues)
+	values := data.Int32()
 
 	if len(values) < size {
 		if cap(values) < size {
-			tmp := make([]byte, size)
+			tmp := make([]int32, size)
 			copy(tmp, values)
 			values = tmp
 		} else {
@@ -1262,7 +1261,7 @@ func newIndexedPage(typ *indexedType, columnIndex int16, numValues int32, values
 
 	return &indexedPage{
 		typ:         typ,
-		values:      unsafecast.BytesToInt32(values[:size]),
+		values:      values[:size],
 		columnIndex: ^columnIndex,
 	}
 }
@@ -1285,7 +1284,7 @@ func (page *indexedPage) RepetitionLevels() []byte { return nil }
 
 func (page *indexedPage) DefinitionLevels() []byte { return nil }
 
-func (page *indexedPage) Data() []byte { return unsafecast.Int32ToBytes(page.values) }
+func (page *indexedPage) Data() encoding.Values { return encoding.Int32Values(page.values) }
 
 func (page *indexedPage) Values() ValueReader { return &indexedPageValues{page: page} }
 
@@ -1322,12 +1321,12 @@ func (page *indexedPage) Slice(i, j int64) BufferedPage {
 // its dictionary instead of plain values.
 type indexedPageType struct{ *indexedType }
 
-func (t indexedPageType) Encode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
-	return enc.EncodeInt32(dst, src)
+func (t indexedPageType) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
+	return encoding.EncodeInt32(dst, src, enc)
 }
 
-func (t indexedPageType) Decode(dst, src []byte, enc encoding.Encoding) ([]byte, error) {
-	return enc.DecodeInt32(dst, src)
+func (t indexedPageType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
+	return encoding.DecodeInt32(dst, src, enc)
 }
 
 type indexedPageValues struct {

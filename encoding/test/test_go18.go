@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/segmentio/parquet-go/encoding"
-	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 func EncodeInt32(t *testing.T, enc encoding.Encoding, min, max int, bitWidth uint) {
@@ -60,9 +59,11 @@ func EncodeDouble(t *testing.T, enc encoding.Encoding, min, max int) {
 	)
 }
 
-type encodingMethod func(encoding.Encoding, []byte, []byte) ([]byte, error)
+type encodingFunc[T comparable] func(encoding.Encoding, []byte, []T) ([]byte, error)
 
-func encode[T comparable](t *testing.T, enc encoding.Encoding, min, max int, encode, decode encodingMethod, valueOf func(int) T) {
+type decodingFunc[T comparable] func(encoding.Encoding, []T, []byte) ([]T, error)
+
+func encode[T comparable](t *testing.T, enc encoding.Encoding, min, max int, encode encodingFunc[T], decode decodingFunc[T], valueOf func(int) T) {
 	t.Helper()
 
 	for k := min; k <= max; k++ {
@@ -72,7 +73,7 @@ func encode[T comparable](t *testing.T, enc encoding.Encoding, min, max int, enc
 				src[i] = valueOf(i)
 			}
 
-			buf, err := encode(enc, nil, unsafecast.Slice[byte](src))
+			buf, err := encode(enc, nil, src)
 			if err != nil {
 				t.Fatalf("encoding %d values: %v", k, err)
 			}
@@ -82,7 +83,7 @@ func encode[T comparable](t *testing.T, enc encoding.Encoding, min, max int, enc
 				t.Fatalf("decoding %d values: %v", k, err)
 			}
 
-			if err := assertEqual(src, unsafecast.Slice[T](res)); err != nil {
+			if err := assertEqual(src, res); err != nil {
 				t.Fatalf("testing %d values: %v", k, err)
 			}
 		})

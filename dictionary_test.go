@@ -36,7 +36,7 @@ func TestDictionary(t *testing.T) {
 func testDictionary(t *testing.T, typ parquet.Type, numValues int) {
 	const columnIndex = 1
 
-	dict := typ.NewDictionary(columnIndex, 0, nil)
+	dict := typ.NewDictionary(columnIndex, 0, typ.NewValues(nil, nil))
 	values := make([]parquet.Value, numValues)
 	indexes := make([]int32, numValues)
 	lookups := make([]parquet.Value, numValues)
@@ -167,7 +167,8 @@ func BenchmarkDictionary(b *testing.B) {
 		b.Run(test.scenario, func(b *testing.B) {
 			for j, typ := range dictionaryTypes {
 				for _, numValues := range []int{1e2, 1e3, 1e4, 1e5, 1e6} {
-					dict := typ.NewDictionary(0, 0, make([]byte, 0, 4*numValues))
+					buf := typ.NewValues(make([]byte, 0, 4*numValues), nil)
+					dict := typ.NewDictionary(0, 0, buf)
 					values := make([]parquet.Value, numValues)
 
 					f := randValueFuncOf(typ)

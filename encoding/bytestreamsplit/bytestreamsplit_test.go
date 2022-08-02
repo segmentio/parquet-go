@@ -12,7 +12,7 @@ import (
 )
 
 func FuzzEncodeFloat(f *testing.F) {
-	fuzz.EncodeDouble(f, new(bytestreamsplit.Encoding))
+	fuzz.EncodeFloat(f, new(bytestreamsplit.Encoding))
 }
 
 func FuzzEncodeDouble(f *testing.F) {
