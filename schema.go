@@ -84,9 +84,9 @@ type Schema struct {
 //
 // The configuration of Parquet maps are done via two tags:
 //   - The `parquet-key` tag allows to configure the key of a map.
-//   - The `parquet-value` tag allows to configure the values of a map.
+//   - The parquet-value tag allows users to configure a map's values, for example to declare their native Parquet types.
 //
-// When configuring a Parquet map, the `parquet` tag will configure map itself.
+// When configuring a Parquet map, the `parquet` tag will configure the map itself.
 //
 // For example, the following will set the int64 key of the map to be a timestamp:
 //
