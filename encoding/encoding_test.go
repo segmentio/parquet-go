@@ -674,7 +674,8 @@ func benchmarkEncodeByteArray(b *testing.B, e encoding.Encoding) {
 	buffer := make([]byte, 0)
 	values, offsets := generateByteArrayValues(benchmarkNumValues, newRand())
 
-	reportThroughput(b, benchmarkNumValues, len(values), func() {
+	numBytes := len(values) + 4*len(offsets)
+	reportThroughput(b, benchmarkNumValues, numBytes, func() {
 		benchmarkZeroAllocsPerRun(b, func() {
 			buffer, _ = e.EncodeByteArray(buffer, values, offsets)
 		})
@@ -823,7 +824,8 @@ func benchmarkDecodeByteArray(b *testing.B, e encoding.Encoding) {
 	values, offsets := generateByteArrayValues(benchmarkNumValues, newRand())
 	buffer, _ := e.EncodeByteArray(nil, values, offsets)
 
-	reportThroughput(b, benchmarkNumValues, len(values), func() {
+	numBytes := len(values) + 4*len(offsets)
+	reportThroughput(b, benchmarkNumValues, numBytes, func() {
 		benchmarkZeroAllocsPerRun(b, func() {
 			values, offsets, _ = e.DecodeByteArray(values, buffer, offsets)
 		})
