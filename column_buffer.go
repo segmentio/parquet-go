@@ -1417,9 +1417,9 @@ func (col *byteArrayColumnBuffer) Page() BufferedPage {
 
 		col.values, col.scratch = col.scratch, col.values
 	}
-	// The offsets have the total length as last item. Since we are about to
+	// The offsets have the total length as the last item. Since we are about to
 	// expose the column buffer's internal state as a Page value we ensure that
-	// the last offset is the total length of of values.
+	// the last offset is the total length of all values.
 	col.offsets = append(col.offsets[:len(col.lengths)], uint32(len(col.values)))
 	return &col.byteArrayPage
 }
