@@ -41,7 +41,7 @@ type Page interface {
 	NumValues() int64
 	NumNulls() int64
 
-	// Returns the min and max values currently buffered in the writer.
+	// Returns the page's min and max values.
 	//
 	// The third value is a boolean indicating whether the page bounds were
 	// available. Page bounds may not be known if the page contained no values
@@ -95,24 +95,6 @@ type BufferedPage interface {
 	// multiple calls to this method, applications must treat the content as
 	// immutable.
 	Data() encoding.Values
-}
-
-// CompressedPage is an extension of the Page interface implemented by pages
-// that have been compressed to their on-file representation.
-type CompressedPage interface {
-	Page
-
-	// Returns a representation of the page header.
-	PageHeader() PageHeader
-
-	// Returns a reader exposing the content of the compressed page.
-	PageData() io.Reader
-
-	// Returns the size of the page data.
-	PageSize() int64
-
-	// CRC returns the IEEE CRC32 checksum of the page.
-	CRC() uint32
 }
 
 // PageReader is an interface implemented by types that support producing a

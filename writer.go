@@ -1013,13 +1013,13 @@ func (c *writerColumn) WritePage(page Page) (numValues int64, err error) {
 				})
 				return numValues, err
 
-			case CompressedPage:
+				//case CompressedPage:
 				// Compressed pages are written as-is to the compressed page
 				// buffers; those pages should be coming from parquet files that
 				// are being copied into a new file, they are simply copied to
 				// amortize the cost of decoding and re-encoding the pages, which
 				// often includes costly compression steps.
-				return c.writeCompressedPage(p)
+				//return c.writeCompressedPage(p)
 			}
 		}
 	}
@@ -1174,6 +1174,8 @@ func (c *writerColumn) writeBufferedPage(page BufferedPage) (int64, error) {
 	return numValues, nil
 }
 
+// Disable for now, will bring back when we optimize page copies.
+/*
 func (c *writerColumn) writeCompressedPage(page CompressedPage) (int64, error) {
 	if page.Dictionary() == nil {
 		switch {
@@ -1235,6 +1237,7 @@ func (c *writerColumn) writeCompressedPage(page CompressedPage) (int64, error) {
 	c.recordPageStats(headerSize, pageHeader, page)
 	return page.NumValues(), nil
 }
+*/
 
 func (c *writerColumn) writeDictionaryPage(output io.Writer, dict Dictionary) (err error) {
 	buf := c.buffers

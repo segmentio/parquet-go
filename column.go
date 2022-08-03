@@ -486,63 +486,36 @@ func schemaRepetitionTypeOf(s *format.SchemaElement) format.FieldRepetitionType 
 	return format.Required
 }
 
-type dictPage struct {
-	values  []byte
-	offsets []uint32
-}
-
-func (p *dictPage) reset() {
-	p.values = p.values[:0]
-	p.offsets = p.offsets[:0]
-}
-
-type dataPage struct {
-	repetitionLevels []byte
-	definitionLevels []byte
-	data             []byte
-	values           []byte
-	offsets          []uint32
-	dictionary       Dictionary
-}
-
-func (p *dataPage) reset() {
-	p.repetitionLevels = p.repetitionLevels[:0]
-	p.definitionLevels = p.definitionLevels[:0]
-	p.data = p.data[:0]
-	p.values = p.values[:0]
-	p.offsets = p.offsets[:0]
-	p.dictionary = nil
-}
-
-func (p *dataPage) decompress(codec compress.Codec, data []byte) (err error) {
-	p.values, err = codec.Decode(p.values, data)
-	p.data, p.values = p.values, p.data[:0]
-	return err
+func (c *Column) decompress(data []byte, size int32) ([]byte, error) {
+	var page []byte
+	if size > 0 {
+		page = make([]byte, size)
+	}
+	return c.compression.Decode(page, data)
 }
 
 // DecodeDataPageV1 decodes a data page from the header, compressed data, and
 // optional dictionary passed as arguments.
 func (c *Column) DecodeDataPageV1(header DataPageHeaderV1, data []byte, dict Dictionary) (Page, error) {
-	return c.decodeDataPageV1(header, &dataPage{data: data, dictionary: dict})
+	return c.decodeDataPageV1(header, data, dict, -1)
 }
 
-func (c *Column) decodeDataPageV1(header DataPageHeaderV1, page *dataPage) (Page, error) {
+func (c *Column) decodeDataPageV1(header DataPageHeaderV1, data []byte, dict Dictionary, size int32) (Page, error) {
 	var err error
 
 	if isCompressed(c.compression) {
-		if err := page.decompress(c.compression, page.data); err != nil {
+		if data, err = c.decompress(data, size); err != nil {
 			return nil, fmt.Errorf("decompressing data page v1: %w", err)
 		}
 	}
 
-	numValues := header.NumValues()
-	data := page.data
-	page.repetitionLevels = page.repetitionLevels[:0]
-	page.definitionLevels = page.definitionLevels[:0]
+	var numValues = header.NumValues()
+	var repetitionLevels []byte
+	var definitionLevels []byte
 
 	if c.maxRepetitionLevel > 0 {
 		encoding := lookupLevelEncoding(header.RepetitionLevelEncoding(), c.maxRepetitionLevel)
-		page.repetitionLevels, data, err = decodeLevelsV1(encoding, numValues, page.repetitionLevels, data)
+		repetitionLevels, data, err = decodeLevelsV1(encoding, numValues, data)
 		if err != nil {
 			return nil, fmt.Errorf("decoding repetition levels of data page v1: %w", err)
 		}
@@ -550,36 +523,35 @@ func (c *Column) decodeDataPageV1(header DataPageHeaderV1, page *dataPage) (Page
 
 	if c.maxDefinitionLevel > 0 {
 		encoding := lookupLevelEncoding(header.DefinitionLevelEncoding(), c.maxDefinitionLevel)
-		page.definitionLevels, data, err = decodeLevelsV1(encoding, numValues, page.definitionLevels, data)
+		definitionLevels, data, err = decodeLevelsV1(encoding, numValues, data)
 		if err != nil {
 			return nil, fmt.Errorf("decoding definition levels of data page v1: %w", err)
 		}
 
 		// Data pages v1 did not embed the number of null values,
 		// so we have to compute it from the definition levels.
-		numValues -= int64(countLevelsNotEqual(page.definitionLevels, c.maxDefinitionLevel))
+		numValues -= int64(countLevelsNotEqual(definitionLevels, c.maxDefinitionLevel))
 	}
 
-	return c.decodeDataPage(header, numValues, page, data)
+	return c.decodeDataPage(header, numValues, repetitionLevels, definitionLevels, data, dict)
 }
 
 // DecodeDataPageV2 decodes a data page from the header, compressed data, and
 // optional dictionary passed as arguments.
 func (c *Column) DecodeDataPageV2(header DataPageHeaderV2, data []byte, dict Dictionary) (Page, error) {
-	return c.decodeDataPageV2(header, &dataPage{data: data, dictionary: dict})
+	return c.decodeDataPageV2(header, data, dict, -1)
 }
 
-func (c *Column) decodeDataPageV2(header DataPageHeaderV2, page *dataPage) (Page, error) {
+func (c *Column) decodeDataPageV2(header DataPageHeaderV2, data []byte, dict Dictionary, size int32) (Page, error) {
 	var numValues = header.NumValues()
 	var err error
-	var data = page.data
-	page.repetitionLevels = page.repetitionLevels[:0]
-	page.definitionLevels = page.definitionLevels[:0]
+	var repetitionLevels []byte
+	var definitionLevels []byte
 
 	if c.maxRepetitionLevel > 0 {
 		encoding := lookupLevelEncoding(header.RepetitionLevelEncoding(), c.maxRepetitionLevel)
 		length := header.RepetitionLevelsByteLength()
-		page.repetitionLevels, data, err = decodeLevelsV2(encoding, numValues, page.repetitionLevels, data, length)
+		repetitionLevels, data, err = decodeLevelsV2(encoding, numValues, data, length)
 		if err != nil {
 			return nil, fmt.Errorf("decoding repetition levels of data page v2: %w", io.ErrUnexpectedEOF)
 		}
@@ -588,24 +560,23 @@ func (c *Column) decodeDataPageV2(header DataPageHeaderV2, page *dataPage) (Page
 	if c.maxDefinitionLevel > 0 {
 		encoding := lookupLevelEncoding(header.DefinitionLevelEncoding(), c.maxDefinitionLevel)
 		length := header.DefinitionLevelsByteLength()
-		page.definitionLevels, data, err = decodeLevelsV2(encoding, numValues, page.definitionLevels, data, length)
+		definitionLevels, data, err = decodeLevelsV2(encoding, numValues, data, length)
 		if err != nil {
 			return nil, fmt.Errorf("decoding definition levels of data page v2: %w", io.ErrUnexpectedEOF)
 		}
 	}
 
 	if isCompressed(c.compression) && header.IsCompressed() {
-		if err := page.decompress(c.compression, data); err != nil {
+		if data, err = c.decompress(data, size); err != nil {
 			return nil, fmt.Errorf("decompressing data page v2: %w", err)
 		}
-		data = page.data
 	}
 
 	numValues -= header.NumNulls()
-	return c.decodeDataPage(header, numValues, page, data)
+	return c.decodeDataPage(header, numValues, repetitionLevels, definitionLevels, data, dict)
 }
 
-func (c *Column) decodeDataPage(header DataPageHeader, numValues int64, page *dataPage, data []byte) (Page, error) {
+func (c *Column) decodeDataPage(header DataPageHeader, numValues int64, repetitionLevels, definitionLevels, data []byte, dict Dictionary) (Page, error) {
 	pageEncoding := LookupEncoding(header.Encoding())
 	pageType := c.Type()
 
@@ -615,27 +586,26 @@ func (c *Column) decodeDataPage(header DataPageHeader, numValues int64, page *da
 		// the dictionary page, but the page is still encoded using the RLE
 		// encoding in this case, so we convert it to RLE_DICTIONARY.
 		pageEncoding = &RLEDictionary
-		pageType = indexedPageType{newIndexedType(pageType, page.dictionary)}
+		pageType = indexedPageType{newIndexedType(pageType, dict)}
 	}
 
-	values := pageType.NewValues(page.values, page.offsets)
+	values := pageType.NewValues(nil, nil)
 	values, err := pageType.Decode(values, data, pageEncoding)
 	if err != nil {
 		return nil, err
 	}
-	page.values, page.offsets = values.Data()
 
 	newPage := pageType.NewPage(c.Index(), int(numValues), values)
 	switch {
 	case c.maxRepetitionLevel > 0:
-		newPage = newRepeatedPage(newPage.Buffer(), c.maxRepetitionLevel, c.maxDefinitionLevel, page.repetitionLevels, page.definitionLevels)
+		newPage = newRepeatedPage(newPage.Buffer(), c.maxRepetitionLevel, c.maxDefinitionLevel, repetitionLevels, definitionLevels)
 	case c.maxDefinitionLevel > 0:
-		newPage = newOptionalPage(newPage.Buffer(), c.maxDefinitionLevel, page.definitionLevels)
+		newPage = newOptionalPage(newPage.Buffer(), c.maxDefinitionLevel, definitionLevels)
 	}
 	return newPage, nil
 }
 
-func decodeLevelsV1(enc encoding.Encoding, numValues int64, levels, data []byte) ([]byte, []byte, error) {
+func decodeLevelsV1(enc encoding.Encoding, numValues int64, data []byte) ([]byte, []byte, error) {
 	if len(data) < 4 {
 		return nil, data, io.ErrUnexpectedEOF
 	}
@@ -644,22 +614,20 @@ func decodeLevelsV1(enc encoding.Encoding, numValues int64, levels, data []byte)
 	if j > len(data) {
 		return nil, data, io.ErrUnexpectedEOF
 	}
-	levels, err := decodeLevels(enc, numValues, levels, data[i:j])
+	levels, err := decodeLevels(enc, numValues, data[i:j])
 	return levels, data[j:], err
 }
 
-func decodeLevelsV2(enc encoding.Encoding, numValues int64, levels, data []byte, length int64) ([]byte, []byte, error) {
+func decodeLevelsV2(enc encoding.Encoding, numValues int64, data []byte, length int64) ([]byte, []byte, error) {
 	if length > int64(len(data)) {
 		return nil, data, io.ErrUnexpectedEOF
 	}
-	levels, err := decodeLevels(enc, numValues, levels, data[:length])
+	levels, err := decodeLevels(enc, numValues, data[:length])
 	return levels, data[length:], err
 }
 
-func decodeLevels(enc encoding.Encoding, numValues int64, levels, data []byte) ([]byte, error) {
-	if cap(levels) < int(numValues) {
-		levels = make([]byte, numValues)
-	}
+func decodeLevels(enc encoding.Encoding, numValues int64, data []byte) ([]byte, error) {
+	levels := make([]byte, numValues)
 	levels, err := enc.DecodeLevels(levels, data)
 	if err == nil {
 		switch {
@@ -675,12 +643,13 @@ func decodeLevels(enc encoding.Encoding, numValues int64, levels, data []byte) (
 // DecodeDictionary decodes a data page from the header and compressed data
 // passed as arguments.
 func (c *Column) DecodeDictionary(header DictionaryPageHeader, data []byte) (Dictionary, error) {
-	return c.decodeDictionary(header, &dataPage{data: data}, &dictPage{})
+	return c.decodeDictionary(header, data, -1)
 }
 
-func (c *Column) decodeDictionary(header DictionaryPageHeader, page *dataPage, dict *dictPage) (Dictionary, error) {
+func (c *Column) decodeDictionary(header DictionaryPageHeader, data []byte, size int32) (Dictionary, error) {
 	if isCompressed(c.compression) {
-		if err := page.decompress(c.compression, page.data); err != nil {
+		var err error
+		if data, err = c.decompress(data, size); err != nil {
 			return nil, fmt.Errorf("decompressing dictionary page: %w", err)
 		}
 	}
@@ -691,13 +660,11 @@ func (c *Column) decodeDictionary(header DictionaryPageHeader, page *dataPage, d
 		pageEncoding = format.Plain
 	}
 
-	values := pageType.NewValues(dict.values, dict.offsets)
-	values, err := pageType.Decode(values, page.data, LookupEncoding(pageEncoding))
+	values := pageType.NewValues(nil, nil)
+	values, err := pageType.Decode(values, data, LookupEncoding(pageEncoding))
 	if err != nil {
 		return nil, err
 	}
-	dict.values, dict.offsets = values.Data()
-	values = pageType.NewValues(dict.values, dict.offsets)
 	return pageType.NewDictionary(int(c.index), int(header.NumValues()), values), nil
 }
 
