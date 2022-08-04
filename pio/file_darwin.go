@@ -8,67 +8,84 @@ import (
 )
 
 const (
+	// Value of AIO_LISTIO_MAX, which seems to be a kernel constant.
 	aioListioMax = 16
 )
 
 func fileMultiReadAt(f *os.File, ops []Op) {
-	var buf [aioListioMax]aiocb
-	var req [aioListioMax]*aiocb
+	var buffer [aioListioMax]aiocb
+	var requests [aioListioMax]*aiocb
+	var operations [aioListioMax]*Op
 	var fd = f.Fd()
+	var pending = 0
 
-	for i := 0; i < len(ops); {
-		j := len(ops)
-		n := len(ops) - i
+	submit := func(i int, op *Op) error {
+		r := &buffer[i]
+		r.filedes = int32(fd)
+		r.offset = op.Off
+		r.setBuf(op.Data)
+		requests[i] = r
+		operations[i] = op
 
-		if n > aioListioMax {
-			j = aioListioMax + i
-			n = aioListioMax
+		if errno := aio_read(r); errno != 0 {
+			return os.NewSyscallError("aio_read", errno)
 		}
 
-		list := ops[i:j]
-		wait := 0
+		return nil
+	}
 
-		for k, op := range list {
-			r := &buf[k]
-			r.filedes = int32(fd)
-			r.offset = op.Off
-			r.buf = nil
-			r.nbytes = 0
+	complete := func(i int, size int, err error) {
+		op := operations[i]
 
-			if len(op.Data) > 0 {
-				r.buf = &op.Data[0]
-				r.nbytes = int64(len(op.Data))
-			}
-
-			switch err := aio_read(r); err {
-			case 0:
-				req[k] = r
-				wait++
-			default:
-				list[k].Err = os.NewSyscallError("aio_read", err)
-				req[k] = nil
-			}
+		if err != nil {
+			op.Err = err
+		} else if size < len(op.Data) {
+			op.Err = io.EOF
 		}
 
-		for wait > 0 && aio_suspend(req[:n]) != syscall.EINTR {
-			for k, r := range req[:n] {
-				if r != nil {
-					if size, errno := aio_return(r); errno != syscall.EINPROGRESS {
-						op := &list[k]
-						if errno != 0 {
-							op.Err = os.NewSyscallError("aio_error", errno)
-						} else if size < len(op.Data) {
-							op.Err = io.EOF
-						}
-						op.Data = op.Data[:size]
-						req[k] = nil
-						wait--
-					}
+		op.Data = op.Data[:size]
+	}
+
+	for len(ops) > 0 && pending < aioListioMax {
+		if err := submit(pending, &ops[0]); err != nil {
+			complete(pending, 0, err)
+		} else {
+			pending++
+		}
+		ops = ops[1:]
+	}
+
+	for pending > 0 && aio_suspend(requests[:]) != syscall.EINTR {
+		for i, r := range requests {
+			if r == nil {
+				continue
+			}
+
+			size, errno := aio_return(r)
+			if errno == syscall.EINPROGRESS {
+				continue
+			}
+
+			var err error
+			if errno != 0 {
+				err = os.NewSyscallError("aio_return", errno)
+			}
+			complete(i, size, err)
+			requests[i] = nil
+			pending--
+
+			for len(ops) > 0 {
+				op := &ops[0]
+				ops = ops[1:]
+
+				if err := submit(i, op); err != nil {
+					complete(i, 0, err)
+				} else {
+					pending++
+					break
 				}
 			}
 		}
-
-		i += len(list)
 	}
 }
 
@@ -104,6 +121,16 @@ type aiocb struct {
 	reqprio   int32
 	sigevent  sigevent
 	lioOpcode int32
+}
+
+func (aiocb *aiocb) setBuf(data []byte) {
+	if len(data) == 0 {
+		aiocb.buf = nil
+		aiocb.nbytes = 0
+	} else {
+		aiocb.buf = &data[0]
+		aiocb.nbytes = int64(len(data))
+	}
 }
 
 func aio_cancel(filedes int32, aiocb *aiocb) syscall.Errno {
