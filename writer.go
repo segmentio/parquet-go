@@ -68,7 +68,6 @@ type Writer struct {
 //		writer := parquet.NewWriter(output, config)
 //		...
 //	}
-//
 func NewWriter(output io.Writer, options ...WriterOption) *Writer {
 	config, err := NewWriterConfig(options...)
 	if err != nil {
