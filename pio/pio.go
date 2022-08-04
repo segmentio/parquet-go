@@ -39,7 +39,7 @@ type Op struct {
 func MultiReadAt(file io.ReaderAt, ops []Op) {
 	switch f := file.(type) {
 	case *os.File:
-		File{f}.MultiReadAt(ops)
+		fileMultiReadAt(f, ops)
 	case ReaderAt:
 		f.MultiReadAt(ops)
 	default:
