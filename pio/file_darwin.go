@@ -136,22 +136,22 @@ type aiocb struct {
 }
 
 func aio_cancel(filedes int32, aiocb *aiocb) syscall.Errno {
-	_, _, errno := syscall.RawSyscall(syscall.SYS_AIO_CANCEL, uintptr(filedes), uintptr(unsafe.Pointer(aiocb)), 0)
+	_, _, errno := syscall.Syscall(syscall.SYS_AIO_CANCEL, uintptr(filedes), uintptr(unsafe.Pointer(aiocb)), 0)
 	return errno
 }
 
 func aio_read(aiocb *aiocb) syscall.Errno {
-	_, _, errno := syscall.RawSyscall(syscall.SYS_AIO_READ, uintptr(unsafe.Pointer(aiocb)), 0, 0)
+	_, _, errno := syscall.Syscall(syscall.SYS_AIO_READ, uintptr(unsafe.Pointer(aiocb)), 0, 0)
 	return errno
 }
 
 func aio_return(aiocb *aiocb) (int, syscall.Errno) {
-	ret, _, errno := syscall.RawSyscall(syscall.SYS_AIO_RETURN, uintptr(unsafe.Pointer(aiocb)), 0, 0)
+	ret, _, errno := syscall.Syscall(syscall.SYS_AIO_RETURN, uintptr(unsafe.Pointer(aiocb)), 0, 0)
 	return int(ret), errno
 }
 
 func aio_error(aiocb *aiocb) syscall.Errno {
-	_, _, errno := syscall.RawSyscall(syscall.SYS_AIO_ERROR, uintptr(unsafe.Pointer(aiocb)), 0, 0)
+	_, _, errno := syscall.Syscall(syscall.SYS_AIO_ERROR, uintptr(unsafe.Pointer(aiocb)), 0, 0)
 	return errno
 }
 
