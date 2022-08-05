@@ -23,14 +23,15 @@ func fileMultiReadAt(f *os.File, ops []Op) {
 		return
 	}
 
-	abort := func(err error) {
-		for i := range ops {
-			op := &ops[i]
-			op.Data, op.Err = op.Data[:0], err
-		}
+	ioctx := <-ioctxPool
+	if ioctx == nil {
+		// The channel holding I/O contexts gets closed if the kernel did not
+		// support async I/O (e.g. io_setup returned ENOSYS), in which case we
+		// fallback to using goroutines to serve the I/O requests.
+		multiReadAt(f, ops)
+		return
 	}
 
-	ioctx := <-ioctxPool
 	defer func() {
 		for i := range ioctx.req {
 			ioctx.req[i] = iocb{}
@@ -131,7 +132,13 @@ func fileMultiReadAt(f *os.File, ops []Op) {
 			}
 
 		default:
-			abort(os.NewSyscallError("io_getevents", errno))
+			err := os.NewSyscallError("io_getevents", errno)
+
+			for i := range ops {
+				op := &ops[i]
+				op.Data, op.Err = op.Data[:0], err
+			}
+
 			return
 		}
 	}
@@ -167,7 +174,11 @@ func init() {
 		ctx, errno := io_setup(ioctxMaxQueue)
 		if errno != 0 {
 			if i > 0 {
-				break
+				return
+			}
+			if errno == syscall.ENOSYS {
+				close(ioctxPool)
+				return
 			}
 			panic(os.NewSyscallError("io_setup", errno))
 		}
