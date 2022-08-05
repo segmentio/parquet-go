@@ -154,7 +154,7 @@ type ioctx struct {
 const (
 	// Hard limits, chosen arbitrarily, we should revisit if they are not
 	// adequate for production workloads.
-	ioctxMaxCount = 64
+	ioctxMaxCount = 16
 	ioctxMaxQueue = 1024
 )
 
