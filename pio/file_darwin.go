@@ -12,6 +12,17 @@ const (
 	aioListioMax = 16
 )
 
+func (op *Op) data() *byte {
+	if len(op.Data) == 0 {
+		return nil
+	}
+	return &op.Data[0]
+}
+
+func (op *Op) size() int64 {
+	return int64(len(op.Data))
+}
+
 func fileMultiReadAt(f *os.File, ops []Op) {
 	var buffer [aioListioMax]aiocb
 	var requests [aioListioMax]*aiocb

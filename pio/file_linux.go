@@ -7,6 +7,17 @@ import (
 	"unsafe"
 )
 
+func (op *Op) data() *byte {
+	if len(op.Data) == 0 {
+		return nil
+	}
+	return &op.Data[0]
+}
+
+func (op *Op) size() uint64 {
+	return uint64(len(op.Data))
+}
+
 func fileMultiReadAt(f *os.File, ops []Op) {
 	if len(ops) == 0 {
 		return

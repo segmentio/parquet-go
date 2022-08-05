@@ -30,17 +30,6 @@ type Op struct {
 	Err error
 }
 
-func (op *Op) data() *byte {
-	if len(op.Data) == 0 {
-		return nil
-	}
-	return &op.Data[0]
-}
-
-func (op *Op) size() uint64 {
-	return uint64(len(op.Data))
-}
-
 // MultiReadAt uses the given list of operations to read multiple locations in
 // a file.
 //
