@@ -1,10 +1,8 @@
 package pio
 
 import (
-	"errors"
 	"io"
 	"os"
-	"sync"
 	"syscall"
 	"unsafe"
 )
@@ -32,12 +30,19 @@ func fileMultiReadAt(f *os.File, ops []Op) {
 		}
 	}
 
-	ioctx, err := getIoctx()
-	if err != nil {
-		abort(err)
-		return
-	}
-	defer putIoctx(ioctx)
+	ioctx := <-ioctxPool
+	defer func() {
+		for i := range ioctx.req {
+			ioctx.req[i] = iocb{}
+		}
+		for i := range ioctx.res {
+			ioctx.res[i] = io_event{}
+		}
+		ioctx.ptr = ioctx.ptr[:0]
+		ioctx.req = ioctx.req[:0]
+		ioctx.res = ioctx.res[:0]
+		ioctxPool <- ioctx
+	}()
 
 	fd := f.Fd()
 	for i := range ops {
@@ -142,63 +147,32 @@ type ioctx struct {
 const (
 	// Hard limits, chosen arbitrarily, we should revisit if they are not
 	// adequate for production workloads.
-	ioctxMaxCount = 4096
+	ioctxMaxCount = 64
 	ioctxMaxQueue = 1024
 )
 
 var (
 	// For some reasons io_destroy has very high latency (~30ms) so instead of
-	// creating a context for each call to fileMultiReadAt we maintain a FIFO
+	// creating a context for each call to fileMultiReadAt we maintain a LIFO
 	// pool of contexts created by the application in order to reuse them.
 	//
 	// Note that in the current implementation, we never destroy I/O contexts,
 	// their lifetime is bound to the lifetime of the process. We might want
 	// to revisit this decision in the future.
-	ioctxMutex sync.Mutex
-	ioctxCount int
-	ioctxStack []*ioctx
-
-	errTooManyIoctx = errors.New("too many I/O contexts")
+	ioctxPool = make(chan *ioctx, ioctxMaxCount)
 )
 
-func getIoctx() (*ioctx, error) {
-	ioctxMutex.Lock()
-	defer ioctxMutex.Unlock()
-
-	if n := len(ioctxStack); n > 0 {
-		ctx := ioctxStack[n-1]
-		ioctxStack = ioctxStack[:n-1]
-		return ctx, nil
+func init() {
+	for i := 0; i < ioctxMaxCount; i++ {
+		ctx, errno := io_setup(ioctxMaxQueue)
+		if errno != 0 {
+			if i > 0 {
+				break
+			}
+			panic(os.NewSyscallError("io_setup", errno))
+		}
+		ioctxPool <- &ioctx{ctx: ctx}
 	}
-
-	if ioctxCount == ioctxMaxCount {
-		return nil, errTooManyIoctx
-	}
-
-	ctx, errno := io_setup(ioctxMaxQueue)
-	if errno != 0 {
-		return nil, os.NewSyscallError("io_setup", errno)
-	}
-	ioctxCount++
-	return &ioctx{ctx: ctx}, nil
-}
-
-func putIoctx(ctx *ioctx) {
-	for i := range ctx.req {
-		ctx.req[i] = iocb{}
-	}
-
-	for i := range ctx.res {
-		ctx.res[i] = io_event{}
-	}
-
-	ctx.ptr = ctx.ptr[:0]
-	ctx.req = ctx.req[:0]
-	ctx.res = ctx.res[:0]
-
-	ioctxMutex.Lock()
-	ioctxStack = append(ioctxStack, ctx)
-	ioctxMutex.Unlock()
 }
 
 const (
@@ -259,11 +233,6 @@ func io_setup(nrEvents int) (io_context_t, syscall.Errno) {
 	ctx := io_context_t(0)
 	_, _, errno := syscall.Syscall(syscall.SYS_IO_SETUP, uintptr(nrEvents), uintptr(unsafe.Pointer(&ctx)), 0)
 	return ctx, errno
-}
-
-func io_destroy(ctx io_context_t) syscall.Errno {
-	_, _, errno := syscall.Syscall(syscall.SYS_IO_DESTROY, uintptr(ctx), 0, 0)
-	return errno
 }
 
 func io_submit(ctx io_context_t, reqs []*iocb) syscall.Errno {
