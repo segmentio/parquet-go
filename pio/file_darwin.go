@@ -22,8 +22,9 @@ func fileMultiReadAt(f *os.File, ops []Op) {
 	submit := func(i int, op *Op) error {
 		r := &buffer[i]
 		r.filedes = int32(fd)
+		r.buf = op.data()
+		r.nbytes = op.size()
 		r.offset = op.Off
-		r.setBuf(op.Data)
 		requests[i] = r
 		operations[i] = op
 
@@ -123,34 +124,24 @@ type aiocb struct {
 	lioOpcode int32
 }
 
-func (aiocb *aiocb) setBuf(data []byte) {
-	if len(data) == 0 {
-		aiocb.buf = nil
-		aiocb.nbytes = 0
-	} else {
-		aiocb.buf = &data[0]
-		aiocb.nbytes = int64(len(data))
-	}
-}
-
 func aio_cancel(filedes int32, aiocb *aiocb) syscall.Errno {
 	_, _, errno := syscall.RawSyscall(syscall.SYS_AIO_CANCEL, uintptr(filedes), uintptr(unsafe.Pointer(aiocb)), 0)
-	return syscall.Errno(errno)
+	return errno
 }
 
 func aio_read(aiocb *aiocb) syscall.Errno {
 	_, _, errno := syscall.RawSyscall(syscall.SYS_AIO_READ, uintptr(unsafe.Pointer(aiocb)), 0, 0)
-	return syscall.Errno(errno)
+	return errno
 }
 
 func aio_return(aiocb *aiocb) (int, syscall.Errno) {
 	ret, _, errno := syscall.RawSyscall(syscall.SYS_AIO_RETURN, uintptr(unsafe.Pointer(aiocb)), 0, 0)
-	return int(ret), syscall.Errno(errno)
+	return int(ret), errno
 }
 
 func aio_error(aiocb *aiocb) syscall.Errno {
 	_, _, errno := syscall.RawSyscall(syscall.SYS_AIO_ERROR, uintptr(unsafe.Pointer(aiocb)), 0, 0)
-	return syscall.Errno(errno)
+	return errno
 }
 
 func aio_suspend(list []*aiocb) syscall.Errno {
@@ -160,5 +151,5 @@ func aio_suspend(list []*aiocb) syscall.Errno {
 	p := &list[0]
 	n := len(list)
 	_, _, errno := syscall.Syscall(syscall.SYS_AIO_SUSPEND, uintptr(unsafe.Pointer(p)), uintptr(n), uintptr(0))
-	return syscall.Errno(errno)
+	return errno
 }

@@ -52,7 +52,7 @@ func TestReaderAt(t *testing.T, makeFile func([]byte) (io.ReaderAt, func(), erro
 				rn, err := reader.ReadAt(tmp[:length], offset)
 				switch {
 				case err != op.Err:
-					t.Errorf("error mismatch for operation at index %d: want=%v got=%v", i, err, op.Err)
+					t.Errorf("error mismatch for operation at index %d: want=%v got=%v (read=%d/%d offset=%d size=%d)", i, err, op.Err, len(op.Data), rn, offset, reader.Size())
 				case rn != len(op.Data):
 					t.Errorf("length mismatch for operation at index %d: want=%d got=%d", i, rn, len(op.Data))
 				case !bytes.Equal(tmp[:rn], op.Data):
