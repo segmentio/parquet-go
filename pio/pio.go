@@ -3,6 +3,7 @@
 package pio
 
 import (
+	"bytes"
 	"io"
 	"os"
 	"sync"
@@ -38,12 +39,22 @@ type Op struct {
 // reads of each file region by submitting multiple calls to ReadAt.
 func MultiReadAt(file io.ReaderAt, ops []Op) {
 	switch f := file.(type) {
+	case *bytes.Reader:
+		byteMultiReadAt(f, ops)
 	case *os.File:
 		fileMultiReadAt(f, ops)
 	case ReaderAt:
 		f.MultiReadAt(ops)
 	default:
 		multiReadAt(f, ops)
+	}
+}
+
+func byteMultiReadAt(file *bytes.Reader, ops []Op) {
+	for i := range ops {
+		op := &ops[i]
+		rn, err := file.ReadAt(op.Data, op.Off)
+		op.Data, op.Err = op.Data[:rn], err
 	}
 }
 
