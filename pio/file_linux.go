@@ -63,7 +63,8 @@ func fileMultiReadAt(f *os.File, ops []Op) {
 	pending := 0
 	for {
 		if len(ioctx.ptr) > 0 {
-			if errno := io_submit(ioctx.ctx, ioctx.ptr); errno != 0 {
+			n, errno := io_submit(ioctx.ctx, ioctx.ptr)
+			if errno != 0 {
 				// When resubmitting the operations fail, we can afford to
 				// only abort these operations and let the other complete.
 				err := os.NewSyscallError("io_submit", errno)
@@ -72,8 +73,8 @@ func fileMultiReadAt(f *os.File, ops []Op) {
 					ops[p.data].Err = err
 				}
 			} else {
-				pending += len(ioctx.ptr)
-				ioctx.ptr = ioctx.ptr[:0]
+				pending += n
+				ioctx.ptr = ioctx.ptr[:copy(ioctx.ptr, ioctx.ptr[n:])]
 			}
 		}
 
@@ -81,7 +82,7 @@ func fileMultiReadAt(f *os.File, ops []Op) {
 			return
 		}
 
-		n, errno := io_getevents(ioctx.ctx, ioctx.res)
+		n, errno := io_getevents(ioctx.ctx, 1, ioctx.res)
 		switch errno {
 		case 0:
 			for i := range ioctx.res[:n] {
@@ -155,7 +156,7 @@ const (
 	// Hard limits, chosen arbitrarily, we should revisit if they are not
 	// adequate for production workloads.
 	ioctxMaxCount = 16
-	ioctxMaxQueue = 1024
+	ioctxMaxQueue = 64
 )
 
 var (
@@ -240,23 +241,23 @@ type io_event struct {
 
 type io_context_t uintptr
 
-func io_setup(nrEvents int) (io_context_t, syscall.Errno) {
+func io_setup(n int) (io_context_t, syscall.Errno) {
 	ctx := io_context_t(0)
-	_, _, errno := syscall.Syscall(syscall.SYS_IO_SETUP, uintptr(nrEvents), uintptr(unsafe.Pointer(&ctx)), 0)
+	_, _, errno := syscall.Syscall(syscall.SYS_IO_SETUP, uintptr(n), uintptr(unsafe.Pointer(&ctx)), 0)
 	return ctx, errno
 }
 
-func io_submit(ctx io_context_t, reqs []*iocb) syscall.Errno {
+func io_submit(ctx io_context_t, reqs []*iocb) (int, syscall.Errno) {
 	p := unsafe.Pointer(&reqs[0])
 	n := len(reqs)
-	_, _, errno := syscall.Syscall(syscall.SYS_IO_SUBMIT, uintptr(ctx), uintptr(n), uintptr(p))
-	return errno
+	r, _, errno := syscall.Syscall(syscall.SYS_IO_SUBMIT, uintptr(ctx), uintptr(n), uintptr(p))
+	return int(r), errno
 }
 
-func io_getevents(ctx io_context_t, events []io_event) (int, syscall.Errno) {
+func io_getevents(ctx io_context_t, min int, events []io_event) (int, syscall.Errno) {
 	p := unsafe.Pointer(&events[0])
 	n := len(events)
-	r, _, errno := syscall.Syscall6(syscall.SYS_IO_GETEVENTS, uintptr(ctx), uintptr(n), uintptr(n), uintptr(p), 0, 0)
+	r, _, errno := syscall.Syscall6(syscall.SYS_IO_GETEVENTS, uintptr(ctx), uintptr(min), uintptr(n), uintptr(p), 0, 0)
 	return int(r), errno
 }
 

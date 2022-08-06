@@ -22,7 +22,7 @@ func TestReaderAt(t *testing.T, makeFile func([]byte) (io.ReaderAt, func(), erro
 	defer teardown()
 
 	const bufferSize = 8192
-	ops := make([]pio.Op, 100)
+	ops := make([]pio.Op, 219)
 	tmp := make([]byte, bufferSize)
 
 	buffers := make([][]byte, len(ops))
@@ -52,11 +52,11 @@ func TestReaderAt(t *testing.T, makeFile func([]byte) (io.ReaderAt, func(), erro
 				rn, err := reader.ReadAt(tmp[:length], offset)
 				switch {
 				case err != op.Err:
-					t.Errorf("error mismatch for operation at index %d: want=%v got=%v (read=%d/%d offset=%d size=%d)", i, err, op.Err, len(op.Data), rn, offset, reader.Size())
+					t.Fatalf("error mismatch for operation at index %d: want=%v got=%v (read=%d/%d offset=%d size=%d)", i, err, op.Err, len(op.Data), rn, offset, reader.Size())
 				case rn != len(op.Data):
-					t.Errorf("length mismatch for operation at index %d: want=%d got=%d", i, rn, len(op.Data))
+					t.Fatalf("length mismatch for operation at index %d: want=%d got=%d", i, rn, len(op.Data))
 				case !bytes.Equal(tmp[:rn], op.Data):
-					t.Errorf("data mismatch for operation at index %d:\nwant = %q\ngot  = %q\n", i, tmp[:rn], op.Data)
+					t.Fatalf("data mismatch for operation at index %d:\nwant = %q\ngot  = %q\n", i, tmp[:rn], op.Data)
 				}
 			}
 		})
