@@ -22,7 +22,7 @@ func TestReaderAt(t *testing.T, makeFile func([]byte) (io.ReaderAt, func(), erro
 	defer teardown()
 
 	const bufferSize = 8192
-	ops := make([]pio.Op, 219)
+	ops := make([]pio.Op, 300)
 	tmp := make([]byte, bufferSize)
 
 	buffers := make([][]byte, len(ops))

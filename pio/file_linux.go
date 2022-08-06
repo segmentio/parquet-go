@@ -156,7 +156,7 @@ const (
 	// Hard limits, chosen arbitrarily, we should revisit if they are not
 	// adequate for production workloads.
 	ioctxMaxCount = 16
-	ioctxMaxQueue = 64
+	ioctxMaxQueue = 256
 )
 
 var (
