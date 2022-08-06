@@ -177,7 +177,15 @@ func init() {
 			if i > 0 {
 				return
 			}
-			if errno == syscall.ENOSYS {
+			switch errno {
+			case syscall.ENOSYS, syscall.EAGAIN:
+				// Under these two conditions we close the channel used  as pool
+				// for I/O contexts, which causes the application to fallback to
+				// using the goroutine schedule to perform concurrent I/O.
+				//
+				// * ENOSYS is returned if the kernel does not support async I/O
+				// * EAGAIN is returned if too many I/O contexts are in use
+				//
 				close(ioctxPool)
 				return
 			}
