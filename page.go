@@ -143,21 +143,21 @@ func AsyncPages(pages Pages) Pages {
 	return p
 }
 
-type page struct {
+type readPageResult struct {
 	page Page
 	err  error
 }
 
 type asyncPages struct {
 	base Pages
-	read chan page
+	read chan readPageResult
 	done chan struct{}
 	seek int64
 	join *sync.WaitGroup
 }
 
 func (pages *asyncPages) init() {
-	pages.read = make(chan page)
+	pages.read = make(chan readPageResult)
 	pages.done = make(chan struct{})
 	pages.join.Add(1)
 	go readPages(pages.base, pages.read, pages.seek, pages.done, pages.join)
@@ -199,12 +199,12 @@ func (pages *asyncPages) SeekToRow(rowIndex int64) error {
 	return nil
 }
 
-func readPages(pages Pages, out chan<- page, seek int64, done <-chan struct{}, join *sync.WaitGroup) {
+func readPages(pages Pages, out chan<- readPageResult, seek int64, done <-chan struct{}, join *sync.WaitGroup) {
 	defer join.Done()
 	defer close(out)
 
 	if err := pages.SeekToRow(seek); err != nil {
-		out <- page{err: err}
+		out <- readPageResult{err: err}
 		return
 	}
 
@@ -214,7 +214,7 @@ func readPages(pages Pages, out chan<- page, seek int64, done <-chan struct{}, j
 			return
 		}
 		select {
-		case out <- page{page: p, err: err}:
+		case out <- readPageResult{page: p, err: err}:
 		case <-done:
 			return
 		}
