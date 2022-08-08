@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"runtime"
 	"strings"
 	"sync"
 )
@@ -291,6 +292,10 @@ func (r *rowGroupRows) init() {
 	}
 
 	r.inited = true
+	// This finalizer is used to ensure that the goroutines started by calling
+	// init on the underlying page readers will be shutdown in the event that
+	// Close isn't called and the rowGroupRows object is garbage collected.
+	runtime.SetFinalizer(r, func(r *rowGroupRows) { r.Close() })
 }
 
 func (r *rowGroupRows) Reset() {
