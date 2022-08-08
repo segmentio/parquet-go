@@ -1,8 +1,10 @@
 package parquet
 
 import (
+	"context"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 )
 
@@ -260,19 +262,29 @@ type rowGroupRows struct {
 
 func (r *rowGroupRows) init() {
 	const columnBufferSize = defaultValueBufferSize
+	schema := r.rowGroup.Schema()
+	schemaName := schema.Name()
+	columnPaths := schema.Columns()
+
 	columns := r.rowGroup.ColumnChunks()
 	buffer := make([]Value, columnBufferSize*len(columns))
 	r.columns = make([]columnChunkReader, len(columns))
 
 	readers := make([]asyncPages, len(columns))
 	waitGroups := make([]sync.WaitGroup, len(columns))
+	background := context.Background()
 
 	for i, column := range columns {
+		columnPath := strings.Join(columnPaths[i], ".")
+
 		reader := &readers[i]
 		reader.base = column.Pages()
-		reader.join = &waitGroups[i]
 		reader.seek = r.seek
-		reader.init()
+		reader.join = &waitGroups[i]
+		reader.init(background,
+			"parquet.column", columnPath,
+			"parquet.schema", schemaName,
+		)
 
 		r.columns[i].buffer = buffer[:0:columnBufferSize]
 		r.columns[i].reader = reader

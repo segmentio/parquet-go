@@ -2,9 +2,11 @@ package parquet
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"runtime"
+	"runtime/pprof"
 	"sync"
 
 	"github.com/segmentio/parquet-go/deprecated"
@@ -135,7 +137,11 @@ type Pages interface {
 // be reading pages from a high latency backend, and processing of the last
 // page read may be processed while initiating reading of the next page.
 func AsyncPages(pages Pages) Pages {
-	p := &asyncPages{base: pages, join: new(sync.WaitGroup)}
+	p := &asyncPages{
+		base:   pages,
+		join:   new(sync.WaitGroup),
+		cancel: func() {},
+	}
 	// If the pages object gets garbage collected without Close being called,
 	// this finalizer would ensure that the goroutine is stopped and doesn't
 	// leak.
@@ -149,38 +155,44 @@ type readPageResult struct {
 }
 
 type asyncPages struct {
-	base Pages
-	read chan readPageResult
-	done chan struct{}
-	seek int64
-	join *sync.WaitGroup
+	base   Pages
+	read   chan readPageResult
+	seek   int64
+	join   *sync.WaitGroup
+	cancel context.CancelFunc
 }
 
-func (pages *asyncPages) init() {
-	pages.read = make(chan readPageResult)
-	pages.done = make(chan struct{})
+func (pages *asyncPages) init(ctx context.Context, labels ...string) {
+	base := pages.base
+	seek := pages.seek
+	join := pages.join
+	read := make(chan readPageResult)
+
+	ctx, cancel := context.WithCancel(ctx)
+	pages.cancel = cancel
+	pages.read = read
 	pages.join.Add(1)
-	go readPages(pages.base, pages.read, pages.seek, pages.done, pages.join)
+
+	go pprof.Do(ctx, pprof.Labels(labels...), func(ctx context.Context) {
+		defer join.Done()
+		defer close(read)
+		readPages(ctx, base, read, seek)
+	})
 }
 
 func (pages *asyncPages) Close() error {
-	if pages.done != nil {
-		close(pages.done)
-	}
+	pages.cancel()
 	pages.join.Wait()
-	pages.read = nil
-	pages.done = nil
 	pages.seek = -1
 	return pages.base.Close()
 }
 
 func (pages *asyncPages) ReadPage() (Page, error) {
-	if pages.done == nil && pages.seek >= 0 {
-		pages.init()
-	}
-	if pages.read != nil {
-		p, ok := <-pages.read
-		if ok {
+	if pages.seek >= 0 {
+		if pages.read == nil {
+			pages.init(context.Background())
+		}
+		if p, ok := <-pages.read; ok {
 			return p.page, p.err
 		}
 	}
@@ -191,20 +203,23 @@ func (pages *asyncPages) SeekToRow(rowIndex int64) error {
 	if rowIndex < 0 {
 		return fmt.Errorf("invalid negative row index: %d", rowIndex)
 	}
-	if pages.done != nil {
-		close(pages.done)
+	if pages.seek < 0 {
+		return io.ErrClosedPipe
 	}
-	pages.done = nil
+	pages.cancel()
+	pages.read = nil
 	pages.seek = rowIndex
 	return nil
 }
 
-func readPages(pages Pages, out chan<- readPageResult, seek int64, done <-chan struct{}, join *sync.WaitGroup) {
-	defer join.Done()
-	defer close(out)
+func readPages(ctx context.Context, pages Pages, read chan<- readPageResult, seek int64) {
+	done := ctx.Done()
 
 	if err := pages.SeekToRow(seek); err != nil {
-		out <- readPageResult{err: err}
+		select {
+		case <-done:
+		case read <- readPageResult{err: err}:
+		}
 		return
 	}
 
@@ -214,9 +229,9 @@ func readPages(pages Pages, out chan<- readPageResult, seek int64, done <-chan s
 			return
 		}
 		select {
-		case out <- readPageResult{page: p, err: err}:
 		case <-done:
 			return
+		case read <- readPageResult{page: p, err: err}:
 		}
 	}
 }
