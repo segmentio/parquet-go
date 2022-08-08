@@ -190,6 +190,11 @@ func (pages *asyncPages) Close() error {
 func (pages *asyncPages) ReadPage() (Page, error) {
 	if pages.seek >= 0 {
 		if pages.read == nil {
+			// The underlying Pages cannot be accessed concurrently from
+			// multiple goroutines. If we entered this code path after a
+			// call to SeekToRow we must wait for a previous goroutine to
+			// terminate before we can start the next one.
+			pages.join.Wait()
 			pages.init(context.Background())
 		}
 		if p, ok := <-pages.read; ok {
@@ -242,17 +247,18 @@ func copyPagesAndClose(w PageWriter, r Pages) (int64, error) {
 }
 
 type singlePage struct {
-	page Page
-	seek int64
+	page    Page
+	seek    int64
+	numRows int64
 }
 
 func (r *singlePage) ReadPage() (Page, error) {
 	if r.page != nil {
-		if numRows := r.page.NumRows(); r.seek < numRows {
+		if r.seek < r.numRows {
 			seek := r.seek
-			r.seek = numRows
+			r.seek = r.numRows
 			if seek > 0 {
-				return r.page.Buffer().Slice(seek, numRows), nil
+				return r.page.Buffer().Slice(seek, r.numRows), nil
 			}
 			return r.page, nil
 		}
@@ -271,7 +277,9 @@ func (r *singlePage) Close() error {
 	return nil
 }
 
-func onePage(page Page) Pages { return &singlePage{page: page} }
+func onePage(page Page) Pages {
+	return &singlePage{page: page, numRows: page.NumRows()}
+}
 
 // CopyPages copies pages from src to dst, returning the number of values that
 // were copied.

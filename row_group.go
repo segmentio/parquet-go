@@ -272,7 +272,6 @@ func (r *rowGroupRows) init() {
 
 	readers := make([]asyncPages, len(columns))
 	waitGroups := make([]sync.WaitGroup, len(columns))
-	background := context.Background()
 
 	for i, column := range columns {
 		columnPath := strings.Join(columnPaths[i], ".")
@@ -281,7 +280,7 @@ func (r *rowGroupRows) init() {
 		reader.base = column.Pages()
 		reader.seek = r.seek
 		reader.join = &waitGroups[i]
-		reader.init(background,
+		reader.init(context.Background(),
 			"parquet.column", columnPath,
 			"parquet.schema", schemaName,
 		)
