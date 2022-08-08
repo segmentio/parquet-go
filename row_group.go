@@ -3,6 +3,7 @@ package parquet
 import (
 	"fmt"
 	"io"
+	"sync"
 )
 
 // RowGroup is an interface representing a parquet row group. From the Parquet
@@ -263,9 +264,18 @@ func (r *rowGroupRows) init() {
 	buffer := make([]Value, columnBufferSize*len(columns))
 	r.columns = make([]columnChunkReader, len(columns))
 
+	readers := make([]asyncPages, len(columns))
+	waitGroups := make([]sync.WaitGroup, len(columns))
+
 	for i, column := range columns {
+		reader := &readers[i]
+		reader.base = column.Pages()
+		reader.join = &waitGroups[i]
+		reader.seek = r.seek
+		reader.init()
+
 		r.columns[i].buffer = buffer[:0:columnBufferSize]
-		r.columns[i].reader = column.Pages()
+		r.columns[i].reader = reader
 		buffer = buffer[columnBufferSize:]
 	}
 

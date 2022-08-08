@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"runtime"
+	"sync"
 
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
@@ -124,6 +126,99 @@ type Pages interface {
 	PageReader
 	RowSeeker
 	io.Closer
+}
+
+// AsyncPages wraps the given Pages instance to perform page reads
+// asynchronoulsy in a separate goroutine.
+//
+// Performing page reads asynchronously is important when the application may
+// be reading pages from a high latency backend, and processing of the last
+// page read may be processed while initiating reading of the next page.
+func AsyncPages(pages Pages) Pages {
+	p := &asyncPages{base: pages, join: new(sync.WaitGroup)}
+	// If the pages object gets garbage collected without Close being called,
+	// this finalizer would ensure that the goroutine is stopped and doesn't
+	// leak.
+	runtime.SetFinalizer(p, func(p *asyncPages) { p.Close() })
+	return p
+}
+
+type page struct {
+	page Page
+	err  error
+}
+
+type asyncPages struct {
+	base Pages
+	read chan page
+	done chan struct{}
+	seek int64
+	join *sync.WaitGroup
+}
+
+func (pages *asyncPages) init() {
+	pages.read = make(chan page)
+	pages.done = make(chan struct{})
+	pages.join.Add(1)
+	go readPages(pages.base, pages.read, pages.seek, pages.done, pages.join)
+}
+
+func (pages *asyncPages) Close() error {
+	if pages.done != nil {
+		close(pages.done)
+	}
+	pages.join.Wait()
+	pages.read = nil
+	pages.done = nil
+	pages.seek = -1
+	return pages.base.Close()
+}
+
+func (pages *asyncPages) ReadPage() (Page, error) {
+	if pages.done == nil && pages.seek >= 0 {
+		pages.init()
+	}
+	if pages.read != nil {
+		p, ok := <-pages.read
+		if ok {
+			return p.page, p.err
+		}
+	}
+	return nil, io.EOF
+}
+
+func (pages *asyncPages) SeekToRow(rowIndex int64) error {
+	if rowIndex < 0 {
+		return fmt.Errorf("invalid negative row index: %d", rowIndex)
+	}
+	if pages.done != nil {
+		close(pages.done)
+	}
+	pages.done = nil
+	pages.seek = rowIndex
+	return nil
+}
+
+func readPages(pages Pages, out chan<- page, seek int64, done <-chan struct{}, join *sync.WaitGroup) {
+	defer join.Done()
+	defer close(out)
+
+	if err := pages.SeekToRow(seek); err != nil {
+		out <- page{err: err}
+		return
+	}
+
+	for {
+		p, err := pages.ReadPage()
+		if err == io.EOF {
+			return
+		}
+		select {
+		case out <- page{page: p, err: err}:
+		case <-done:
+			return
+		}
+	}
 }
 
 func copyPagesAndClose(w PageWriter, r Pages) (int64, error) {
