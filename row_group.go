@@ -6,7 +6,6 @@ import (
 	"io"
 	"runtime"
 	"strings"
-	"sync"
 )
 
 // RowGroup is an interface representing a parquet row group. From the Parquet
@@ -259,6 +258,7 @@ type rowGroupRows struct {
 	seek     int64
 	inited   bool
 	closed   bool
+	cancel   context.CancelFunc
 }
 
 func (r *rowGroupRows) init() {
@@ -268,20 +268,17 @@ func (r *rowGroupRows) init() {
 	columnPaths := schema.Columns()
 
 	columns := r.rowGroup.ColumnChunks()
+	readers := make([]asyncPages, len(columns))
 	buffer := make([]Value, columnBufferSize*len(columns))
 	r.columns = make([]columnChunkReader, len(columns))
 
-	readers := make([]asyncPages, len(columns))
-	waitGroups := make([]sync.WaitGroup, len(columns))
+	ctx, cancel := context.WithCancel(context.Background())
 
 	for i, column := range columns {
 		columnPath := strings.Join(columnPaths[i], ".")
 
 		reader := &readers[i]
-		reader.base = column.Pages()
-		reader.seek = r.seek
-		reader.join = &waitGroups[i]
-		reader.init(context.Background(),
+		reader.init(ctx, column.Pages(),
 			"parquet.column", columnPath,
 			"parquet.schema", schemaName,
 		)
@@ -291,6 +288,7 @@ func (r *rowGroupRows) init() {
 		buffer = buffer[columnBufferSize:]
 	}
 
+	r.cancel = cancel
 	r.inited = true
 	// This finalizer is used to ensure that the goroutines started by calling
 	// init on the underlying page readers will be shutdown in the event that
@@ -310,6 +308,7 @@ func (r *rowGroupRows) Reset() {
 
 func (r *rowGroupRows) Close() error {
 	var lastErr error
+	r.cancel()
 
 	for i := range r.columns {
 		if err := r.columns[i].close(); err != nil {

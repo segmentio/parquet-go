@@ -7,7 +7,6 @@ import (
 	"io"
 	"runtime"
 	"runtime/pprof"
-	"sync"
 
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
@@ -137,11 +136,9 @@ type Pages interface {
 // be reading pages from a high latency backend, and processing of the last
 // page read may be processed while initiating reading of the next page.
 func AsyncPages(pages Pages) Pages {
-	p := &asyncPages{
-		base:   pages,
-		join:   new(sync.WaitGroup),
-		cancel: func() {},
-	}
+	ctx, cancel := context.WithCancel(context.Background())
+	p := &asyncPages{cancel: cancel}
+	p.init(ctx, pages)
 	// If the pages object gets garbage collected without Close being called,
 	// this finalizer would ensure that the goroutine is stopped and doesn't
 	// leak.
@@ -149,94 +146,100 @@ func AsyncPages(pages Pages) Pages {
 	return p
 }
 
-type readPageResult struct {
-	page Page
-	err  error
-}
-
 type asyncPages struct {
-	base   Pages
-	read   chan readPageResult
-	seek   int64
-	join   *sync.WaitGroup
-	cancel context.CancelFunc
+	read    <-chan asyncPage
+	seek    chan<- int64
+	version int64
+	cancel  context.CancelFunc
 }
 
-func (pages *asyncPages) init(ctx context.Context, labels ...string) {
-	base := pages.base
-	seek := pages.seek
-	join := pages.join
-	read := make(chan readPageResult)
+type asyncPage struct {
+	page    Page
+	err     error
+	version int64
+}
 
-	ctx, cancel := context.WithCancel(ctx)
-	pages.cancel = cancel
+func (pages *asyncPages) init(ctx context.Context, base Pages, labels ...string) {
+	read := make(chan asyncPage)
+	seek := make(chan int64, 1)
+
 	pages.read = read
-	pages.join.Add(1)
+	pages.seek = seek
 
 	go pprof.Do(ctx, pprof.Labels(labels...), func(ctx context.Context) {
-		defer join.Done()
-		defer close(read)
 		readPages(ctx, base, read, seek)
 	})
 }
 
-func (pages *asyncPages) Close() error {
-	pages.cancel()
-	pages.join.Wait()
-	pages.seek = -1
-	return pages.base.Close()
+func (pages *asyncPages) Close() (err error) {
+	if pages.cancel != nil {
+		pages.cancel()
+	}
+	for p := range pages.read {
+		// Capture the last error, which is the value returned from closing the
+		// underlying Pages instance.
+		err = p.err
+	}
+	return err
 }
 
 func (pages *asyncPages) ReadPage() (Page, error) {
-	if pages.seek >= 0 {
-		if pages.read == nil {
-			// The underlying Pages cannot be accessed concurrently from
-			// multiple goroutines. If we entered this code path after a
-			// call to SeekToRow we must wait for a previous goroutine to
-			// terminate before we can start the next one.
-			pages.join.Wait()
-			pages.init(context.Background())
+	for {
+		p, ok := <-pages.read
+		if !ok {
+			return nil, io.EOF
 		}
-		if p, ok := <-pages.read; ok {
+		if p.version == pages.version {
 			return p.page, p.err
 		}
 	}
-	return nil, io.EOF
 }
 
 func (pages *asyncPages) SeekToRow(rowIndex int64) error {
-	if rowIndex < 0 {
-		return fmt.Errorf("invalid negative row index: %d", rowIndex)
+	for {
+		select {
+		case pages.seek <- rowIndex:
+			pages.version++
+			return nil
+		case _, ok := <-pages.read:
+			if !ok {
+				return io.ErrClosedPipe
+			}
+		}
 	}
-	if pages.seek < 0 {
-		return io.ErrClosedPipe
-	}
-	pages.cancel()
-	pages.read = nil
-	pages.seek = rowIndex
-	return nil
 }
 
-func readPages(ctx context.Context, pages Pages, read chan<- readPageResult, seek int64) {
+func readPages(ctx context.Context, pages Pages, read chan<- asyncPage, seek <-chan int64) {
 	done := ctx.Done()
+	version := int64(0)
 
-	if err := pages.SeekToRow(seek); err != nil {
-		select {
-		case <-done:
-		case read <- readPageResult{err: err}:
+	defer func() {
+		read <- asyncPage{
+			err:     pages.Close(),
+			version: version,
 		}
-		return
-	}
+		close(read)
+	}()
 
 	for {
-		p, err := pages.ReadPage()
-		if err == io.EOF {
-			return
-		}
-		select {
-		case <-done:
-			return
-		case read <- readPageResult{page: p, err: err}:
+		page, err := pages.ReadPage()
+
+		for {
+			select {
+			case <-done:
+				return
+			case read <- asyncPage{
+				page:    page,
+				err:     err,
+				version: version,
+			}:
+			case rowIndex := <-seek:
+				version++
+				err = pages.SeekToRow(rowIndex)
+			}
+			if err == nil {
+				break
+			}
 		}
 	}
 }
