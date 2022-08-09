@@ -1,8 +1,11 @@
 package parquet
 
 import (
+	"context"
 	"fmt"
 	"io"
+	"runtime"
+	"strings"
 )
 
 // RowGroup is an interface representing a parquet row group. From the Parquet
@@ -255,21 +258,42 @@ type rowGroupRows struct {
 	seek     int64
 	inited   bool
 	closed   bool
+	cancel   context.CancelFunc
 }
 
 func (r *rowGroupRows) init() {
 	const columnBufferSize = defaultValueBufferSize
+	schema := r.rowGroup.Schema()
+	schemaName := schema.Name()
+	columnPaths := schema.Columns()
+
 	columns := r.rowGroup.ColumnChunks()
+	readers := make([]asyncPages, len(columns))
 	buffer := make([]Value, columnBufferSize*len(columns))
 	r.columns = make([]columnChunkReader, len(columns))
 
+	ctx, cancel := context.WithCancel(context.Background())
+
 	for i, column := range columns {
+		columnPath := strings.Join(columnPaths[i], ".")
+
+		reader := &readers[i]
+		reader.init(ctx, column.Pages(),
+			"parquet.column", columnPath,
+			"parquet.schema", schemaName,
+		)
+
 		r.columns[i].buffer = buffer[:0:columnBufferSize]
-		r.columns[i].reader = column.Pages()
+		r.columns[i].reader = reader
 		buffer = buffer[columnBufferSize:]
 	}
 
+	r.cancel = cancel
 	r.inited = true
+	// This finalizer is used to ensure that the goroutines started by calling
+	// init on the underlying page readers will be shutdown in the event that
+	// Close isn't called and the rowGroupRows object is garbage collected.
+	runtime.SetFinalizer(r, func(r *rowGroupRows) { r.Close() })
 }
 
 func (r *rowGroupRows) Reset() {
@@ -284,6 +308,7 @@ func (r *rowGroupRows) Reset() {
 
 func (r *rowGroupRows) Close() error {
 	var lastErr error
+	r.cancel()
 
 	for i := range r.columns {
 		if err := r.columns[i].close(); err != nil {

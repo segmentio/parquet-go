@@ -2,8 +2,11 @@ package parquet
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
+	"runtime"
+	"runtime/pprof"
 
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
@@ -126,23 +129,144 @@ type Pages interface {
 	io.Closer
 }
 
+// AsyncPages wraps the given Pages instance to perform page reads
+// asynchronously in a separate goroutine.
+//
+// Performing page reads asynchronously is important when the application may
+// be reading pages from a high latency backend, and the last
+// page read may be processed while initiating reading of the next page.
+func AsyncPages(pages Pages) Pages {
+	ctx, cancel := context.WithCancel(context.Background())
+	p := &asyncPages{cancel: cancel}
+	p.init(ctx, pages)
+	// If the pages object gets garbage collected without Close being called,
+	// this finalizer would ensure that the goroutine is stopped and doesn't
+	// leak.
+	runtime.SetFinalizer(p, func(p *asyncPages) { p.Close() })
+	return p
+}
+
+type asyncPages struct {
+	read    <-chan asyncPage
+	seek    chan<- int64
+	version int64
+	cancel  context.CancelFunc
+}
+
+type asyncPage struct {
+	page    Page
+	err     error
+	version int64
+}
+
+func (pages *asyncPages) init(ctx context.Context, base Pages, labels ...string) {
+	read := make(chan asyncPage)
+	seek := make(chan int64, 1)
+
+	pages.read = read
+	pages.seek = seek
+
+	go pprof.Do(ctx, pprof.Labels(labels...), func(ctx context.Context) {
+		readPages(ctx, base, read, seek)
+	})
+}
+
+func (pages *asyncPages) Close() (err error) {
+	if pages.cancel != nil {
+		pages.cancel()
+	}
+	for p := range pages.read {
+		// Capture the last error, which is the value returned from closing the
+		// underlying Pages instance.
+		err = p.err
+	}
+	pages.seek = nil
+	return err
+}
+
+func (pages *asyncPages) ReadPage() (Page, error) {
+	for {
+		p, ok := <-pages.read
+		if !ok {
+			return nil, io.EOF
+		}
+		// Because calls to SeekToRow might be made concurrently to reading
+		// pages, it is possible for ReadPage to see pages that were read before
+		// the last SeekToRow call.
+		//
+		// A version number is attached to each page read asynchronously to
+		// discard outdated pages and ensure that we maintain a consistent view
+		// of the sequence of pages read.
+		if p.version == pages.version {
+			return p.page, p.err
+		}
+	}
+}
+
+func (pages *asyncPages) SeekToRow(rowIndex int64) error {
+	if pages.seek == nil {
+		return io.ErrClosedPipe
+	}
+	// The seek channel has a capacity of 1 to allow the first SeekToRow call to
+	// be non-blocking.
+	//
+	// If SeekToRow calls are performed faster than they can be handled by the
+	// goroutine reading pages, this path might become a contention point.
+	pages.seek <- rowIndex
+	pages.version++
+	return nil
+}
+
+func readPages(ctx context.Context, pages Pages, read chan<- asyncPage, seek <-chan int64) {
+	defer func() {
+		read <- asyncPage{err: pages.Close(), version: -1}
+		close(read)
+	}()
+
+	done := ctx.Done()
+	version := int64(0)
+
+	for {
+		page, err := pages.ReadPage()
+
+		for {
+			select {
+			case <-done:
+				return
+			case read <- asyncPage{
+				page:    page,
+				err:     err,
+				version: version,
+			}:
+			case rowIndex := <-seek:
+				version++
+				err = pages.SeekToRow(rowIndex)
+			}
+			if err == nil {
+				break
+			}
+		}
+	}
+}
+
 func copyPagesAndClose(w PageWriter, r Pages) (int64, error) {
 	defer r.Close()
 	return CopyPages(w, r)
 }
 
 type singlePage struct {
-	page Page
-	seek int64
+	page    Page
+	seek    int64
+	numRows int64
 }
 
 func (r *singlePage) ReadPage() (Page, error) {
 	if r.page != nil {
-		if numRows := r.page.NumRows(); r.seek < numRows {
+		if r.seek < r.numRows {
 			seek := r.seek
-			r.seek = numRows
+			r.seek = r.numRows
 			if seek > 0 {
-				return r.page.Buffer().Slice(seek, numRows), nil
+				return r.page.Buffer().Slice(seek, r.numRows), nil
 			}
 			return r.page, nil
 		}
@@ -161,7 +285,9 @@ func (r *singlePage) Close() error {
 	return nil
 }
 
-func onePage(page Page) Pages { return &singlePage{page: page} }
+func onePage(page Page) Pages {
+	return &singlePage{page: page, numRows: page.NumRows()}
+}
 
 // CopyPages copies pages from src to dst, returning the number of values that
 // were copied.
