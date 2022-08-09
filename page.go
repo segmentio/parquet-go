@@ -130,7 +130,7 @@ type Pages interface {
 }
 
 // AsyncPages wraps the given Pages instance to perform page reads
-// asynchronoulsy in a separate goroutine.
+// asynchronously in a separate goroutine.
 //
 // Performing page reads asynchronously is important when the application may
 // be reading pages from a high latency backend, and processing of the last
