@@ -598,9 +598,9 @@ func (c *Column) decodeDataPage(header DataPageHeader, numValues int64, repetiti
 	newPage := pageType.NewPage(c.Index(), int(numValues), values)
 	switch {
 	case c.maxRepetitionLevel > 0:
-		newPage = newRepeatedPage(newPage.Buffer(), c.maxRepetitionLevel, c.maxDefinitionLevel, repetitionLevels, definitionLevels)
+		newPage = newRepeatedPage(newPage, c.maxRepetitionLevel, c.maxDefinitionLevel, repetitionLevels, definitionLevels)
 	case c.maxDefinitionLevel > 0:
-		newPage = newOptionalPage(newPage.Buffer(), c.maxDefinitionLevel, definitionLevels)
+		newPage = newOptionalPage(newPage, c.maxDefinitionLevel, definitionLevels)
 	}
 	return newPage, nil
 }
