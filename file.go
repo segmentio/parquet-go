@@ -419,9 +419,13 @@ func (c *fileColumnChunk) Column() int {
 	return int(c.column.Index())
 }
 
-func (c *fileColumnChunk) Pages() Pages {
+func (c *fileColumnChunk) Pages(options ...PageOption) Pages {
+	config, err := NewPageConfig(options...)
+	if err != nil {
+		panic(err)
+	}
 	r := new(filePages)
-	r.init(c)
+	r.init(c, config)
 	return r
 }
 
@@ -451,6 +455,7 @@ func (c *fileColumnChunk) NumValues() int64 {
 }
 
 type filePages struct {
+	config  *PageConfig
 	chunk   *fileColumnChunk
 	rbuf    *bufio.Reader
 	section io.SectionReader
@@ -466,7 +471,8 @@ type filePages struct {
 	dictionary Dictionary
 }
 
-func (f *filePages) init(c *fileColumnChunk) {
+func (f *filePages) init(c *fileColumnChunk, config *PageConfig) {
+	f.config = config
 	f.chunk = c
 	f.baseOffset = c.chunk.MetaData.DataPageOffset
 	f.dataOffset = f.baseOffset
@@ -551,7 +557,7 @@ func (f *filePages) readDictionary() error {
 		return err
 	}
 
-	data := make([]byte, header.CompressedPageSize)
+	data := f.config.Allocator.Allocate(int(header.CompressedPageSize))
 
 	if _, err := io.ReadFull(rbuf, data); err != nil {
 		return err
@@ -564,7 +570,11 @@ func (f *filePages) readDictionaryPage(header *format.PageHeader, data []byte) e
 	if header.DictionaryPageHeader == nil {
 		return ErrMissingPageHeader
 	}
-	d, err := f.chunk.column.decodeDictionary(DictionaryPageHeader{header.DictionaryPageHeader}, data, header.UncompressedPageSize)
+	// Dictionary pages will be retained an shared across multiple pages read
+	// from the parquet file. Using the allocator configured by the application
+	// may result in prematurely freeing the dictionary memory, so we use the
+	// default allocator instead in this case.
+	d, err := f.chunk.column.decodeDictionary(DictionaryPageHeader{header.DictionaryPageHeader}, data, header.UncompressedPageSize, DefaultAllocator)
 	if err != nil {
 		return err
 	}
@@ -581,7 +591,7 @@ func (f *filePages) readDataPageV1(header *format.PageHeader, data []byte) (Page
 			return nil, err
 		}
 	}
-	return f.chunk.column.decodeDataPageV1(DataPageHeaderV1{header.DataPageHeader}, data, f.dictionary, header.UncompressedPageSize)
+	return f.chunk.column.decodeDataPageV1(DataPageHeaderV1{header.DataPageHeader}, data, f.dictionary, header.UncompressedPageSize, f.config.Allocator)
 }
 
 func (f *filePages) readDataPageV2(header *format.PageHeader, data []byte) (Page, error) {
@@ -596,11 +606,11 @@ func (f *filePages) readDataPageV2(header *format.PageHeader, data []byte) (Page
 			return nil, err
 		}
 	}
-	return f.chunk.column.decodeDataPageV2(DataPageHeaderV2{header.DataPageHeaderV2}, data, f.dictionary, header.UncompressedPageSize)
+	return f.chunk.column.decodeDataPageV2(DataPageHeaderV2{header.DataPageHeaderV2}, data, f.dictionary, header.UncompressedPageSize, f.config.Allocator)
 }
 
 func (f *filePages) readPage(header *format.PageHeader, reader *bufio.Reader) ([]byte, error) {
-	page := make([]byte, header.CompressedPageSize)
+	page := f.config.Allocator.Allocate(int(header.CompressedPageSize))
 
 	if _, err := io.ReadFull(reader, page); err != nil {
 		return nil, err

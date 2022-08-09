@@ -273,6 +273,40 @@ func (c *RowGroupConfig) ConfigureRowGroup(config *RowGroupConfig) {
 	}
 }
 
+// The WriterConfig type carries configuration options to instantiate Page
+// values.
+type PageConfig struct {
+	Allocator Allocator
+}
+
+func DefaultPageConfig() *PageConfig {
+	return &PageConfig{
+		Allocator: DefaultAllocator,
+	}
+}
+
+func NewPageConfig(options ...PageOption) (*PageConfig, error) {
+	config := DefaultPageConfig()
+	config.Apply(options...)
+	return config, config.Validate()
+}
+
+func (c *PageConfig) Validate() error {
+	return nil
+}
+
+func (c *PageConfig) Apply(options ...PageOption) {
+	for _, opt := range options {
+		opt.ConfigurePage(c)
+	}
+}
+
+func (c *PageConfig) ConfigurePage(config *PageConfig) {
+	*c = PageConfig{
+		Allocator: config.Allocator,
+	}
+}
+
 // FileOption is an interface implemented by types that carry configuration
 // options for parquet files.
 type FileOption interface {
@@ -297,6 +331,12 @@ type RowGroupOption interface {
 	ConfigureRowGroup(*RowGroupConfig)
 }
 
+// PageOption is an interface implemented by types that carry configuration
+// options to instantiate Page values with.
+type PageOption interface {
+	ConfigurePage(*PageConfig)
+}
+
 // SkipPageIndex is a file configuration option which prevents automatically
 // reading the page index when opening a parquet file, when set to true. This is
 // useful as an optimization when programs know that they will not need to
@@ -315,6 +355,14 @@ func SkipPageIndex(skip bool) FileOption {
 // Defaults to false.
 func SkipBloomFilters(skip bool) FileOption {
 	return fileOption(func(config *FileConfig) { config.SkipBloomFilters = skip })
+}
+
+// PageAllocator configures the allocator used to allocate memory of parquet
+// pages.
+//
+// Defaults to DefaultAllocator.
+func PageAllocator(alloc Allocator) PageOption {
+	return pageOption(func(config *PageConfig) { config.Allocator = alloc })
 }
 
 // PageBufferSize configures the size of column page buffers on parquet writers.
@@ -476,6 +524,10 @@ func (opt writerOption) ConfigureWriter(config *WriterConfig) { opt(config) }
 type rowGroupOption func(*RowGroupConfig)
 
 func (opt rowGroupOption) ConfigureRowGroup(config *RowGroupConfig) { opt(config) }
+
+type pageOption func(*PageConfig)
+
+func (opt pageOption) ConfigurePage(config *PageConfig) { opt(config) }
 
 func coalesceInt(i1, i2 int) int {
 	if i1 != 0 {

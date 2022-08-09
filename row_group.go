@@ -269,16 +269,19 @@ func (r *rowGroupRows) init() {
 
 	columns := r.rowGroup.ColumnChunks()
 	readers := make([]asyncPages, len(columns))
+	arenas := make([]arena, len(columns))
 	buffer := make([]Value, columnBufferSize*len(columns))
 	r.columns = make([]columnChunkReader, len(columns))
 
 	ctx, cancel := context.WithCancel(context.Background())
+	pagesConfig := DefaultPageConfig()
 
 	for i, column := range columns {
 		columnPath := strings.Join(columnPaths[i], ".")
+		pagesConfig.Allocator = &arenas[i]
 
 		reader := &readers[i]
-		reader.init(ctx, column.Pages(),
+		reader.init(ctx, column.Pages(pagesConfig),
 			"parquet.column", columnPath,
 			"parquet.schema", schemaName,
 		)
@@ -458,8 +461,8 @@ func (c *seekColumnChunk) Column() int {
 	return c.base.Column()
 }
 
-func (c *seekColumnChunk) Pages() Pages {
-	pages := c.base.Pages()
+func (c *seekColumnChunk) Pages(options ...PageOption) Pages {
+	pages := c.base.Pages(options...)
 	pages.SeekToRow(c.seek)
 	return pages
 }
@@ -512,13 +515,13 @@ type emptyColumnChunk struct {
 	column int16
 }
 
-func (c *emptyColumnChunk) Type() Type               { return c.typ }
-func (c *emptyColumnChunk) Column() int              { return int(c.column) }
-func (c *emptyColumnChunk) Pages() Pages             { return emptyPages{} }
-func (c *emptyColumnChunk) ColumnIndex() ColumnIndex { return emptyColumnIndex{} }
-func (c *emptyColumnChunk) OffsetIndex() OffsetIndex { return emptyOffsetIndex{} }
-func (c *emptyColumnChunk) BloomFilter() BloomFilter { return emptyBloomFilter{} }
-func (c *emptyColumnChunk) NumValues() int64         { return 0 }
+func (c *emptyColumnChunk) Type() Type                { return c.typ }
+func (c *emptyColumnChunk) Column() int               { return int(c.column) }
+func (c *emptyColumnChunk) Pages(...PageOption) Pages { return emptyPages{} }
+func (c *emptyColumnChunk) ColumnIndex() ColumnIndex  { return emptyColumnIndex{} }
+func (c *emptyColumnChunk) OffsetIndex() OffsetIndex  { return emptyOffsetIndex{} }
+func (c *emptyColumnChunk) BloomFilter() BloomFilter  { return emptyBloomFilter{} }
+func (c *emptyColumnChunk) NumValues() int64          { return 0 }
 
 type emptyBloomFilter struct{}
 

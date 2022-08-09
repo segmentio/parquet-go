@@ -14,7 +14,7 @@ type ColumnChunk interface {
 	Column() int
 
 	// Returns a reader exposing the pages of the column.
-	Pages() Pages
+	Pages(options ...PageOption) Pages
 
 	// Returns the components of the page index for this column chunk,
 	// containing details about the content and location of pages within the

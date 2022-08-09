@@ -129,8 +129,8 @@ func (c *multiColumnChunk) Column() int {
 	return c.column
 }
 
-func (c *multiColumnChunk) Pages() Pages {
-	return &multiPages{column: c}
+func (c *multiColumnChunk) Pages(options ...PageOption) Pages {
+	return &multiPages{column: c, options: append([]PageOption{}, options...)}
 }
 
 func (c *multiColumnChunk) ColumnIndex() ColumnIndex {
@@ -212,9 +212,10 @@ func (f multiBloomFilter) Check(v Value) (bool, error) {
 }
 
 type multiPages struct {
-	pages  Pages
-	index  int
-	column *multiColumnChunk
+	pages   Pages
+	index   int
+	column  *multiColumnChunk
+	options []PageOption
 }
 
 func (m *multiPages) ReadPage() (Page, error) {
@@ -234,7 +235,7 @@ func (m *multiPages) ReadPage() (Page, error) {
 			return nil, io.EOF
 		}
 
-		m.pages = m.column.chunks[m.index].Pages()
+		m.pages = m.column.chunks[m.index].Pages(m.options...)
 		m.index++
 	}
 }

@@ -1379,7 +1379,7 @@ func (col *indexedColumnBuffer) BloomFilter() BloomFilter { return nil }
 
 func (col *indexedColumnBuffer) Dictionary() Dictionary { return col.typ.dict }
 
-func (col *indexedColumnBuffer) Pages() Pages { return onePage(col.Page()) }
+func (col *indexedColumnBuffer) Pages(...PageOption) Pages { return onePage(col.Page()) }
 
 func (col *indexedColumnBuffer) Page() Page { return &col.indexedPage }
 
