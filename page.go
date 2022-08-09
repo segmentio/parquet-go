@@ -133,7 +133,7 @@ type Pages interface {
 // asynchronously in a separate goroutine.
 //
 // Performing page reads asynchronously is important when the application may
-// be reading pages from a high latency backend, and processing of the last
+// be reading pages from a high latency backend, and the last
 // page read may be processed while initiating reading of the next page.
 func AsyncPages(pages Pages) Pages {
 	ctx, cancel := context.WithCancel(context.Background())
