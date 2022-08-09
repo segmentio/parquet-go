@@ -180,6 +180,7 @@ func (pages *asyncPages) Close() (err error) {
 		// underlying Pages instance.
 		err = p.err
 	}
+	pages.seek = nil
 	return err
 }
 
@@ -189,6 +190,13 @@ func (pages *asyncPages) ReadPage() (Page, error) {
 		if !ok {
 			return nil, io.EOF
 		}
+		// Because calls to SeekToRow might be made concurrently to reading
+		// pages, it is possible for ReadPage to see pages that were read before
+		// the last SeekToRow call.
+		//
+		// A version number is attached to each page read asynchronously to
+		// discard outdated pages and ensure that we maintain a consistent view
+		// of the sequence of pages read.
 		if p.version == pages.version {
 			return p.page, p.err
 		}
@@ -196,30 +204,27 @@ func (pages *asyncPages) ReadPage() (Page, error) {
 }
 
 func (pages *asyncPages) SeekToRow(rowIndex int64) error {
-	for {
-		select {
-		case pages.seek <- rowIndex:
-			pages.version++
-			return nil
-		case _, ok := <-pages.read:
-			if !ok {
-				return io.ErrClosedPipe
-			}
-		}
+	if pages.seek == nil {
+		return io.ErrClosedPipe
 	}
+	// The seek channel has a capacity of 1 to allow the first SeekToRow call to
+	// be non-blocking.
+	//
+	// If SeekToRow calls are performed faster than they can be handled by the
+	// goroutine reading pages, this path might become a contention point.
+	pages.seek <- rowIndex
+	pages.version++
+	return nil
 }
 
 func readPages(ctx context.Context, pages Pages, read chan<- asyncPage, seek <-chan int64) {
-	done := ctx.Done()
-	version := int64(0)
-
 	defer func() {
-		read <- asyncPage{
-			err:     pages.Close(),
-			version: version,
-		}
+		read <- asyncPage{err: pages.Close(), version: -1}
 		close(read)
 	}()
+
+	done := ctx.Done()
+	version := int64(0)
 
 	for {
 		page, err := pages.ReadPage()
