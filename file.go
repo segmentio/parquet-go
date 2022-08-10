@@ -531,7 +531,7 @@ func (f *filePages) ReadPage() (Page, error) {
 			seek := f.skip
 			f.skip = 0
 			if seek > 0 {
-				page = page.Buffer().Slice(seek, numRows)
+				page = page.Slice(seek, numRows)
 			}
 			return page, nil
 		}
