@@ -614,16 +614,18 @@ func (c *Column) decodeDataPage(header DataPageHeader, numValues int, repetition
 	pageKind := pageType.Kind()
 	if pageKind >= 0 && int(pageKind) < len(pageValuesBufferPool) {
 		vbuf = pageValuesBufferPool[pageKind].get()
+		defer vbuf.unref()
 		vbuf.resize(int(pageType.EstimateSize(numValues)))
 		pageValues = vbuf.data
 	}
 	if pageKind == ByteArray {
 		obuf = pageOffsetsBufferPool.get()
+		defer obuf.unref()
 		obuf.resize(4 * (numValues + 1))
 		pageOffsets = unsafecast.BytesToUint32(obuf.data)
 	}
 
-	values := pageType.NewValues(pageValues[:0], pageOffsets[:0])
+	values := pageType.NewValues(pageValues, pageOffsets)
 	values, err := pageType.Decode(values, page.data, pageEncoding)
 
 	pageValues, pageOffsets = values.Data()
@@ -633,16 +635,7 @@ func (c *Column) decodeDataPage(header DataPageHeader, numValues int, repetition
 	if obuf != nil {
 		obuf.data = unsafecast.Uint32ToBytes(pageOffsets)
 	}
-
 	if err != nil {
-		if obuf != nil {
-			vbuf.unref()
-			vbuf = nil
-		}
-		if obuf != nil {
-			obuf.unref()
-			obuf = nil
-		}
 		return nil, err
 	}
 

@@ -314,8 +314,12 @@ func (b *buffer) reset() {
 func (b *buffer) resize(size int) {
 	if cap(b.data) < size {
 		const pageSize = 4096
-		alignedBufferSize := ((size + (pageSize - 1)) / pageSize) * pageSize
-		b.data = make([]byte, size, alignedBufferSize)
+		minSize := 2 * cap(b.data)
+		bufferSize := ((size + (pageSize - 1)) / pageSize) * pageSize
+		if bufferSize < minSize {
+			bufferSize = minSize
+		}
+		b.data = make([]byte, size, bufferSize)
 	} else {
 		b.data = b.data[:size]
 	}

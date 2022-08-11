@@ -511,6 +511,8 @@ func (f *filePages) ReadPage() (Page, error) {
 			err = fmt.Errorf("cannot read values of type %s from page", header.Type)
 		}
 
+		data.unref()
+
 		if err != nil {
 			return nil, fmt.Errorf("decoding page %d of column %q: %w", f.index, f.columnPath(), err)
 		}
