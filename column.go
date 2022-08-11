@@ -487,10 +487,10 @@ func schemaRepetitionTypeOf(s *format.SchemaElement) format.FieldRepetitionType 
 	return format.Required
 }
 
-func (c *Column) decompress(compressedPageData []byte, compressedPageSize int32) (page *buffer, err error) {
+func (c *Column) decompress(compressedPageData []byte, uncompressedPageSize int32) (page *buffer, err error) {
 	page = uncompressedPageBufferPool.get()
-	if compressedPageSize > 0 {
-		page.resize(int(compressedPageSize))
+	if uncompressedPageSize > 0 {
+		page.resize(int(uncompressedPageSize))
 	}
 	page.data, err = c.compression.Decode(page.data, compressedPageData)
 	if err != nil {
