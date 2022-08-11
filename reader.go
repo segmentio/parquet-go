@@ -11,22 +11,24 @@ import (
 //
 // This example showcases a typical use of parquet readers:
 //
-//	reader := parquet.NewReader(file)
-//	rows := []RowType{}
-//	for {
-//		row := RowType{}
-//		err := reader.Read(&row)
-//		if err != nil {
-//			if err == io.EOF {
-//				break
+//		reader, err := parquet.NewReaderOrError(file)
+//	 if err != nil { ... }
+//
+//		rows := []RowType{}
+//		for {
+//			row := RowType{}
+//			err := reader.Read(&row)
+//			if err != nil {
+//				if err == io.EOF {
+//					break
+//				}
+//				...
 //			}
+//			rows = append(rows, row)
+//		}
+//		if err := reader.Close(); err != nil {
 //			...
 //		}
-//		rows = append(rows, row)
-//	}
-//	if err := reader.Close(); err != nil {
-//		...
-//	}
 //
 // For programs building with Go 1.18 or later, the GenericReader[T] type
 // supersedes this one.
@@ -56,19 +58,39 @@ type Reader struct {
 //		// handle the configuration error
 //		...
 //	} else {
-//		// this call to create a reader is guaranteed not to panic
+//		// this call to create a reader is guaranteed not to panic because
+//		// of an invalid config, but may panic on other errors
 //		reader := parquet.NewReader(input, config)
 //		...
 //	}
+//
+// NewReader also panics if trying to read an invalid parquet file, or on any
+// error. To inspect the error rather than panic, use NewReaderOrError.
 func NewReader(input io.ReaderAt, options ...ReaderOption) *Reader {
-	c, err := NewReaderConfig(options...)
+	r, err := NewReaderOrError(input, options...)
 	if err != nil {
 		panic(err)
 	}
 
+	return r
+}
+
+// NewReaderOrError constructs a parquet reader reading rows from the given
+// io.ReaderAt, returning an error if anything goes wrong.
+//
+// In order to read parquet rows, the io.ReaderAt must be converted to a
+// parquet.File. If r is already a parquet.File it is used directly; otherwise,
+// the io.ReaderAt value is expected to either have a `Size() int64` method or
+// implement io.Seeker in order to determine its size.
+func NewReaderOrError(input io.ReaderAt, options ...ReaderOption) (*Reader, error) {
+	c, err := NewReaderConfig(options...)
+	if err != nil {
+		return nil, err
+	}
+
 	f, err := openFile(input)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	r := &Reader{
@@ -80,11 +102,17 @@ func NewReader(input io.ReaderAt, options ...ReaderOption) *Reader {
 
 	if c.Schema != nil {
 		r.file.schema = c.Schema
-		r.file.rowGroup = convertRowGroupTo(r.file.rowGroup, c.Schema)
+
+		r.file.rowGroup, err = convertRowGroupTo(r.file.rowGroup, c.Schema)
+		if err != nil {
+			_ = r.Close()
+			return nil, err
+		}
 	}
 
 	r.read.init(r.file.schema, r.file.rowGroup)
-	return r
+
+	return r, nil
 }
 
 func openFile(input io.ReaderAt) (*File, error) {
@@ -113,15 +141,30 @@ func fileRowGroupOf(f *File) RowGroup {
 }
 
 // NewRowGroupReader constructs a new Reader which reads rows from the RowGroup
-// passed as argument.
+// passed as an argument. This function panics if it encounters any error; use
+// NewRowGroupReaderOrError to be able to handle failures more gracefully
 func NewRowGroupReader(rowGroup RowGroup, options ...ReaderOption) *Reader {
-	c, err := NewReaderConfig(options...)
+	r, err := NewRowGroupReaderOrError(rowGroup, options...)
 	if err != nil {
 		panic(err)
 	}
 
+	return r
+}
+
+// NewRowGroupReaderOrError constructs a new Reader which reads rows from the RowGroup
+// passed as an argument.
+func NewRowGroupReaderOrError(rowGroup RowGroup, options ...ReaderOption) (*Reader, error) {
+	c, err := NewReaderConfig(options...)
+	if err != nil {
+		return nil, err
+	}
+
 	if c.Schema != nil {
-		rowGroup = convertRowGroupTo(rowGroup, c.Schema)
+		rowGroup, err = convertRowGroupTo(rowGroup, c.Schema)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	r := &Reader{
@@ -132,21 +175,20 @@ func NewRowGroupReader(rowGroup RowGroup, options ...ReaderOption) *Reader {
 	}
 
 	r.read.init(r.file.schema, r.file.rowGroup)
-	return r
+	return r, nil
 }
 
-func convertRowGroupTo(rowGroup RowGroup, schema *Schema) RowGroup {
+func convertRowGroupTo(rowGroup RowGroup, schema *Schema) (RowGroup, error) {
 	if rowGroupSchema := rowGroup.Schema(); !nodesAreEqual(schema, rowGroupSchema) {
 		conv, err := Convert(schema, rowGroupSchema)
 		if err != nil {
-			// TODO: this looks like something we should not be panicking on,
-			// but the current NewReader API does not offer a mechanism to
-			// report errors.
-			panic(err)
+			return nil, err
 		}
+
 		rowGroup = ConvertRowGroup(rowGroup, conv)
 	}
-	return rowGroup
+
+	return rowGroup, nil
 }
 
 func sizeOf(r io.ReaderAt) (int64, error) {
