@@ -2,11 +2,9 @@ package parquet
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"io"
 	"runtime"
-	"runtime/pprof"
 
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
@@ -126,9 +124,8 @@ type Pages interface {
 // be reading pages from a high latency backend, and the last
 // page read may be processed while initiating reading of the next page.
 func AsyncPages(pages Pages) Pages {
-	ctx, cancel := context.WithCancel(context.Background())
-	p := &asyncPages{cancel: cancel}
-	p.init(ctx, pages)
+	p := new(asyncPages)
+	p.init(pages, nil)
 	// If the pages object gets garbage collected without Close being called,
 	// this finalizer would ensure that the goroutine is stopped and doesn't
 	// leak.
@@ -139,8 +136,8 @@ func AsyncPages(pages Pages) Pages {
 type asyncPages struct {
 	read    <-chan asyncPage
 	seek    chan<- int64
+	done    chan<- struct{}
 	version int64
-	cancel  context.CancelFunc
 }
 
 type asyncPage struct {
@@ -149,21 +146,25 @@ type asyncPage struct {
 	version int64
 }
 
-func (pages *asyncPages) init(ctx context.Context, base Pages, labels ...string) {
+func (pages *asyncPages) init(base Pages, done chan struct{}) {
 	read := make(chan asyncPage)
 	seek := make(chan int64, 1)
 
 	pages.read = read
 	pages.seek = seek
 
-	go pprof.Do(ctx, pprof.Labels(labels...), func(ctx context.Context) {
-		readPages(ctx, base, read, seek)
-	})
+	if done == nil {
+		done = make(chan struct{})
+		pages.done = done
+	}
+
+	go readPages(base, read, seek, done)
 }
 
 func (pages *asyncPages) Close() (err error) {
-	if pages.cancel != nil {
-		pages.cancel()
+	if pages.done != nil {
+		close(pages.done)
+		pages.done = nil
 	}
 	for p := range pages.read {
 		// Capture the last error, which is the value returned from closing the
@@ -207,15 +208,13 @@ func (pages *asyncPages) SeekToRow(rowIndex int64) error {
 	return nil
 }
 
-func readPages(ctx context.Context, pages Pages, read chan<- asyncPage, seek <-chan int64) {
+func readPages(pages Pages, read chan<- asyncPage, seek <-chan int64, done <-chan struct{}) {
 	defer func() {
 		read <- asyncPage{err: pages.Close(), version: -1}
 		close(read)
 	}()
 
-	done := ctx.Done()
 	version := int64(0)
-
 	for {
 		page, err := pages.ReadPage()
 
