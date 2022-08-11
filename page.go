@@ -317,7 +317,10 @@ func forEachPageSlice(page Page, wantSize int64, do func(Page) error) error {
 
 	for numPages > 0 {
 		lastRowIndex := rowIndex + ((numRows - rowIndex) / numPages)
-		if err := do(page.Slice(rowIndex, lastRowIndex)); err != nil {
+		pageSlice := page.Slice(rowIndex, lastRowIndex)
+		err := do(pageSlice)
+		unref(pageSlice)
+		if err != nil {
 			return err
 		}
 		rowIndex = lastRowIndex
@@ -374,10 +377,10 @@ func errPageBoundsOutOfRange(i, j, n int64) error {
 type optionalPage struct {
 	base               Page
 	maxDefinitionLevel byte
-	definitionLevels   []byte
+	definitionLevels   bufferRef
 }
 
-func newOptionalPage(base Page, maxDefinitionLevel byte, definitionLevels []byte) *optionalPage {
+func newOptionalPage(base Page, maxDefinitionLevel byte, definitionLevels bufferRef) *optionalPage {
 	return &optionalPage{
 		base:               base,
 		maxDefinitionLevel: maxDefinitionLevel,
@@ -391,21 +394,21 @@ func (page *optionalPage) Column() int { return page.base.Column() }
 
 func (page *optionalPage) Dictionary() Dictionary { return page.base.Dictionary() }
 
-func (page *optionalPage) NumRows() int64 { return int64(len(page.definitionLevels)) }
+func (page *optionalPage) NumRows() int64 { return int64(page.definitionLevels.len) }
 
-func (page *optionalPage) NumValues() int64 { return int64(len(page.definitionLevels)) }
+func (page *optionalPage) NumValues() int64 { return int64(page.definitionLevels.len) }
 
 func (page *optionalPage) NumNulls() int64 {
-	return int64(countLevelsNotEqual(page.definitionLevels, page.maxDefinitionLevel))
+	return int64(countLevelsNotEqual(page.definitionLevels.data(), page.maxDefinitionLevel))
 }
 
 func (page *optionalPage) Bounds() (min, max Value, ok bool) { return page.base.Bounds() }
 
-func (page *optionalPage) Size() int64 { return page.base.Size() + int64(len(page.definitionLevels)) }
+func (page *optionalPage) Size() int64 { return page.base.Size() + int64(page.definitionLevels.len) }
 
 func (page *optionalPage) RepetitionLevels() []byte { return nil }
 
-func (page *optionalPage) DefinitionLevels() []byte { return page.definitionLevels }
+func (page *optionalPage) DefinitionLevels() []byte { return page.definitionLevels.data() }
 
 func (page *optionalPage) Data() encoding.Values { return page.base.Data() }
 
@@ -420,17 +423,18 @@ func (page *optionalPage) Clone() Page {
 	return newOptionalPage(
 		page.base.Clone(),
 		page.maxDefinitionLevel,
-		append([]byte{}, page.definitionLevels...),
+		page.definitionLevels.clone(),
 	)
 }
 
 func (page *optionalPage) Slice(i, j int64) Page {
-	numNulls1 := int64(countLevelsNotEqual(page.definitionLevels[:i], page.maxDefinitionLevel))
-	numNulls2 := int64(countLevelsNotEqual(page.definitionLevels[i:j], page.maxDefinitionLevel))
+	definitionLevels := page.definitionLevels.data()
+	numNulls1 := int64(countLevelsNotEqual(definitionLevels[:i], page.maxDefinitionLevel))
+	numNulls2 := int64(countLevelsNotEqual(definitionLevels[i:j], page.maxDefinitionLevel))
 	return newOptionalPage(
 		page.base.Slice(i-numNulls1, j-(numNulls1+numNulls2)),
 		page.maxDefinitionLevel,
-		page.definitionLevels[i:j],
+		page.definitionLevels.slice(int(i), int(j)),
 	)
 }
 
@@ -438,11 +442,11 @@ type repeatedPage struct {
 	base               Page
 	maxRepetitionLevel byte
 	maxDefinitionLevel byte
-	definitionLevels   []byte
-	repetitionLevels   []byte
+	definitionLevels   bufferRef
+	repetitionLevels   bufferRef
 }
 
-func newRepeatedPage(base Page, maxRepetitionLevel, maxDefinitionLevel byte, repetitionLevels, definitionLevels []byte) *repeatedPage {
+func newRepeatedPage(base Page, maxRepetitionLevel, maxDefinitionLevel byte, repetitionLevels, definitionLevels bufferRef) *repeatedPage {
 	return &repeatedPage{
 		base:               base,
 		maxRepetitionLevel: maxRepetitionLevel,
@@ -458,23 +462,27 @@ func (page *repeatedPage) Column() int { return page.base.Column() }
 
 func (page *repeatedPage) Dictionary() Dictionary { return page.base.Dictionary() }
 
-func (page *repeatedPage) NumRows() int64 { return int64(countLevelsEqual(page.repetitionLevels, 0)) }
+func (page *repeatedPage) NumRows() int64 {
+	return int64(countLevelsEqual(page.repetitionLevels.data(), 0))
+}
 
-func (page *repeatedPage) NumValues() int64 { return int64(len(page.definitionLevels)) }
+func (page *repeatedPage) NumValues() int64 {
+	return int64(page.definitionLevels.len)
+}
 
 func (page *repeatedPage) NumNulls() int64 {
-	return int64(countLevelsNotEqual(page.definitionLevels, page.maxDefinitionLevel))
+	return int64(countLevelsNotEqual(page.definitionLevels.data(), page.maxDefinitionLevel))
 }
 
 func (page *repeatedPage) Bounds() (min, max Value, ok bool) { return page.base.Bounds() }
 
 func (page *repeatedPage) Size() int64 {
-	return int64(len(page.repetitionLevels)) + int64(len(page.definitionLevels)) + page.base.Size()
+	return int64(page.repetitionLevels.len) + int64(page.definitionLevels.len) + page.base.Size()
 }
 
-func (page *repeatedPage) RepetitionLevels() []byte { return page.repetitionLevels }
+func (page *repeatedPage) RepetitionLevels() []byte { return page.repetitionLevels.data() }
 
-func (page *repeatedPage) DefinitionLevels() []byte { return page.definitionLevels }
+func (page *repeatedPage) DefinitionLevels() []byte { return page.definitionLevels.data() }
 
 func (page *repeatedPage) Data() encoding.Values { return page.base.Data() }
 
@@ -490,8 +498,8 @@ func (page *repeatedPage) Clone() Page {
 		page.base.Clone(),
 		page.maxRepetitionLevel,
 		page.maxDefinitionLevel,
-		append([]byte{}, page.repetitionLevels...),
-		append([]byte{}, page.definitionLevels...),
+		page.repetitionLevels.clone(),
+		page.definitionLevels.clone(),
 	)
 }
 
@@ -507,11 +515,12 @@ func (page *repeatedPage) Slice(i, j int64) Page {
 		panic(errPageBoundsOutOfRange(i, j, numRows))
 	}
 
+	repetitionLevels := page.repetitionLevels.data()
 	rowIndex0 := 0
-	rowIndex1 := len(page.repetitionLevels)
-	rowIndex2 := len(page.repetitionLevels)
+	rowIndex1 := len(repetitionLevels)
+	rowIndex2 := len(repetitionLevels)
 
-	for k, def := range page.repetitionLevels {
+	for k, def := range repetitionLevels {
 		if def == 0 {
 			if rowIndex0 == int(i) {
 				rowIndex1 = k
@@ -521,7 +530,7 @@ func (page *repeatedPage) Slice(i, j int64) Page {
 		}
 	}
 
-	for k, def := range page.repetitionLevels[rowIndex1:] {
+	for k, def := range repetitionLevels[rowIndex1:] {
 		if def == 0 {
 			if rowIndex0 == int(j) {
 				rowIndex2 = rowIndex1 + k
@@ -531,8 +540,9 @@ func (page *repeatedPage) Slice(i, j int64) Page {
 		}
 	}
 
-	numNulls1 := countLevelsNotEqual(page.definitionLevels[:rowIndex1], page.maxDefinitionLevel)
-	numNulls2 := countLevelsNotEqual(page.definitionLevels[rowIndex1:rowIndex2], page.maxDefinitionLevel)
+	definitionLevels := page.definitionLevels.data()
+	numNulls1 := countLevelsNotEqual(definitionLevels[:rowIndex1], page.maxDefinitionLevel)
+	numNulls2 := countLevelsNotEqual(definitionLevels[rowIndex1:rowIndex2], page.maxDefinitionLevel)
 
 	i = int64(rowIndex1 - numNulls1)
 	j = int64(rowIndex2 - (numNulls1 + numNulls2))
@@ -541,8 +551,8 @@ func (page *repeatedPage) Slice(i, j int64) Page {
 		page.base.Slice(i, j),
 		page.maxRepetitionLevel,
 		page.maxDefinitionLevel,
-		page.repetitionLevels[rowIndex1:rowIndex2],
-		page.definitionLevels[rowIndex1:rowIndex2],
+		page.repetitionLevels.slice(int(rowIndex1), int(rowIndex2)),
+		page.definitionLevels.slice(int(rowIndex1), int(rowIndex2)),
 	)
 }
 

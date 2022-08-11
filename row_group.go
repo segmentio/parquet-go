@@ -308,7 +308,10 @@ func (r *rowGroupRows) Reset() {
 
 func (r *rowGroupRows) Close() error {
 	var lastErr error
-	r.cancel()
+
+	if r.cancel != nil {
+		r.cancel()
+	}
 
 	for i := range r.columns {
 		if err := r.columns[i].close(); err != nil {
