@@ -2,6 +2,8 @@ package parquet
 
 import (
 	"sort"
+	"sync"
+	"sync/atomic"
 )
 
 // Buffer represents an in-memory group of parquet rows.
@@ -281,4 +283,138 @@ var (
 	_ RowWriter   = (*bufferWriter)(nil)
 	_ PageWriter  = (*bufferWriter)(nil)
 	_ ValueWriter = (*bufferWriter)(nil)
+)
+
+type buffer struct {
+	data []byte
+	refc uintptr
+	pool *bufferPool
+}
+
+func newBuffer(data []byte) *buffer {
+	return &buffer{data: data, refc: 1}
+}
+
+func (b *buffer) Write(p []byte) (int, error) {
+	b.data = append(b.data, p...)
+	return len(p), nil
+}
+
+func (b *buffer) WriteString(s string) (int, error) {
+	b.data = append(b.data, s...)
+	return len(s), nil
+}
+
+func (b *buffer) ref() {
+	atomic.AddUintptr(&b.refc, +1)
+}
+
+func (b *buffer) unref() {
+	if atomic.AddUintptr(&b.refc, ^uintptr(0)) == 0 {
+		if b.pool != nil {
+			b.pool.put(b)
+		}
+	}
+}
+
+func (b *buffer) reset() {
+	b.data = b.data[:0]
+}
+
+func (b *buffer) resize(size int) {
+	if cap(b.data) < size {
+		const pageSize = 4096
+		alignedBufferSize := ((size + (pageSize - 1)) / pageSize) * pageSize
+		b.data = make([]byte, size, alignedBufferSize)
+	} else {
+		b.data = b.data[:size]
+	}
+}
+
+func (b *buffer) clone() (clone *buffer) {
+	if b.pool != nil {
+		clone = b.pool.get()
+	} else {
+		clone = &buffer{refc: 1}
+	}
+	clone.data = append(clone.data, b.data...)
+	return clone
+}
+
+type bufferRef struct {
+	buf *buffer
+	off int
+	len int
+}
+
+func makeBufferRef(buf *buffer) bufferRef {
+	buf.ref()
+	return bufferRef{buf: buf, len: len(buf.data)}
+}
+
+func (r *bufferRef) data() []byte {
+	if r.buf != nil {
+		i := r.off
+		j := r.off + r.len
+		return r.buf.data[i:j:j]
+	}
+	return nil
+}
+
+func (r *bufferRef) ref() bufferRef {
+	if r.buf != nil {
+		r.buf.ref()
+	}
+	return *r
+}
+
+func (r *bufferRef) unref() {
+	if r.buf != nil {
+		r.buf.unref()
+		r.buf = nil
+	}
+}
+
+func (r *bufferRef) slice(i, j int) bufferRef {
+	if r.buf != nil {
+		r.buf.ref()
+	}
+	return bufferRef{buf: r.buf, off: r.off + i, len: j - i}
+}
+
+func (r *bufferRef) clone() (clone bufferRef) {
+	clone.off = r.off
+	clone.len = r.len
+	if r.buf != nil {
+		clone.buf = r.buf.clone()
+	}
+	return clone
+}
+
+type bufferPool struct {
+	pool sync.Pool
+}
+
+func (p *bufferPool) get() *buffer {
+	b, _ := p.pool.Get().(*buffer)
+	if b == nil {
+		b = &buffer{pool: p}
+	} else {
+		b.reset()
+	}
+	b.ref()
+	return b
+}
+
+func (p *bufferPool) put(b *buffer) {
+	if b.pool != p {
+		panic("BUG: buffer returned to a different pool than the one it was allocated from")
+	}
+	p.pool.Put(b)
+}
+
+var (
+	levelsBufferPool           bufferPool
+	compressedPageBufferPool   bufferPool
+	uncompressedPageBufferPool bufferPool
 )

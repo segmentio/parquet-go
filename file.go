@@ -551,20 +551,23 @@ func (f *filePages) readDictionary() error {
 		return err
 	}
 
-	data := make([]byte, header.CompressedPageSize)
+	page := compressedPageBufferPool.get()
+	defer page.unref()
 
-	if _, err := io.ReadFull(rbuf, data); err != nil {
+	page.resize(int(header.CompressedPageSize))
+
+	if _, err := io.ReadFull(rbuf, page.data); err != nil {
 		return err
 	}
 
-	return f.readDictionaryPage(header, data)
+	return f.readDictionaryPage(header, page)
 }
 
-func (f *filePages) readDictionaryPage(header *format.PageHeader, data []byte) error {
+func (f *filePages) readDictionaryPage(header *format.PageHeader, page *buffer) error {
 	if header.DictionaryPageHeader == nil {
 		return ErrMissingPageHeader
 	}
-	d, err := f.chunk.column.decodeDictionary(DictionaryPageHeader{header.DictionaryPageHeader}, data, header.UncompressedPageSize)
+	d, err := f.chunk.column.decodeDictionary(DictionaryPageHeader{header.DictionaryPageHeader}, page, header.UncompressedPageSize)
 	if err != nil {
 		return err
 	}
@@ -572,7 +575,7 @@ func (f *filePages) readDictionaryPage(header *format.PageHeader, data []byte) e
 	return nil
 }
 
-func (f *filePages) readDataPageV1(header *format.PageHeader, data []byte) (Page, error) {
+func (f *filePages) readDataPageV1(header *format.PageHeader, page *buffer) (Page, error) {
 	if header.DataPageHeader == nil {
 		return nil, ErrMissingPageHeader
 	}
@@ -581,10 +584,10 @@ func (f *filePages) readDataPageV1(header *format.PageHeader, data []byte) (Page
 			return nil, err
 		}
 	}
-	return f.chunk.column.decodeDataPageV1(DataPageHeaderV1{header.DataPageHeader}, data, f.dictionary, header.UncompressedPageSize)
+	return f.chunk.column.decodeDataPageV1(DataPageHeaderV1{header.DataPageHeader}, page, f.dictionary, header.UncompressedPageSize)
 }
 
-func (f *filePages) readDataPageV2(header *format.PageHeader, data []byte) (Page, error) {
+func (f *filePages) readDataPageV2(header *format.PageHeader, page *buffer) (Page, error) {
 	if header.DataPageHeaderV2 == nil {
 		return nil, ErrMissingPageHeader
 	}
@@ -596,19 +599,22 @@ func (f *filePages) readDataPageV2(header *format.PageHeader, data []byte) (Page
 			return nil, err
 		}
 	}
-	return f.chunk.column.decodeDataPageV2(DataPageHeaderV2{header.DataPageHeaderV2}, data, f.dictionary, header.UncompressedPageSize)
+	return f.chunk.column.decodeDataPageV2(DataPageHeaderV2{header.DataPageHeaderV2}, page, f.dictionary, header.UncompressedPageSize)
 }
 
-func (f *filePages) readPage(header *format.PageHeader, reader *bufio.Reader) ([]byte, error) {
-	page := make([]byte, header.CompressedPageSize)
+func (f *filePages) readPage(header *format.PageHeader, reader *bufio.Reader) (*buffer, error) {
+	page := compressedPageBufferPool.get()
+	defer page.unref()
 
-	if _, err := io.ReadFull(reader, page); err != nil {
+	page.resize(int(header.CompressedPageSize))
+
+	if _, err := io.ReadFull(reader, page.data); err != nil {
 		return nil, err
 	}
 
 	if header.CRC != 0 {
 		headerChecksum := uint32(header.CRC)
-		bufferChecksum := crc32.ChecksumIEEE(page)
+		bufferChecksum := crc32.ChecksumIEEE(page.data)
 
 		// TODO: checksum validation is disabled until we figure out how the
 		// checksum of TestOpenFile/testdata/delta_length_byte_array.parquet was
@@ -638,6 +644,7 @@ func (f *filePages) readPage(header *format.PageHeader, reader *bufio.Reader) ([
 		}
 	}
 
+	page.ref()
 	return page, nil
 }
 
