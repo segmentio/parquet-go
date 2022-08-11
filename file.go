@@ -7,6 +7,7 @@ import (
 	"hash/crc32"
 	"io"
 	"sort"
+	"sync"
 
 	"github.com/segmentio/encoding/thrift"
 	"github.com/segmentio/parquet-go/format"
@@ -477,7 +478,7 @@ func (f *filePages) init(c *fileColumnChunk) {
 	}
 
 	f.section = *io.NewSectionReader(c.file, f.baseOffset, c.chunk.MetaData.TotalCompressedSize)
-	f.rbuf = bufio.NewReaderSize(&f.section, defaultReadBufferSize)
+	f.rbuf = getBufioReader(&f.section)
 	f.decoder.Reset(f.protocol.NewReader(f.rbuf))
 }
 
@@ -544,7 +545,8 @@ func (f *filePages) ReadPage() (Page, error) {
 
 func (f *filePages) readDictionary() error {
 	chunk := io.NewSectionReader(f.chunk.file, f.baseOffset, f.chunk.chunk.MetaData.TotalCompressedSize)
-	rbuf := bufio.NewReaderSize(chunk, defaultReadBufferSize)
+	rbuf := getBufioReader(chunk)
+	defer putBufioReader(rbuf)
 
 	decoder := thrift.NewDecoder(f.protocol.NewReader(rbuf))
 	header := new(format.PageHeader)
@@ -678,6 +680,7 @@ func (f *filePages) SeekToRow(rowIndex int64) (err error) {
 }
 
 func (f *filePages) Close() error {
+	putBufioReader(f.rbuf)
 	f.chunk = nil
 	f.section = io.SectionReader{}
 	f.rbuf = nil
@@ -692,4 +695,25 @@ func (f *filePages) Close() error {
 
 func (f *filePages) columnPath() columnPath {
 	return columnPath(f.chunk.column.Path())
+}
+
+var (
+	bufioReaderPool sync.Pool
+)
+
+func getBufioReader(r io.Reader) *bufio.Reader {
+	rbuf, _ := bufioReaderPool.Get().(*bufio.Reader)
+	if rbuf == nil {
+		rbuf = bufio.NewReaderSize(r, defaultReadBufferSize)
+	} else {
+		rbuf.Reset(r)
+	}
+	return rbuf
+}
+
+func putBufioReader(rbuf *bufio.Reader) {
+	if rbuf != nil {
+		rbuf.Reset(nil)
+		bufioReaderPool.Put(rbuf)
+	}
 }
