@@ -10,6 +10,7 @@ import (
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/format"
+	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 // Column represents a column in a parquet file.
@@ -517,7 +518,7 @@ func (c *Column) decodeDataPageV1(header DataPageHeaderV1, page *buffer, dict Di
 		pageData = page.data
 	}
 
-	var numValues = header.NumValues()
+	var numValues = int(header.NumValues())
 	var repetitionLevels *buffer
 	var definitionLevels *buffer
 
@@ -540,7 +541,7 @@ func (c *Column) decodeDataPageV1(header DataPageHeaderV1, page *buffer, dict Di
 
 		// Data pages v1 did not embed the number of null values,
 		// so we have to compute it from the definition levels.
-		numValues -= int64(countLevelsNotEqual(definitionLevels.data, c.maxDefinitionLevel))
+		numValues -= countLevelsNotEqual(definitionLevels.data, c.maxDefinitionLevel)
 	}
 
 	page = &buffer{data: pageData}
@@ -554,7 +555,7 @@ func (c *Column) DecodeDataPageV2(header DataPageHeaderV2, page []byte, dict Dic
 }
 
 func (c *Column) decodeDataPageV2(header DataPageHeaderV2, page *buffer, dict Dictionary, size int32) (Page, error) {
-	var numValues = header.NumValues()
+	var numValues = int(header.NumValues())
 	var pageData = page.data
 	var err error
 	var repetitionLevels *buffer
@@ -589,11 +590,11 @@ func (c *Column) decodeDataPageV2(header DataPageHeaderV2, page *buffer, dict Di
 		page = &buffer{data: pageData}
 	}
 
-	numValues -= header.NumNulls()
+	numValues -= int(header.NumNulls())
 	return c.decodeDataPage(header, numValues, repetitionLevels, definitionLevels, page, dict)
 }
 
-func (c *Column) decodeDataPage(header DataPageHeader, numValues int64, repetitionLevels, definitionLevels, page *buffer, dict Dictionary) (Page, error) {
+func (c *Column) decodeDataPage(header DataPageHeader, numValues int, repetitionLevels, definitionLevels, page *buffer, dict Dictionary) (Page, error) {
 	pageEncoding := LookupEncoding(header.Encoding())
 	pageType := c.Type()
 
@@ -606,13 +607,46 @@ func (c *Column) decodeDataPage(header DataPageHeader, numValues int64, repetiti
 		pageType = indexedPageType{newIndexedType(pageType, dict)}
 	}
 
-	values := pageType.NewValues(nil, nil)
+	var vbuf, obuf *buffer
+	var pageValues []byte
+	var pageOffsets []uint32
+
+	pageKind := pageType.Kind()
+	if pageKind >= 0 && int(pageKind) < len(pageValuesBufferPool) {
+		vbuf = pageValuesBufferPool[pageKind].get()
+		vbuf.resize(int(pageType.EstimateSize(numValues)))
+		pageValues = vbuf.data
+	}
+	if pageKind == ByteArray {
+		obuf = pageOffsetsBufferPool.get()
+		obuf.resize(4 * (numValues + 1))
+		pageOffsets = unsafecast.BytesToUint32(obuf.data)
+	}
+
+	values := pageType.NewValues(pageValues[:0], pageOffsets[:0])
 	values, err := pageType.Decode(values, page.data, pageEncoding)
+
+	pageValues, pageOffsets = values.Data()
+	if vbuf != nil {
+		vbuf.data = pageValues
+	}
+	if obuf != nil {
+		obuf.data = unsafecast.Uint32ToBytes(pageOffsets)
+	}
+
 	if err != nil {
+		if obuf != nil {
+			vbuf.unref()
+			vbuf = nil
+		}
+		if obuf != nil {
+			obuf.unref()
+			obuf = nil
+		}
 		return nil, err
 	}
 
-	newPage := pageType.NewPage(c.Index(), int(numValues), values)
+	newPage := pageType.NewPage(c.Index(), numValues, values)
 	switch {
 	case c.maxRepetitionLevel > 0:
 		newPage = newRepeatedPage(
@@ -629,10 +663,15 @@ func (c *Column) decodeDataPage(header DataPageHeader, numValues int64, repetiti
 			makeBufferRef(definitionLevels),
 		)
 	}
+	newPage = &bufferedPage{
+		Page:    newPage,
+		values:  makeBufferRef(vbuf),
+		offsets: makeBufferRef(obuf),
+	}
 	return newPage, nil
 }
 
-func decodeLevelsV1(enc encoding.Encoding, numValues int64, data []byte) (*buffer, []byte, error) {
+func decodeLevelsV1(enc encoding.Encoding, numValues int, data []byte) (*buffer, []byte, error) {
 	if len(data) < 4 {
 		return nil, data, io.ErrUnexpectedEOF
 	}
@@ -645,7 +684,7 @@ func decodeLevelsV1(enc encoding.Encoding, numValues int64, data []byte) (*buffe
 	return levels, data[j:], err
 }
 
-func decodeLevelsV2(enc encoding.Encoding, numValues int64, data []byte, length int64) (*buffer, []byte, error) {
+func decodeLevelsV2(enc encoding.Encoding, numValues int, data []byte, length int64) (*buffer, []byte, error) {
 	if length > int64(len(data)) {
 		return nil, data, io.ErrUnexpectedEOF
 	}
@@ -653,7 +692,7 @@ func decodeLevelsV2(enc encoding.Encoding, numValues int64, data []byte, length 
 	return levels, data[length:], err
 }
 
-func decodeLevels(enc encoding.Encoding, numValues int64, data []byte) (levels *buffer, err error) {
+func decodeLevels(enc encoding.Encoding, numValues int, data []byte) (levels *buffer, err error) {
 	levels = levelsBufferPool.get()
 	levels.data, err = enc.DecodeLevels(levels.data, data)
 	if err != nil {
@@ -661,9 +700,9 @@ func decodeLevels(enc encoding.Encoding, numValues int64, data []byte) (levels *
 		levels = nil
 	} else {
 		switch {
-		case len(levels.data) < int(numValues):
+		case len(levels.data) < numValues:
 			err = fmt.Errorf("decoding level expected %d values but got only %d", numValues, len(levels.data))
-		case len(levels.data) > int(numValues):
+		case len(levels.data) > numValues:
 			levels.data = levels.data[:numValues]
 		}
 	}
@@ -694,12 +733,13 @@ func (c *Column) decodeDictionary(header DictionaryPageHeader, page *buffer, siz
 		pageEncoding = format.Plain
 	}
 
+	numValues := int(header.NumValues())
 	values := pageType.NewValues(nil, nil)
 	values, err := pageType.Decode(values, pageData, LookupEncoding(pageEncoding))
 	if err != nil {
 		return nil, err
 	}
-	return pageType.NewDictionary(int(c.index), int(header.NumValues()), values), nil
+	return pageType.NewDictionary(int(c.index), numValues, values), nil
 }
 
 var (

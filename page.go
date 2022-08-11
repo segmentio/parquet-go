@@ -317,7 +317,10 @@ func forEachPageSlice(page Page, wantSize int64, do func(Page) error) error {
 
 	for numPages > 0 {
 		lastRowIndex := rowIndex + ((numRows - rowIndex) / numPages)
-		if err := do(page.Slice(rowIndex, lastRowIndex)); err != nil {
+		pageSlice := page.Slice(rowIndex, lastRowIndex)
+		err := do(pageSlice)
+		unref(pageSlice)
+		if err != nil {
 			return err
 		}
 		rowIndex = lastRowIndex

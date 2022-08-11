@@ -295,16 +295,6 @@ func newBuffer(data []byte) *buffer {
 	return &buffer{data: data, refc: 1}
 }
 
-func (b *buffer) Write(p []byte) (int, error) {
-	b.data = append(b.data, p...)
-	return len(p), nil
-}
-
-func (b *buffer) WriteString(s string) (int, error) {
-	b.data = append(b.data, s...)
-	return len(s), nil
-}
-
 func (b *buffer) ref() {
 	atomic.AddUintptr(&b.refc, +1)
 }
@@ -347,9 +337,13 @@ type bufferRef struct {
 	len int
 }
 
-func makeBufferRef(buf *buffer) bufferRef {
-	buf.ref()
-	return bufferRef{buf: buf, len: len(buf.data)}
+func makeBufferRef(buf *buffer) (ref bufferRef) {
+	if buf != nil {
+		buf.ref()
+		ref.buf = buf
+		ref.len = len(buf.data)
+	}
+	return ref
 }
 
 func (r *bufferRef) data() []byte {
@@ -417,4 +411,27 @@ var (
 	levelsBufferPool           bufferPool
 	compressedPageBufferPool   bufferPool
 	uncompressedPageBufferPool bufferPool
+	pageOffsetsBufferPool      bufferPool
+	pageValuesBufferPool       [8]bufferPool
 )
+
+type bufferedPage struct {
+	Page
+	values  bufferRef
+	offsets bufferRef
+}
+
+func (p *bufferedPage) Slice(i, j int64) Page {
+	return &bufferedPage{
+		Page:    p.Page.Slice(i, j),
+		values:  p.values.ref(),
+		offsets: p.offsets.ref(),
+	}
+}
+
+func unref(page Page) {
+	if p, _ := page.(*bufferedPage); p != nil {
+		p.values.unref()
+		p.offsets.unref()
+	}
+}
