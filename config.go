@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/yonesko/parquet-go/compress"
+	"github.com/1712n/parquet-go/compress"
 )
 
 const (
-	DefaultCreatedBy            = "github.com/yonesko/parquet-go"
+	DefaultCreatedBy            = "github.com/1712n/parquet-go"
 	DefaultColumnIndexSizeLimit = 16
 	DefaultColumnBufferCapacity = 16 * 1024
 	DefaultPageBufferSize       = 256 * 1024

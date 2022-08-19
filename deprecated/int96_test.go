@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/yonesko/parquet-go/deprecated"
+	"github.com/1712n/parquet-go/deprecated"
 )
 
 func TestInt96Less(t *testing.T) {

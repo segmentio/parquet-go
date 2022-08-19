@@ -3,8 +3,6 @@ package parquet_test
 import (
 	"reflect"
 	"testing"
-
-	"github.com/yonesko/parquet-go"
 )
 
 var conversionTests = [...]struct {

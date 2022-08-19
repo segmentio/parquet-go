@@ -9,8 +9,8 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/1712n/parquet-go/format"
 	"github.com/segmentio/encoding/thrift"
-	"github.com/yonesko/parquet-go/format"
 )
 
 const (

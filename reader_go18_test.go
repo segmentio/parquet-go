@@ -6,12 +6,11 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"github.com/1712n/parquet-go"
 	"io"
 	"math/rand"
 	"reflect"
 	"testing"
-
-	"github.com/yonesko/parquet-go"
 )
 
 func TestGenericReader(t *testing.T) {

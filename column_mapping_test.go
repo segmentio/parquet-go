@@ -2,9 +2,8 @@ package parquet_test
 
 import (
 	"fmt"
+	"github.com/1712n/parquet-go"
 	"strings"
-
-	"github.com/yonesko/parquet-go"
 )
 
 func ExampleSchema_Lookup() {

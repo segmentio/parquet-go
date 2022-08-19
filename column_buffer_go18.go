@@ -7,9 +7,9 @@ import (
 	"reflect"
 	"unsafe"
 
-	"github.com/yonesko/parquet-go/deprecated"
-	"github.com/yonesko/parquet-go/internal/unsafecast"
-	"github.com/yonesko/parquet-go/sparse"
+	"github.com/1712n/parquet-go/deprecated"
+	"github.com/1712n/parquet-go/internal/unsafecast"
+	"github.com/1712n/parquet-go/sparse"
 )
 
 // writeRowsFunc is the type of functions that apply rows to a set of column

@@ -8,8 +8,6 @@ import (
 	"math/rand"
 	"reflect"
 	"testing"
-
-	"github.com/yonesko/parquet-go"
 )
 
 func BenchmarkGenericWriter(b *testing.B) {

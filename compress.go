@@ -3,14 +3,14 @@ package parquet
 import (
 	"fmt"
 
-	"github.com/yonesko/parquet-go/compress"
-	"github.com/yonesko/parquet-go/compress/brotli"
-	"github.com/yonesko/parquet-go/compress/gzip"
-	"github.com/yonesko/parquet-go/compress/lz4"
-	"github.com/yonesko/parquet-go/compress/snappy"
-	"github.com/yonesko/parquet-go/compress/uncompressed"
-	"github.com/yonesko/parquet-go/compress/zstd"
-	"github.com/yonesko/parquet-go/format"
+	"github.com/1712n/parquet-go/compress"
+	"github.com/1712n/parquet-go/compress/brotli"
+	"github.com/1712n/parquet-go/compress/gzip"
+	"github.com/1712n/parquet-go/compress/lz4"
+	"github.com/1712n/parquet-go/compress/snappy"
+	"github.com/1712n/parquet-go/compress/uncompressed"
+	"github.com/1712n/parquet-go/compress/zstd"
+	"github.com/1712n/parquet-go/format"
 )
 
 var (

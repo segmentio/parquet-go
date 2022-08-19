@@ -2,10 +2,9 @@ package parquet_test
 
 import (
 	"fmt"
+	"github.com/1712n/parquet-go"
 	"math"
 	"testing"
-
-	"github.com/yonesko/parquet-go"
 )
 
 func assertCompare(t *testing.T, a, b parquet.Value, cmp func(parquet.Value, parquet.Value) int, want int) {

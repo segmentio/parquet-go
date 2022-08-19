@@ -11,11 +11,11 @@ import (
 	"io"
 	"unsafe"
 
-	"github.com/yonesko/parquet-go/encoding"
-	"github.com/yonesko/parquet-go/format"
-	"github.com/yonesko/parquet-go/internal/bitpack"
-	"github.com/yonesko/parquet-go/internal/bytealg"
-	"github.com/yonesko/parquet-go/internal/unsafecast"
+	"github.com/1712n/parquet-go/encoding"
+	"github.com/1712n/parquet-go/format"
+	"github.com/1712n/parquet-go/internal/bitpack"
+	"github.com/1712n/parquet-go/internal/bytealg"
+	"github.com/1712n/parquet-go/internal/unsafecast"
 )
 
 const (

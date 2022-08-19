@@ -10,9 +10,9 @@ import (
 	"strconv"
 	"unsafe"
 
+	"github.com/1712n/parquet-go/deprecated"
+	"github.com/1712n/parquet-go/internal/unsafecast"
 	"github.com/google/uuid"
-	"github.com/yonesko/parquet-go/deprecated"
-	"github.com/yonesko/parquet-go/internal/unsafecast"
 )
 
 const (

@@ -5,7 +5,7 @@ package unsafecast_test
 import (
 	"testing"
 
-	"github.com/yonesko/parquet-go/internal/unsafecast"
+	"github.com/1712n/parquet-go/internal/unsafecast"
 )
 
 func TestUnsafeCastSlice(t *testing.T) {

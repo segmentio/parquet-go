@@ -3,7 +3,7 @@ package parquet
 import (
 	"unsafe"
 
-	"github.com/yonesko/parquet-go/sparse"
+	"github.com/1712n/parquet-go/sparse"
 )
 
 func makeArrayValue(values []Value, offset uintptr) sparse.Array {

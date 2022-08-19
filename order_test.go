@@ -5,7 +5,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/yonesko/parquet-go/internal/quick"
+	"github.com/1712n/parquet-go/internal/quick"
 )
 
 type boolOrder []bool

@@ -3,8 +3,6 @@ package parquet_test
 import (
 	"strings"
 	"testing"
-
-	"github.com/yonesko/parquet-go"
 )
 
 func TestPrintSchema(t *testing.T) {

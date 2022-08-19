@@ -3,8 +3,8 @@
 package parquet
 
 import (
-	"github.com/yonesko/parquet-go/internal/unsafecast"
-	"github.com/yonesko/parquet-go/sparse"
+	"github.com/1712n/parquet-go/internal/unsafecast"
+	"github.com/1712n/parquet-go/sparse"
 )
 
 //go:noescape

@@ -9,8 +9,6 @@ import (
 	"math/rand"
 	"reflect"
 	"testing"
-
-	"github.com/yonesko/parquet-go"
 )
 
 func TestGenericBuffer(t *testing.T) {

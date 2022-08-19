@@ -6,10 +6,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/yonesko/parquet-go"
-	"github.com/yonesko/parquet-go/deprecated"
-	"github.com/yonesko/parquet-go/encoding/plain"
-	"github.com/yonesko/parquet-go/internal/unsafecast"
+	"github.com/1712n/parquet-go/deprecated"
+	"github.com/1712n/parquet-go/encoding/plain"
+	"github.com/1712n/parquet-go/internal/unsafecast"
 )
 
 func TestPage(t *testing.T) {

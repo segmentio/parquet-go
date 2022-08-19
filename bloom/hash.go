@@ -1,6 +1,6 @@
 package bloom
 
-import "github.com/yonesko/parquet-go/bloom/xxhash"
+import "github.com/1712n/parquet-go/bloom/xxhash"
 
 // Hash is an interface abstracting the hashing algorithm used in bloom filters.
 //

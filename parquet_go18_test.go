@@ -6,8 +6,6 @@ import (
 	"bytes"
 	"fmt"
 	"log"
-
-	"github.com/yonesko/parquet-go"
 )
 
 func ExampleReadFile() {

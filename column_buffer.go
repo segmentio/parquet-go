@@ -7,11 +7,11 @@ import (
 	"sort"
 	"unsafe"
 
-	"github.com/yonesko/parquet-go/deprecated"
-	"github.com/yonesko/parquet-go/encoding/plain"
-	"github.com/yonesko/parquet-go/internal/bitpack"
-	"github.com/yonesko/parquet-go/internal/unsafecast"
-	"github.com/yonesko/parquet-go/sparse"
+	"github.com/1712n/parquet-go/deprecated"
+	"github.com/1712n/parquet-go/encoding/plain"
+	"github.com/1712n/parquet-go/internal/bitpack"
+	"github.com/1712n/parquet-go/internal/unsafecast"
+	"github.com/1712n/parquet-go/sparse"
 )
 
 // ColumnBuffer is an interface representing columns of a row group.

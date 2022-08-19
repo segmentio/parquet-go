@@ -3,7 +3,7 @@ package parquet
 import (
 	"encoding/binary"
 
-	"github.com/yonesko/parquet-go/deprecated"
+	"github.com/1712n/parquet-go/deprecated"
 )
 
 func compareBool(v1, v2 bool) int {

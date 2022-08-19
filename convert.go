@@ -5,7 +5,7 @@ import (
 	"io"
 	"sync"
 
-	"github.com/yonesko/parquet-go/encoding"
+	"github.com/1712n/parquet-go/encoding"
 )
 
 // ConvertError is an error type returned by calls to Convert when the conversion

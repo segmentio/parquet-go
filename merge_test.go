@@ -8,8 +8,6 @@ import (
 	"math/rand"
 	"sort"
 	"testing"
-
-	"github.com/yonesko/parquet-go"
 )
 
 const (

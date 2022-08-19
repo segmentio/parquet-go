@@ -4,8 +4,6 @@ import (
 	"math"
 	"testing"
 	"unsafe"
-
-	"github.com/yonesko/parquet-go"
 )
 
 func TestSizeOfValue(t *testing.T) {

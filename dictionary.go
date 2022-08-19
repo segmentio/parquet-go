@@ -6,13 +6,13 @@ import (
 	"strings"
 	"unsafe"
 
-	"github.com/yonesko/parquet-go/deprecated"
-	"github.com/yonesko/parquet-go/encoding"
-	"github.com/yonesko/parquet-go/encoding/plain"
-	"github.com/yonesko/parquet-go/hashprobe"
-	"github.com/yonesko/parquet-go/internal/bitpack"
-	"github.com/yonesko/parquet-go/internal/unsafecast"
-	"github.com/yonesko/parquet-go/sparse"
+	"github.com/1712n/parquet-go/deprecated"
+	"github.com/1712n/parquet-go/encoding"
+	"github.com/1712n/parquet-go/encoding/plain"
+	"github.com/1712n/parquet-go/hashprobe"
+	"github.com/1712n/parquet-go/internal/bitpack"
+	"github.com/1712n/parquet-go/internal/unsafecast"
+	"github.com/1712n/parquet-go/sparse"
 )
 
 const (

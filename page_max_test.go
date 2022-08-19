@@ -5,7 +5,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/yonesko/parquet-go/internal/quick"
+	"github.com/1712n/parquet-go/internal/quick"
 )
 
 func TestMaxInt32(t *testing.T) {

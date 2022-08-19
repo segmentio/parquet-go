@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/yonesko/parquet-go"
 )
 
 func TestSortFunc(t *testing.T) {

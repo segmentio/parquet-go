@@ -5,9 +5,9 @@ import (
 	"io"
 	"strings"
 
+	"github.com/1712n/parquet-go/compress"
+	"github.com/1712n/parquet-go/format"
 	"github.com/klauspost/compress/gzip"
-	"github.com/yonesko/parquet-go/compress"
-	"github.com/yonesko/parquet-go/format"
 )
 
 const (

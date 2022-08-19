@@ -5,10 +5,9 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/1712n/parquet-go"
+	"github.com/1712n/parquet-go/format"
 	"github.com/google/uuid"
-	"github.com/yonesko/parquet-go"
-	"github.com/yonesko/parquet-go/deprecated"
-	"github.com/yonesko/parquet-go/format"
 )
 
 func TestColumnPageIndex(t *testing.T) {

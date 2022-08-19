@@ -8,12 +8,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/1712n/parquet-go/compress"
 	"github.com/google/uuid"
 	"github.com/hexops/gotextdiff"
 	"github.com/hexops/gotextdiff/myers"
 	"github.com/hexops/gotextdiff/span"
-	"github.com/yonesko/parquet-go"
-	"github.com/yonesko/parquet-go/compress"
 )
 
 const (

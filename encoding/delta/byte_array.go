@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"sort"
 
-	"github.com/yonesko/parquet-go/encoding"
-	"github.com/yonesko/parquet-go/format"
+	"github.com/1712n/parquet-go/encoding"
+	"github.com/1712n/parquet-go/format"
 )
 
 const (

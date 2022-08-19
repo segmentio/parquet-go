@@ -5,8 +5,6 @@ import (
 	"math/rand"
 	"testing"
 	"time"
-
-	"github.com/yonesko/parquet-go"
 )
 
 var dictionaryTypes = [...]parquet.Type{

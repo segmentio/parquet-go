@@ -1,4 +1,4 @@
-module github.com/yonesko/parquet-go
+module github.com/1712n/parquet-go
 
 go 1.18
 

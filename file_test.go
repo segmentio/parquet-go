@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/yonesko/parquet-go"
 )
 
 var testdataFiles []string
