@@ -10,7 +10,7 @@ import (
 	"sync"
 
 	"github.com/segmentio/encoding/thrift"
-	"github.com/segmentio/parquet-go/format"
+	"github.com/yonesko/parquet-go/format"
 )
 
 const (

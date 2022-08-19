@@ -3,12 +3,12 @@ package parquet
 import (
 	"io"
 
-	"github.com/segmentio/parquet-go/bloom"
-	"github.com/segmentio/parquet-go/bloom/xxhash"
-	"github.com/segmentio/parquet-go/deprecated"
-	"github.com/segmentio/parquet-go/encoding"
-	"github.com/segmentio/parquet-go/format"
-	"github.com/segmentio/parquet-go/internal/unsafecast"
+	"github.com/yonesko/parquet-go/bloom"
+	"github.com/yonesko/parquet-go/bloom/xxhash"
+	"github.com/yonesko/parquet-go/deprecated"
+	"github.com/yonesko/parquet-go/encoding"
+	"github.com/yonesko/parquet-go/format"
+	"github.com/yonesko/parquet-go/internal/unsafecast"
 )
 
 // BloomFilter is an interface allowing applications to test whether a key

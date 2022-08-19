@@ -6,7 +6,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/segmentio/parquet-go"
+	"github.com/yonesko/parquet-go"
 )
 
 func sortedRowGroup(options []parquet.RowGroupOption, rows ...interface{}) parquet.RowGroup {

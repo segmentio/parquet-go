@@ -7,7 +7,7 @@ import (
 	"testing/quick"
 	"time"
 
-	"github.com/segmentio/parquet-go/bloom/xxhash"
+	"github.com/yonesko/parquet-go/bloom/xxhash"
 )
 
 func TestSumUint8(t *testing.T) {

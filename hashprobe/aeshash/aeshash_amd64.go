@@ -3,7 +3,7 @@
 package aeshash
 
 import (
-	"github.com/segmentio/parquet-go/sparse"
+	"github.com/yonesko/parquet-go/sparse"
 	"golang.org/x/sys/cpu"
 )
 

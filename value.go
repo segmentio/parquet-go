@@ -11,8 +11,8 @@ import (
 	"unsafe"
 
 	"github.com/google/uuid"
-	"github.com/segmentio/parquet-go/deprecated"
-	"github.com/segmentio/parquet-go/internal/unsafecast"
+	"github.com/yonesko/parquet-go/deprecated"
+	"github.com/yonesko/parquet-go/internal/unsafecast"
 )
 
 const (

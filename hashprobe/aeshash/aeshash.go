@@ -6,7 +6,7 @@
 // to call any other function will trigger a panic.
 package aeshash
 
-import "github.com/segmentio/parquet-go/sparse"
+import "github.com/yonesko/parquet-go/sparse"
 
 func MultiHash32(hashes []uintptr, values []uint32, seed uintptr) {
 	MultiHashUint32Array(hashes, sparse.MakeUint32Array(values), seed)

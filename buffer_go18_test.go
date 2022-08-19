@@ -10,7 +10,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/segmentio/parquet-go"
+	"github.com/yonesko/parquet-go"
 )
 
 func TestGenericBuffer(t *testing.T) {

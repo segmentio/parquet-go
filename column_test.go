@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/segmentio/parquet-go"
-	"github.com/segmentio/parquet-go/deprecated"
-	"github.com/segmentio/parquet-go/format"
+	"github.com/yonesko/parquet-go"
+	"github.com/yonesko/parquet-go/deprecated"
+	"github.com/yonesko/parquet-go/format"
 )
 
 func TestColumnPageIndex(t *testing.T) {

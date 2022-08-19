@@ -9,9 +9,9 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
-	"github.com/segmentio/parquet-go/compress"
-	"github.com/segmentio/parquet-go/deprecated"
-	"github.com/segmentio/parquet-go/encoding"
+	"github.com/yonesko/parquet-go/compress"
+	"github.com/yonesko/parquet-go/deprecated"
+	"github.com/yonesko/parquet-go/encoding"
 )
 
 // Schema represents a parquet schema created from a Go value.
@@ -110,7 +110,7 @@ func schemaOf(model reflect.Type) *Schema {
 	if model.Kind() != reflect.Struct {
 		panic("cannot construct parquet schema from value of type " + model.String())
 	}
-	schema = NewSchema(model.Name(), nodeOf(model, nil))
+	schema = NewSchema(model.Name(), NodeOf(model, nil))
 	if actual, loaded := cachedSchemas.LoadOrStore(model, schema); loaded {
 		schema = actual.(*Schema)
 	}
@@ -475,7 +475,7 @@ func forEachStructTagOption(sf reflect.StructField, do func(t reflect.Type, opti
 	}
 }
 
-func nodeOf(t reflect.Type, tag []string) Node {
+func NodeOf(t reflect.Type, tag []string) Node {
 	switch t {
 	case reflect.TypeOf(deprecated.Int96{}):
 		return Leaf(Int96Type)
@@ -510,13 +510,13 @@ func nodeOf(t reflect.Type, tag []string) Node {
 		n = String()
 
 	case reflect.Ptr:
-		n = Optional(nodeOf(t.Elem(), nil))
+		n = Optional(NodeOf(t.Elem(), nil))
 
 	case reflect.Slice:
 		if elem := t.Elem(); elem.Kind() == reflect.Uint8 { // []byte?
 			n = Leaf(ByteArrayType)
 		} else {
-			n = Repeated(nodeOf(elem, nil))
+			n = Repeated(NodeOf(elem, nil))
 		}
 
 	case reflect.Array:
@@ -688,7 +688,7 @@ func makeNodeOf(t reflect.Type, name string, tag []string) Node {
 
 	forEachTagOption(tag, func(option, args string) {
 		if t.Kind() == reflect.Map {
-			node = nodeOf(t, tag)
+			node = NodeOf(t, tag)
 			return
 		}
 		switch option {
@@ -757,7 +757,7 @@ func makeNodeOf(t reflect.Type, name string, tag []string) Node {
 		case "list":
 			switch t.Kind() {
 			case reflect.Slice:
-				element := nodeOf(t.Elem(), nil)
+				element := NodeOf(t.Elem(), nil)
 				setNode(element)
 				setList()
 			default:
@@ -824,7 +824,7 @@ func makeNodeOf(t reflect.Type, name string, tag []string) Node {
 	})
 
 	if node == nil {
-		node = nodeOf(t, tag)
+		node = NodeOf(t, tag)
 	}
 
 	if compressed != nil {

@@ -9,14 +9,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/segmentio/parquet-go/deprecated"
-	"github.com/segmentio/parquet-go/encoding"
-	"github.com/segmentio/parquet-go/encoding/bitpacked"
-	"github.com/segmentio/parquet-go/encoding/bytestreamsplit"
-	"github.com/segmentio/parquet-go/encoding/delta"
-	"github.com/segmentio/parquet-go/encoding/plain"
-	"github.com/segmentio/parquet-go/encoding/rle"
-	"github.com/segmentio/parquet-go/internal/unsafecast"
+	"github.com/yonesko/parquet-go/deprecated"
+	"github.com/yonesko/parquet-go/encoding"
+	"github.com/yonesko/parquet-go/encoding/bitpacked"
+	"github.com/yonesko/parquet-go/encoding/bytestreamsplit"
+	"github.com/yonesko/parquet-go/encoding/delta"
+	"github.com/yonesko/parquet-go/encoding/plain"
+	"github.com/yonesko/parquet-go/encoding/rle"
+	"github.com/yonesko/parquet-go/internal/unsafecast"
 )
 
 func repeatInt64(seq []int64, n int) []int64 {

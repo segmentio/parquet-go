@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/segmentio/parquet-go/encoding"
+	"github.com/yonesko/parquet-go/encoding"
 )
 
 func EncodeInt32(t *testing.T, enc encoding.Encoding, min, max int, bitWidth uint) {

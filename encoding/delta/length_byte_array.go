@@ -1,8 +1,8 @@
 package delta
 
 import (
-	"github.com/segmentio/parquet-go/encoding"
-	"github.com/segmentio/parquet-go/format"
+	"github.com/yonesko/parquet-go/encoding"
+	"github.com/yonesko/parquet-go/format"
 )
 
 type LengthByteArrayEncoding struct {

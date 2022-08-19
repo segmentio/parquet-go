@@ -2,7 +2,7 @@
 
 package bytestreamsplit
 
-import "github.com/segmentio/parquet-go/internal/unsafecast"
+import "github.com/yonesko/parquet-go/internal/unsafecast"
 
 func encodeFloat(dst, src []byte) {
 	n := len(src) / 4

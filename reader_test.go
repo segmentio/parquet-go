@@ -9,8 +9,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/segmentio/parquet-go"
-	"github.com/segmentio/parquet-go/internal/quick"
+	"github.com/yonesko/parquet-go"
+	"github.com/yonesko/parquet-go/internal/quick"
 )
 
 func rowsOf(numRows int, model interface{}) rows {

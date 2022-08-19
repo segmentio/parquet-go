@@ -12,10 +12,10 @@ import (
 	"sort"
 
 	"github.com/segmentio/encoding/thrift"
-	"github.com/segmentio/parquet-go/compress"
-	"github.com/segmentio/parquet-go/encoding"
-	"github.com/segmentio/parquet-go/encoding/plain"
-	"github.com/segmentio/parquet-go/format"
+	"github.com/yonesko/parquet-go/compress"
+	"github.com/yonesko/parquet-go/encoding"
+	"github.com/yonesko/parquet-go/encoding/plain"
+	"github.com/yonesko/parquet-go/format"
 )
 
 // Deprecated: A Writer uses a parquet schema and sequence of Go values to

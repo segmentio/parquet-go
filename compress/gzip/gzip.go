@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/klauspost/compress/gzip"
-	"github.com/segmentio/parquet-go/compress"
-	"github.com/segmentio/parquet-go/format"
+	"github.com/yonesko/parquet-go/compress"
+	"github.com/yonesko/parquet-go/format"
 )
 
 const (
