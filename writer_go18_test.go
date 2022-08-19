@@ -9,6 +9,8 @@ import (
 	"reflect"
 	"testing"
 
+	"encoding/json"
+
 	"github.com/segmentio/parquet-go"
 )
 
@@ -204,5 +206,59 @@ func TestIssue279(t *testing.T) {
 		if d := r[1].DefinitionLevel(); d != 3 {
 			t.Errorf("wrong definition level for column 1: %d", d)
 		}
+	}
+}
+
+func TestIssue302(t *testing.T) {
+	tests := []struct {
+		name string
+		fn   func(t *testing.T)
+	}{
+		{
+			name: "SimpleMap",
+			fn: func(t *testing.T) {
+				type M map[string]json.RawMessage
+
+				type T struct {
+					M M `parquet:","`
+				}
+
+				b := new(bytes.Buffer)
+				_ = parquet.NewGenericWriter[T](b)
+
+			},
+		},
+		{
+			name: "MapWithOptional",
+			fn: func(t *testing.T) {
+				type M map[string]json.RawMessage
+
+				type T struct {
+					M M `parquet:",optional"`
+				}
+
+				b := new(bytes.Buffer)
+				_ = parquet.NewGenericWriter[T](b)
+
+			},
+		},
+		{
+			name: "MapWithValue",
+			fn: func(t *testing.T) {
+				type M map[string]json.RawMessage
+
+				type T struct {
+					M M `parquet:"," parquet-value:",zstd"`
+				}
+
+				b := new(bytes.Buffer)
+				_ = parquet.NewGenericWriter[T](b)
+
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, test.fn)
 	}
 }
