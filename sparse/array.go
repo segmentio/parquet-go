@@ -55,6 +55,19 @@ func (a array) slice(i, j int) array {
 }
 
 func (a array) offset(off uintptr) array {
+	if a.off == 0 {
+		off = 0
+		a.len = 0
+	} else {
+		offsetSize := off / a.off
+		if a.len > offsetSize {
+			a.len -= offsetSize
+		} else {
+			off = 0
+			a.len = 0
+		}
+	}
+
 	return array{
 		ptr: unsafe.Add(a.ptr, off),
 		len: a.len,
