@@ -1265,11 +1265,14 @@ func (c *writerColumn) recordPageStats(headerSize int32, header *format.PageHead
 
 	pageType := header.Type
 	encoding := format.Encoding(-1)
+	var statistics format.Statistics
 	switch pageType {
 	case format.DataPageV2:
 		encoding = header.DataPageHeaderV2.Encoding
+		statistics = header.DataPageHeaderV2.Statistics
 	case format.DataPage:
 		encoding = header.DataPageHeader.Encoding
+		statistics = header.DataPageHeader.Statistics
 	case format.DictionaryPage:
 		encoding = header.DictionaryPageHeader.Encoding
 	}
@@ -1281,6 +1284,7 @@ func (c *writerColumn) recordPageStats(headerSize int32, header *format.PageHead
 		Encoding: encoding,
 		Count:    1,
 	})
+	c.columnChunk.MetaData.Statistics = statistics
 }
 
 func addEncoding(encodings []format.Encoding, add format.Encoding) []format.Encoding {
