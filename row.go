@@ -167,7 +167,12 @@ func (r *forwardRowSeeker) SeekToRow(rowIndex int64) error {
 		r.seek = rowIndex
 		return nil
 	}
-	return fmt.Errorf("SeekToRow: %T does not implement parquet.RowSeeker: cannot seek backward from row %d to %d", r.rows, r.index, rowIndex)
+	return fmt.Errorf(
+		"SeekToRow: %T does not implement parquet.RowSeeker: cannot seek backward from row %d to %d",
+		r.rows,
+		r.index,
+		rowIndex,
+	)
 }
 
 // CopyRows copies rows from src to dst.
@@ -361,6 +366,10 @@ type levels struct {
 	definitionLevel byte
 }
 
+// deconstructFunc accepts a row, the current levels, the value to deserialize
+// the current column onto, and returns the row minus the deserialied value(s)
+// It recurses until it hits a leaf node, then deserializes that value
+// individually as the base case.
 type deconstructFunc func(Row, levels, reflect.Value) Row
 
 func deconstructFuncOf(columnIndex int16, node Node) (int16, deconstructFunc) {
@@ -521,14 +530,26 @@ func reconstructFuncOf(columnIndex int16, node Node) (int16, reconstructFunc) {
 
 //go:noinline
 func reconstructFuncOfOptional(columnIndex int16, node Node) (int16, reconstructFunc) {
+	// What's the purpose of forcing the passed in node to Required for the Optional fields?
+	// Ah, I see it's so that we eventually reach the leaf base-case?
 	nextColumnIndex, reconstruct := reconstructFuncOf(columnIndex, Required(node))
+	// What if this is the last node/column in the row? We just incremented the
+	// nextColumnIndex meaning that if this is the last one in the list,
+	// rowLength will always be > 0 here, triggering the second if statement in
+	// the closure below, even if the optional field is empty
 	rowLength := nextColumnIndex - columnIndex
+
 	return nextColumnIndex, func(value reflect.Value, levels levels, row Row) (Row, error) {
-		if !row.startsWith(columnIndex) {
+		if len(row) > 0 && !row.startsWith(columnIndex) {
 			return row, fmt.Errorf("row is missing optional column %d", columnIndex)
 		}
 		if len(row) < int(rowLength) {
-			return row, fmt.Errorf("expected optional column %d to have at least %d values but got %d", columnIndex, rowLength, len(row))
+			return row, fmt.Errorf(
+				"expected optional column %d to have at least %d values but got %d",
+				columnIndex,
+				rowLength,
+				len(row),
+			)
 		}
 
 		levels.definitionLevel++
@@ -587,7 +608,12 @@ func reconstructRepeated(columnIndex, rowLength int16, levels levels, row Row, d
 		return row, fmt.Errorf("row is missing repeated column %d: %+v", columnIndex, row)
 	}
 	if len(row) < int(rowLength) {
-		return row, fmt.Errorf("expected repeated column %d to have at least %d values but got %d", columnIndex, rowLength, len(row))
+		return row, fmt.Errorf(
+			"expected repeated column %d to have at least %d values but got %d",
+			columnIndex,
+			rowLength,
+			len(row),
+		)
 	}
 
 	levels.repetitionDepth++
@@ -599,6 +625,7 @@ func reconstructRepeated(columnIndex, rowLength int16, levels levels, row Row, d
 
 	var err error
 	for row.startsWith(columnIndex) && row[0].repetitionLevel == levels.repetitionLevel {
+		// TODO: check specific error here.
 		if row, err = do(levels, row); err != nil {
 			break
 		}

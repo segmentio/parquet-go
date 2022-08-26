@@ -158,6 +158,7 @@ func makeReconstructFunc(node Node) (reconstruct reconstructFunc) {
 	if !node.Leaf() {
 		_, reconstruct = reconstructFuncOf(0, node)
 	}
+	// will this ever return nil?  Implicit assignment as named return parameter
 	return reconstruct
 }
 
@@ -259,10 +260,16 @@ func (s *Schema) Reconstruct(value interface{}, row Row) error {
 		v = v.Elem()
 	}
 	var err error
+	// TODO: when is s.reconstruct nil? Should that error?
+
 	if s.reconstruct != nil {
 		row, err = s.reconstruct(v, levels{}, row)
 		if len(row) > 0 && err == nil {
-			err = fmt.Errorf("%d values remain unused after reconstructing go value of type %s from parquet row", len(row), v.Type())
+			err = fmt.Errorf(
+				"%d values remain unused after reconstructing go value of type %s from parquet row",
+				len(row),
+				v.Type(),
+			)
 		}
 	}
 	return err
