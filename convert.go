@@ -88,7 +88,7 @@ func (c *conversion) putBuffer(b *conversionBuffer) {
 // by the target schema given in makeConvertFunc
 type convertFunc func(Row, *conversionBuffer) (Row, error)
 
-func makeConvertFunc(c *conversion, node Node) (convert convertFunc) {
+func (c *conversion) makeConvertFunc(node Node) (convert convertFunc) {
 	if !node.Leaf() {
 		_, convert = c.convertFuncOf(0, node)
 	}
@@ -176,19 +176,17 @@ func (c *conversion) convertFuncOfRepeated(tgtIdx int16, node Node) (int16, conv
 	}
 }
 
-// Convert constructs a conversion function from one parquet schema to another.
-//
-// The function supports converting between schemas where the source or target
-// have extra columns; if there are more columns in the source, they will be
-// stripped out of the rows. Extra columns in the target schema will be set to
-// null or zero values.
-//
-// The returned function is intended to be used to append the converted source
-// row to the destination buffer.
+// Convert here satisfies the Conversion interface, and does the actual work to
+// convert betweeen the source and target Rows.
 func (c *conversion) Convert(target, source Row) (Row, error) {
+	if c.convertFunc == nil {
+		c.convertFunc = c.makeConvertFunc(c.schema)
+	}
+
 	buffer := c.getBuffer()
 	defer c.putBuffer(buffer)
 
+	// Build conversion buffer
 	for _, value := range source {
 		sourceIndex := value.Column()
 		targetIndex := c.sourceToTargetIndex[sourceIndex]
@@ -208,6 +206,8 @@ func (c *conversion) Convert(target, source Row) (Row, error) {
 			})
 		}
 	}
+
+	// Construct row from buffer
 	return c.convertFunc(target, buffer)
 }
 
@@ -225,6 +225,15 @@ func (id identity) Convert(dst, src Row) (Row, error) { return append(dst, src..
 func (id identity) Column(i int) int                  { return i }
 func (id identity) Schema() *Schema                   { return id.schema }
 
+// Convert constructs a conversion function from one parquet schema to another.
+//
+// The function supports converting between schemas where the source or target
+// have extra columns; if there are more columns in the source, they will be
+// stripped out of the rows. Extra columns in the target schema will be set to
+// null or zero values.
+//
+// The returned function is intended to be used to append the converted source
+// row to the destination buffer.
 func Convert(to, from Node) (conv Conversion, err error) {
 	schema, _ := to.(*Schema)
 	if schema == nil {
@@ -277,7 +286,6 @@ func Convert(to, from Node) (conv Conversion, err error) {
 		sourceToTargetIndex: sourceToTargetIndex,
 		schema:              schema,
 	}
-	c.convertFunc = makeConvertFunc(c, to)
 	return c, nil
 }
 
