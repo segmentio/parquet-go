@@ -14,9 +14,8 @@ import (
 )
 
 const (
-	defaultDictBufferSize  = 8192
-	defaultReadBufferSize  = 4096
-	defaultLevelBufferSize = 1024
+	defaultDictBufferSize = 8192
+	defaultReadBufferSize = 4096
 )
 
 // File represents a parquet file. The layout of a Parquet file can be found
