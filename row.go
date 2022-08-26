@@ -540,7 +540,7 @@ func reconstructFuncOfOptional(columnIndex int16, node Node) (int16, reconstruct
 	rowLength := nextColumnIndex - columnIndex
 
 	return nextColumnIndex, func(value reflect.Value, levels levels, row Row) (Row, error) {
-		if len(row) > 0 && !row.startsWith(columnIndex) {
+		if !row.startsWith(columnIndex) {
 			return row, fmt.Errorf("row is missing optional column %d", columnIndex)
 		}
 		if len(row) < int(rowLength) {
