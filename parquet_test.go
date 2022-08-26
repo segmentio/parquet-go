@@ -136,6 +136,24 @@ func (row uuidColumn) generate(prng *rand.Rand) uuidColumn {
 	return row
 }
 
+type timeColumn struct {
+	Value time.Time
+}
+
+func (row timeColumn) generate(prng *rand.Rand) timeColumn {
+	t := time.Unix(0, prng.Int63()).UTC()
+	return timeColumn{Value: t}
+}
+
+type timeInMillisColumn struct {
+	Value time.Time `parquet:",timestamp(millisecond)"`
+}
+
+func (row timeInMillisColumn) generate(prng *rand.Rand) timeInMillisColumn {
+	t := time.Unix(0, prng.Int63()).UTC()
+	return timeInMillisColumn{Value: t}
+}
+
 type decimalColumn struct {
 	Value int64 `parquet:",decimal(0:3)"`
 }

@@ -90,6 +90,16 @@ var readerTests = []struct {
 	},
 
 	{
+		scenario: "time.Time",
+		model:    timeColumn{},
+	},
+
+	{
+		scenario: "time.Time in ms",
+		model:    timeInMillisColumn{},
+	},
+
+	{
 		scenario: "DECIMAL",
 		model:    decimalColumn{},
 	},

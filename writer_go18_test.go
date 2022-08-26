@@ -24,6 +24,8 @@ func BenchmarkGenericWriter(b *testing.B) {
 	benchmarkGenericWriter[stringColumn](b)
 	benchmarkGenericWriter[indexedStringColumn](b)
 	benchmarkGenericWriter[uuidColumn](b)
+	benchmarkGenericWriter[timeColumn](b)
+	benchmarkGenericWriter[timeInMillisColumn](b)
 	benchmarkGenericWriter[mapColumn](b)
 	benchmarkGenericWriter[decimalColumn](b)
 	benchmarkGenericWriter[contact](b)
