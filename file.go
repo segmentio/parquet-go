@@ -30,6 +30,7 @@ type File struct {
 	columnIndexes []format.ColumnIndex
 	offsetIndexes []format.OffsetIndex
 	rowGroups     []RowGroup
+	cfg           *FileConfig
 }
 
 // OpenFile opens a parquet file and reads the content between offset 0 and the given
@@ -40,11 +41,11 @@ type File struct {
 // a file does not validate that the pages have valid checksums.
 func OpenFile(r io.ReaderAt, size int64, options ...FileOption) (*File, error) {
 	b := make([]byte, 8)
-	f := &File{reader: r, size: size}
 	c, err := NewFileConfig(options...)
 	if err != nil {
 		return nil, err
 	}
+	f := &File{reader: r, size: size, cfg: c}
 
 	if _, err := r.ReadAt(b[:4], 0); err != nil {
 		return nil, fmt.Errorf("reading magic header of parquet file: %w", err)
@@ -464,12 +465,15 @@ type filePages struct {
 	index      int
 	skip       int64
 	dictionary Dictionary
+
+	bufferSize int
 }
 
 func (f *filePages) init(c *fileColumnChunk) {
 	f.chunk = c
 	f.baseOffset = c.chunk.MetaData.DataPageOffset
 	f.dataOffset = f.baseOffset
+	f.bufferSize = c.file.cfg.ReadBufferSize
 
 	if c.chunk.MetaData.DictionaryPageOffset != 0 {
 		f.baseOffset = c.chunk.MetaData.DictionaryPageOffset
@@ -477,7 +481,7 @@ func (f *filePages) init(c *fileColumnChunk) {
 	}
 
 	f.section = *io.NewSectionReader(c.file, f.baseOffset, c.chunk.MetaData.TotalCompressedSize)
-	f.rbuf = getBufioReader(&f.section)
+	f.rbuf = getBufioReader(&f.section, f.bufferSize)
 	f.decoder.Reset(f.protocol.NewReader(f.rbuf))
 }
 
@@ -544,7 +548,7 @@ func (f *filePages) ReadPage() (Page, error) {
 
 func (f *filePages) readDictionary() error {
 	chunk := io.NewSectionReader(f.chunk.file, f.baseOffset, f.chunk.chunk.MetaData.TotalCompressedSize)
-	rbuf := getBufioReader(chunk)
+	rbuf := getBufioReader(chunk, f.bufferSize)
 	defer putBufioReader(rbuf)
 
 	decoder := thrift.NewDecoder(f.protocol.NewReader(rbuf))
@@ -700,10 +704,10 @@ var (
 	bufioReaderPool sync.Pool
 )
 
-func getBufioReader(r io.Reader) *bufio.Reader {
+func getBufioReader(r io.Reader, bufferSize int) *bufio.Reader {
 	rbuf, _ := bufioReaderPool.Get().(*bufio.Reader)
 	if rbuf == nil {
-		rbuf = bufio.NewReaderSize(r, defaultReadBufferSize)
+		rbuf = bufio.NewReaderSize(r, bufferSize)
 	} else {
 		rbuf.Reset(r)
 	}
