@@ -86,7 +86,7 @@ func (c *conversion) putBuffer(b *conversionBuffer) {
 // convertFunc takes a target and source row, then copies data
 // from the source to the target according to the heuristics determined
 // by the target schema given in makeConvertFunc
-type convertFunc func(Row, *conversionBuffer) (Row, error)
+type convertFunc func(Row, levels, *conversionBuffer) (Row, error)
 
 func (c *conversion) makeConvertFunc(node Node) (convert convertFunc) {
 	if !node.Leaf() {
@@ -116,7 +116,7 @@ func (c *conversion) convertFuncOfRequired(tgtIdx int16, node Node) (int16, conv
 // convertFuncOfLeaf is the base case to our schema-tree traversal, doing the
 // actual copy of the value from the old Row (via conversionBuffer) to the new Row
 func (c *conversion) convertFuncOfLeaf(tgtIdx int16, node Node) (int16, convertFunc) {
-	return tgtIdx + 1, func(tgt Row, src *conversionBuffer) (Row, error) {
+	return tgtIdx + 1, func(tgt Row, _ levels, src *conversionBuffer) (Row, error) {
 		value := Value{}
 		if tgtIdx >= 0 && len(src.columns[tgtIdx]) > 0 {
 			// Pop the top value and remove from the buffer.
@@ -138,10 +138,10 @@ func (c *conversion) convertFuncOfGroup(tgtIdx int16, node Node) (int16, convert
 		tgtIdx, funcs[i] = c.convertFuncOf(tgtIdx, field)
 	}
 
-	return tgtIdx, func(tgt Row, src *conversionBuffer) (Row, error) {
+	return tgtIdx, func(tgt Row, levels levels, src *conversionBuffer) (Row, error) {
 		var err error
 		for i, convFunc := range funcs {
-			if tgt, err = convFunc(tgt, src); err != nil {
+			if tgt, err = convFunc(tgt, levels, src); err != nil {
 				err = fmt.Errorf("%s → %w", fields[i].Name(), err)
 				break
 			}
@@ -152,17 +152,17 @@ func (c *conversion) convertFuncOfGroup(tgtIdx int16, node Node) (int16, convert
 
 func (c *conversion) convertFuncOfRepeated(tgtIdx int16, node Node) (int16, convertFunc) {
 	nextIdx, convFunc := c.convertFuncOf(tgtIdx, Required(node))
-	return nextIdx, func(tgt Row, src *conversionBuffer) (Row, error) {
+	return nextIdx, func(tgt Row, levels levels, src *conversionBuffer) (Row, error) {
 		var err error
 
-		for i, elem := range src.columns[tgtIdx] {
-			// if our repetitionLevel is not equal to the definition level on our
-			// second or subsequent copies, then this element belongs to another
-			// repeated object above us.
-			if i != 0 && int16(elem.repetitionLevel) != int16(elem.definitionLevel) {
+		levels.repetitionDepth++
+
+		for _, elem := range src.columns[tgtIdx] {
+			if elem.repetitionLevel != levels.repetitionLevel {
 				break
 			}
-			tgt, err = convFunc(tgt, src)
+			tgt, err = convFunc(tgt, levels, src)
+			levels.repetitionLevel = levels.repetitionDepth
 		}
 
 		return tgt, err
@@ -201,7 +201,7 @@ func (c *conversion) Convert(target, source Row) (Row, error) {
 	}
 
 	// Construct row from buffer
-	return c.convertFunc(target, buffer)
+	return c.convertFunc(target, levels{}, buffer)
 }
 
 func (c *conversion) Column(i int) int {
