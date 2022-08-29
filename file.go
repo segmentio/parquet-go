@@ -30,7 +30,7 @@ type File struct {
 	columnIndexes []format.ColumnIndex
 	offsetIndexes []format.OffsetIndex
 	rowGroups     []RowGroup
-	cfg           *FileConfig
+	config        *FileConfig
 }
 
 // OpenFile opens a parquet file and reads the content between offset 0 and the given
@@ -45,7 +45,7 @@ func OpenFile(r io.ReaderAt, size int64, options ...FileOption) (*File, error) {
 	if err != nil {
 		return nil, err
 	}
-	f := &File{reader: r, size: size, cfg: c}
+	f := &File{reader: r, size: size, config: c}
 
 	if _, err := r.ReadAt(b[:4], 0); err != nil {
 		return nil, fmt.Errorf("reading magic header of parquet file: %w", err)
@@ -473,7 +473,7 @@ func (f *filePages) init(c *fileColumnChunk) {
 	f.chunk = c
 	f.baseOffset = c.chunk.MetaData.DataPageOffset
 	f.dataOffset = f.baseOffset
-	f.bufferSize = c.file.cfg.ReadBufferSize
+	f.bufferSize = c.file.config.ReadBufferSize
 
 	if c.chunk.MetaData.DictionaryPageOffset != 0 {
 		f.baseOffset = c.chunk.MetaData.DictionaryPageOffset
