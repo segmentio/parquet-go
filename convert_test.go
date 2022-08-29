@@ -1,7 +1,6 @@
 package parquet_test
 
 import (
-	"fmt"
 	"reflect"
 	"testing"
 
@@ -209,11 +208,12 @@ func TestConvert(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			newRow := to.Deconstruct(nil, test.to)
-			fmt.Printf("conv: %+v\n", conv)
-			fmt.Printf("old row: %+v\n", oldRow)
-			fmt.Printf("new row (desired state): %+v\n", newRow)
-			fmt.Printf("new row (converted from old): %+v\n", row)
+			// Helpful debugging info
+			// newRow := to.Deconstruct(nil, test.to)
+			// fmt.Printf("conv: %+v\n", conv)
+			// fmt.Printf("old row: %+v\n", oldRow)
+			// fmt.Printf("new row (desired state): %+v\n", newRow)
+			// fmt.Printf("new row (converted from old): %+v\n", row)
 
 			value := reflect.New(reflect.TypeOf(test.to))
 			if err := to.Reconstruct(value.Interface(), row); err != nil {

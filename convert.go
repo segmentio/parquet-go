@@ -97,15 +97,6 @@ func (c *conversion) makeConvertFunc(node Node) (convert convertFunc) {
 
 func (c *conversion) convertFuncOf(tgtIdx int16, node Node) (int16, convertFunc) {
 	switch {
-
-	// TODO: these may still be necessary
-	// case node.Optional():
-	// 	return convertFuncOfOptional(columnIndex, node)
-	// case isList(node):
-	// 	return convertFuncOfList(columnIndex, node)
-	// case isMap(node):
-	// 	return convertFuncOfMap(columnIndex, node)
-
 	case node.Repeated():
 		return c.convertFuncOfRepeated(tgtIdx, node)
 	default:
@@ -163,12 +154,15 @@ func (c *conversion) convertFuncOfRepeated(tgtIdx int16, node Node) (int16, conv
 	nextIdx, convFunc := c.convertFuncOf(tgtIdx, Required(node))
 	return nextIdx, func(tgt Row, src *conversionBuffer) (Row, error) {
 		var err error
+		repLevel := int16(src.columns[tgtIdx][0].repetitionLevel)
 
-		// TODO: figure out the true length from repetitionLevel here instead This
-		// will fail for some scenarios in it's current form, figure those out, add
-		// a test, then fix.
-		toCopy := len(src.columns[tgtIdx])
-		for j := 0; j < toCopy; j++ {
+		for _, elem := range src.columns[tgtIdx] {
+			// If repetitionLevel is going down, that means this element belongs to a
+			// higher-level repeated object, and will be copied later.
+			if int16(elem.repetitionLevel) < repLevel {
+				break
+			}
+			repLevel = int16(elem.repetitionLevel)
 			tgt, err = convFunc(tgt, src)
 		}
 
