@@ -14,6 +14,22 @@ type AddressBook2 struct {
 	Extra             string    `parquet:"extra"`
 }
 
+type AddressBook3 struct {
+	Owner    string     `parquet:"owner,zstd"`
+	Contacts []Contact2 `parquet:"contacts"`
+}
+
+type Contact2 struct {
+	Name         string   `parquet:"name"`
+	PhoneNumbers []string `parquet:"phoneNumbers,optional,zstd"`
+}
+
+type AddressBook4 struct {
+	Owner    string     `parquet:"owner,zstd"`
+	Contacts []Contact2 `parquet:"contacts"`
+	Extra    string     `parquet:"extra"`
+}
+
 var conversionTests = [...]struct {
 	scenario string
 	from     interface{}
@@ -130,6 +146,47 @@ var conversionTests = [...]struct {
 					Name: "Chris Aniszczyk",
 				},
 			},
+		},
+	},
+
+	{
+		scenario: "handle nested repeated elements during conversion",
+		from: AddressBook3{
+			Owner: "Julien Le Dem",
+			Contacts: []Contact2{
+				{
+					Name: "Dmitriy Ryaboy",
+					PhoneNumbers: []string{
+						"555 987 6543",
+						"555 123 4567",
+					},
+				},
+				{
+					Name: "Chris Aniszczyk",
+					PhoneNumbers: []string{
+						"555 345 8129",
+					},
+				},
+			},
+		},
+		to: AddressBook4{
+			Owner: "Julien Le Dem",
+			Contacts: []Contact2{
+				{
+					Name: "Dmitriy Ryaboy",
+					PhoneNumbers: []string{
+						"555 987 6543",
+						"555 123 4567",
+					},
+				},
+				{
+					Name: "Chris Aniszczyk",
+					PhoneNumbers: []string{
+						"555 345 8129",
+					},
+				},
+			},
+			Extra: "",
 		},
 	},
 }
