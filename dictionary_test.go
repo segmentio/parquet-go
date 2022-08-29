@@ -1,6 +1,7 @@
 package parquet_test
 
 import (
+	"bytes"
 	"fmt"
 	"math/rand"
 	"testing"
@@ -195,6 +196,79 @@ func BenchmarkDictionary(b *testing.B) {
 					})
 				}
 			}
+		})
+	}
+}
+
+func TestIssue312(t *testing.T) {
+	node := parquet.String()
+	node = parquet.Encoded(node, &parquet.RLEDictionary)
+	g := parquet.Group{}
+	g["mystring"] = node
+	schema := parquet.NewSchema("test", g)
+
+	rows := []parquet.Row{[]parquet.Value{parquet.ValueOf("hello").Level(0, 0, 0)}}
+
+	var storage bytes.Buffer
+
+	tests := []struct {
+		name        string
+		getRowGroup func(t *testing.T) parquet.RowGroup
+	}{
+		{
+			name: "Writer",
+			getRowGroup: func(t *testing.T) parquet.RowGroup {
+				t.Helper()
+
+				w := parquet.NewWriter(&storage, schema)
+				_, err := w.WriteRows(rows)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := w.Close(); err != nil {
+					t.Fatal(err)
+				}
+
+				r := bytes.NewReader(storage.Bytes())
+				f, err := parquet.OpenFile(r, int64(storage.Len()))
+				if err != nil {
+					t.Fatal(err)
+				}
+				return f.RowGroups()[0]
+			},
+		},
+		{
+			name: "Buffer",
+			getRowGroup: func(t *testing.T) parquet.RowGroup {
+				t.Helper()
+
+				b := parquet.NewBuffer(schema)
+				_, err := b.WriteRows(rows)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return b
+			},
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			rowGroup := testCase.getRowGroup(t)
+
+			chunk := rowGroup.ColumnChunks()[0]
+			idx := chunk.ColumnIndex()
+			val := idx.MinValue(0)
+			columnType := chunk.Type()
+			values := columnType.NewValues(val.Bytes(), []uint32{0, uint32(len(val.Bytes()))})
+
+			// This test ensures that the dictionary type created by column
+			// chunks of parquet readers and buffers are the same. We want the
+			// column chunk type to be the actual value type, even when the
+			// schema uses a dictionary encoding.
+			//
+			// https://github.com/segmentio/parquet-go/issues/312
+			_ = columnType.NewDictionary(0, 1, values)
 		})
 	}
 }
