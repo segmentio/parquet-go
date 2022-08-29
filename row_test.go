@@ -18,6 +18,60 @@ func TestRowClone(t *testing.T) {
 	}
 }
 
+type AddressBook3 struct {
+	Owner    string     `parquet:"owner,zstd"`
+	Contacts []Contact2 `parquet:"contacts"`
+}
+
+type Contact2 struct {
+	Name         string   `parquet:"name"`
+	PhoneNumbers []string `parquet:"phoneNumbers,optional,zstd"`
+}
+
+func TestNestedDeconstrcutReconstruct(t *testing.T) {
+	var conversionTests = [...]struct {
+		scenario string
+		input    interface{}
+	}{
+		{
+			scenario: "handle nested repeated elements",
+			input: AddressBook3{
+				Owner: "Julien Le Dem",
+				Contacts: []Contact2{
+					{
+						Name: "Dmitriy Ryaboy",
+						PhoneNumbers: []string{
+							"555 987 6543",
+							"555 123 4567",
+						},
+					},
+					{
+						Name: "Chris Aniszczyk",
+						PhoneNumbers: []string{
+							"555 345 8129",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, test := range conversionTests {
+		t.Run(test.scenario, func(t *testing.T) {
+			input := parquet.SchemaOf(test.input)
+			row := input.Deconstruct(nil, test.input)
+			value := reflect.New(reflect.TypeOf(test.input))
+			if err := input.Reconstruct(value.Interface(), row); err != nil {
+				t.Fatal(err)
+			}
+			value = value.Elem()
+			if !reflect.DeepEqual(value.Interface(), test.input) {
+				t.Errorf("converted value mismatch:\nwant = %+v\ngot  = %+v", test.input, value.Interface())
+			}
+		})
+	}
+}
+
 func TestDeconstructionReconstruction(t *testing.T) {
 	type Person struct {
 		FirstName string
