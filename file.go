@@ -549,7 +549,7 @@ func (f *filePages) ReadPage() (Page, error) {
 func (f *filePages) readDictionary() error {
 	chunk := io.NewSectionReader(f.chunk.file, f.baseOffset, f.chunk.chunk.MetaData.TotalCompressedSize)
 	rbuf := getBufioReader(chunk, f.bufferSize)
-	defer putBufioReader(rbuf)
+	defer putBufioReader(rbuf, f.bufferSize)
 
 	decoder := thrift.NewDecoder(f.protocol.NewReader(rbuf))
 	header := new(format.PageHeader)
@@ -683,7 +683,7 @@ func (f *filePages) SeekToRow(rowIndex int64) (err error) {
 }
 
 func (f *filePages) Close() error {
-	putBufioReader(f.rbuf)
+	putBufioReader(f.rbuf, f.bufferSize)
 	f.chunk = nil
 	f.section = io.SectionReader{}
 	f.rbuf = nil
@@ -701,11 +701,11 @@ func (f *filePages) columnPath() columnPath {
 }
 
 var (
-	bufioReaderPool sync.Pool
+	bufioReaderPool = map[int]*sync.Pool{}
 )
 
 func getBufioReader(r io.Reader, bufferSize int) *bufio.Reader {
-	rbuf, _ := bufioReaderPool.Get().(*bufio.Reader)
+	rbuf, _ := getBufioReaderPool(bufferSize).Get().(*bufio.Reader)
 	if rbuf == nil {
 		rbuf = bufio.NewReaderSize(r, bufferSize)
 	} else {
@@ -714,9 +714,19 @@ func getBufioReader(r io.Reader, bufferSize int) *bufio.Reader {
 	return rbuf
 }
 
-func putBufioReader(rbuf *bufio.Reader) {
+func putBufioReader(rbuf *bufio.Reader, bufferSize int) {
 	if rbuf != nil {
 		rbuf.Reset(nil)
-		bufioReaderPool.Put(rbuf)
+		getBufioReaderPool(bufferSize).Put(rbuf)
 	}
+}
+
+func getBufioReaderPool(size int) *sync.Pool {
+	if pool := bufioReaderPool[size]; pool != nil {
+		return pool
+	}
+
+	pool := &sync.Pool{}
+	bufioReaderPool[size] = pool
+	return pool
 }
