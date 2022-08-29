@@ -31,187 +31,237 @@ type AddressBook4 struct {
 	Extra    string     `parquet:"extra"`
 }
 
+type SimpleNumber struct {
+	Number *int64 `parquet:"number,optional"`
+}
+
+type SimpleContact struct {
+	Numbers []SimpleNumber `parquet:"numbers"`
+}
+
+type SimpleAddressBook struct {
+	Name    string
+	Contact SimpleContact
+}
+
+type SimpleAddressBook2 struct {
+	Name    string
+	Contact SimpleContact
+	Extra   string
+}
+
 var conversionTests = [...]struct {
 	scenario string
 	from     interface{}
 	to       interface{}
 }{
-	{
-		scenario: "convert between rows which have the same schema",
-		from: AddressBook{
-			Owner: "Julien Le Dem",
-			OwnerPhoneNumbers: []string{
-				"555 123 4567",
-				"555 666 1337",
-			},
-			Contacts: []Contact{
-				{
-					Name:        "Dmitriy Ryaboy",
-					PhoneNumber: "555 987 6543",
-				},
-				{
-					Name: "Chris Aniszczyk",
-				},
-			},
-		},
-		to: AddressBook{
-			Owner: "Julien Le Dem",
-			OwnerPhoneNumbers: []string{
-				"555 123 4567",
-				"555 666 1337",
-			},
-			Contacts: []Contact{
-				{
-					Name:        "Dmitriy Ryaboy",
-					PhoneNumber: "555 987 6543",
-				},
-				{
-					Name: "Chris Aniszczyk",
-				},
-			},
-		},
-	},
+	// {
+	// 	scenario: "convert between rows which have the same schema",
+	// 	from: AddressBook{
+	// 		Owner: "Julien Le Dem",
+	// 		OwnerPhoneNumbers: []string{
+	// 			"555 123 4567",
+	// 			"555 666 1337",
+	// 		},
+	// 		Contacts: []Contact{
+	// 			{
+	// 				Name:        "Dmitriy Ryaboy",
+	// 				PhoneNumber: "555 987 6543",
+	// 			},
+	// 			{
+	// 				Name: "Chris Aniszczyk",
+	// 			},
+	// 		},
+	// 	},
+	// 	to: AddressBook{
+	// 		Owner: "Julien Le Dem",
+	// 		OwnerPhoneNumbers: []string{
+	// 			"555 123 4567",
+	// 			"555 666 1337",
+	// 		},
+	// 		Contacts: []Contact{
+	// 			{
+	// 				Name:        "Dmitriy Ryaboy",
+	// 				PhoneNumber: "555 987 6543",
+	// 			},
+	// 			{
+	// 				Name: "Chris Aniszczyk",
+	// 			},
+	// 		},
+	// 	},
+	// },
 
-	{
-		scenario: "missing column",
-		from:     struct{ FirstName, LastName string }{FirstName: "Luke", LastName: "Skywalker"},
-		to:       struct{ LastName string }{LastName: "Skywalker"},
-	},
+	// {
+	// 	scenario: "missing column",
+	// 	from:     struct{ FirstName, LastName string }{FirstName: "Luke", LastName: "Skywalker"},
+	// 	to:       struct{ LastName string }{LastName: "Skywalker"},
+	// },
 
-	{
-		scenario: "missing optional column",
-		from: struct {
-			FirstName *string
-			LastName  string
-		}{FirstName: newString("Luke"), LastName: "Skywalker"},
-		to: struct{ LastName string }{LastName: "Skywalker"},
-	},
+	// {
+	// 	scenario: "missing optional column",
+	// 	from: struct {
+	// 		FirstName *string
+	// 		LastName  string
+	// 	}{FirstName: newString("Luke"), LastName: "Skywalker"},
+	// 	to: struct{ LastName string }{LastName: "Skywalker"},
+	// },
 
-	{
-		scenario: "missing repeated column",
-		from: struct {
-			ID    uint64
-			Names []string
-		}{ID: 42, Names: []string{"me", "myself", "I"}},
-		to: struct{ ID uint64 }{ID: 42},
-	},
+	// {
+	// 	scenario: "missing repeated column",
+	// 	from: struct {
+	// 		ID    uint64
+	// 		Names []string
+	// 	}{ID: 42, Names: []string{"me", "myself", "I"}},
+	// 	to: struct{ ID uint64 }{ID: 42},
+	// },
 
-	{
-		scenario: "extra column",
-		from:     struct{ LastName string }{LastName: "Skywalker"},
-		to:       struct{ FirstName, LastName string }{LastName: "Skywalker"},
-	},
+	// {
+	// 	scenario: "extra column",
+	// 	from:     struct{ LastName string }{LastName: "Skywalker"},
+	// 	to:       struct{ FirstName, LastName string }{LastName: "Skywalker"},
+	// },
 
-	{
-		scenario: "extra optional column",
-		from:     struct{ ID uint64 }{ID: 2},
-		to: struct {
-			ID      uint64
-			Details *struct{ FirstName, LastName string }
-		}{ID: 2, Details: nil},
-	},
+	// {
+	// 	scenario: "extra optional column",
+	// 	from:     struct{ ID uint64 }{ID: 2},
+	// 	to: struct {
+	// 		ID      uint64
+	// 		Details *struct{ FirstName, LastName string }
+	// 	}{ID: 2, Details: nil},
+	// },
 
-	{
-		scenario: "extra repeated column",
-		from:     struct{ ID uint64 }{ID: 1},
-		to: struct {
-			ID    uint64
-			Names []string
-		}{ID: 1, Names: []string{}},
-	},
+	// {
+	// 	scenario: "extra repeated column",
+	// 	from:     struct{ ID uint64 }{ID: 1},
+	// 	to: struct {
+	// 		ID    uint64
+	// 		Names []string
+	// 	}{ID: 1, Names: []string{}},
+	// },
 
-	{
-		scenario: "extra column on complex struct",
-		from: AddressBook{
-			Owner:             "Julien Le Dem",
-			OwnerPhoneNumbers: []string{},
-			Contacts: []Contact{
-				{
-					Name:        "Dmitriy Ryaboy",
-					PhoneNumber: "555 987 6543",
-				},
-				{
-					Name: "Chris Aniszczyk",
-				},
-			},
-		},
-		to: AddressBook2{
-			Owner:             "Julien Le Dem",
-			OwnerPhoneNumbers: []string{},
-			Contacts: []Contact{
-				{
-					Name:        "Dmitriy Ryaboy",
-					PhoneNumber: "555 987 6543",
-				},
-				{
-					Name: "Chris Aniszczyk",
-				},
-			},
-		},
-	},
+	// {
+	// 	scenario: "extra column on complex struct",
+	// 	from: AddressBook{
+	// 		Owner:             "Julien Le Dem",
+	// 		OwnerPhoneNumbers: []string{},
+	// 		Contacts: []Contact{
+	// 			{
+	// 				Name:        "Dmitriy Ryaboy",
+	// 				PhoneNumber: "555 987 6543",
+	// 			},
+	// 			{
+	// 				Name: "Chris Aniszczyk",
+	// 			},
+	// 		},
+	// 	},
+	// 	to: AddressBook2{
+	// 		Owner:             "Julien Le Dem",
+	// 		OwnerPhoneNumbers: []string{},
+	// 		Contacts: []Contact{
+	// 			{
+	// 				Name:        "Dmitriy Ryaboy",
+	// 				PhoneNumber: "555 987 6543",
+	// 			},
+	// 			{
+	// 				Name: "Chris Aniszczyk",
+	// 			},
+	// 		},
+	// 	},
+	// },
+
+	// {
+	// 	scenario: "handle nested repeated elements during conversion",
+	// 	from: AddressBook3{
+	// 		Owner: "Julien Le Dem",
+	// 		Contacts: []Contact2{
+	// 			{
+	// 				Name: "Dmitriy Ryaboy",
+	// 				PhoneNumbers: []string{
+	// 					"555 987 6543",
+	// 					"555 123 4567",
+	// 				},
+	// 				Addresses: []string{},
+	// 			},
+	// 			{
+	// 				Name: "Chris Aniszczyk",
+	// 				PhoneNumbers: []string{
+	// 					"555 345 8129",
+	// 				},
+	// 				Addresses: []string{
+	// 					"42 Wallaby Way Sydney",
+	// 					"1 White House Way",
+	// 				},
+	// 			},
+	// 			{
+	// 				Name: "Bob Ross",
+	// 				PhoneNumbers: []string{
+	// 					"555 198 3628",
+	// 				},
+	// 				Addresses: []string{
+	// 					"::1",
+	// 				},
+	// 			},
+	// 		},
+	// 	},
+	// 	to: AddressBook4{
+	// 		Owner: "Julien Le Dem",
+	// 		Contacts: []Contact2{
+	// 			{
+	// 				Name: "Dmitriy Ryaboy",
+	// 				PhoneNumbers: []string{
+	// 					"555 987 6543",
+	// 					"555 123 4567",
+	// 				},
+	// 				Addresses: []string{},
+	// 			},
+	// 			{
+	// 				Name: "Chris Aniszczyk",
+	// 				PhoneNumbers: []string{
+	// 					"555 345 8129",
+	// 				},
+	// 				Addresses: []string{
+	// 					"42 Wallaby Way Sydney",
+	// 					"1 White House Way",
+	// 				},
+	// 			},
+	// 			{
+	// 				Name: "Bob Ross",
+	// 				PhoneNumbers: []string{
+	// 					"555 198 3628",
+	// 				},
+	// 				Addresses: []string{
+	// 					"::1",
+	// 				},
+	// 			},
+	// 		},
+	// 		Extra: "",
+	// 	},
+	// },
 
 	{
 		scenario: "handle nested repeated elements during conversion",
-		from: AddressBook3{
-			Owner: "Julien Le Dem",
-			Contacts: []Contact2{
-				{
-					Name: "Dmitriy Ryaboy",
-					PhoneNumbers: []string{
-						"555 987 6543",
-						"555 123 4567",
+		from: SimpleAddressBook{
+			Name: "asdf",
+			Contact: SimpleContact{
+				Numbers: []SimpleNumber{
+					SimpleNumber{
+						Number: nil,
 					},
-					Addresses: []string{},
-				},
-				{
-					Name: "Chris Aniszczyk",
-					PhoneNumbers: []string{
-						"555 345 8129",
-					},
-					Addresses: []string{
-						"42 Wallaby Way Sydney",
-						"1 White House Way",
-					},
-				},
-				{
-					Name: "Bob Ross",
-					PhoneNumbers: []string{
-						"555 198 3628",
-					},
-					Addresses: []string{
-						"::1",
+					SimpleNumber{
+						Number: newInt64(1329),
 					},
 				},
 			},
 		},
-		to: AddressBook4{
-			Owner: "Julien Le Dem",
-			Contacts: []Contact2{
-				{
-					Name: "Dmitriy Ryaboy",
-					PhoneNumbers: []string{
-						"555 987 6543",
-						"555 123 4567",
+		to: SimpleAddressBook2{
+			Name: "asdf",
+			Contact: SimpleContact{
+				Numbers: []SimpleNumber{
+					SimpleNumber{
+						Number: nil,
 					},
-					Addresses: []string{},
-				},
-				{
-					Name: "Chris Aniszczyk",
-					PhoneNumbers: []string{
-						"555 345 8129",
-					},
-					Addresses: []string{
-						"42 Wallaby Way Sydney",
-						"1 White House Way",
-					},
-				},
-				{
-					Name: "Bob Ross",
-					PhoneNumbers: []string{
-						"555 198 3628",
-					},
-					Addresses: []string{
-						"::1",
+					SimpleNumber{
+						Number: newInt64(1329),
 					},
 				},
 			},
@@ -257,4 +307,5 @@ func TestConvert(t *testing.T) {
 	}
 }
 
+func newInt64(i int64) *int64    { return &i }
 func newString(s string) *string { return &s }
