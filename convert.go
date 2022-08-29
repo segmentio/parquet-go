@@ -154,15 +154,14 @@ func (c *conversion) convertFuncOfRepeated(tgtIdx int16, node Node) (int16, conv
 	nextIdx, convFunc := c.convertFuncOf(tgtIdx, Required(node))
 	return nextIdx, func(tgt Row, src *conversionBuffer) (Row, error) {
 		var err error
-		repLevel := int16(src.columns[tgtIdx][0].repetitionLevel)
 
-		for _, elem := range src.columns[tgtIdx] {
-			// If repetitionLevel is going down, that means this element belongs to a
-			// higher-level repeated object, and will be copied later.
-			if int16(elem.repetitionLevel) < repLevel {
+		for i, elem := range src.columns[tgtIdx] {
+			// if our repetitionLevel is not equal to the definition level on our
+			// second or subsequent copies, then this element belongs to another
+			// repeated object above us.
+			if i != 0 && int16(elem.repetitionLevel) != int16(elem.definitionLevel) {
 				break
 			}
-			repLevel = int16(elem.repetitionLevel)
 			tgt, err = convFunc(tgt, src)
 		}
 

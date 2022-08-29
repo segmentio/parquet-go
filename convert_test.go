@@ -22,6 +22,7 @@ type AddressBook3 struct {
 type Contact2 struct {
 	Name         string   `parquet:"name"`
 	PhoneNumbers []string `parquet:"phoneNumbers,zstd"`
+	Addresses    []string `parquet:"addresses,zstd"`
 }
 
 type AddressBook4 struct {
@@ -160,11 +161,25 @@ var conversionTests = [...]struct {
 						"555 987 6543",
 						"555 123 4567",
 					},
+					Addresses: []string{},
 				},
 				{
 					Name: "Chris Aniszczyk",
 					PhoneNumbers: []string{
 						"555 345 8129",
+					},
+					Addresses: []string{
+						"42 Wallaby Way Sydney",
+						"1 White House Way",
+					},
+				},
+				{
+					Name: "Bob Ross",
+					PhoneNumbers: []string{
+						"555 198 3628",
+					},
+					Addresses: []string{
+						"::1",
 					},
 				},
 			},
@@ -178,11 +193,25 @@ var conversionTests = [...]struct {
 						"555 987 6543",
 						"555 123 4567",
 					},
+					Addresses: []string{},
 				},
 				{
 					Name: "Chris Aniszczyk",
 					PhoneNumbers: []string{
 						"555 345 8129",
+					},
+					Addresses: []string{
+						"42 Wallaby Way Sydney",
+						"1 White House Way",
+					},
+				},
+				{
+					Name: "Bob Ross",
+					PhoneNumbers: []string{
+						"555 198 3628",
+					},
+					Addresses: []string{
+						"::1",
 					},
 				},
 			},
