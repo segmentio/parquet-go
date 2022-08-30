@@ -530,13 +530,11 @@ func reconstructFuncOf(columnIndex int16, node Node) (int16, reconstructFunc) {
 
 //go:noinline
 func reconstructFuncOfOptional(columnIndex int16, node Node) (int16, reconstructFunc) {
-	// What's the purpose of forcing the passed in node to Required for the Optional fields?
-	// Ah, I see it's so that we eventually reach the leaf base-case?
+	// We convert the optional func to required so that we eventually reach the
+	// leaf base-case.  We're still using the heuristics of optional in the
+	// returned closure (see levels.definitionLevel++), but we don't actually do
+	// deserialization here, that happens in the leaf function, hence this line.
 	nextColumnIndex, reconstruct := reconstructFuncOf(columnIndex, Required(node))
-	// What if this is the last node/column in the row? We just incremented the
-	// nextColumnIndex meaning that if this is the last one in the list,
-	// rowLength will always be > 0 here, triggering the second if statement in
-	// the closure below, even if the optional field is empty
 	rowLength := nextColumnIndex - columnIndex
 
 	return nextColumnIndex, func(value reflect.Value, levels levels, row Row) (Row, error) {
