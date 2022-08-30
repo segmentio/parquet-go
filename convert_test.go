@@ -7,6 +7,49 @@ import (
 	"github.com/segmentio/parquet-go"
 )
 
+type AddressBook2 struct {
+	Owner             string    `parquet:"owner,zstd"`
+	OwnerPhoneNumbers []string  `parquet:"ownerPhoneNumbers,gzip"`
+	Contacts          []Contact `parquet:"contacts"`
+	Extra             string    `parquet:"extra"`
+}
+
+type AddressBook3 struct {
+	Owner    string     `parquet:"owner,zstd"`
+	Contacts []Contact2 `parquet:"contacts"`
+}
+
+type Contact2 struct {
+	Name         string   `parquet:"name"`
+	PhoneNumbers []string `parquet:"phoneNumbers,zstd"`
+	Addresses    []string `parquet:"addresses,zstd"`
+}
+
+type AddressBook4 struct {
+	Owner    string     `parquet:"owner,zstd"`
+	Contacts []Contact2 `parquet:"contacts"`
+	Extra    string     `parquet:"extra"`
+}
+
+type SimpleNumber struct {
+	Number *int64 `parquet:"number,optional"`
+}
+
+type SimpleContact struct {
+	Numbers []SimpleNumber `parquet:"numbers"`
+}
+
+type SimpleAddressBook struct {
+	Name    string
+	Contact SimpleContact
+}
+
+type SimpleAddressBook2 struct {
+	Name    string
+	Contact SimpleContact
+	Extra   string
+}
+
 var conversionTests = [...]struct {
 	scenario string
 	from     interface{}
@@ -14,7 +57,6 @@ var conversionTests = [...]struct {
 }{
 	{
 		scenario: "convert between rows which have the same schema",
-
 		from: AddressBook{
 			Owner: "Julien Le Dem",
 			OwnerPhoneNumbers: []string{
@@ -31,7 +73,6 @@ var conversionTests = [...]struct {
 				},
 			},
 		},
-
 		to: AddressBook{
 			Owner: "Julien Le Dem",
 			OwnerPhoneNumbers: []string{
@@ -97,6 +138,136 @@ var conversionTests = [...]struct {
 			Names []string
 		}{ID: 1, Names: []string{}},
 	},
+
+	{
+		scenario: "extra column on complex struct",
+		from: AddressBook{
+			Owner:             "Julien Le Dem",
+			OwnerPhoneNumbers: []string{},
+			Contacts: []Contact{
+				{
+					Name:        "Dmitriy Ryaboy",
+					PhoneNumber: "555 987 6543",
+				},
+				{
+					Name: "Chris Aniszczyk",
+				},
+			},
+		},
+		to: AddressBook2{
+			Owner:             "Julien Le Dem",
+			OwnerPhoneNumbers: []string{},
+			Contacts: []Contact{
+				{
+					Name:        "Dmitriy Ryaboy",
+					PhoneNumber: "555 987 6543",
+				},
+				{
+					Name: "Chris Aniszczyk",
+				},
+			},
+		},
+	},
+
+	{
+		scenario: "handle nested repeated elements during conversion",
+		from: AddressBook3{
+			Owner: "Julien Le Dem",
+			Contacts: []Contact2{
+				{
+					Name: "Dmitriy Ryaboy",
+					PhoneNumbers: []string{
+						"555 987 6543",
+						"555 123 4567",
+					},
+					Addresses: []string{},
+				},
+				{
+					Name: "Chris Aniszczyk",
+					PhoneNumbers: []string{
+						"555 345 8129",
+					},
+					Addresses: []string{
+						"42 Wallaby Way Sydney",
+						"1 White House Way",
+					},
+				},
+				{
+					Name: "Bob Ross",
+					PhoneNumbers: []string{
+						"555 198 3628",
+					},
+					Addresses: []string{
+						"::1",
+					},
+				},
+			},
+		},
+		to: AddressBook4{
+			Owner: "Julien Le Dem",
+			Contacts: []Contact2{
+				{
+					Name: "Dmitriy Ryaboy",
+					PhoneNumbers: []string{
+						"555 987 6543",
+						"555 123 4567",
+					},
+					Addresses: []string{},
+				},
+				{
+					Name: "Chris Aniszczyk",
+					PhoneNumbers: []string{
+						"555 345 8129",
+					},
+					Addresses: []string{
+						"42 Wallaby Way Sydney",
+						"1 White House Way",
+					},
+				},
+				{
+					Name: "Bob Ross",
+					PhoneNumbers: []string{
+						"555 198 3628",
+					},
+					Addresses: []string{
+						"::1",
+					},
+				},
+			},
+			Extra: "",
+		},
+	},
+
+	{
+		scenario: "handle nested repeated elements during conversion",
+		from: SimpleAddressBook{
+			Name: "New Contact",
+			Contact: SimpleContact{
+				Numbers: []SimpleNumber{
+					SimpleNumber{
+						Number: nil,
+					},
+					SimpleNumber{
+						Number: newInt64(1329),
+					},
+				},
+			},
+		},
+		to: SimpleAddressBook2{
+			Name: "New Contact",
+			Contact: SimpleContact{
+				Numbers: []SimpleNumber{
+					SimpleNumber{
+						Number: nil,
+					},
+					SimpleNumber{
+						Number: newInt64(1329),
+					},
+				},
+			},
+			Extra: "",
+		},
+	},
 }
 
 func TestConvert(t *testing.T) {
@@ -110,11 +281,18 @@ func TestConvert(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			row := from.Deconstruct(nil, test.from)
-			row, err = conv.Convert(nil, row)
+			oldRow := from.Deconstruct(nil, test.from)
+			row, err := conv.Convert(nil, oldRow)
 			if err != nil {
 				t.Fatal(err)
 			}
+
+			// Helpful debugging info
+			// newRow := to.Deconstruct(nil, test.to)
+			// fmt.Printf("conv: %+v\n", conv)
+			// fmt.Printf("old row: %+v\n", oldRow)
+			// fmt.Printf("new row (desired state): %+v\n", newRow)
+			// fmt.Printf("new row (converted from old): %+v\n", row)
 
 			value := reflect.New(reflect.TypeOf(test.to))
 			if err := to.Reconstruct(value.Interface(), row); err != nil {
@@ -129,4 +307,5 @@ func TestConvert(t *testing.T) {
 	}
 }
 
+func newInt64(i int64) *int64    { return &i }
 func newString(s string) *string { return &s }
