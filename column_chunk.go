@@ -172,7 +172,6 @@ func readRowsFuncOfLeaf(columnIndex int, repetitionDepth byte) (int, readRowsFun
 
 			for i := range rows {
 				if col.offset == col.length {
-					clearValues(buf[:col.length])
 					n, err := col.values.ReadValues(buf)
 					col.offset = 0
 					col.length = int32(n)
@@ -196,7 +195,6 @@ func readRowsFuncOfLeaf(columnIndex int, repetitionDepth byte) (int, readRowsFun
 			buf := r.buffer(columnIndex)
 
 			if col.offset == col.length {
-				clearValues(buf[:col.length])
 				n, err := col.values.ReadValues(buf)
 				col.offset = 0
 				col.length = int32(n)
