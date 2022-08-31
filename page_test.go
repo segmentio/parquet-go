@@ -437,8 +437,9 @@ func TestOptionalPagePreserveIndex(t *testing.T) {
 	defer rows.Close()
 
 	rowbuf := make([]parquet.Row, 2)
+
 	n, err := rows.ReadRows(rowbuf)
-	if err != io.EOF {
+	if err != nil && err != io.EOF {
 		t.Fatal("reading rows:", err)
 	}
 	if n != 1 {
@@ -446,6 +447,14 @@ func TestOptionalPagePreserveIndex(t *testing.T) {
 	}
 	if rowbuf[0][0].Column() != 0 {
 		t.Errorf("wrong index: got=%d want=%d", rowbuf[0][0].Column(), 0)
+	}
+
+	n, err = rows.ReadRows(rowbuf)
+	if err != io.EOF {
+		t.Fatal("reading EOF:", err)
+	}
+	if n != 0 {
+		t.Fatal("expected no more rows after EOF:", n)
 	}
 }
 
