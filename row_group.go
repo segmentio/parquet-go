@@ -378,10 +378,6 @@ func (r *rowGroupRows) ReadRows(rows []Row) (int, error) {
 	// the columns' page, the rows that were already read during the ReadRows
 	// call would be invalidated, and might reference memory locations that have
 	// been reused due to pooling of page buffers.
-	//
-	// The application is expected to handle the case where ReadRows returns
-	// less rows that requested and no error, by looking at the first returned
-	// value from ReadRows, which is the number of rows that were read.
 	numRows := int64(len(rows))
 
 	for i := range r.columns {
