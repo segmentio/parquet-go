@@ -452,9 +452,10 @@ func (c *fileColumnChunk) NumValues() int64 {
 }
 
 type filePages struct {
-	chunk   *fileColumnChunk
-	rbuf    *bufio.Reader
-	section io.SectionReader
+	chunk    *fileColumnChunk
+	rbuf     *bufio.Reader
+	rbufpool *sync.Pool
+	section  io.SectionReader
 
 	protocol thrift.CompactProtocol
 	decoder  thrift.Decoder
@@ -481,7 +482,7 @@ func (f *filePages) init(c *fileColumnChunk) {
 	}
 
 	f.section = *io.NewSectionReader(c.file, f.baseOffset, c.chunk.MetaData.TotalCompressedSize)
-	f.rbuf = getBufioReader(&f.section, f.bufferSize)
+	f.rbuf, f.rbufpool = getBufioReader(&f.section, f.bufferSize)
 	f.decoder.Reset(f.protocol.NewReader(f.rbuf))
 }
 
@@ -548,8 +549,8 @@ func (f *filePages) ReadPage() (Page, error) {
 
 func (f *filePages) readDictionary() error {
 	chunk := io.NewSectionReader(f.chunk.file, f.baseOffset, f.chunk.chunk.MetaData.TotalCompressedSize)
-	rbuf := getBufioReader(chunk, f.bufferSize)
-	defer putBufioReader(rbuf)
+	rbuf, pool := getBufioReader(chunk, f.bufferSize)
+	defer putBufioReader(rbuf, pool)
 
 	decoder := thrift.NewDecoder(f.protocol.NewReader(rbuf))
 	header := new(format.PageHeader)
@@ -683,7 +684,7 @@ func (f *filePages) SeekToRow(rowIndex int64) (err error) {
 }
 
 func (f *filePages) Close() error {
-	putBufioReader(f.rbuf)
+	putBufioReader(f.rbuf, f.rbufpool)
 	f.chunk = nil
 	f.section = io.SectionReader{}
 	f.rbuf = nil
@@ -700,25 +701,28 @@ func (f *filePages) columnPath() columnPath {
 	return columnPath(f.chunk.column.Path())
 }
 
+type putBufioReaderFunc func()
+
 var (
 	bufioReaderPoolLock sync.Mutex
 	bufioReaderPool     = map[int]*sync.Pool{}
 )
 
-func getBufioReader(r io.Reader, bufferSize int) *bufio.Reader {
-	rbuf, _ := getBufioReaderPool(bufferSize).Get().(*bufio.Reader)
+func getBufioReader(r io.Reader, bufferSize int) (*bufio.Reader, *sync.Pool) {
+	pool := getBufioReaderPool(bufferSize)
+	rbuf, _ := pool.Get().(*bufio.Reader)
 	if rbuf == nil {
 		rbuf = bufio.NewReaderSize(r, bufferSize)
 	} else {
 		rbuf.Reset(r)
 	}
-	return rbuf
+	return rbuf, pool
 }
 
-func putBufioReader(rbuf *bufio.Reader) {
-	if rbuf != nil {
+func putBufioReader(rbuf *bufio.Reader, pool *sync.Pool) {
+	if rbuf != nil && pool != nil {
 		rbuf.Reset(nil)
-		getBufioReaderPool(rbuf.Size()).Put(rbuf)
+		pool.Put(rbuf)
 	}
 }
 
