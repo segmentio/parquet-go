@@ -206,3 +206,90 @@ func TestIssue279(t *testing.T) {
 		}
 	}
 }
+
+func TestIssue302(t *testing.T) {
+	tests := []struct {
+		name string
+		fn   func(t *testing.T)
+	}{
+		{
+			name: "SimpleMap",
+			fn: func(t *testing.T) {
+				type M map[string]int
+
+				type T struct {
+					M M `parquet:","`
+				}
+
+				b := new(bytes.Buffer)
+				_ = parquet.NewGenericWriter[T](b)
+
+			},
+		},
+
+		{
+			name: "MapWithValueTag",
+			fn: func(t *testing.T) {
+				type M map[string]int
+
+				type T struct {
+					M M `parquet:"," parquet-value:",zstd"`
+				}
+
+				b := new(bytes.Buffer)
+				_ = parquet.NewGenericWriter[T](b)
+
+			},
+		},
+
+		{
+			name: "MapWithOptionalTag",
+			fn: func(t *testing.T) {
+				type M map[string]int
+
+				type T struct {
+					M M `parquet:",optional"`
+				}
+
+				b := new(bytes.Buffer)
+				w := parquet.NewGenericWriter[T](b)
+				expect := []T{
+					T{
+						M: M{
+							"Holden": 1,
+							"Naomi":  2,
+						},
+					},
+					T{
+						M: nil,
+					},
+					T{
+						M: M{
+							"Naomi":  1,
+							"Holden": 2,
+						},
+					},
+				}
+				_, err := w.Write(expect)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err = w.Close(); err != nil {
+					t.Fatal(err)
+				}
+
+				bufReader := bytes.NewReader(b.Bytes())
+				r := parquet.NewGenericReader[T](bufReader)
+				values := make([]T, 3)
+				_, err = r.Read(values)
+				if !reflect.DeepEqual(expect, values) {
+					t.Fatalf("values do not match.\n\texpect: %v\n\tactual: %v", expect, values)
+				}
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, test.fn)
+	}
+}
