@@ -16,7 +16,7 @@ type optionalPageValues struct {
 
 func (r *optionalPageValues) ReadValues(values []Value) (n int, err error) {
 	maxDefinitionLevel := r.page.maxDefinitionLevel
-	definitionLevels := r.page.definitionLevels.data()
+	definitionLevels := r.page.definitionLevels
 	columnIndex := ^int16(r.page.Column())
 
 	for n < len(values) && r.offset < len(definitionLevels) {
@@ -64,8 +64,8 @@ type repeatedPageValues struct {
 
 func (r *repeatedPageValues) ReadValues(values []Value) (n int, err error) {
 	maxDefinitionLevel := r.page.maxDefinitionLevel
-	definitionLevels := r.page.definitionLevels.data()
-	repetitionLevels := r.page.repetitionLevels.data()
+	definitionLevels := r.page.definitionLevels
+	repetitionLevels := r.page.repetitionLevels
 	columnIndex := ^int16(r.page.Column())
 
 	for n < len(values) && r.offset < len(definitionLevels) {
