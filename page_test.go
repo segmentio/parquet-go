@@ -493,3 +493,32 @@ func TestRepeatedPageTrailingNulls(t *testing.T) {
 		t.Errorf("wrong number of rows read: got=%d want=%d", n, len(records))
 	}
 }
+
+func TestIssue327(t *testing.T) {
+	type testType struct {
+		ListOfLists [][]int
+	}
+	instance := testType{ListOfLists: [][]int{{1, 3, 5}, nil, {2, 4, 6}}}
+	buf := parquet.NewGenericBuffer[testType]()
+	_, err := buf.Write([]testType{instance})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rg := parquet.RowGroup(buf)
+	chunks := rg.ColumnChunks()
+	if len(chunks) != 1 {
+		t.Fatal("chunks expected to be 1")
+	}
+	pages := chunks[0].Pages()
+	p, err := pages.ReadPage()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	vals := make([]parquet.Value, p.NumValues())
+	_, err = p.Values().ReadValues(vals)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
