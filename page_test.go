@@ -2,6 +2,7 @@ package parquet_test
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"reflect"
 	"testing"
@@ -498,15 +499,15 @@ func TestIssue327(t *testing.T) {
 	type testType struct {
 		ListOfLists [][]int
 	}
-	instance := testType{ListOfLists: [][]int{{1, 3, 5}, nil, {2, 4, 6}}}
+	// instance := testType{ListOfLists: [][]int{{1, 3, 5}, nil, {2, 4, 6}}}
+	instance := testType{ListOfLists: [][]int{{1, 3, 5}, {9, 8, 7}, {2, 4, 6}}}
 	buf := parquet.NewGenericBuffer[testType]()
 	_, err := buf.Write([]testType{instance})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	rg := parquet.RowGroup(buf)
-	chunks := rg.ColumnChunks()
+	chunks := buf.ColumnChunks()
 	if len(chunks) != 1 {
 		t.Fatal("chunks expected to be 1")
 	}
@@ -518,7 +519,8 @@ func TestIssue327(t *testing.T) {
 
 	vals := make([]parquet.Value, p.NumValues())
 	_, err = p.Values().ReadValues(vals)
-	if err != nil {
+	if err != nil && err != io.EOF {
 		t.Fatal(err)
 	}
+	fmt.Println(vals)
 }
