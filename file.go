@@ -701,7 +701,7 @@ func (f *filePages) columnPath() columnPath {
 }
 
 var (
-	bufioReaderPoolLock sync.RWMutex
+	bufioReaderPoolLock sync.Mutex
 	bufioReaderPool     = map[int]*sync.Pool{}
 )
 
@@ -723,15 +723,12 @@ func putBufioReader(rbuf *bufio.Reader) {
 }
 
 func getBufioReaderPool(size int) *sync.Pool {
-	bufioReaderPoolLock.RLock()
-	if pool := bufioReaderPool[size]; pool != nil {
-		bufioReaderPoolLock.RUnlock()
-		return pool
-	}
-	bufioReaderPoolLock.RUnlock()
-
 	bufioReaderPoolLock.Lock()
 	defer bufioReaderPoolLock.Unlock()
+
+	if pool := bufioReaderPool[size]; pool != nil {
+		return pool
+	}
 
 	pool := &sync.Pool{}
 	bufioReaderPool[size] = pool
