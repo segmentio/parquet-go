@@ -846,12 +846,12 @@ func makeNodeOf(t reflect.Type, name string, tag []string) Node {
 		node = List(node)
 	}
 
-	if !list && node.Repeated() {
+	if node.Repeated() && !list {
 		elemKind := node.GoType().Elem().Kind()
 		switch elemKind {
-		case reflect.Uint8, reflect.String:
+		case reflect.Slice:
+			panic(fmt.Sprintf("unhandled nested slice without list tag: %v", elemKind))
 		default:
-			panic(fmt.Sprintf("unhandled repeated element without list tag: %v", elemKind))
 		}
 	}
 

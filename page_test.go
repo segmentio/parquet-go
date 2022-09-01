@@ -2,7 +2,6 @@ package parquet_test
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"reflect"
 	"testing"
@@ -494,95 +493,3 @@ func TestRepeatedPageTrailingNulls(t *testing.T) {
 		t.Errorf("wrong number of rows read: got=%d want=%d", n, len(records))
 	}
 }
-
-func TestIssue327(t *testing.T) {
-	// type testType struct {
-	// 	ListOfLists [][]int `parquet:",list"`
-	// }
-	type testType struct {
-		ListOfLists [][]int
-	}
-	instance := testType{ListOfLists: [][]int{{1, 3, 5}, nil, {2, 4, 6}}}
-
-	// type testType struct {
-	// 	ListOfLists []string
-	// }
-	// instance := testType{ListOfLists: []string{"asdf", "", "qwer"}}
-
-	// 	type ListOfInts struct {
-	// 		List []int `parquet:",list"`
-	// 	}
-	// 	type testType struct {
-	// 		ListOfLists []ListOfInts `parquet:",list"`
-	// 	}
-
-	// 	instance := testType{ListOfLists: []ListOfInts{
-	// 		ListOfInts{
-	// 			List: []int{1, 3, 5},
-	// 		},
-	// 		ListOfInts{
-	// 			List: nil,
-	// 		},
-	// 		ListOfInts{
-	// 			List: []int{2, 4, 6},
-	// 		},
-	// 	}}
-
-	buf := parquet.NewGenericBuffer[testType]()
-	_, err := buf.Write([]testType{instance})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	chunks := buf.ColumnChunks()
-	if len(chunks) != 1 {
-		t.Fatal("chunks expected to be 1")
-	}
-	pages := chunks[0].Pages()
-	p, err := pages.ReadPage()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	vals := make([]parquet.Value, p.NumValues())
-	_, err = p.Values().ReadValues(vals)
-	if err != nil && err != io.EOF {
-		t.Fatal(err)
-	}
-	v := vals[0]
-	fmt.Println(v.String())
-	fmt.Println(v.GoString())
-	fmt.Println(v.Kind())
-	fmt.Println(vals)
-}
-
-/*
-(dlv) p r
-*github.com/segmentio/parquet-go.repeatedPageValues {
-        page: *github.com/segmentio/parquet-go.repeatedPage {
-                base: github.com/segmentio/parquet-go.Page(*github.com/segmentio/parquet-go.int64Page) ...,
-                maxRepetitionLevel: 2,
-                maxDefinitionLevel: 2,
-                definitionLevels: []uint8 len: 7, cap: 16384, [2,2,2,1,2,2,2],
-                repetitionLevels: []uint8 len: 7, cap: 16384, [0,2,2,1,1,2,2],},
-        values: github.com/segmentio/parquet-go.ValueReader(*github.com/segmentio/parquet-go.int64PageValues) *{
-                page: *(*"github.com/segmentio/parquet-go.int64Page")(0x14000021380),
-                offset: 0,},
-        offset: 0,}
----------------------------------------------------------
-(dlv) p r
-*github.com/segmentio/parquet-go.repeatedPageValues {
-        page: *github.com/segmentio/parquet-go.repeatedPage {
-                base: github.com/segmentio/parquet-go.Page(*github.com/segmentio/parquet-go.int64Page) ...,
-                maxRepetitionLevel: 1,
-                maxDefinitionLevel: 1,
-                definitionLevels: []uint8 len: 7, cap: 16384, [2,2,2,1,2,2,2],
-                repetitionLevels: []uint8 len: 7, cap: 16384, [0,2,2,1,1,2,2],},
-        values: github.com/segmentio/parquet-go.ValueReader(*github.com/segmentio/parquet-go.int64PageValues) *{
-                page: *(*"github.com/segmentio/parquet-go.int64Page")(0x1400011f260),
-                offset: 0,},
-        offset: 0,}
-
-
-
-*/
