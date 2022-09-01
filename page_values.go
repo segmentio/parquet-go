@@ -68,17 +68,14 @@ func (r *repeatedPageValues) ReadValues(values []Value) (n int, err error) {
 	repetitionLevels := r.page.repetitionLevels
 	columnIndex := ^int16(r.page.Column())
 
-	outBufLen := len(values)
-	pageLen := len(definitionLevels)
-
 	// while we haven't exceeded the output buffer and we haven't exceeded the page size
-	for n < outBufLen && r.offset < pageLen {
+	for n < len(values) && r.offset < len(definitionLevels) {
 
 		// while we haven't exceeded the output buffer and we haven't exceeded the
 		// page size AND the current element's definitionLevel is not the
 		// maxDefinitionLevel (this is a null value), Create the zero values to be
 		// returned in this run
-		for n < outBufLen && r.offset < pageLen && definitionLevels[r.offset] < maxDefinitionLevel {
+		for n < len(values) && r.offset < len(definitionLevels) && definitionLevels[r.offset] < maxDefinitionLevel {
 			values[n] = Value{
 				repetitionLevel: repetitionLevels[r.offset],
 				definitionLevel: definitionLevels[r.offset],
@@ -91,7 +88,7 @@ func (r *repeatedPageValues) ReadValues(values []Value) (n int, err error) {
 		i := n
 		j := r.offset
 		// Get the length of the run of non-zero values to be copied
-		for i < outBufLen && j < pageLen && definitionLevels[j] == maxDefinitionLevel {
+		for i < len(values) && j < len(definitionLevels) && definitionLevels[j] == maxDefinitionLevel {
 			i++
 			j++
 		}
@@ -108,12 +105,10 @@ func (r *repeatedPageValues) ReadValues(values []Value) (n int, err error) {
 				return n, err
 			}
 			err = nil
-		} else {
-			panic("invalid schema detected")
 		}
 	}
 
-	if r.offset == pageLen {
+	if r.offset == len(definitionLevels) {
 		err = io.EOF
 	}
 	return n, err
