@@ -36,7 +36,8 @@ func defaultCreatedBy() string {
 		if ok {
 			for _, mod := range build.Deps {
 				if mod.Replace == nil && mod.Path == parquetGoModulePath {
-					createdBy += " (" + mod.Version + ")"
+					semver, _, buildsha := parseModuleVersion(mod.Version)
+					createdBy += " version " + semver + " (build " + buildsha + ")"
 					break
 				}
 			}
@@ -44,6 +45,23 @@ func defaultCreatedBy() string {
 		defaultCreatedByInfo = createdBy
 	})
 	return defaultCreatedByInfo
+}
+
+func parseModuleVersion(version string) (semver, datetime, buildsha string) {
+	semver, version = splitModuleVersion(version)
+	datetime, version = splitModuleVersion(version)
+	buildsha, _ = splitModuleVersion(version)
+	semver = strings.TrimPrefix(semver, "v")
+	return
+}
+
+func splitModuleVersion(s string) (head, tail string) {
+	if i := strings.IndexByte(s, '-'); i < 0 {
+		head = s
+	} else {
+		head, tail = s[:i], s[i+1:]
+	}
+	return
 }
 
 // The FileConfig type carries configuration options for parquet files.
