@@ -35,7 +35,7 @@ func defaultCreatedBy() string {
 		build, ok := debug.ReadBuildInfo()
 		if ok {
 			for _, mod := range build.Deps {
-				if mod.Replace == nil && strings.HasSuffix(mod.Path, parquetGoModulePath) {
+				if mod.Replace == nil && mod.Path == parquetGoModulePath {
 					createdBy += " (" + mod.Version + ")"
 					break
 				}
