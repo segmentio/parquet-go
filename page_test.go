@@ -496,10 +496,18 @@ func TestRepeatedPageTrailingNulls(t *testing.T) {
 }
 
 func TestIssue327(t *testing.T) {
+	// type testType struct {
+	// 	ListOfLists [][]int `parquet:",list"`
+	// }
 	type testType struct {
-		ListOfLists [][]int `parquet:",list"`
+		ListOfLists [][]int
 	}
 	instance := testType{ListOfLists: [][]int{{1, 3, 5}, nil, {2, 4, 6}}}
+
+	// type testType struct {
+	// 	ListOfLists []string
+	// }
+	// instance := testType{ListOfLists: []string{"asdf", "", "qwer"}}
 
 	// 	type ListOfInts struct {
 	// 		List []int `parquet:",list"`
@@ -547,3 +555,34 @@ func TestIssue327(t *testing.T) {
 	fmt.Println(v.Kind())
 	fmt.Println(vals)
 }
+
+/*
+(dlv) p r
+*github.com/segmentio/parquet-go.repeatedPageValues {
+        page: *github.com/segmentio/parquet-go.repeatedPage {
+                base: github.com/segmentio/parquet-go.Page(*github.com/segmentio/parquet-go.int64Page) ...,
+                maxRepetitionLevel: 2,
+                maxDefinitionLevel: 2,
+                definitionLevels: []uint8 len: 7, cap: 16384, [2,2,2,1,2,2,2],
+                repetitionLevels: []uint8 len: 7, cap: 16384, [0,2,2,1,1,2,2],},
+        values: github.com/segmentio/parquet-go.ValueReader(*github.com/segmentio/parquet-go.int64PageValues) *{
+                page: *(*"github.com/segmentio/parquet-go.int64Page")(0x14000021380),
+                offset: 0,},
+        offset: 0,}
+---------------------------------------------------------
+(dlv) p r
+*github.com/segmentio/parquet-go.repeatedPageValues {
+        page: *github.com/segmentio/parquet-go.repeatedPage {
+                base: github.com/segmentio/parquet-go.Page(*github.com/segmentio/parquet-go.int64Page) ...,
+                maxRepetitionLevel: 1,
+                maxDefinitionLevel: 1,
+                definitionLevels: []uint8 len: 7, cap: 16384, [2,2,2,1,2,2,2],
+                repetitionLevels: []uint8 len: 7, cap: 16384, [0,2,2,1,1,2,2],},
+        values: github.com/segmentio/parquet-go.ValueReader(*github.com/segmentio/parquet-go.int64PageValues) *{
+                page: *(*"github.com/segmentio/parquet-go.int64Page")(0x1400011f260),
+                offset: 0,},
+        offset: 0,}
+
+
+
+*/

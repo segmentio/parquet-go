@@ -846,6 +846,15 @@ func makeNodeOf(t reflect.Type, name string, tag []string) Node {
 		node = List(node)
 	}
 
+	if !list && node.Repeated() {
+		elemKind := node.GoType().Elem().Kind()
+		switch elemKind {
+		case reflect.Uint8, reflect.String:
+		default:
+			panic(fmt.Sprintf("unhandled repeated element without list tag: %v", elemKind))
+		}
+	}
+
 	if optional {
 		node = Optional(node)
 	}
