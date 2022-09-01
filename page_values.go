@@ -93,7 +93,7 @@ func (r *repeatedPageValues) ReadValues(values []Value) (n int, err error) {
 			j++
 		}
 
-		// Copy all the non-zero values in this run
+		// Copy all the non-zero values in this run.
 		if n < i {
 			for j, err = r.values.ReadValues(values[n:i]); j > 0; j-- {
 				values[n].repetitionLevel = repetitionLevels[r.offset]
