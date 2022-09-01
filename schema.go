@@ -850,7 +850,7 @@ func makeNodeOf(t reflect.Type, name string, tag []string) Node {
 		elemKind := node.GoType().Elem().Kind()
 		switch elemKind {
 		case reflect.Slice:
-			panic(fmt.Sprintf("unhandled nested slice without list tag: %v", elemKind))
+			panic("unhandled nested slice on parquet schema without list tag")
 		default:
 		}
 	}
