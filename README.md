@@ -410,11 +410,11 @@ for {
     }
 
     switch page := p.Values().(type) {
-    case parquet.Int32Page:
+    case parquet.Int32Reader:
         values := make([]int32, page.NumValues())
         _, err := page.ReadInt32s(values)
         ...
-    case parquet.Int64Page:
+    case parquet.Int64Reader:
         values := make([]int64, page.NumValues())
         _, err := page.ReadInt64s(values)
         ...
