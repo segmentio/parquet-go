@@ -496,11 +496,25 @@ func TestRepeatedPageTrailingNulls(t *testing.T) {
 }
 
 func TestIssue327(t *testing.T) {
+	type ListOfInts struct {
+		List []int `parquet:",list"`
+	}
 	type testType struct {
-		ListOfLists [][]int
+		ListOfLists []ListOfInts `parquet:",list"`
 	}
 	// instance := testType{ListOfLists: [][]int{{1, 3, 5}, nil, {2, 4, 6}}}
-	instance := testType{ListOfLists: [][]int{{1, 3, 5}, {9, 8, 7}, {2, 4, 6}}}
+	instance := testType{ListOfLists: []ListOfInts{
+		ListOfInts{
+			List: []int{1, 3, 5},
+		},
+		ListOfInts{
+			List: nil,
+		},
+		ListOfInts{
+			List: []int{2, 4, 6},
+		},
+	}}
+	// , {{9, 8, 7}, {2, 4, 6}}}
 	buf := parquet.NewGenericBuffer[testType]()
 	_, err := buf.Write([]testType{instance})
 	if err != nil {
@@ -522,5 +536,9 @@ func TestIssue327(t *testing.T) {
 	if err != nil && err != io.EOF {
 		t.Fatal(err)
 	}
+	v := vals[0]
+	fmt.Println(v.String())
+	fmt.Println(v.GoString())
+	fmt.Println(v.Kind())
 	fmt.Println(vals)
 }
