@@ -165,3 +165,19 @@ func benchmarkGenericBuffer[Row generator[Row]](b *testing.B) {
 		})
 	})
 }
+
+func TestIssue327(t *testing.T) {
+	t.Run("untagged nested lists should panic", func(t *testing.T) {
+		type testType struct {
+			ListOfLists [][]int
+		}
+
+		defer func() {
+			if r := recover(); r == nil {
+				t.Errorf("Nested lists without the list tag should panic")
+			}
+		}()
+
+		_ = parquet.NewGenericBuffer[testType]()
+	})
+}

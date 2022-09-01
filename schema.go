@@ -846,6 +846,13 @@ func makeNodeOf(t reflect.Type, name string, tag []string) Node {
 		node = List(node)
 	}
 
+	if node.Repeated() && !list {
+		elemKind := node.GoType().Elem().Kind()
+		if elemKind == reflect.Slice {
+			panic("unhandled nested slice on parquet schema without list tag")
+		}
+	}
+
 	if optional {
 		node = Optional(node)
 	}
