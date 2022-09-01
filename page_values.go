@@ -75,7 +75,7 @@ func (r *repeatedPageValues) ReadValues(values []Value) (n int, err error) {
 		// page size AND the current element's definitionLevel is not the
 		// maxDefinitionLevel (this is a null value), Create the zero values to be
 		// returned in this run
-		for n < len(values) && r.offset < len(definitionLevels) && definitionLevels[r.offset] < maxDefinitionLevel {
+		for n < len(values) && r.offset < len(definitionLevels) && definitionLevels[r.offset] != maxDefinitionLevel {
 			values[n] = Value{
 				repetitionLevel: repetitionLevels[r.offset],
 				definitionLevel: definitionLevels[r.offset],
