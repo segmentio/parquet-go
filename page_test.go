@@ -496,25 +496,30 @@ func TestRepeatedPageTrailingNulls(t *testing.T) {
 }
 
 func TestIssue327(t *testing.T) {
-	type ListOfInts struct {
-		List []int `parquet:",list"`
-	}
 	type testType struct {
-		ListOfLists []ListOfInts `parquet:",list"`
+		ListOfLists [][]int `parquet:",list"`
 	}
-	// instance := testType{ListOfLists: [][]int{{1, 3, 5}, nil, {2, 4, 6}}}
-	instance := testType{ListOfLists: []ListOfInts{
-		ListOfInts{
-			List: []int{1, 3, 5},
-		},
-		ListOfInts{
-			List: nil,
-		},
-		ListOfInts{
-			List: []int{2, 4, 6},
-		},
-	}}
-	// , {{9, 8, 7}, {2, 4, 6}}}
+	instance := testType{ListOfLists: [][]int{{1, 3, 5}, nil, {2, 4, 6}}}
+
+	// 	type ListOfInts struct {
+	// 		List []int `parquet:",list"`
+	// 	}
+	// 	type testType struct {
+	// 		ListOfLists []ListOfInts `parquet:",list"`
+	// 	}
+
+	// 	instance := testType{ListOfLists: []ListOfInts{
+	// 		ListOfInts{
+	// 			List: []int{1, 3, 5},
+	// 		},
+	// 		ListOfInts{
+	// 			List: nil,
+	// 		},
+	// 		ListOfInts{
+	// 			List: []int{2, 4, 6},
+	// 		},
+	// 	}}
+
 	buf := parquet.NewGenericBuffer[testType]()
 	_, err := buf.Write([]testType{instance})
 	if err != nil {
