@@ -402,7 +402,7 @@ mechanisms to read column values:
 
 ```go
 pages := column.Pages()
-defer pages.Close()
+defer checkErr(pages.Close())
 
 for {
     p, err := pages.ReadPage()
