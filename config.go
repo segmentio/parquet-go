@@ -37,7 +37,7 @@ func defaultCreatedBy() string {
 			for _, mod := range build.Deps {
 				if mod.Replace == nil && mod.Path == parquetGoModulePath {
 					semver, _, buildsha := parseModuleVersion(mod.Version)
-					createdBy += " version " + semver + " (build " + buildsha + ")"
+					createdBy = formatCreatedBy(createdBy, semver, buildsha)
 					break
 				}
 			}
@@ -62,6 +62,10 @@ func splitModuleVersion(s string) (head, tail string) {
 		head, tail = s[:i], s[i+1:]
 	}
 	return
+}
+
+func formatCreatedBy(application, version, build string) string {
+	return application + " version " + version + "(build " + build + ")"
 }
 
 // The FileConfig type carries configuration options for parquet files.
@@ -396,8 +400,15 @@ func WriteBufferSize(size int) WriterOption {
 // CreatedBy creates a configuration option which sets the name of the
 // application that created a parquet file.
 //
-// By default, this information is omitted.
-func CreatedBy(createdBy string) WriterOption {
+// The option formats the "CreatedBy" file metadata according to the convention
+// described by the parquet spec:
+//
+//	"<application> version <version> (build <build>)"
+//
+// By default, the option is set to the parquet-go module name, version, and
+// build hash.
+func CreatedBy(application, version, build string) WriterOption {
+	createdBy := formatCreatedBy(application, version, build)
 	return writerOption(func(config *WriterConfig) { config.CreatedBy = createdBy })
 }
 
