@@ -2,13 +2,14 @@ package parquet
 
 import (
 	"fmt"
+	"runtime/debug"
 	"strings"
+	"sync"
 
 	"github.com/segmentio/parquet-go/compress"
 )
 
 const (
-	DefaultCreatedBy            = "github.com/segmentio/parquet-go"
 	DefaultColumnIndexSizeLimit = 16
 	DefaultColumnBufferCapacity = 16 * 1024
 	DefaultPageBufferSize       = 256 * 1024
@@ -18,6 +19,32 @@ const (
 	DefaultSkipPageIndex        = false
 	DefaultSkipBloomFilters     = false
 )
+
+const (
+	parquetGoModulePath = "github.com/segmentio/parquet-go"
+)
+
+var (
+	defaultCreatedByInfo string
+	defaultCreatedByOnce sync.Once
+)
+
+func defaultCreatedBy() string {
+	defaultCreatedByOnce.Do(func() {
+		createdBy := parquetGoModulePath
+		build, ok := debug.ReadBuildInfo()
+		if ok {
+			for _, mod := range build.Deps {
+				if mod.Replace == nil && strings.HasSuffix(mod.Path, parquetGoModulePath) {
+					createdBy += " (" + mod.Version + ")"
+					break
+				}
+			}
+		}
+		defaultCreatedByInfo = createdBy
+	})
+	return defaultCreatedByInfo
+}
 
 // The FileConfig type carries configuration options for parquet files.
 //
@@ -150,7 +177,7 @@ type WriterConfig struct {
 // default writer configuration.
 func DefaultWriterConfig() *WriterConfig {
 	return &WriterConfig{
-		CreatedBy:            DefaultCreatedBy,
+		CreatedBy:            defaultCreatedBy(),
 		ColumnPageBuffers:    &defaultPageBufferPool,
 		ColumnIndexSizeLimit: DefaultColumnIndexSizeLimit,
 		PageBufferSize:       DefaultPageBufferSize,
