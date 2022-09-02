@@ -28,7 +28,7 @@ type Contact2 struct {
 	PhoneNumbers []string `parquet:"phoneNumbers,optional,zstd"`
 }
 
-func TestNestedDeconstrcutReconstruct(t *testing.T) {
+func TestNestedDeconstructReconstruct(t *testing.T) {
 	var conversionTests = [...]struct {
 		scenario string
 		input    interface{}
