@@ -378,10 +378,10 @@ type deconstructFunc func(Row, levels, reflect.Value) Row
 
 func deconstructFuncOf(columnIndex int16, node Node) (int16, deconstructFunc) {
 	switch {
-	case node.Optional():
-		return deconstructFuncOfOptional(columnIndex, node)
 	case node.Repeated():
 		return deconstructFuncOfRepeated(columnIndex, node)
+	case node.Optional():
+		return deconstructFuncOfOptional(columnIndex, node)
 	case isList(node):
 		return deconstructFuncOfList(columnIndex, node)
 	case isMap(node):
@@ -519,10 +519,10 @@ type reconstructFunc func(reflect.Value, levels, Row) (Row, error)
 
 func reconstructFuncOf(columnIndex int16, node Node) (int16, reconstructFunc) {
 	switch {
-	case node.Optional():
-		return reconstructFuncOfOptional(columnIndex, node)
 	case node.Repeated():
 		return reconstructFuncOfRepeated(columnIndex, node)
+	case node.Optional():
+		return reconstructFuncOfOptional(columnIndex, node)
 	case isList(node):
 		return reconstructFuncOfList(columnIndex, node)
 	case isMap(node):

@@ -152,7 +152,7 @@ func Optional(node Node) Node { return &optionalNode{node} }
 type optionalNode struct{ Node }
 
 func (opt *optionalNode) Optional() bool       { return true }
-func (opt *optionalNode) Repeated() bool       { return false }
+func (opt *optionalNode) Repeated() bool       { return opt.Node.Repeated() }
 func (opt *optionalNode) Required() bool       { return false }
 func (opt *optionalNode) GoType() reflect.Type { return reflect.PtrTo(opt.Node.GoType()) }
 
@@ -161,7 +161,7 @@ func Repeated(node Node) Node { return &repeatedNode{node} }
 
 type repeatedNode struct{ Node }
 
-func (rep *repeatedNode) Optional() bool       { return false }
+func (rep *repeatedNode) Optional() bool       { return rep.Node.Optional() }
 func (rep *repeatedNode) Repeated() bool       { return true }
 func (rep *repeatedNode) Required() bool       { return false }
 func (rep *repeatedNode) GoType() reflect.Type { return reflect.SliceOf(rep.Node.GoType()) }

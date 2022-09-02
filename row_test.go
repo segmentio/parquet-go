@@ -25,7 +25,7 @@ type AddressBook3 struct {
 
 type Contact2 struct {
 	Name         string   `parquet:"name"`
-	PhoneNumbers []string `parquet:"phoneNumbers,optional,zstd"`
+	PhoneNumbers []string `parquet:"phoneNumbers,optional"`
 }
 
 func TestNestedDeconstructReconstruct(t *testing.T) {

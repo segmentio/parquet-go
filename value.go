@@ -201,6 +201,7 @@ func ValueOf(v interface{}) Value {
 }
 
 func makeValue(k Kind, v reflect.Value) Value {
+
 	switch k {
 	case Boolean:
 		return makeValueBoolean(v.Bool())
