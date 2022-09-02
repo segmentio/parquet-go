@@ -14,12 +14,7 @@ type AddressBook2 struct {
 	Extra             string    `parquet:"extra"`
 }
 
-type AddressBook3 struct {
-	Owner    string     `parquet:"owner,zstd"`
-	Contacts []Contact2 `parquet:"contacts"`
-}
-
-type Contact2 struct {
+type Contact3 struct {
 	Name         string   `parquet:"name"`
 	PhoneNumbers []string `parquet:"phoneNumbers,zstd"`
 	Addresses    []string `parquet:"addresses,zstd"`
@@ -27,8 +22,13 @@ type Contact2 struct {
 
 type AddressBook4 struct {
 	Owner    string     `parquet:"owner,zstd"`
-	Contacts []Contact2 `parquet:"contacts"`
+	Contacts []Contact3 `parquet:"contacts"`
 	Extra    string     `parquet:"extra"`
+}
+
+type AddressBook5 struct {
+	Owner    string     `parquet:"owner,zstd"`
+	Contacts []Contact3 `parquet:"contacts"`
 }
 
 type SimpleNumber struct {
@@ -171,9 +171,9 @@ var conversionTests = [...]struct {
 
 	{
 		scenario: "handle nested repeated elements during conversion",
-		from: AddressBook3{
+		from: AddressBook5{
 			Owner: "Julien Le Dem",
-			Contacts: []Contact2{
+			Contacts: []Contact3{
 				{
 					Name: "Dmitriy Ryaboy",
 					PhoneNumbers: []string{
@@ -205,7 +205,7 @@ var conversionTests = [...]struct {
 		},
 		to: AddressBook4{
 			Owner: "Julien Le Dem",
-			Contacts: []Contact2{
+			Contacts: []Contact3{
 				{
 					Name: "Dmitriy Ryaboy",
 					PhoneNumbers: []string{
