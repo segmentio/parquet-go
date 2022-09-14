@@ -181,3 +181,8 @@ func TestIssue327(t *testing.T) {
 		_ = parquet.NewGenericBuffer[testType]()
 	})
 }
+
+func TestIssue343(t *testing.T) {
+	// must not panic
+	_ = parquet.NewGenericBuffer[any]()
+}
