@@ -688,6 +688,7 @@ func (f *filePages) Close() error {
 	f.chunk = nil
 	f.section = io.SectionReader{}
 	f.rbuf = nil
+	f.rbufpool = nil
 	f.baseOffset = 0
 	f.dataOffset = 0
 	f.dictOffset = 0
