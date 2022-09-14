@@ -561,24 +561,39 @@ func (c *Column) decodeDataPageV2(header DataPageHeaderV2, page *buffer, dict Di
 	var repetitionLevels *buffer
 	var definitionLevels *buffer
 
-	if c.maxRepetitionLevel > 0 {
-		encoding := lookupLevelEncoding(header.RepetitionLevelEncoding(), c.maxRepetitionLevel)
-		length := header.RepetitionLevelsByteLength()
-		repetitionLevels, pageData, err = decodeLevelsV2(encoding, numValues, pageData, length)
+	if length := header.RepetitionLevelsByteLength(); length > 0 {
+		if c.maxRepetitionLevel == 0 {
+			// In some cases we've observed files which have a non-zero
+			// repetition level despite the column not being repeated
+			// (nor nested within a repeated column).
+			//
+			// See https://github.com/apache/parquet-testing/pull/24
+			pageData, err = skipLevelsV2(pageData, length)
+		} else {
+			encoding := lookupLevelEncoding(header.RepetitionLevelEncoding(), c.maxRepetitionLevel)
+			repetitionLevels, pageData, err = decodeLevelsV2(encoding, numValues, pageData, length)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("decoding repetition levels of data page v2: %w", io.ErrUnexpectedEOF)
 		}
-		defer repetitionLevels.unref()
+		if repetitionLevels != nil {
+			defer repetitionLevels.unref()
+		}
 	}
 
-	if c.maxDefinitionLevel > 0 {
-		encoding := lookupLevelEncoding(header.DefinitionLevelEncoding(), c.maxDefinitionLevel)
-		length := header.DefinitionLevelsByteLength()
-		definitionLevels, pageData, err = decodeLevelsV2(encoding, numValues, pageData, length)
+	if length := header.DefinitionLevelsByteLength(); length > 0 {
+		if c.maxDefinitionLevel == 0 {
+			pageData, err = skipLevelsV2(pageData, length)
+		} else {
+			encoding := lookupLevelEncoding(header.DefinitionLevelEncoding(), c.maxDefinitionLevel)
+			definitionLevels, pageData, err = decodeLevelsV2(encoding, numValues, pageData, length)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("decoding definition levels of data page v2: %w", io.ErrUnexpectedEOF)
 		}
-		defer definitionLevels.unref()
+		if definitionLevels != nil {
+			defer definitionLevels.unref()
+		}
 	}
 
 	if isCompressed(c.compression) && header.IsCompressed() {
@@ -687,9 +702,6 @@ func decodeLevelsV1(enc encoding.Encoding, numValues int, data []byte) (*buffer,
 }
 
 func decodeLevelsV2(enc encoding.Encoding, numValues int, data []byte, length int64) (*buffer, []byte, error) {
-	if length > int64(len(data)) {
-		return nil, data, io.ErrUnexpectedEOF
-	}
 	levels, err := decodeLevels(enc, numValues, data[:length])
 	return levels, data[length:], err
 }
@@ -709,6 +721,13 @@ func decodeLevels(enc encoding.Encoding, numValues int, data []byte) (levels *bu
 		}
 	}
 	return levels, err
+}
+
+func skipLevelsV2(data []byte, length int64) ([]byte, error) {
+	if length >= int64(len(data)) {
+		return data, io.ErrUnexpectedEOF
+	}
+	return data[length:], nil
 }
 
 // DecodeDictionary decodes a data page from the header and compressed data
