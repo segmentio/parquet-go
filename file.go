@@ -105,10 +105,13 @@ func OpenFile(r io.ReaderAt, size int64, options ...FileOption) (*File, error) {
 	}
 
 	if !c.SkipBloomFilters {
-		h := format.BloomFilterHeader{}
-		p := thrift.CompactProtocol{}
-		s := io.NewSectionReader(r, 0, size)
-		d := thrift.NewDecoder(p.NewReader(s))
+		section := io.NewSectionReader(r, 0, size)
+		rbuf, rbufpool := getBufioReader(section, c.ReadBufferSize)
+		defer putBufioReader(rbuf, rbufpool)
+
+		header := format.BloomFilterHeader{}
+		compact := thrift.CompactProtocol{}
+		decoder := thrift.NewDecoder(compact.NewReader(rbuf))
 
 		for i := range rowGroups {
 			g := &rowGroups[i]
@@ -117,19 +120,24 @@ func OpenFile(r io.ReaderAt, size int64, options ...FileOption) (*File, error) {
 				c := g.columns[j].(*fileColumnChunk)
 
 				if offset := c.chunk.MetaData.BloomFilterOffset; offset > 0 {
-					s.Seek(offset, io.SeekStart)
-					h = format.BloomFilterHeader{}
-					if err := d.Decode(&h); err != nil {
-						return nil, err
+					section.Seek(offset, io.SeekStart)
+					rbuf.Reset(section)
+
+					header = format.BloomFilterHeader{}
+					if err := decoder.Decode(&header); err != nil {
+						return nil, fmt.Errorf("decoding bloom filter header: %w", err)
 					}
-					offset, _ = s.Seek(0, io.SeekCurrent)
+
+					offset, _ = section.Seek(0, io.SeekCurrent)
+					offset -= int64(rbuf.Buffered())
+
 					if cast, ok := r.(interface{ SetBloomFilterSection(offset, length int64) }); ok {
 						bloomFilterOffset := c.chunk.MetaData.BloomFilterOffset
-						bloomFilterLength := (offset - bloomFilterOffset) + int64(h.NumBytes)
+						bloomFilterLength := (offset - bloomFilterOffset) + int64(header.NumBytes)
 						cast.SetBloomFilterSection(bloomFilterOffset, bloomFilterLength)
 					}
 
-					c.bloomFilter = newBloomFilter(r, offset, &h)
+					c.bloomFilter = newBloomFilter(r, offset, &header)
 				}
 			}
 		}
