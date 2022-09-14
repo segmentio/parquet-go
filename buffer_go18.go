@@ -33,7 +33,7 @@ func NewGenericBuffer[T any](options ...RowGroupOption) *GenericBuffer[T] {
 	}
 
 	t := typeOf[T]()
-	if config.Schema == nil {
+	if config.Schema == nil && t != nil {
 		config.Schema = schemaOf(dereference(t))
 	}
 
@@ -53,6 +53,9 @@ func typeOf[T any]() reflect.Type {
 type bufferFunc[T any] func(*GenericBuffer[T], []T) (int, error)
 
 func bufferFuncOf[T any](t reflect.Type, schema *Schema) bufferFunc[T] {
+	if t == nil {
+		return (*GenericBuffer[T]).writeRows
+	}
 	switch t.Kind() {
 	case reflect.Interface, reflect.Map:
 		return (*GenericBuffer[T]).writeRows
