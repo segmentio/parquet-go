@@ -632,17 +632,7 @@ func (f *filePages) readPage(header *format.PageHeader, reader *bufio.Reader) (*
 		headerChecksum := uint32(header.CRC)
 		bufferChecksum := crc32.ChecksumIEEE(page.data)
 
-		// TODO: checksum validation is disabled until we figure out how the
-		// checksum of TestOpenFile/testdata/delta_length_byte_array.parquet was
-		// computed.
-		//
-		// Note that we still compute the page checksum even if we are not using
-		// to avoid skewing benchmarks.
-		//
-		// https://github.com/apache/parquet-testing/pull/24#issuecomment-1196045050
-		const validateChecksum = false
-
-		if validateChecksum && headerChecksum != bufferChecksum {
+		if headerChecksum != bufferChecksum {
 			// The parquet specs indicate that corruption errors could be
 			// handled gracefully by skipping pages, tho this may not always
 			// be practical. Depending on how the pages are consumed,
