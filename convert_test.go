@@ -244,10 +244,10 @@ var conversionTests = [...]struct {
 			Name: "New Contact",
 			Contact: SimpleContact{
 				Numbers: []SimpleNumber{
-					SimpleNumber{
+					{
 						Number: nil,
 					},
-					SimpleNumber{
+					{
 						Number: newInt64(1329),
 					},
 				},
@@ -257,10 +257,10 @@ var conversionTests = [...]struct {
 			Name: "New Contact",
 			Contact: SimpleContact{
 				Numbers: []SimpleNumber{
-					SimpleNumber{
+					{
 						Number: nil,
 					},
-					SimpleNumber{
+					{
 						Number: newInt64(1329),
 					},
 				},

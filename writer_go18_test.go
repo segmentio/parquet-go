@@ -163,7 +163,7 @@ func TestIssue279(t *testing.T) {
 	row := T{
 		T1: &T1{
 			TA: []*T2{
-				&T2{
+				{
 					Id:   43,
 					Name: "john",
 				},
@@ -254,16 +254,16 @@ func TestIssue302(t *testing.T) {
 				b := new(bytes.Buffer)
 				w := parquet.NewGenericWriter[T](b)
 				expect := []T{
-					T{
+					{
 						M: M{
 							"Holden": 1,
 							"Naomi":  2,
 						},
 					},
-					T{
+					{
 						M: nil,
 					},
-					T{
+					{
 						M: M{
 							"Naomi":  1,
 							"Holden": 2,
