@@ -186,3 +186,16 @@ func TestIssue343(t *testing.T) {
 	// must not panic
 	_ = parquet.NewGenericBuffer[any]()
 }
+
+func TestIssue346(t *testing.T) {
+	type TestType struct {
+		Key int
+	}
+
+	schema := parquet.SchemaOf(TestType{})
+	buffer := parquet.NewGenericBuffer[any](schema)
+
+	data := make([]any, 1)
+	data[0] = TestType{Key: 0}
+	_, _ = buffer.Write(data)
+}
