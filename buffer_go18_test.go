@@ -182,11 +182,6 @@ func TestIssue327(t *testing.T) {
 	})
 }
 
-func TestIssue343(t *testing.T) {
-	// must not panic
-	_ = parquet.NewGenericBuffer[any]()
-}
-
 func TestIssue346(t *testing.T) {
 	type TestType struct {
 		Key int

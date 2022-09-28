@@ -293,3 +293,25 @@ func TestIssue302(t *testing.T) {
 		t.Run(test.name, test.fn)
 	}
 }
+
+func TestIssue347Writer(t *testing.T) {
+	type TestType struct {
+		Key int
+	}
+
+	b := new(bytes.Buffer)
+	// instantiating with concrete type shouldn't panic
+	_ = parquet.NewGenericWriter[TestType](b)
+
+	// instantiating with schema and interface type parameter shouldn't panic
+	schema := parquet.SchemaOf(TestType{})
+	_ = parquet.NewGenericWriter[any](b, schema)
+
+	defer func() {
+		if r := recover(); r == nil {
+			t.Errorf("instantiating generic buffer without schema and with interface " +
+				"type parameter should panic")
+		}
+	}()
+	_ = parquet.NewGenericWriter[any](b)
+}
