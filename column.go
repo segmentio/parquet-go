@@ -488,7 +488,7 @@ func schemaRepetitionTypeOf(s *format.SchemaElement) format.FieldRepetitionType 
 }
 
 func (c *Column) decompress(compressedPageData []byte, uncompressedPageSize int32) (page *buffer, err error) {
-	page = uncompressedPageBufferPool.get()
+	page = uncompressedPageBufferPool.get(int(uncompressedPageSize))
 	if uncompressedPageSize > 0 {
 		page.resize(int(uncompressedPageSize))
 	}
@@ -628,15 +628,15 @@ func (c *Column) decodeDataPage(header DataPageHeader, numValues int, repetition
 
 	pageKind := pageType.Kind()
 	if pageKind >= 0 && int(pageKind) < len(pageValuesBufferPool) {
-		vbuf = pageValuesBufferPool[pageKind].get()
+		vbuf = pageValuesBufferPool[pageKind].get(int(pageType.EstimateSize(numValues)))
 		defer vbuf.unref()
 		vbuf.resize(int(pageType.EstimateSize(numValues)))
 		pageValues = vbuf.data
 	}
 	if pageKind == ByteArray {
-		obuf = pageOffsetsBufferPool.get()
+		obuf = pageOffsetsBufferPool.get(4 * (numValues + 1))
 		defer obuf.unref()
-		obuf.resize(4 * (numValues + 1))
+		obuf.resize(4 * (numValues + 1)) // jpe - wut?
 		pageOffsets = unsafecast.BytesToUint32(obuf.data)
 	}
 
@@ -707,7 +707,7 @@ func decodeLevelsV2(enc encoding.Encoding, numValues int, data []byte, length in
 }
 
 func decodeLevels(enc encoding.Encoding, numValues int, data []byte) (levels *buffer, err error) {
-	levels = levelsBufferPool.get()
+	levels = levelsBufferPool.get(len(data) * 8)
 	levels.data, err = enc.DecodeLevels(levels.data, data)
 	if err != nil {
 		levels.unref()

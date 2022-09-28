@@ -1,6 +1,8 @@
 package parquet
 
 import (
+	"fmt"
+	"math/bits"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -318,6 +320,11 @@ func (b *buffer) resize(size int) {
 		if bufferSize < minSize {
 			bufferSize = minSize
 		}
+		// put old byte slice back in the pool
+		buffer := newBuffer(b.data)
+		buffer.pool = b.pool
+		buffer.unref() // unref will put it back in the pool
+
 		b.data = make([]byte, size, bufferSize)
 	} else {
 		b.data = b.data[:size]
@@ -326,7 +333,7 @@ func (b *buffer) resize(size int) {
 
 func (b *buffer) clone() (clone *buffer) {
 	if b.pool != nil {
-		clone = b.pool.get()
+		clone = b.pool.get(len(b.data))
 	} else {
 		clone = &buffer{refc: 1}
 	}
@@ -334,14 +341,34 @@ func (b *buffer) clone() (clone *buffer) {
 	return clone
 }
 
+// slice of sync.pools is used for levelled buffering.
+// min size of buffer in each pool is basePoolIncrement*2^i
+//
+// [0] -> 1024
+// [1] -> 2048
+// ...
+// [14] -> 16MB
+// [15] -> 32MB
+const totalPools = 16
+const basePoolIncrement = 1024
+
 type bufferPool struct {
-	pool sync.Pool
+	pool [totalPools]sync.Pool
 }
 
-func (p *bufferPool) get() *buffer {
-	b, _ := p.pool.Get().(*buffer)
+// get returns a buffer from the levelled buffer pool. sz is used to choose the appropriate pool
+func (p *bufferPool) get(sz int) *buffer {
+	b, _ := p.pool[levelledPoolIndex(sz)].Get().(*buffer)
 	if b == nil {
-		b = &buffer{pool: p}
+		// don't allocate less then our min pool size so the buffer will be correctly
+		// placed in the smallest pool on put
+		if sz < basePoolIncrement {
+			sz = basePoolIncrement
+		}
+		b = &buffer{
+			data: make([]byte, 0, sz),
+			pool: p,
+		}
 	} else {
 		b.reset()
 	}
@@ -353,7 +380,28 @@ func (p *bufferPool) put(b *buffer) {
 	if b.pool != p {
 		panic("BUG: buffer returned to a different pool than the one it was allocated from")
 	}
-	p.pool.Put(b)
+	// if this slice is somehow less then our min pool size, just drop it
+	sz := cap(b.data)
+	if sz < basePoolIncrement {
+		return
+	}
+	i := levelledPoolIndex(sz / 2) // divide by 2 to put the buffer in the level below so it will always be large enough
+	p.pool[i].Put(b)
+}
+
+// levelledPoolIndex returns the index of the pool to use for a buffer of size sz. it never returns
+// an index that will panic
+func levelledPoolIndex(sz int) int {
+	i := sz / basePoolIncrement
+	i = 32 - bits.LeadingZeros32(uint32(i)) // log2
+	if i >= totalPools {
+		i = totalPools - 1
+		fmt.Println("this happened", sz)
+	}
+	if i < 0 {
+		i = 0
+	}
+	return i
 }
 
 var (

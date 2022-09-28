@@ -567,7 +567,7 @@ func (f *filePages) readDictionary() error {
 		return err
 	}
 
-	page := compressedPageBufferPool.get()
+	page := compressedPageBufferPool.get(int(header.CompressedPageSize))
 	defer page.unref()
 
 	page.resize(int(header.CompressedPageSize))
@@ -619,7 +619,7 @@ func (f *filePages) readDataPageV2(header *format.PageHeader, page *buffer) (Pag
 }
 
 func (f *filePages) readPage(header *format.PageHeader, reader *bufio.Reader) (*buffer, error) {
-	page := compressedPageBufferPool.get()
+	page := compressedPageBufferPool.get(int(header.CompressedPageSize))
 	defer page.unref()
 
 	page.resize(int(header.CompressedPageSize))
