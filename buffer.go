@@ -219,7 +219,7 @@ func (buf *Buffer) WriteRows(rows []Row) (int, error) {
 
 	for columnIndex, values := range buf.colbuf {
 		if _, err := buf.columns[columnIndex].WriteValues(values); err != nil {
-			// TOOD: an error at this stage will leave the buffer in an invalid
+			// TODO: an error at this stage will leave the buffer in an invalid
 			// state since the row was partially written. Applications are not
 			// expected to continue using the buffer after getting an error,
 			// maybe we can enforce it?

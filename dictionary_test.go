@@ -113,7 +113,7 @@ func testDictionary(t *testing.T, typ parquet.Type, numValues int) {
 
 		lowerBound, upperBound := dict.Bounds(indexes[i:j])
 		if !parquet.DeepEqual(lowerBound, minValue) {
-			t.Errorf("wrong lower bound betwen indexes %d and %d: want=%#v got=%#v", i, j, minValue, lowerBound)
+			t.Errorf("wrong lower bound between indexes %d and %d: want=%#v got=%#v", i, j, minValue, lowerBound)
 		}
 		if !parquet.DeepEqual(upperBound, maxValue) {
 			t.Errorf("wrong upper bound between indexes %d and %d: want=%#v got=%#v", i, j, maxValue, upperBound)
