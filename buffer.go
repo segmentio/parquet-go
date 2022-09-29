@@ -357,12 +357,13 @@ type bufferPool struct {
 
 // get returns a buffer from the levelled buffer pool. sz is used to choose the appropriate pool
 func (p *bufferPool) get(sz int) *buffer {
-	b, _ := p.pool[levelledPoolIndex(sz)].Get().(*buffer)
+	i := levelledPoolIndex(sz)
+	b, _ := p.pool[i].Get().(*buffer)
 	if b == nil {
-		// don't allocate less then our min pool size so the buffer will be correctly
-		// placed in the smallest pool on put
-		if sz < basePoolIncrement {
-			sz = basePoolIncrement
+		// align size to the pool
+		poolSize := basePoolIncrement * (2 ^ i)
+		if poolSize > sz {
+			sz = poolSize
 		}
 		b = &buffer{
 			data: make([]byte, 0, sz),
