@@ -182,11 +182,6 @@ func TestIssue327(t *testing.T) {
 	})
 }
 
-func TestIssue343(t *testing.T) {
-	// must not panic
-	_ = parquet.NewGenericBuffer[any]()
-}
-
 func TestIssue346(t *testing.T) {
 	type TestType struct {
 		Key int
@@ -198,4 +193,25 @@ func TestIssue346(t *testing.T) {
 	data := make([]any, 1)
 	data[0] = TestType{Key: 0}
 	_, _ = buffer.Write(data)
+}
+
+func TestIssue347(t *testing.T) {
+	type TestType struct {
+		Key int
+	}
+
+	// instantiating with concrete type shouldn't panic
+	_ = parquet.NewGenericBuffer[TestType]()
+
+	// instantiating with schema and interface type parameter shouldn't panic
+	schema := parquet.SchemaOf(TestType{})
+	_ = parquet.NewGenericBuffer[any](schema)
+
+	defer func() {
+		if r := recover(); r == nil {
+			t.Errorf("instantiating generic buffer without schema and with interface " +
+				"type parameter should panic")
+		}
+	}()
+	_ = parquet.NewGenericBuffer[any]()
 }
