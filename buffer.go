@@ -348,11 +348,11 @@ func (b *buffer) clone() (clone *buffer) {
 // ...
 // [14] -> 16MB
 // [15] -> 32MB
-const totalPools = 16
+const numPoolBuckets = 16
 const basePoolIncrement = 1024
 
 type bufferPool struct {
-	pool [totalPools]sync.Pool
+	pool [numPoolBuckets]sync.Pool
 }
 
 // get returns a buffer from the levelled buffer pool. sz is used to choose the appropriate pool
@@ -394,8 +394,8 @@ func (p *bufferPool) put(b *buffer) {
 func levelledPoolIndex(sz int) int {
 	i := sz / basePoolIncrement
 	i = 32 - bits.LeadingZeros32(uint32(i)) // log2
-	if i >= totalPools {
-		i = totalPools - 1
+	if i >= numPoolBuckets {
+		i = numPoolBuckets - 1
 	}
 	if i < 0 {
 		i = 0

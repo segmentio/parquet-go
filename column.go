@@ -636,7 +636,7 @@ func (c *Column) decodeDataPage(header DataPageHeader, numValues int, repetition
 	if pageKind == ByteArray {
 		obuf = pageOffsetsBufferPool.get(4 * (numValues + 1))
 		defer obuf.unref()
-		obuf.resize(4 * (numValues + 1)) // jpe - wut?
+		obuf.resize(4 * (numValues + 1))
 		pageOffsets = unsafecast.BytesToUint32(obuf.data)
 	}
 
