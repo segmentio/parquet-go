@@ -1,7 +1,6 @@
 package parquet
 
 import (
-	"fmt"
 	"math/bits"
 	"sort"
 	"sync"
@@ -396,7 +395,6 @@ func levelledPoolIndex(sz int) int {
 	i = 32 - bits.LeadingZeros32(uint32(i)) // log2
 	if i >= totalPools {
 		i = totalPools - 1
-		fmt.Println("this happened", sz)
 	}
 	if i < 0 {
 		i = 0
