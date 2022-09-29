@@ -361,7 +361,7 @@ func (p *bufferPool) get(sz int) *buffer {
 	b, _ := p.pool[i].Get().(*buffer)
 	if b == nil {
 		// align size to the pool
-		poolSize := basePoolIncrement * (2 ^ i)
+		poolSize := basePoolIncrement << i
 		if poolSize > sz {
 			sz = poolSize
 		}
