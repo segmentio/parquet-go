@@ -332,8 +332,13 @@ func (cl *columnLoader) open(file *File, path []string) (*Column, error) {
 			// the page headers to determine which compression and encodings are
 			// applied.
 			for _, encoding := range c.chunks[0].MetaData.Encoding {
-				c.encoding = LookupEncoding(encoding)
-				break
+				if c.encoding == nil {
+					c.encoding = LookupEncoding(encoding)
+				}
+				if encoding != format.Plain && encoding != format.RLE {
+					c.encoding = LookupEncoding(encoding)
+					break
+				}
 			}
 			c.compression = LookupCompressionCodec(c.chunks[0].MetaData.Codec)
 		}
