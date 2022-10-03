@@ -307,29 +307,6 @@ func (b *buffer) unref() {
 	}
 }
 
-func (b *buffer) reset() {
-	b.data = b.data[:0]
-}
-
-func (b *buffer) resize(size int) {
-	if cap(b.data) < size {
-		const pageSize = 4096
-		minSize := 2 * cap(b.data)
-		bufferSize := ((size + (pageSize - 1)) / pageSize) * pageSize
-		if bufferSize < minSize {
-			bufferSize = minSize
-		}
-		// put old byte slice back in the pool
-		buffer := newBuffer(b.data)
-		buffer.pool = b.pool
-		buffer.unref() // unref will put it back in the pool
-
-		b.data = make([]byte, size, bufferSize)
-	} else {
-		b.data = b.data[:size]
-	}
-}
-
 func (b *buffer) clone() (clone *buffer) {
 	if b.pool != nil {
 		clone = b.pool.get(len(b.data))
@@ -341,13 +318,17 @@ func (b *buffer) clone() (clone *buffer) {
 }
 
 // slice of sync.pools is used for levelled buffering.
-// min size of buffer in each pool is basePoolIncrement*2^i
+// the table below shows the pools used for different buffer sizes. the first range of
+// values are the sizes for which the pool will be used on get. the second range
+// are the sizes of the buffers that are placed into the pool on put. when allocating a new buffer
+// from a given pool we always choose the min of the put range to guarantee that all gets
+// will have an adequately sized buffer.
 //
-// [0] -> 1024
-// [1] -> 2048
+// [pool] : <get range>  : <put range>
+// [0]    : 0    -> 1023 : 1024 -> 2047
+// [1]    : 1024 -> 2047 : 2048 -> 4095
+// [2]    : 2048 -> 4095 : 4096 -> 8191
 // ...
-// [14] -> 16MB
-// [15] -> 32MB
 const numPoolBuckets = 16
 const basePoolIncrement = 1024
 
@@ -362,16 +343,17 @@ func (p *bufferPool) get(sz int) *buffer {
 	if b == nil {
 		// align size to the pool
 		poolSize := basePoolIncrement << i
-		if poolSize > sz {
-			sz = poolSize
+		if sz > poolSize { // this can occur when the buffer requested is larger than the largest pool
+			poolSize = sz
 		}
 		b = &buffer{
-			data: make([]byte, 0, sz),
+			data: make([]byte, 0, poolSize),
 			pool: p,
 		}
-	} else {
-		b.reset()
 	}
+	// the above guarantees that the buffer is at least sz bytes long
+	b.data = b.data[:sz]
+
 	b.ref()
 	return b
 }
