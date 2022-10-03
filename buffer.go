@@ -307,16 +307,6 @@ func (b *buffer) unref() {
 	}
 }
 
-func (b *buffer) clone() (clone *buffer) {
-	if b.pool != nil {
-		clone = b.pool.get(len(b.data))
-	} else {
-		clone = &buffer{refc: 1}
-	}
-	clone.data = append(clone.data, b.data...)
-	return clone
-}
-
 // slice of sync.pools is used for levelled buffering.
 // the table below shows the pools used for different buffer sizes. the first range of
 // values are the sizes for which the pool will be used on get. the second range
