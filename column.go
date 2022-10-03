@@ -702,7 +702,7 @@ func decodeLevelsV2(enc encoding.Encoding, numValues int, data []byte, length in
 }
 
 func decodeLevels(enc encoding.Encoding, numValues int, data []byte) (levels *buffer, err error) {
-	levels = levelsBufferPool.get(len(data) * 32)
+	levels = levelsBufferPool.get(numValues)
 	levels.data, err = enc.DecodeLevels(levels.data, data)
 	if err != nil {
 		levels.unref()

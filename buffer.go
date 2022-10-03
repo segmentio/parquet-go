@@ -307,17 +307,15 @@ func (b *buffer) unref() {
 	}
 }
 
-// slice of sync.pools is used for levelled buffering.
-// the table below shows the pools used for different buffer sizes. the first range of
-// values are the sizes for which the pool will be used on get. the second range
-// are the sizes of the buffers that are placed into the pool on put. when allocating a new buffer
-// from a given pool we always choose the min of the put range to guarantee that all gets
-// will have an adequately sized buffer.
+// bufferPool holds a slice of sync.pools used for levelled buffering.
+// the table below shows the pools used for different buffer sizes when both getting
+// and putting a buffer. when allocating a new buffer from a given pool we always choose the
+// min of the put range to guarantee that all gets will have an adequately sized buffer.
 //
-// [pool] : <get range>  : <put range>
-// [0]    : 0    -> 1023 : 1024 -> 2047
-// [1]    : 1024 -> 2047 : 2048 -> 4095
-// [2]    : 2048 -> 4095 : 4096 -> 8191
+// [pool] : <get range>  : <put range>  : <alloc size>
+// [0]    : 0    -> 1023 : 1024 -> 2047 : 1024
+// [1]    : 1024 -> 2047 : 2048 -> 4095 : 2048
+// [2]    : 2048 -> 4095 : 4096 -> 8191 : 4096
 // ...
 const numPoolBuckets = 16
 const basePoolIncrement = 1024
