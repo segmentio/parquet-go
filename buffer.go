@@ -341,9 +341,15 @@ func (p *bufferPool) get(sz int) *buffer {
 			pool: p,
 		}
 	}
-	// the above guarantees that the buffer is at least sz bytes long
+	// if the buffer comes from the largest pool it may not be big enough
+	if cap(b.data) < sz {
+		p.pool[i].Put(b)
+		b = &buffer{
+			data: make([]byte, 0, sz),
+			pool: p,
+		}
+	}
 	b.data = b.data[:sz]
-
 	b.ref()
 	return b
 }
