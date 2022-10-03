@@ -331,18 +331,13 @@ func (cl *columnLoader) open(file *File, path []string) (*Column, error) {
 			// each page of the column should iterate through the pages and read
 			// the page headers to determine which compression and encodings are
 			// applied.
-			switch encodings := c.chunks[0].MetaData.Encoding; len(encodings) {
-			case 1:
-				c.encoding = LookupEncoding(encodings[0])
-			default: // If RLE, Plain, and an additional encoding are present, the additional encoding is the given one
-				for _, encoding := range encodings {
-					if encoding != format.Plain && encoding != format.RLE {
-						c.encoding = LookupEncoding(encoding)
-						break
-					}
-				}
+			for _, encoding := range c.chunks[0].MetaData.Encoding {
 				if c.encoding == nil {
-					c.encoding = LookupEncoding(format.Plain)
+					c.encoding = LookupEncoding(encoding)
+				}
+				if encoding != format.Plain && encoding != format.RLE {
+					c.encoding = LookupEncoding(encoding)
+					break
 				}
 			}
 			c.compression = LookupCompressionCodec(c.chunks[0].MetaData.Codec)
