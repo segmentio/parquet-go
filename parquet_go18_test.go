@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"fmt"
 	"log"
+	"reflect"
+	"testing"
 
 	"github.com/segmentio/parquet-go"
 )
@@ -115,4 +117,50 @@ func ExampleWrite_any() {
 	// map["FirstName":"Luke" "LastName":"Skywalker"]
 	// map["FirstName":"Han" "LastName":"Solo"]
 	// map["FirstName":"R2" "LastName":"D2"]
+}
+
+func TestIssue360(t *testing.T) {
+	type TestType struct {
+		Key []int
+	}
+
+	schema := parquet.SchemaOf(TestType{})
+	buffer := parquet.NewGenericBuffer[any](schema)
+
+	data := make([]any, 1)
+	data[0] = TestType{Key: []int{1}}
+	_, err := buffer.Write(data)
+	if err != nil {
+		fmt.Println("Exiting with error: ", err)
+		return
+	}
+
+	var out bytes.Buffer
+	writer := parquet.NewGenericWriter[any](&out, schema)
+
+	_, err = parquet.CopyRows(writer, buffer.Rows())
+	if err != nil {
+		fmt.Println("Exiting with error: ", err)
+		return
+	}
+	writer.Close()
+
+	br := bytes.NewReader(out.Bytes())
+	rows, _ := parquet.Read[any](br, br.Size())
+
+	expect := []any{
+		map[string]any{
+			"Key": []any{
+				int64(1),
+			},
+		},
+	}
+
+	if !reflect.DeepEqual(rows, expect) {
+		t.Error("rows mismatch")
+
+		for _, row := range rows {
+			t.Logf("%#v", row)
+		}
+	}
 }
