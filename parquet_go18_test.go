@@ -5,7 +5,9 @@ package parquet_test
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"log"
+	"os"
 	"reflect"
 	"testing"
 
@@ -156,11 +158,60 @@ func TestIssue360(t *testing.T) {
 		},
 	}
 
-	if !reflect.DeepEqual(rows, expect) {
+	assertRowsEqual(t, expect, rows)
+}
+
+func TestIssue362ParquetReadFromGenericReaders(t *testing.T) {
+	path := "testdata/dms_test_table_LOAD00000001.parquet"
+	fp, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fp.Close()
+
+	r1 := parquet.NewGenericReader[any](fp)
+	rows1 := make([]any, r1.NumRows())
+	_, err = r1.Read(rows1)
+	if err != nil && err != io.EOF {
+		t.Fatal(err)
+	}
+
+	r2 := parquet.NewGenericReader[any](fp)
+	rows2 := make([]any, r2.NumRows())
+	_, err = r2.Read(rows2)
+	if err != nil && err != io.EOF {
+		t.Fatal(err)
+	}
+}
+
+func TestIssue362ParquetReadFile(t *testing.T) {
+	rows1, err := parquet.ReadFile[any]("testdata/dms_test_table_LOAD00000001.parquet")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows2, err := parquet.ReadFile[any]("testdata/dms_test_table_LOAD00000001.parquet")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertRowsEqual(t, rows1, rows2)
+}
+
+func assertRowsEqual(t *testing.T, rows1, rows2 []any) {
+	if !reflect.DeepEqual(rows1, rows2) {
 		t.Error("rows mismatch")
 
-		for _, row := range rows {
-			t.Logf("%#v", row)
-		}
+		t.Log("want:")
+		logRows(t, rows1)
+
+		t.Log("got:")
+		logRows(t, rows2)
+	}
+}
+
+func logRows(t *testing.T, rows []any) {
+	for _, row := range rows {
+		t.Logf(". %#v\n", row)
 	}
 }
