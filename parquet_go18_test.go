@@ -11,7 +11,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/mitchellh/copystructure"
 	"github.com/segmentio/parquet-go"
 )
 
@@ -183,24 +182,6 @@ func TestIssue362ParquetReadFromGenericReaders(t *testing.T) {
 	if err != nil && err != io.EOF {
 		t.Fatal(err)
 	}
-}
-
-func TestIssue362ParquetReadFileWithCopyingResults(t *testing.T) {
-	rows1, err := parquet.ReadFile[any]("testdata/dms_test_table_LOAD00000001.parquet")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	for i, row := range rows1 {
-		rows1[i] = copystructure.Must(copystructure.Copy(row))
-	}
-
-	rows2, err := parquet.ReadFile[any]("testdata/dms_test_table_LOAD00000001.parquet")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	assertRowsEqual(t, rows1, rows2)
 }
 
 func TestIssue362ParquetReadFile(t *testing.T) {

@@ -671,7 +671,7 @@ func assignValue(dst reflect.Value, src Value) error {
 				return nil
 			}
 		default:
-			val = reflect.ValueOf(string(v))
+			val = reflect.ValueOf(copyBytes(v))
 		}
 
 	case FixedLenByteArray:
@@ -695,7 +695,7 @@ func assignValue(dst reflect.Value, src Value) error {
 				return nil
 			}
 		default:
-			val = reflect.ValueOf(v)
+			val = reflect.ValueOf(copyBytes(v))
 		}
 	}
 
