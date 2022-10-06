@@ -121,6 +121,67 @@ func ExampleWrite_any() {
 	// map["FirstName":"R2" "LastName":"D2"]
 }
 
+func ExampleSearch() {
+	type Row struct{ FirstName, LastName string }
+
+	buf := new(bytes.Buffer)
+	// The column being searched must be sorted for search to work.
+	rows := []Row{
+		{FirstName: "C", LastName: "3PO"},
+		{FirstName: "Han", LastName: "Solo"},
+		{FirstName: "Leia", LastName: "Organa"},
+		{FirstName: "Luke", LastName: "Skywalker"},
+		{FirstName: "R2", LastName: "D2"},
+	}
+	// The tiny page buffer size ensures we get multiple pages out of the example above.
+	w := parquet.NewGenericWriter[Row](buf, parquet.PageBufferSize(20), parquet.WriteBufferSize(0))
+	// Need to write 1 row at a time here as writing many at once disregards PageBufferSize option.
+	for _, row := range rows {
+		_, err := w.Write([]Row{row})
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+	err := w.Close()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	reader := bytes.NewReader(buf.Bytes())
+	file, err := parquet.OpenFile(reader, reader.Size())
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Search is scoped to a single RowGroup/ColumnChunk
+	rowGroup := file.RowGroups()[0]
+	firstNameColChunk := rowGroup.ColumnChunks()[0]
+
+	found := parquet.Search(firstNameColChunk.ColumnIndex(), parquet.ValueOf("Luke"), parquet.ByteArrayType)
+	offsetIndex := firstNameColChunk.OffsetIndex()
+	fmt.Printf("numPages: %d\n", offsetIndex.NumPages())
+	fmt.Printf("result found in page: %d\n", found)
+	if found < offsetIndex.NumPages() {
+		r := parquet.NewGenericReader[Row](file)
+		defer r.Close()
+		// Seek to the first row in the page the result was found
+		r.SeekToRow(offsetIndex.FirstRowIndex(found))
+		result := make([]Row, 2)
+		_, _ = r.Read(result)
+		// Leia is in index 0 for the page.
+		for _, row := range result {
+			if row.FirstName == "Luke" {
+				fmt.Printf("%q\n", row)
+			}
+		}
+	}
+
+	// Output:
+	// numPages: 3
+	// result found in page: 1
+	// {"Luke" "Skywalker"}
+}
+
 func TestIssue360(t *testing.T) {
 	type TestType struct {
 		Key []int
