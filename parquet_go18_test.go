@@ -125,7 +125,9 @@ func ExampleSearch() {
 	type Row struct{ FirstName, LastName string }
 
 	buf := new(bytes.Buffer)
-	// The column being searched must be sorted for search to work.
+	// The column being searched should be sorted to avoid a full scan of the
+	// column. See the section of the readme on sorting for how to sort on
+	// insertion into the parquet file using parquet.SortingColumns
 	rows := []Row{
 		{FirstName: "C", LastName: "3PO"},
 		{FirstName: "Han", LastName: "Solo"},
