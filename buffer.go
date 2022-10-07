@@ -380,11 +380,7 @@ func levelledPoolIndex(sz int) int {
 }
 
 var (
-	levelsBufferPool           bufferPool
-	compressedPageBufferPool   bufferPool
-	uncompressedPageBufferPool bufferPool
-	pageOffsetsBufferPool      bufferPool
-	pageValuesBufferPool       [8]bufferPool
+	bytesPool bufferPool
 )
 
 type bufferedPage struct {
