@@ -380,7 +380,7 @@ func levelledPoolIndex(sz int) int {
 }
 
 var (
-	bytesPool bufferPool
+	buffers bufferPool
 )
 
 type bufferedPage struct {
