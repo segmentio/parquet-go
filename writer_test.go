@@ -2,6 +2,7 @@ package parquet_test
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"os"
 	"os/exec"
@@ -680,5 +681,38 @@ func TestWriterResetWithBloomFilters(t *testing.T) {
 
 	if err := writer.Close(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestWriterGenerateStatistics(t *testing.T) {
+	type Test struct {
+		Value int32 `parquet:"value"`
+	}
+
+	// write test file with page stats enabled
+	b := bytes.NewBuffer(nil)
+	w := parquet.NewWriter(b,
+		parquet.DataPageStatistics(true),
+	)
+	for i := 13; i <= 42; i++ {
+		if err := w.Write(&Test{Value: int32(i)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// verify that the page stats show up in the file
+	r, err := parquet.OpenFile(bytes.NewReader(b.Bytes()), int64(b.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	statistics := r.Metadata().RowGroups[0].Columns[0].MetaData.Statistics
+	if v := binary.LittleEndian.Uint32(statistics.MinValue); v != 13 {
+		t.Errorf("MinValue is expected to be 13, got %d", v)
+	}
+	if v := binary.LittleEndian.Uint32(statistics.MaxValue); v != 42 {
+		t.Errorf("MaxValue is expected to be 42, got %d", v)
 	}
 }
