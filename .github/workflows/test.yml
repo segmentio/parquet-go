@@ -30,6 +30,9 @@ jobs:
     - name: Download Dependencies
       run: go mod download
 
+    - name: Which CPU are we running on?
+      run: cpuid
+
     - name: Run Tests
       run: go test -race -tags=${{ matrix.tags }} ./...
 
