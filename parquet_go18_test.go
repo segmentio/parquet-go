@@ -261,6 +261,43 @@ func TestIssue362ParquetReadFile(t *testing.T) {
 	assertRowsEqual(t, rows1, rows2)
 }
 
+func TestIssue368(t *testing.T) {
+	for i := 0; i < 5; i++ {
+		f, err := os.Open("testdata/issue368.parquet")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		info, err := f.Stat()
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		pf, err := parquet.OpenFile(f, info.Size())
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		reader := parquet.NewGenericReader[any](pf)
+
+		trs := make([]any, 1)
+		for {
+			_, err := reader.Read(trs)
+			if err != nil {
+				break
+			}
+		}
+
+		if err := reader.Close(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := f.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func assertRowsEqual(t *testing.T, rows1, rows2 []any) {
 	if !reflect.DeepEqual(rows1, rows2) {
 		t.Error("rows mismatch")

@@ -700,7 +700,7 @@ func reconstructFuncOfGroup(columnIndex int16, node Node) (int16, reconstructFun
 	return columnIndex, func(value reflect.Value, levels levels, row Row) (Row, error) {
 		var err error
 
-		if value.Kind() == reflect.Interface && value.IsNil() {
+		if value.Kind() == reflect.Interface {
 			value.Set(reflect.MakeMap(reflect.TypeOf((map[string]interface{})(nil))))
 			value = value.Elem()
 		}
