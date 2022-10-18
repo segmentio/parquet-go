@@ -75,6 +75,10 @@ func (d *byteArrayDictionary) lookupString(indexes []int32, rows sparse.Array) {
 	// with the garbage collector and result in writing pointers to free objects
 	// to the output.
 	//
+	// This command was used to trigger the problem:
+	//
+	//	GOMAXPROCS=8 go test -run TestIssue368 -count 10
+	//
 	// https://github.com/segmentio/parquet-go/issues/368
 	//
 	//dictionaryLookupByteArrayString(d.offsets, d.values, indexes, rows).check()
