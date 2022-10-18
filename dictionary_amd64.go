@@ -3,6 +3,8 @@
 package parquet
 
 import (
+	"unsafe"
+
 	"github.com/segmentio/parquet-go/internal/unsafecast"
 	"github.com/segmentio/parquet-go/sparse"
 )
@@ -69,7 +71,17 @@ func (d *doubleDictionary) lookup(indexes []int32, rows sparse.Array) {
 
 func (d *byteArrayDictionary) lookupString(indexes []int32, rows sparse.Array) {
 	checkLookupIndexBounds(indexes, rows)
-	dictionaryLookupByteArrayString(d.offsets, d.values, indexes, rows).check()
+	// TODO: this optimization is disabled for now because it appears to race
+	// with the garbage collector and result in writing pointers to free objects
+	// to the output.
+	//
+	// https://github.com/segmentio/parquet-go/issues/368
+	//
+	//dictionaryLookupByteArrayString(d.offsets, d.values, indexes, rows).check()
+	for i, j := range indexes {
+		v := d.index(int(j))
+		*(*string)(rows.Index(i)) = *(*string)(unsafe.Pointer(&v))
+	}
 }
 
 func (d *fixedLenByteArrayDictionary) lookupString(indexes []int32, rows sparse.Array) {
