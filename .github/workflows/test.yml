@@ -31,7 +31,7 @@ jobs:
       run: go mod download
 
     - name: Which CPU are we running on?
-      run: cpuid
+      run: cat /proc/cpuinfo
 
     - name: Run Tests
       run: go test -race -tags=${{ matrix.tags }} ./...
