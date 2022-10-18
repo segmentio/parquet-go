@@ -290,7 +290,43 @@ func TestIssue368(t *testing.T) {
 	}
 }
 
-func assertRowsEqual(t *testing.T, rows1, rows2 []any) {
+func TestIssue377(t *testing.T) {
+	type People struct {
+		Name string
+		Age  int
+	}
+
+	type Nested struct {
+		P  []People
+		F  string
+		GF string
+	}
+	row1 := Nested{P: []People{
+		{
+			Name: "Bob",
+			Age:  10,
+		}}}
+	ods := []Nested{
+		row1,
+	}
+	buf := new(bytes.Buffer)
+	w := parquet.NewGenericWriter[Nested](buf)
+	_, err := w.Write(ods)
+	if err != nil {
+		t.Fatal("write error: ", err)
+	}
+	w.Close()
+
+	file := bytes.NewReader(buf.Bytes())
+	rows, err := parquet.Read[Nested](file, file.Size())
+	if err != nil {
+		t.Fatal("read error: ", err)
+	}
+
+	assertRowsEqual(t, rows, ods)
+}
+
+func assertRowsEqual[T any](t *testing.T, rows1, rows2 []T) {
 	if !reflect.DeepEqual(rows1, rows2) {
 		t.Error("rows mismatch")
 
@@ -302,7 +338,7 @@ func assertRowsEqual(t *testing.T, rows1, rows2 []any) {
 	}
 }
 
-func logRows(t *testing.T, rows []any) {
+func logRows[T any](t *testing.T, rows []T) {
 	for _, row := range rows {
 		t.Logf(". %#v\n", row)
 	}
