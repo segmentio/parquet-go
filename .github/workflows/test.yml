@@ -30,14 +30,11 @@ jobs:
     - name: Download Dependencies
       run: go mod download
 
-    - name: Which CPU are we running on?
-      run: cat /proc/cpuinfo
-
     - name: Run Tests
-      run: go test -race -tags=${{ matrix.tags }} -run TestIssue368
+      run: go test -race -tags=${{ matrix.tags }} ./...
 
-    #- name: Run Benchmarks
-    #  run: go test -short -tags=${{ matrix.tags }} -run '^$' -bench . -benchtime 1x ./...
+    - name: Run Benchmarks
+      run: go test -short -tags=${{ matrix.tags }} -run '^$' -bench . -benchtime 1x ./...
 
   format:
     runs-on: ubuntu-latest

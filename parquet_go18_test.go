@@ -262,38 +262,30 @@ func TestIssue362ParquetReadFile(t *testing.T) {
 }
 
 func TestIssue368(t *testing.T) {
-	for i := 0; i < 5; i++ {
-		f, err := os.Open("testdata/issue368.parquet")
+	f, err := os.Open("testdata/issue368.parquet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	info, err := f.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pf, err := parquet.OpenFile(f, info.Size())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	reader := parquet.NewGenericReader[any](pf)
+	defer reader.Close()
+
+	trs := make([]any, 1)
+	for {
+		_, err := reader.Read(trs)
 		if err != nil {
-			t.Fatal(err)
-		}
-
-		info, err := f.Stat()
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		pf, err := parquet.OpenFile(f, info.Size())
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		reader := parquet.NewGenericReader[any](pf)
-
-		trs := make([]any, 1)
-		for {
-			_, err := reader.Read(trs)
-			if err != nil {
-				break
-			}
-		}
-
-		if err := reader.Close(); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := f.Close(); err != nil {
-			t.Fatal(err)
+			break
 		}
 	}
 }
