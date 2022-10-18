@@ -261,6 +261,35 @@ func TestIssue362ParquetReadFile(t *testing.T) {
 	assertRowsEqual(t, rows1, rows2)
 }
 
+func TestIssue368(t *testing.T) {
+	f, err := os.Open("testdata/issue368.parquet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	info, err := f.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pf, err := parquet.OpenFile(f, info.Size())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	reader := parquet.NewGenericReader[any](pf)
+	defer reader.Close()
+
+	trs := make([]any, 1)
+	for {
+		_, err := reader.Read(trs)
+		if err != nil {
+			break
+		}
+	}
+}
+
 func TestIssue377(t *testing.T) {
 	type People struct {
 		Name string
