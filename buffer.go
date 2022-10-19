@@ -457,7 +457,7 @@ func Retain(page Page) {
 // Release is a helper function to decrement the reference counter of pages
 // backed by memory which can be granularly managed by the application.
 //
-// Usage of this is optional and with Retain, is intended to allow finer grain
+// Usage of this is optional and with Retain, is intended to allow finer grained
 // memory management in the application, at the expense of potentially causing
 // panics if the page is used after its reference count has reached zero. Most
 // programs should be able to rely on automated memory management provided by
