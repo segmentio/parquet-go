@@ -446,6 +446,10 @@ func bufferUnref(buf *buffer) {
 // able to rely on automated memory management provided by the Go garbage
 // collector instead.
 //
+// The function should be called when a page lifetime is about to be shared
+// between multiple goroutines or layers of an application, and the program
+// wants to express "sharing ownership" of the page.
+//
 // Calling this function on pages that do not embed a reference counter does
 // nothing.
 func Retain(page Page) {
@@ -457,11 +461,16 @@ func Retain(page Page) {
 // Release is a helper function to decrement the reference counter of pages
 // backed by memory which can be granularly managed by the application.
 //
-// Usage of this is optional and with Retain, is intended to allow finer grain
-// memory management in the application, at the expense of potentially causing
-// panics if the page is used after its reference count has reached zero. Most
-// programs should be able to rely on automated memory management provided by
-// the Go garbage collector instead.
+// Usage of this function is optional and with Retain, is intended to allow
+// finer grain memory management in the application, at the expense of
+// potentially causing panics if the page is used after its reference count has
+// reached zero. Most programs should be able to rely on automated memory
+// management provided by the Go garbage collector instead.
+//
+// The function should be called to return a page to the internal buffer pool,
+// when a goroutine "releases ownership" it acquired either by being the single
+// owner (e.g. capturing the return value from a ReadPage call) or having gotten
+// shared ownership by calling Retain.
 //
 // Calling this function on pages that do not embed a reference counter does
 // nothing.
