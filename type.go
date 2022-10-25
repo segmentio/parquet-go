@@ -245,15 +245,6 @@ var convertedTypes = [...]deprecated.ConvertedType{
 	21: deprecated.Interval,
 }
 
-func defaultAssignValue(val reflect.Value, dst reflect.Value, src Value) error {
-	if !val.IsValid() || !val.Type().AssignableTo(dst.Type()) {
-		return fmt.Errorf("cannot assign parquet value of type %s to go value of type %s", src.Kind().String(), dst.Type())
-	}
-
-	dst.Set(val)
-	return nil
-}
-
 type booleanType struct{}
 
 func (t booleanType) String() string                           { return "BOOLEAN" }
@@ -302,7 +293,8 @@ func (t booleanType) AssignValue(dst reflect.Value, src Value) error {
 		return nil
 	}
 
-	return defaultAssignValue(reflect.ValueOf(v), dst, src)
+	dst.Set(reflect.ValueOf(v))
+	return nil
 }
 
 type int32Type struct{}
@@ -356,7 +348,8 @@ func (t int32Type) AssignValue(dst reflect.Value, src Value) error {
 		return nil
 	}
 
-	return defaultAssignValue(reflect.ValueOf(v), dst, src)
+	dst.Set(reflect.ValueOf(v))
+	return nil
 }
 
 type int64Type struct{}
@@ -410,7 +403,8 @@ func (t int64Type) AssignValue(dst reflect.Value, src Value) error {
 		return nil
 	}
 
-	return defaultAssignValue(reflect.ValueOf(v), dst, src)
+	dst.Set(reflect.ValueOf(v))
+	return nil
 }
 
 type int96Type struct{}
@@ -455,8 +449,8 @@ func (t int96Type) Decode(dst encoding.Values, src []byte, enc encoding.Encoding
 }
 
 func (t int96Type) AssignValue(dst reflect.Value, src Value) error {
-	v := src.Int96()
-	return defaultAssignValue(reflect.ValueOf(v), dst, src)
+	dst.Set(reflect.ValueOf(src.Int96()))
+	return nil
 }
 
 type floatType struct{}
@@ -507,7 +501,8 @@ func (t floatType) AssignValue(dst reflect.Value, src Value) error {
 		return nil
 	}
 
-	return defaultAssignValue(reflect.ValueOf(v), dst, src)
+	dst.Set(reflect.ValueOf(v))
+	return nil
 }
 
 type doubleType struct{}
@@ -558,7 +553,8 @@ func (t doubleType) AssignValue(dst reflect.Value, src Value) error {
 		return nil
 	}
 
-	return defaultAssignValue(reflect.ValueOf(v), dst, src)
+	dst.Set(reflect.ValueOf(v))
+	return nil
 }
 
 type byteArrayType struct{}
@@ -618,7 +614,8 @@ func (t byteArrayType) AssignValue(dst reflect.Value, src Value) error {
 		val = reflect.ValueOf(string(v))
 	}
 
-	return defaultAssignValue(val, dst, src)
+	dst.Set(val)
+	return nil
 }
 
 type fixedLenByteArrayType struct{ length int }
@@ -700,7 +697,8 @@ func (t fixedLenByteArrayType) AssignValue(dst reflect.Value, src Value) error {
 		val = reflect.ValueOf(copyBytes(v))
 	}
 
-	return defaultAssignValue(val, dst, src)
+	dst.Set(val)
+	return nil
 }
 
 // BE128 stands for "big-endian 128 bits". This type is used as a special case
