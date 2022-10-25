@@ -1208,7 +1208,6 @@ func (t *enumType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding
 }
 
 func (t *enumType) AssignValue(dst reflect.Value, src Value) error {
-	// TODO: Is this correct?
 	return ByteArrayType.AssignValue(dst, src)
 }
 
@@ -1276,7 +1275,6 @@ func (t *jsonType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding
 }
 
 func (t *jsonType) AssignValue(dst reflect.Value, src Value) error {
-	// TODO: Is this correct?
 	return ByteArrayType.AssignValue(dst, src)
 }
 
@@ -1461,9 +1459,6 @@ func (t *timeType) useInt32() bool {
 }
 
 func (t *timeType) useInt64() bool {
-	// TODO: Write test covering this change. Not even sure if this is correct.
-	//       Nothing in this struct refers to nanos.
-	//return t.Unit.Micros != nil || t.Unit.Nanos != nil
 	return t.Unit.Micros != nil
 }
 
