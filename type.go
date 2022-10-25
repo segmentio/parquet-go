@@ -201,8 +201,6 @@ var (
 	FloatType     Type = floatType{}
 	DoubleType    Type = doubleType{}
 	ByteArrayType Type = byteArrayType{}
-	// TODO: Rename this
-	BE128Type Type = fixedLenByteArrayType{length: 16}
 )
 
 // In the current parquet version supported by this library, only type-defined
@@ -767,7 +765,7 @@ func (t be128Type) Decode(dst encoding.Values, src []byte, enc encoding.Encoding
 }
 
 func (t be128Type) AssignValue(dst reflect.Value, src Value) error {
-	return BE128Type.AssignValue(dst, src)
+	return fixedLenByteArrayType{length: 16}.AssignValue(dst, src)
 }
 
 // FixedLenByteArrayType constructs a type for fixed-length values of the given
@@ -1143,7 +1141,7 @@ func (t *uuidType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding
 }
 
 func (t *uuidType) AssignValue(dst reflect.Value, src Value) error {
-	return BE128Type.AssignValue(dst, src)
+	return fixedLenByteArrayType{length: 16}.AssignValue(dst, src)
 }
 
 // Enum constructs a leaf node with a logical type representing enumerations.
