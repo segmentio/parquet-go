@@ -121,8 +121,7 @@ func binarySearch(index ColumnIndex, value Value, cmp func(Value, Value) int) in
 		}
 	}
 
-	// If value may exist somewhere in the column
-	// e.g. we got to idx 0 or idx n-1
+	// last page check, if it wasn't explicitly found above
 	if curIdx < n {
 
 		// check current nextIdx for value
