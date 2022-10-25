@@ -75,33 +75,46 @@ func Find(index ColumnIndex, value Value, cmp func(Value, Value) int) int {
 
 func binarySearch(index ColumnIndex, value Value, cmp func(Value, Value) int) int {
 	n := index.NumPages()
-	i := 0
-	j := n
+	curIdx := 0
+	topIdx := n
 
-	for (j - i) > 1 {
-		k := ((j - i) / 2) + i
-		c := cmp(value, index.MinValue(k))
+	// while there's at least one more page to check
+	for (topIdx - curIdx) > 1 {
+
+		// nextIdx is halfway between curIdx and topIdx
+		nextIdx := ((topIdx - curIdx) / 2) + curIdx
+
+		smallerThanMin := cmp(value, index.MinValue(nextIdx))
+		greaterThanMax := cmp(value, index.MaxValue(nextIdx))
 
 		switch {
-		case c < 0:
-			j = k
-		case c > 0:
-			i = k
+		// search below this page
+		case smallerThanMin < 0:
+			topIdx = nextIdx
+		// search above this page
+		case greaterThanMax > 0:
+			curIdx = nextIdx
+		// if present at all, value will be in this page
 		default:
-			return k
+			return nextIdx
 		}
 	}
 
-	if i < n {
-		min := index.MinValue(i)
-		max := index.MaxValue(i)
+	// If value may exist somewhere in the column
+	// e.g. we got to idx 0 or idx n-1
+	if curIdx < n {
 
-		if cmp(value, min) < 0 || cmp(max, value) < 0 {
-			i = n
+		// check current nextIdx for value
+		min := index.MinValue(curIdx)
+		max := index.MaxValue(curIdx)
+
+		if cmp(value, min) < 0 || cmp(value, max) > 0 {
+			// value is not in the column, mark outside the column
+			curIdx = n
 		}
 	}
 
-	return i
+	return curIdx
 }
 
 func linearSearch(index ColumnIndex, value Value, cmp func(Value, Value) int) int {
