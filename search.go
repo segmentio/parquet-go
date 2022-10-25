@@ -94,6 +94,27 @@ func binarySearch(index ColumnIndex, value Value, cmp func(Value, Value) int) in
 		// search above this page
 		case greaterThanMax > 0:
 			curIdx = nextIdx
+		case smallerThanMin == 0:
+			// this case is hit when winValue == value of nextIdx
+			// we must check below this index to find if there's
+			// another page before this.
+			// e.g. searching for first page 3 is in:
+			// [1,2,3]
+			// [3,4,5]
+			// [6,7,8]
+
+			// if the page proceeding this has a maxValue matching the value we're
+			// searching, continue the search.
+			// otherwise, we can return early
+			//
+			// cases covered by else block
+			// if cmp(value, index.MaxValue(nextIdx-1)) < 0: the value is only in this page
+			// if cmp(value, index.MaxValue(nextIdx-1)) > 0: we've got a sorting problem with overlapping pages
+			if nextIdx-1 > curIdx && cmp(value, index.MaxValue(nextIdx-1)) == 0 {
+				topIdx = nextIdx
+			} else {
+				return nextIdx
+			}
 		// if present at all, value will be in this page
 		default:
 			return nextIdx
