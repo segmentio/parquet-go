@@ -338,10 +338,10 @@ func (t int32Type) Decode(dst encoding.Values, src []byte, enc encoding.Encoding
 }
 
 func (t int32Type) AssignValue(dst reflect.Value, src Value) error {
-	v := int64(src.Int32())
+	v := src.Int32()
 	switch dst.Kind() {
 	case reflect.Int8, reflect.Int16, reflect.Int32:
-		dst.SetInt(v)
+		dst.SetInt(int64(v))
 		return nil
 	case reflect.Uint8, reflect.Uint16, reflect.Uint32:
 		dst.SetUint(uint64(v))
@@ -449,7 +449,8 @@ func (t int96Type) Decode(dst encoding.Values, src []byte, enc encoding.Encoding
 }
 
 func (t int96Type) AssignValue(dst reflect.Value, src Value) error {
-	dst.Set(reflect.ValueOf(src.Int96()))
+	v := src.Int96()
+	dst.Set(reflect.ValueOf(v))
 	return nil
 }
 
