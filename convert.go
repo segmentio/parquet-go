@@ -170,7 +170,7 @@ func (c *conversion) convertFuncOfRepeated(tgtIdx int16, node Node) (int16, conv
 }
 
 // Convert here satisfies the Conversion interface, and does the actual work to
-// convert betweeen the source and target Rows.
+// convert between the source and target Rows.
 func (c *conversion) Convert(target, source Row) (Row, error) {
 	buf := c.getBuffer()
 	defer c.putBuffer(buf)
