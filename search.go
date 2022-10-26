@@ -81,18 +81,17 @@ func binarySearch(index ColumnIndex, value Value, cmp func(Value, Value) int) in
 	// while there's at least one more page to check
 	for (topIdx - curIdx) > 1 {
 
-		// nextIdx is halfway between curIdx and topIdx
+		// nextIdx is set to halfway between curIdx and topIdx
 		nextIdx := ((topIdx - curIdx) / 2) + curIdx
 
 		smallerThanMin := cmp(value, index.MinValue(nextIdx))
-		greaterThanMax := cmp(value, index.MaxValue(nextIdx))
 
 		switch {
-		// search below this page
+		// search below pages[nextIdx]
 		case smallerThanMin < 0:
 			topIdx = nextIdx
-		// search above this page
-		case greaterThanMax > 0:
+		// search pages[nextIdx] and above
+		case smallerThanMin > 0:
 			curIdx = nextIdx
 		case smallerThanMin == 0:
 			// this case is hit when winValue == value of nextIdx
@@ -110,26 +109,26 @@ func binarySearch(index ColumnIndex, value Value, cmp func(Value, Value) int) in
 			// cases covered by else block
 			// if cmp(value, index.MaxValue(nextIdx-1)) < 0: the value is only in this page
 			// if cmp(value, index.MaxValue(nextIdx-1)) > 0: we've got a sorting problem with overlapping pages
-			if nextIdx-1 > curIdx && cmp(value, index.MaxValue(nextIdx-1)) == 0 {
+			//
+			// bounds check not needed for nextIdx-1 because nextIdx is guaranteed to be at least curIdx + 1
+			// line 82 & 85 above
+			if cmp(value, index.MaxValue(nextIdx-1)) == 0 {
 				topIdx = nextIdx
 			} else {
 				return nextIdx
 			}
-		// if present at all, value will be in this page
-		default:
-			return nextIdx
 		}
 	}
 
 	// last page check, if it wasn't explicitly found above
 	if curIdx < n {
 
-		// check current nextIdx for value
+		// check pages[curIdx] for value
 		min := index.MinValue(curIdx)
 		max := index.MaxValue(curIdx)
 
+		// if value is not in pages[curIdx], then it's not in this columnChunk
 		if cmp(value, min) < 0 || cmp(value, max) > 0 {
-			// value is not in the column, mark outside the column
 			curIdx = n
 		}
 	}
