@@ -745,12 +745,15 @@ func reconstructFuncOfLeaf(columnIndex int16, node Node) (int16, reconstructFunc
 			return row, fmt.Errorf("no values found in parquet row for column %d", columnIndex)
 		}
 
+		var err error
 		src := row[0]
+
 		if src.IsNull() {
 			value.Set(reflect.Zero(value.Type()))
-			return row[1:], nil
+		} else {
+			err = typ.AssignValue(value, src)
 		}
 
-		return row[1:], typ.AssignValue(value, src)
+		return row[1:], err
 	}
 }
