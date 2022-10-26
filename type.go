@@ -598,7 +598,6 @@ func (t byteArrayType) Decode(dst encoding.Values, src []byte, enc encoding.Enco
 }
 
 func (t byteArrayType) AssignValue(dst reflect.Value, src Value) error {
-	var val reflect.Value
 	v := src.ByteArray()
 	switch dst.Kind() {
 	case reflect.String:
@@ -609,11 +608,9 @@ func (t byteArrayType) AssignValue(dst reflect.Value, src Value) error {
 			dst.SetBytes(copyBytes(v))
 			return nil
 		}
-		// TODO: What to do here? This code preserves the current implementation.
-	default:
-		val = reflect.ValueOf(string(v))
 	}
 
+	val := reflect.ValueOf(string(v))
 	dst.Set(val)
 	return nil
 }
@@ -671,7 +668,6 @@ func (t fixedLenByteArrayType) Decode(dst encoding.Values, src []byte, enc encod
 }
 
 func (t fixedLenByteArrayType) AssignValue(dst reflect.Value, src Value) error {
-	var val reflect.Value
 	v := src.ByteArray()
 	switch dst.Kind() {
 	case reflect.Array:
@@ -686,17 +682,14 @@ func (t fixedLenByteArrayType) AssignValue(dst reflect.Value, src Value) error {
 			copy(d, v)
 			return nil
 		}
-		// TODO: What to do here? This code preserves the current implementation.
 	case reflect.Slice:
 		if dst.Type().Elem().Kind() == reflect.Uint8 {
 			dst.SetBytes(copyBytes(v))
 			return nil
 		}
-		// TODO: What to do here? This code preserves the current implementation.
-	default:
-		val = reflect.ValueOf(copyBytes(v))
 	}
 
+	val := reflect.ValueOf(copyBytes(v))
 	dst.Set(val)
 	return nil
 }
