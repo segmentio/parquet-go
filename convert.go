@@ -176,8 +176,8 @@ func (c *conversion) Convert(target, source Row) (Row, error) {
 		c.convertFunc = c.makeConvertFunc(c.schema)
 	}
 
-	buffer := c.getBuffer()
-	defer c.putBuffer(buffer)
+	buf := c.getBuffer()
+	defer c.putBuffer(buf)
 
 	// Build conversion buffer
 	for _, value := range source {
@@ -186,14 +186,14 @@ func (c *conversion) Convert(target, source Row) (Row, error) {
 		if targetIndex >= 0 {
 			value.kind = ^int8(c.targetColumnKinds[targetIndex])
 			value.columnIndex = ^targetIndex
-			buffer.columns[targetIndex] = append(buffer.columns[targetIndex], value)
+			buf.columns[targetIndex] = append(buf.columns[targetIndex], value)
 		}
 	}
 
 	// Fill empty columns
-	for i, values := range buffer.columns {
+	for i, values := range buf.columns {
 		if len(values) == 0 {
-			buffer.columns[i] = append(buffer.columns[i], Value{
+			buf.columns[i] = append(buf.columns[i], Value{
 				kind:        ^int8(c.targetColumnKinds[i]),
 				columnIndex: ^int16(i),
 			})
@@ -201,7 +201,7 @@ func (c *conversion) Convert(target, source Row) (Row, error) {
 	}
 
 	// Construct row from buffer
-	return c.convertFunc(target, levels{}, buffer)
+	return c.convertFunc(target, levels{}, buf)
 }
 
 func (c *conversion) Column(i int) int {
