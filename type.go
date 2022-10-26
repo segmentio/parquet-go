@@ -188,8 +188,8 @@ type Type interface {
 	// encoding methods.
 	Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error)
 
-	// Assign the value of a source Parquet value into a destination Go value.
-	// Returns an error if conversion is not possible.
+	// Assigns a Parquet value to a Go value. Returns an error if conversion is
+	// not possible.
 	AssignValue(dst reflect.Value, src Value) error
 }
 
