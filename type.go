@@ -1726,7 +1726,32 @@ func (t *timestampType) AssignValue(dst reflect.Value, src Value) error {
 }
 
 func (t *timestampType) ConvertValue(val Value, typ Type) (Value, error) {
-	return Int64Type.ConvertValue(val, typ)
+	var sourceTs *format.TimestampType
+	if typ.LogicalType() != nil {
+		sourceTs = typ.LogicalType().Timestamp
+	}
+
+	// Ignore when source is not a timestamp (i.e., Integer)
+	if sourceTs == nil {
+		return val, nil
+	}
+
+	source := timeUnitDuration(sourceTs.Unit)
+	target := timeUnitDuration(t.Unit)
+	converted := val.Int64() * source.Nanoseconds() / target.Nanoseconds()
+
+	return ValueOf(converted), nil
+}
+
+func timeUnitDuration(unit format.TimeUnit) time.Duration {
+	switch {
+	case unit.Millis != nil:
+		return time.Millisecond
+	case unit.Micros != nil:
+		return time.Microsecond
+	default:
+		return time.Nanosecond
+	}
 }
 
 // List constructs a node of LIST logical type.
