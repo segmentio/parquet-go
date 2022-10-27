@@ -50,7 +50,7 @@ type Conversion interface {
 }
 
 type conversion struct {
-	targetColumnKinds   []Kind
+	targetColumnTypes   []Type
 	targetToSourceIndex []int16
 	sourceToTargetIndex []int16
 	convertFunc         convertFunc
@@ -59,18 +59,19 @@ type conversion struct {
 }
 
 type conversionBuffer struct {
+	types   []Type
 	columns [][]Value
 }
 
 func (c *conversion) getBuffer() *conversionBuffer {
 	b, _ := c.buffers.Get().(*conversionBuffer)
 	if b == nil {
-		n := len(c.targetColumnKinds)
-		columns, values := make([][]Value, n), make([]Value, n)
+		n := len(c.targetColumnTypes)
+		columns, values, types := make([][]Value, n), make([]Value, n), make([]Type, n)
 		for i := range columns {
 			columns[i] = values[i : i : i+1]
 		}
-		b = &conversionBuffer{columns: columns}
+		b = &conversionBuffer{types: types, columns: columns}
 	}
 	return b
 }
@@ -123,8 +124,18 @@ func (c *conversion) convertFuncOfLeaf(tgtIdx int16, node Node) (int16, convertF
 			value = src.columns[tgtIdx][0]
 			src.columns[tgtIdx] = src.columns[tgtIdx][1:]
 		}
-		value.kind = ^int8(c.targetColumnKinds[tgtIdx])
+		value.kind = ^int8(c.targetColumnTypes[tgtIdx].Kind())
 		value.columnIndex = ^tgtIdx
+
+		var err error
+		srcType := src.types[tgtIdx]
+		if srcType != nil {
+			value, err = node.Type().ConvertValue(value, srcType)
+			if err != nil {
+				return nil, err
+			}
+		}
+
 		tgt = append(tgt, value)
 		return tgt, nil
 	}
@@ -180,8 +191,10 @@ func (c *conversion) Convert(target, source Row) (Row, error) {
 		sourceIndex := value.Column()
 		targetIndex := c.sourceToTargetIndex[sourceIndex]
 		if targetIndex >= 0 {
-			value.kind = ^int8(c.targetColumnKinds[targetIndex])
+			typ := c.targetColumnTypes[targetIndex]
+			value.kind = ^int8(typ.Kind())
 			value.columnIndex = ^targetIndex
+			buf.types[targetIndex] = typ
 			buf.columns[targetIndex] = append(buf.columns[targetIndex], value)
 		}
 	}
@@ -190,7 +203,7 @@ func (c *conversion) Convert(target, source Row) (Row, error) {
 	for i, values := range buf.columns {
 		if len(values) == 0 {
 			buf.columns[i] = append(buf.columns[i], Value{
-				kind:        ^int8(c.targetColumnKinds[i]),
+				kind:        ^int8(c.targetColumnTypes[i].Kind()),
 				columnIndex: ^int16(i),
 			})
 		}
@@ -237,7 +250,7 @@ func Convert(to, from Node) (conv Conversion, err error) {
 	sourceMapping, sourceColumns := columnMappingOf(from)
 
 	columnIndexBuffer := make([]int16, len(targetColumns)+len(sourceColumns))
-	targetColumnKinds := make([]Kind, len(targetColumns))
+	targetColumnTypes := make([]Type, len(targetColumns))
 	targetToSourceIndex := columnIndexBuffer[:len(targetColumns)]
 	sourceToTargetIndex := columnIndexBuffer[len(targetColumns):]
 
@@ -245,7 +258,7 @@ func Convert(to, from Node) (conv Conversion, err error) {
 		sourceColumn := sourceMapping.lookup(path)
 		targetColumn := targetMapping.lookup(path)
 		targetToSourceIndex[i] = sourceColumn.columnIndex
-		targetColumnKinds[i] = targetColumn.node.Type().Kind()
+		targetColumnTypes[i] = targetColumn.node.Type()
 	}
 
 	for i, path := range sourceColumns {
@@ -270,7 +283,7 @@ func Convert(to, from Node) (conv Conversion, err error) {
 	}
 
 	c := &conversion{
-		targetColumnKinds:   targetColumnKinds,
+		targetColumnTypes:   targetColumnTypes,
 		targetToSourceIndex: targetToSourceIndex,
 		sourceToTargetIndex: sourceToTargetIndex,
 		schema:              schema,
