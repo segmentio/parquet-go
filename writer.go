@@ -657,7 +657,7 @@ func (w *writer) writeRowGroup(rowGroupSchema *Schema, rowGroupSortingColumns []
 }
 
 func (w *writer) WriteRows(rows []Row) (int, error) {
-	return w.writeRows(len(rows), func(i, j int) (int, error) {
+	return w.writeRows(len(rows), func(start, end int) (int, error) {
 		defer func() {
 			for i, values := range w.values {
 				clearValues(values)
@@ -669,7 +669,7 @@ func (w *writer) WriteRows(rows []Row) (int, error) {
 		// partially functional state. Applications are not expected to continue
 		// using the writer after getting an error, but maybe we could ensure that
 		// we are preventing further use as well?
-		for _, row := range rows[i:j] {
+		for _, row := range rows[start:end] {
 			for _, value := range row {
 				columnIndex := value.Column()
 				w.values[columnIndex] = append(w.values[columnIndex], value)
@@ -684,7 +684,7 @@ func (w *writer) WriteRows(rows []Row) (int, error) {
 			}
 		}
 
-		return j - i, nil
+		return end - start, nil
 	})
 }
 
