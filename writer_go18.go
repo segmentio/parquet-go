@@ -149,7 +149,7 @@ func (w *GenericWriter[T]) Reset(output io.Writer) {
 
 func (w *GenericWriter[T]) Write(rows []T) (int, error) {
 	return w.base.writer.writeRows(len(rows), func(i, j int) (int, error) {
-		n, err := w.write(w, rows[i:j])
+		n, err := w.write(w, rows[i:j:j])
 		if err != nil {
 			return n, err
 		}
