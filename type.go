@@ -290,10 +290,10 @@ func (t booleanType) AssignValue(dst reflect.Value, src Value) error {
 	switch dst.Kind() {
 	case reflect.Bool:
 		dst.SetBool(v)
-		return nil
+	default:
+		dst.Set(reflect.ValueOf(v))
 	}
 
-	dst.Set(reflect.ValueOf(v))
 	return nil
 }
 
@@ -342,13 +342,12 @@ func (t int32Type) AssignValue(dst reflect.Value, src Value) error {
 	switch dst.Kind() {
 	case reflect.Int8, reflect.Int16, reflect.Int32:
 		dst.SetInt(int64(v))
-		return nil
 	case reflect.Uint8, reflect.Uint16, reflect.Uint32:
 		dst.SetUint(uint64(v))
-		return nil
+	default:
+		dst.Set(reflect.ValueOf(v))
 	}
 
-	dst.Set(reflect.ValueOf(v))
 	return nil
 }
 
@@ -397,13 +396,12 @@ func (t int64Type) AssignValue(dst reflect.Value, src Value) error {
 	switch dst.Kind() {
 	case reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Int:
 		dst.SetInt(v)
-		return nil
 	case reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uint, reflect.Uintptr:
 		dst.SetUint(uint64(v))
-		return nil
+	default:
+		dst.Set(reflect.ValueOf(v))
 	}
 
-	dst.Set(reflect.ValueOf(v))
 	return nil
 }
 
@@ -499,10 +497,10 @@ func (t floatType) AssignValue(dst reflect.Value, src Value) error {
 	switch dst.Kind() {
 	case reflect.Float32, reflect.Float64:
 		dst.SetFloat(float64(v))
-		return nil
+	default:
+		dst.Set(reflect.ValueOf(v))
 	}
 
-	dst.Set(reflect.ValueOf(v))
 	return nil
 }
 
@@ -551,10 +549,10 @@ func (t doubleType) AssignValue(dst reflect.Value, src Value) error {
 	switch dst.Kind() {
 	case reflect.Float32, reflect.Float64:
 		dst.SetFloat(v)
-		return nil
+	default:
+		dst.Set(reflect.ValueOf(v))
 	}
 
-	dst.Set(reflect.ValueOf(v))
 	return nil
 }
 
@@ -603,14 +601,13 @@ func (t byteArrayType) AssignValue(dst reflect.Value, src Value) error {
 	switch dst.Kind() {
 	case reflect.String:
 		dst.SetString(string(v))
-		return nil
 	case reflect.Slice:
 		dst.SetBytes(copyBytes(v))
-		return nil
+	default:
+		val := reflect.ValueOf(string(v))
+		dst.Set(val)
 	}
 
-	val := reflect.ValueOf(string(v))
-	dst.Set(val)
 	return nil
 }
 
