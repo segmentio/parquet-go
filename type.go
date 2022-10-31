@@ -605,10 +605,8 @@ func (t byteArrayType) AssignValue(dst reflect.Value, src Value) error {
 		dst.SetString(string(v))
 		return nil
 	case reflect.Slice:
-		if dst.Type().Elem().Kind() == reflect.Uint8 {
-			dst.SetBytes(copyBytes(v))
-			return nil
-		}
+		dst.SetBytes(copyBytes(v))
+		return nil
 	}
 
 	val := reflect.ValueOf(string(v))
