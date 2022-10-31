@@ -682,3 +682,32 @@ func TestWriterResetWithBloomFilters(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestWriterMaxRowsPerRowGroup(t *testing.T) {
+	output := new(bytes.Buffer)
+	writer := parquet.NewWriter(output, parquet.MaxRowsPerRowGroup(10))
+
+	for i := 0; i < 100; i++ {
+		err := writer.Write(struct{ FirstName, LastName string }{
+			FirstName: "0123456789"[i%10 : i%10+1],
+			LastName:  "foo",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	f, err := parquet.OpenFile(bytes.NewReader(output.Bytes()), int64(output.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rowGroups := f.RowGroups()
+	if len(rowGroups) != 10 {
+		t.Errorf("wrong number of row groups in parquet file: want=10 got=%d", len(rowGroups))
+	}
+}

@@ -315,3 +315,40 @@ func TestIssue347Writer(t *testing.T) {
 	}()
 	_ = parquet.NewGenericWriter[any](b)
 }
+
+func TestIssue375(t *testing.T) {
+	type Row struct{ FirstName, LastName string }
+
+	output := new(bytes.Buffer)
+	writer := parquet.NewGenericWriter[Row](output, parquet.MaxRowsPerRowGroup(10))
+
+	rows := make([]Row, 100)
+	for i := range rows {
+		rows[i] = Row{
+			FirstName: "0123456789"[i%10 : i%10+1],
+			LastName:  "foo",
+		}
+	}
+
+	n, err := writer.Write(rows)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != len(rows) {
+		t.Fatal("wrong number of rows written:", n)
+	}
+
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	f, err := parquet.OpenFile(bytes.NewReader(output.Bytes()), int64(output.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rowGroups := f.RowGroups()
+	if len(rowGroups) != 10 {
+		t.Errorf("wrong number of row groups in parquet file: want=10 got=%d", len(rowGroups))
+	}
+}
