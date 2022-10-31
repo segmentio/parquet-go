@@ -682,10 +682,8 @@ func (t fixedLenByteArrayType) AssignValue(dst reflect.Value, src Value) error {
 			return nil
 		}
 	case reflect.Slice:
-		if dst.Type().Elem().Kind() == reflect.Uint8 {
-			dst.SetBytes(copyBytes(v))
-			return nil
-		}
+		dst.SetBytes(copyBytes(v))
+		return nil
 	}
 
 	val := reflect.ValueOf(copyBytes(v))
