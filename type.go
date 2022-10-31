@@ -1327,7 +1327,6 @@ func (t *bsonType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding
 }
 
 func (t *bsonType) AssignValue(dst reflect.Value, src Value) error {
-	// TODO: Is this correct?
 	return ByteArrayType.AssignValue(dst, src)
 }
 
