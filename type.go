@@ -447,7 +447,11 @@ func (t int96Type) Decode(dst encoding.Values, src []byte, enc encoding.Encoding
 }
 
 func (t int96Type) AssignValue(dst reflect.Value, src Value) error {
-	v := src.Int96()
+	var v deprecated.Int96
+	if !src.IsNull() {
+		v = src.Int96()
+	}
+
 	dst.Set(reflect.ValueOf(v))
 	return nil
 }
