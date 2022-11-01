@@ -383,7 +383,14 @@ func (v Value) Int32() int32 { return int32(v.u64) }
 func (v Value) Int64() int64 { return int64(v.u64) }
 
 // Int96 returns v as a int96, assuming the underlying type is INT96.
-func (v Value) Int96() deprecated.Int96 { return makeInt96(v.ByteArray()) }
+func (v Value) Int96() deprecated.Int96 {
+	var val deprecated.Int96
+	if !v.IsNull() {
+		val = makeInt96(v.ByteArray())
+	}
+
+	return val
+}
 
 // Float returns v as a float32, assuming the underlying type is FLOAT.
 func (v Value) Float() float32 { return math.Float32frombits(uint32(v.u64)) }
