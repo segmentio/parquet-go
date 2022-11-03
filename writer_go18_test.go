@@ -352,3 +352,42 @@ func TestIssue375(t *testing.T) {
 		t.Errorf("wrong number of row groups in parquet file: want=10 got=%d", len(rowGroups))
 	}
 }
+
+func TestGenericSetKeyValueMetadata(t *testing.T) {
+	testKey := "test-key"
+	testValue := "test-value"
+
+	type Row struct{ FirstName, LastName string }
+
+	output := new(bytes.Buffer)
+	writer := parquet.NewGenericWriter[Row](output, parquet.MaxRowsPerRowGroup(10))
+
+	rows := []Row{
+		{FirstName: "First", LastName: "Last"},
+	}
+
+	_, err := writer.Write(rows)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	writer.SetKeyValueMetadata(testKey, testValue)
+
+	err = writer.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	f, err := parquet.OpenFile(bytes.NewReader(output.Bytes()), int64(output.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	value, ok := f.Lookup(testKey)
+	if !ok {
+		t.Fatalf("key/value metadata should have included %q", testKey)
+	}
+	if value != testValue {
+		t.Errorf("expected %q, got %q", testValue, value)
+	}
+}
