@@ -188,9 +188,15 @@ type Type interface {
 	// encoding methods.
 	Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error)
 
-	// Assigns a Parquet value to a Go value. Returns an error if conversion is
-	// not possible.
+	// Assigns a Parquet value to a Go value. Returns an error if assignment is
+	// not possible. The source Value must be an expected logical type for the
+	// receiver. This can be accomplished using ConvertValue.
 	AssignValue(dst reflect.Value, src Value) error
+
+	// Convert a Parquet Value of the given Type into a Parquet Value that is
+	// compatible with the receiver. The returned Value is suitable to be passed
+	// to AssignValue.
+	ConvertValue(val Value, typ Type) (Value, error)
 }
 
 var (
@@ -297,6 +303,10 @@ func (t booleanType) AssignValue(dst reflect.Value, src Value) error {
 	return nil
 }
 
+func (t booleanType) ConvertValue(val Value, typ Type) (Value, error) {
+	return val, checkTypeKindEqual(t, typ)
+}
+
 type int32Type struct{}
 
 func (t int32Type) String() string                           { return "INT32" }
@@ -349,6 +359,10 @@ func (t int32Type) AssignValue(dst reflect.Value, src Value) error {
 	}
 
 	return nil
+}
+
+func (t int32Type) ConvertValue(val Value, typ Type) (Value, error) {
+	return val, checkTypeKindEqual(t, typ)
 }
 
 type int64Type struct{}
@@ -405,6 +419,10 @@ func (t int64Type) AssignValue(dst reflect.Value, src Value) error {
 	return nil
 }
 
+func (t int64Type) ConvertValue(val Value, typ Type) (Value, error) {
+	return val, checkTypeKindEqual(t, typ)
+}
+
 type int96Type struct{}
 
 func (t int96Type) String() string { return "INT96" }
@@ -450,6 +468,10 @@ func (t int96Type) AssignValue(dst reflect.Value, src Value) error {
 	v := src.Int96()
 	dst.Set(reflect.ValueOf(v))
 	return nil
+}
+
+func (t int96Type) ConvertValue(val Value, typ Type) (Value, error) {
+	return val, checkTypeKindEqual(t, typ)
 }
 
 type floatType struct{}
@@ -504,6 +526,10 @@ func (t floatType) AssignValue(dst reflect.Value, src Value) error {
 	return nil
 }
 
+func (t floatType) ConvertValue(val Value, typ Type) (Value, error) {
+	return val, checkTypeKindEqual(t, typ)
+}
+
 type doubleType struct{}
 
 func (t doubleType) String() string                           { return "DOUBLE" }
@@ -554,6 +580,10 @@ func (t doubleType) AssignValue(dst reflect.Value, src Value) error {
 	}
 
 	return nil
+}
+
+func (t doubleType) ConvertValue(val Value, typ Type) (Value, error) {
+	return val, checkTypeKindEqual(t, typ)
 }
 
 type byteArrayType struct{}
@@ -609,6 +639,10 @@ func (t byteArrayType) AssignValue(dst reflect.Value, src Value) error {
 	}
 
 	return nil
+}
+
+func (t byteArrayType) ConvertValue(val Value, typ Type) (Value, error) {
+	return val, checkTypeKindEqual(t, typ)
 }
 
 type fixedLenByteArrayType struct{ length int }
@@ -688,6 +722,10 @@ func (t fixedLenByteArrayType) AssignValue(dst reflect.Value, src Value) error {
 	return nil
 }
 
+func (t fixedLenByteArrayType) ConvertValue(val Value, typ Type) (Value, error) {
+	return val, checkTypeKindEqual(t, typ)
+}
+
 // BE128 stands for "big-endian 128 bits". This type is used as a special case
 // for fixed-length byte arrays of 16 bytes, which are commonly used to
 // represent columns of random unique identifiers such as UUIDs.
@@ -751,6 +789,10 @@ func (t be128Type) Decode(dst encoding.Values, src []byte, enc encoding.Encoding
 
 func (t be128Type) AssignValue(dst reflect.Value, src Value) error {
 	return fixedLenByteArrayType{length: 16}.AssignValue(dst, src)
+}
+
+func (t be128Type) ConvertValue(val Value, typ Type) (Value, error) {
+	return fixedLenByteArrayType{length: 16}.ConvertValue(val, typ)
 }
 
 // FixedLenByteArrayType constructs a type for fixed-length values of the given
@@ -967,6 +1009,14 @@ func (t *intType) AssignValue(dst reflect.Value, src Value) error {
 	}
 }
 
+func (t *intType) ConvertValue(val Value, typ Type) (Value, error) {
+	if t.BitWidth == 64 {
+		return Int64Type.ConvertValue(val, typ)
+	} else {
+		return Int32Type.ConvertValue(val, typ)
+	}
+}
+
 // Decimal constructs a leaf node of decimal logical type with the given
 // scale, precision, and underlying type.
 //
@@ -1068,6 +1118,10 @@ func (t *stringType) AssignValue(dst reflect.Value, src Value) error {
 	return ByteArrayType.AssignValue(dst, src)
 }
 
+func (t *stringType) ConvertValue(val Value, typ Type) (Value, error) {
+	return ByteArrayType.ConvertValue(val, typ)
+}
+
 // UUID constructs a leaf node of UUID logical type.
 //
 // https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#uuid
@@ -1127,6 +1181,10 @@ func (t *uuidType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding
 
 func (t *uuidType) AssignValue(dst reflect.Value, src Value) error {
 	return fixedLenByteArrayType{length: 16}.AssignValue(dst, src)
+}
+
+func (t *uuidType) ConvertValue(val Value, typ Type) (Value, error) {
+	return fixedLenByteArrayType{length: 16}.ConvertValue(val, typ)
 }
 
 // Enum constructs a leaf node with a logical type representing enumerations.
@@ -1196,6 +1254,10 @@ func (t *enumType) AssignValue(dst reflect.Value, src Value) error {
 	return ByteArrayType.AssignValue(dst, src)
 }
 
+func (t *enumType) ConvertValue(val Value, typ Type) (Value, error) {
+	return ByteArrayType.ConvertValue(val, typ)
+}
+
 // JSON constructs a leaf node of JSON logical type.
 //
 // https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#json
@@ -1261,6 +1323,10 @@ func (t *jsonType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding
 
 func (t *jsonType) AssignValue(dst reflect.Value, src Value) error {
 	return ByteArrayType.AssignValue(dst, src)
+}
+
+func (t *jsonType) ConvertValue(val Value, typ Type) (Value, error) {
+	return ByteArrayType.ConvertValue(val, typ)
 }
 
 // BSON constructs a leaf node of BSON logical type.
@@ -1330,6 +1396,10 @@ func (t *bsonType) AssignValue(dst reflect.Value, src Value) error {
 	return ByteArrayType.AssignValue(dst, src)
 }
 
+func (t *bsonType) ConvertValue(val Value, typ Type) (Value, error) {
+	return ByteArrayType.ConvertValue(val, typ)
+}
+
 // Date constructs a leaf node of DATE logical type.
 //
 // https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#date
@@ -1391,6 +1461,10 @@ func (t *dateType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding
 
 func (t *dateType) AssignValue(dst reflect.Value, src Value) error {
 	return Int32Type.AssignValue(dst, src)
+}
+
+func (t *dateType) ConvertValue(val Value, typ Type) (Value, error) {
+	return Int32Type.ConvertValue(val, typ)
 }
 
 // TimeUnit represents units of time in the parquet type system.
@@ -1573,6 +1647,14 @@ func (t *timeType) AssignValue(dst reflect.Value, src Value) error {
 	}
 }
 
+func (t *timeType) ConvertValue(val Value, typ Type) (Value, error) {
+	if t.useInt32() {
+		return Int32Type.ConvertValue(val, typ)
+	} else {
+		return Int64Type.ConvertValue(val, typ)
+	}
+}
+
 // Timestamp constructs of leaf node of TIMESTAMP logical type.
 //
 // https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#timestamp
@@ -1643,6 +1725,10 @@ func (t *timestampType) AssignValue(dst reflect.Value, src Value) error {
 	return Int64Type.AssignValue(dst, src)
 }
 
+func (t *timestampType) ConvertValue(val Value, typ Type) (Value, error) {
+	return Int64Type.ConvertValue(val, typ)
+}
+
 // List constructs a node of LIST logical type.
 //
 // https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#lists
@@ -1708,6 +1794,10 @@ func (t *listType) Decode(_ encoding.Values, _ []byte, _ encoding.Encoding) (enc
 
 func (t *listType) AssignValue(reflect.Value, Value) error {
 	panic("cannot assign value to a parquet LIST type")
+}
+
+func (t *listType) ConvertValue(Value, Type) (Value, error) {
+	panic("cannot convert value to a parquet LIST type")
 }
 
 // Map constructs a node of MAP logical type.
@@ -1782,6 +1872,10 @@ func (t *mapType) AssignValue(reflect.Value, Value) error {
 	panic("cannot assign value to a parquet MAP type")
 }
 
+func (t *mapType) ConvertValue(Value, Type) (Value, error) {
+	panic("cannot convert value to a parquet MAP type")
+}
+
 type nullType format.NullType
 
 func (t *nullType) String() string { return (*format.NullType)(t).String() }
@@ -1836,6 +1930,10 @@ func (t *nullType) AssignValue(reflect.Value, Value) error {
 	return nil
 }
 
+func (t *nullType) ConvertValue(val Value, _ Type) (Value, error) {
+	return val, nil
+}
+
 type groupType struct{}
 
 func (groupType) String() string { return "group" }
@@ -1880,6 +1978,10 @@ func (groupType) AssignValue(reflect.Value, Value) error {
 	panic("cannot assign value to a parquet group")
 }
 
+func (t groupType) ConvertValue(Value, Type) (Value, error) {
+	panic("cannot convert value to a parquet group")
+}
+
 func (groupType) Length() int { return 0 }
 
 func (groupType) EstimateSize(int) int64 { return 0 }
@@ -1891,3 +1993,10 @@ func (groupType) PhysicalType() *format.Type { return nil }
 func (groupType) LogicalType() *format.LogicalType { return nil }
 
 func (groupType) ConvertedType() *deprecated.ConvertedType { return nil }
+
+func checkTypeKindEqual(to, from Type) error {
+	if to.Kind() != from.Kind() {
+		return fmt.Errorf("cannot convert from parquet value of type %s to %s", from, to)
+	}
+	return nil
+}
