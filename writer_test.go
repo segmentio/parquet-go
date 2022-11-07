@@ -711,3 +711,88 @@ func TestWriterMaxRowsPerRowGroup(t *testing.T) {
 		t.Errorf("wrong number of row groups in parquet file: want=10 got=%d", len(rowGroups))
 	}
 }
+
+func TestSetKeyValueMetadata(t *testing.T) {
+	testKey := "test-key"
+	testValue := "test-value"
+
+	type testStruct struct {
+		A string `parquet:"a,dict"`
+	}
+
+	schema := parquet.SchemaOf(&testStruct{})
+
+	b := bytes.NewBuffer(nil)
+	w := parquet.NewWriter(
+		b,
+		schema,
+	)
+
+	err := w.Write(&testStruct{A: "test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	w.SetKeyValueMetadata(testKey, testValue)
+
+	err = w.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	f, err := parquet.OpenFile(bytes.NewReader(b.Bytes()), int64(b.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	value, ok := f.Lookup(testKey)
+	if !ok {
+		t.Fatalf("key/value metadata should have included %q", testKey)
+	}
+	if value != testValue {
+		t.Errorf("expected %q, got %q", testValue, value)
+	}
+}
+
+func TestSetKeyValueMetadataOverwritesExisting(t *testing.T) {
+	testKey := "test-key"
+	testValue := "test-value"
+
+	type testStruct struct {
+		A string `parquet:"a,dict"`
+	}
+
+	schema := parquet.SchemaOf(&testStruct{})
+
+	b := bytes.NewBuffer(nil)
+	w := parquet.NewWriter(
+		b,
+		schema,
+		parquet.KeyValueMetadata(testKey, "original-value"),
+	)
+
+	err := w.Write(&testStruct{A: "test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	w.SetKeyValueMetadata(testKey, testValue)
+
+	err = w.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	f, err := parquet.OpenFile(bytes.NewReader(b.Bytes()), int64(b.Len()))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	value, ok := f.Lookup(testKey)
+	if !ok {
+		t.Fatalf("key/value metadata should have included %q", testKey)
+	}
+	if value != testValue {
+		t.Errorf("expected %q, got %q", testValue, value)
+	}
+}

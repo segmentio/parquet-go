@@ -210,6 +210,29 @@ func (w *Writer) ReadRowsFrom(rows RowReader) (written int64, err error) {
 // The returned value will be nil if no schema has yet been configured on w.
 func (w *Writer) Schema() *Schema { return w.schema }
 
+// SetKeyValueMetadata sets a key/value pair in the Parquet file metadata.
+//
+// Keys are assumed to be unique, if the same key is repeated multiple times the
+// last value is retained. While the parquet format does not require unique keys,
+// this design decision was made to optimize for the most common use case where
+// applications leverage this extension mechanism to associate single values to
+// keys. This may create incompatibilities with other parquet libraries, or may
+// cause some key/value pairs to be lost when open parquet files written with
+// repeated keys. We can revisit this decision if it ever becomes a blocker.
+func (w *Writer) SetKeyValueMetadata(key, value string) {
+	for i, kv := range w.writer.metadata {
+		if kv.Key == key {
+			kv.Value = value
+			w.writer.metadata[i] = kv
+			return
+		}
+	}
+	w.writer.metadata = append(w.writer.metadata, format.KeyValue{
+		Key:   key,
+		Value: value,
+	})
+}
+
 type writer struct {
 	buffer  *bufio.Writer
 	writer  offsetTrackingWriter
