@@ -150,3 +150,39 @@ func benchmarkGenericReader[Row generator[Row]](b *testing.B) {
 		})
 	})
 }
+
+func TestIssue400(t *testing.T) {
+	type B struct {
+		Name string
+	}
+	type A struct {
+		B []B `parquet:",optional"`
+	}
+
+	b := new(bytes.Buffer)
+	w := parquet.NewGenericWriter[A](b)
+	expect := []A{
+		{
+			B: []B{
+				{
+					Name: "foo",
+				},
+			},
+		},
+	}
+	_, err := w.Write(expect)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = w.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	bufReader := bytes.NewReader(b.Bytes())
+	r := parquet.NewGenericReader[A](bufReader)
+	values := make([]A, 2)
+	_, err = r.Read(values)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
