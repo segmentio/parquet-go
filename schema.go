@@ -15,6 +15,14 @@ import (
 	"github.com/segmentio/parquet-go/encoding"
 )
 
+// NXYZ_NOTE(todd,benj): We changed the struct tag names from "parquet" to "segmentio", to let us
+// incrementally roll out in our code.  Otherwise "parquet" conflicts with the xitongsys package.
+const (
+	tagName      = "segmentio"
+	keyTagName   = "segmentio-key"
+	valueTagName = "segmentio-value"
+)
+
 // Schema represents a parquet schema created from a Go value.
 //
 // Schema implements the Node interface to represent the root node of a parquet
@@ -324,9 +332,9 @@ func structNodeOf(t reflect.Type) *structNode {
 	for i := range fields {
 		field := structField{name: fields[i].Name, index: fields[i].Index}
 		field.Node = makeNodeOf(fields[i].Type, fields[i].Name, []string{
-			fields[i].Tag.Get("parquet"),
-			fields[i].Tag.Get("parquet-key"),
-			fields[i].Tag.Get("parquet-value"),
+			fields[i].Tag.Get(tagName),
+			fields[i].Tag.Get(keyTagName),
+			fields[i].Tag.Get(valueTagName),
 		})
 		s.fields[i] = field
 	}
@@ -340,7 +348,7 @@ func structFieldsOf(t reflect.Type) []reflect.StructField {
 	for i := range fields {
 		f := &fields[i]
 
-		if tag := f.Tag.Get("parquet"); tag != "" {
+		if tag := f.Tag.Get(tagName); tag != "" {
 			name, _ := split(tag)
 			if name != "" {
 				f.Name = name
@@ -354,7 +362,7 @@ func structFieldsOf(t reflect.Type) []reflect.StructField {
 func appendStructFields(t reflect.Type, fields []reflect.StructField, index []int, offset uintptr) []reflect.StructField {
 	for i, n := 0, t.NumField(); i < n; i++ {
 		f := t.Field(i)
-		if tag := f.Tag.Get("parquet"); tag != "" {
+		if tag := f.Tag.Get(tagName); tag != "" {
 			name, _ := split(tag)
 			if tag != "-," && name == "-" {
 				continue
@@ -467,7 +475,7 @@ func decimalFixedLenByteArraySize(precision int) int {
 }
 
 func forEachStructTagOption(sf reflect.StructField, do func(t reflect.Type, option, args string)) {
-	if tag := sf.Tag.Get("parquet"); tag != "" {
+	if tag := sf.Tag.Get(tagName); tag != "" {
 		_, tag = split(tag) // skip the field name
 		for tag != "" {
 			option := ""
