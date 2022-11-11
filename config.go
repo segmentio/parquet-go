@@ -412,6 +412,9 @@ func WriteBufferSize(size int) WriterOption {
 //
 // Defaults to unlimited.
 func MaxRowsPerRowGroup(numRows int64) WriterOption {
+	if numRows <= 0 {
+		numRows = DefaultMaxRowsPerRowGroup
+	}
 	return writerOption(func(config *WriterConfig) { config.MaxRowsPerRowGroup = numRows })
 }
 
