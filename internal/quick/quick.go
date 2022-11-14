@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"reflect"
 	"strings"
+	"time"
 )
 
 var DefaultConfig = Config{
@@ -70,6 +71,18 @@ func (c *Config) Check(f interface{}) error {
 type MakeValueFunc func(reflect.Value, *rand.Rand)
 
 func MakeValueFuncOf(t reflect.Type) MakeValueFunc {
+	switch t {
+	case reflect.TypeOf(time.Time{}):
+		return func(v reflect.Value, r *rand.Rand) {
+			// TODO: This is a hack to support the matching of times in a precision
+			// other than nanosecond by generating times rounded to the second. A
+			// better solution would be to update columns types to add a compare
+			// function.
+			sec := r.Int63n(2524608000) // 2050-01-01
+			v.Set(reflect.ValueOf(time.Unix(sec, 0).UTC()))
+		}
+	}
+
 	switch t.Kind() {
 	case reflect.Bool:
 		return func(v reflect.Value, r *rand.Rand) {

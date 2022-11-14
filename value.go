@@ -8,10 +8,12 @@ import (
 	"math"
 	"reflect"
 	"strconv"
+	"time"
 	"unsafe"
 
 	"github.com/google/uuid"
 	"github.com/segmentio/parquet-go/deprecated"
+	"github.com/segmentio/parquet-go/format"
 	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
@@ -158,6 +160,9 @@ func copyValues(dst ValueWriter, src ValueReader, buf []Value) (written int64, e
 //
 // The function panics if the Go value cannot be represented in parquet.
 func ValueOf(v interface{}) Value {
+	k := Kind(-1)
+	t := reflect.TypeOf(v)
+
 	switch value := v.(type) {
 	case nil:
 		return Value{}
@@ -165,10 +170,9 @@ func ValueOf(v interface{}) Value {
 		return makeValueBytes(FixedLenByteArray, value[:])
 	case deprecated.Int96:
 		return makeValueInt96(value)
+	case time.Time:
+		k = Int64
 	}
-
-	k := Kind(-1)
-	t := reflect.TypeOf(v)
 
 	switch t.Kind() {
 	case reflect.Bool:
@@ -197,10 +201,30 @@ func ValueOf(v interface{}) Value {
 		panic("cannot create parquet value from go value of type " + t.String())
 	}
 
-	return makeValue(k, reflect.ValueOf(v))
+	return makeValue(k, nil, reflect.ValueOf(v))
 }
 
-func makeValue(k Kind, v reflect.Value) Value {
+func makeValue(k Kind, lt *format.LogicalType, v reflect.Value) Value {
+	switch v.Type() {
+	case reflect.TypeOf(time.Time{}):
+		unit := Nanosecond.TimeUnit()
+		if lt != nil && lt.Timestamp != nil {
+			unit = lt.Timestamp.Unit
+		}
+
+		t := v.Interface().(time.Time)
+		var val int64
+		switch {
+		case unit.Millis != nil:
+			val = t.UnixMilli()
+		case unit.Micros != nil:
+			val = t.UnixMicro()
+		default:
+			val = t.UnixNano()
+		}
+		return makeValueInt64(val)
+	}
+
 	switch k {
 	case Boolean:
 		return makeValueBoolean(v.Bool())

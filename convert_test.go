@@ -3,6 +3,7 @@ package parquet_test
 import (
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/segmentio/parquet-go"
 )
@@ -309,3 +310,91 @@ func TestConvert(t *testing.T) {
 
 func newInt64(i int64) *int64    { return &i }
 func newString(s string) *string { return &s }
+
+func TestConvertTimestamp(t *testing.T) {
+	now := time.Unix(42, 0)
+	ms := now.UnixMilli()
+	us := now.UnixMicro()
+	ns := now.UnixNano()
+
+	msType := parquet.Timestamp(parquet.Millisecond).Type()
+	msVal := parquet.ValueOf(ms)
+	if msVal.Int64() != ms {
+		t.Errorf("converted value mismatch:\nwant = %+v\ngot  = %+v", ms, msVal.Int64())
+	}
+
+	usType := parquet.Timestamp(parquet.Microsecond).Type()
+	usVal := parquet.ValueOf(us)
+	if usVal.Int64() != us {
+		t.Errorf("converted value mismatch:\nwant = %+v\ngot  = %+v", us, usVal.Int64())
+	}
+
+	nsType := parquet.Timestamp(parquet.Nanosecond).Type()
+	nsVal := parquet.ValueOf(ns)
+	if nsVal.Int64() != ns {
+		t.Errorf("converted value mismatch:\nwant = %+v\ngot  = %+v", ns, nsVal.Int64())
+	}
+
+	var timestampConversionTests = [...]struct {
+		scenario  string
+		fromType  parquet.Type
+		fromValue parquet.Value
+		toType    parquet.Type
+		expected  int64
+	}{
+		{
+			scenario:  "micros to nanos",
+			fromType:  usType,
+			fromValue: usVal,
+			toType:    nsType,
+			expected:  ns,
+		},
+		{
+			scenario:  "millis to nanos",
+			fromType:  msType,
+			fromValue: msVal,
+			toType:    nsType,
+			expected:  ns,
+		},
+		{
+			scenario:  "nanos to micros",
+			fromType:  nsType,
+			fromValue: nsVal,
+			toType:    usType,
+			expected:  us,
+		},
+		{
+			scenario:  "nanos to nanos",
+			fromType:  nsType,
+			fromValue: nsVal,
+			toType:    nsType,
+			expected:  ns,
+		},
+		{
+			scenario:  "int64 to nanos",
+			fromType:  parquet.Int64Type,
+			fromValue: nsVal,
+			toType:    nsType,
+			expected:  ns,
+		},
+		{
+			scenario:  "int64 to int64",
+			fromType:  parquet.Int64Type,
+			fromValue: nsVal,
+			toType:    parquet.Int64Type,
+			expected:  ns,
+		},
+	}
+
+	for _, test := range timestampConversionTests {
+		t.Run(test.scenario, func(t *testing.T) {
+			a, err := test.toType.ConvertValue(test.fromValue, test.fromType)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if a.Int64() != test.expected {
+				t.Errorf("converted value mismatch:\nwant = %+v\ngot  = %+v", test.expected, a.Int64())
+			}
+		})
+	}
+}

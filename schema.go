@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/segmentio/parquet-go/compress"
@@ -488,6 +489,8 @@ func nodeOf(t reflect.Type, tag []string) Node {
 		return Leaf(Int96Type)
 	case reflect.TypeOf(uuid.UUID{}):
 		return UUID()
+	case reflect.TypeOf(time.Time{}):
+		return Timestamp(Nanosecond)
 	}
 
 	var n Node
@@ -823,7 +826,16 @@ func makeNodeOf(t reflect.Type, name string, tag []string) Node {
 				}
 				setNode(Timestamp(timeUnit))
 			default:
-				throwInvalidTag(t, name, option)
+				switch t {
+				case reflect.TypeOf(time.Time{}):
+					timeUnit, err := parseTimestampArgs(args)
+					if err != nil {
+						throwInvalidTag(t, name, option)
+					}
+					setNode(Timestamp(timeUnit))
+				default:
+					throwInvalidTag(t, name, option)
+				}
 			}
 		default:
 			throwUnknownTag(t, name, option)

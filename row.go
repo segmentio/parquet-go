@@ -499,13 +499,15 @@ func deconstructFuncOfLeaf(columnIndex int16, node Node) (int16, deconstructFunc
 	if columnIndex > MaxColumnIndex {
 		panic("row cannot be deconstructed because it has more than 127 columns")
 	}
-	kind := node.Type().Kind()
+	typ := node.Type()
+	kind := typ.Kind()
+	lt := typ.LogicalType()
 	valueColumnIndex := ^columnIndex
 	return columnIndex + 1, func(row Row, levels levels, value reflect.Value) Row {
 		v := Value{}
 
 		if value.IsValid() {
-			v = makeValue(kind, value)
+			v = makeValue(kind, lt, value)
 		}
 
 		v.repetitionLevel = levels.repetitionLevel

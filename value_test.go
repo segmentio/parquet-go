@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"math"
 	"testing"
+	"time"
 	"unsafe"
 
 	"github.com/segmentio/parquet-go"
@@ -67,6 +68,14 @@ func TestValueClone(t *testing.T) {
 		{
 			scenario: "FIXED_LEN_BYTE_ARRAY",
 			values:   []interface{}{[1]byte{42}, [16]byte{0: 1}},
+		},
+
+		{
+			scenario: "TIME",
+			values: []interface{}{
+				time.Date(2020, 1, 2, 3, 4, 5, 7, time.UTC),
+				time.Date(2021, 2, 3, 4, 5, 6, 8, time.UTC),
+			},
 		},
 	}
 
