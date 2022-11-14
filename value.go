@@ -160,6 +160,9 @@ func copyValues(dst ValueWriter, src ValueReader, buf []Value) (written int64, e
 //
 // The function panics if the Go value cannot be represented in parquet.
 func ValueOf(v interface{}) Value {
+	k := Kind(-1)
+	t := reflect.TypeOf(v)
+
 	switch value := v.(type) {
 	case nil:
 		return Value{}
@@ -167,10 +170,9 @@ func ValueOf(v interface{}) Value {
 		return makeValueBytes(FixedLenByteArray, value[:])
 	case deprecated.Int96:
 		return makeValueInt96(value)
+	case time.Time:
+		k = Int64
 	}
-
-	k := Kind(-1)
-	t := reflect.TypeOf(v)
 
 	switch t.Kind() {
 	case reflect.Bool:
