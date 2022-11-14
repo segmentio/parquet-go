@@ -8,10 +8,12 @@ import (
 	"math"
 	"reflect"
 	"strconv"
+	"time"
 	"unsafe"
 
 	"github.com/google/uuid"
 	"github.com/segmentio/parquet-go/deprecated"
+	"github.com/segmentio/parquet-go/format"
 	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
@@ -197,10 +199,30 @@ func ValueOf(v interface{}) Value {
 		panic("cannot create parquet value from go value of type " + t.String())
 	}
 
-	return makeValue(k, reflect.ValueOf(v))
+	return makeValue(k, nil, reflect.ValueOf(v))
 }
 
-func makeValue(k Kind, v reflect.Value) Value {
+func makeValue(k Kind, lt *format.LogicalType, v reflect.Value) Value {
+	switch v.Type() {
+	case reflect.TypeOf(time.Time{}):
+		unit := Nanosecond.TimeUnit()
+		if lt != nil && lt.Timestamp != nil {
+			unit = lt.Timestamp.Unit
+		}
+
+		t := v.Interface().(time.Time)
+		var val int64
+		switch {
+		case unit.Millis != nil:
+			val = t.UnixMilli()
+		case unit.Micros != nil:
+			val = t.UnixMicro()
+		default:
+			val = t.UnixNano()
+		}
+		return makeValueInt64(val)
+	}
+
 	switch k {
 	case Boolean:
 		return makeValueBoolean(v.Bool())

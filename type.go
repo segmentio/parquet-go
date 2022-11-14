@@ -1722,7 +1722,28 @@ func (t *timestampType) Decode(dst encoding.Values, src []byte, enc encoding.Enc
 }
 
 func (t *timestampType) AssignValue(dst reflect.Value, src Value) error {
-	return Int64Type.AssignValue(dst, src)
+	switch dst.Type() {
+	case reflect.TypeOf(time.Time{}):
+		unit := Nanosecond.TimeUnit()
+		lt := t.LogicalType()
+		if lt != nil && lt.Timestamp != nil {
+			unit = lt.Timestamp.Unit
+		}
+
+		nanos := src.Int64()
+		switch {
+		case unit.Millis != nil:
+			nanos = nanos * 1e6
+		case unit.Micros != nil:
+			nanos = nanos * 1e3
+		}
+
+		val := time.Unix(0, nanos).UTC()
+		dst.Set(reflect.ValueOf(val))
+		return nil
+	default:
+		return Int64Type.AssignValue(dst, src)
+	}
 }
 
 func (t *timestampType) ConvertValue(val Value, typ Type) (Value, error) {
