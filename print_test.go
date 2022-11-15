@@ -141,14 +141,14 @@ func TestPrintSchema(t *testing.T) {
 		{
 			node: parquet.Group{"cost": parquet.Decimal(0, 9, parquet.Int32Type)},
 			print: `message Test {
-	required int32 cost (DECIMAL(0,9));
+	required int32 cost (DECIMAL(9,0));
 }`,
 		},
 
 		{
 			node: parquet.Group{"cost": parquet.Decimal(0, 18, parquet.Int64Type)},
 			print: `message Test {
-	required int64 cost (DECIMAL(0,18));
+	required int64 cost (DECIMAL(18,0));
 }`,
 		},
 
