@@ -30,7 +30,7 @@ jobs:
       run: go mod download
 
     - name: Run Tests
-      run: go test -race -tags=${{ matrix.tags }} ./...
+      run: go test -trimpath -race -tags=${{ matrix.tags }} ./...
 
   format:
     runs-on: ubuntu-latest
