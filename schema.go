@@ -57,7 +57,7 @@ type Schema struct {
 //	date      | for int32 types use the DATE logical type
 //	timestamp | for int64 types use the TIMESTAMP logical type with millisecond precision
 //
-// The date logical type is an int32 value of the number of days since the unix epoch
+// # The date logical type is an int32 value of the number of days since the unix epoch
 //
 // The decimal tag must be followed by two integer parameters, the first integer
 // representing the scale and the second the precision; for example:
@@ -391,7 +391,6 @@ func (f *structField) Value(base reflect.Value) reflect.Value {
 			return fieldByIndex(base, f.index)
 		}
 	}
-	return reflect.Value{}
 }
 
 func structFieldString(f reflect.StructField) string {
@@ -569,6 +568,21 @@ func makeStructField(f reflect.StructField) structField {
 			throwUnknownFieldTag(f, option)
 		}
 	})
+
+	// Special case: an "optional" struct tag on a slice applies to the
+	// individual items, not the overall list. The least messy way to
+	// deal with this is at this level, instead of passing down optional
+	// information into the nodeOf function, and then passing back whether an
+	// optional tag was applied.
+	if field.Node == nil && f.Type.Kind() == reflect.Slice {
+		isUint8 := f.Type.Elem().Kind() == reflect.Uint8
+		// TODO: does 'optional string' apply to each byte?
+		if optional && !isUint8 {
+			field.Node = Repeated(Optional(nodeOf(f.Type.Elem())))
+			// Don't also apply "optional" to the whole list.
+			optional = false
+		}
+	}
 
 	if field.Node == nil {
 		field.Node = nodeOf(f.Type)
