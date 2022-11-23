@@ -844,6 +844,22 @@ func makeNodeOf(t reflect.Type, name string, tag []string) Node {
 		}
 	})
 
+	// Special case: an "optional" struct tag on a slice applies to the
+	// individual items, not the overall list. The least messy way to
+	// deal with this is at this level, instead of passing down optional
+	// information into the nodeOf function, and then passing back whether an
+	// optional tag was applied.
+	if node == nil && t.Kind() == reflect.Slice {
+		isUint8 := t.Elem().Kind() == reflect.Uint8
+		// Note for strings "optional" applies only to the entire BYTE_ARRAY and
+		// not each individual byte.
+		if optional && !isUint8 {
+			node = Repeated(Optional(nodeOf(t.Elem(), tag)))
+			// Don't also apply "optional" to the whole list.
+			optional = false
+		}
+	}
+
 	if node == nil {
 		node = nodeOf(t, tag)
 	}
