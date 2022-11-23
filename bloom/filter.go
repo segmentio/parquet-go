@@ -45,7 +45,6 @@ func MakeSplitBlockFilter(data []byte) SplitBlockFilter {
 // filters in memory, for example:
 //
 //	f := make(bloom.SplitBlockFilter, bloom.NumSplitBlocksOf(n, 10))
-//
 func NumSplitBlocksOf(numValues int64, bitsPerValue uint) int {
 	numBytes := bits.ByteCount(uint(numValues) * bitsPerValue)
 	numBlocks := (numBytes + (BlockSize - 1)) / BlockSize
