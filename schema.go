@@ -57,7 +57,8 @@ type Schema struct {
 //	date      | for int32 types use the DATE logical type
 //	timestamp | for int64 types use the TIMESTAMP logical type with millisecond precision
 //
-// The date logical type is an int32 value of the number of days since the unix epoch
+// The date logical type is an int32 value of the number of days since the
+// unix epoch.
 //
 // The decimal tag must be followed by two integer parameters, the first integer
 // representing the scale and the second the precision; for example:
@@ -391,7 +392,6 @@ func (f *structField) Value(base reflect.Value) reflect.Value {
 			return fieldByIndex(base, f.index)
 		}
 	}
-	return reflect.Value{}
 }
 
 func structFieldString(f reflect.StructField) string {

@@ -245,19 +245,18 @@ type columnBufferWriter struct {
 // writeRowsFunc is the type of functions that apply rows to a set of column
 // buffers.
 //
-// - w is the columnBufferWriter holding the column buffers where the rows are
-//   written.
+//   - w is the columnBufferWriter holding the column buffers where the rows are
+//     written.
 //
 // - rows is the array of Go values to write to the column buffers.
 //
 // - size is the size of Go values in the rows array (in bytes).
 //
-// - offset is the byte offset of the value being written in each element of the
-//   rows array.
+//   - offset is the byte offset of the value being written in each element of the
+//     rows array.
 //
-// - levels is used to track the column index, repetition and definition levels
-//   of values when writing optional or repeated columns.
-//
+//   - levels is used to track the column index, repetition and definition levels
+//     of values when writing optional or repeated columns.
 type writeRowsFunc func(w *columnBufferWriter, rows array, size, offset uintptr, levels columnLevels) error
 
 // writeRowsFuncOf generates a writeRowsFunc function for the given Go type and

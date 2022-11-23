@@ -36,7 +36,6 @@ type Buffer struct {
 //		buffer := parquet.NewBuffer(config)
 //		...
 //	}
-//
 func NewBuffer(options ...RowGroupOption) *Buffer {
 	config, err := NewRowGroupConfig(options...)
 	if err != nil {

@@ -135,19 +135,19 @@ func OpenFile(r io.ReaderAt, size int64, options ...FileOption) (*File, error) {
 // Only leaf columns have indexes, the returned indexes are arranged using the
 // following layout:
 //
-//	+ -------------- +
+//	+--------------- +
 //	| col 0: chunk 0 |
-//	+ -------------- +
+//	+--------------- +
 //	| col 1: chunk 0 |
-//	+ -------------- +
+//	+--------------- +
 //	| ...            |
-//	+ -------------- +
+//	+--------------- +
 //	| col 0: chunk 1 |
-//	+ -------------- +
+//	+--------------- +
 //	| col 1: chunk 1 |
-//	+ -------------- +
+//	+--------------- +
 //	| ...            |
-//	+ -------------- +
+//	+--------------- +
 //
 // This method is useful in combination with the SkipPageIndex option to delay
 // reading the page index section until after the file was opened. Note that in
