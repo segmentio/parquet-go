@@ -57,7 +57,7 @@ func OpenFile(r io.ReaderAt, size int64, options ...FileOption) (*File, error) {
 	if cast, ok := f.reader.(interface{ SetMagicFooterSection(offset, length int64) }); ok {
 		cast.SetMagicFooterSection(size-8, 8)
 	}
-	if _, err := r.ReadAt(b[:8], size-8); err != nil {
+	if n, err := r.ReadAt(b[:8], size-8); n != 8 {
 		return nil, fmt.Errorf("reading magic footer of parquet file: %w", err)
 	}
 	if string(b[4:8]) != "PAR1" {
