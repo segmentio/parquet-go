@@ -295,16 +295,17 @@ func (r *rowGroupRows) init() {
 	done := make(chan struct{})
 	r.done = done
 
-	if r.pageReadMode == PageReadModeAsync {
+	switch r.pageReadMode {
+	case PageReadModeAsync:
 		for i, column := range columns {
 			r.readers[i] = &asyncPages{}
 			r.readers[i].(*asyncPages).init(column.Pages(), done)
 		}
-	} else if r.pageReadMode == PageReadModeSync {
+	case PageReadModeSync:
 		for i, column := range columns {
 			r.readers[i] = column.Pages()
 		}
-	} else {
+	default:
 		panic(fmt.Sprintf("parquet: invalid page read mode: %d", r.pageReadMode))
 	}
 
