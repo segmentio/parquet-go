@@ -10,6 +10,13 @@ import (
 	"github.com/segmentio/parquet-go/compress"
 )
 
+type PageReadMode int
+
+const (
+	PageReadModeAsync PageReadMode = iota
+	PageReadModeSync
+)
+
 const (
 	DefaultColumnIndexSizeLimit = 16
 	DefaultColumnBufferCapacity = 16 * 1024
@@ -83,6 +90,7 @@ type FileConfig struct {
 	SkipPageIndex    bool
 	SkipBloomFilters bool
 	ReadBufferSize   int
+	PageReadMode     PageReadMode
 }
 
 // DefaultFileConfig returns a new FileConfig value initialized with the
@@ -92,6 +100,7 @@ func DefaultFileConfig() *FileConfig {
 		SkipPageIndex:    DefaultSkipPageIndex,
 		SkipBloomFilters: DefaultSkipBloomFilters,
 		ReadBufferSize:   defaultReadBufferSize,
+		PageReadMode:     PageReadModeAsync,
 	}
 }
 
@@ -367,6 +376,15 @@ func SkipPageIndex(skip bool) FileOption {
 // Defaults to false.
 func SkipBloomFilters(skip bool) FileOption {
 	return fileOption(func(config *FileConfig) { config.SkipBloomFilters = skip })
+}
+
+// SetPageReadMode is a file configuration option which controls the way pages
+// are read. Currently the only two options are PageReadModeAsync and PageReadModeSync
+// which control whether or not pages are loaded asynchronously.
+//
+// Defaults to PageReadModeAsync.
+func SetPageReadMode(mode PageReadMode) FileOption {
+	return fileOption(func(config *FileConfig) { config.PageReadMode = mode })
 }
 
 // ReadBufferSize is a file configuration option which controls the default

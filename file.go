@@ -363,11 +363,13 @@ type fileRowGroup struct {
 	rowGroup *format.RowGroup
 	columns  []ColumnChunk
 	sorting  []SortingColumn
+	config   *FileConfig
 }
 
 func (g *fileRowGroup) init(file *File, schema *Schema, columns []*Column, rowGroup *format.RowGroup) {
 	g.schema = schema
 	g.rowGroup = rowGroup
+	g.config = file.config
 	g.columns = make([]ColumnChunk, len(rowGroup.Columns))
 	g.sorting = make([]SortingColumn, len(rowGroup.SortingColumns))
 	fileColumnChunks := make([]fileColumnChunk, len(rowGroup.Columns))
@@ -402,7 +404,7 @@ func (g *fileRowGroup) Schema() *Schema                 { return g.schema }
 func (g *fileRowGroup) NumRows() int64                  { return g.rowGroup.NumRows }
 func (g *fileRowGroup) ColumnChunks() []ColumnChunk     { return g.columns }
 func (g *fileRowGroup) SortingColumns() []SortingColumn { return g.sorting }
-func (g *fileRowGroup) Rows() Rows                      { return &rowGroupRows{rowGroup: g} }
+func (g *fileRowGroup) Rows() Rows                      { return newRowGroupRows(g, g.config.PageReadMode) }
 
 type fileSortingColumn struct {
 	column     *Column
