@@ -181,6 +181,19 @@ func TestSchemaOf(t *testing.T) {
 	}
 }`,
 		},
+		{
+			value: new(struct {
+				A map[int64]string `parquet:",old_map,optional"`
+			}),
+			print: `message {
+	optional group A (MAP) {
+		repeated group map {
+			required int64 key (INT(64,true));
+			required binary value (STRING);
+		}
+	}
+}`,
+		},
 	}
 
 	for _, test := range tests {
