@@ -557,6 +557,11 @@ func nodeOf(t reflect.Type, tag []string) Node {
 				return
 			case "optional":
 				n = Optional(n)
+			case "old_map":
+				n = OldMap(
+					makeNodeOf(t.Key(), t.Name(), []string{keyTag}),
+					makeNodeOf(t.Elem(), t.Name(), []string{valueTag}),
+				)
 			default:
 				throwUnknownTag(t, "map", option)
 			}

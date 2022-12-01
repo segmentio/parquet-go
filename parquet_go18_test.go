@@ -344,9 +344,9 @@ func TestIssue415(t *testing.T) {
 		Operation                   uint8            `parquet:"operation,optional"`
 		SequenceNumber              string           `parquet:"sequencenumber,optional"`
 		ApproximateCreationDateTime deprecated.Int96 `parquet:"approximatecreationdatetime,optional"`
-		Keys                        map[string]AV    `parquet:"keys,optional" parquet-key:"," parquet-value:",optional"`
-		Old                         map[string]AV    `parquet:"old,optional" parquet-key:"," parquet-value:",optional"`
-		New                         map[string]AV    `parquet:"new,optional" parquet-key:"," parquet-value:",optional"`
+		Keys                        map[string]AV    `parquet:"keys,old_map,optional"`
+		Old                         map[string]AV    `parquet:"old,old_map,optional"`
+		New                         map[string]AV    `parquet:"new,old_map,optional"`
 	}
 
 	f, err := os.Open("testdata/issue415.parquet")
@@ -365,18 +365,14 @@ func TestIssue415(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	first := rows[0]
+	for _, row := range rows {
+		if len(row.Keys) == 0 {
+			t.Fatal("expected more than 0 entries")
+		}
 
-	if len(first.Keys) == 0 {
-		t.Error("expected more than 0 entries")
-	}
-
-	if len(first.Old) == 0 {
-		t.Error("expected more than 0 entries")
-	}
-
-	if len(first.New) == 0 {
-		t.Error("expected more than 0 entries")
+		if len(row.New) == 0 {
+			t.Fatal("expected more than 0 entries")
+		}
 	}
 }
 

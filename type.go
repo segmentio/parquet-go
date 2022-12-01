@@ -1858,6 +1858,15 @@ func Map(key, value Node) Node {
 	}}
 }
 
+func OldMap(key, value Node) Node {
+	return mapNode{Group{
+		"map": Repeated(Group{
+			"key":   Required(key),
+			"value": value,
+		}),
+	}}
+}
+
 type mapNode struct{ Group }
 
 func (mapNode) Type() Type { return &mapType{} }
