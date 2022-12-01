@@ -204,6 +204,38 @@ func ValueOf(v interface{}) Value {
 	return makeValue(k, nil, reflect.ValueOf(v))
 }
 
+// BooleamValue constructs a BOOLEAN parquet value from the bool passed as
+// argument.
+func BooleanValue(value bool) Value { return makeValueBoolean(value) }
+
+// Int32Value constructs a INT32 parquet value from the int32 passed as
+// argument.
+func Int32Value(value int32) Value { return makeValueInt32(value) }
+
+// Int64Value constructs a INT64 parquet value from the int64 passed as
+// argument.
+func Int64Value(value int64) Value { return makeValueInt64(value) }
+
+// Int96Value constructs a INT96 parquet value from the deprecated.Int96 passed
+// as argument.
+func Int96Value(value deprecated.Int96) Value { return makeValueInt96(value) }
+
+// FloatValue constructs a FLOAT parquet value from the float32 passed as
+// argument.
+func FloatValue(value float32) Value { return makeValueFloat(value) }
+
+// DoubleValue constructs a DOUBLE parquet value from the float64 passed as
+// argument.
+func DoubleValue(value float64) Value { return makeValueDouble(value) }
+
+// ByteArrayValue constructs a BYTE_ARRAY parquet value from the byte slice
+// passed as argument.
+func ByteArrayValue(value []byte) Value { return makeValueBytes(ByteArray, value) }
+
+// FixedLenByteArrayValue constructs a BYTE_ARRAY parquet value from the byte
+// slice passed as argument.
+func FixedLenByteArrayValue(value []byte) Value { return makeValueBytes(FixedLenByteArray, value) }
+
 func makeValue(k Kind, lt *format.LogicalType, v reflect.Value) Value {
 	switch v.Type() {
 	case reflect.TypeOf(time.Time{}):
