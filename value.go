@@ -204,7 +204,7 @@ func ValueOf(v interface{}) Value {
 	return makeValue(k, nil, reflect.ValueOf(v))
 }
 
-// BooleamValue constructs a BOOLEAN parquet value from the bool passed as
+// BooleanValue constructs a BOOLEAN parquet value from the bool passed as
 // argument.
 func BooleanValue(value bool) Value { return makeValueBoolean(value) }
 
