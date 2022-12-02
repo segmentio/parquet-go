@@ -5,12 +5,16 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/bits"
 	"reflect"
+	"sync"
 )
 
 const (
 	defaultRowBufferSize = 20
 )
+
+var rows = newRowPool(100, 16)
 
 // Row represents a parquet row as a slice of values.
 //
@@ -54,6 +58,15 @@ func (row Row) Equal(other Row) bool {
 		}
 	}
 	return true
+}
+
+// Repool readds the row to the internal pool.
+func (row Row) Repool() {
+	rows.put(row)
+}
+
+func RowFromPool(sz int) Row {
+	return rows.get(sz)
 }
 
 func (row Row) startsWith(columnIndex int16) bool {
@@ -156,7 +169,7 @@ func (r *forwardRowSeeker) ReadRows(rows []Row) (int, error) {
 			}
 
 			for i, j := 0, int(skip); j < n; i++ {
-				rows[i] = append(rows[i][:0], rows[j]...)
+				rows[i] = appendRow(rows[i][:0], rows[j]...)
 			}
 
 			n -= int(skip)
@@ -750,4 +763,79 @@ func reconstructFuncOfLeaf(columnIndex int16, node Node) (int16, reconstructFunc
 		err := typ.AssignValue(value, row[0])
 		return row[1:], err
 	}
+}
+
+// pooling
+
+// rowPool holds a slice of sync.pools used for leveled buffering.
+// the table below shows the pools used for different buffer sizes when both getting
+// and putting a buffer. when allocating a new buffer from a given pool we always choose the
+// min of the put range to guarantee that all gets will have an adequately sized buffer.
+//
+// TODO! this is basically a copy of bufferPool. once parquet-go requires go 1.18 these two
+// can be combined as slicePool[T].
+type rowPool struct {
+	base    int
+	buckets int
+	pool    []sync.Pool
+}
+
+func newRowPool(base, buckets int) *rowPool {
+	if base <= 0 {
+		panic(fmt.Sprintf("pool illegal base: %d", base))
+	}
+
+	if buckets <= 0 {
+		panic(fmt.Sprintf("pool illegal buckets: %d", base))
+	}
+
+	return &rowPool{
+		buckets: buckets,
+		base:    base,
+		pool:    make([]sync.Pool, buckets),
+	}
+}
+
+// get returns a buffer from the levelled buffer pool. sz is used to choose the appropriate pool
+func (p *rowPool) get(sz int) Row {
+	i := p.levelledPoolIndex(sz)
+	r, _ := p.pool[i].Get().(Row)
+	if r == nil {
+		// align size to the pool
+		poolSize := p.base << i
+		if sz > poolSize { // this can occur when the buffer requested is larger than the largest pool
+			poolSize = sz
+		}
+		r = make([]Value, 0, poolSize)
+	}
+	// if the buffer comes from the largest pool it may not be big enough
+	if cap(r) < sz {
+		p.pool[i].Put(r)
+		r = make([]Value, 0, sz)
+	}
+	return r[:sz]
+}
+
+func (p *rowPool) put(r Row) {
+	// if this slice is somehow less then our min pool size, just drop it
+	sz := cap(r)
+	if sz < p.base {
+		return
+	}
+	i := p.levelledPoolIndex(sz / 2) // divide by 2 to put the buffer in the level below so it will always be large enough
+	p.pool[i].Put(r)
+}
+
+// levelledPoolIndex returns the index of the pool to use for a buffer of size sz. it never returns
+// an index that will panic
+func (p *rowPool) levelledPoolIndex(sz int) int {
+	i := sz / p.base
+	i = 32 - bits.LeadingZeros32(uint32(i)) // log2
+	if i >= p.buckets {
+		i = p.buckets - 1
+	}
+	if i < 0 {
+		i = 0
+	}
+	return i
 }

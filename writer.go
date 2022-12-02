@@ -695,7 +695,7 @@ func (w *writer) WriteRows(rows []Row) (int, error) {
 		for _, row := range rows[start:end] {
 			for _, value := range row {
 				columnIndex := value.Column()
-				w.values[columnIndex] = append(w.values[columnIndex], value)
+				w.values[columnIndex] = appendRow(w.values[columnIndex], value)
 			}
 		}
 

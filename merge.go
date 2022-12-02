@@ -110,7 +110,7 @@ func (r *mergedRowGroupRows) ReadRows(rows []Row) (n int, err error) {
 		}
 
 		if r.index >= r.seek {
-			rows[n] = append(rows[n][:0], r.values1...)
+			rows[n] = appendRow(rows[n][:0], r.values1...)
 			n++
 		}
 		r.index++
@@ -234,7 +234,7 @@ func (cur *bufferedRowGroupCursor) close() error {
 }
 
 func (cur *bufferedRowGroupCursor) readRow(row Row) (Row, error) {
-	return append(row, cur.rowbuf[0]...), nil
+	return appendRow(row, cur.rowbuf[0]...), nil
 }
 
 func (cur *bufferedRowGroupCursor) readNext() error {
@@ -247,13 +247,13 @@ func (cur *bufferedRowGroupCursor) readNext() error {
 	}
 	for _, v := range cur.rowbuf[0] {
 		columnIndex := v.Column()
-		cur.columns[columnIndex] = append(cur.columns[columnIndex], v)
+		cur.columns[columnIndex] = appendRow(cur.columns[columnIndex], v)
 	}
 	return nil
 }
 
 func (cur *bufferedRowGroupCursor) nextRowValuesOf(values []Value, columnIndex int16) []Value {
-	return append(values, cur.columns[columnIndex]...)
+	return appendRow(values, cur.columns[columnIndex]...)
 }
 
 /*
