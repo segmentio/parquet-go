@@ -6,8 +6,8 @@ type MapGroup[K comparable, V any] map[K]V
 
 func (m MapGroup[K, V]) IsMapGroup() {}
 
-type IsMapGroup interface {
+type isMapGroup interface {
 	IsMapGroup()
 }
 
-var MapGroupI = reflect.TypeOf((*IsMapGroup)(nil)).Elem()
+var MapGroupI = reflect.TypeOf((*isMapGroup)(nil)).Elem()
