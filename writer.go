@@ -179,7 +179,9 @@ func (w *Writer) WriteRowGroup(rowGroup RowGroup) (int64, error) {
 		return 0, err
 	}
 	w.writer.configureBloomFilters(rowGroup.ColumnChunks())
-	n, err := CopyRows(w.writer, rowGroup.Rows())
+	rows := rowGroup.Rows()
+	defer rows.Close()
+	n, err := CopyRows(w.writer, rows)
 	if err != nil {
 		return n, err
 	}

@@ -2,6 +2,7 @@ package parquet_test
 
 import (
 	"bytes"
+	"io"
 	"reflect"
 	"sort"
 	"testing"
@@ -419,5 +420,29 @@ func TestMergeRowGroups(t *testing.T) {
 				})
 			}
 		})
+	}
+}
+
+func TestWriteRowGroupClosesRows(t *testing.T) {
+	var rows []*wrappedRows
+	rg := wrappedRowGroup{
+		RowGroup: newPeopleFile([]Person{{}}),
+		rowsCallback: func(r parquet.Rows) parquet.Rows {
+			wrapped := &wrappedRows{Rows: r}
+			rows = append(rows, wrapped)
+			return wrapped
+		},
+	}
+	writer := parquet.NewWriter(io.Discard)
+	if _, err := writer.WriteRowGroup(rg); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range rows {
+		if !r.closed {
+			t.Fatal("rows not closed")
+		}
 	}
 }
