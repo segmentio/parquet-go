@@ -520,7 +520,8 @@ func (col *repeatedColumnBuffer) Page() Page {
 
 			if numValues > 0 {
 				if numValues > cap(col.buffer) {
-					col.buffer = make([]Value, numValues)
+					rows.put(col.buffer)
+					col.buffer = rows.get(numValues)
 				} else {
 					col.buffer = col.buffer[:numValues]
 				}
