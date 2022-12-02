@@ -535,37 +535,11 @@ func nodeOf(t reflect.Type, tag []string) Node {
 		}
 
 	case reflect.Map:
-		var mapTag, valueTag, keyTag string
-		if len(tag) > 0 {
-			mapTag = tag[0]
-			if len(tag) > 1 {
-				keyTag = tag[1]
-			}
-			if len(tag) >= 2 {
-				valueTag = tag[2]
-			}
+		if t.Implements(deprecated.MapGroupI) {
+			n = makeMap(tag, t, OldMap)
+		} else {
+			n = makeMap(tag, t, Map)
 		}
-
-		n = Map(
-			makeNodeOf(t.Key(), t.Name(), []string{keyTag}),
-			makeNodeOf(t.Elem(), t.Name(), []string{valueTag}),
-		)
-
-		forEachTagOption([]string{mapTag}, func(option, args string) {
-			switch option {
-			case "":
-				return
-			case "optional":
-				n = Optional(n)
-			case "old_map":
-				n = OldMap(
-					makeNodeOf(t.Key(), t.Name(), []string{keyTag}),
-					makeNodeOf(t.Elem(), t.Name(), []string{valueTag}),
-				)
-			default:
-				throwUnknownTag(t, "map", option)
-			}
-		})
 
 	case reflect.Struct:
 		return structNodeOf(t)
@@ -576,6 +550,38 @@ func nodeOf(t reflect.Type, tag []string) Node {
 	}
 
 	return &goNode{Node: n, gotype: t}
+}
+
+func makeMap(tag []string, t reflect.Type, buildMap func(key, value Node) Node) Node {
+	var node Node
+	var mapTag, valueTag, keyTag string
+	if len(tag) > 0 {
+		mapTag = tag[0]
+		if len(tag) > 1 {
+			keyTag = tag[1]
+		}
+		if len(tag) >= 2 {
+			valueTag = tag[2]
+		}
+	}
+
+	node = buildMap(
+		makeNodeOf(t.Key(), t.Name(), []string{keyTag}),
+		makeNodeOf(t.Elem(), t.Name(), []string{valueTag}),
+	)
+
+	forEachTagOption([]string{mapTag}, func(option, args string) {
+		switch option {
+		case "":
+			return
+		case "optional":
+			node = Optional(node)
+		default:
+			throwUnknownTag(t, "map", option)
+		}
+	})
+
+	return node
 }
 
 func split(s string) (head, tail string) {

@@ -333,20 +333,20 @@ func TestIssue415(t *testing.T) {
 		N string `parquet:"n,optional"`
 	}
 	type CDC struct {
-		TenantID                    string           `parquet:"tenantid,optional"`
-		RowID                       string           `parquet:"rowid,optional"`
-		TransactionID               string           `parquet:"transactionid,optional"`
-		Begin                       int64            `parquet:"begin,optional"`
-		End                         int64            `parquet:"end,optional"`
-		RecordType                  uint8            `parquet:"recordtype,optional"`
-		EventID                     string           `parquet:"eventid,optional"`
-		EventSource                 string           `parquet:"eventsource,optional"`
-		Operation                   uint8            `parquet:"operation,optional"`
-		SequenceNumber              string           `parquet:"sequencenumber,optional"`
-		ApproximateCreationDateTime deprecated.Int96 `parquet:"approximatecreationdatetime,optional"`
-		Keys                        map[string]AV    `parquet:"keys,old_map,optional"`
-		Old                         map[string]AV    `parquet:"old,old_map,optional"`
-		New                         map[string]AV    `parquet:"new,old_map,optional"`
+		TenantID                    string                          `parquet:"tenantid,optional"`
+		RowID                       string                          `parquet:"rowid,optional"`
+		TransactionID               string                          `parquet:"transactionid,optional"`
+		Begin                       int64                           `parquet:"begin,optional"`
+		End                         int64                           `parquet:"end,optional"`
+		RecordType                  uint8                           `parquet:"recordtype,optional"`
+		EventID                     string                          `parquet:"eventid,optional"`
+		EventSource                 string                          `parquet:"eventsource,optional"`
+		Operation                   uint8                           `parquet:"operation,optional"`
+		SequenceNumber              string                          `parquet:"sequencenumber,optional"`
+		ApproximateCreationDateTime deprecated.Int96                `parquet:"approximatecreationdatetime,optional"`
+		Keys                        deprecated.MapGroup[string, AV] `parquet:"keys,optional"`
+		Old                         deprecated.MapGroup[string, AV] `parquet:"old,optional"`
+		New                         deprecated.MapGroup[string, AV] `parquet:"new,optional"`
 	}
 
 	f, err := os.Open("testdata/issue415.parquet")
