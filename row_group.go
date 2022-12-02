@@ -296,9 +296,10 @@ func (r *rowGroupRows) init() {
 	case PageReadModeAsync:
 		done := make(chan struct{})
 		r.done = done
+		readers := make([]asyncPages, len(columns))
 		for i, column := range columns {
-			r.readers[i] = &asyncPages{}
-			r.readers[i].(*asyncPages).init(column.Pages(), done)
+			readers[i].init(column.Pages(), done)
+			r.readers[i] = &readers[i]
 		}
 	case PageReadModeSync:
 		for i, column := range columns {
