@@ -394,6 +394,7 @@ func mapKeyValueOf(node Node) Node {
 	if !node.Leaf() && (node.Required() || node.Optional()) {
 		var keyValue Node
 		if keyValue = childByName(node, "key_value"); keyValue == nil {
+			// Older writers may have written this group as "map"
 			keyValue = childByName(node, "map")
 		}
 
