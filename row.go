@@ -138,6 +138,32 @@ type RowWriterWithSchema interface {
 	Schema() *Schema
 }
 
+// MultiRowWriter constructs a RowWriter which dispatches writes to all the
+// writers passed as arguments.
+//
+// When writing rows, if any of the writers returns an error, the operation is
+// aborted and the error returned.
+//
+// Rows are written sequentially to each writer in the order they are given to
+// this function.
+func MultiRowWriter(writers ...RowWriter) RowWriter {
+	m := &multiRowWriter{writers: make([]RowWriter, len(writers))}
+	copy(m.writers, writers)
+	return m
+}
+
+type multiRowWriter struct{ writers []RowWriter }
+
+func (m *multiRowWriter) WriteRows(rows []Row) (int, error) {
+	for _, w := range m.writers {
+		_, err := w.WriteRows(rows)
+		if err != nil {
+			return 0, err
+		}
+	}
+	return len(rows), nil
+}
+
 type forwardRowSeeker struct {
 	rows  RowReader
 	seek  int64

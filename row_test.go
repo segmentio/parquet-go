@@ -8,6 +8,47 @@ import (
 	"github.com/segmentio/parquet-go"
 )
 
+type bufferedRows struct {
+	rows []parquet.Row
+}
+
+func (w *bufferedRows) WriteRows(rows []parquet.Row) (int, error) {
+	for _, row := range rows {
+		w.rows = append(w.rows, row.Clone())
+	}
+	return len(rows), nil
+}
+
+func TestMultiRowWriter(t *testing.T) {
+	b1 := new(bufferedRows)
+	b2 := new(bufferedRows)
+	mw := parquet.MultiRowWriter(b1, b2)
+
+	rows := []parquet.Row{
+		{
+			parquet.Int32Value(10).Level(0, 0, 0),
+			parquet.Int32Value(11).Level(0, 0, 1),
+			parquet.Int32Value(12).Level(0, 0, 2),
+		},
+		{
+			parquet.Int32Value(20).Level(0, 0, 0),
+			parquet.Int32Value(21).Level(0, 0, 1),
+			parquet.Int32Value(22).Level(0, 0, 2),
+		},
+	}
+
+	n, err := mw.WriteRows(rows)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != len(rows) {
+		t.Fatalf("number of rows written mismatch: got=%d want=%d", n, len(rows))
+	}
+
+	assertEqualRows(t, rows, b1.rows)
+	assertEqualRows(t, rows, b2.rows)
+}
+
 func TestRowClone(t *testing.T) {
 	row := parquet.Row{
 		parquet.ValueOf(42).Level(0, 1, 0),
@@ -507,6 +548,28 @@ func columnsOf(row parquet.Row) [][]parquet.Value {
 		columns[columnIndex] = append(columns[columnIndex], value)
 	}
 	return columns
+}
+
+func assertEqualRows(t *testing.T, want, got []parquet.Row) {
+	if len(want) != len(got) {
+		t.Errorf("number of rows mismatch: want=%d got=%d", len(want), len(got))
+		return
+	}
+
+	for i := range want {
+		row1, row2 := want[i], got[i]
+
+		if len(row1) != len(row2) {
+			t.Errorf("number of values in row %d mismatch: want=%d got=%d", i, len(row1), len(row2))
+			continue
+		}
+
+		for j := range row1 {
+			if value1, value2 := row1[j], row2[j]; !parquet.DeepEqual(value1, value2) {
+				t.Errorf("values of row %d at index %d mismatch: want=%+v got=%+v", i, j, value1, value2)
+			}
+		}
+	}
 }
 
 func assertEqualValues(t *testing.T, columnIndex int, want, got []parquet.Value) {
