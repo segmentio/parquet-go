@@ -57,14 +57,13 @@ func NewRowBuffer[T any](options ...RowGroupOption) *RowBuffer[T] {
 
 // Reset clears the content of the buffer without releasing its memory.
 func (buf *RowBuffer[T]) Reset() {
-	buf.buffer = buf.buffer[:0]
-	buf.numRows = 0
-
-	for _, row := range buf.rows {
+	for _, row := range buf.rows[:buf.numRows] {
 		for i := range row {
 			row[i] = Value{}
 		}
 	}
+	buf.buffer = buf.buffer[:0]
+	buf.numRows = 0
 }
 
 // NumRows returns the number of rows currently written to the buffer.
@@ -489,7 +488,7 @@ func (r *rowBufferRows) ReadRows(rows []Row) (n int, err error) {
 	}
 
 	for i, row := range r.rows[r.index : r.index+n] {
-		rows[i] = append(rows[i], row...)
+		rows[i] = append(rows[i][:0], row...)
 	}
 
 	if r.index += n; r.index == len(r.rows) {
