@@ -302,6 +302,9 @@ func compareRowsFuncOfScan(columnIndex int, compare func(Value, Value) int) func
 			} else if cmp := compare(row1[i1], row2[i2]); cmp != 0 {
 				return cmp
 			}
+
+			i1++
+			i2++
 		}
 	}
 }
