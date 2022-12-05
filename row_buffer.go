@@ -23,9 +23,9 @@ import (
 //
 // RowBuffer values are not safe to use concurrently from multiple goroutines.
 type RowBuffer[T any] struct {
+	alloc   rowAllocator
 	schema  *Schema
 	sorting []SortingColumn
-	buffer  []byte
 	rows    []Row
 	numRows int
 	compare func(Row, Row) int
@@ -62,7 +62,7 @@ func (buf *RowBuffer[T]) Reset() {
 			row[i] = Value{}
 		}
 	}
-	buf.buffer = buf.buffer[:0]
+	buf.alloc.reset()
 	buf.numRows = 0
 }
 
@@ -153,7 +153,7 @@ func (buf *RowBuffer[T]) Write(rows []T) (int, error) {
 	for i := range rows {
 		bufRow := buf.rows[buf.numRows][:0]
 		bufRow = buf.schema.Deconstruct(bufRow, &rows[i])
-		buf.capture(bufRow)
+		buf.alloc.capture(bufRow)
 		buf.rows[buf.numRows] = bufRow
 		buf.numRows++
 	}
@@ -169,42 +169,12 @@ func (buf *RowBuffer[T]) WriteRows(rows []Row) (int, error) {
 	for _, row := range rows {
 		bufRow := buf.rows[buf.numRows][:0]
 		bufRow = append(bufRow, row...)
-		buf.capture(bufRow)
+		buf.alloc.capture(bufRow)
 		buf.rows[buf.numRows] = bufRow
 		buf.numRows++
 	}
 
 	return len(rows), nil
-}
-
-func (buf *RowBuffer[T]) copyBytes(v []byte) []byte {
-	if free := cap(buf.buffer) - len(buf.buffer); free < len(v) {
-		newCap := 2 * cap(buf.buffer)
-		if newCap == 0 {
-			newCap = defaultReadBufferSize
-		}
-		for newCap < len(v) {
-			newCap *= 2
-		}
-		buf.buffer = make([]byte, 0, newCap)
-	}
-
-	i := len(buf.buffer)
-	j := len(buf.buffer) + len(v)
-	buf.buffer = buf.buffer[:j]
-
-	b := buf.buffer[i:j:j]
-	copy(b, v)
-	return b
-}
-
-func (buf *RowBuffer[T]) capture(row Row) {
-	for i, v := range row {
-		switch kind := v.Kind(); kind {
-		case ByteArray, FixedLenByteArray:
-			row[i].ptr = unsafecast.AddressOfBytes(buf.copyBytes(v.byteArray()))
-		}
-	}
 }
 
 func (buf *RowBuffer[T]) reserve(n int) {
@@ -220,6 +190,42 @@ func (buf *RowBuffer[T]) reserve(n int) {
 		copy(newRows, buf.rows)
 		buf.rows = newRows
 	}
+}
+
+type rowAllocator struct{ buffer []byte }
+
+func (a *rowAllocator) reset() {
+	a.buffer = a.buffer[:0]
+}
+
+func (a *rowAllocator) capture(row Row) {
+	for i, v := range row {
+		switch kind := v.Kind(); kind {
+		case ByteArray, FixedLenByteArray:
+			row[i].ptr = unsafecast.AddressOfBytes(a.copyBytes(v.byteArray()))
+		}
+	}
+}
+
+func (a *rowAllocator) copyBytes(v []byte) []byte {
+	if free := cap(a.buffer) - len(a.buffer); free < len(v) {
+		newCap := 2 * cap(a.buffer)
+		if newCap == 0 {
+			newCap = defaultReadBufferSize
+		}
+		for newCap < len(v) {
+			newCap *= 2
+		}
+		a.buffer = make([]byte, 0, newCap)
+	}
+
+	i := len(a.buffer)
+	j := len(a.buffer) + len(v)
+	a.buffer = a.buffer[:j]
+
+	b := a.buffer[i:j:j]
+	copy(b, v)
+	return b
 }
 
 type rowBufferColumnChunk struct{ page rowBufferPage }
