@@ -14,8 +14,8 @@ import (
 type ReadMode int
 
 const (
-	ReadModeAsync ReadMode = iota // ReadModeAsync reads pages asynchronously in the background.
-	ReadModeSync                  // ReadModeSync reads pages synchronously on demand.
+	ReadModeSync  ReadMode = iota // ReadModeSync reads pages synchronously on demand.
+	ReadModeAsync                 // ReadModeAsync reads pages asynchronously in the background.
 )
 
 const (
