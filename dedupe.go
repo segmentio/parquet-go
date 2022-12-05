@@ -104,6 +104,7 @@ func (d *dedupe) deduplicate(rows []Row, compare func(Row, Row) int) int {
 	rows = append(rows, d.uniq...)
 	rows = append(rows, d.dupe...)
 
+	d.alloc.reset()
 	d.alloc.capture(lastRow)
 	d.lastRow = append(d.lastRow[:0], lastRow...)
 	return len(d.uniq)
