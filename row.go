@@ -142,7 +142,9 @@ type RowWriterWithSchema interface {
 // writers passed as arguments.
 //
 // When writing rows, if any of the writers returns an error, the operation is
-// aborted and the error returned.
+// aborted and the error returned. If one of the writers did not error, but did
+// not write all the rows, the operation is aborted and io.ErrShortWrite is
+// returned.
 //
 // Rows are written sequentially to each writer in the order they are given to
 // this function.
@@ -156,9 +158,12 @@ type multiRowWriter struct{ writers []RowWriter }
 
 func (m *multiRowWriter) WriteRows(rows []Row) (int, error) {
 	for _, w := range m.writers {
-		_, err := w.WriteRows(rows)
+		n, err := w.WriteRows(rows)
 		if err != nil {
-			return 0, err
+			return n, err
+		}
+		if n != len(rows) {
+			return n, io.ErrShortWrite
 		}
 	}
 	return len(rows), nil
