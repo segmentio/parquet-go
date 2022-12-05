@@ -535,8 +535,8 @@ func nodeOf(t reflect.Type, tag []string) Node {
 		}
 
 	case reflect.Map:
-		if t.Implements(deprecated.MapGroupI) {
-			n = makeMap(tag, t, OldMap)
+		if deprecated.IsMap(t) {
+			n = makeMap(tag, t, deprecatedMap)
 		} else {
 			n = makeMap(tag, t, Map)
 		}

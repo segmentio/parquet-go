@@ -1859,7 +1859,7 @@ func Map(key, value Node) Node {
 }
 
 // Older parquet writers write maps with `repeated group map`
-func OldMap(key, value Node) Node {
+func deprecatedMap(key, value Node) Node {
 	return mapNode{Group{
 		"map": Repeated(Group{
 			"key":   Required(key),

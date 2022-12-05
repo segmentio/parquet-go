@@ -15,4 +15,8 @@ type isMapGroup interface {
 	IsMapGroup()
 }
 
-var MapGroupI = reflect.TypeOf((*isMapGroup)(nil)).Elem()
+var mapGroupI = reflect.TypeOf((*isMapGroup)(nil)).Elem()
+
+func IsMap(t reflect.Type) bool {
+	return t.Implements(mapGroupI)
+}
