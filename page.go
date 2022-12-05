@@ -296,34 +296,6 @@ func CopyPages(dst PageWriter, src PageReader) (numValues int64, err error) {
 	}
 }
 
-func forEachPageSlice(page Page, wantSize int64, do func(Page) error) error {
-	numRows := page.NumRows()
-	if numRows == 0 {
-		return nil
-	}
-
-	pageSize := page.Size()
-	numPages := (pageSize + (wantSize - 1)) / wantSize
-	rowIndex := int64(0)
-	if numPages < 2 {
-		return do(page)
-	}
-
-	for numPages > 0 {
-		lastRowIndex := rowIndex + ((numRows - rowIndex) / numPages)
-		pageSlice := page.Slice(rowIndex, lastRowIndex)
-		err := do(pageSlice)
-		Release(pageSlice)
-		if err != nil {
-			return err
-		}
-		rowIndex = lastRowIndex
-		numPages--
-	}
-
-	return nil
-}
-
 // errorPage is an implementation of the Page interface which always errors when
 // attempting to read its values.
 //
