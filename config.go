@@ -128,7 +128,9 @@ func (c *FileConfig) Apply(options ...FileOption) {
 func (c *FileConfig) ConfigureFile(config *FileConfig) {
 	*config = FileConfig{
 		SkipPageIndex:    config.SkipPageIndex,
-		SkipBloomFilters: config.SkipBloomFilters, // jpe
+		SkipBloomFilters: config.SkipBloomFilters,
+		ReadBufferSize:   config.ReadBufferSize,
+		ReadMode:         config.ReadMode,
 	}
 }
 
