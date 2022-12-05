@@ -37,7 +37,6 @@ func (r *wrappedRows) Close() error {
 }
 
 func TestMergeRowGroupsCursorsAreClosed(t *testing.T) {
-
 	type model struct {
 		A int
 	}
@@ -110,7 +109,7 @@ func BenchmarkMergeRowGroups(b *testing.B) {
 
 			for n := 1; n <= numRowGroups; n++ {
 				b.Run(fmt.Sprintf("groups=%d,rows=%d", n, n*rowsPerGroup), func(b *testing.B) {
-					mergedRowGroup, err := parquet.MergeRowGroups(rowGroups[:n])
+					mergedRowGroup, err := parquet.MergeRowGroups(rowGroups[:n], options...)
 					if err != nil {
 						b.Fatal(err)
 					}
@@ -143,14 +142,20 @@ func BenchmarkMergeFiles(b *testing.B) {
 		b.Run(test.scenario, func(b *testing.B) {
 			schema := parquet.SchemaOf(test.model)
 
-			buffer := parquet.NewBuffer(
+			sortingOptions := []parquet.SortingOption{
+				parquet.SortingColumns(
+					parquet.Ascending(schema.Columns()[0]...),
+				),
+			}
+
+			options := []parquet.RowGroupOption{
 				schema,
 				parquet.SortingRowGroupConfig(
-					parquet.SortingColumns(
-						parquet.Ascending(schema.Columns()[0]...),
-					),
+					sortingOptions...,
 				),
-			)
+			}
+
+			buffer := parquet.NewBuffer(options...)
 
 			prng := rand.New(rand.NewSource(0))
 			files := make([]*parquet.File, numRowGroups)
@@ -162,7 +167,12 @@ func BenchmarkMergeFiles(b *testing.B) {
 				}
 				sort.Sort(buffer)
 				rowGroupBuffers[i].Reset()
-				writer := parquet.NewWriter(&rowGroupBuffers[i])
+				writer := parquet.NewWriter(&rowGroupBuffers[i],
+					schema,
+					parquet.SortingWriterConfig(
+						sortingOptions...,
+					),
+				)
 				_, err := copyRowsAndClose(writer, buffer.Rows())
 				if err != nil {
 					b.Fatal(err)
@@ -180,7 +190,7 @@ func BenchmarkMergeFiles(b *testing.B) {
 
 			for n := 1; n <= numRowGroups; n++ {
 				b.Run(fmt.Sprintf("groups=%d,rows=%d", n, n*rowsPerGroup), func(b *testing.B) {
-					mergedRowGroup, err := parquet.MergeRowGroups(rowGroups[:n])
+					mergedRowGroup, err := parquet.MergeRowGroups(rowGroups[:n], options...)
 					if err != nil {
 						b.Fatal(err)
 					}
