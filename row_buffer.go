@@ -504,8 +504,16 @@ func (r *rowBufferRows) ReadRows(rows []Row) (n int, err error) {
 	return n, err
 }
 
+func (r *rowBufferRows) WriteRowsTo(w RowWriter) (int64, error) {
+	n, err := w.WriteRows(r.rows[r.index:])
+	r.index += n
+	return int64(n), err
+}
+
 var (
 	_ RowGroup       = (*RowBuffer[any])(nil)
 	_ RowWriter      = (*RowBuffer[any])(nil)
 	_ sort.Interface = (*RowBuffer[any])(nil)
+
+	_ RowWriterTo = (*rowBufferRows)(nil)
 )

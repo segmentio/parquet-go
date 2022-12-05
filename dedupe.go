@@ -6,21 +6,19 @@ package parquet
 // If the underlying reader produces a sequence of rows sorted by the same
 // comparison predicate, the output is guaranteed to produce unique rows only.
 func DedupeRowReader(reader RowReader, compare func(Row, Row) int) RowReader {
-	return &dedupeRowReader{
-		reader: reader,
-		dedupe: dedupe{compare: compare},
-	}
+	return &dedupeRowReader{reader: reader, compare: compare}
 }
 
 type dedupeRowReader struct {
-	reader RowReader
+	reader  RowReader
+	compare func(Row, Row) int
 	dedupe
 }
 
 func (d *dedupeRowReader) ReadRows(rows []Row) (int, error) {
 	for {
 		n, err := d.reader.ReadRows(rows)
-		n = d.deduplicate(rows[:n])
+		n = d.deduplicate(rows[:n], d.compare)
 
 		if n > 0 || err != nil {
 			return n, err
@@ -34,14 +32,12 @@ func (d *dedupeRowReader) ReadRows(rows []Row) (int, error) {
 // If the writer is given a sequence of rows sorted by the same comparison
 // predicate, the output is guaranteed to contain unique rows only.
 func DedupeRowWriter(writer RowWriter, compare func(Row, Row) int) RowWriter {
-	return &dedupeRowWriter{
-		writer: writer,
-		dedupe: dedupe{compare: compare},
-	}
+	return &dedupeRowWriter{writer: writer, compare: compare}
 }
 
 type dedupeRowWriter struct {
-	writer RowWriter
+	writer  RowWriter
+	compare func(Row, Row) int
 	dedupe
 	rows []Row
 }
@@ -56,7 +52,7 @@ func (d *dedupeRowWriter) WriteRows(rows []Row) (int, error) {
 		}
 	}()
 
-	if n := d.deduplicate(d.rows); n > 0 {
+	if n := d.deduplicate(d.rows, d.compare); n > 0 {
 		w, err := d.writer.WriteRows(d.rows[:n])
 		if err != nil {
 			return w, err
@@ -70,14 +66,18 @@ func (d *dedupeRowWriter) WriteRows(rows []Row) (int, error) {
 }
 
 type dedupe struct {
-	compare func(Row, Row) int
 	alloc   rowAllocator
 	lastRow Row
 	uniq    []Row
 	dupe    []Row
 }
 
-func (d *dedupe) deduplicate(rows []Row) int {
+func (d *dedupe) reset() {
+	d.alloc.reset()
+	d.lastRow = d.lastRow[:0]
+}
+
+func (d *dedupe) deduplicate(rows []Row, compare func(Row, Row) int) int {
 	defer func() {
 		for i := range d.uniq {
 			d.uniq[i] = Row{}
@@ -92,7 +92,7 @@ func (d *dedupe) deduplicate(rows []Row) int {
 	lastRow := d.lastRow
 
 	for _, row := range rows {
-		if lastRow != nil && d.compare(row, lastRow) == 0 {
+		if len(lastRow) != 0 && compare(row, lastRow) == 0 {
 			d.dupe = append(d.dupe, row)
 		} else {
 			lastRow = row

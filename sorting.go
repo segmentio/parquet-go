@@ -30,6 +30,7 @@ type SortingWriter[T any] struct {
 	maxRows int64
 	numRows int64
 	sorting SortingConfig
+	dedupe  dedupe
 }
 
 // NewSortingWriter constructs a new sorting writer which writes a parquet file
@@ -125,7 +126,15 @@ func (w *SortingWriter[T]) Flush() error {
 		return err
 	}
 
-	if _, err := w.output.WriteRowGroup(m); err != nil {
+	rows := m.Rows()
+	defer rows.Close()
+
+	reader := RowReader(rows)
+	if w.sorting.DropDuplicatedRows {
+		reader = DedupeRowReader(rows, w.rows.compare)
+	}
+
+	if _, err := CopyRows(w.output, reader); err != nil {
 		return err
 	}
 
@@ -191,7 +200,15 @@ func (w *SortingWriter[T]) sortAndWriteBufferedRows() error {
 	defer w.rows.Reset()
 	sort.Sort(w.rows)
 
-	n, err := w.writer.WriteRowGroup(w.rows)
+	if w.sorting.DropDuplicatedRows {
+		w.rows.numRows = w.dedupe.deduplicate(w.rows.rows[:w.rows.numRows], w.rows.compare)
+		defer w.dedupe.reset()
+	}
+
+	rows := w.rows.Rows()
+	defer rows.Close()
+
+	n, err := CopyRows(w.writer, rows)
 	if err != nil {
 		return err
 	}
