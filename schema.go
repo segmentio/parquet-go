@@ -302,6 +302,12 @@ func (s *Schema) Columns() [][]string {
 	return s.columns
 }
 
+// Comparator constructs a comparator function which orders rows according to
+// the list of sorting columns passed as arguments.
+func (s *Schema) Comparator(sortingColumns ...SortingColumn) func(Row, Row) int {
+	return compareRowsFuncOf(s, sortingColumns)
+}
+
 func (s *Schema) forEachNode(do func(name string, node Node)) {
 	forEachNodeOf(s.Name(), s, do)
 }

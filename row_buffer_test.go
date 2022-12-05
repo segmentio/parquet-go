@@ -3,10 +3,13 @@
 package parquet_test
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"reflect"
+	"sort"
 	"testing"
 
 	"github.com/segmentio/parquet-go"
@@ -80,4 +83,45 @@ func testRowBufferRows[Row any](rows []Row) error {
 		return fmt.Errorf("rows mismatch:\nwant: %#v\ngot:  %#v", rows, result)
 	}
 	return nil
+}
+
+func BenchmarkSortRowBuffer(b *testing.B) {
+	type Row struct {
+		I0 int64
+		I1 int64
+		I2 int64
+		I3 int64
+		I4 int64
+		I5 int64
+		I6 int64
+		I7 int64
+		I8 int64
+		I9 int64
+		ID [16]byte
+	}
+
+	buf := parquet.NewRowBuffer[Row](
+		parquet.SortingColumns(
+			parquet.Ascending("ID"),
+		),
+	)
+
+	rows := make([]Row, 10e3)
+	prng := rand.New(rand.NewSource(0))
+
+	for i := range rows {
+		binary.LittleEndian.PutUint64(rows[i].ID[:8], uint64(i))
+		binary.LittleEndian.PutUint64(rows[i].ID[8:], ^uint64(i))
+	}
+
+	buf.Write(rows)
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		for j := 0; j < 10; j++ {
+			buf.Swap(prng.Intn(len(rows)), prng.Intn(len(rows)))
+		}
+
+		sort.Sort(buf)
+	}
 }

@@ -6,28 +6,6 @@ import (
 	"github.com/segmentio/parquet-go"
 )
 
-func assertCompare(t *testing.T, a, b parquet.Value, cmp func(parquet.Value, parquet.Value) int, want int) {
-	if got := cmp(a, b); got != want {
-		t.Errorf("compare(%v, %v): got=%d want=%d", a, b, got, want)
-	}
-}
-
-func TestCompareNullsFirst(t *testing.T) {
-	cmp := parquet.CompareNullsFirst(parquet.Int32Type.Compare)
-	assertCompare(t, parquet.Value{}, parquet.Value{}, cmp, 0)
-	assertCompare(t, parquet.Value{}, parquet.ValueOf(int32(0)), cmp, -1)
-	assertCompare(t, parquet.ValueOf(int32(0)), parquet.Value{}, cmp, +1)
-	assertCompare(t, parquet.ValueOf(int32(0)), parquet.ValueOf(int32(1)), cmp, -1)
-}
-
-func TestCompareNullsLast(t *testing.T) {
-	cmp := parquet.CompareNullsLast(parquet.Int32Type.Compare)
-	assertCompare(t, parquet.Value{}, parquet.Value{}, cmp, 0)
-	assertCompare(t, parquet.Value{}, parquet.ValueOf(int32(0)), cmp, +1)
-	assertCompare(t, parquet.ValueOf(int32(0)), parquet.Value{}, cmp, -1)
-	assertCompare(t, parquet.ValueOf(int32(0)), parquet.ValueOf(int32(1)), cmp, -1)
-}
-
 func TestSearchBinary(t *testing.T) {
 	testSearch(t, [][]int32{
 		{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},

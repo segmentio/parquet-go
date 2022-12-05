@@ -25,18 +25,10 @@ import (
 type RowBuffer[T any] struct {
 	schema  *Schema
 	sorting []SortingColumn
-	order   []columnOrder
 	buffer  []byte
 	rows    []Row
 	numRows int
-	values1 []Value
-	values2 []Value
-}
-
-type columnOrder struct {
-	columnIndex int16
-	repeated    bool
-	sortFunc    SortFunc
+	compare func(Row, Row) int
 }
 
 // NewRowBuffer constructs a new row buffer.
@@ -56,30 +48,10 @@ func NewRowBuffer[T any](options ...RowGroupOption) *RowBuffer[T] {
 		panic("row buffer must be instantiated with schema or concrete type.")
 	}
 
-	order := make([]columnOrder, 0, len(config.SortingColumns))
-	for _, sortingColumn := range config.SortingColumns {
-		leaf, ok := config.Schema.Lookup(sortingColumn.Path()...)
-		if ok {
-			order = append(order, columnOrder{
-				columnIndex: makeColumnIndex(leaf.ColumnIndex),
-				repeated:    leaf.MaxRepetitionLevel > 0,
-				sortFunc: SortFuncOf(leaf.Node.Type(),
-					SortDescending(sortingColumn.Descending()),
-					SortNullsFirst(sortingColumn.NullsFirst()),
-					SortMaxRepetitionLevel(leaf.MaxRepetitionLevel),
-					SortMaxDefinitionLevel(leaf.MaxDefinitionLevel),
-				),
-			})
-		}
-	}
-
-	values := [2]Value{}
 	return &RowBuffer[T]{
 		schema:  config.Schema,
 		sorting: config.SortingColumns,
-		order:   order,
-		values1: values[0:0:1],
-		values2: values[1:1:2],
+		compare: config.Schema.Comparator(config.SortingColumns...),
 	}
 }
 
@@ -93,9 +65,6 @@ func (buf *RowBuffer[T]) Reset() {
 			row[i] = Value{}
 		}
 	}
-
-	clearValues(buf.values1[:cap(buf.values1)])
-	clearValues(buf.values2[:cap(buf.values2)])
 }
 
 // NumRows returns the number of rows currently written to the buffer.
@@ -159,40 +128,7 @@ func (buf *RowBuffer[T]) Len() int { return buf.numRows }
 //
 // The method contributes to satisfying sort.Interface.
 func (buf *RowBuffer[T]) Less(i, j int) bool {
-	row1 := buf.rows[i]
-	row2 := buf.rows[j]
-
-	for _, order := range buf.order {
-		buf.values1 = buf.values1[:0]
-		buf.values2 = buf.values2[:0]
-
-		for _, value := range row1 {
-			if value.columnIndex == order.columnIndex {
-				buf.values1 = append(buf.values1, value)
-				if !order.repeated {
-					break
-				}
-			}
-		}
-
-		for _, value := range row2 {
-			if value.columnIndex == order.columnIndex {
-				buf.values2 = append(buf.values2, value)
-				if !order.repeated {
-					break
-				}
-			}
-		}
-
-		switch cmp := order.sortFunc(buf.values1, buf.values2); {
-		case cmp < 0:
-			return true
-		case cmp > 0:
-			return false
-		}
-	}
-
-	return false
+	return buf.compare(buf.rows[i], buf.rows[j]) < 0
 }
 
 // Swap exchanges the rows at index i and j in the buffer.
@@ -267,7 +203,7 @@ func (buf *RowBuffer[T]) capture(row Row) {
 	for i, v := range row {
 		switch kind := v.Kind(); kind {
 		case ByteArray, FixedLenByteArray:
-			row[i].ptr = unsafecast.AddressOfBytes(buf.copyBytes(v.ByteArray()))
+			row[i].ptr = unsafecast.AddressOfBytes(buf.copyBytes(v.byteArray()))
 		}
 	}
 }
@@ -322,7 +258,7 @@ func (p *rowBufferPage) NumRows() int64 { return int64(len(p.rows)) }
 func (p *rowBufferPage) NumValues() int64 {
 	numValues := int64(0)
 	p.scan(func(value Value) {
-		if !value.IsNull() {
+		if !value.isNull() {
 			numValues++
 		}
 	})
@@ -332,7 +268,7 @@ func (p *rowBufferPage) NumValues() int64 {
 func (p *rowBufferPage) NumNulls() int64 {
 	numNulls := int64(0)
 	p.scan(func(value Value) {
-		if value.IsNull() {
+		if value.isNull() {
 			numNulls++
 		}
 	})
@@ -409,47 +345,47 @@ func (p *rowBufferPage) Data() encoding.Values {
 	case Boolean:
 		values := make([]byte, (len(p.rows)+7)/8)
 		numValues := 0
-		p.scan(func(value Value) {
-			if value.Boolean() {
+		p.scanNonNull(func(value Value) {
+			if value.boolean() {
 				i := uint(numValues) / 8
 				j := uint(numValues) % 8
 				values[i] |= 1 << j
 			}
 			numValues++
 		})
-		return encoding.BooleanValues(values)
+		return encoding.BooleanValues(values[:(numValues+7)/8])
 
 	case Int32:
 		values := make([]int32, 0, len(p.rows))
-		p.scan(func(value Value) { values = append(values, value.Int32()) })
+		p.scanNonNull(func(value Value) { values = append(values, value.int32()) })
 		return encoding.Int32Values(values)
 
 	case Int64:
 		values := make([]int64, 0, len(p.rows))
-		p.scan(func(value Value) { values = append(values, value.Int64()) })
+		p.scanNonNull(func(value Value) { values = append(values, value.int64()) })
 		return encoding.Int64Values(values)
 
 	case Int96:
 		values := make([]deprecated.Int96, 0, len(p.rows))
-		p.scan(func(value Value) { values = append(values, value.Int96()) })
+		p.scanNonNull(func(value Value) { values = append(values, value.int96()) })
 		return encoding.Int96Values(values)
 
 	case Float:
 		values := make([]float32, 0, len(p.rows))
-		p.scan(func(value Value) { values = append(values, value.Float()) })
+		p.scanNonNull(func(value Value) { values = append(values, value.float()) })
 		return encoding.FloatValues(values)
 
 	case Double:
 		values := make([]float64, 0, len(p.rows))
-		p.scan(func(value Value) { values = append(values, value.Double()) })
+		p.scanNonNull(func(value Value) { values = append(values, value.double()) })
 		return encoding.DoubleValues(values)
 
 	case ByteArray:
 		values := make([]byte, 0, p.typ.EstimateSize(len(p.rows)))
 		offsets := make([]uint32, 0, len(p.rows))
-		p.scan(func(value Value) {
+		p.scanNonNull(func(value Value) {
 			offsets = append(offsets, uint32(len(values)))
-			values = append(values, value.ByteArray()...)
+			values = append(values, value.byteArray()...)
 		})
 		offsets = append(offsets, uint32(len(values)))
 		return encoding.ByteArrayValues(values, offsets)
@@ -457,7 +393,7 @@ func (p *rowBufferPage) Data() encoding.Values {
 	case FixedLenByteArray:
 		length := p.typ.Length()
 		values := make([]byte, 0, length*len(p.rows))
-		p.scan(func(value Value) { values = append(values, value.ByteArray()...) })
+		p.scanNonNull(func(value Value) { values = append(values, value.byteArray()...) })
 		return encoding.FixedLenByteArrayValues(values, length)
 
 	default:
@@ -475,6 +411,14 @@ func (p *rowBufferPage) scan(f func(Value)) {
 			}
 		}
 	}
+}
+
+func (p *rowBufferPage) scanNonNull(f func(Value)) {
+	p.scan(func(value Value) {
+		if !value.isNull() {
+			f(value)
+		}
+	})
 }
 
 type rowBufferPageValueReader struct {
