@@ -62,6 +62,9 @@ func (row Row) Equal(other Row) bool {
 
 // Repool readds the row to the internal pool.
 func (row Row) Repool() {
+	for i := range row {
+		row[i] = Value{}
+	}
 	rows.put(row)
 }
 
