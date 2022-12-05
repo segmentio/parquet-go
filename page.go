@@ -238,11 +238,6 @@ func readPages(pages Pages, read chan<- asyncPage, seek <-chan int64, done <-cha
 	}
 }
 
-func copyPagesAndClose(w PageWriter, r Pages) (int64, error) {
-	defer r.Close()
-	return CopyPages(w, r)
-}
-
 type singlePage struct {
 	page    Page
 	seek    int64

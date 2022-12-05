@@ -749,14 +749,6 @@ func (w *writer) WriteValues(values []Value) (numValues int, err error) {
 	return w.columns[values[0].Column()].WriteValues(values)
 }
 
-// This WritePage method satisfies the PageWriter interface as a mechanism to
-// allow writing whole pages of values instead of individual rows. It is called
-// indirectly by readers that implement WriteRowsTo and are able to leverage
-// the method to optimize writes.
-func (w *writer) WritePage(page Page) (int64, error) {
-	return w.columns[page.Column()].WritePage(page)
-}
-
 // One writerBuffers is used by each writer instance, the memory buffers here
 // are shared by all columns of the writer because serialization is not done
 // concurrently, which helps keep memory utilization low, both in the total
@@ -947,10 +939,6 @@ func (c *writerColumn) totalRowCount() int64 {
 	return n
 }
 
-func (c *writerColumn) canFlush() bool {
-	return c.columnBuffer.Size() >= int64(c.bufferSize/2)
-}
-
 func (c *writerColumn) flush() (err error) {
 	if c.numValues != 0 {
 		c.numValues = 0
@@ -1045,57 +1033,6 @@ func (c *writerColumn) WriteValues(values []Value) (numValues int, err error) {
 	}
 	numValues, err = c.columnBuffer.WriteValues(values)
 	c.numValues += int32(numValues)
-	return numValues, err
-}
-
-func (c *writerColumn) WritePage(page Page) (numValues int64, err error) {
-	// Page write optimizations are only available the column is not reindexing
-	// the values. If a dictionary is present, the column needs to see each
-	// individual value in order to re-index them in the dictionary.
-	if c.dictionary == nil || c.dictionary == page.Dictionary() {
-		// If the column had buffered values, we continue writing values from
-		// the page into the column buffer if it would have caused producing a
-		// page less than half the size of the target; if there were enough
-		// buffered values already, we have to flush the buffered page instead
-		// otherwise values would get reordered.
-		if c.numValues > 0 && c.canFlush() {
-			if err := c.flush(); err != nil {
-				return 0, err
-			}
-		}
-
-		// If we were successful at flushing buffered values, we attempt to
-		// optimize the write path by copying whole pages without decoding them
-		// into a sequence of values.
-		if c.numValues == 0 {
-			// Buffered pages may be larger than the target page size on the
-			// column, in which case multiple pages get written by slicing
-			// the original page into sub-pages.
-			err = forEachPageSlice(page, int64(c.bufferSize), func(p Page) error {
-				n, err := c.writeDataPage(p)
-				numValues += n
-				return err
-			})
-			return numValues, err
-		}
-	}
-
-	// Pages that implement neither of those interfaces can still be
-	// written by copying their values into the column buffer and flush
-	// them to compressed page buffers as if the program had written
-	// rows individually.
-	return c.writePageValues(page.Values())
-}
-
-func (c *writerColumn) writePageValues(page ValueReader) (numValues int64, err error) {
-	numValues, err = CopyValues(c, page)
-	if err == nil && c.canFlush() {
-		// Always attempt to flush after writing a full page if we have enough
-		// buffered values; the intent is to leave the column clean so that
-		// subsequent calls to the WritePage method can use optimized write path
-		// to bypass buffering.
-		err = c.flush()
-	}
 	return numValues, err
 }
 
@@ -1419,9 +1356,7 @@ var (
 	_ RowGroupWriter      = (*Writer)(nil)
 
 	_ RowWriter   = (*writer)(nil)
-	_ PageWriter  = (*writer)(nil)
 	_ ValueWriter = (*writer)(nil)
 
-	_ PageWriter  = (*writerColumn)(nil)
 	_ ValueWriter = (*writerColumn)(nil)
 )
