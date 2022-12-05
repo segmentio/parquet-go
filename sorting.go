@@ -125,10 +125,7 @@ func (w *SortingWriter[T]) Flush() error {
 		return err
 	}
 
-	rows := m.Rows()
-	defer rows.Close()
-
-	if _, err := CopyRows(w.output, rows); err != nil {
+	if _, err := w.output.WriteRowGroup(m); err != nil {
 		return err
 	}
 
@@ -194,10 +191,7 @@ func (w *SortingWriter[T]) sortAndWriteBufferedRows() error {
 	defer w.rows.Reset()
 	sort.Sort(w.rows)
 
-	rows := w.rows.Rows()
-	defer rows.Close()
-
-	n, err := CopyRows(w.writer, rows)
+	n, err := w.writer.WriteRowGroup(w.rows)
 	if err != nil {
 		return err
 	}
