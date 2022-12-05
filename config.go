@@ -350,7 +350,6 @@ func (c *RowGroupConfig) ConfigureRowGroup(config *RowGroupConfig) {
 //			parquet.DropDuplicatedRows(true),
 //		),
 //	})
-//
 type SortingConfig struct {
 	SortingColumns     []SortingColumn
 	DropDuplicatedRows bool
