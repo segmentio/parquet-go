@@ -34,7 +34,7 @@ func (c *SortConfig) ConfigureSort(config *SortConfig) {
 //
 // Defaults to zero, which represents a non-repeated column.
 func SortMaxRepetitionLevel(level int) SortOption {
-	return sortingOption(func(c *SortConfig) { c.MaxRepetitionLevel = level })
+	return sortOption(func(c *SortConfig) { c.MaxRepetitionLevel = level })
 }
 
 // SortMaxDefinitionLevel constructs a configuration option which sets the
@@ -42,7 +42,7 @@ func SortMaxRepetitionLevel(level int) SortOption {
 //
 // Defaults to zero, which represents a non-nullable column.
 func SortMaxDefinitionLevel(level int) SortOption {
-	return sortingOption(func(c *SortConfig) { c.MaxDefinitionLevel = level })
+	return sortOption(func(c *SortConfig) { c.MaxDefinitionLevel = level })
 }
 
 // SortDescending constructs a configuration option which inverts the order of a
@@ -50,7 +50,7 @@ func SortMaxDefinitionLevel(level int) SortOption {
 //
 // Defaults to false, which means values are sorted in ascending order.
 func SortDescending(descending bool) SortOption {
-	return sortingOption(func(c *SortConfig) { c.Descending = descending })
+	return sortOption(func(c *SortConfig) { c.Descending = descending })
 }
 
 // SortNullsFirst constructs a configuration option which places the null values
@@ -58,7 +58,7 @@ func SortDescending(descending bool) SortOption {
 //
 // Defaults to false, which means null values are placed last.
 func SortNullsFirst(nullsFirst bool) SortOption {
-	return sortingOption(func(c *SortConfig) { c.NullsFirst = nullsFirst })
+	return sortOption(func(c *SortConfig) { c.NullsFirst = nullsFirst })
 }
 
 // SortOption is an interface implemented by types that carry configuration
@@ -67,9 +67,9 @@ type SortOption interface {
 	ConfigureSort(*SortConfig)
 }
 
-type sortingOption func(*SortConfig)
+type sortOption func(*SortConfig)
 
-func (f sortingOption) ConfigureSort(c *SortConfig) { f(c) }
+func (f sortOption) ConfigureSort(c *SortConfig) { f(c) }
 
 // SortFunc is a function type which compares two sets of column values.
 //

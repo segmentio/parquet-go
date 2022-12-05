@@ -28,8 +28,10 @@ func TestSortingWriter(t *testing.T) {
 
 	buffer := bytes.NewBuffer(nil)
 	writer := parquet.NewSortingWriter[Row](buffer, 99,
-		parquet.SortingColumns(
-			parquet.Ascending("value"),
+		parquet.SortingWriterConfig(
+			parquet.SortingColumns(
+				parquet.Ascending("value"),
+			),
 		),
 	)
 

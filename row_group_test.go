@@ -187,15 +187,19 @@ func TestMergeRowGroups(t *testing.T) {
 		{
 			scenario: "row groups sorted by ascending last name",
 			options: []parquet.RowGroupOption{
-				parquet.SortingColumns(
-					parquet.Ascending("LastName"),
+				parquet.SortingRowGroupConfig(
+					parquet.SortingColumns(
+						parquet.Ascending("LastName"),
+					),
 				),
 			},
 			input: []parquet.RowGroup{
 				sortedRowGroup(
 					[]parquet.RowGroupOption{
-						parquet.SortingColumns(
-							parquet.Ascending("LastName"),
+						parquet.SortingRowGroupConfig(
+							parquet.SortingColumns(
+								parquet.Ascending("LastName"),
+							),
 						),
 					},
 					Person{FirstName: "Han", LastName: "Solo"},
@@ -203,8 +207,10 @@ func TestMergeRowGroups(t *testing.T) {
 				),
 				sortedRowGroup(
 					[]parquet.RowGroupOption{
-						parquet.SortingColumns(
-							parquet.Ascending("LastName"),
+						parquet.SortingRowGroupConfig(
+							parquet.SortingColumns(
+								parquet.Ascending("LastName"),
+							),
 						),
 					},
 					Person{FirstName: "Obiwan", LastName: "Kenobi"},
@@ -220,15 +226,19 @@ func TestMergeRowGroups(t *testing.T) {
 		{
 			scenario: "row groups sorted by descending last name",
 			options: []parquet.RowGroupOption{
-				parquet.SortingColumns(
-					parquet.Descending("LastName"),
+				parquet.SortingRowGroupConfig(
+					parquet.SortingColumns(
+						parquet.Descending("LastName"),
+					),
 				),
 			},
 			input: []parquet.RowGroup{
 				sortedRowGroup(
 					[]parquet.RowGroupOption{
-						parquet.SortingColumns(
-							parquet.Descending("LastName"),
+						parquet.SortingRowGroupConfig(
+							parquet.SortingColumns(
+								parquet.Descending("LastName"),
+							),
 						),
 					},
 					Person{FirstName: "Han", LastName: "Solo"},
@@ -236,8 +246,10 @@ func TestMergeRowGroups(t *testing.T) {
 				),
 				sortedRowGroup(
 					[]parquet.RowGroupOption{
-						parquet.SortingColumns(
-							parquet.Descending("LastName"),
+						parquet.SortingRowGroupConfig(
+							parquet.SortingColumns(
+								parquet.Descending("LastName"),
+							),
 						),
 					},
 					Person{FirstName: "Obiwan", LastName: "Kenobi"},
@@ -253,17 +265,21 @@ func TestMergeRowGroups(t *testing.T) {
 		{
 			scenario: "row groups sorted by ascending last and first name",
 			options: []parquet.RowGroupOption{
-				parquet.SortingColumns(
-					parquet.Ascending("LastName"),
-					parquet.Ascending("FirstName"),
+				parquet.SortingRowGroupConfig(
+					parquet.SortingColumns(
+						parquet.Ascending("LastName"),
+						parquet.Ascending("FirstName"),
+					),
 				),
 			},
 			input: []parquet.RowGroup{
 				sortedRowGroup(
 					[]parquet.RowGroupOption{
-						parquet.SortingColumns(
-							parquet.Ascending("LastName"),
-							parquet.Ascending("FirstName"),
+						parquet.SortingRowGroupConfig(
+							parquet.SortingColumns(
+								parquet.Ascending("LastName"),
+								parquet.Ascending("FirstName"),
+							),
 						),
 					},
 					Person{FirstName: "Luke", LastName: "Skywalker"},
@@ -271,9 +287,11 @@ func TestMergeRowGroups(t *testing.T) {
 				),
 				sortedRowGroup(
 					[]parquet.RowGroupOption{
-						parquet.SortingColumns(
-							parquet.Ascending("LastName"),
-							parquet.Ascending("FirstName"),
+						parquet.SortingRowGroupConfig(
+							parquet.SortingColumns(
+								parquet.Ascending("LastName"),
+								parquet.Ascending("FirstName"),
+							),
 						),
 					},
 					Person{FirstName: "Obiwan", LastName: "Kenobi"},
@@ -292,15 +310,19 @@ func TestMergeRowGroups(t *testing.T) {
 			scenario: "row groups with conversion to a different schema",
 			options: []parquet.RowGroupOption{
 				parquet.SchemaOf(LastNameOnly{}),
-				parquet.SortingColumns(
-					parquet.Ascending("LastName"),
+				parquet.SortingRowGroupConfig(
+					parquet.SortingColumns(
+						parquet.Ascending("LastName"),
+					),
 				),
 			},
 			input: []parquet.RowGroup{
 				sortedRowGroup(
 					[]parquet.RowGroupOption{
-						parquet.SortingColumns(
-							parquet.Ascending("LastName"),
+						parquet.SortingRowGroupConfig(
+							parquet.SortingColumns(
+								parquet.Ascending("LastName"),
+							),
 						),
 					},
 					Person{FirstName: "Han", LastName: "Solo"},
@@ -308,8 +330,10 @@ func TestMergeRowGroups(t *testing.T) {
 				),
 				sortedRowGroup(
 					[]parquet.RowGroupOption{
-						parquet.SortingColumns(
-							parquet.Ascending("LastName"),
+						parquet.SortingRowGroupConfig(
+							parquet.SortingColumns(
+								parquet.Ascending("LastName"),
+							),
 						),
 					},
 					Person{FirstName: "Obiwan", LastName: "Kenobi"},
@@ -318,8 +342,10 @@ func TestMergeRowGroups(t *testing.T) {
 			},
 			output: sortedRowGroup(
 				[]parquet.RowGroupOption{
-					parquet.SortingColumns(
-						parquet.Ascending("LastName"),
+					parquet.SortingRowGroupConfig(
+						parquet.SortingColumns(
+							parquet.Ascending("LastName"),
+						),
 					),
 				},
 				LastNameOnly{LastName: "Solo"},

@@ -246,9 +246,11 @@ written to a parquet file:
 type RowType struct { FirstName, LastName string }
 
 buffer := parquet.NewGenericBuffer[RowType](
-    parquet.SortingColumns(
-        parquet.Ascending("LastName"),
-        parquet.Ascending("FistName"),
+    parquet.SortingRowGroupConfig(
+        parquet.SortingColumns(
+            parquet.Ascending("LastName"),
+            parquet.Ascending("FistName"),
+        ),
     ),
 )
 

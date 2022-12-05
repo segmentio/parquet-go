@@ -206,9 +206,9 @@ type WriterConfig struct {
 	MaxRowsPerRowGroup   int64
 	KeyValueMetadata     map[string]string
 	Schema               *Schema
-	SortingColumns       []SortingColumn
 	BloomFilters         []BloomFilterColumn
 	Compression          compress.Codec
+	Sorting              SortingConfig
 }
 
 // DefaultWriterConfig returns a new WriterConfig value initialized with the
@@ -255,6 +255,7 @@ func (c *WriterConfig) ConfigureWriter(config *WriterConfig) {
 			keyValueMetadata[k] = v
 		}
 	}
+
 	*config = WriterConfig{
 		CreatedBy:            coalesceString(c.CreatedBy, config.CreatedBy),
 		ColumnPageBuffers:    coalescePageBufferPool(c.ColumnPageBuffers, config.ColumnPageBuffers),
@@ -266,9 +267,9 @@ func (c *WriterConfig) ConfigureWriter(config *WriterConfig) {
 		MaxRowsPerRowGroup:   config.MaxRowsPerRowGroup,
 		KeyValueMetadata:     keyValueMetadata,
 		Schema:               coalesceSchema(c.Schema, config.Schema),
-		SortingColumns:       coalesceSortingColumns(c.SortingColumns, config.SortingColumns),
 		BloomFilters:         coalesceBloomFilters(c.BloomFilters, config.BloomFilters),
 		Compression:          coalesceCompression(c.Compression, config.Compression),
+		Sorting:              coalesceSortingConfig(c.Sorting, config.Sorting),
 	}
 }
 
@@ -293,8 +294,8 @@ func (c *WriterConfig) Validate() error {
 //	})
 type RowGroupConfig struct {
 	ColumnBufferCapacity int
-	SortingColumns       []SortingColumn
 	Schema               *Schema
+	Sorting              SortingConfig
 }
 
 // DefaultRowGroupConfig returns a new RowGroupConfig value initialized with the
@@ -333,8 +334,61 @@ func (c *RowGroupConfig) Apply(options ...RowGroupOption) {
 func (c *RowGroupConfig) ConfigureRowGroup(config *RowGroupConfig) {
 	*config = RowGroupConfig{
 		ColumnBufferCapacity: coalesceInt(c.ColumnBufferCapacity, config.ColumnBufferCapacity),
-		SortingColumns:       coalesceSortingColumns(c.SortingColumns, config.SortingColumns),
 		Schema:               coalesceSchema(c.Schema, config.Schema),
+		Sorting:              coalesceSortingConfig(c.Sorting, config.Sorting),
+	}
+}
+
+// The SortingConfig type carries configuration options for parquet row groups.
+//
+// SortingConfig implements the SortingOption interface so it can be used
+// directly as argument to the NewSortingWriter function when needed,
+// for example:
+//
+//	buffer := parquet.NewSortingWriter[Row](
+//		parquet.SortingWriterConfig(
+//			parquet.DropDuplicatedRows(true),
+//		),
+//	})
+//
+type SortingConfig struct {
+	SortingColumns     []SortingColumn
+	DropDuplicatedRows bool
+}
+
+// DefaultSortingConfig returns a new SortingConfig value initialized with the
+// default row group configuration.
+func DefaultSortingConfig() *SortingConfig {
+	return &SortingConfig{
+		DropDuplicatedRows: false,
+	}
+}
+
+// NewSortingConfig constructs a new sorting configuration applying the
+// options passed as arguments.
+//
+// The function returns an non-nil error if some of the options carried invalid
+// configuration values.
+func NewSortingConfig(options ...SortingOption) (*SortingConfig, error) {
+	config := DefaultSortingConfig()
+	config.Apply(options...)
+	return config, config.Validate()
+}
+
+func (c *SortingConfig) Validate() error {
+	return nil
+}
+
+func (c *SortingConfig) Apply(options ...SortingOption) {
+	for _, opt := range options {
+		opt.ConfigureSorting(c)
+	}
+}
+
+func (c *SortingConfig) ConfigureSorting(config *SortingConfig) {
+	*config = SortingConfig{
+		SortingColumns:     coalesceSortingColumns(c.SortingColumns, config.SortingColumns),
+		DropDuplicatedRows: c.DropDuplicatedRows,
 	}
 }
 
@@ -360,6 +414,12 @@ type WriterOption interface {
 // options for parquet row groups.
 type RowGroupOption interface {
 	ConfigureRowGroup(*RowGroupConfig)
+}
+
+// SortingOption is an interface implemented by types that carry configuration
+// options for parquet sorting writers.
+type SortingOption interface {
+	ConfigureSorting(*SortingConfig)
 }
 
 // SkipPageIndex is a file configuration option which prevents automatically
@@ -532,6 +592,13 @@ func Compression(codec compress.Codec) WriterOption {
 	return writerOption(func(config *WriterConfig) { config.Compression = codec })
 }
 
+// SortingWriterConfig is a writer option which applies configuration specific
+// to sorting writers.
+func SortingWriterConfig(options ...SortingOption) WriterOption {
+	options = append([]SortingOption{}, options...)
+	return writerOption(func(config *WriterConfig) { config.Sorting.Apply(options...) })
+}
+
 // ColumnBufferCapacity creates a configuration option which defines the size of
 // row group column buffers.
 //
@@ -540,32 +607,37 @@ func ColumnBufferCapacity(size int) RowGroupOption {
 	return rowGroupOption(func(config *RowGroupConfig) { config.ColumnBufferCapacity = size })
 }
 
+// SortingRowGroupConfig is a row group option which applies configuration
+// specific sorting row groups.
+func SortingRowGroupConfig(options ...SortingOption) RowGroupOption {
+	options = append([]SortingOption{}, options...)
+	return rowGroupOption(func(config *RowGroupConfig) { config.Sorting.Apply(options...) })
+}
+
 // SortingColumns creates a configuration option which defines the sorting order
 // of columns in a row group.
 //
 // The order of sorting columns passed as argument defines the ordering
 // hierarchy; when elements are equal in the first column, the second column is
 // used to order rows, etc...
-func SortingColumns(columns ...SortingColumn) interface {
-	RowGroupOption
-	WriterOption
-} {
+func SortingColumns(columns ...SortingColumn) SortingOption {
 	// Make a copy so that we do not retain the input slice generated implicitly
 	// for the variable argument list, and also avoid having a nil slice when
 	// the option is passed with no sorting columns, so we can differentiate it
 	// from it not being passed.
 	columns = append([]SortingColumn{}, columns...)
-	return sortingColumns(columns)
+	return sortingOption(func(config *SortingConfig) { config.SortingColumns = columns })
 }
 
-type sortingColumns []SortingColumn
-
-func (columns sortingColumns) ConfigureRowGroup(config *RowGroupConfig) {
-	config.SortingColumns = columns
-}
-
-func (columns sortingColumns) ConfigureWriter(config *WriterConfig) {
-	config.SortingColumns = columns
+// DropDuplicatedRows configures whether a sorting writer will keep or remove
+// duplicated rows.
+//
+// Two rows are considered duplicates if the values of their all their sorting
+// columns are equal.
+//
+// Defaults to false
+func DropDuplicatedRows(drop bool) SortingOption {
+	return sortingOption(func(config *SortingConfig) { config.DropDuplicatedRows = drop })
 }
 
 type fileOption func(*FileConfig)
@@ -583,6 +655,10 @@ func (opt writerOption) ConfigureWriter(config *WriterConfig) { opt(config) }
 type rowGroupOption func(*RowGroupConfig)
 
 func (opt rowGroupOption) ConfigureRowGroup(config *RowGroupConfig) { opt(config) }
+
+type sortingOption func(*SortingConfig)
+
+func (opt sortingOption) ConfigureSorting(config *SortingConfig) { opt(config) }
 
 func coalesceInt(i1, i2 int) int {
 	if i1 != 0 {
@@ -631,6 +707,13 @@ func coalesceSortingColumns(s1, s2 []SortingColumn) []SortingColumn {
 		return s1
 	}
 	return s2
+}
+
+func coalesceSortingConfig(c1, c2 SortingConfig) SortingConfig {
+	return SortingConfig{
+		SortingColumns:     coalesceSortingColumns(c1.SortingColumns, c2.SortingColumns),
+		DropDuplicatedRows: c1.DropDuplicatedRows,
+	}
 }
 
 func coalesceBloomFilters(f1, f2 []BloomFilterColumn) []BloomFilterColumn {
@@ -722,4 +805,5 @@ var (
 	_ ReaderOption   = (*ReaderConfig)(nil)
 	_ WriterOption   = (*WriterConfig)(nil)
 	_ RowGroupOption = (*RowGroupConfig)(nil)
+	_ SortingOption  = (*SortingConfig)(nil)
 )

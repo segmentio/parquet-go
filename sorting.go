@@ -29,7 +29,7 @@ type SortingWriter[T any] struct {
 	output  *GenericWriter[T]
 	maxRows int64
 	numRows int64
-	sorting []SortingColumn
+	sorting SortingConfig
 }
 
 // NewSortingWriter constructs a new sorting writer which writes a parquet file
@@ -57,8 +57,8 @@ func NewSortingWriter[T any](output io.Writer, sortRowCount int64, options ...Wr
 
 	return &SortingWriter[T]{
 		rows: NewRowBuffer[T](&RowGroupConfig{
-			Schema:         config.Schema,
-			SortingColumns: config.SortingColumns,
+			Schema:  config.Schema,
+			Sorting: config.Sorting,
 		}),
 		buffer: buffer,
 		writer: NewGenericWriter[T](buffer, &WriterConfig{
@@ -69,12 +69,12 @@ func NewSortingWriter[T any](output io.Writer, sortRowCount int64, options ...Wr
 			WriteBufferSize:      config.WriteBufferSize,
 			DataPageVersion:      config.DataPageVersion,
 			Schema:               config.Schema,
-			SortingColumns:       config.SortingColumns,
 			Compression:          config.Compression,
+			Sorting:              config.Sorting,
 		}),
 		output:  NewGenericWriter[T](output, config),
 		maxRows: sortRowCount,
-		sorting: config.SortingColumns,
+		sorting: config.Sorting,
 	}
 }
 
@@ -117,8 +117,8 @@ func (w *SortingWriter[T]) Flush() error {
 
 	m, err := MergeRowGroups(f.RowGroups(),
 		&RowGroupConfig{
-			Schema:         w.Schema(),
-			SortingColumns: w.sorting,
+			Schema:  w.Schema(),
+			Sorting: w.sorting,
 		},
 	)
 	if err != nil {

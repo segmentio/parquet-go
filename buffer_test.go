@@ -209,7 +209,11 @@ func TestBuffer(t *testing.T) {
 										parquet.ColumnBufferCapacity(100),
 									}
 									if ordering.sorting != nil {
-										options = append(options, parquet.SortingColumns(ordering.sorting))
+										options = append(options,
+											parquet.SortingRowGroupConfig(
+												parquet.SortingColumns(ordering.sorting),
+											),
+										)
 									}
 
 									content := new(bytes.Buffer)
