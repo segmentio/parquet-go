@@ -10,6 +10,14 @@ import (
 	"github.com/segmentio/parquet-go/compress"
 )
 
+// ReadMode is an enum that is used to configure the way that a File reads pages.
+type ReadMode int
+
+const (
+	ReadModeSync  ReadMode = iota // ReadModeSync reads pages synchronously on demand.
+	ReadModeAsync                 // ReadModeAsync reads pages asynchronously in the background.
+)
+
 const (
 	DefaultColumnIndexSizeLimit = 16
 	DefaultColumnBufferCapacity = 16 * 1024
@@ -20,6 +28,7 @@ const (
 	DefaultSkipPageIndex        = false
 	DefaultSkipBloomFilters     = false
 	DefaultMaxRowsPerRowGroup   = math.MaxInt64
+	DefaultReadMode             = ReadModeSync
 )
 
 const (
@@ -83,6 +92,7 @@ type FileConfig struct {
 	SkipPageIndex    bool
 	SkipBloomFilters bool
 	ReadBufferSize   int
+	ReadMode         ReadMode
 }
 
 // DefaultFileConfig returns a new FileConfig value initialized with the
@@ -92,6 +102,7 @@ func DefaultFileConfig() *FileConfig {
 		SkipPageIndex:    DefaultSkipPageIndex,
 		SkipBloomFilters: DefaultSkipBloomFilters,
 		ReadBufferSize:   defaultReadBufferSize,
+		ReadMode:         DefaultReadMode,
 	}
 }
 
@@ -118,6 +129,8 @@ func (c *FileConfig) ConfigureFile(config *FileConfig) {
 	*config = FileConfig{
 		SkipPageIndex:    config.SkipPageIndex,
 		SkipBloomFilters: config.SkipBloomFilters,
+		ReadBufferSize:   config.ReadBufferSize,
+		ReadMode:         config.ReadMode,
 	}
 }
 
@@ -367,6 +380,15 @@ func SkipPageIndex(skip bool) FileOption {
 // Defaults to false.
 func SkipBloomFilters(skip bool) FileOption {
 	return fileOption(func(config *FileConfig) { config.SkipBloomFilters = skip })
+}
+
+// FileReadMode is a file configuration option which controls the way pages
+// are read. Currently the only two options are PageReadModeAsync and PageReadModeSync
+// which control whether or not pages are loaded asynchronously.
+//
+// Defaults to ReadModeAsync.
+func FileReadMode(mode ReadMode) FileOption {
+	return fileOption(func(config *FileConfig) { config.ReadMode = mode })
 }
 
 // ReadBufferSize is a file configuration option which controls the default

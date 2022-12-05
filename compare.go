@@ -205,7 +205,7 @@ func compareRowsFuncOf(schema *Schema, sortingColumns []SortingColumn) func(Row,
 					// does not need to scan the rows looking for values with
 					// a matching column index.
 					//
-					// A second optimization consist in passing the column type
+					// A second optimization consists in passing the column type
 					// directly to the sort function instead of an intermediary
 					// closure, which removes an indirection layer and improves
 					// throughput by ~20% in BenchmarkSortRowBuffer.
