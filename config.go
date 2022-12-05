@@ -10,11 +10,12 @@ import (
 	"github.com/segmentio/parquet-go/compress"
 )
 
-type PageReadMode int
+// ReadMode is an enum that is used to configure the way that a File reads pages.
+type ReadMode int
 
 const (
-	PageReadModeAsync PageReadMode = iota
-	PageReadModeSync
+	ReadModeAsync ReadMode = iota // ReadModeAsync reads pages asynchronously in the background.
+	ReadModeSync                  // ReadModeSync reads pages synchronously on demand.
 )
 
 const (
@@ -27,6 +28,7 @@ const (
 	DefaultSkipPageIndex        = false
 	DefaultSkipBloomFilters     = false
 	DefaultMaxRowsPerRowGroup   = math.MaxInt64
+	DefaultReadMode             = ReadModeSync
 )
 
 const (
@@ -90,7 +92,7 @@ type FileConfig struct {
 	SkipPageIndex    bool
 	SkipBloomFilters bool
 	ReadBufferSize   int
-	PageReadMode     PageReadMode
+	ReadMode         ReadMode
 }
 
 // DefaultFileConfig returns a new FileConfig value initialized with the
@@ -100,7 +102,7 @@ func DefaultFileConfig() *FileConfig {
 		SkipPageIndex:    DefaultSkipPageIndex,
 		SkipBloomFilters: DefaultSkipBloomFilters,
 		ReadBufferSize:   defaultReadBufferSize,
-		PageReadMode:     PageReadModeAsync,
+		ReadMode:         DefaultReadMode,
 	}
 }
 
@@ -126,7 +128,7 @@ func (c *FileConfig) Apply(options ...FileOption) {
 func (c *FileConfig) ConfigureFile(config *FileConfig) {
 	*config = FileConfig{
 		SkipPageIndex:    config.SkipPageIndex,
-		SkipBloomFilters: config.SkipBloomFilters,
+		SkipBloomFilters: config.SkipBloomFilters, // jpe
 	}
 }
 
@@ -378,13 +380,13 @@ func SkipBloomFilters(skip bool) FileOption {
 	return fileOption(func(config *FileConfig) { config.SkipBloomFilters = skip })
 }
 
-// SetPageReadMode is a file configuration option which controls the way pages
+// FileReadMode is a file configuration option which controls the way pages
 // are read. Currently the only two options are PageReadModeAsync and PageReadModeSync
 // which control whether or not pages are loaded asynchronously.
 //
-// Defaults to PageReadModeAsync.
-func SetPageReadMode(mode PageReadMode) FileOption {
-	return fileOption(func(config *FileConfig) { config.PageReadMode = mode })
+// Defaults to ReadModeAsync.
+func FileReadMode(mode ReadMode) FileOption {
+	return fileOption(func(config *FileConfig) { config.ReadMode = mode })
 }
 
 // ReadBufferSize is a file configuration option which controls the default

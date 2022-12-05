@@ -245,10 +245,10 @@ func (r *rowGroup) NumRows() int64                  { return r.numRows }
 func (r *rowGroup) ColumnChunks() []ColumnChunk     { return r.columns }
 func (r *rowGroup) SortingColumns() []SortingColumn { return r.sorting }
 func (r *rowGroup) Schema() *Schema                 { return r.schema }
-func (r *rowGroup) Rows() Rows                      { return newRowGroupRows(r, PageReadModeAsync) }
+func (r *rowGroup) Rows() Rows                      { return newRowGroupRows(r, ReadModeSync) }
 
 func NewRowGroupRowReader(rowGroup RowGroup) Rows {
-	return newRowGroupRows(rowGroup, PageReadModeAsync)
+	return newRowGroupRows(rowGroup, ReadModeSync)
 }
 
 type rowGroupRows struct {
@@ -259,7 +259,7 @@ type rowGroupRows struct {
 	inited       bool
 	closed       bool
 	done         chan<- struct{}
-	pageReadMode PageReadMode
+	pageReadMode ReadMode
 }
 
 type columnChunkRows struct {
@@ -278,7 +278,7 @@ func (r *rowGroupRows) buffer(i int) []Value {
 	return r.buffers[j:k:k]
 }
 
-func newRowGroupRows(rowGroup RowGroup, pageReadMode PageReadMode) *rowGroupRows {
+func newRowGroupRows(rowGroup RowGroup, pageReadMode ReadMode) *rowGroupRows {
 	return &rowGroupRows{
 		rowGroup:     rowGroup,
 		pageReadMode: pageReadMode,
@@ -293,7 +293,7 @@ func (r *rowGroupRows) init() {
 	r.columns = make([]columnChunkRows, len(columns))
 
 	switch r.pageReadMode {
-	case PageReadModeAsync:
+	case ReadModeAsync:
 		done := make(chan struct{})
 		r.done = done
 		readers := make([]asyncPages, len(columns))
@@ -301,7 +301,7 @@ func (r *rowGroupRows) init() {
 			readers[i].init(column.Pages(), done)
 			r.readers[i] = &readers[i]
 		}
-	case PageReadModeSync:
+	case ReadModeSync:
 		for i, column := range columns {
 			r.readers[i] = column.Pages()
 		}
