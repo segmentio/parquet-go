@@ -179,12 +179,12 @@ func lessBE128(v1, v2 *[16]byte) bool {
 
 func compareRowsFuncOf(schema *Schema, sortingColumns []SortingColumn) func(Row, Row) int {
 	compareFuncs := make([]func(Row, Row) int, 0, len(sortingColumns))
-	firstIndexOfRepeatedColumn := -1
+	direct := true
 
 	for _, column := range schema.Columns() {
 		leaf, _ := schema.Lookup(column...)
 		if leaf.MaxRepetitionLevel > 0 {
-			firstIndexOfRepeatedColumn = leaf.ColumnIndex
+			direct = false
 		}
 
 		for _, sortingColumn := range sortingColumns {
@@ -196,7 +196,7 @@ func compareRowsFuncOf(schema *Schema, sortingColumns []SortingColumn) func(Row,
 				optional := leaf.MaxDefinitionLevel > 0
 				sortFunc := (func(Row, Row) int)(nil)
 
-				if firstIndexOfRepeatedColumn < 0 && !optional {
+				if direct && !optional {
 					// This is an optimization for the common case where rows
 					// are sorted by non-optional, non-repeated columns.
 					//
