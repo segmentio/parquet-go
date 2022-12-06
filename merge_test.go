@@ -44,8 +44,10 @@ func TestMergeRowGroupsCursorsAreClosed(t *testing.T) {
 
 	schema := parquet.SchemaOf(model{})
 	options := []parquet.RowGroupOption{
-		parquet.SortingColumns(
-			parquet.Ascending(schema.Columns()[0]...),
+		parquet.SortingRowGroupConfig(
+			parquet.SortingColumns(
+				parquet.Ascending(schema.Columns()[0]...),
+			),
 		),
 	}
 
@@ -92,8 +94,10 @@ func BenchmarkMergeRowGroups(b *testing.B) {
 			schema := parquet.SchemaOf(test.model)
 
 			options := []parquet.RowGroupOption{
-				parquet.SortingColumns(
-					parquet.Ascending(schema.Columns()[0]...),
+				parquet.SortingRowGroupConfig(
+					parquet.SortingColumns(
+						parquet.Ascending(schema.Columns()[0]...),
+					),
 				),
 			}
 
@@ -141,8 +145,10 @@ func BenchmarkMergeFiles(b *testing.B) {
 
 			buffer := parquet.NewBuffer(
 				schema,
-				parquet.SortingColumns(
-					parquet.Ascending(schema.Columns()[0]...),
+				parquet.SortingRowGroupConfig(
+					parquet.SortingColumns(
+						parquet.Ascending(schema.Columns()[0]...),
+					),
 				),
 			)
 

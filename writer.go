@@ -274,7 +274,7 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 		w.metadata = append(w.metadata, format.KeyValue{Key: k, Value: v})
 	}
 	sortKeyValueMetadata(w.metadata)
-	w.sortingColumns = make([]format.SortingColumn, len(config.SortingColumns))
+	w.sortingColumns = make([]format.SortingColumn, len(config.Sorting.SortingColumns))
 
 	config.Schema.forEachNode(func(name string, node Node) {
 		nodeType := node.Type()
@@ -388,11 +388,11 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 
 		w.columns = append(w.columns, c)
 
-		if sortingIndex := searchSortingColumn(config.SortingColumns, leaf.path); sortingIndex < len(w.sortingColumns) {
+		if sortingIndex := searchSortingColumn(config.Sorting.SortingColumns, leaf.path); sortingIndex < len(w.sortingColumns) {
 			w.sortingColumns[sortingIndex] = format.SortingColumn{
 				ColumnIdx:  int32(leaf.columnIndex),
-				Descending: config.SortingColumns[sortingIndex].Descending(),
-				NullsFirst: config.SortingColumns[sortingIndex].NullsFirst(),
+				Descending: config.Sorting.SortingColumns[sortingIndex].Descending(),
+				NullsFirst: config.Sorting.SortingColumns[sortingIndex].NullsFirst(),
 			}
 		}
 	})

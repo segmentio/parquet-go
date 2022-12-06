@@ -196,7 +196,7 @@ func MergeRowGroups(rowGroups []RowGroup, options ...RowGroupOption) (RowGroup, 
 		}
 	}
 
-	m := &mergedRowGroup{sorting: config.SortingColumns}
+	m := &mergedRowGroup{sorting: config.Sorting.SortingColumns}
 	m.init(schema, mergedRowGroups)
 
 	if len(m.sorting) == 0 {

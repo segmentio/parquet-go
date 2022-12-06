@@ -8,7 +8,6 @@ import (
 
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
-	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 // RowBuffer is an implementation of the RowGroup interface which stores parquet
@@ -23,9 +22,9 @@ import (
 //
 // RowBuffer values are not safe to use concurrently from multiple goroutines.
 type RowBuffer[T any] struct {
+	alloc   rowAllocator
 	schema  *Schema
 	sorting []SortingColumn
-	buffer  []byte
 	rows    []Row
 	numRows int
 	compare func(Row, Row) int
@@ -50,8 +49,8 @@ func NewRowBuffer[T any](options ...RowGroupOption) *RowBuffer[T] {
 
 	return &RowBuffer[T]{
 		schema:  config.Schema,
-		sorting: config.SortingColumns,
-		compare: config.Schema.Comparator(config.SortingColumns...),
+		sorting: config.Sorting.SortingColumns,
+		compare: config.Schema.Comparator(config.Sorting.SortingColumns...),
 	}
 }
 
@@ -62,7 +61,7 @@ func (buf *RowBuffer[T]) Reset() {
 			row[i] = Value{}
 		}
 	}
-	buf.buffer = buf.buffer[:0]
+	buf.alloc.reset()
 	buf.numRows = 0
 }
 
@@ -153,7 +152,7 @@ func (buf *RowBuffer[T]) Write(rows []T) (int, error) {
 	for i := range rows {
 		bufRow := buf.rows[buf.numRows][:0]
 		bufRow = buf.schema.Deconstruct(bufRow, &rows[i])
-		buf.capture(bufRow)
+		buf.alloc.capture(bufRow)
 		buf.rows[buf.numRows] = bufRow
 		buf.numRows++
 	}
@@ -169,42 +168,12 @@ func (buf *RowBuffer[T]) WriteRows(rows []Row) (int, error) {
 	for _, row := range rows {
 		bufRow := buf.rows[buf.numRows][:0]
 		bufRow = append(bufRow, row...)
-		buf.capture(bufRow)
+		buf.alloc.capture(bufRow)
 		buf.rows[buf.numRows] = bufRow
 		buf.numRows++
 	}
 
 	return len(rows), nil
-}
-
-func (buf *RowBuffer[T]) copyBytes(v []byte) []byte {
-	if free := cap(buf.buffer) - len(buf.buffer); free < len(v) {
-		newCap := 2 * cap(buf.buffer)
-		if newCap == 0 {
-			newCap = defaultReadBufferSize
-		}
-		for newCap < len(v) {
-			newCap *= 2
-		}
-		buf.buffer = make([]byte, 0, newCap)
-	}
-
-	i := len(buf.buffer)
-	j := len(buf.buffer) + len(v)
-	buf.buffer = buf.buffer[:j]
-
-	b := buf.buffer[i:j:j]
-	copy(b, v)
-	return b
-}
-
-func (buf *RowBuffer[T]) capture(row Row) {
-	for i, v := range row {
-		switch kind := v.Kind(); kind {
-		case ByteArray, FixedLenByteArray:
-			row[i].ptr = unsafecast.AddressOfBytes(buf.copyBytes(v.byteArray()))
-		}
-	}
 }
 
 func (buf *RowBuffer[T]) reserve(n int) {
@@ -498,8 +467,16 @@ func (r *rowBufferRows) ReadRows(rows []Row) (n int, err error) {
 	return n, err
 }
 
+func (r *rowBufferRows) WriteRowsTo(w RowWriter) (int64, error) {
+	n, err := w.WriteRows(r.rows[r.index:])
+	r.index += n
+	return int64(n), err
+}
+
 var (
 	_ RowGroup       = (*RowBuffer[any])(nil)
 	_ RowWriter      = (*RowBuffer[any])(nil)
 	_ sort.Interface = (*RowBuffer[any])(nil)
+
+	_ RowWriterTo = (*rowBufferRows)(nil)
 )

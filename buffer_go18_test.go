@@ -238,8 +238,10 @@ func BenchmarkSortGenericBuffer(b *testing.B) {
 	}
 
 	buf := parquet.NewGenericBuffer[Row](
-		parquet.SortingColumns(
-			parquet.Ascending("ID"),
+		parquet.SortingRowGroupConfig(
+			parquet.SortingColumns(
+				parquet.Ascending("ID"),
+			),
 		),
 	)
 

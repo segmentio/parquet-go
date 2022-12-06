@@ -57,7 +57,7 @@ func (buf *Buffer) configure(schema *Schema) {
 	if schema == nil {
 		return
 	}
-	sortingColumns := buf.config.SortingColumns
+	sortingColumns := buf.config.Sorting.SortingColumns
 	buf.sorted = make([]ColumnBuffer, len(sortingColumns))
 
 	forEachLeafColumnOf(schema, func(leaf leafColumn) {
@@ -145,7 +145,7 @@ func (buf *Buffer) Schema() *Schema { return buf.schema }
 //
 // The sorting order is configured by passing a SortingColumns option when
 // constructing the buffer.
-func (buf *Buffer) SortingColumns() []SortingColumn { return buf.config.SortingColumns }
+func (buf *Buffer) SortingColumns() []SortingColumn { return buf.config.Sorting.SortingColumns }
 
 // Len returns the number of rows written to the buffer.
 func (buf *Buffer) Len() int {
