@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"math/rand"
+	"reflect"
 	"testing"
 
 	"github.com/segmentio/parquet-go/internal/quick"
@@ -165,6 +166,55 @@ func TestBoundsFloat64(t *testing.T) {
 	})
 	if err != nil {
 		t.Error(err)
+	}
+}
+
+func TestBE128MinMaxSimilar(t *testing.T) {
+	var min [16]byte
+
+	// Test values:
+	//   [1 1 ... 1 1]
+	//   [0 1 ... 1 1]
+	//   ...
+	//   [0 0 ... 0 1]
+	//   [0 0 ... 0 0]
+	for i := 0; i < 17; i++ {
+		var max [16]byte
+		for j := i; j < 16; j++ {
+			max[j] = 1
+		}
+		testBE182MinMaxPerm(t, min, max)
+	}
+
+	// Test values:
+	//   [0 0 ... 0 0]
+	//   [1 0 ... 0 0]
+	//   ...
+	//   [1 1 ... 1 0]
+	//   [1 1 ... 1 1]
+	for i := 0; i < 17; i++ {
+		var max [16]byte
+		for j := 0; j < i; j++ {
+			max[j] = 1
+		}
+		testBE182MinMaxPerm(t, min, max)
+	}
+}
+
+func testBE182MinMaxPerm(t *testing.T, min, max [16]byte) {
+	testBE128MinMax(t, min[:], max[:], [][16]byte{min, max})
+	testBE128MinMax(t, min[:], max[:], [][16]byte{max, min})
+}
+
+func testBE128MinMax(t *testing.T, min, max []byte, data [][16]byte) {
+	bmin := minBE128(data)
+	if !reflect.DeepEqual(bmin, min[:]) {
+		t.Errorf("unexpected min value\nexpected %v\n     got %v", min, bmin)
+	}
+
+	bmax := maxBE128(data)
+	if !reflect.DeepEqual(bmax, max[:]) {
+		t.Errorf("unexpected max value\nexpected %v\n     got %v", max, bmax)
 	}
 }
 
