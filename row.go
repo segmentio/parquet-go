@@ -636,7 +636,7 @@ func reconstructFuncOfRepeated(columnIndex int16, node Node) (int16, reconstruct
 
 		return reconstructRepeated(columnIndex, rowLength, lvls, row, func(levels levels, row Row) (Row, error) {
 			if n == c {
-				c *= 2
+				c = growSliceSize(c)
 				newSlice := reflect.MakeSlice(t, c, c)
 				reflect.Copy(newSlice, s)
 				s = newSlice
@@ -809,12 +809,12 @@ func (a *rowAllocator) capture(row Row) {
 
 func (a *rowAllocator) copyBytes(v []byte) []byte {
 	if free := cap(a.buffer) - len(a.buffer); free < len(v) {
-		newCap := 2 * cap(a.buffer)
+		newCap := growSliceSize(cap(a.buffer))
 		if newCap == 0 {
 			newCap = defaultReadBufferSize
 		}
 		for newCap < len(v) {
-			newCap *= 2
+			newCap = growSliceSize(newCap)
 		}
 		a.buffer = make([]byte, 0, newCap)
 	}
@@ -826,4 +826,16 @@ func (a *rowAllocator) copyBytes(v []byte) []byte {
 	b := a.buffer[i:j:j]
 	copy(b, v)
 	return b
+}
+
+// growSliceSize attempts to mimic the behavior of the growslice method in the
+// go runtime. in this case we are doubling slice size until we cross the threshold
+// of 256 entries, at which point we grow by 25%.
+func growSliceSize(c int) int {
+	const threshold = 256
+	if c > threshold {
+		return c + c // 2x
+	}
+
+	return c + c/4 // grow by 1.25x
 }
