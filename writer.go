@@ -602,7 +602,7 @@ func (w *writer) writeRowGroup(rowGroupSchema *Schema, rowGroupSortingColumns []
 	fileOffset := w.writer.offset
 
 	for _, c := range w.columns {
-		if len(c.filter.bits) > 0 {
+		if len(c.filter) > 0 {
 			c.columnChunk.MetaData.BloomFilterOffset = w.writer.offset
 			if err := c.writeBloomFilter(&w.writer); err != nil {
 				return 0, err
@@ -846,7 +846,7 @@ func (wb *writerBuffers) swapPageAndScratchBuffers() {
 
 type writerColumn struct {
 	pool  PageBufferPool
-	pages []io.ReadWriter
+	pages []io.ReadWriteSeeker
 
 	columnPath   columnPath
 	columnType   Type
@@ -871,11 +871,7 @@ type writerColumn struct {
 		encoding encoding.Encoding
 	}
 
-	filter struct {
-		bits  []byte
-		pages []Page
-	}
-
+	filter         []byte
 	numRows        int64
 	maxValues      int32
 	numValues      int32
@@ -905,14 +901,10 @@ func (c *writerColumn) reset() {
 	for i := range c.pages {
 		c.pages[i] = nil
 	}
-	for i := range c.filter.pages {
-		c.filter.pages[i] = nil
-	}
 	c.pages = c.pages[:0]
 	// Bloom filters may change in size between row groups, but we retain the
 	// buffer to avoid reallocating large memory blocks.
-	c.filter.bits = c.filter.bits[:0]
-	c.filter.pages = c.filter.pages[:0]
+	c.filter = c.filter[:0]
 	c.numRows = 0
 	c.numValues = 0
 	// Reset the fields of column chunks that change between row groups,
@@ -949,44 +941,34 @@ func (c *writerColumn) flush() (err error) {
 }
 
 func (c *writerColumn) flushFilterPages() error {
-	if c.columnFilter != nil {
-		// If there is a dictionary, it contains all the values that we need to
-		// write to the filter.
-		if dict := c.dictionary; dict != nil {
-			// Need to always attempt to resize the filter, as the writer might
-			// be reused after resetting which would have reset the length of
-			// the filter to 0.
-			c.resizeBloomFilter(int64(dict.Len()))
-			if err := c.writePageToFilter(dict.Page()); err != nil {
-				return err
-			}
-		}
-
-		if len(c.filter.pages) > 0 {
-			numValues := int64(0)
-			for _, page := range c.filter.pages {
-				numValues += page.NumValues()
-			}
-			c.resizeBloomFilter(numValues)
-			for _, page := range c.filter.pages {
-				if err := c.writePageToFilter(page); err != nil {
-					return err
-				}
-			}
-		}
+	if c.columnFilter == nil {
+		return nil
 	}
+
+	// If there is a dictionary, it contains all the values that we need to
+	// write to the filter.
+	if dict := c.dictionary; dict != nil {
+		// Need to always attempt to resize the filter, as the writer might
+		// be reused after resetting which would have reset the length of
+		// the filter to 0.
+		c.resizeBloomFilter(int64(dict.Len()))
+		return c.writePageToFilter(dict.Page())
+	}
+
+	// TODO: decode pages + writePageToFilter
+
 	return nil
 }
 
 func (c *writerColumn) resizeBloomFilter(numValues int64) {
 	const bitsPerValue = 10 // TODO: make this configurable
 	filterSize := c.columnFilter.Size(numValues, bitsPerValue)
-	if cap(c.filter.bits) < filterSize {
-		c.filter.bits = make([]byte, filterSize)
+	if cap(c.filter) < filterSize {
+		c.filter = make([]byte, filterSize)
 	} else {
-		c.filter.bits = c.filter.bits[:filterSize]
-		for i := range c.filter.bits {
-			c.filter.bits[i] = 0
+		c.filter = c.filter[:filterSize]
+		for i := range c.filter {
+			c.filter[i] = 0
 		}
 	}
 }
@@ -1039,11 +1021,11 @@ func (c *writerColumn) WriteValues(values []Value) (numValues int, err error) {
 func (c *writerColumn) writeBloomFilter(w io.Writer) error {
 	e := thrift.NewEncoder(c.header.protocol.NewWriter(w))
 	h := bloomFilterHeader(c.columnFilter)
-	h.NumBytes = int32(len(c.filter.bits))
+	h.NumBytes = int32(len(c.filter))
 	if err := e.Encode(&h); err != nil {
 		return err
 	}
-	_, err := w.Write(c.filter.bits)
+	_, err := w.Write(c.filter)
 	return err
 }
 
@@ -1077,24 +1059,14 @@ func (c *writerColumn) writeDataPage(page Page) (int64, error) {
 		}
 	}
 
-	if page.Dictionary() == nil {
-		switch {
-		case len(c.filter.bits) > 0:
-			// When the writer knows the number of values in advance (e.g. when
-			// writing a full row group), the filter encoding is set and the page
-			// can be directly applied to the filter, which minimizes memory usage
-			// since there is no need to buffer the values in order to determine
-			// the size of the filter.
-			if err := c.writePageToFilter(page); err != nil {
-				return 0, err
-			}
-		case c.columnFilter != nil:
-			// If the column uses a dictionary encoding, all possible values exist
-			// in the dictionary and there is no need to buffer the pages, but if
-			// the column is supposed to generate a filter and the number of values
-			// wasn't known, we must buffer all the pages in order to properly size
-			// the filter.
-			c.filter.pages = append(c.filter.pages, page.Clone())
+	if page.Dictionary() == nil && len(c.filter) > 0 {
+		// When the writer knows the number of values in advance (e.g. when
+		// writing a full row group), the filter encoding is set and the page
+		// can be directly applied to the filter, which minimizes memory usage
+		// since there is no need to buffer the values in order to determine
+		// the size of the filter.
+		if err := c.writePageToFilter(page); err != nil {
+			return 0, err
 		}
 	}
 
@@ -1212,7 +1184,7 @@ func (c *writerColumn) writeDictionaryPage(output io.Writer, dict Dictionary) (e
 func (w *writerColumn) writePageToFilter(page Page) (err error) {
 	pageType := page.Type()
 	pageData := page.Data()
-	w.filter.bits, err = pageType.Encode(w.filter.bits, pageData, w.columnFilter.Encoding())
+	w.filter, err = pageType.Encode(w.filter, pageData, w.columnFilter.Encoding())
 	return err
 }
 
@@ -1229,6 +1201,13 @@ func (c *writerColumn) writePageTo(size int64, writeTo func(io.Writer) (int64, e
 	}
 	if written != size {
 		return fmt.Errorf("writing parquet column page expected %dB but got %dB: %w", size, written, io.ErrShortWrite)
+	}
+	offset, err := buffer.Seek(0, io.SeekStart)
+	if err != nil {
+		return err
+	}
+	if offset != 0 {
+		return fmt.Errorf("resetting parquet page buffer to the start expected offset zero but got %d", offset)
 	}
 	c.pages, buffer = append(c.pages, buffer), nil
 	return nil
