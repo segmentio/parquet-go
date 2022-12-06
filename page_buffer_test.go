@@ -93,6 +93,9 @@ func testPageBufferPoolCopyFromBuffer(t *testing.T, pool parquet.PageBufferPool)
 	if _, err := io.WriteString(buffer, content); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := buffer.Seek(0, io.SeekStart); err != nil {
+		t.Fatal(err)
+	}
 
 	writer := new(bytes.Buffer)
 	_, err := io.Copy(struct{ io.Writer }{writer}, buffer)

@@ -382,8 +382,8 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 			c.encodings = addEncoding(c.encodings, format.Plain)
 		}
 
-		c.page.encoding = encoding
-		c.encodings = addEncoding(c.encodings, c.page.encoding.Encoding())
+		c.encoding = encoding
+		c.encodings = addEncoding(c.encodings, c.encoding.Encoding())
 		sortPageEncodings(c.encodings)
 
 		w.columns = append(w.columns, c)
@@ -853,6 +853,7 @@ type writerColumn struct {
 	columnIndex  ColumnIndexer
 	columnBuffer ColumnBuffer
 	columnFilter BloomFilterColumn
+	encoding     encoding.Encoding
 	compression  compress.Codec
 	dictionary   Dictionary
 
@@ -865,10 +866,6 @@ type writerColumn struct {
 	header struct {
 		protocol thrift.CompactProtocol
 		encoder  thrift.Encoder
-	}
-
-	page struct {
-		encoding encoding.Encoding
 	}
 
 	filter         []byte
@@ -955,7 +952,76 @@ func (c *writerColumn) flushFilterPages() error {
 		return c.writePageToFilter(dict.Page())
 	}
 
-	// TODO: decode pages + writePageToFilter
+	// When the filter was already allocated, pages have been written to it as
+	// they were seen by the column writer.
+	if len(c.filter) > 0 {
+		return nil
+	}
+
+	// When the filter was not allocated, the writer did not know how many
+	// values were going to be seen and therefore could not properly size the
+	// filter ahead of time. In this case, we read back all the pages that we
+	// have encoded and copy their values back to the filter.
+	//
+	// A prior implementation of the column writer used to create in-memory
+	// copies of the pages to avoid this decoding step; however, this unbounded
+	// allocation caused memory exhaustion in production applications. CPU being
+	// a somewhat more stretchable resource, we prefer spending time on this
+	// decoding step than having to trigger incident response when production
+	// systems are getting OOM-Killed.
+	c.resizeBloomFilter(c.columnChunk.MetaData.NumValues)
+
+	column := &Column{
+		// Set all the fields required by the decodeDataPage* methods.
+		typ:                c.columnType,
+		encoding:           c.encoding,
+		compression:        c.compression,
+		maxRepetitionLevel: c.maxRepetitionLevel,
+		maxDefinitionLevel: c.maxDefinitionLevel,
+		index:              int16(c.bufferIndex),
+	}
+
+	pageReader := bytes.NewReader(nil)
+	pageBuffer := buffers.get(0)
+	defer buffers.put(pageBuffer)
+
+	decoder := thrift.NewDecoder(c.header.protocol.NewReader(pageReader))
+
+	for _, p := range c.pages {
+		if _, err := pageBuffer.ReadFrom(p); err != nil {
+			return err
+		}
+		if _, err := p.Seek(0, io.SeekStart); err != nil {
+			return err
+		}
+
+		pageReader.Reset(pageBuffer.data)
+
+		header := new(format.PageHeader)
+		if err := decoder.Decode(header); err != nil {
+			return err
+		}
+
+		pageDataOffset, _ := pageReader.Seek(0, io.SeekCurrent)
+		pageData := &buffer{data: pageBuffer.data[pageDataOffset:]}
+
+		var page Page
+		var err error
+
+		switch header.Type {
+		case format.DataPage:
+			page, err = column.decodeDataPageV1(DataPageHeaderV1{header.DataPageHeader}, pageData, nil, header.UncompressedPageSize)
+		case format.DataPageV2:
+			page, err = column.decodeDataPageV2(DataPageHeaderV2{header.DataPageHeaderV2}, pageData, nil, header.UncompressedPageSize)
+		}
+		if page != nil {
+			err = c.writePageToFilter(page)
+			Release(page)
+		}
+		if err != nil {
+			return err
+		}
+	}
 
 	return nil
 }
@@ -1045,7 +1111,7 @@ func (c *writerColumn) writeDataPage(page Page) (int64, error) {
 		buf.encodeDefinitionLevels(page, c.maxDefinitionLevel)
 	}
 
-	if err := buf.encode(page, c.page.encoding); err != nil {
+	if err := buf.encode(page, c.encoding); err != nil {
 		return 0, fmt.Errorf("encoding parquet data page: %w", err)
 	}
 	if c.dataPageType == format.DataPage {
@@ -1088,7 +1154,7 @@ func (c *writerColumn) writeDataPage(page Page) (int64, error) {
 	case format.DataPage:
 		pageHeader.DataPageHeader = &format.DataPageHeader{
 			NumValues:               int32(numValues),
-			Encoding:                c.page.encoding.Encoding(),
+			Encoding:                c.encoding.Encoding(),
 			DefinitionLevelEncoding: format.RLE,
 			RepetitionLevelEncoding: format.RLE,
 			Statistics:              statistics,
@@ -1098,7 +1164,7 @@ func (c *writerColumn) writeDataPage(page Page) (int64, error) {
 			NumValues:                  int32(numValues),
 			NumNulls:                   int32(numNulls),
 			NumRows:                    int32(numRows),
-			Encoding:                   c.page.encoding.Encoding(),
+			Encoding:                   c.encoding.Encoding(),
 			DefinitionLevelsByteLength: int32(len(buf.definitions)),
 			RepetitionLevelsByteLength: int32(len(buf.repetitions)),
 			IsCompressed:               &c.isCompressed,

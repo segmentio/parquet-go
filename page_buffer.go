@@ -60,13 +60,15 @@ func (p *pageBuffer) Read(b []byte) (n int, err error) {
 }
 
 func (p *pageBuffer) Write(b []byte) (int, error) {
-	p.data = append(p.data, b...)
-	return len(b), nil
-}
+	n := copy(p.data[p.off:cap(p.data)], b)
+	p.data = p.data[:p.off+n]
 
-func (p *pageBuffer) WriteString(s string) (int, error) {
-	p.data = append(p.data, s...)
-	return len(s), nil
+	if n < len(b) {
+		p.data = append(p.data, b[n:]...)
+	}
+
+	p.off += len(b)
+	return len(b), nil
 }
 
 func (p *pageBuffer) WriteTo(w io.Writer) (int64, error) {
@@ -148,7 +150,6 @@ type errorBuffer struct{ err error }
 
 func (buf *errorBuffer) Read([]byte) (int, error)          { return 0, buf.err }
 func (buf *errorBuffer) Write([]byte) (int, error)         { return 0, buf.err }
-func (buf *errorBuffer) WriteString(string) (int, error)   { return 0, buf.err }
 func (buf *errorBuffer) ReadFrom(io.Reader) (int64, error) { return 0, buf.err }
 func (buf *errorBuffer) WriteTo(io.Writer) (int64, error)  { return 0, buf.err }
 func (buf *errorBuffer) Seek(int64, int) (int64, error)    { return 0, buf.err }
@@ -156,10 +157,7 @@ func (buf *errorBuffer) Seek(int64, int) (int64, error)    { return 0, buf.err }
 var (
 	defaultPageBufferPool pageBufferPool
 
-	_ io.StringWriter = (*pageBuffer)(nil)
-	_ io.WriterTo     = (*pageBuffer)(nil)
-
-	_ io.ReaderFrom   = (*errorBuffer)(nil)
-	_ io.WriterTo     = (*errorBuffer)(nil)
-	_ io.StringWriter = (*errorBuffer)(nil)
+	_ io.ReaderFrom = (*errorBuffer)(nil)
+	_ io.WriterTo   = (*errorBuffer)(nil)
+	_ io.WriterTo   = (*pageBuffer)(nil)
 )
