@@ -1,7 +1,6 @@
 package parquet
 
 import (
-	"io"
 	"math/bits"
 	"sort"
 	"sync"
@@ -307,55 +306,6 @@ func (b *buffer) unref() {
 		}
 	}
 }
-
-func (b *buffer) Write(p []byte) (int, error) {
-	b.data = append(b.data, p...)
-	return len(p), nil
-}
-
-func (b *buffer) WriteString(s string) (int, error) {
-	b.data = append(b.data, s...)
-	return len(s), nil
-}
-
-func (b *buffer) ReadFrom(r io.Reader) (int64, error) {
-	written := int64(0)
-
-	for {
-		const minCap = 4096
-
-		if free := cap(b.data) - len(b.data); free < minCap {
-			newCap := 2 * cap(b.data)
-			if newCap < minCap {
-				newCap = minCap
-			}
-			newData := make([]byte, len(b.data), newCap)
-			copy(newData, b.data)
-			b.data = newData
-		}
-
-		n, err := r.Read(b.data[len(b.data):cap(b.data)])
-		b.data = b.data[:len(b.data)+n]
-		written += int64(n)
-
-		if err != nil {
-			if err == io.EOF {
-				err = nil
-			}
-			return written, err
-		}
-
-		if n == 0 {
-			return written, io.ErrNoProgress
-		}
-	}
-}
-
-var (
-	_ io.ReaderFrom   = (*buffer)(nil)
-	_ io.StringWriter = (*buffer)(nil)
-	_ io.Writer       = (*buffer)(nil)
-)
 
 // bufferPool holds a slice of sync.pools used for levelled buffering.
 // the table below shows the pools used for different buffer sizes when both getting

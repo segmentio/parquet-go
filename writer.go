@@ -981,38 +981,44 @@ func (c *writerColumn) flushFilterPages() error {
 		index:              int16(c.bufferIndex),
 	}
 
-	pageReader := bytes.NewReader(nil)
-	pageBuffer := buffers.get(0)
-	defer buffers.put(pageBuffer)
+	rbuf, pool := getBufioReader(nil, 1024)
+	pbuf := (*buffer)(nil)
+	defer func() {
+		putBufioReader(rbuf, pool)
+		if pbuf != nil {
+			buffers.put(pbuf)
+		}
+	}()
 
-	decoder := thrift.NewDecoder(c.header.protocol.NewReader(pageReader))
+	decoder := thrift.NewDecoder(c.header.protocol.NewReader(rbuf))
 
 	for _, p := range c.pages {
-		if _, err := pageBuffer.ReadFrom(p); err != nil {
-			return err
-		}
-		if _, err := p.Seek(0, io.SeekStart); err != nil {
-			return err
-		}
-
-		pageReader.Reset(pageBuffer.data)
+		rbuf.Reset(p)
 
 		header := new(format.PageHeader)
 		if err := decoder.Decode(header); err != nil {
 			return err
 		}
 
-		pageDataOffset, _ := pageReader.Seek(0, io.SeekCurrent)
-		pageData := &buffer{data: pageBuffer.data[pageDataOffset:]}
+		if pbuf != nil {
+			buffers.put(pbuf)
+		}
+		pbuf = buffers.get(int(header.CompressedPageSize))
+		if _, err := io.ReadFull(rbuf, pbuf.data); err != nil {
+			return err
+		}
+		if _, err := p.Seek(0, io.SeekStart); err != nil {
+			return err
+		}
 
 		var page Page
 		var err error
 
 		switch header.Type {
 		case format.DataPage:
-			page, err = column.decodeDataPageV1(DataPageHeaderV1{header.DataPageHeader}, pageData, nil, header.UncompressedPageSize)
+			page, err = column.decodeDataPageV1(DataPageHeaderV1{header.DataPageHeader}, pbuf, nil, header.UncompressedPageSize)
 		case format.DataPageV2:
-			page, err = column.decodeDataPageV2(DataPageHeaderV2{header.DataPageHeaderV2}, pageData, nil, header.UncompressedPageSize)
+			page, err = column.decodeDataPageV2(DataPageHeaderV2{header.DataPageHeaderV2}, pbuf, nil, header.UncompressedPageSize)
 		}
 		if page != nil {
 			err = c.writePageToFilter(page)
