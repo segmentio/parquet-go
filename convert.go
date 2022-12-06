@@ -136,7 +136,7 @@ func (c *conversion) convertFuncOfLeaf(tgtIdx int16, node Node) (int16, convertF
 			}
 		}
 
-		tgt = append(tgt, value)
+		tgt = appendRow(tgt, value)
 		return tgt, nil
 	}
 }
@@ -195,14 +195,14 @@ func (c *conversion) Convert(target, source Row) (Row, error) {
 			value.kind = ^int8(typ.Kind())
 			value.columnIndex = ^targetIndex
 			buf.types[targetIndex] = typ
-			buf.columns[targetIndex] = append(buf.columns[targetIndex], value)
+			buf.columns[targetIndex] = appendRow(buf.columns[targetIndex], value)
 		}
 	}
 
 	// Fill empty columns
 	for i, values := range buf.columns {
 		if len(values) == 0 {
-			buf.columns[i] = append(buf.columns[i], Value{
+			buf.columns[i] = appendRow(buf.columns[i], Value{
 				kind:        ^int8(c.targetColumnTypes[i].Kind()),
 				columnIndex: ^int16(i),
 			})
@@ -223,7 +223,7 @@ func (c *conversion) Schema() *Schema {
 
 type identity struct{ schema *Schema }
 
-func (id identity) Convert(dst, src Row) (Row, error) { return append(dst, src...), nil }
+func (id identity) Convert(dst, src Row) (Row, error) { return appendRow(dst, src...), nil }
 func (id identity) Column(i int) int                  { return i }
 func (id identity) Schema() *Schema                   { return id.schema }
 
@@ -522,7 +522,7 @@ func (c *convertedRows) ReadRows(rows []Row) (int, error) {
 		if err != nil {
 			return i, err
 		}
-		rows[i] = append(row[:0], c.buf...)
+		rows[i] = appendRow(row[:0], c.buf...)
 	}
 
 	return n, err

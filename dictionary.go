@@ -1462,7 +1462,7 @@ func (col *indexedColumnBuffer) ReadRowAt(row Row, index int64) (Row, error) {
 	default:
 		v := col.typ.dict.Index(col.values[index])
 		v.columnIndex = col.columnIndex
-		return append(row, v), nil
+		return appendRow(row, v), nil
 	}
 }
 

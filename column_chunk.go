@@ -180,7 +180,7 @@ func readRowsFuncOfLeaf(columnIndex int, repetitionDepth byte) (int, readRowsFun
 					}
 				}
 
-				rows[i] = append(rows[i], buf[col.offset])
+				rows[i] = appendRow(rows[i], buf[col.offset])
 				col.offset++
 			}
 
@@ -207,11 +207,30 @@ func readRowsFuncOfLeaf(columnIndex int, repetitionDepth byte) (int, readRowsFun
 				return 0, nil
 			}
 
-			rows[0] = append(rows[0], buf[col.offset])
+			rows[0] = appendRow(rows[0], buf[col.offset])
 			col.offset++
 			return 1, nil
 		}
 	}
 
 	return columnIndex + 1, read
+}
+
+func appendRow(r Row, v ...Value) Row {
+	// if the slice is large enough just use it
+	newrowlen := len(r) + len(v)
+	if newrowlen <= cap(r) {
+		return append(r, v...)
+	}
+
+	// else let's request a new row from the pool and return this one
+	newrowlen += newrowlen / 4 // + 25% is what growslice does for slices > 1024
+	new := rows.get(newrowlen)
+
+	new = append(new[:0], r...) // copy the original values
+	new = append(new, v...)     // and append
+
+	r.Repool()
+
+	return new
 }
