@@ -529,7 +529,7 @@ func deconstructFuncOfLeaf(columnIndex int16, node Node) (int16, deconstructFunc
 		v.repetitionLevel = levels.repetitionLevel
 		v.definitionLevel = levels.definitionLevel
 		v.columnIndex = valueColumnIndex
-		return append(row, v)
+		return appendRow(row, v)
 	}
 }
 
