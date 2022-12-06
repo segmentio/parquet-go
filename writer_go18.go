@@ -64,6 +64,13 @@ type GenericWriter[T any] struct {
 //
 // If the option list may explicitly declare a schema, it must be compatible
 // with the schema generated from T.
+//
+// Sorting columns may be set on the writer to configure the generated row
+// groups metadata. However, rows are always written in the order they were
+// seen, no reordering is performed, the writer expects the application to
+// ensure proper correlation between the order of rows and the list of sorting
+// columns. See SortingWriter[T] for a writer which handles reordering rows
+// based on the configured sorting columns.
 func NewGenericWriter[T any](output io.Writer, options ...WriterOption) *GenericWriter[T] {
 	config, err := NewWriterConfig(options...)
 	if err != nil {

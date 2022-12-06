@@ -385,6 +385,58 @@ func (c *SortingConfig) Apply(options ...SortingOption) {
 }
 
 func (c *SortingConfig) ConfigureSorting(config *SortingConfig) {
+	*config = SortingConfig{
+		SortingColumns:     coalesceSortingColumns(c.SortingColumns, config.SortingColumns),
+		DropDuplicatedRows: c.DropDuplicatedRows,
+	}
+}
+
+// The SortingConfig type carries configuration options for parquet row groups.
+//
+// SortingConfig implements the SortingOption interface so it can be used
+// directly as argument to the NewSortingWriter function when needed,
+// for example:
+//
+//	buffer := parquet.NewSortingWriter[Row](
+//		parquet.SortingWriterConfig(
+//			parquet.DropDuplicatedRows(true),
+//		),
+//	})
+type SortingConfig struct {
+	SortingColumns     []SortingColumn
+	DropDuplicatedRows bool
+}
+
+// DefaultSortingConfig returns a new SortingConfig value initialized with the
+// default row group configuration.
+func DefaultSortingConfig() *SortingConfig {
+	return &SortingConfig{
+		DropDuplicatedRows: false,
+	}
+}
+
+// NewSortingConfig constructs a new sorting configuration applying the
+// options passed as arguments.
+//
+// The function returns an non-nil error if some of the options carried invalid
+// configuration values.
+func NewSortingConfig(options ...SortingOption) (*SortingConfig, error) {
+	config := DefaultSortingConfig()
+	config.Apply(options...)
+	return config, config.Validate()
+}
+
+func (c *SortingConfig) Validate() error {
+	return nil
+}
+
+func (c *SortingConfig) Apply(options ...SortingOption) {
+	for _, opt := range options {
+		opt.ConfigureSorting(c)
+	}
+}
+
+func (c *SortingConfig) ConfigureSorting(config *SortingConfig) {
 	*config = coalesceSortingConfig(*c, *config)
 }
 
