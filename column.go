@@ -647,14 +647,12 @@ func (c *Column) decodeDataPage(header DataPageHeader, numValues int, repetition
 	var pageValues []byte
 	var pageOffsets []uint32
 
-	vbuf = buffers.get(int(pageType.EstimateSize(numValues)))
+	vbuf = buffers.get(pageType.EstimateDecodeSize(numValues, page.data, pageEncoding))
 	defer vbuf.unref()
 	pageValues = vbuf.data
 
-	pageKind := pageType.Kind()
-
 	// Page offsets not needed when dictionary-encoded
-	if pageKind == ByteArray && !isDictionaryEncoding(pageEncoding) {
+	if pageType.Kind() == ByteArray && !isDictionaryEncoding(pageEncoding) {
 		obuf = buffers.get(4 * (numValues + 1))
 		defer obuf.unref()
 		pageOffsets = unsafecast.BytesToUint32(obuf.data)

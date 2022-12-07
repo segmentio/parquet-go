@@ -1225,10 +1225,6 @@ func (t *indexedType) NewPage(columnIndex, numValues int, data encoding.Values) 
 	return newIndexedPage(t, makeColumnIndex(columnIndex), makeNumValues(numValues), data)
 }
 
-func (t *indexedType) NewValues(values []byte, _ []uint32) encoding.Values {
-	return encoding.Int32ValuesFromBytes(values)
-}
-
 // indexedPage is an implementation of the Page interface which stores
 // indexes instead of plain value. The indexes reference the values in a
 // dictionary that the page was created for.
@@ -1311,12 +1307,20 @@ func (page *indexedPage) Slice(i, j int64) Page {
 // its dictionary instead of plain values.
 type indexedPageType struct{ *indexedType }
 
+func (t indexedPageType) NewValues(values []byte, _ []uint32) encoding.Values {
+	return encoding.Int32ValuesFromBytes(values)
+}
+
 func (t indexedPageType) Encode(dst []byte, src encoding.Values, enc encoding.Encoding) ([]byte, error) {
 	return encoding.EncodeInt32(dst, src, enc)
 }
 
 func (t indexedPageType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding) (encoding.Values, error) {
 	return encoding.DecodeInt32(dst, src, enc)
+}
+
+func (t indexedPageType) EstimateDecodeSize(numValues int, src []byte, enc encoding.Encoding) int {
+	return Int32Type.EstimateDecodeSize(numValues, src, enc)
 }
 
 type indexedPageValues struct {

@@ -1047,7 +1047,7 @@ func (c *writerColumn) resizeBloomFilter(numValues int64) {
 
 func (c *writerColumn) newColumnBuffer() ColumnBuffer {
 	columnBufferCapacity := sort.Search(math.MaxInt32, func(i int) bool {
-		return c.columnType.EstimateSize(i) >= int64(c.bufferSize)
+		return c.columnType.EstimateSize(i) >= int(c.bufferSize)
 	})
 	column := c.columnType.NewColumnBuffer(int(c.bufferIndex), columnBufferCapacity)
 	switch {
