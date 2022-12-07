@@ -6,14 +6,6 @@ import (
 	"testing"
 )
 
-func init() {
-	size := bufferPoolMinSize
-	for i := 0; i < bufferPoolBucketCount; i++ {
-		fmt.Printf("%d KiB\n", size/1024)
-		size = bufferPoolNextSize(size)
-	}
-}
-
 func TestBufferAlwaysCorrectSize(t *testing.T) {
 	var p bufferPool
 	for i := 0; i < 1000; i++ {
@@ -26,117 +18,39 @@ func TestBufferAlwaysCorrectSize(t *testing.T) {
 	}
 }
 
-/*
-func TestBufferPoolBucketIndex(t *testing.T) {
-	tcs := []struct {
-		size int
-		get  int
-		put  int
-	}{
-		{
-			size: 1023,
-			get:  0,
-			put:  0,
-		},
-
-		{
-			size: 1024,
-			get:  0,
-			put:  0,
-		},
-
-		{
-			size: 256*1024 - 1,
-			get:  8,
-			put:  8,
-		},
-
-		{
-			size: 256 * 1024,
-			get:  8,
-			put:  8,
-		},
-
-		{
-			size: 256*1024 + 1,
-			get:  9,
-			put:  9,
-		},
-
-		{
-			size: 1024 * 1024,
-			get:  10,
-			put:  10,
-		},
-
-		{
-			size: 16*1024*1024 - 1,
-			get:  14,
-			put:  13,
-		},
-
-		{
-			size: 16 * 1024 * 1024,
-			get:  14,
-			put:  14,
-		},
-
-		{
-			size: math.MaxInt,
-			get:  15,
-			put:  15,
-		},
-	}
-
-	for _, tc := range tcs {
-		if index := bufferPoolBucketIndexGet(tc.size); index != tc.get {
-			t.Errorf("expected index %d when acquiring buffer of size %d, got %d", tc.get, tc.size, index)
-		}
-		if index := bufferPoolBucketIndexPut(tc.size); index != tc.put {
-			t.Errorf("expected index %d when releasing buffer of size %d, got %d", tc.put, tc.size, index)
-		}
-	}
-}
-
-func TestBufferPoolBucketSize(t *testing.T) {
+func TestBufferPoolBucketIndexAndSizeOf(t *testing.T) {
 	tests := []struct {
-		bucket int
-		size   int
+		size        int
+		bucketIndex int
+		bucketSize  int
 	}{
-		{
-			bucket: 0,
-			size:   1024,
-		},
-
-		{
-			bucket: 1,
-			size:   2048,
-		},
-
-		{
-			bucket: 16,
-			size:   67108864,
-		},
+		{size: 0, bucketIndex: 0, bucketSize: 4096},
+		{size: 1, bucketIndex: 0, bucketSize: 4096},
+		{size: 2049, bucketIndex: 0, bucketSize: 4096},
+		{size: 4096, bucketIndex: 0, bucketSize: 4096},
+		{size: 4097, bucketIndex: 1, bucketSize: 8192},
+		{size: 8192, bucketIndex: 1, bucketSize: 8192},
+		{size: 8193, bucketIndex: 2, bucketSize: 16384},
+		{size: 16384, bucketIndex: 2, bucketSize: 16384},
+		{size: 16385, bucketIndex: 3, bucketSize: 32768},
+		{size: 32768, bucketIndex: 3, bucketSize: 32768},
+		{size: 32769, bucketIndex: 4, bucketSize: 65536},
+		{size: 262143, bucketIndex: 6, bucketSize: 262144},
+		{size: 262144, bucketIndex: 6, bucketSize: 262144},
+		{size: 262145, bucketIndex: 7, bucketSize: 393216},
 	}
 
 	for _, test := range tests {
-		t.Run(fmt.Sprintf("bucket=%d", test.bucket), func(t *testing.T) {
-			if size := bufferPoolBucketSize(test.bucket); size != test.size {
-				t.Errorf("bucket %d: want=%d got=%d", test.bucket, test.size, size)
+		t.Run(fmt.Sprintf("size=%d", test.size), func(t *testing.T) {
+			bucketIndex, bucketSize := bufferPoolBucketIndexAndSizeOfGet(test.size)
+
+			if bucketIndex != test.bucketIndex {
+				t.Errorf("wrong bucket index, want %d but got %d", test.bucketIndex, bucketIndex)
+			}
+
+			if bucketSize != test.bucketSize {
+				t.Errorf("wrong bucket size, want %d but got %d", test.bucketSize, bucketSize)
 			}
 		})
 	}
-
-	for i := 0; i < bufferPoolBucketCount; i++ {
-		n := bufferPoolBucketSize(i)
-		j := bufferPoolBucketIndexGet(n)
-		k := bufferPoolBucketIndexPut(n + 1)
-		if i != j {
-			t.Errorf("index for size=%d is %d but want %d", n, j, i)
-		}
-		if i != k {
-			t.Errorf("index for size=%d is %d but want %d", n, k, i)
-		}
-	}
 }
-*/

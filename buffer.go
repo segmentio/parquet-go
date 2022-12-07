@@ -317,17 +317,19 @@ func monitorBufferRelease(b *buffer) {
 	}
 }
 
-// bufferPool holds a slice of sync.pools used for levelled buffering.
-// the table below shows the pools used for different buffer sizes when both getting
-// and putting a buffer. when allocating a new buffer from a given pool we always choose the
-// min of the put range to guarantee that all gets will have an adequately sized buffer.
-//
-// [pool] : <get range>  : <put range>  : <alloc size>
-// [0]    : 0    -> 1023 : 1024 -> 2047 : 1024
-// [1]    : 1024 -> 2047 : 2048 -> 4095 : 2048
-// [2]    : 2048 -> 4095 : 4096 -> 8191 : 4096
-// ...
 type bufferPool struct {
+	// Buckets are split in two groups for short and large buffers. In the short
+	// buffer group (below 256KB), the growth rate between each bucket is 2. The
+	// growth rate changes to 1.5 in the larger buffer group.
+	//
+	// Short buffer buckets:
+	// ---------------------
+	//   4K, 8K, 16K, 32K, 64K, 128K, 256K
+	//
+	// Large buffer buckets:
+	// ---------------------
+	//   364K, 546K, 819K ...
+	//
 	buckets [bufferPoolBucketCount]sync.Pool
 }
 
@@ -350,7 +352,7 @@ func (p *bufferPool) newBuffer(bufferSize, bucketSize int) *buffer {
 func (p *bufferPool) get(bufferSize int) *buffer {
 	bucketIndex, bucketSize := bufferPoolBucketIndexAndSizeOfGet(bufferSize)
 
-	if bucketIndex >= 0 && bucketIndex < len(p.buckets) {
+	if bucketIndex >= 0 {
 		b, _ := p.buckets[bucketIndex].Get().(*buffer)
 		if b != nil {
 			b.data = b.data[:bufferSize]
@@ -360,28 +362,6 @@ func (p *bufferPool) get(bufferSize int) *buffer {
 	}
 
 	return p.newBuffer(bufferSize, bucketSize)
-
-	/*
-		i := bufferPoolBucketIndexGet(size)
-		b, _ := p.bucket[i].Get().(*buffer)
-		switch {
-		case b == nil:
-			// align size to the pool
-			bufferSize := bufferPoolBucketSize(i)
-			if size > bufferSize { // this can occur when the buffer requested is larger than the largest pool
-				bufferSize = size
-			}
-			b = p.newBuffer(bufferSize)
-		case size <= cap(b.data):
-			b.ref()
-		default:
-			// if the buffer comes from the largest pool it may not be big enough
-			p.bucket[i].Put(b)
-			b = p.newBuffer(size)
-		}
-		b.data = b.data[:size]
-		return b
-	*/
 }
 
 func (p *bufferPool) put(b *buffer) {
@@ -391,66 +371,16 @@ func (p *bufferPool) put(b *buffer) {
 	if b.refCount() != 0 {
 		panic("BUG: buffer returned to pool with a non-zero reference count")
 	}
-	if bucketIndex, _ := bufferPoolBucketIndexAndSizeOfPut(cap(b.data)); bucketIndex >= 0 && bucketIndex < len(p.buckets) {
+	if bucketIndex, _ := bufferPoolBucketIndexAndSizeOfPut(cap(b.data)); bucketIndex >= 0 {
 		p.buckets[bucketIndex].Put(b)
 	}
-
-	/*
-		// if this slice is somehow less then our min pool size, just drop it
-		size := cap(b.data)
-		if size < bufferPoolMinSize {
-			return
-		}
-		i := bufferPoolBucketIndexPut(size)
-		p.bucket[i].Put(b)
-	*/
 }
 
 const (
-	bufferPoolBucketCount = 36
-	//bufferPoolMinShift    = 10
+	bufferPoolBucketCount         = 32
 	bufferPoolMinSize             = 4096
-	bufferPoolLastShortBucketSize = 32768
+	bufferPoolLastShortBucketSize = 262144
 )
-
-/*
-func highestPowerOfTwoGreaterThanOrEqualTo(n uint64) uint64 {
-	return 1 << (64 - bits.LeadingZeros64(n-1))
-}
-
-func lowestPowerOfTwoLessThanOrEqualTo(n uint64) uint64 {
-	return 1 << (63 - bits.LeadingZeros64(n))
-}
-
-func bufferPoolBucketSize(index int) int {
-	return 1 << (uint(index) + bufferPoolMinShift)
-}
-
-func bufferPoolBucketIndexLimit(index int) int {
-	switch {
-	case index < 0:
-		index = 0
-	case index >= bufferPoolBucketCount:
-		index = bufferPoolBucketCount - 1
-	}
-	return index
-}
-
-func bufferPoolBucketIndexGet(size int) int {
-	index := bits.TrailingZeros64(highestPowerOfTwoGreaterThanOrEqualTo(uint64(size) >> bufferPoolMinShift))
-	return bufferPoolBucketIndexLimit(index)
-}
-
-func bufferPoolBucketIndexPut(size int) int {
-	index := bits.TrailingZeros64(lowestPowerOfTwoLessThanOrEqualTo(uint64(size) >> bufferPoolMinShift))
-	return bufferPoolBucketIndexLimit(index)
-}
-
-const (
-    minBufferSize      = 256
-    maxShortBufferSize = 32768
-)
-*/
 
 func bufferPoolNextSize(size int) int {
 	if size < bufferPoolLastShortBucketSize {
