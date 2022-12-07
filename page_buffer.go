@@ -22,7 +22,7 @@ import (
 // PageBufferPool implementations must be safe to use concurrently from multiple
 // goroutines.
 type PageBufferPool interface {
-	// GetPageBuffer is called when a parquet writer needs to acquires a new
+	// GetPageBuffer is called when a parquet writer needs to acquire a new
 	// page buffer from the pool.
 	GetPageBuffer() io.ReadWriteSeeker
 
