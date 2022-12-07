@@ -26,7 +26,7 @@ type RowBuffer[T any] struct {
 	schema  *Schema
 	sorting []SortingColumn
 	rows    []Row
-	numRows int
+	values  []Value
 	compare func(Row, Row) int
 }
 
@@ -56,17 +56,19 @@ func NewRowBuffer[T any](options ...RowGroupOption) *RowBuffer[T] {
 
 // Reset clears the content of the buffer without releasing its memory.
 func (buf *RowBuffer[T]) Reset() {
-	for _, row := range buf.rows[:buf.numRows] {
-		for i := range row {
-			row[i] = Value{}
-		}
+	for i := range buf.rows {
+		buf.rows[i] = nil
 	}
+	for i := range buf.values {
+		buf.values[i] = Value{}
+	}
+	buf.rows = buf.rows[:0]
+	buf.values = buf.values[:0]
 	buf.alloc.reset()
-	buf.numRows = 0
 }
 
 // NumRows returns the number of rows currently written to the buffer.
-func (buf *RowBuffer[T]) NumRows() int64 { return int64(buf.numRows) }
+func (buf *RowBuffer[T]) NumRows() int64 { return int64(len(buf.rows)) }
 
 // ColumnChunks returns a view of the buffer's columns.
 //
@@ -86,7 +88,7 @@ func (buf *RowBuffer[T]) ColumnChunks() []ColumnChunk {
 		leafColumn, _ := buf.schema.Lookup(column...)
 		chunks[i] = rowBufferColumnChunk{
 			page: rowBufferPage{
-				rows:               buf.rows[:buf.numRows],
+				rows:               buf.rows,
 				typ:                leafColumn.Node.Type(),
 				column:             leafColumn.ColumnIndex,
 				maxRepetitionLevel: byte(leafColumn.MaxRepetitionLevel),
@@ -119,7 +121,7 @@ func (buf *RowBuffer[T]) Schema() *Schema { return buf.schema }
 // Len returns the number of rows in the buffer.
 //
 // The method contributes to satisfying sort.Interface.
-func (buf *RowBuffer[T]) Len() int { return buf.numRows }
+func (buf *RowBuffer[T]) Len() int { return len(buf.rows) }
 
 // Less compares the rows at index i and j according to the sorting columns
 // configured on the buffer.
@@ -142,53 +144,28 @@ func (buf *RowBuffer[T]) Swap(i, j int) {
 // The returned rows and values read from it remain valid until the next call
 // to Reset on the buffer.
 func (buf *RowBuffer[T]) Rows() Rows {
-	return &rowBufferRows{rows: buf.rows[:buf.numRows], schema: buf.schema}
+	return &rowBufferRows{rows: buf.rows, schema: buf.schema}
 }
 
 // Write writes rows to the buffer, returning the number of rows written.
 func (buf *RowBuffer[T]) Write(rows []T) (int, error) {
-	buf.reserve(len(rows))
-
 	for i := range rows {
-		bufRow := buf.rows[buf.numRows][:0]
-		bufRow = buf.schema.Deconstruct(bufRow, &rows[i])
+		bufRow := buf.schema.Deconstruct(buf.values, &rows[i])
 		buf.alloc.capture(bufRow)
-		buf.rows[buf.numRows] = bufRow
-		buf.numRows++
+		buf.rows = append(buf.rows, bufRow)
 	}
-
 	return len(rows), nil
 }
 
 // WriteRows writes parquet rows to the buffer, returing the number of rows
 // written.
 func (buf *RowBuffer[T]) WriteRows(rows []Row) (int, error) {
-	buf.reserve(len(rows))
-
 	for _, row := range rows {
-		bufRow := buf.rows[buf.numRows][:0]
-		bufRow = append(bufRow, row...)
+		bufRow := append(buf.values, row...)
 		buf.alloc.capture(bufRow)
-		buf.rows[buf.numRows] = bufRow
-		buf.numRows++
+		buf.rows = append(buf.rows, bufRow)
 	}
-
 	return len(rows), nil
-}
-
-func (buf *RowBuffer[T]) reserve(n int) {
-	if newLen := buf.numRows + n; newLen > len(buf.rows) {
-		bufLen := 2 * len(buf.rows)
-		if bufLen == 0 {
-			bufLen = defaultValueBufferSize
-		}
-		for bufLen < newLen {
-			bufLen *= 2
-		}
-		newRows := make([]Row, bufLen)
-		copy(newRows, buf.rows)
-		buf.rows = newRows
-	}
 }
 
 type rowBufferColumnChunk struct{ page rowBufferPage }
