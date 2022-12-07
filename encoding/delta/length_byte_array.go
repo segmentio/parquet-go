@@ -69,6 +69,10 @@ func (e *LengthByteArrayEncoding) EstimateDecodeByteArraySize(src []byte) int {
 	return int(length.sum())
 }
 
+func (e *LengthByteArrayEncoding) CanDecodeInPlace() bool {
+	return true
+}
+
 func (e *LengthByteArrayEncoding) wrap(err error) error {
 	if err != nil {
 		err = encoding.Error(e, err)
