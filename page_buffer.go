@@ -1,7 +1,7 @@
 package parquet
 
 import (
-	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -22,9 +22,9 @@ import (
 // PageBufferPool implementations must be safe to use concurrently from multiple
 // goroutines.
 type PageBufferPool interface {
-	// GetPageBuffer is called when a parquet writer needs to acquires a new
+	// GetPageBuffer is called when a parquet writer needs to acquire a new
 	// page buffer from the pool.
-	GetPageBuffer() io.ReadWriter
+	GetPageBuffer() io.ReadWriteSeeker
 
 	// PutPageBuffer is called when a parquet writer releases a page buffer to
 	// the pool.
@@ -32,7 +32,7 @@ type PageBufferPool interface {
 	// The parquet.Writer type guarantees that the buffers it calls this method
 	// with were previously acquired by a call to GetPageBuffer on the same
 	// pool, and that it will not use them anymore after the call.
-	PutPageBuffer(io.ReadWriter)
+	PutPageBuffer(io.ReadWriteSeeker)
 }
 
 // NewPageBufferPool creates a new in-memory page buffer pool.
@@ -41,20 +41,73 @@ type PageBufferPool interface {
 // Go heap.
 func NewPageBufferPool() PageBufferPool { return new(pageBufferPool) }
 
+type pageBuffer struct {
+	data []byte
+	off  int
+}
+
+func (p *pageBuffer) Reset() {
+	p.data, p.off = p.data[:0], 0
+}
+
+func (p *pageBuffer) Read(b []byte) (n int, err error) {
+	n = copy(b, p.data[p.off:])
+	p.off += n
+	if p.off == len(p.data) {
+		err = io.EOF
+	}
+	return n, err
+}
+
+func (p *pageBuffer) Write(b []byte) (int, error) {
+	n := copy(p.data[p.off:cap(p.data)], b)
+	p.data = p.data[:p.off+n]
+
+	if n < len(b) {
+		p.data = append(p.data, b[n:]...)
+	}
+
+	p.off += len(b)
+	return len(b), nil
+}
+
+func (p *pageBuffer) WriteTo(w io.Writer) (int64, error) {
+	n, err := w.Write(p.data[p.off:])
+	p.off += n
+	return int64(n), err
+}
+
+func (p *pageBuffer) Seek(offset int64, whence int) (int64, error) {
+	switch whence {
+	case io.SeekCurrent:
+		offset += int64(p.off)
+	case io.SeekEnd:
+		offset += int64(len(p.data))
+	}
+	if offset < 0 {
+		return 0, fmt.Errorf("seek: negative offset: %d<0", offset)
+	}
+	if offset > int64(len(p.data)) {
+		offset = int64(len(p.data))
+	}
+	p.off = int(offset)
+	return offset, nil
+}
+
 type pageBufferPool struct{ sync.Pool }
 
-func (pool *pageBufferPool) GetPageBuffer() io.ReadWriter {
-	b, _ := pool.Get().(*bytes.Buffer)
+func (pool *pageBufferPool) GetPageBuffer() io.ReadWriteSeeker {
+	b, _ := pool.Get().(*pageBuffer)
 	if b == nil {
-		b = new(bytes.Buffer)
+		b = new(pageBuffer)
 	} else {
 		b.Reset()
 	}
 	return b
 }
 
-func (pool *pageBufferPool) PutPageBuffer(buf io.ReadWriter) {
-	if b, _ := buf.(*bytes.Buffer); b != nil {
+func (pool *pageBufferPool) PutPageBuffer(buf io.ReadWriteSeeker) {
+	if b, _ := buf.(*pageBuffer); b != nil {
 		pool.Put(b)
 	}
 }
@@ -75,7 +128,7 @@ func NewFileBufferPool(tempdir, pattern string) PageBufferPool {
 	return pool
 }
 
-func (pool *fileBufferPool) GetPageBuffer() io.ReadWriter {
+func (pool *fileBufferPool) GetPageBuffer() io.ReadWriteSeeker {
 	if pool.err != nil {
 		return &errorBuffer{err: pool.err}
 	}
@@ -83,58 +136,28 @@ func (pool *fileBufferPool) GetPageBuffer() io.ReadWriter {
 	if err != nil {
 		return &errorBuffer{err: err}
 	}
-	return &fileBuffer{file: f}
+	return f
 }
 
-func (pool *fileBufferPool) PutPageBuffer(buf io.ReadWriter) {
-	if f, _ := buf.(*fileBuffer); f != nil {
-		defer f.file.Close()
-		os.Remove(f.file.Name())
+func (pool *fileBufferPool) PutPageBuffer(buf io.ReadWriteSeeker) {
+	if f, _ := buf.(*os.File); f != nil {
+		defer f.Close()
+		os.Remove(f.Name())
 	}
-}
-
-type fileBuffer struct {
-	file *os.File
-	seek int64
-}
-
-func (buf *fileBuffer) Read(b []byte) (int, error) {
-	// The *os.File tracks a single cursor which we use for write operations to
-	// support appending to the buffer. We need a second cursor for reads which
-	// is tracked by the buf.seek field, using ReadAt to read from the file at
-	// the current read position.
-	n, err := buf.file.ReadAt(b, buf.seek)
-	buf.seek += int64(n)
-	return n, err
-}
-
-func (buf *fileBuffer) ReadFrom(r io.Reader) (int64, error) {
-	return buf.file.ReadFrom(r)
-}
-
-func (buf *fileBuffer) Write(b []byte) (int, error) {
-	return buf.file.Write(b)
-}
-
-func (buf *fileBuffer) WriteString(s string) (int, error) {
-	return buf.file.WriteString(s)
 }
 
 type errorBuffer struct{ err error }
 
 func (buf *errorBuffer) Read([]byte) (int, error)          { return 0, buf.err }
 func (buf *errorBuffer) Write([]byte) (int, error)         { return 0, buf.err }
-func (buf *errorBuffer) WriteString(string) (int, error)   { return 0, buf.err }
 func (buf *errorBuffer) ReadFrom(io.Reader) (int64, error) { return 0, buf.err }
 func (buf *errorBuffer) WriteTo(io.Writer) (int64, error)  { return 0, buf.err }
+func (buf *errorBuffer) Seek(int64, int) (int64, error)    { return 0, buf.err }
 
 var (
 	defaultPageBufferPool pageBufferPool
 
-	_ io.ReaderFrom   = (*fileBuffer)(nil)
-	_ io.StringWriter = (*fileBuffer)(nil)
-
-	_ io.ReaderFrom   = (*errorBuffer)(nil)
-	_ io.WriterTo     = (*errorBuffer)(nil)
-	_ io.StringWriter = (*errorBuffer)(nil)
+	_ io.ReaderFrom = (*errorBuffer)(nil)
+	_ io.WriterTo   = (*errorBuffer)(nil)
+	_ io.WriterTo   = (*pageBuffer)(nil)
 )

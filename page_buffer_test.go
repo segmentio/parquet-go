@@ -93,6 +93,9 @@ func testPageBufferPoolCopyFromBuffer(t *testing.T, pool parquet.PageBufferPool)
 	if _, err := io.WriteString(buffer, content); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := buffer.Seek(0, io.SeekStart); err != nil {
+		t.Fatal(err)
+	}
 
 	writer := new(bytes.Buffer)
 	_, err := io.Copy(struct{ io.Writer }{writer}, buffer)
@@ -100,13 +103,20 @@ func testPageBufferPoolCopyFromBuffer(t *testing.T, pool parquet.PageBufferPool)
 		t.Fatal(err)
 	}
 
-	assertBufferContent(t, writer, content)
+	assertBufferContent(t, bytes.NewReader(writer.Bytes()), content)
 }
 
-func assertBufferContent(t *testing.T, b io.Reader, s string) {
+func assertBufferContent(t *testing.T, b io.ReadSeeker, s string) {
 	t.Helper()
 
+	offset, err := b.Seek(0, io.SeekStart)
+	if err != nil {
+		t.Error("seek:", err)
+	}
+	if offset != 0 {
+		t.Errorf("seek: invalid offset returned: want=0 got=%d", offset)
+	}
 	if err := iotest.TestReader(b, []byte(s)); err != nil {
-		t.Error(err)
+		t.Error("iotest:", err)
 	}
 }

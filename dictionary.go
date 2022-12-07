@@ -1297,14 +1297,6 @@ func (page *indexedPage) Bounds() (min, max Value, ok bool) {
 	return min, max, ok
 }
 
-func (page *indexedPage) Clone() Page {
-	return &indexedPage{
-		typ:         page.typ,
-		values:      append([]int32{}, page.values...),
-		columnIndex: page.columnIndex,
-	}
-}
-
 func (page *indexedPage) Slice(i, j int64) Page {
 	return &indexedPage{
 		typ:         page.typ,
