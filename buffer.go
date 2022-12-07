@@ -5,6 +5,7 @@ import (
 	"math/bits"
 	"os"
 	"runtime"
+	"runtime/debug"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -289,13 +290,10 @@ var (
 )
 
 type buffer struct {
-	data []byte
-	refc uintptr
-	pool *bufferPool
-}
-
-func newBuffer(data []byte) *buffer {
-	return &buffer{data: data, refc: 1}
+	data  []byte
+	refc  uintptr
+	pool  *bufferPool
+	stack []byte
 }
 
 func (b *buffer) refCount() int {
@@ -311,6 +309,12 @@ func (b *buffer) unref() {
 		if b.pool != nil {
 			b.pool.put(b)
 		}
+	}
+}
+
+func monitorBufferRelease(b *buffer) {
+	if rc := b.refCount(); rc != 0 {
+		log.Printf("WARN - buffer garbage collected with non-zero reference count\n%s", string(b.stack))
 	}
 }
 
@@ -331,6 +335,19 @@ type bufferPool struct {
 	pool [numPoolBuckets]sync.Pool
 }
 
+func (p *bufferPool) newBuffer(size int) *buffer {
+	b := &buffer{
+		data: make([]byte, 0, size),
+		refc: 1,
+		pool: p,
+	}
+	if debugEnabled {
+		b.stack = debug.Stack()
+		runtime.SetFinalizer(b, monitorBufferRelease)
+	}
+	return b
+}
+
 // get returns a buffer from the levelled buffer pool. sz is used to choose the appropriate pool
 func (p *bufferPool) get(sz int) *buffer {
 	i := levelledPoolIndex(sz)
@@ -341,18 +358,12 @@ func (p *bufferPool) get(sz int) *buffer {
 		if sz > poolSize { // this can occur when the buffer requested is larger than the largest pool
 			poolSize = sz
 		}
-		b = &buffer{
-			data: make([]byte, 0, poolSize),
-			pool: p,
-		}
+		b = p.newBuffer(poolSize)
 	}
 	// if the buffer comes from the largest pool it may not be big enough
 	if cap(b.data) < sz {
 		p.pool[i].Put(b)
-		b = &buffer{
-			data: make([]byte, 0, sz),
-			pool: p,
-		}
+		b = p.newBuffer(sz)
 	}
 	b.data = b.data[:sz]
 	b.ref()
@@ -400,39 +411,29 @@ type bufferedPage struct {
 	definitionLevels *buffer
 }
 
-func monitorBufferRelease(b *buffer, name string) {
-	if b != nil {
-		if rc := b.refCount(); rc != 0 {
-			log.Printf("WARN - %s - object garbage collected with non-zero reference count", name)
-		}
+func newBufferedPage(page Page, values, offsets, definitionLevels, repetitionLevels *buffer) *bufferedPage {
+	p := &bufferedPage{
+		Page:             page,
+		values:           values,
+		offsets:          offsets,
+		definitionLevels: definitionLevels,
+		repetitionLevels: repetitionLevels,
 	}
-}
-
-func monitorBufferedPageRelease(p *bufferedPage) {
-	monitorBufferRelease(p.values, "bufferedPage.values")
-	monitorBufferRelease(p.offsets, "bufferedPage.offsets")
-	monitorBufferRelease(p.repetitionLevels, "bufferedPage.repetitionLevels")
-	monitorBufferRelease(p.definitionLevels, "bufferedPage.definitionLevels")
+	bufferRef(values)
+	bufferRef(offsets)
+	bufferRef(definitionLevels)
+	bufferRef(repetitionLevels)
+	return p
 }
 
 func (p *bufferedPage) Slice(i, j int64) Page {
-	bufferRef(p.values)
-	bufferRef(p.offsets)
-	bufferRef(p.definitionLevels)
-	bufferRef(p.repetitionLevels)
-
-	s := &bufferedPage{
-		values:           p.values,
-		offsets:          p.offsets,
-		definitionLevels: p.definitionLevels,
-		repetitionLevels: p.repetitionLevels,
-		Page:             p.Page.Slice(i, j),
-	}
-
-	if debugEnabled {
-		runtime.SetFinalizer(s, monitorBufferedPageRelease)
-	}
-	return s
+	return newBufferedPage(
+		p.Page.Slice(i, j),
+		p.values,
+		p.offsets,
+		p.definitionLevels,
+		p.repetitionLevels,
+	)
 }
 
 func (p *bufferedPage) Retain() {
