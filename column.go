@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"runtime"
 
 	"github.com/segmentio/parquet-go/compress"
 	"github.com/segmentio/parquet-go/deprecated"
@@ -698,6 +699,9 @@ func (c *Column) decodeDataPage(header DataPageHeader, numValues int, repetition
 		definitionLevels: definitionLevels,
 	}
 
+	if debugEnabled {
+		runtime.SetFinalizer(newPage.(*bufferedPage), monitorBufferedPageRelease)
+	}
 	return newPage, nil
 }
 

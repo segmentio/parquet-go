@@ -1,7 +1,10 @@
 package parquet
 
 import (
+	"log"
 	"math/bits"
+	"os"
+	"runtime"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -295,6 +298,10 @@ func newBuffer(data []byte) *buffer {
 	return &buffer{data: data, refc: 1}
 }
 
+func (b *buffer) refCount() int {
+	return int(atomic.LoadUintptr(&b.refc))
+}
+
 func (b *buffer) ref() {
 	atomic.AddUintptr(&b.refc, +1)
 }
@@ -381,6 +388,8 @@ func levelledPoolIndex(sz int) int {
 
 var (
 	buffers bufferPool
+
+	debugEnabled = os.Getenv("DEBUG") == "1"
 )
 
 type bufferedPage struct {
@@ -391,19 +400,39 @@ type bufferedPage struct {
 	definitionLevels *buffer
 }
 
+func monitorBufferRelease(b *buffer, name string) {
+	if b != nil {
+		if rc := b.refCount(); rc != 0 {
+			log.Printf("WARN - %s - object garbage collected with non-zero reference count", name)
+		}
+	}
+}
+
+func monitorBufferedPageRelease(p *bufferedPage) {
+	monitorBufferRelease(p.values, "bufferedPage.values")
+	monitorBufferRelease(p.offsets, "bufferedPage.offsets")
+	monitorBufferRelease(p.repetitionLevels, "bufferedPage.repetitionLevels")
+	monitorBufferRelease(p.definitionLevels, "bufferedPage.definitionLevels")
+}
+
 func (p *bufferedPage) Slice(i, j int64) Page {
 	bufferRef(p.values)
 	bufferRef(p.offsets)
 	bufferRef(p.definitionLevels)
 	bufferRef(p.repetitionLevels)
 
-	return &bufferedPage{
+	s := &bufferedPage{
 		values:           p.values,
 		offsets:          p.offsets,
 		definitionLevels: p.definitionLevels,
 		repetitionLevels: p.repetitionLevels,
 		Page:             p.Page.Slice(i, j),
 	}
+
+	if debugEnabled {
+		runtime.SetFinalizer(s, monitorBufferedPageRelease)
+	}
+	return s
 }
 
 func (p *bufferedPage) Retain() {
