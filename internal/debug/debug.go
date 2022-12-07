@@ -73,7 +73,13 @@ var (
 
 func init() {
 	for _, arg := range strings.Split(os.Getenv("PARQUETGODEBUG"), ",") {
-		switch k, v, _ := strings.Cut(arg, "="); k {
+		k := arg
+		v := ""
+		i := strings.IndexByte(arg, '=')
+		if i >= 0 {
+			k, v = arg[:i], arg[i+1:]
+		}
+		switch k {
 		case "tracebuf":
 			TRACEBUF, _ = strconv.Atoi(v)
 		}
