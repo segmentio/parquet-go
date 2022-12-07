@@ -3,12 +3,12 @@ package parquet
 import (
 	"log"
 	"math/bits"
-	"os"
 	"runtime"
-	"runtime/debug"
 	"sort"
 	"sync"
 	"sync/atomic"
+
+	"github.com/segmentio/parquet-go/internal/debug"
 )
 
 // Buffer represents an in-memory group of parquet rows.
@@ -314,7 +314,7 @@ func (b *buffer) unref() {
 
 func monitorBufferRelease(b *buffer) {
 	if rc := b.refCount(); rc != 0 {
-		log.Printf("WARN - buffer garbage collected with non-zero reference count\n%s", string(b.stack))
+		log.Printf("PARQUETGODEBUG: buffer garbage collected with non-zero reference count\n%s", string(b.stack))
 	}
 }
 
@@ -332,41 +332,44 @@ const numPoolBuckets = 16
 const basePoolIncrement = 1024
 
 type bufferPool struct {
-	pool [numPoolBuckets]sync.Pool
+	bucket [numPoolBuckets]sync.Pool
 }
 
 func (p *bufferPool) newBuffer(size int) *buffer {
 	b := &buffer{
-		data: make([]byte, 0, size),
+		data: make([]byte, size),
 		refc: 1,
 		pool: p,
 	}
-	if debugEnabled {
-		b.stack = debug.Stack()
+	if debug.TRACEBUF > 0 {
+		b.stack = make([]byte, 4096)
+		b.stack = b.stack[:runtime.Stack(b.stack, false)]
 		runtime.SetFinalizer(b, monitorBufferRelease)
 	}
 	return b
 }
 
-// get returns a buffer from the levelled buffer pool. sz is used to choose the appropriate pool
-func (p *bufferPool) get(sz int) *buffer {
-	i := levelledPoolIndex(sz)
-	b, _ := p.pool[i].Get().(*buffer)
-	if b == nil {
+// get returns a buffer from the levelled buffer pool. size is used to choose
+// the appropriate pool.
+func (p *bufferPool) get(size int) *buffer {
+	i := levelledPoolIndex(size)
+	b, _ := p.bucket[i].Get().(*buffer)
+	switch {
+	case b == nil:
 		// align size to the pool
-		poolSize := basePoolIncrement << i
-		if sz > poolSize { // this can occur when the buffer requested is larger than the largest pool
-			poolSize = sz
+		bucketSize := basePoolIncrement << i
+		if size > bucketSize { // this can occur when the buffer requested is larger than the largest pool
+			bucketSize = size
 		}
-		b = p.newBuffer(poolSize)
+		b = p.newBuffer(bucketSize)
+	case size <= cap(b.data):
+		b.ref()
+	default:
+		// if the buffer comes from the largest pool it may not be big enough
+		p.bucket[i].Put(b)
+		b = p.newBuffer(size)
 	}
-	// if the buffer comes from the largest pool it may not be big enough
-	if cap(b.data) < sz {
-		p.pool[i].Put(b)
-		b = p.newBuffer(sz)
-	}
-	b.data = b.data[:sz]
-	b.ref()
+	b.data = b.data[:size]
 	return b
 }
 
@@ -374,19 +377,22 @@ func (p *bufferPool) put(b *buffer) {
 	if b.pool != p {
 		panic("BUG: buffer returned to a different pool than the one it was allocated from")
 	}
+	if b.refCount() != 0 {
+		panic("BUG: buffer returned to pool with a non-zero reference count")
+	}
 	// if this slice is somehow less then our min pool size, just drop it
-	sz := cap(b.data)
-	if sz < basePoolIncrement {
+	size := cap(b.data)
+	if size < basePoolIncrement {
 		return
 	}
-	i := levelledPoolIndex(sz / 2) // divide by 2 to put the buffer in the level below so it will always be large enough
-	p.pool[i].Put(b)
+	i := levelledPoolIndex(size / 2) // divide by 2 to put the buffer in the level below so it will always be large enough
+	p.bucket[i].Put(b)
 }
 
-// levelledPoolIndex returns the index of the pool to use for a buffer of size sz. it never returns
-// an index that will panic
-func levelledPoolIndex(sz int) int {
-	i := sz / basePoolIncrement
+// levelledPoolIndex returns the index of the pool to use for a buffer of the
+// given size. It never returns an index that will panic.
+func levelledPoolIndex(size int) int {
+	i := size / basePoolIncrement
 	i = 32 - bits.LeadingZeros32(uint32(i)) // log2
 	if i >= numPoolBuckets {
 		i = numPoolBuckets - 1
@@ -399,8 +405,6 @@ func levelledPoolIndex(sz int) int {
 
 var (
 	buffers bufferPool
-
-	debugEnabled = os.Getenv("DEBUG") == "1"
 )
 
 type bufferedPage struct {

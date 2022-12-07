@@ -364,6 +364,7 @@ func testFilePage(t *testing.T, schema *parquet.Schema, test pageTest) {
 	if err != nil {
 		t.Fatal("reading parquet page:", err)
 	}
+	defer parquet.Release(p)
 
 	values := p.Values()
 	r, err := test.read(values)
