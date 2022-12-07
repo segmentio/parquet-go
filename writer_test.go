@@ -101,13 +101,12 @@ var writerTests = []struct {
 		},
 		dump: `row group 0
 --------------------------------------------------------------------------------
-first_name:  BINARY ZSTD DO:4 FPO:55 SZ:123/96/0.78 VC:3 ENC:PLAIN,RLE_DICTIONARY ST:[no stats for this column]
-last_name:   BINARY ZSTD DO:0 FPO:127 SZ:127/121/0.95 VC:3 ENC:DELTA_BYTE_ARRAY ST:[no stats for this column]
+first_name:  BINARY ZSTD DO:4 FPO:55 SZ:90/72/0.80 VC:3 ENC:PLAIN,RLE_DICTIONARY ST:[no stats for this column]
+last_name:   BINARY ZSTD DO:0 FPO:94 SZ:127/121/0.95 VC:3 ENC:DELTA_BYTE_ARRAY ST:[no stats for this column]
 
     first_name TV=3 RL=0 DL=0 DS: 3 DE:PLAIN
     ----------------------------------------------------------------------------
-    page 0:                        DLE:RLE RLE:RLE VLE:RLE_DICTIONARY ST:[no stats for this column] CRC:[PAGE CORRUPT] SZ:5 VC:2
-    page 1:                        DLE:RLE RLE:RLE VLE:RLE_DICTIONARY ST:[no stats for this column] CRC:[PAGE CORRUPT] SZ:3 VC:1
+    page 0:                        DLE:RLE RLE:RLE VLE:RLE_DICTIONARY ST:[no stats for this column] CRC:[PAGE CORRUPT] SZ:7 VC:3
 
     last_name TV=3 RL=0 DL=0
     ----------------------------------------------------------------------------
@@ -140,13 +139,12 @@ value 3: R:0 D:0 V:Skywalker
 		},
 		dump: `row group 0
 --------------------------------------------------------------------------------
-first_name:  BINARY ZSTD DO:4 FPO:55 SZ:115/106/0.92 VC:3 ENC:RLE_DICTIONARY,PLAIN ST:[no stats for this column]
-last_name:   BINARY ZSTD DO:0 FPO:119 SZ:137/131/0.96 VC:3 ENC:DELTA_BYTE_ARRAY ST:[no stats for this column]
+first_name:  BINARY ZSTD DO:4 FPO:55 SZ:86/77/0.90 VC:3 ENC:RLE_DICTIONARY,PLAIN ST:[no stats for this column]
+last_name:   BINARY ZSTD DO:0 FPO:90 SZ:137/131/0.96 VC:3 ENC:DELTA_BYTE_ARRAY ST:[no stats for this column]
 
     first_name TV=3 RL=0 DL=0 DS: 3 DE:PLAIN
     ----------------------------------------------------------------------------
-    page 0:                        DLE:RLE RLE:RLE VLE:RLE_DICTIONARY ST:[no stats for this column] SZ:5 VC:2
-    page 1:                        DLE:RLE RLE:RLE VLE:RLE_DICTIONARY ST:[no stats for this column] SZ:3 VC:1
+    page 0:                        DLE:RLE RLE:RLE VLE:RLE_DICTIONARY ST:[no stats for this column] SZ:7 VC:3
 
     last_name TV=3 RL=0 DL=0
     ----------------------------------------------------------------------------
@@ -187,17 +185,14 @@ value 3: R:0 D:0 V:Skywalker
 		},
 		dump: `row group 0
 --------------------------------------------------------------------------------
-name:       BINARY GZIP DO:4 FPO:70 SZ:216/191/0.88 VC:10 ENC:PLAIN,RLE_DICTIONARY ST:[no stats for this column]
-timestamp:  INT64 GZIP DO:0 FPO:220 SZ:299/550/1.84 VC:10 ENC:DELTA_BINARY_PACKED ST:[no stats for this column]
-value:      DOUBLE GZIP DO:0 FPO:519 SZ:292/192/0.66 VC:10 ENC:PLAIN ST:[no stats for this column]
+name:       BINARY GZIP DO:4 FPO:70 SZ:126/101/0.80 VC:10 ENC:PLAIN,RLE_DICTIONARY ST:[no stats for this column]
+timestamp:  INT64 GZIP DO:0 FPO:130 SZ:299/550/1.84 VC:10 ENC:DELTA_BINARY_PACKED ST:[no stats for this column]
+value:      DOUBLE GZIP DO:0 FPO:429 SZ:292/192/0.66 VC:10 ENC:PLAIN ST:[no stats for this column]
 
     name TV=10 RL=0 DL=0 DS: 1 DE:PLAIN
     ----------------------------------------------------------------------------
-    page 0:                   DLE:RLE RLE:RLE VLE:RLE_DICTIONARY ST:[no stats for this column] SZ:2 VC:2
-    page 1:                   DLE:RLE RLE:RLE VLE:RLE_DICTIONARY ST:[no stats for this column] SZ:2 VC:2
-    page 2:                   DLE:RLE RLE:RLE VLE:RLE_DICTIONARY ST:[no stats for this column] SZ:2 VC:2
-    page 3:                   DLE:RLE RLE:RLE VLE:RLE_DICTIONARY ST:[no stats for this column] SZ:2 VC:2
-    page 4:                   DLE:RLE RLE:RLE VLE:RLE_DICTIONARY ST:[no stats for this column] SZ:2 VC:2
+    page 0:                   DLE:RLE RLE:RLE VLE:RLE_DICTIONARY ST:[no stats for this column] SZ:2 VC:5
+    page 1:                   DLE:RLE RLE:RLE VLE:RLE_DICTIONARY ST:[no stats for this column] SZ:2 VC:5
 
     timestamp TV=10 RL=0 DL=0
     ----------------------------------------------------------------------------
