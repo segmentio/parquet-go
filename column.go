@@ -71,7 +71,7 @@ func (c *Column) Encoding() encoding.Encoding { return c.encoding }
 func (c *Column) Compression() compress.Codec { return c.compression }
 
 // Path of the column in the parquet schema.
-func (c *Column) Path() []string { return c.path }
+func (c *Column) Path() []string { return c.path[1:] }
 
 // Name returns the column name.
 func (c *Column) Name() string { return c.schema.Name }
@@ -273,7 +273,7 @@ func (cl *columnLoader) open(file *File, path []string) (*Column, error) {
 		file:   file,
 		schema: &file.metadata.Schema[cl.schemaIndex],
 	}
-	c.path = c.path.append(c.schema.Name)
+	c.path = columnPath(path).append(c.schema.Name)
 
 	cl.schemaIndex++
 	numChildren := int(c.schema.NumChildren)
@@ -356,7 +356,7 @@ func (cl *columnLoader) open(file *File, path []string) (*Column, error) {
 		}
 
 		var err error
-		c.columns[i], err = cl.open(file, path)
+		c.columns[i], err = cl.open(file, c.path)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", c.schema.Name, err)
 		}

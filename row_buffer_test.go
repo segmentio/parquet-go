@@ -300,3 +300,60 @@ func BenchmarkSortRowBuffer(b *testing.B) {
 		sort.Sort(buf)
 	}
 }
+
+func BenchmarkMergeRowBuffers(b *testing.B) {
+	type Row struct {
+		ID int64 `parquet:"id"`
+	}
+
+	const (
+		numBuffers       = 100
+		numRowsPerBuffer = 10e3
+	)
+
+	rows := [numBuffers][numRowsPerBuffer]Row{}
+	nextID := int64(0)
+	for i := 0; i < numRowsPerBuffer; i++ {
+		for j := 0; j < numBuffers; j++ {
+			rows[j][i].ID = nextID
+			nextID++
+		}
+	}
+
+	options := []parquet.RowGroupOption{
+		parquet.SortingRowGroupConfig(
+			parquet.SortingColumns(
+				parquet.Ascending("id"),
+			),
+		),
+	}
+
+	rowGroups := make([]parquet.RowGroup, numBuffers)
+	for i := range rowGroups {
+		buffer := parquet.NewRowBuffer[Row](options...)
+		buffer.Write(rows[i][:])
+		rowGroups[i] = buffer
+	}
+
+	merge, err := parquet.MergeRowGroups(rowGroups, options...)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		rows := merge.Rows()
+		_, err := parquet.CopyRows(discardRows{}, rows)
+		rows.Close()
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+type discardRows struct{}
+
+func (discardRows) WriteRows(rows []parquet.Row) (int, error) {
+	return len(rows), nil
+}

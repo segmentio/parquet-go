@@ -385,10 +385,7 @@ func (c *SortingConfig) Apply(options ...SortingOption) {
 }
 
 func (c *SortingConfig) ConfigureSorting(config *SortingConfig) {
-	*config = SortingConfig{
-		SortingColumns:     coalesceSortingColumns(c.SortingColumns, config.SortingColumns),
-		DropDuplicatedRows: c.DropDuplicatedRows,
-	}
+	*config = coalesceSortingConfig(*c, *config)
 }
 
 // FileOption is an interface implemented by types that carry configuration

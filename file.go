@@ -7,6 +7,7 @@ import (
 	"hash/crc32"
 	"io"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/segmentio/encoding/thrift"
@@ -415,6 +416,20 @@ type fileSortingColumn struct {
 func (s *fileSortingColumn) Path() []string   { return s.column.Path() }
 func (s *fileSortingColumn) Descending() bool { return s.descending }
 func (s *fileSortingColumn) NullsFirst() bool { return s.nullsFirst }
+func (s *fileSortingColumn) String() string {
+	b := new(strings.Builder)
+	if s.nullsFirst {
+		b.WriteString("nulls_first+")
+	}
+	if s.descending {
+		b.WriteString("descending(")
+	} else {
+		b.WriteString("ascending(")
+	}
+	b.WriteString(columnPath(s.Path()).String())
+	b.WriteString(")")
+	return b.String()
+}
 
 type fileColumnChunk struct {
 	file        *File

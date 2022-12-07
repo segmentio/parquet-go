@@ -420,21 +420,31 @@ func TestMergeRowGroups(t *testing.T) {
 
 							for {
 								_, err1 := expectedRows.ReadRows(row1)
-								_, err2 := mergedRows.ReadRows(row2)
+								n, err2 := mergedRows.ReadRows(row2)
 
 								if err1 != err2 {
-									t.Fatalf("errors mismatched while comparing row %d/%d: want=%v got=%v", numRows, totalRows, err1, err2)
+									// ReadRows may or may not return io.EOF
+									// when it reads the last row, so we test
+									// that the reference RowReader has also
+									// reached the end.
+									if err1 == nil && err2 == io.EOF {
+										_, err1 = expectedRows.ReadRows(row1[:0])
+									}
+									if err1 != io.EOF {
+										t.Fatalf("errors mismatched while comparing row %d/%d: want=%v got=%v", numRows, totalRows, err1, err2)
+									}
+								}
+
+								if n != 0 {
+									if !row1[0].Equal(row2[0]) {
+										t.Errorf("row at index %d/%d mismatch: want=%+v got=%+v", numRows, totalRows, row1[0], row2[0])
+									}
+									numRows++
 								}
 
 								if err1 != nil {
 									break
 								}
-
-								if !row1[0].Equal(row2[0]) {
-									t.Errorf("row at index %d/%d mismatch: want=%+v got=%+v", numRows, totalRows, row1[0], row2[0])
-								}
-
-								numRows++
 							}
 
 							if numRows != totalRows {
