@@ -731,6 +731,19 @@ func (w *writer) writeRows(numRows int, write func(i, j int) (int, error)) (int,
 			length = int(remain)
 		}
 
+		// Since the writer cannot flush pages across row boundaries, calls to
+		// WriteRows with very large slices can result in greatly exceeding the
+		// target page size. To set a limit to the impact of these large writes
+		// we chunk the input in slices of 64 rows.
+		//
+		// Note that this mechanism isn't perfect; for example, values may hold
+		// large byte slices which could still cause the column buffers to grow
+		// beyond the target page size.
+		const maxRowsPerWrite = 64
+		if length > maxRowsPerWrite {
+			length = maxRowsPerWrite
+		}
+
 		n, err := write(written, written+length)
 		written += n
 		w.numRows += int64(n)
