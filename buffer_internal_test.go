@@ -18,7 +18,7 @@ func TestBufferAlwaysCorrectSize(t *testing.T) {
 	}
 }
 
-func TestLevelledPoolIndex(t *testing.T) {
+func TestBufferPoolBucketIndex(t *testing.T) {
 	tcs := []struct {
 		size     int
 		expected int
@@ -27,22 +27,32 @@ func TestLevelledPoolIndex(t *testing.T) {
 			size:     1023,
 			expected: 0,
 		},
+
 		{
 			size:     1024,
 			expected: 1,
 		},
+
+		{
+			size:     256 * 1024,
+			expected: 9,
+		},
+
 		{
 			size:     -1,
 			expected: 0,
 		},
+
 		{
 			size:     16*1024*1024 - 1,
 			expected: 14,
 		},
+
 		{
 			size:     16 * 1024 * 1024,
 			expected: 15,
 		},
+
 		{
 			size:     math.MaxInt,
 			expected: 15,
@@ -50,8 +60,8 @@ func TestLevelledPoolIndex(t *testing.T) {
 	}
 
 	for _, tc := range tcs {
-		if actual := levelledPoolIndex(tc.size); actual != tc.expected {
-			t.Errorf("Expected index %d for size %d, got %d", tc.expected, tc.size, actual)
+		if actual := bufferPoolBucketIndex(tc.size); actual != tc.expected {
+			t.Errorf("expected index %d when acquiring buffer of size %d, got %d", tc.expected, tc.size, actual)
 		}
 	}
 }

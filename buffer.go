@@ -337,7 +337,7 @@ type bufferPool struct {
 
 func (p *bufferPool) newBuffer(size int) *buffer {
 	b := &buffer{
-		data: make([]byte, size),
+		data: make([]byte, size, size),
 		refc: 1,
 		pool: p,
 	}
@@ -352,12 +352,12 @@ func (p *bufferPool) newBuffer(size int) *buffer {
 // get returns a buffer from the levelled buffer pool. size is used to choose
 // the appropriate pool.
 func (p *bufferPool) get(size int) *buffer {
-	i := levelledPoolIndex(size)
+	i := bufferPoolBucketIndex(size)
 	b, _ := p.bucket[i].Get().(*buffer)
 	switch {
 	case b == nil:
 		// align size to the pool
-		bucketSize := basePoolIncrement << i
+		bucketSize := bufferPoolBucketSize(i)
 		if size > bucketSize { // this can occur when the buffer requested is larger than the largest pool
 			bucketSize = size
 		}
@@ -385,13 +385,17 @@ func (p *bufferPool) put(b *buffer) {
 	if size < basePoolIncrement {
 		return
 	}
-	i := levelledPoolIndex(size / 2) // divide by 2 to put the buffer in the level below so it will always be large enough
+	i := bufferPoolBucketIndex(size)
 	p.bucket[i].Put(b)
 }
 
-// levelledPoolIndex returns the index of the pool to use for a buffer of the
+func bufferPoolBucketSize(index int) int {
+	return basePoolIncrement << index
+}
+
+// bufferPoolBucketIndex returns the index of the pool to use for a buffer of the
 // given size. It never returns an index that will panic.
-func levelledPoolIndex(size int) int {
+func bufferPoolBucketIndex(size int) int {
 	i := size / basePoolIncrement
 	i = 32 - bits.LeadingZeros32(uint32(i)) // log2
 	if i >= numPoolBuckets {
