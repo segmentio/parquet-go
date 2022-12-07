@@ -328,11 +328,8 @@ func monitorBufferRelease(b *buffer) {
 // [1]    : 1024 -> 2047 : 2048 -> 4095 : 2048
 // [2]    : 2048 -> 4095 : 4096 -> 8191 : 4096
 // ...
-const numPoolBuckets = 16
-const basePoolIncrement = 1024
-
 type bufferPool struct {
-	bucket [numPoolBuckets]sync.Pool
+	bucket [bufferPoolBucketCount]sync.Pool
 }
 
 func (p *bufferPool) newBuffer(size int) *buffer {
@@ -352,16 +349,16 @@ func (p *bufferPool) newBuffer(size int) *buffer {
 // get returns a buffer from the levelled buffer pool. size is used to choose
 // the appropriate pool.
 func (p *bufferPool) get(size int) *buffer {
-	i := bufferPoolBucketIndex(size)
+	i := bufferPoolBucketIndexGet(size)
 	b, _ := p.bucket[i].Get().(*buffer)
 	switch {
 	case b == nil:
 		// align size to the pool
-		bucketSize := bufferPoolBucketSize(i)
-		if size > bucketSize { // this can occur when the buffer requested is larger than the largest pool
-			bucketSize = size
+		bufferSize := bufferPoolBucketSize(i)
+		if size > bufferSize { // this can occur when the buffer requested is larger than the largest pool
+			bufferSize = size
 		}
-		b = p.newBuffer(bucketSize)
+		b = p.newBuffer(bufferSize)
 	case size <= cap(b.data):
 		b.ref()
 	default:
@@ -382,29 +379,46 @@ func (p *bufferPool) put(b *buffer) {
 	}
 	// if this slice is somehow less then our min pool size, just drop it
 	size := cap(b.data)
-	if size < basePoolIncrement {
+	if size < bufferPoolMinSize {
 		return
 	}
-	i := bufferPoolBucketIndex(size)
+	i := bufferPoolBucketIndexPut(size)
 	p.bucket[i].Put(b)
 }
 
-func bufferPoolBucketSize(index int) int {
-	return basePoolIncrement << index
+const (
+	bufferPoolBucketCount = 16
+	bufferPoolMinShift    = 9
+	bufferPoolMinSize     = 1 << bufferPoolMinShift // 1 KiB
+)
+
+func highestPowerOfTwoGreaterThanOrEqualTo(n uint64) uint64 {
+	return 1 << (64 - bits.LeadingZeros64(n-1))
 }
 
-// bufferPoolBucketIndex returns the index of the pool to use for a buffer of the
-// given size. It never returns an index that will panic.
-func bufferPoolBucketIndex(size int) int {
-	i := size / basePoolIncrement
-	i = 32 - bits.LeadingZeros32(uint32(i)) // log2
-	if i >= numPoolBuckets {
-		i = numPoolBuckets - 1
+func lowestPowerOfTwoLessThanOrEqualTo(n uint64) uint64 {
+	return 1 << (63 - bits.LeadingZeros64(n))
+}
+
+func bufferPoolBucketSize(index int) int {
+	return 1 << (uint(index) + bufferPoolMinShift)
+}
+
+func bufferPoolBucketIndexLimit(index int) int {
+	if index >= bufferPoolBucketCount {
+		index = bufferPoolBucketCount - 1
 	}
-	if i < 0 {
-		i = 0
-	}
-	return i
+	return index
+}
+
+func bufferPoolBucketIndexGet(size int) int {
+	index := bits.TrailingZeros64(highestPowerOfTwoGreaterThanOrEqualTo(uint64(size) >> bufferPoolMinShift))
+	return bufferPoolBucketIndexLimit(index)
+}
+
+func bufferPoolBucketIndexPut(size int) int {
+	index := bits.TrailingZeros64(lowestPowerOfTwoLessThanOrEqualTo(uint64(size) >> bufferPoolMinShift))
+	return bufferPoolBucketIndexLimit(index)
 }
 
 var (
