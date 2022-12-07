@@ -216,13 +216,16 @@ type WriterConfig struct {
 func DefaultWriterConfig() *WriterConfig {
 	return &WriterConfig{
 		CreatedBy:            defaultCreatedBy(),
-		ColumnPageBuffers:    &defaultPageBufferPool,
+		ColumnPageBuffers:    &defaultColumnBufferPool,
 		ColumnIndexSizeLimit: DefaultColumnIndexSizeLimit,
 		PageBufferSize:       DefaultPageBufferSize,
 		WriteBufferSize:      DefaultWriteBufferSize,
 		DataPageVersion:      DefaultDataPageVersion,
 		DataPageStatistics:   DefaultDataPageStatistics,
 		MaxRowsPerRowGroup:   DefaultMaxRowsPerRowGroup,
+		Sorting: SortingConfig{
+			SortingBuffers: &defaultSortingBufferPool,
+		},
 	}
 }
 
@@ -281,6 +284,7 @@ func (c *WriterConfig) Validate() error {
 		validatePositiveInt(baseName+"ColumnIndexSizeLimit", c.ColumnIndexSizeLimit),
 		validatePositiveInt(baseName+"PageBufferSize", c.PageBufferSize),
 		validateOneOfInt(baseName+"DataPageVersion", c.DataPageVersion, 1, 2),
+		c.Sorting.Validate(),
 	)
 }
 
@@ -303,6 +307,9 @@ type RowGroupConfig struct {
 func DefaultRowGroupConfig() *RowGroupConfig {
 	return &RowGroupConfig{
 		ColumnBufferCapacity: DefaultColumnBufferCapacity,
+		Sorting: SortingConfig{
+			SortingBuffers: &defaultSortingBufferPool,
+		},
 	}
 }
 
@@ -322,6 +329,7 @@ func (c *RowGroupConfig) Validate() error {
 	const baseName = "parquet.(*RowGroupConfig)."
 	return errorInvalidConfiguration(
 		validatePositiveInt(baseName+"ColumnBufferCapacity", c.ColumnBufferCapacity),
+		c.Sorting.Validate(),
 	)
 }
 
@@ -351,6 +359,7 @@ func (c *RowGroupConfig) ConfigureRowGroup(config *RowGroupConfig) {
 //		),
 //	})
 type SortingConfig struct {
+	SortingBuffers     PageBufferPool
 	SortingColumns     []SortingColumn
 	DropDuplicatedRows bool
 }
@@ -359,7 +368,7 @@ type SortingConfig struct {
 // default row group configuration.
 func DefaultSortingConfig() *SortingConfig {
 	return &SortingConfig{
-		DropDuplicatedRows: false,
+		SortingBuffers: &defaultSortingBufferPool,
 	}
 }
 
@@ -375,7 +384,10 @@ func NewSortingConfig(options ...SortingOption) (*SortingConfig, error) {
 }
 
 func (c *SortingConfig) Validate() error {
-	return nil
+	const baseName = "parquet.(*SortingConfig)."
+	return errorInvalidConfiguration(
+		validateNotNil(baseName+"SortingBuffers", c.SortingBuffers),
+	)
 }
 
 func (c *SortingConfig) Apply(options ...SortingOption) {
@@ -625,6 +637,14 @@ func SortingColumns(columns ...SortingColumn) SortingOption {
 	return sortingOption(func(config *SortingConfig) { config.SortingColumns = columns })
 }
 
+// SortingBuffers creates a configuration option which sets the pool of buffers
+// used to hold intermediary state when sorting parquet rows.
+//
+// Defaults to using in-memory buffers.
+func SortingBuffers(buffers PageBufferPool) SortingOption {
+	return sortingOption(func(config *SortingConfig) { config.SortingBuffers = buffers })
+}
+
 // DropDuplicatedRows configures whether a sorting writer will keep or remove
 // duplicated rows.
 //
@@ -707,6 +727,7 @@ func coalesceSortingColumns(s1, s2 []SortingColumn) []SortingColumn {
 
 func coalesceSortingConfig(c1, c2 SortingConfig) SortingConfig {
 	return SortingConfig{
+		SortingBuffers:     coalescePageBufferPool(c1.SortingBuffers, c2.SortingBuffers),
 		SortingColumns:     coalesceSortingColumns(c1.SortingColumns, c2.SortingColumns),
 		DropDuplicatedRows: c1.DropDuplicatedRows,
 	}

@@ -155,9 +155,38 @@ func (buf *errorBuffer) WriteTo(io.Writer) (int64, error)  { return 0, buf.err }
 func (buf *errorBuffer) Seek(int64, int) (int64, error)    { return 0, buf.err }
 
 var (
-	defaultPageBufferPool pageBufferPool
+	defaultColumnBufferPool  pageBufferPool
+	defaultSortingBufferPool pageBufferPool
 
 	_ io.ReaderFrom = (*errorBuffer)(nil)
 	_ io.WriterTo   = (*errorBuffer)(nil)
 	_ io.WriterTo   = (*pageBuffer)(nil)
 )
+
+type readerAt struct {
+	reader io.ReadSeeker
+	offset int64
+}
+
+func (r *readerAt) ReadAt(b []byte, off int64) (int, error) {
+	if off < 0 {
+		return 0, fmt.Errorf("seek: invalid negative offset: %d<0", off)
+	}
+	if off != r.offset {
+		off, err := r.reader.Seek(off, io.SeekStart)
+		if err != nil {
+			return 0, err
+		}
+		r.offset = off
+	}
+	n, err := r.reader.Read(b)
+	r.offset += int64(n)
+	return n, err
+}
+
+func newReaderAt(r io.ReadSeeker) io.ReaderAt {
+	if rr, ok := r.(io.ReaderAt); ok {
+		return rr
+	}
+	return &readerAt{reader: r, offset: -1}
+}
