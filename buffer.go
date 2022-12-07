@@ -401,23 +401,26 @@ func lowestPowerOfTwoLessThanOrEqualTo(n uint64) uint64 {
 }
 
 func bufferPoolBucketSize(index int) int {
-	return 1 << (uint(index) + bufferPoolMinShift)
+	return 1 << (uint(index) + bufferPoolMinShift + 1)
 }
 
 func bufferPoolBucketIndexLimit(index int) int {
-	if index >= bufferPoolBucketCount {
+	switch {
+	case index < 0:
+		index = 0
+	case index >= bufferPoolBucketCount:
 		index = bufferPoolBucketCount - 1
 	}
 	return index
 }
 
 func bufferPoolBucketIndexGet(size int) int {
-	index := bits.TrailingZeros64(highestPowerOfTwoGreaterThanOrEqualTo(uint64(size) >> bufferPoolMinShift))
+	index := bits.TrailingZeros64(highestPowerOfTwoGreaterThanOrEqualTo(uint64(size)>>bufferPoolMinShift)) - 1
 	return bufferPoolBucketIndexLimit(index)
 }
 
 func bufferPoolBucketIndexPut(size int) int {
-	index := bits.TrailingZeros64(lowestPowerOfTwoLessThanOrEqualTo(uint64(size) >> bufferPoolMinShift))
+	index := bits.TrailingZeros64(lowestPowerOfTwoLessThanOrEqualTo(uint64(size)>>bufferPoolMinShift)) - 1
 	return bufferPoolBucketIndexLimit(index)
 }
 

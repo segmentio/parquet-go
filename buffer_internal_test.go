@@ -1,6 +1,7 @@
 package parquet
 
 import (
+	"fmt"
 	"math"
 	"math/rand"
 	"testing"
@@ -32,32 +33,32 @@ func TestBufferPoolBucketIndex(t *testing.T) {
 
 		{
 			size: 1024,
-			get:  1,
-			put:  1,
+			get:  0,
+			put:  0,
 		},
 
 		{
 			size: 256 * 1024,
-			get:  9,
-			put:  9,
+			get:  8,
+			put:  8,
 		},
 
 		{
 			size: 1024 * 1024,
-			get:  11,
-			put:  11,
+			get:  10,
+			put:  10,
 		},
 
 		{
 			size: 16*1024*1024 - 1,
-			get:  15,
-			put:  14,
+			get:  14,
+			put:  13,
 		},
 
 		{
 			size: 16 * 1024 * 1024,
-			get:  15,
-			put:  15,
+			get:  14,
+			put:  14,
 		},
 
 		{
@@ -74,5 +75,35 @@ func TestBufferPoolBucketIndex(t *testing.T) {
 		if index := bufferPoolBucketIndexPut(tc.size); index != tc.put {
 			t.Errorf("expected index %d when releasing buffer of size %d, got %d", tc.put, tc.size, index)
 		}
+	}
+}
+
+func TestBufferPoolBucketSize(t *testing.T) {
+	tests := []struct {
+		bucket int
+		size   int
+	}{
+		{
+			bucket: 0,
+			size:   1024,
+		},
+
+		{
+			bucket: 1,
+			size:   2048,
+		},
+
+		{
+			bucket: 16,
+			size:   67108864,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(fmt.Sprintf("bucket=%d", test.bucket), func(t *testing.T) {
+			if size := bufferPoolBucketSize(test.bucket); size != test.size {
+				t.Errorf("bucket %d: want=%d got=%d", test.bucket, test.size, size)
+			}
+		})
 	}
 }
