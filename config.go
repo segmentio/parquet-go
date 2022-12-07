@@ -127,10 +127,10 @@ func (c *FileConfig) Apply(options ...FileOption) {
 // ConfigureFile applies configuration options from c to config.
 func (c *FileConfig) ConfigureFile(config *FileConfig) {
 	*config = FileConfig{
-		SkipPageIndex:    config.SkipPageIndex,
-		SkipBloomFilters: config.SkipBloomFilters,
-		ReadBufferSize:   config.ReadBufferSize,
-		ReadMode:         config.ReadMode,
+		SkipPageIndex:    c.SkipPageIndex,
+		SkipBloomFilters: c.SkipBloomFilters,
+		ReadBufferSize:   coalesceInt(c.ReadBufferSize, config.ReadBufferSize),
+		ReadMode:         ReadMode(coalesceInt(int(c.ReadMode), int(config.ReadMode))),
 	}
 }
 
