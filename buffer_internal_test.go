@@ -2,10 +2,17 @@ package parquet
 
 import (
 	"fmt"
-	"math"
 	"math/rand"
 	"testing"
 )
+
+func init() {
+	size := bufferPoolMinSize
+	for i := 0; i < bufferPoolBucketCount; i++ {
+		fmt.Printf("%d KiB\n", size/1024)
+		size = bufferPoolNextSize(size)
+	}
+}
 
 func TestBufferAlwaysCorrectSize(t *testing.T) {
 	var p bufferPool
@@ -19,6 +26,7 @@ func TestBufferAlwaysCorrectSize(t *testing.T) {
 	}
 }
 
+/*
 func TestBufferPoolBucketIndex(t *testing.T) {
 	tcs := []struct {
 		size int
@@ -38,9 +46,21 @@ func TestBufferPoolBucketIndex(t *testing.T) {
 		},
 
 		{
+			size: 256*1024 - 1,
+			get:  8,
+			put:  8,
+		},
+
+		{
 			size: 256 * 1024,
 			get:  8,
 			put:  8,
+		},
+
+		{
+			size: 256*1024 + 1,
+			get:  9,
+			put:  9,
 		},
 
 		{
@@ -106,4 +126,17 @@ func TestBufferPoolBucketSize(t *testing.T) {
 			}
 		})
 	}
+
+	for i := 0; i < bufferPoolBucketCount; i++ {
+		n := bufferPoolBucketSize(i)
+		j := bufferPoolBucketIndexGet(n)
+		k := bufferPoolBucketIndexPut(n + 1)
+		if i != j {
+			t.Errorf("index for size=%d is %d but want %d", n, j, i)
+		}
+		if i != k {
+			t.Errorf("index for size=%d is %d but want %d", n, k, i)
+		}
+	}
 }
+*/

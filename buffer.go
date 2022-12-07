@@ -2,7 +2,6 @@ package parquet
 
 import (
 	"log"
-	"math/bits"
 	"runtime"
 	"sort"
 	"sync"
@@ -329,12 +328,12 @@ func monitorBufferRelease(b *buffer) {
 // [2]    : 2048 -> 4095 : 4096 -> 8191 : 4096
 // ...
 type bufferPool struct {
-	bucket [bufferPoolBucketCount]sync.Pool
+	buckets [bufferPoolBucketCount]sync.Pool
 }
 
-func (p *bufferPool) newBuffer(size int) *buffer {
+func (p *bufferPool) newBuffer(bufferSize, bucketSize int) *buffer {
 	b := &buffer{
-		data: make([]byte, size, size),
+		data: make([]byte, bufferSize, bucketSize),
 		refc: 1,
 		pool: p,
 	}
@@ -348,26 +347,41 @@ func (p *bufferPool) newBuffer(size int) *buffer {
 
 // get returns a buffer from the levelled buffer pool. size is used to choose
 // the appropriate pool.
-func (p *bufferPool) get(size int) *buffer {
-	i := bufferPoolBucketIndexGet(size)
-	b, _ := p.bucket[i].Get().(*buffer)
-	switch {
-	case b == nil:
-		// align size to the pool
-		bufferSize := bufferPoolBucketSize(i)
-		if size > bufferSize { // this can occur when the buffer requested is larger than the largest pool
-			bufferSize = size
+func (p *bufferPool) get(bufferSize int) *buffer {
+	bucketIndex, bucketSize := bufferPoolBucketIndexAndSizeOfGet(bufferSize)
+
+	if bucketIndex >= 0 && bucketIndex < len(p.buckets) {
+		b, _ := p.buckets[bucketIndex].Get().(*buffer)
+		if b != nil {
+			b.data = b.data[:bufferSize]
+			b.ref()
+			return b
 		}
-		b = p.newBuffer(bufferSize)
-	case size <= cap(b.data):
-		b.ref()
-	default:
-		// if the buffer comes from the largest pool it may not be big enough
-		p.bucket[i].Put(b)
-		b = p.newBuffer(size)
 	}
-	b.data = b.data[:size]
-	return b
+
+	return p.newBuffer(bufferSize, bucketSize)
+
+	/*
+		i := bufferPoolBucketIndexGet(size)
+		b, _ := p.bucket[i].Get().(*buffer)
+		switch {
+		case b == nil:
+			// align size to the pool
+			bufferSize := bufferPoolBucketSize(i)
+			if size > bufferSize { // this can occur when the buffer requested is larger than the largest pool
+				bufferSize = size
+			}
+			b = p.newBuffer(bufferSize)
+		case size <= cap(b.data):
+			b.ref()
+		default:
+			// if the buffer comes from the largest pool it may not be big enough
+			p.bucket[i].Put(b)
+			b = p.newBuffer(size)
+		}
+		b.data = b.data[:size]
+		return b
+	*/
 }
 
 func (p *bufferPool) put(b *buffer) {
@@ -377,21 +391,29 @@ func (p *bufferPool) put(b *buffer) {
 	if b.refCount() != 0 {
 		panic("BUG: buffer returned to pool with a non-zero reference count")
 	}
-	// if this slice is somehow less then our min pool size, just drop it
-	size := cap(b.data)
-	if size < bufferPoolMinSize {
-		return
+	if bucketIndex, _ := bufferPoolBucketIndexAndSizeOfPut(cap(b.data)); bucketIndex >= 0 && bucketIndex < len(p.buckets) {
+		p.buckets[bucketIndex].Put(b)
 	}
-	i := bufferPoolBucketIndexPut(size)
-	p.bucket[i].Put(b)
+
+	/*
+		// if this slice is somehow less then our min pool size, just drop it
+		size := cap(b.data)
+		if size < bufferPoolMinSize {
+			return
+		}
+		i := bufferPoolBucketIndexPut(size)
+		p.bucket[i].Put(b)
+	*/
 }
 
 const (
-	bufferPoolBucketCount = 16
-	bufferPoolMinShift    = 9
-	bufferPoolMinSize     = 1 << bufferPoolMinShift // 1 KiB
+	bufferPoolBucketCount = 36
+	//bufferPoolMinShift    = 10
+	bufferPoolMinSize             = 4096
+	bufferPoolLastShortBucketSize = 32768
 )
 
+/*
 func highestPowerOfTwoGreaterThanOrEqualTo(n uint64) uint64 {
 	return 1 << (64 - bits.LeadingZeros64(n-1))
 }
@@ -401,7 +423,7 @@ func lowestPowerOfTwoLessThanOrEqualTo(n uint64) uint64 {
 }
 
 func bufferPoolBucketSize(index int) int {
-	return 1 << (uint(index) + bufferPoolMinShift + 1)
+	return 1 << (uint(index) + bufferPoolMinShift)
 }
 
 func bufferPoolBucketIndexLimit(index int) int {
@@ -415,13 +437,57 @@ func bufferPoolBucketIndexLimit(index int) int {
 }
 
 func bufferPoolBucketIndexGet(size int) int {
-	index := bits.TrailingZeros64(highestPowerOfTwoGreaterThanOrEqualTo(uint64(size)>>bufferPoolMinShift)) - 1
+	index := bits.TrailingZeros64(highestPowerOfTwoGreaterThanOrEqualTo(uint64(size) >> bufferPoolMinShift))
 	return bufferPoolBucketIndexLimit(index)
 }
 
 func bufferPoolBucketIndexPut(size int) int {
-	index := bits.TrailingZeros64(lowestPowerOfTwoLessThanOrEqualTo(uint64(size)>>bufferPoolMinShift)) - 1
+	index := bits.TrailingZeros64(lowestPowerOfTwoLessThanOrEqualTo(uint64(size) >> bufferPoolMinShift))
 	return bufferPoolBucketIndexLimit(index)
+}
+
+const (
+    minBufferSize      = 256
+    maxShortBufferSize = 32768
+)
+*/
+
+func bufferPoolNextSize(size int) int {
+	if size < bufferPoolLastShortBucketSize {
+		return size * 2
+	} else {
+		return size + (size / 2)
+	}
+}
+
+func bufferPoolBucketIndexAndSizeOfGet(size int) (int, int) {
+	limit := bufferPoolMinSize
+
+	for i := 0; i < bufferPoolBucketCount; i++ {
+		if size <= limit {
+			return i, limit
+		}
+		limit = bufferPoolNextSize(limit)
+	}
+
+	return -1, size
+}
+
+func bufferPoolBucketIndexAndSizeOfPut(size int) (int, int) {
+	// When releasing buffers, some may have a capacity that is not one of the
+	// bucket sizes (due to the use of append for example). In this case, we
+	// have to put the buffer is the highest bucket with a size less or equal
+	// to the buffer capacity.
+	if limit := bufferPoolMinSize; size >= limit {
+		for i := 0; i < bufferPoolBucketCount; i++ {
+			n := bufferPoolNextSize(limit)
+			if size < n {
+				return i, limit
+			}
+			limit = n
+		}
+	}
+	return -1, size
 }
 
 var (
