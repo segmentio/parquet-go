@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -79,9 +80,14 @@ func init() {
 		if i >= 0 {
 			k, v = arg[:i], arg[i+1:]
 		}
+		var err error
 		switch k {
 		case "tracebuf":
-			TRACEBUF, _ = strconv.Atoi(v)
+			if TRACEBUF, err = strconv.Atoi(v); err != nil {
+				log.Printf("PARQUETGODEBUG: invalid value for tracebuf: %q", v)
+			}
+		default:
+			log.Printf("PARQUETGODEBUG: unrecognized debug option: %q", k)
 		}
 	}
 }
