@@ -41,7 +41,7 @@ func (a *allocator) reset() {
 // rowAllocator is a memory allocator used to make a copy of rows referencing
 // memory buffers that parquet-go does not have ownership of.
 //
-// This type is used in the implementation of a various readers and writers that
+// This type is used in the implementation of various readers and writers that
 // need to capture rows passed to the ReadRows/WriteRows methods.
 //
 // See: RowBuffer, DedupeRowReader, DedupeRowWriter
