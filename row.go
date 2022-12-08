@@ -834,7 +834,7 @@ func (a *rowAllocator) copyBytes(v []byte) []byte {
 // https://go.googlesource.com/go/+/refs/tags/go1.19.4/src/runtime/slice.go#205
 func growSliceSize(c int) int {
 	const threshold = 256
-	if c > threshold {
+	if c < threshold {
 		return c + c // 2x
 	}
 
