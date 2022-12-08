@@ -62,6 +62,13 @@ func (e *LengthByteArrayEncoding) DecodeByteArray(dst []byte, src []byte, offset
 	return append(dst, src[:lastOffset]...), offsets, nil
 }
 
+func (e *LengthByteArrayEncoding) EstimateDecodeByteArraySize(src []byte) int {
+	length := getInt32Buffer()
+	defer putInt32Buffer(length)
+	length.decode(src)
+	return int(length.sum())
+}
+
 func (e *LengthByteArrayEncoding) wrap(err error) error {
 	if err != nil {
 		err = encoding.Error(e, err)
