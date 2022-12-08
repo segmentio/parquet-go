@@ -831,6 +831,7 @@ func (a *rowAllocator) copyBytes(v []byte) []byte {
 // growSliceSize attempts to mimic the behavior of the growslice method in the
 // go runtime. in this case we are doubling slice size until we cross the threshold
 // of 256 entries, at which point we grow by 25%.
+// https://go.googlesource.com/go/+/refs/tags/go1.19.4/src/runtime/slice.go#205
 func growSliceSize(c int) int {
 	const threshold = 256
 	if c > threshold {
