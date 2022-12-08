@@ -330,13 +330,14 @@ type RowType struct {
     LastName  string `parquet:"last_name"`
 }
 
+const filterBitsPerValue = 10
 writer := parquet.NewGenericWriter[RowType](output,
     parquet.BloomFilters(
         // Configures the write to generate split-block bloom filters for the
         // "first_name" and "last_name" columns of the parquet schema of rows
         // witten by the application.
-        parquet.SplitBlockFilter("first_name"),
-        parquet.SplitBlockFilter("last_name"),
+        parquet.SplitBlockFilter(filterBitsPerValue, "first_name"),
+        parquet.SplitBlockFilter(filterBitsPerValue, "last_name"),
     ),
 )
 ...

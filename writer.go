@@ -1049,8 +1049,7 @@ func (c *writerColumn) flushFilterPages() error {
 }
 
 func (c *writerColumn) resizeBloomFilter(numValues int64) {
-	const bitsPerValue = 10 // TODO: make this configurable
-	filterSize := c.columnFilter.Size(numValues, bitsPerValue)
+	filterSize := c.columnFilter.Size(numValues)
 	if cap(c.filter) < filterSize {
 		c.filter = make([]byte, filterSize)
 	} else {
