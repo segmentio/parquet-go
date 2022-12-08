@@ -3,7 +3,6 @@ package parquet
 import (
 	"io"
 	"math/bits"
-	"strings"
 	"unsafe"
 
 	"github.com/segmentio/parquet-go/deprecated"
@@ -674,6 +673,7 @@ func (d *doubleDictionary) Page() Page {
 type byteArrayDictionary struct {
 	byteArrayPage
 	table map[string]int32
+	alloc allocator
 }
 
 func newByteArrayDictionary(typ Type, columnIndex int16, numValues int32, data encoding.Values) *byteArrayDictionary {
@@ -731,7 +731,7 @@ func (d *byteArrayDictionary) insert(indexes []int32, rows sparse.Array) {
 
 		index, exists := d.table[value]
 		if !exists {
-			value = cloneString(value)
+			value = d.alloc.copyString(value)
 			index = int32(len(d.table))
 			d.table[value] = index
 			d.values = append(d.values, value...)
@@ -740,12 +740,6 @@ func (d *byteArrayDictionary) insert(indexes []int32, rows sparse.Array) {
 
 		indexes[i] = index
 	}
-}
-
-func cloneString(s string) string {
-	b := new(strings.Builder)
-	b.WriteString(s)
-	return b.String()
 }
 
 func (d *byteArrayDictionary) Lookup(indexes []int32, values []Value) {
@@ -788,10 +782,10 @@ func (d *byteArrayDictionary) Bounds(indexes []int32) (min, max Value) {
 func (d *byteArrayDictionary) Reset() {
 	d.offsets = d.offsets[:1]
 	d.values = d.values[:0]
-
 	for k := range d.table {
 		delete(d.table, k)
 	}
+	d.alloc.reset()
 }
 
 func (d *byteArrayDictionary) Page() Page {
