@@ -41,16 +41,16 @@ type BufferPool interface {
 // Go heap.
 func NewBufferPool() BufferPool { return new(memoryBufferPool) }
 
-type pageBuffer struct {
+type memoryBuffer struct {
 	data []byte
 	off  int
 }
 
-func (p *pageBuffer) Reset() {
+func (p *memoryBuffer) Reset() {
 	p.data, p.off = p.data[:0], 0
 }
 
-func (p *pageBuffer) Read(b []byte) (n int, err error) {
+func (p *memoryBuffer) Read(b []byte) (n int, err error) {
 	n = copy(b, p.data[p.off:])
 	p.off += n
 	if p.off == len(p.data) {
@@ -59,7 +59,7 @@ func (p *pageBuffer) Read(b []byte) (n int, err error) {
 	return n, err
 }
 
-func (p *pageBuffer) Write(b []byte) (int, error) {
+func (p *memoryBuffer) Write(b []byte) (int, error) {
 	n := copy(p.data[p.off:cap(p.data)], b)
 	p.data = p.data[:p.off+n]
 
@@ -71,13 +71,13 @@ func (p *pageBuffer) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
-func (p *pageBuffer) WriteTo(w io.Writer) (int64, error) {
+func (p *memoryBuffer) WriteTo(w io.Writer) (int64, error) {
 	n, err := w.Write(p.data[p.off:])
 	p.off += n
 	return int64(n), err
 }
 
-func (p *pageBuffer) Seek(offset int64, whence int) (int64, error) {
+func (p *memoryBuffer) Seek(offset int64, whence int) (int64, error) {
 	switch whence {
 	case io.SeekCurrent:
 		offset += int64(p.off)
@@ -97,9 +97,9 @@ func (p *pageBuffer) Seek(offset int64, whence int) (int64, error) {
 type memoryBufferPool struct{ sync.Pool }
 
 func (pool *memoryBufferPool) GetBuffer() io.ReadWriteSeeker {
-	b, _ := pool.Get().(*pageBuffer)
+	b, _ := pool.Get().(*memoryBuffer)
 	if b == nil {
-		b = new(pageBuffer)
+		b = new(memoryBuffer)
 	} else {
 		b.Reset()
 	}
@@ -107,7 +107,7 @@ func (pool *memoryBufferPool) GetBuffer() io.ReadWriteSeeker {
 }
 
 func (pool *memoryBufferPool) PutBuffer(buf io.ReadWriteSeeker) {
-	if b, _ := buf.(*pageBuffer); b != nil {
+	if b, _ := buf.(*memoryBuffer); b != nil {
 		pool.Put(b)
 	}
 }
@@ -160,7 +160,7 @@ var (
 
 	_ io.ReaderFrom = (*errorBuffer)(nil)
 	_ io.WriterTo   = (*errorBuffer)(nil)
-	_ io.WriterTo   = (*pageBuffer)(nil)
+	_ io.WriterTo   = (*memoryBuffer)(nil)
 )
 
 type readerAt struct {
