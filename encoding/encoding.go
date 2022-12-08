@@ -65,4 +65,8 @@ type Encoding interface {
 	// The estimate never errors since it is not intended to be used as an
 	// input validation method.
 	EstimateDecodeByteArraySize(src []byte) int
+
+	// When this method returns true, the encoding supports receiving the same
+	// buffer as source and destination.
+	CanDecodeInPlace() bool
 }

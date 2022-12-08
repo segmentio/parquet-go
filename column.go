@@ -565,8 +565,7 @@ func (c *Column) decodeDataPageV1(header DataPageHeaderV1, page *buffer, dict Di
 		numValues -= countLevelsNotEqual(definitionLevels.data, c.maxDefinitionLevel)
 	}
 
-	page = &buffer{data: pageData}
-	return c.decodeDataPage(header, numValues, repetitionLevels, definitionLevels, page, dict)
+	return c.decodeDataPage(header, numValues, repetitionLevels, definitionLevels, page, pageData, dict)
 }
 
 // DecodeDataPageV2 decodes a data page from the header, compressed data, and
@@ -622,15 +621,14 @@ func (c *Column) decodeDataPageV2(header DataPageHeaderV2, page *buffer, dict Di
 			return nil, fmt.Errorf("decompressing data page v2: %w", err)
 		}
 		defer page.unref()
-	} else {
-		page = &buffer{data: pageData}
+		pageData = page.data
 	}
 
 	numValues -= int(header.NumNulls())
-	return c.decodeDataPage(header, numValues, repetitionLevels, definitionLevels, page, dict)
+	return c.decodeDataPage(header, numValues, repetitionLevels, definitionLevels, page, pageData, dict)
 }
 
-func (c *Column) decodeDataPage(header DataPageHeader, numValues int, repetitionLevels, definitionLevels, page *buffer, dict Dictionary) (Page, error) {
+func (c *Column) decodeDataPage(header DataPageHeader, numValues int, repetitionLevels, definitionLevels, page *buffer, data []byte, dict Dictionary) (Page, error) {
 	pageEncoding := LookupEncoding(header.Encoding())
 	pageType := c.Type()
 
@@ -647,9 +645,14 @@ func (c *Column) decodeDataPage(header DataPageHeader, numValues int, repetition
 	var pageValues []byte
 	var pageOffsets []uint32
 
-	vbuf = buffers.get(pageType.EstimateDecodeSize(numValues, page.data, pageEncoding))
-	defer vbuf.unref()
-	pageValues = vbuf.data
+	if pageEncoding.CanDecodeInPlace() {
+		vbuf = page
+		pageValues = data
+	} else {
+		vbuf = buffers.get(pageType.EstimateDecodeSize(numValues, data, pageEncoding))
+		defer vbuf.unref()
+		pageValues = vbuf.data
+	}
 
 	// Page offsets not needed when dictionary-encoded
 	if pageType.Kind() == ByteArray && !isDictionaryEncoding(pageEncoding) {
@@ -659,15 +662,7 @@ func (c *Column) decodeDataPage(header DataPageHeader, numValues int, repetition
 	}
 
 	values := pageType.NewValues(pageValues, pageOffsets)
-	values, err := pageType.Decode(values, page.data, pageEncoding)
-
-	pageValues, pageOffsets = values.Data()
-	if vbuf != nil {
-		vbuf.data = pageValues
-	}
-	if obuf != nil {
-		obuf.data = unsafecast.Uint32ToBytes(pageOffsets)
-	}
+	values, err := pageType.Decode(values, data, pageEncoding)
 	if err != nil {
 		return nil, err
 	}

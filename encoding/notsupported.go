@@ -200,6 +200,10 @@ func (NotSupported) EstimateDecodeByteArraySize(src []byte) int {
 	return 0
 }
 
+func (NotSupported) CanDecodeInPlace() bool {
+	return false
+}
+
 func errNotSupported(typ string) error {
 	return fmt.Errorf("%w for type %s", ErrNotSupported, typ)
 }

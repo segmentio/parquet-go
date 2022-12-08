@@ -151,6 +151,10 @@ func (e *Encoding) EstimateDecodeByteArraySize(src []byte) int {
 	return len(src)
 }
 
+func (e *Encoding) CanDecodeInPlace() bool {
+	return true
+}
+
 func Boolean(v bool) []byte { return AppendBoolean(nil, 0, v) }
 
 func Int32(v int32) []byte { return AppendInt32(nil, v) }
