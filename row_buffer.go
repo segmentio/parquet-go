@@ -150,9 +150,12 @@ func (buf *RowBuffer[T]) Rows() Rows {
 // Write writes rows to the buffer, returning the number of rows written.
 func (buf *RowBuffer[T]) Write(rows []T) (int, error) {
 	for i := range rows {
-		bufRow := buf.schema.Deconstruct(buf.values, &rows[i])
-		buf.alloc.capture(bufRow)
-		buf.rows = append(buf.rows, bufRow)
+		off := len(buf.values)
+		buf.values = buf.schema.Deconstruct(buf.values, &rows[i])
+		end := len(buf.values)
+		row := buf.values[off:end:end]
+		buf.alloc.capture(row)
+		buf.rows = append(buf.rows, row)
 	}
 	return len(rows), nil
 }
@@ -160,10 +163,13 @@ func (buf *RowBuffer[T]) Write(rows []T) (int, error) {
 // WriteRows writes parquet rows to the buffer, returing the number of rows
 // written.
 func (buf *RowBuffer[T]) WriteRows(rows []Row) (int, error) {
-	for _, row := range rows {
-		bufRow := append(buf.values, row...)
-		buf.alloc.capture(bufRow)
-		buf.rows = append(buf.rows, bufRow)
+	for i := range rows {
+		off := len(buf.values)
+		buf.values = append(buf.values, rows[i]...)
+		end := len(buf.values)
+		row := buf.values[off:end:end]
+		buf.alloc.capture(row)
+		buf.rows = append(buf.rows, row)
 	}
 	return len(rows), nil
 }

@@ -149,36 +149,17 @@ func (w *SortingWriter[T]) resetSortingBuffer() {
 }
 
 func (w *SortingWriter[T]) Write(rows []T) (int, error) {
-	wn := 0
-
-	for wn < len(rows) {
-		if w.rowbuf.NumRows() >= w.maxRows {
-			if err := w.sortAndWriteBufferedRows(); err != nil {
-				return wn, err
-			}
-		}
-
-		n := int(w.maxRows - w.rowbuf.NumRows())
-		n += wn
-		if n > len(rows) {
-			n = len(rows)
-		}
-
-		n, err := w.rowbuf.Write(rows[wn:n])
-		wn += n
-
-		if err != nil {
-			return wn, err
-		}
-	}
-
-	return wn, nil
+	return w.writeRows(len(rows), func(i, j int) (int, error) { return w.rowbuf.Write(rows[i:j]) })
 }
 
 func (w *SortingWriter[T]) WriteRows(rows []Row) (int, error) {
+	return w.writeRows(len(rows), func(i, j int) (int, error) { return w.rowbuf.WriteRows(rows[i:j]) })
+}
+
+func (w *SortingWriter[T]) writeRows(numRows int, writeRows func(i, j int) (int, error)) (int, error) {
 	wn := 0
 
-	for wn < len(rows) {
+	for wn < numRows {
 		if w.rowbuf.NumRows() >= w.maxRows {
 			if err := w.sortAndWriteBufferedRows(); err != nil {
 				return wn, err
@@ -187,11 +168,11 @@ func (w *SortingWriter[T]) WriteRows(rows []Row) (int, error) {
 
 		n := int(w.maxRows - w.rowbuf.NumRows())
 		n += wn
-		if n > len(rows) {
-			n = len(rows)
+		if n > numRows {
+			n = numRows
 		}
 
-		n, err := w.rowbuf.WriteRows(rows[wn:n])
+		n, err := writeRows(wn, n)
 		wn += n
 
 		if err != nil {
