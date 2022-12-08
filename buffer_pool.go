@@ -169,10 +169,7 @@ type readerAt struct {
 }
 
 func (r *readerAt) ReadAt(b []byte, off int64) (int, error) {
-	if off < 0 {
-		return 0, fmt.Errorf("seek: invalid negative offset: %d<0", off)
-	}
-	if off != r.offset {
+	if r.offset < 0 || off != r.offset {
 		off, err := r.reader.Seek(off, io.SeekStart)
 		if err != nil {
 			return 0, err
