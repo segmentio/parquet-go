@@ -143,7 +143,7 @@ func (w *SortingWriter[T]) resetSortingBuffer() {
 	w.numRows = 0
 
 	if w.buffer != nil {
-		w.sorting.SortingBuffers.PutPageBuffer(w.buffer)
+		w.sorting.SortingBuffers.PutBuffer(w.buffer)
 		w.buffer = nil
 	}
 }
@@ -208,7 +208,7 @@ func (w *SortingWriter[T]) sortAndWriteBufferedRows() error {
 	defer rows.Close()
 
 	if w.buffer == nil {
-		w.buffer = w.sorting.SortingBuffers.GetPageBuffer()
+		w.buffer = w.sorting.SortingBuffers.GetBuffer()
 		w.writer.Reset(w.buffer)
 	}
 

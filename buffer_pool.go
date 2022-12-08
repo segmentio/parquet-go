@@ -8,7 +8,7 @@ import (
 	"sync"
 )
 
-// PageBufferPool is an interface abstracting the underlying implementation of
+// BufferPool is an interface abstracting the underlying implementation of
 // page buffer pools.
 //
 // The parquet-go package provides two implementations of this interface, one
@@ -19,27 +19,27 @@ import (
 // of page buffers may choose to provide their own implementation and install it
 // via the parquet.ColumnPageBuffers writer option.
 //
-// PageBufferPool implementations must be safe to use concurrently from multiple
+// BufferPool implementations must be safe to use concurrently from multiple
 // goroutines.
-type PageBufferPool interface {
-	// GetPageBuffer is called when a parquet writer needs to acquire a new
+type BufferPool interface {
+	// GetBuffer is called when a parquet writer needs to acquire a new
 	// page buffer from the pool.
-	GetPageBuffer() io.ReadWriteSeeker
+	GetBuffer() io.ReadWriteSeeker
 
-	// PutPageBuffer is called when a parquet writer releases a page buffer to
+	// PutBuffer is called when a parquet writer releases a page buffer to
 	// the pool.
 	//
 	// The parquet.Writer type guarantees that the buffers it calls this method
-	// with were previously acquired by a call to GetPageBuffer on the same
+	// with were previously acquired by a call to GetBuffer on the same
 	// pool, and that it will not use them anymore after the call.
-	PutPageBuffer(io.ReadWriteSeeker)
+	PutBuffer(io.ReadWriteSeeker)
 }
 
-// NewPageBufferPool creates a new in-memory page buffer pool.
+// NewBufferPool creates a new in-memory page buffer pool.
 //
 // The implementation is backed by sync.Pool and allocates memory buffers on the
 // Go heap.
-func NewPageBufferPool() PageBufferPool { return new(pageBufferPool) }
+func NewBufferPool() BufferPool { return new(memoryBufferPool) }
 
 type pageBuffer struct {
 	data []byte
@@ -94,9 +94,9 @@ func (p *pageBuffer) Seek(offset int64, whence int) (int64, error) {
 	return offset, nil
 }
 
-type pageBufferPool struct{ sync.Pool }
+type memoryBufferPool struct{ sync.Pool }
 
-func (pool *pageBufferPool) GetPageBuffer() io.ReadWriteSeeker {
+func (pool *memoryBufferPool) GetBuffer() io.ReadWriteSeeker {
 	b, _ := pool.Get().(*pageBuffer)
 	if b == nil {
 		b = new(pageBuffer)
@@ -106,7 +106,7 @@ func (pool *pageBufferPool) GetPageBuffer() io.ReadWriteSeeker {
 	return b
 }
 
-func (pool *pageBufferPool) PutPageBuffer(buf io.ReadWriteSeeker) {
+func (pool *memoryBufferPool) PutBuffer(buf io.ReadWriteSeeker) {
 	if b, _ := buf.(*pageBuffer); b != nil {
 		pool.Put(b)
 	}
@@ -119,7 +119,7 @@ type fileBufferPool struct {
 }
 
 // NewFileBufferPool creates a new on-disk page buffer pool.
-func NewFileBufferPool(tempdir, pattern string) PageBufferPool {
+func NewFileBufferPool(tempdir, pattern string) BufferPool {
 	pool := &fileBufferPool{
 		tempdir: tempdir,
 		pattern: pattern,
@@ -128,7 +128,7 @@ func NewFileBufferPool(tempdir, pattern string) PageBufferPool {
 	return pool
 }
 
-func (pool *fileBufferPool) GetPageBuffer() io.ReadWriteSeeker {
+func (pool *fileBufferPool) GetBuffer() io.ReadWriteSeeker {
 	if pool.err != nil {
 		return &errorBuffer{err: pool.err}
 	}
@@ -139,7 +139,7 @@ func (pool *fileBufferPool) GetPageBuffer() io.ReadWriteSeeker {
 	return f
 }
 
-func (pool *fileBufferPool) PutPageBuffer(buf io.ReadWriteSeeker) {
+func (pool *fileBufferPool) PutBuffer(buf io.ReadWriteSeeker) {
 	if f, _ := buf.(*os.File); f != nil {
 		defer f.Close()
 		os.Remove(f.Name())
@@ -155,8 +155,8 @@ func (buf *errorBuffer) WriteTo(io.Writer) (int64, error)  { return 0, buf.err }
 func (buf *errorBuffer) Seek(int64, int) (int64, error)    { return 0, buf.err }
 
 var (
-	defaultColumnBufferPool  pageBufferPool
-	defaultSortingBufferPool pageBufferPool
+	defaultColumnBufferPool  memoryBufferPool
+	defaultSortingBufferPool memoryBufferPool
 
 	_ io.ReaderFrom = (*errorBuffer)(nil)
 	_ io.WriterTo   = (*errorBuffer)(nil)
