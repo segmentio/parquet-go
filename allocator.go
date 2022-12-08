@@ -42,7 +42,10 @@ func (a *allocator) reset() {
 // memory buffers that parquet-go does not have ownership of.
 //
 // This type is used in the implementation of various readers and writers that
-// need to capture rows passed to the ReadRows/WriteRows methods.
+// need to capture rows passed to the ReadRows/WriteRows methods. Copies to a
+// local buffer is necessary in those cases to repect the reader/writer
+// contracts that do not allow the implementations to retain the rows they
+// are passed as arguments.
 //
 // See: RowBuffer, DedupeRowReader, DedupeRowWriter
 type rowAllocator struct{ allocator }
