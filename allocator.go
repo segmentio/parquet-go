@@ -52,7 +52,7 @@ type rowAllocator struct{ allocator }
 
 func (a *rowAllocator) capture(row Row) {
 	for i, v := range row {
-		switch kind := v.Kind(); kind {
+		switch v.Kind() {
 		case ByteArray, FixedLenByteArray:
 			row[i].ptr = unsafecast.AddressOfBytes(a.copyBytes(v.byteArray()))
 		}
