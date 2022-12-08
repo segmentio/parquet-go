@@ -358,7 +358,7 @@ func (page *optionalPage) NumNulls() int64 {
 
 func (page *optionalPage) Bounds() (min, max Value, ok bool) { return page.base.Bounds() }
 
-func (page *optionalPage) Size() int64 { return page.base.Size() + int64(len(page.definitionLevels)) }
+func (page *optionalPage) Size() int64 { return int64(len(page.definitionLevels)) + page.base.Size() }
 
 func (page *optionalPage) RepetitionLevels() []byte { return nil }
 

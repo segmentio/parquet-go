@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
-	"math"
 	"math/bits"
 	"sort"
 
@@ -361,7 +360,7 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 			maxRepetitionLevel: leaf.maxRepetitionLevel,
 			maxDefinitionLevel: leaf.maxDefinitionLevel,
 			bufferIndex:        int32(leaf.columnIndex),
-			bufferSize:         int32(config.PageBufferSize),
+			bufferSize:         int32(float64(config.PageBufferSize) * 0.98),
 			writePageStats:     config.DataPageStatistics,
 			encodings:          make([]format.Encoding, 0, 3),
 			// Data pages in version 2 can omit compression when dictionary
@@ -732,6 +731,19 @@ func (w *writer) writeRows(numRows int, write func(i, j int) (int, error)) (int,
 			length = int(remain)
 		}
 
+		// Since the writer cannot flush pages across row boundaries, calls to
+		// WriteRows with very large slices can result in greatly exceeding the
+		// target page size. To set a limit to the impact of these large writes
+		// we chunk the input in slices of 64 rows.
+		//
+		// Note that this mechanism isn't perfect; for example, values may hold
+		// large byte slices which could still cause the column buffers to grow
+		// beyond the target page size.
+		const maxRowsPerWrite = 64
+		if length > maxRowsPerWrite {
+			length = maxRowsPerWrite
+		}
+
 		n, err := write(written, written+length)
 		written += n
 		w.numRows += int64(n)
@@ -870,8 +882,6 @@ type writerColumn struct {
 
 	filter         []byte
 	numRows        int64
-	maxValues      int32
-	numValues      int32
 	bufferIndex    int32
 	bufferSize     int32
 	writePageStats bool
@@ -903,7 +913,6 @@ func (c *writerColumn) reset() {
 	// buffer to avoid reallocating large memory blocks.
 	c.filter = c.filter[:0]
 	c.numRows = 0
-	c.numValues = 0
 	// Reset the fields of column chunks that change between row groups,
 	// but keep the ones that remain unchanged.
 	c.columnChunk.MetaData.NumValues = 0
@@ -929,8 +938,7 @@ func (c *writerColumn) totalRowCount() int64 {
 }
 
 func (c *writerColumn) flush() (err error) {
-	if c.numValues != 0 {
-		c.numValues = 0
+	if c.columnBuffer.Len() > 0 {
 		defer c.columnBuffer.Reset()
 		_, err = c.writeDataPage(c.columnBuffer.Page())
 	}
@@ -1046,10 +1054,7 @@ func (c *writerColumn) resizeBloomFilter(numValues int64) {
 }
 
 func (c *writerColumn) newColumnBuffer() ColumnBuffer {
-	columnBufferCapacity := sort.Search(math.MaxInt32, func(i int) bool {
-		return c.columnType.EstimateSize(i) >= int(c.bufferSize)
-	})
-	column := c.columnType.NewColumnBuffer(int(c.bufferIndex), columnBufferCapacity)
+	column := c.columnType.NewColumnBuffer(int(c.bufferIndex), c.columnType.EstimateNumValues(int(c.bufferSize)))
 	switch {
 	case c.maxRepetitionLevel > 0:
 		column = newRepeatedColumnBuffer(column, c.maxRepetitionLevel, c.maxDefinitionLevel, nullsGoLast)
@@ -1064,30 +1069,21 @@ func (c *writerColumn) writeRows(rows []Value) error {
 		// Lazily create the row group column so we don't need to allocate it if
 		// rows are not written individually to the column.
 		c.columnBuffer = c.newColumnBuffer()
-		c.maxValues = int32(c.columnBuffer.Cap())
 	}
-
-	if c.numValues > 0 && c.numValues > (c.maxValues-int32(len(rows))) {
-		if err := c.flush(); err != nil {
-			return err
-		}
-	}
-
 	if _, err := c.columnBuffer.WriteValues(rows); err != nil {
 		return err
 	}
-	c.numValues += int32(len(rows))
+	if c.columnBuffer.Size() >= int64(c.bufferSize) {
+		return c.flush()
+	}
 	return nil
 }
 
 func (c *writerColumn) WriteValues(values []Value) (numValues int, err error) {
 	if c.columnBuffer == nil {
 		c.columnBuffer = c.newColumnBuffer()
-		c.maxValues = int32(c.columnBuffer.Cap())
 	}
-	numValues, err = c.columnBuffer.WriteValues(values)
-	c.numValues += int32(numValues)
-	return numValues, err
+	return c.columnBuffer.WriteValues(values)
 }
 
 func (c *writerColumn) writeBloomFilter(w io.Writer) error {
