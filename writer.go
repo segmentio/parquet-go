@@ -244,11 +244,10 @@ type writer struct {
 	createdBy string
 	metadata  []format.KeyValue
 
-	columns       []*writerColumn
-	columnChunk   []format.ColumnChunk
-	columnIndex   []format.ColumnIndex
-	offsetIndex   []format.OffsetIndex
-	encodingStats [][]format.PageEncodingStats
+	columns     []*writerColumn
+	columnChunk []format.ColumnChunk
+	columnIndex []format.ColumnIndex
+	offsetIndex []format.OffsetIndex
 
 	columnOrders   []format.ColumnOrder
 	schemaElements []format.SchemaElement
@@ -665,6 +664,18 @@ func (w *writer) writeRowGroup(rowGroupSchema *Schema, rowGroupSortingColumns []
 	offsetIndex := make([]format.OffsetIndex, len(w.offsetIndex))
 	copy(offsetIndex, w.offsetIndex)
 
+	for i := range columns {
+		c := &columns[i]
+		c.MetaData.EncodingStats = make([]format.PageEncodingStats, len(c.MetaData.EncodingStats))
+		copy(c.MetaData.EncodingStats, w.columnChunk[i].MetaData.EncodingStats)
+	}
+
+	for i := range offsetIndex {
+		c := &offsetIndex[i]
+		c.PageLocations = make([]format.PageLocation, len(c.PageLocations))
+		copy(c.PageLocations, w.offsetIndex[i].PageLocations)
+	}
+
 	w.rowGroups = append(w.rowGroups, format.RowGroup{
 		Columns:             columns,
 		TotalByteSize:       totalByteSize,
@@ -921,12 +932,9 @@ func (c *writerColumn) reset() {
 	c.columnChunk.MetaData.DataPageOffset = 0
 	c.columnChunk.MetaData.DictionaryPageOffset = 0
 	c.columnChunk.MetaData.Statistics = format.Statistics{}
-	c.columnChunk.MetaData.EncodingStats = make([]format.PageEncodingStats, 0, cap(c.columnChunk.MetaData.EncodingStats))
+	c.columnChunk.MetaData.EncodingStats = c.columnChunk.MetaData.EncodingStats[:0]
 	c.columnChunk.MetaData.BloomFilterOffset = 0
-	// Retain the previous capacity in the new page locations array, assuming
-	// the number of pages should be roughly the same between row groups written
-	// by the writer.
-	c.offsetIndex.PageLocations = make([]format.PageLocation, 0, cap(c.offsetIndex.PageLocations))
+	c.offsetIndex.PageLocations = c.offsetIndex.PageLocations[:0]
 }
 
 func (c *writerColumn) totalRowCount() int64 {
