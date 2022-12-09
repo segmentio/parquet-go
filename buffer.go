@@ -2,7 +2,6 @@ package parquet
 
 import (
 	"log"
-	"math/bits"
 	"runtime"
 	"sort"
 	"sync"
@@ -318,26 +317,25 @@ func monitorBufferRelease(b *buffer) {
 	}
 }
 
-// bufferPool holds a slice of sync.pools used for levelled buffering.
-// the table below shows the pools used for different buffer sizes when both getting
-// and putting a buffer. when allocating a new buffer from a given pool we always choose the
-// min of the put range to guarantee that all gets will have an adequately sized buffer.
-//
-// [pool] : <get range>  : <put range>  : <alloc size>
-// [0]    : 0    -> 1023 : 1024 -> 2047 : 1024
-// [1]    : 1024 -> 2047 : 2048 -> 4095 : 2048
-// [2]    : 2048 -> 4095 : 4096 -> 8191 : 4096
-// ...
-const numPoolBuckets = 16
-const basePoolIncrement = 1024
-
 type bufferPool struct {
-	bucket [numPoolBuckets]sync.Pool
+	// Buckets are split in two groups for short and large buffers. In the short
+	// buffer group (below 256KB), the growth rate between each bucket is 2. The
+	// growth rate changes to 1.5 in the larger buffer group.
+	//
+	// Short buffer buckets:
+	// ---------------------
+	//   4K, 8K, 16K, 32K, 64K, 128K, 256K
+	//
+	// Large buffer buckets:
+	// ---------------------
+	//   364K, 546K, 819K ...
+	//
+	buckets [bufferPoolBucketCount]sync.Pool
 }
 
-func (p *bufferPool) newBuffer(size int) *buffer {
+func (p *bufferPool) newBuffer(bufferSize, bucketSize int) *buffer {
 	b := &buffer{
-		data: make([]byte, size),
+		data: make([]byte, bufferSize, bucketSize),
 		refc: 1,
 		pool: p,
 	}
@@ -350,25 +348,21 @@ func (p *bufferPool) newBuffer(size int) *buffer {
 
 // get returns a buffer from the levelled buffer pool. size is used to choose
 // the appropriate pool.
-func (p *bufferPool) get(size int) *buffer {
-	i := levelledPoolIndex(size)
-	b, _ := p.bucket[i].Get().(*buffer)
-	switch {
-	case b == nil:
-		// align size to the pool
-		bucketSize := basePoolIncrement << i
-		if size > bucketSize { // this can occur when the buffer requested is larger than the largest pool
-			bucketSize = size
-		}
-		b = p.newBuffer(bucketSize)
-	case size <= cap(b.data):
-		b.ref()
-	default:
-		// if the buffer comes from the largest pool it may not be big enough
-		p.bucket[i].Put(b)
-		b = p.newBuffer(size)
+func (p *bufferPool) get(bufferSize int) *buffer {
+	bucketIndex, bucketSize := bufferPoolBucketIndexAndSizeOfGet(bufferSize)
+
+	b := (*buffer)(nil)
+	if bucketIndex >= 0 {
+		b, _ = p.buckets[bucketIndex].Get().(*buffer)
 	}
-	b.data = b.data[:size]
+
+	if b == nil {
+		b = p.newBuffer(bufferSize, bucketSize)
+	} else {
+		b.data = b.data[:bufferSize]
+		b.ref()
+	}
+
 	if debug.TRACEBUF > 0 {
 		b.stack = b.stack[:runtime.Stack(b.stack[:cap(b.stack)], false)]
 	}
@@ -382,27 +376,53 @@ func (p *bufferPool) put(b *buffer) {
 	if b.refCount() != 0 {
 		panic("BUG: buffer returned to pool with a non-zero reference count")
 	}
-	// if this slice is somehow less then our min pool size, just drop it
-	size := cap(b.data)
-	if size < basePoolIncrement {
-		return
+	if bucketIndex, _ := bufferPoolBucketIndexAndSizeOfPut(cap(b.data)); bucketIndex >= 0 {
+		p.buckets[bucketIndex].Put(b)
 	}
-	i := levelledPoolIndex(size / 2) // divide by 2 to put the buffer in the level below so it will always be large enough
-	p.bucket[i].Put(b)
 }
 
-// levelledPoolIndex returns the index of the pool to use for a buffer of the
-// given size. It never returns an index that will panic.
-func levelledPoolIndex(size int) int {
-	i := size / basePoolIncrement
-	i = 32 - bits.LeadingZeros32(uint32(i)) // log2
-	if i >= numPoolBuckets {
-		i = numPoolBuckets - 1
+const (
+	bufferPoolBucketCount         = 32
+	bufferPoolMinSize             = 4096
+	bufferPoolLastShortBucketSize = 262144
+)
+
+func bufferPoolNextSize(size int) int {
+	if size < bufferPoolLastShortBucketSize {
+		return size * 2
+	} else {
+		return size + (size / 2)
 	}
-	if i < 0 {
-		i = 0
+}
+
+func bufferPoolBucketIndexAndSizeOfGet(size int) (int, int) {
+	limit := bufferPoolMinSize
+
+	for i := 0; i < bufferPoolBucketCount; i++ {
+		if size <= limit {
+			return i, limit
+		}
+		limit = bufferPoolNextSize(limit)
 	}
-	return i
+
+	return -1, size
+}
+
+func bufferPoolBucketIndexAndSizeOfPut(size int) (int, int) {
+	// When releasing buffers, some may have a capacity that is not one of the
+	// bucket sizes (due to the use of append for example). In this case, we
+	// have to put the buffer is the highest bucket with a size less or equal
+	// to the buffer capacity.
+	if limit := bufferPoolMinSize; size >= limit {
+		for i := 0; i < bufferPoolBucketCount; i++ {
+			n := bufferPoolNextSize(limit)
+			if size < n {
+				return i, limit
+			}
+			limit = n
+		}
+	}
+	return -1, size
 }
 
 var (
