@@ -82,6 +82,8 @@ func init() {
 		}
 		var err error
 		switch k {
+		case "":
+			// ignore empty entries
 		case "tracebuf":
 			if TRACEBUF, err = strconv.Atoi(v); err != nil {
 				log.Printf("PARQUETGODEBUG: invalid value for tracebuf: %q", v)
