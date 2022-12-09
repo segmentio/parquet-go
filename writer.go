@@ -868,7 +868,7 @@ func (wb *writerBuffers) swapPageAndScratchBuffers() {
 }
 
 type writerColumn struct {
-	pool  PageBufferPool
+	pool  BufferPool
 	pages []io.ReadWriteSeeker
 
 	columnPath   columnPath
@@ -914,7 +914,7 @@ func (c *writerColumn) reset() {
 		c.dictionary.Reset()
 	}
 	for _, page := range c.pages {
-		c.pool.PutPageBuffer(page)
+		c.pool.PutBuffer(page)
 	}
 	for i := range c.pages {
 		c.pages[i] = nil
@@ -1265,10 +1265,10 @@ func (w *writerColumn) writePageToFilter(page Page) (err error) {
 }
 
 func (c *writerColumn) writePageTo(size int64, writeTo func(io.Writer) (int64, error)) error {
-	buffer := c.pool.GetPageBuffer()
+	buffer := c.pool.GetBuffer()
 	defer func() {
 		if buffer != nil {
-			c.pool.PutPageBuffer(buffer)
+			c.pool.PutBuffer(buffer)
 		}
 	}()
 	written, err := writeTo(buffer)
