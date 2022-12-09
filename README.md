@@ -558,3 +558,17 @@ before submitting contributions.
 ### Continuous Integration
 
 The project uses [Github Actions](https://github.com/segmentio/parquet-go/actions) for CI.
+
+### Debugging
+
+The package has debugging capabilities built in which can be turned on using the
+`PARQUETGODEBUG` environment variable. The value follows a model similar to
+`GODEBUG`, it must be formatted as a comma-separated list of `key=value` pairs.
+
+The following debug flag are currently supported:
+
+- `tracebuf=1` turns on tracing of internal buffers, which validates that
+  reference counters are set to zero when buffers are reclaimed by the garbage
+  collector. When the package detects that a buffer was leaked, it logs an error
+  message along with the stack trace captured when the buffer was last used.
+
