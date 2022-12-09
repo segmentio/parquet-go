@@ -22,7 +22,7 @@ func TestScanRowReader(t *testing.T) {
 	}
 
 	reader := parquet.ScanRowReader(&bufferedRows{rows: rows},
-		func(row parquet.Row) bool {
+		func(row parquet.Row, _ int64) bool {
 			return row[0].Int64() < 3
 		},
 	)
