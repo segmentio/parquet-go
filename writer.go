@@ -994,7 +994,7 @@ func (c *writerColumn) flushFilterPages() error {
 	defer func() {
 		putBufioReader(rbuf, pool)
 		if pbuf != nil {
-			buffers.put(pbuf)
+			pbuf.unref()
 		}
 	}()
 
@@ -1009,7 +1009,7 @@ func (c *writerColumn) flushFilterPages() error {
 		}
 
 		if pbuf != nil {
-			buffers.put(pbuf)
+			pbuf.unref()
 		}
 		pbuf = buffers.get(int(header.CompressedPageSize))
 		if _, err := io.ReadFull(rbuf, pbuf.data); err != nil {

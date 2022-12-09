@@ -1,10 +1,14 @@
 package parquet
 
 import (
+	"log"
 	"math/bits"
+	"runtime"
 	"sort"
 	"sync"
 	"sync/atomic"
+
+	"github.com/segmentio/parquet-go/internal/debug"
 )
 
 // Buffer represents an in-memory group of parquet rows.
@@ -286,13 +290,14 @@ var (
 )
 
 type buffer struct {
-	data []byte
-	refc uintptr
-	pool *bufferPool
+	data  []byte
+	refc  uintptr
+	pool  *bufferPool
+	stack []byte
 }
 
-func newBuffer(data []byte) *buffer {
-	return &buffer{data: data, refc: 1}
+func (b *buffer) refCount() int {
+	return int(atomic.LoadUintptr(&b.refc))
 }
 
 func (b *buffer) ref() {
@@ -304,6 +309,12 @@ func (b *buffer) unref() {
 		if b.pool != nil {
 			b.pool.put(b)
 		}
+	}
+}
+
+func monitorBufferRelease(b *buffer) {
+	if rc := b.refCount(); rc != 0 {
+		log.Printf("PARQUETGODEBUG: buffer garbage collected with non-zero reference count\n%s", string(b.stack))
 	}
 }
 
@@ -321,34 +332,46 @@ const numPoolBuckets = 16
 const basePoolIncrement = 1024
 
 type bufferPool struct {
-	pool [numPoolBuckets]sync.Pool
+	bucket [numPoolBuckets]sync.Pool
 }
 
-// get returns a buffer from the levelled buffer pool. sz is used to choose the appropriate pool
-func (p *bufferPool) get(sz int) *buffer {
-	i := levelledPoolIndex(sz)
-	b, _ := p.pool[i].Get().(*buffer)
-	if b == nil {
+func (p *bufferPool) newBuffer(size int) *buffer {
+	b := &buffer{
+		data: make([]byte, size),
+		refc: 1,
+		pool: p,
+	}
+	if debug.TRACEBUF > 0 {
+		b.stack = make([]byte, 4096)
+		runtime.SetFinalizer(b, monitorBufferRelease)
+	}
+	return b
+}
+
+// get returns a buffer from the levelled buffer pool. size is used to choose
+// the appropriate pool.
+func (p *bufferPool) get(size int) *buffer {
+	i := levelledPoolIndex(size)
+	b, _ := p.bucket[i].Get().(*buffer)
+	switch {
+	case b == nil:
 		// align size to the pool
-		poolSize := basePoolIncrement << i
-		if sz > poolSize { // this can occur when the buffer requested is larger than the largest pool
-			poolSize = sz
+		bucketSize := basePoolIncrement << i
+		if size > bucketSize { // this can occur when the buffer requested is larger than the largest pool
+			bucketSize = size
 		}
-		b = &buffer{
-			data: make([]byte, 0, poolSize),
-			pool: p,
-		}
+		b = p.newBuffer(bucketSize)
+	case size <= cap(b.data):
+		b.ref()
+	default:
+		// if the buffer comes from the largest pool it may not be big enough
+		p.bucket[i].Put(b)
+		b = p.newBuffer(size)
 	}
-	// if the buffer comes from the largest pool it may not be big enough
-	if cap(b.data) < sz {
-		p.pool[i].Put(b)
-		b = &buffer{
-			data: make([]byte, 0, sz),
-			pool: p,
-		}
+	b.data = b.data[:size]
+	if debug.TRACEBUF > 0 {
+		b.stack = b.stack[:runtime.Stack(b.stack[:cap(b.stack)], false)]
 	}
-	b.data = b.data[:sz]
-	b.ref()
 	return b
 }
 
@@ -356,19 +379,22 @@ func (p *bufferPool) put(b *buffer) {
 	if b.pool != p {
 		panic("BUG: buffer returned to a different pool than the one it was allocated from")
 	}
+	if b.refCount() != 0 {
+		panic("BUG: buffer returned to pool with a non-zero reference count")
+	}
 	// if this slice is somehow less then our min pool size, just drop it
-	sz := cap(b.data)
-	if sz < basePoolIncrement {
+	size := cap(b.data)
+	if size < basePoolIncrement {
 		return
 	}
-	i := levelledPoolIndex(sz / 2) // divide by 2 to put the buffer in the level below so it will always be large enough
-	p.pool[i].Put(b)
+	i := levelledPoolIndex(size / 2) // divide by 2 to put the buffer in the level below so it will always be large enough
+	p.bucket[i].Put(b)
 }
 
-// levelledPoolIndex returns the index of the pool to use for a buffer of size sz. it never returns
-// an index that will panic
-func levelledPoolIndex(sz int) int {
-	i := sz / basePoolIncrement
+// levelledPoolIndex returns the index of the pool to use for a buffer of the
+// given size. It never returns an index that will panic.
+func levelledPoolIndex(size int) int {
+	i := size / basePoolIncrement
 	i = 32 - bits.LeadingZeros32(uint32(i)) // log2
 	if i >= numPoolBuckets {
 		i = numPoolBuckets - 1
@@ -391,19 +417,29 @@ type bufferedPage struct {
 	definitionLevels *buffer
 }
 
-func (p *bufferedPage) Slice(i, j int64) Page {
-	bufferRef(p.values)
-	bufferRef(p.offsets)
-	bufferRef(p.definitionLevels)
-	bufferRef(p.repetitionLevels)
-
-	return &bufferedPage{
-		values:           p.values,
-		offsets:          p.offsets,
-		definitionLevels: p.definitionLevels,
-		repetitionLevels: p.repetitionLevels,
-		Page:             p.Page.Slice(i, j),
+func newBufferedPage(page Page, values, offsets, definitionLevels, repetitionLevels *buffer) *bufferedPage {
+	p := &bufferedPage{
+		Page:             page,
+		values:           values,
+		offsets:          offsets,
+		definitionLevels: definitionLevels,
+		repetitionLevels: repetitionLevels,
 	}
+	bufferRef(values)
+	bufferRef(offsets)
+	bufferRef(definitionLevels)
+	bufferRef(repetitionLevels)
+	return p
+}
+
+func (p *bufferedPage) Slice(i, j int64) Page {
+	return newBufferedPage(
+		p.Page.Slice(i, j),
+		p.values,
+		p.offsets,
+		p.definitionLevels,
+		p.repetitionLevels,
+	)
 }
 
 func (p *bufferedPage) Retain() {

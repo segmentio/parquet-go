@@ -685,20 +685,7 @@ func (c *Column) decodeDataPage(header DataPageHeader, numValues int, repetition
 		)
 	}
 
-	bufferRef(vbuf)
-	bufferRef(obuf)
-	bufferRef(repetitionLevels)
-	bufferRef(definitionLevels)
-
-	newPage = &bufferedPage{
-		Page:             newPage,
-		values:           vbuf,
-		offsets:          obuf,
-		repetitionLevels: repetitionLevels,
-		definitionLevels: definitionLevels,
-	}
-
-	return newPage, nil
+	return newBufferedPage(newPage, vbuf, obuf, repetitionLevels, definitionLevels), nil
 }
 
 func decodeLevelsV1(enc encoding.Encoding, numValues int, data []byte) (*buffer, []byte, error) {

@@ -563,13 +563,14 @@ func (f *filePages) ReadPage() (Page, error) {
 		// TODO: what about pages that don't embed the number of rows?
 		// (data page v1 with no offset index in the column chunk).
 		numRows := page.NumRows()
-		if numRows > f.skip {
-			seek := f.skip
+
+		if numRows <= f.skip {
+			Release(page)
+		} else {
+			tail := page.Slice(f.skip, numRows)
+			Release(page)
 			f.skip = 0
-			if seek > 0 {
-				page = page.Slice(seek, numRows)
-			}
-			return page, nil
+			return tail, nil
 		}
 
 		f.skip -= numRows

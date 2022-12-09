@@ -24,6 +24,9 @@ jobs:
 
     runs-on: ${{ matrix.label }}
 
+    env:
+      PARQUETGODEBUG: tracebuf=1
+
     steps:
     - uses: actions/checkout@v3
 
