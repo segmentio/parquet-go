@@ -24,8 +24,7 @@ func (s *scanRowReader) ReadRows(rows []Row) (int, error) {
 	for i, row := range rows[:n] {
 		if !s.predicate(row) {
 			s.done = true
-			n = i
-			break
+			return i, io.EOF
 		}
 	}
 
