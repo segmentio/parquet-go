@@ -10,37 +10,37 @@ import (
 	"github.com/segmentio/parquet-go"
 )
 
-func TestPageBufferPool(t *testing.T) {
-	testPageBufferPool(t, parquet.NewPageBufferPool())
+func TestBufferPool(t *testing.T) {
+	testBufferPool(t, parquet.NewBufferPool())
 }
 
 func TestFileBufferPool(t *testing.T) {
-	testPageBufferPool(t, parquet.NewFileBufferPool("/tmp", "buffers.*"))
+	testBufferPool(t, parquet.NewFileBufferPool("/tmp", "buffers.*"))
 }
 
-func testPageBufferPool(t *testing.T, pool parquet.PageBufferPool) {
+func testBufferPool(t *testing.T, pool parquet.BufferPool) {
 	tests := []struct {
 		scenario string
-		function func(*testing.T, parquet.PageBufferPool)
+		function func(*testing.T, parquet.BufferPool)
 	}{
 		{
 			scenario: "write bytes",
-			function: testPageBufferPoolWriteBytes,
+			function: testBufferPoolWriteBytes,
 		},
 
 		{
 			scenario: "write string",
-			function: testPageBufferPoolWriteString,
+			function: testBufferPoolWriteString,
 		},
 
 		{
 			scenario: "copy to buffer",
-			function: testPageBufferPoolCopyToBuffer,
+			function: testBufferPoolCopyToBuffer,
 		},
 
 		{
 			scenario: "copy from buffer",
-			function: testPageBufferPoolCopyFromBuffer,
+			function: testBufferPoolCopyFromBuffer,
 		},
 	}
 
@@ -49,22 +49,25 @@ func testPageBufferPool(t *testing.T, pool parquet.PageBufferPool) {
 	}
 }
 
-func testPageBufferPoolWriteBytes(t *testing.T, pool parquet.PageBufferPool) {
+func testBufferPoolWriteBytes(t *testing.T, pool parquet.BufferPool) {
 	const content = "Hello World!"
 
-	buffer := pool.GetPageBuffer()
+	buffer := pool.GetBuffer()
+	defer pool.PutBuffer(buffer)
+
 	_, err := buffer.Write([]byte(content))
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	assertBufferContent(t, buffer, content)
 }
 
-func testPageBufferPoolWriteString(t *testing.T, pool parquet.PageBufferPool) {
+func testBufferPoolWriteString(t *testing.T, pool parquet.BufferPool) {
 	const content = "Hello World!"
 
-	buffer := pool.GetPageBuffer()
+	buffer := pool.GetBuffer()
+	defer pool.PutBuffer(buffer)
+
 	_, err := io.WriteString(buffer, content)
 	if err != nil {
 		t.Fatal(err)
@@ -73,10 +76,12 @@ func testPageBufferPoolWriteString(t *testing.T, pool parquet.PageBufferPool) {
 	assertBufferContent(t, buffer, content)
 }
 
-func testPageBufferPoolCopyToBuffer(t *testing.T, pool parquet.PageBufferPool) {
+func testBufferPoolCopyToBuffer(t *testing.T, pool parquet.BufferPool) {
 	const content = "ABC"
 
-	buffer := pool.GetPageBuffer()
+	buffer := pool.GetBuffer()
+	defer pool.PutBuffer(buffer)
+
 	reader := strings.NewReader(content)
 	_, err := io.Copy(buffer, struct{ io.Reader }{reader})
 	if err != nil {
@@ -86,10 +91,12 @@ func testPageBufferPoolCopyToBuffer(t *testing.T, pool parquet.PageBufferPool) {
 	assertBufferContent(t, buffer, content)
 }
 
-func testPageBufferPoolCopyFromBuffer(t *testing.T, pool parquet.PageBufferPool) {
+func testBufferPoolCopyFromBuffer(t *testing.T, pool parquet.BufferPool) {
 	const content = "0123456789"
 
-	buffer := pool.GetPageBuffer()
+	buffer := pool.GetBuffer()
+	defer pool.PutBuffer(buffer)
+
 	if _, err := io.WriteString(buffer, content); err != nil {
 		t.Fatal(err)
 	}
