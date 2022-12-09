@@ -370,9 +370,9 @@ func TestBufferGenerateBloomFilters(t *testing.T) {
 		buffer := parquet.NewBuffer()
 		writer := parquet.NewWriter(output,
 			parquet.BloomFilters(
-				parquet.SplitBlockFilter("X"),
-				parquet.SplitBlockFilter("Y"),
-				parquet.SplitBlockFilter("Z"),
+				parquet.SplitBlockFilter(10, "X"),
+				parquet.SplitBlockFilter(10, "Y"),
+				parquet.SplitBlockFilter(10, "Z"),
 			),
 		)
 		for i := range rows {

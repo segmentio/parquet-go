@@ -520,7 +520,7 @@ func TestWriterGenerateBloomFilters(t *testing.T) {
 		buffer := new(bytes.Buffer)
 		writer := parquet.NewWriter(buffer,
 			parquet.BloomFilters(
-				parquet.SplitBlockFilter("last_name"),
+				parquet.SplitBlockFilter(10, "last_name"),
 			),
 		)
 		for i := range rows {
@@ -584,7 +584,7 @@ func TestBloomFilterForDict(t *testing.T) {
 	w := parquet.NewWriter(
 		b,
 		schema,
-		parquet.BloomFilters(parquet.SplitBlockFilter("a")),
+		parquet.BloomFilters(parquet.SplitBlockFilter(10, "a")),
 	)
 
 	err := w.Write(&testStruct{A: "test"})
@@ -655,7 +655,7 @@ func TestWriterResetWithBloomFilters(t *testing.T) {
 
 	writer := parquet.NewWriter(new(bytes.Buffer),
 		parquet.BloomFilters(
-			parquet.SplitBlockFilter("value"),
+			parquet.SplitBlockFilter(10, "value"),
 		),
 	)
 

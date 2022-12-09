@@ -15,7 +15,7 @@ func TestSplitBlockFilter(t *testing.T) {
 		return make(bloom.SplitBlockFilter, bloom.NumSplitBlocksOf(int64(numValues), 11))
 	}
 
-	enc := SplitBlockFilter("$").Encoding()
+	enc := SplitBlockFilter(10, "$").Encoding()
 
 	check := func(filter bloom.SplitBlockFilter, value Value) bool {
 		return filter.Check(value.hash(&bloom.XXH64{}))
@@ -157,7 +157,7 @@ func TestSplitBlockFilter(t *testing.T) {
 func BenchmarkSplitBlockFilter(b *testing.B) {
 	const N = 1000
 	f := make(bloom.SplitBlockFilter, bloom.NumSplitBlocksOf(N, 10)).Bytes()
-	e := SplitBlockFilter("$").Encoding()
+	e := SplitBlockFilter(10, "$").Encoding()
 
 	v := make([]int64, N)
 	r := rand.NewSource(10)
