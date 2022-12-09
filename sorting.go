@@ -22,7 +22,7 @@ import (
 // results in better CPU cache utilization since sorting multi-megabyte arrays
 // causes a lot of cache misses since the data set cannot be held in CPU caches.
 type SortingWriter[T any] struct {
-	rows    *RowBuffer[T]
+	rowbuf  *RowBuffer[T]
 	writer  *GenericWriter[T]
 	output  *GenericWriter[T]
 	buffer  io.ReadWriteSeeker
@@ -48,7 +48,7 @@ func NewSortingWriter[T any](output io.Writer, sortRowCount int64, options ...Wr
 		panic(err)
 	}
 	return &SortingWriter[T]{
-		rows: NewRowBuffer[T](&RowGroupConfig{
+		rowbuf: NewRowBuffer[T](&RowGroupConfig{
 			Schema:  config.Schema,
 			Sorting: config.Sorting,
 		}),
@@ -122,7 +122,7 @@ func (w *SortingWriter[T]) Flush() error {
 
 	reader := RowReader(rows)
 	if w.sorting.DropDuplicatedRows {
-		reader = DedupeRowReader(rows, w.rows.compare)
+		reader = DedupeRowReader(rows, w.rowbuf.compare)
 	}
 
 	if _, err := CopyRows(w.output, reader); err != nil {
@@ -134,7 +134,7 @@ func (w *SortingWriter[T]) Flush() error {
 
 func (w *SortingWriter[T]) Reset(output io.Writer) {
 	w.output.Reset(output)
-	w.rows.Reset()
+	w.rowbuf.Reset()
 	w.resetSortingBuffer()
 }
 
@@ -149,24 +149,24 @@ func (w *SortingWriter[T]) resetSortingBuffer() {
 }
 
 func (w *SortingWriter[T]) Write(rows []T) (int, error) {
-	return w.writeRows(len(rows), func(i, j int) (int, error) { return w.rows.Write(rows[i:j]) })
+	return w.writeRows(len(rows), func(i, j int) (int, error) { return w.rowbuf.Write(rows[i:j]) })
 }
 
 func (w *SortingWriter[T]) WriteRows(rows []Row) (int, error) {
-	return w.writeRows(len(rows), func(i, j int) (int, error) { return w.rows.WriteRows(rows[i:j]) })
+	return w.writeRows(len(rows), func(i, j int) (int, error) { return w.rowbuf.WriteRows(rows[i:j]) })
 }
 
 func (w *SortingWriter[T]) writeRows(numRows int, writeRows func(i, j int) (int, error)) (int, error) {
 	wn := 0
 
 	for wn < numRows {
-		if w.rows.NumRows() >= w.maxRows {
+		if w.rowbuf.NumRows() >= w.maxRows {
 			if err := w.sortAndWriteBufferedRows(); err != nil {
 				return wn, err
 			}
 		}
 
-		n := int(w.maxRows - w.rows.NumRows())
+		n := int(w.maxRows - w.rowbuf.NumRows())
 		n += wn
 		if n > numRows {
 			n = numRows
@@ -192,19 +192,19 @@ func (w *SortingWriter[T]) Schema() *Schema {
 }
 
 func (w *SortingWriter[T]) sortAndWriteBufferedRows() error {
-	if w.rows.Len() == 0 {
+	if w.rowbuf.Len() == 0 {
 		return nil
 	}
 
-	defer w.rows.Reset()
-	sort.Sort(w.rows)
+	defer w.rowbuf.Reset()
+	sort.Sort(w.rowbuf)
 
 	if w.sorting.DropDuplicatedRows {
-		w.rows.numRows = w.dedupe.deduplicate(w.rows.rows[:w.rows.numRows], w.rows.compare)
+		w.rowbuf.rows = w.rowbuf.rows[:w.dedupe.deduplicate(w.rowbuf.rows, w.rowbuf.compare)]
 		defer w.dedupe.reset()
 	}
 
-	rows := w.rows.Rows()
+	rows := w.rowbuf.Rows()
 	defer rows.Close()
 
 	if w.buffer == nil {
