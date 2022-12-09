@@ -53,6 +53,10 @@ var (
 	// ErrTooManyRowGroups is returned when attempting to generate a parquet
 	// file with more than MaxRowGroups row groups.
 	ErrTooManyRowGroups = errors.New("the limit of 32767 row groups has been reached")
+
+	// ErrShortBuffer is returned when an output buffer is not large enough to
+	// hold the number of values to be written to it.
+	ErrShortBuffer = errors.New("short buffer")
 )
 
 type errno int
