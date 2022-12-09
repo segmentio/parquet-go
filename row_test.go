@@ -1,6 +1,7 @@
 package parquet_test
 
 import (
+	"io"
 	"reflect"
 	"testing"
 
@@ -10,6 +11,17 @@ import (
 
 type bufferedRows struct {
 	rows []parquet.Row
+}
+
+func (r *bufferedRows) ReadRows(rows []parquet.Row) (int, error) {
+	for i := range rows {
+		if len(r.rows) == 0 {
+			return i, io.EOF
+		}
+		rows[i] = append(rows[i][:0], r.rows[0]...)
+		r.rows = r.rows[1:]
+	}
+	return len(rows), nil
 }
 
 func (w *bufferedRows) WriteRows(rows []parquet.Row) (int, error) {
