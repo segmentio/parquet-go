@@ -343,7 +343,6 @@ func (p *bufferPool) newBuffer(size int) *buffer {
 	}
 	if debug.TRACEBUF > 0 {
 		b.stack = make([]byte, 4096)
-		b.stack = b.stack[:runtime.Stack(b.stack, false)]
 		runtime.SetFinalizer(b, monitorBufferRelease)
 	}
 	return b
@@ -370,6 +369,9 @@ func (p *bufferPool) get(size int) *buffer {
 		b = p.newBuffer(size)
 	}
 	b.data = b.data[:size]
+	if debug.TRACEBUF > 0 {
+		b.stack = b.stack[:runtime.Stack(b.stack[:cap(b.stack)], false)]
+	}
 	return b
 }
 
