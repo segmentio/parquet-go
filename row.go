@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"io"
 	"reflect"
-
-	"github.com/segmentio/parquet-go/internal/unsafecast"
 )
 
 const (
@@ -793,47 +791,4 @@ func reconstructFuncOfLeaf(columnIndex int16, node Node) (int16, reconstructFunc
 		err := typ.AssignValue(value, row[0])
 		return row[1:], err
 	}
-}
-
-// rowAllocator is a memory allocator used to make copy of rows referencing
-// memory buffers that parquet-go does not have ownership of.
-//
-// This type is used in the implementation of a various readers and writers that
-// need to capture rows passed to the ReadRows/WriteRows methods.
-//
-// See: RowBuffer, DedupeRowReader, DedupeRowWriter
-type rowAllocator struct{ buffer []byte }
-
-func (a *rowAllocator) reset() {
-	a.buffer = a.buffer[:0]
-}
-
-func (a *rowAllocator) capture(row Row) {
-	for i, v := range row {
-		switch kind := v.Kind(); kind {
-		case ByteArray, FixedLenByteArray:
-			row[i].ptr = unsafecast.AddressOfBytes(a.copyBytes(v.byteArray()))
-		}
-	}
-}
-
-func (a *rowAllocator) copyBytes(v []byte) []byte {
-	if free := cap(a.buffer) - len(a.buffer); free < len(v) {
-		newCap := 2 * cap(a.buffer)
-		if newCap == 0 {
-			newCap = defaultReadBufferSize
-		}
-		for newCap < len(v) {
-			newCap *= 2
-		}
-		a.buffer = make([]byte, 0, newCap)
-	}
-
-	i := len(a.buffer)
-	j := len(a.buffer) + len(v)
-	a.buffer = a.buffer[:j]
-
-	b := a.buffer[i:j:j]
-	copy(b, v)
-	return b
 }
