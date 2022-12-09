@@ -160,9 +160,7 @@ func (t *transformRowWriter) WriteRows(rows []Row) (n int, err error) {
 
 		if tn < 0 {
 			if t.length == 0 {
-				newRows := make([]Row, 2*len(t.rows))
-				copy(newRows, t.rows)
-				t.rows = newRows
+				t.rows = makeRows(2 * len(t.rows))
 				continue
 			}
 		} else {
