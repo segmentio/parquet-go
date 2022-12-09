@@ -299,6 +299,15 @@ func copyRows(dst RowWriter, src RowReader, buf []Row) (written int64, err error
 	}
 }
 
+func makeRows(n int) []Row {
+	buf := make([]Value, n)
+	row := make([]Row, n)
+	for i := range row {
+		row[i] = buf[i : i : i+1]
+	}
+	return row
+}
+
 func clearRows(rows []Row) {
 	for i, values := range rows {
 		clearValues(values)
