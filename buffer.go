@@ -341,7 +341,6 @@ func (p *bufferPool) newBuffer(bufferSize, bucketSize int) *buffer {
 	}
 	if debug.TRACEBUF > 0 {
 		b.stack = make([]byte, 4096)
-		b.stack = b.stack[:runtime.Stack(b.stack, false)]
 		runtime.SetFinalizer(b, monitorBufferRelease)
 	}
 	return b
@@ -352,16 +351,22 @@ func (p *bufferPool) newBuffer(bufferSize, bucketSize int) *buffer {
 func (p *bufferPool) get(bufferSize int) *buffer {
 	bucketIndex, bucketSize := bufferPoolBucketIndexAndSizeOfGet(bufferSize)
 
+	b := (*buffer)(nil)
 	if bucketIndex >= 0 {
-		b, _ := p.buckets[bucketIndex].Get().(*buffer)
-		if b != nil {
-			b.data = b.data[:bufferSize]
-			b.ref()
-			return b
-		}
+		b, _ = p.buckets[bucketIndex].Get().(*buffer)
 	}
 
-	return p.newBuffer(bufferSize, bucketSize)
+	if b == nil {
+		b = p.newBuffer(bufferSize, bucketSize)
+	} else {
+		b.data = b.data[:bufferSize]
+		b.ref()
+	}
+
+	if debug.TRACEBUF > 0 {
+		b.stack = b.stack[:runtime.Stack(b.stack[:cap(b.stack)], false)]
+	}
+	return b
 }
 
 func (p *bufferPool) put(b *buffer) {
