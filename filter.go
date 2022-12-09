@@ -2,7 +2,7 @@ package parquet
 
 // FilterRowReader constructs a RowReader which exposes rows from reader for
 // which the predicate has returned true.
-func FilterRowReader(reader RowReader, predicate func(Row) bool) RowReader {
+func FilterRowReader(reader RowReader, predicate func(Row, int64) bool) RowReader {
 	f := &filterRowReader{reader: reader, predicate: predicate}
 	for i := range f.rows {
 		f.rows[i] = f.values[i : i : i+1]
@@ -12,7 +12,8 @@ func FilterRowReader(reader RowReader, predicate func(Row) bool) RowReader {
 
 type filterRowReader struct {
 	reader    RowReader
-	predicate func(Row) bool
+	predicate func(Row, int64) bool
+	rowIndex  int64
 	rows      [defaultRowBufferSize]Row
 	values    [defaultRowBufferSize]Value
 }
@@ -28,10 +29,11 @@ func (f *filterRowReader) ReadRows(rows []Row) (n int, err error) {
 		r, err = f.reader.ReadRows(f.rows[:r])
 
 		for i := 0; i < r; i++ {
-			if f.predicate(f.rows[i]) {
+			if f.predicate(f.rows[i], f.rowIndex) {
 				rows[n] = append(rows[n][:0], f.rows[i]...)
 				n++
 			}
+			f.rowIndex++
 		}
 
 		if err != nil {
@@ -43,13 +45,14 @@ func (f *filterRowReader) ReadRows(rows []Row) (n int, err error) {
 
 // FilterRowWriter constructs a RowWriter which writes rows to writer for which
 // the predicate has returned true.
-func FilterRowWriter(writer RowWriter, predicate func(Row) bool) RowWriter {
+func FilterRowWriter(writer RowWriter, predicate func(Row, int64) bool) RowWriter {
 	return &filterRowWriter{writer: writer, predicate: predicate}
 }
 
 type filterRowWriter struct {
 	writer    RowWriter
-	predicate func(Row) bool
+	predicate func(Row, int64) bool
+	rowIndex  int64
 	rows      [defaultRowBufferSize]Row
 }
 
@@ -70,10 +73,11 @@ func (f *filterRowWriter) WriteRows(rows []Row) (n int, err error) {
 		}
 
 		for _, row := range rows[n : n+j] {
-			if f.predicate(row) {
+			if f.predicate(row, f.rowIndex) {
 				f.rows[i] = row
 				i++
 			}
+			f.rowIndex++
 		}
 
 		if i > 0 {

@@ -22,8 +22,8 @@ func TestFilterRowReader(t *testing.T) {
 	}
 
 	reader := parquet.FilterRowReader(&bufferedRows{rows: rows},
-		func(row parquet.Row) bool {
-			return row[0].Int64()%2 == 0
+		func(row parquet.Row, rowIndex int64) bool {
+			return rowIndex%2 == 0
 		},
 	)
 
@@ -52,7 +52,7 @@ func TestFilterRowWriter(t *testing.T) {
 
 	buffer := &bufferedRows{}
 	writer := parquet.FilterRowWriter(buffer,
-		func(row parquet.Row) bool {
+		func(row parquet.Row, rowIndex int64) bool {
 			return row[0].Int64()%2 == 1
 		},
 	)
