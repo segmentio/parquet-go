@@ -74,6 +74,9 @@ func TestSortingWriterDropDuplicatedRows(t *testing.T) {
 	buffer := bytes.NewBuffer(nil)
 	writer := parquet.NewSortingWriter[Row](buffer, 99,
 		parquet.SortingWriterConfig(
+			parquet.SortingBuffers(
+				parquet.NewFileBufferPool("", "buffers.*"),
+			),
 			parquet.SortingColumns(
 				parquet.Ascending("value"),
 			),

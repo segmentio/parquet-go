@@ -197,7 +197,7 @@ func (c *ReaderConfig) Validate() error {
 //	})
 type WriterConfig struct {
 	CreatedBy            string
-	ColumnPageBuffers    PageBufferPool
+	ColumnPageBuffers    BufferPool
 	ColumnIndexSizeLimit int
 	PageBufferSize       int
 	WriteBufferSize      int
@@ -216,13 +216,16 @@ type WriterConfig struct {
 func DefaultWriterConfig() *WriterConfig {
 	return &WriterConfig{
 		CreatedBy:            defaultCreatedBy(),
-		ColumnPageBuffers:    &defaultPageBufferPool,
+		ColumnPageBuffers:    &defaultColumnBufferPool,
 		ColumnIndexSizeLimit: DefaultColumnIndexSizeLimit,
 		PageBufferSize:       DefaultPageBufferSize,
 		WriteBufferSize:      DefaultWriteBufferSize,
 		DataPageVersion:      DefaultDataPageVersion,
 		DataPageStatistics:   DefaultDataPageStatistics,
 		MaxRowsPerRowGroup:   DefaultMaxRowsPerRowGroup,
+		Sorting: SortingConfig{
+			SortingBuffers: &defaultSortingBufferPool,
+		},
 	}
 }
 
@@ -258,7 +261,7 @@ func (c *WriterConfig) ConfigureWriter(config *WriterConfig) {
 
 	*config = WriterConfig{
 		CreatedBy:            coalesceString(c.CreatedBy, config.CreatedBy),
-		ColumnPageBuffers:    coalescePageBufferPool(c.ColumnPageBuffers, config.ColumnPageBuffers),
+		ColumnPageBuffers:    coalesceBufferPool(c.ColumnPageBuffers, config.ColumnPageBuffers),
 		ColumnIndexSizeLimit: coalesceInt(c.ColumnIndexSizeLimit, config.ColumnIndexSizeLimit),
 		PageBufferSize:       coalesceInt(c.PageBufferSize, config.PageBufferSize),
 		WriteBufferSize:      coalesceInt(c.WriteBufferSize, config.WriteBufferSize),
@@ -281,6 +284,7 @@ func (c *WriterConfig) Validate() error {
 		validatePositiveInt(baseName+"ColumnIndexSizeLimit", c.ColumnIndexSizeLimit),
 		validatePositiveInt(baseName+"PageBufferSize", c.PageBufferSize),
 		validateOneOfInt(baseName+"DataPageVersion", c.DataPageVersion, 1, 2),
+		c.Sorting.Validate(),
 	)
 }
 
@@ -303,6 +307,9 @@ type RowGroupConfig struct {
 func DefaultRowGroupConfig() *RowGroupConfig {
 	return &RowGroupConfig{
 		ColumnBufferCapacity: DefaultColumnBufferCapacity,
+		Sorting: SortingConfig{
+			SortingBuffers: &defaultSortingBufferPool,
+		},
 	}
 }
 
@@ -322,6 +329,7 @@ func (c *RowGroupConfig) Validate() error {
 	const baseName = "parquet.(*RowGroupConfig)."
 	return errorInvalidConfiguration(
 		validatePositiveInt(baseName+"ColumnBufferCapacity", c.ColumnBufferCapacity),
+		c.Sorting.Validate(),
 	)
 }
 
@@ -351,6 +359,7 @@ func (c *RowGroupConfig) ConfigureRowGroup(config *RowGroupConfig) {
 //		),
 //	})
 type SortingConfig struct {
+	SortingBuffers     BufferPool
 	SortingColumns     []SortingColumn
 	DropDuplicatedRows bool
 }
@@ -359,7 +368,7 @@ type SortingConfig struct {
 // default row group configuration.
 func DefaultSortingConfig() *SortingConfig {
 	return &SortingConfig{
-		DropDuplicatedRows: false,
+		SortingBuffers: &defaultSortingBufferPool,
 	}
 }
 
@@ -375,7 +384,10 @@ func NewSortingConfig(options ...SortingOption) (*SortingConfig, error) {
 }
 
 func (c *SortingConfig) Validate() error {
-	return nil
+	const baseName = "parquet.(*SortingConfig)."
+	return errorInvalidConfiguration(
+		validateNotNil(baseName+"SortingBuffers", c.SortingBuffers),
+	)
 }
 
 func (c *SortingConfig) Apply(options ...SortingOption) {
@@ -517,7 +529,7 @@ func CreatedBy(application, version, build string) WriterOption {
 // on the amount of memory available.
 //
 // Defaults to using in-memory buffers.
-func ColumnPageBuffers(buffers PageBufferPool) WriterOption {
+func ColumnPageBuffers(buffers BufferPool) WriterOption {
 	return writerOption(func(config *WriterConfig) { config.ColumnPageBuffers = buffers })
 }
 
@@ -625,6 +637,14 @@ func SortingColumns(columns ...SortingColumn) SortingOption {
 	return sortingOption(func(config *SortingConfig) { config.SortingColumns = columns })
 }
 
+// SortingBuffers creates a configuration option which sets the pool of buffers
+// used to hold intermediary state when sorting parquet rows.
+//
+// Defaults to using in-memory buffers.
+func SortingBuffers(buffers BufferPool) SortingOption {
+	return sortingOption(func(config *SortingConfig) { config.SortingBuffers = buffers })
+}
+
 // DropDuplicatedRows configures whether a sorting writer will keep or remove
 // duplicated rows.
 //
@@ -684,7 +704,7 @@ func coalesceBytes(b1, b2 []byte) []byte {
 	return b2
 }
 
-func coalescePageBufferPool(p1, p2 PageBufferPool) PageBufferPool {
+func coalesceBufferPool(p1, p2 BufferPool) BufferPool {
 	if p1 != nil {
 		return p1
 	}
@@ -707,6 +727,7 @@ func coalesceSortingColumns(s1, s2 []SortingColumn) []SortingColumn {
 
 func coalesceSortingConfig(c1, c2 SortingConfig) SortingConfig {
 	return SortingConfig{
+		SortingBuffers:     coalesceBufferPool(c1.SortingBuffers, c2.SortingBuffers),
 		SortingColumns:     coalesceSortingColumns(c1.SortingColumns, c2.SortingColumns),
 		DropDuplicatedRows: c1.DropDuplicatedRows,
 	}

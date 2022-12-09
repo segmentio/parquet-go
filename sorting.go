@@ -3,7 +3,6 @@
 package parquet
 
 import (
-	"bytes"
 	"io"
 	"sort"
 )
@@ -24,9 +23,9 @@ import (
 // causes a lot of cache misses since the data set cannot be held in CPU caches.
 type SortingWriter[T any] struct {
 	rows    *RowBuffer[T]
-	buffer  *bytes.Buffer
 	writer  *GenericWriter[T]
 	output  *GenericWriter[T]
+	buffer  io.ReadWriteSeeker
 	maxRows int64
 	numRows int64
 	sorting SortingConfig
@@ -48,21 +47,12 @@ func NewSortingWriter[T any](output io.Writer, sortRowCount int64, options ...Wr
 	if err != nil {
 		panic(err)
 	}
-
-	// At this time the intermediary buffer where partial row groups are
-	// written is held in memory. This may prove impractical if the parquet
-	// file exceeds the amount of memory available to the application, we will
-	// revisit when we have a need to put this buffer on a different storage
-	// medium.
-	buffer := bytes.NewBuffer(nil)
-
 	return &SortingWriter[T]{
 		rows: NewRowBuffer[T](&RowGroupConfig{
 			Schema:  config.Schema,
 			Sorting: config.Sorting,
 		}),
-		buffer: buffer,
-		writer: NewGenericWriter[T](buffer, &WriterConfig{
+		writer: NewGenericWriter[T](io.Discard, &WriterConfig{
 			CreatedBy:            config.CreatedBy,
 			ColumnPageBuffers:    config.ColumnPageBuffers,
 			ColumnIndexSizeLimit: config.ColumnIndexSizeLimit,
@@ -87,6 +77,8 @@ func (w *SortingWriter[T]) Close() error {
 }
 
 func (w *SortingWriter[T]) Flush() error {
+	defer w.resetSortingBuffer()
+
 	if err := w.sortAndWriteBufferedRows(); err != nil {
 		return err
 	}
@@ -95,17 +87,16 @@ func (w *SortingWriter[T]) Flush() error {
 		return nil
 	}
 
-	defer func() {
-		w.buffer.Reset()
-		w.writer.Reset(w.buffer)
-		w.numRows = 0
-	}()
-
 	if err := w.writer.Close(); err != nil {
 		return err
 	}
 
-	f, err := OpenFile(bytes.NewReader(w.buffer.Bytes()), int64(w.buffer.Len()),
+	size, err := w.buffer.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return err
+	}
+
+	f, err := OpenFile(newReaderAt(w.buffer), size,
 		&FileConfig{
 			SkipPageIndex:    true,
 			SkipBloomFilters: true,
@@ -142,11 +133,19 @@ func (w *SortingWriter[T]) Flush() error {
 }
 
 func (w *SortingWriter[T]) Reset(output io.Writer) {
-	w.rows.Reset()
-	w.buffer.Reset()
-	w.writer.Reset(w.buffer)
 	w.output.Reset(output)
+	w.rows.Reset()
+	w.resetSortingBuffer()
+}
+
+func (w *SortingWriter[T]) resetSortingBuffer() {
+	w.writer.Reset(io.Discard)
 	w.numRows = 0
+
+	if w.buffer != nil {
+		w.sorting.SortingBuffers.PutBuffer(w.buffer)
+		w.buffer = nil
+	}
 }
 
 func (w *SortingWriter[T]) Write(rows []T) (int, error) {
@@ -207,6 +206,11 @@ func (w *SortingWriter[T]) sortAndWriteBufferedRows() error {
 
 	rows := w.rows.Rows()
 	defer rows.Close()
+
+	if w.buffer == nil {
+		w.buffer = w.sorting.SortingBuffers.GetBuffer()
+		w.writer.Reset(w.buffer)
+	}
 
 	n, err := CopyRows(w.writer, rows)
 	if err != nil {
