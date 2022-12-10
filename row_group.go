@@ -209,7 +209,11 @@ func MergeRowGroups(rowGroups []RowGroup, options ...RowGroupOption) (RowGroup, 
 
 	for _, rowGroup := range m.rowGroups {
 		if !sortingColumnsHavePrefix(rowGroup.SortingColumns(), m.sorting) {
-			return nil, ErrRowGroupSortingColumnsMismatch
+			return nil, fmt.Errorf("parquet.MergeRowGroups: %w\n%v\n%v",
+				ErrRowGroupSortingColumnsMismatch,
+				rowGroup.SortingColumns(),
+				m.sorting,
+			)
 		}
 	}
 

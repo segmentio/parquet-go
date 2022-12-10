@@ -1,6 +1,7 @@
 package parquet
 
 import (
+	"fmt"
 	"log"
 	"runtime"
 	"sort"
@@ -61,6 +62,7 @@ func (buf *Buffer) configure(schema *Schema) {
 		return
 	}
 	sortingColumns := buf.config.Sorting.SortingColumns
+	schema.ensureSortingColumnsExist(sortingColumns)
 	buf.sorted = make([]ColumnBuffer, len(sortingColumns))
 
 	forEachLeafColumnOf(schema, func(leaf leafColumn) {
@@ -246,7 +248,11 @@ func (buf *Buffer) WriteRowGroup(rowGroup RowGroup) (int64, error) {
 		return 0, ErrRowGroupSchemaMismatch
 	}
 	if !sortingColumnsHavePrefix(rowGroup.SortingColumns(), buf.SortingColumns()) {
-		return 0, ErrRowGroupSortingColumnsMismatch
+		return 0, fmt.Errorf("parquet.(*Buffer).WriteRowGroups: %w\n%v\n%v",
+			ErrRowGroupSortingColumnsMismatch,
+			rowGroup.SortingColumns(),
+			buf.SortingColumns(),
+		)
 	}
 	n := buf.NumRows()
 	r := rowGroup.Rows()

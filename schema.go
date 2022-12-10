@@ -304,8 +304,28 @@ func (s *Schema) Columns() [][]string {
 
 // Comparator constructs a comparator function which orders rows according to
 // the list of sorting columns passed as arguments.
+//
+// The method panics if one of the sorting columns path do not exist in the
+// schema.
 func (s *Schema) Comparator(sortingColumns ...SortingColumn) func(Row, Row) int {
+	s.ensureSortingColumnsExist(sortingColumns)
 	return compareRowsFuncOf(s, sortingColumns)
+}
+
+func (s *Schema) ensureSortingColumnsExist(sortingColumns []SortingColumn) {
+	if missing := s.findMissingSortingColumn(sortingColumns); missing != nil {
+		panic("BUG: sorting column does not exist in " + s.name + ": " + columnPath(missing.Path()).String())
+	}
+}
+
+func (s *Schema) findMissingSortingColumn(sortingColumns []SortingColumn) SortingColumn {
+	for _, sortingColumn := range sortingColumns {
+		path := columnPath(sortingColumn.Path())
+
+		if _, exist := s.Lookup(path...); !exist {
+			return sortingColumn
+		}
+	}
 }
 
 func (s *Schema) forEachNode(do func(name string, node Node)) {
