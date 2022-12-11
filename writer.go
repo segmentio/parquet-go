@@ -705,10 +705,10 @@ func (w *writer) WriteRows(rows []Row) (int, error) {
 		// using the writer after getting an error, but maybe we could ensure that
 		// we are preventing further use as well?
 		for _, row := range rows[start:end] {
-			for _, value := range row {
-				columnIndex := value.Column()
-				w.values[columnIndex] = append(w.values[columnIndex], value)
-			}
+			row.Range(func(columnIndex int, columnValues []Value) bool {
+				w.values[columnIndex] = append(w.values[columnIndex], columnValues...)
+				return true
+			})
 		}
 
 		for i, values := range w.values {

@@ -423,7 +423,8 @@ func (r *rowGroupRows) ReadRows(rows []Row) (int, error) {
 		return 0, io.EOF
 	}
 
-	n, err := r.Schema().readRows(r, rows[:numRows], 0)
+	//n, err := r.Schema().readRows(r, rows[:numRows], 0)
+	n, err := r.readRows(rows[:numRows])
 
 	for i := range r.columns {
 		r.columns[i].rows -= int64(n)
@@ -434,6 +435,51 @@ func (r *rowGroupRows) ReadRows(rows []Row) (int, error) {
 
 func (r *rowGroupRows) Schema() *Schema {
 	return r.rowGroup.Schema()
+}
+
+func (r *rowGroupRows) readRows(rows []Row) (int, error) {
+	for i := range rows {
+	readColumns:
+		for columnIndex := range r.columns {
+			col := &r.columns[columnIndex]
+			buf := r.buffer(columnIndex)
+
+			skip := int32(1)
+			for {
+				if col.offset == col.length {
+					n, err := col.values.ReadValues(buf)
+					if n == 0 {
+						switch err {
+						case nil:
+							err = io.ErrNoProgress
+						case io.EOF:
+							continue readColumns
+						}
+						return i, err
+					}
+					col.offset = 0
+					col.length = int32(n)
+				}
+
+				_ = buf[:col.offset]
+				_ = buf[:col.length]
+				endOffset := col.offset + skip
+
+				for endOffset < col.length && buf[endOffset].repetitionLevel != 0 {
+					endOffset++
+				}
+
+				rows[i] = append(rows[i], buf[col.offset:endOffset]...)
+
+				if col.offset = endOffset; col.offset < col.length {
+					break
+				}
+				skip = 0
+			}
+		}
+		//fmt.Printf("> %+v\n", rows[i])
+	}
+	return len(rows), nil
 }
 
 type seekRowGroup struct {
