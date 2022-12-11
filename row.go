@@ -588,13 +588,12 @@ func reconstructFuncOfOptional(columnIndex int16, node Node) (int16, reconstruct
 	}
 }
 
-func setMakeSlice(v reflect.Value, n int) (s reflect.Value) {
-	if t := v.Type(); t.Kind() == reflect.Interface {
+func setMakeSlice(v reflect.Value, n int) reflect.Value {
+	t := v.Type()
+	if t.Kind() == reflect.Interface {
 		t = reflect.TypeOf(([]interface{})(nil))
-		s = reflect.MakeSlice(t, n, n)
-	} else {
-		s = reflect.MakeSlice(t, n, n)
 	}
+	s := reflect.MakeSlice(t, n, n)
 	v.Set(s)
 	return s
 }
