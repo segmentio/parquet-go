@@ -29,7 +29,7 @@ func TestTransformRowReader(t *testing.T) {
 	}
 
 	reader := parquet.TransformRowReader(&bufferedRows{rows: rows},
-		func(dst []parquet.Row, src parquet.Row, rowIndex int64) (int, error) {
+		func(dst []parquet.Row, src parquet.Row) (int, error) {
 			dst[0] = append(dst[0], src[0])
 			dst[1] = append(dst[1], parquet.Int64Value(2*src[0].Int64()))
 			return 2, nil
@@ -61,7 +61,7 @@ func TestTransformRowWriter(t *testing.T) {
 
 	buffer := &bufferedRows{}
 	writer := parquet.TransformRowWriter(buffer,
-		func(dst []parquet.Row, src parquet.Row, rowIndex int64) (int, error) {
+		func(dst []parquet.Row, src parquet.Row) (int, error) {
 			if (src[0].Int64() % 2) == 0 {
 				return 0, nil
 			} else {

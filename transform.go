@@ -9,16 +9,15 @@ package parquet
 // applying a filter since the row will be skipped. If the dst buffer is not
 // large enough to contain the transformation, the function must return the
 // sentinel error parquet.ErrShortBuffer.
-func TransformRowReader(reader RowReader, transform func(dst []Row, src Row, rowIndex int64) (int, error)) RowReader {
+func TransformRowReader(reader RowReader, transform func(dst []Row, src Row) (int, error)) RowReader {
 	return &transformRowReader{reader: reader, transform: transform}
 }
 
 type transformRowReader struct {
 	reader    RowReader
-	transform func([]Row, Row, int64) (int, error)
+	transform func([]Row, Row) (int, error)
 	input     transformRowBuffer
 	output    transformRowBuffer
-	rowIndex  int64
 }
 
 func (t *transformRowReader) ReadRows(rows []Row) (n int, err error) {
@@ -52,7 +51,7 @@ readRows:
 				break
 			}
 
-			tn, err := t.transform(rows[n:], t.input.rows()[0], t.rowIndex)
+			tn, err := t.transform(rows[n:], t.input.rows()[0])
 			switch err {
 			case nil:
 				// The transform may have produced zero rows but that's OK.
@@ -60,7 +59,6 @@ readRows:
 				// if it is not their primary intent.
 				n += tn
 				t.input.discard()
-				t.rowIndex++
 
 			case ErrShortBuffer:
 				if n > 0 {
@@ -80,7 +78,7 @@ readRows:
 					} else {
 						t.output.init(2 * t.output.cap())
 					}
-					tn, err := t.transform(t.output.buffer, t.input.rows()[0], t.rowIndex)
+					tn, err := t.transform(t.output.buffer, t.input.rows()[0])
 					if err == nil {
 						t.output.reset(tn)
 						continue readRows
@@ -150,16 +148,15 @@ func (b *transformRowBuffer) len() int {
 // applying a filter since the row will be skipped. If the dst buffer is not
 // large enough to contain the transformation, the function must return the
 // sentinel error parquet.ErrShortBuffer.
-func TransformRowWriter(writer RowWriter, transform func(dst []Row, src Row, rowIndex int64) (int, error)) RowWriter {
+func TransformRowWriter(writer RowWriter, transform func(dst []Row, src Row) (int, error)) RowWriter {
 	return &transformRowWriter{writer: writer, transform: transform}
 }
 
 type transformRowWriter struct {
 	writer    RowWriter
-	transform func([]Row, Row, int64) (int, error)
+	transform func([]Row, Row) (int, error)
 	rows      []Row
 	length    int
-	rowIndex  int64
 }
 
 func (t *transformRowWriter) WriteRows(rows []Row) (n int, err error) {
@@ -168,7 +165,7 @@ func (t *transformRowWriter) WriteRows(rows []Row) (n int, err error) {
 	}
 
 	for n < len(rows) {
-		tn, err := t.transform(t.rows[t.length:], rows[n], t.rowIndex)
+		tn, err := t.transform(t.rows[t.length:], rows[n])
 
 		switch err {
 		case nil:
@@ -189,7 +186,6 @@ func (t *transformRowWriter) WriteRows(rows []Row) (n int, err error) {
 			return n, err
 		}
 
-		t.rowIndex++
 		n++
 	}
 
