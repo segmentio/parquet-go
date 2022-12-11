@@ -16,23 +16,18 @@ func TestTransformRowReader(t *testing.T) {
 	}
 
 	want := []parquet.Row{
-		{parquet.Int64Value(0)},
-		{parquet.Int64Value(0)},
-		{parquet.Int64Value(1)},
-		{parquet.Int64Value(2)},
-		{parquet.Int64Value(2)},
-		{parquet.Int64Value(4)},
-		{parquet.Int64Value(3)},
-		{parquet.Int64Value(6)},
-		{parquet.Int64Value(4)},
-		{parquet.Int64Value(8)},
+		{parquet.Int64Value(0), parquet.Int64Value(0).Level(0, 0, 1)},
+		{parquet.Int64Value(1), parquet.Int64Value(2).Level(0, 0, 1)},
+		{parquet.Int64Value(2), parquet.Int64Value(4).Level(0, 0, 1)},
+		{parquet.Int64Value(3), parquet.Int64Value(6).Level(0, 0, 1)},
+		{parquet.Int64Value(4), parquet.Int64Value(8).Level(0, 0, 1)},
 	}
 
 	reader := parquet.TransformRowReader(&bufferedRows{rows: rows},
-		func(dst []parquet.Row, src parquet.Row) (int, error) {
-			dst[0] = append(dst[0], src[0])
-			dst[1] = append(dst[1], parquet.Int64Value(2*src[0].Int64()))
-			return 2, nil
+		func(dst, src parquet.Row) (parquet.Row, error) {
+			dst = append(dst, src[0])
+			dst = append(dst, parquet.Int64Value(2*src[0].Int64()).Level(0, 0, 1))
+			return dst, nil
 		},
 	)
 
@@ -61,13 +56,11 @@ func TestTransformRowWriter(t *testing.T) {
 
 	buffer := &bufferedRows{}
 	writer := parquet.TransformRowWriter(buffer,
-		func(dst []parquet.Row, src parquet.Row) (int, error) {
-			if (src[0].Int64() % 2) == 0 {
-				return 0, nil
-			} else {
-				dst[0] = append(dst[0], src[0])
-				return 1, nil
+		func(dst, src parquet.Row) (parquet.Row, error) {
+			if (src[0].Int64() % 2) != 0 {
+				dst = append(dst, src[0])
 			}
+			return dst, nil
 		},
 	)
 
