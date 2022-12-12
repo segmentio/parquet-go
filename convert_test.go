@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/segmentio/parquet-go"
+	"github.com/segmentio/parquet-go/deprecated"
 )
 
 type AddressBook1 struct {
@@ -481,7 +482,7 @@ func TestConvert(t *testing.T) {
 func newInt64(i int64) *int64    { return &i }
 func newString(s string) *string { return &s }
 
-func TestConvertTimestamp(t *testing.T) {
+func TestConvertValue(t *testing.T) {
 	now := time.Unix(42, 0)
 	ms := now.UnixMilli()
 	us := now.UnixMicro()
@@ -510,60 +511,569 @@ func TestConvertTimestamp(t *testing.T) {
 		fromType  parquet.Type
 		fromValue parquet.Value
 		toType    parquet.Type
-		expected  int64
+		toValue   parquet.Value
 	}{
+		{
+			scenario:  "true to boolean",
+			fromType:  parquet.BooleanType,
+			fromValue: parquet.BooleanValue(true),
+			toType:    parquet.BooleanType,
+			toValue:   parquet.BooleanValue(true),
+		},
+
+		{
+			scenario:  "true to int32",
+			fromType:  parquet.BooleanType,
+			fromValue: parquet.BooleanValue(true),
+			toType:    parquet.Int32Type,
+			toValue:   parquet.Int32Value(1),
+		},
+
+		{
+			scenario:  "true to int64",
+			fromType:  parquet.BooleanType,
+			fromValue: parquet.BooleanValue(true),
+			toType:    parquet.Int64Type,
+			toValue:   parquet.Int64Value(1),
+		},
+
+		{
+			scenario:  "true to int96",
+			fromType:  parquet.BooleanType,
+			fromValue: parquet.BooleanValue(true),
+			toType:    parquet.Int96Type,
+			toValue:   parquet.Int96Value(deprecated.Int96{0: 1}),
+		},
+
+		{
+			scenario:  "true to float",
+			fromType:  parquet.BooleanType,
+			fromValue: parquet.BooleanValue(true),
+			toType:    parquet.FloatType,
+			toValue:   parquet.FloatValue(1),
+		},
+
+		{
+			scenario:  "true to double",
+			fromType:  parquet.BooleanType,
+			fromValue: parquet.BooleanValue(true),
+			toType:    parquet.FloatType,
+			toValue:   parquet.FloatValue(1),
+		},
+
+		{
+			scenario:  "true to byte array",
+			fromType:  parquet.BooleanType,
+			fromValue: parquet.BooleanValue(true),
+			toType:    parquet.ByteArrayType,
+			toValue:   parquet.ByteArrayValue([]byte{1}),
+		},
+
+		{
+			scenario:  "true to fixed length byte array",
+			fromType:  parquet.BooleanType,
+			fromValue: parquet.BooleanValue(true),
+			toType:    parquet.FixedLenByteArrayType(4),
+			toValue:   parquet.FixedLenByteArrayValue([]byte{1, 0, 0, 0}),
+		},
+
+		{
+			scenario:  "true to string",
+			fromType:  parquet.BooleanType,
+			fromValue: parquet.BooleanValue(true),
+			toType:    parquet.String().Type(),
+			toValue:   parquet.ByteArrayValue([]byte(`true`)),
+		},
+
+		{
+			scenario:  "false to boolean",
+			fromType:  parquet.BooleanType,
+			fromValue: parquet.BooleanValue(false),
+			toType:    parquet.BooleanType,
+			toValue:   parquet.BooleanValue(false),
+		},
+
+		{
+			scenario:  "false to int32",
+			fromType:  parquet.BooleanType,
+			fromValue: parquet.BooleanValue(false),
+			toType:    parquet.Int32Type,
+			toValue:   parquet.Int32Value(0),
+		},
+
+		{
+			scenario:  "false to int64",
+			fromType:  parquet.BooleanType,
+			fromValue: parquet.BooleanValue(false),
+			toType:    parquet.Int64Type,
+			toValue:   parquet.Int64Value(0),
+		},
+
+		{
+			scenario:  "false to int96",
+			fromType:  parquet.BooleanType,
+			fromValue: parquet.BooleanValue(false),
+			toType:    parquet.Int96Type,
+			toValue:   parquet.Int96Value(deprecated.Int96{}),
+		},
+
+		{
+			scenario:  "false to float",
+			fromType:  parquet.BooleanType,
+			fromValue: parquet.BooleanValue(false),
+			toType:    parquet.FloatType,
+			toValue:   parquet.FloatValue(0),
+		},
+
+		{
+			scenario:  "false to double",
+			fromType:  parquet.BooleanType,
+			fromValue: parquet.BooleanValue(false),
+			toType:    parquet.FloatType,
+			toValue:   parquet.FloatValue(0),
+		},
+
+		{
+			scenario:  "false to byte array",
+			fromType:  parquet.BooleanType,
+			fromValue: parquet.BooleanValue(false),
+			toType:    parquet.ByteArrayType,
+			toValue:   parquet.ByteArrayValue([]byte{0}),
+		},
+
+		{
+			scenario:  "false to fixed length byte array",
+			fromType:  parquet.BooleanType,
+			fromValue: parquet.BooleanValue(false),
+			toType:    parquet.FixedLenByteArrayType(4),
+			toValue:   parquet.FixedLenByteArrayValue([]byte{0, 0, 0, 0}),
+		},
+
+		{
+			scenario:  "false to string",
+			fromType:  parquet.BooleanType,
+			fromValue: parquet.BooleanValue(false),
+			toType:    parquet.String().Type(),
+			toValue:   parquet.ByteArrayValue([]byte(`false`)),
+		},
+
+		{
+			scenario:  "int32 to true",
+			fromType:  parquet.Int32Type,
+			fromValue: parquet.Int32Value(10),
+			toType:    parquet.BooleanType,
+			toValue:   parquet.BooleanValue(true),
+		},
+
+		{
+			scenario:  "int32 to false",
+			fromType:  parquet.Int32Type,
+			fromValue: parquet.Int32Value(0),
+			toType:    parquet.BooleanType,
+			toValue:   parquet.BooleanValue(false),
+		},
+
+		{
+			scenario:  "int32 to int32",
+			fromType:  parquet.Int32Type,
+			fromValue: parquet.Int32Value(42),
+			toType:    parquet.Int32Type,
+			toValue:   parquet.Int32Value(42),
+		},
+
+		{
+			scenario:  "int32 to int64",
+			fromType:  parquet.Int32Type,
+			fromValue: parquet.Int32Value(-21),
+			toType:    parquet.Int64Type,
+			toValue:   parquet.Int64Value(-21),
+		},
+
+		{
+			scenario:  "int32 to int96",
+			fromType:  parquet.Int32Type,
+			fromValue: parquet.Int32Value(123),
+			toType:    parquet.Int96Type,
+			toValue:   parquet.Int96Value(deprecated.Int96{0: 123}),
+		},
+
+		{
+			scenario:  "int32 to float",
+			fromType:  parquet.Int32Type,
+			fromValue: parquet.Int32Value(9),
+			toType:    parquet.FloatType,
+			toValue:   parquet.FloatValue(9),
+		},
+
+		{
+			scenario:  "int32 to double",
+			fromType:  parquet.Int32Type,
+			fromValue: parquet.Int32Value(100),
+			toType:    parquet.DoubleType,
+			toValue:   parquet.DoubleValue(100),
+		},
+
+		{
+			scenario:  "int32 to byte array",
+			fromType:  parquet.Int32Type,
+			fromValue: parquet.Int32Value(1 << 8),
+			toType:    parquet.ByteArrayType,
+			toValue:   parquet.ByteArrayValue([]byte{0, 1, 0, 0}),
+		},
+
+		{
+			scenario:  "int32 to fixed length byte array",
+			fromType:  parquet.Int32Type,
+			fromValue: parquet.Int32Value(1 << 8),
+			toType:    parquet.FixedLenByteArrayType(3),
+			toValue:   parquet.FixedLenByteArrayValue([]byte{0, 1, 0}),
+		},
+
+		{
+			scenario:  "int32 to string",
+			fromType:  parquet.Int32Type,
+			fromValue: parquet.Int32Value(12345),
+			toType:    parquet.String().Type(),
+			toValue:   parquet.ByteArrayValue([]byte(`12345`)),
+		},
+
+		{
+			scenario:  "int64 to true",
+			fromType:  parquet.Int64Type,
+			fromValue: parquet.Int64Value(10),
+			toType:    parquet.BooleanType,
+			toValue:   parquet.BooleanValue(true),
+		},
+
+		{
+			scenario:  "int64 to false",
+			fromType:  parquet.Int64Type,
+			fromValue: parquet.Int64Value(0),
+			toType:    parquet.BooleanType,
+			toValue:   parquet.BooleanValue(false),
+		},
+
+		{
+			scenario:  "int64 to int32",
+			fromType:  parquet.Int64Type,
+			fromValue: parquet.Int64Value(-21),
+			toType:    parquet.Int32Type,
+			toValue:   parquet.Int32Value(-21),
+		},
+
+		{
+			scenario:  "int64 to int64",
+			fromType:  parquet.Int64Type,
+			fromValue: parquet.Int64Value(42),
+			toType:    parquet.Int64Type,
+			toValue:   parquet.Int64Value(42),
+		},
+
+		{
+			scenario:  "int64 to int96",
+			fromType:  parquet.Int64Type,
+			fromValue: parquet.Int64Value(123),
+			toType:    parquet.Int96Type,
+			toValue:   parquet.Int96Value(deprecated.Int96{0: 123}),
+		},
+
+		{
+			scenario:  "int64 to float",
+			fromType:  parquet.Int64Type,
+			fromValue: parquet.Int64Value(9),
+			toType:    parquet.FloatType,
+			toValue:   parquet.FloatValue(9),
+		},
+
+		{
+			scenario:  "int64 to double",
+			fromType:  parquet.Int64Type,
+			fromValue: parquet.Int64Value(100),
+			toType:    parquet.DoubleType,
+			toValue:   parquet.DoubleValue(100),
+		},
+
+		{
+			scenario:  "int64 to byte array",
+			fromType:  parquet.Int64Type,
+			fromValue: parquet.Int64Value(1 << 8),
+			toType:    parquet.ByteArrayType,
+			toValue:   parquet.ByteArrayValue([]byte{0, 1, 0, 0, 0, 0, 0, 0}),
+		},
+
+		{
+			scenario:  "int64 to fixed length byte array",
+			fromType:  parquet.Int64Type,
+			fromValue: parquet.Int64Value(1 << 8),
+			toType:    parquet.FixedLenByteArrayType(3),
+			toValue:   parquet.FixedLenByteArrayValue([]byte{0, 1, 0}),
+		},
+
+		{
+			scenario:  "int64 to string",
+			fromType:  parquet.Int64Type,
+			fromValue: parquet.Int64Value(1234567890),
+			toType:    parquet.String().Type(),
+			toValue:   parquet.ByteArrayValue([]byte(`1234567890`)),
+		},
+
+		{
+			scenario:  "float to true",
+			fromType:  parquet.FloatType,
+			fromValue: parquet.FloatValue(0.1),
+			toType:    parquet.BooleanType,
+			toValue:   parquet.BooleanValue(true),
+		},
+
+		{
+			scenario:  "float to false",
+			fromType:  parquet.FloatType,
+			fromValue: parquet.FloatValue(0),
+			toType:    parquet.BooleanType,
+			toValue:   parquet.BooleanValue(false),
+		},
+
+		{
+			scenario:  "float to int32",
+			fromType:  parquet.FloatType,
+			fromValue: parquet.FloatValue(9.9),
+			toType:    parquet.Int32Type,
+			toValue:   parquet.Int32Value(9),
+		},
+
+		{
+			scenario:  "float to int64",
+			fromType:  parquet.FloatType,
+			fromValue: parquet.FloatValue(-1.5),
+			toType:    parquet.Int64Type,
+			toValue:   parquet.Int64Value(-1),
+		},
+
+		{
+			scenario:  "float to float",
+			fromType:  parquet.FloatType,
+			fromValue: parquet.FloatValue(1.234),
+			toType:    parquet.FloatType,
+			toValue:   parquet.FloatValue(1.234),
+		},
+
+		{
+			scenario:  "float to double",
+			fromType:  parquet.FloatType,
+			fromValue: parquet.FloatValue(-0.5),
+			toType:    parquet.DoubleType,
+			toValue:   parquet.DoubleValue(-0.5),
+		},
+
+		{
+			scenario:  "float to string",
+			fromType:  parquet.FloatType,
+			fromValue: parquet.FloatValue(0.125),
+			toType:    parquet.String().Type(),
+			toValue:   parquet.ByteArrayValue([]byte(`0.125`)),
+		},
+
+		{
+			scenario:  "double to true",
+			fromType:  parquet.DoubleType,
+			fromValue: parquet.DoubleValue(0.1),
+			toType:    parquet.BooleanType,
+			toValue:   parquet.BooleanValue(true),
+		},
+
+		{
+			scenario:  "double to false",
+			fromType:  parquet.DoubleType,
+			fromValue: parquet.DoubleValue(0),
+			toType:    parquet.BooleanType,
+			toValue:   parquet.BooleanValue(false),
+		},
+
+		{
+			scenario:  "double to int32",
+			fromType:  parquet.DoubleType,
+			fromValue: parquet.DoubleValue(9.9),
+			toType:    parquet.Int32Type,
+			toValue:   parquet.Int32Value(9),
+		},
+
+		{
+			scenario:  "double to int64",
+			fromType:  parquet.DoubleType,
+			fromValue: parquet.DoubleValue(-1.5),
+			toType:    parquet.Int64Type,
+			toValue:   parquet.Int64Value(-1),
+		},
+
+		{
+			scenario:  "double to float",
+			fromType:  parquet.DoubleType,
+			fromValue: parquet.DoubleValue(1.234),
+			toType:    parquet.FloatType,
+			toValue:   parquet.FloatValue(1.234),
+		},
+
+		{
+			scenario:  "double to double",
+			fromType:  parquet.DoubleType,
+			fromValue: parquet.DoubleValue(-0.5),
+			toType:    parquet.DoubleType,
+			toValue:   parquet.DoubleValue(-0.5),
+		},
+
+		{
+			scenario:  "double to string",
+			fromType:  parquet.DoubleType,
+			fromValue: parquet.DoubleValue(0.125),
+			toType:    parquet.String().Type(),
+			toValue:   parquet.ByteArrayValue([]byte(`0.125`)),
+		},
+
+		{
+			scenario:  "string to true",
+			fromType:  parquet.String().Type(),
+			fromValue: parquet.ByteArrayValue([]byte(`true`)),
+			toType:    parquet.BooleanType,
+			toValue:   parquet.BooleanValue(true),
+		},
+
+		{
+			scenario:  "string to false",
+			fromType:  parquet.String().Type(),
+			fromValue: parquet.ByteArrayValue([]byte(`false`)),
+			toType:    parquet.BooleanType,
+			toValue:   parquet.BooleanValue(false),
+		},
+
+		{
+			scenario:  "string to int32",
+			fromType:  parquet.String().Type(),
+			fromValue: parquet.ByteArrayValue([]byte(`-21`)),
+			toType:    parquet.Int32Type,
+			toValue:   parquet.Int32Value(-21),
+		},
+
+		{
+			scenario:  "string to int64",
+			fromType:  parquet.String().Type(),
+			fromValue: parquet.ByteArrayValue([]byte(`42`)),
+			toType:    parquet.Int64Type,
+			toValue:   parquet.Int64Value(42),
+		},
+
+		{
+			scenario:  "string to int96",
+			fromType:  parquet.String().Type(),
+			fromValue: parquet.ByteArrayValue([]byte(`123`)),
+			toType:    parquet.Int96Type,
+			toValue:   parquet.Int96Value(deprecated.Int96{0: 123}),
+		},
+
+		{
+			scenario:  "string to float",
+			fromType:  parquet.String().Type(),
+			fromValue: parquet.ByteArrayValue([]byte(`-0.5`)),
+			toType:    parquet.FloatType,
+			toValue:   parquet.FloatValue(-0.5),
+		},
+
+		{
+			scenario:  "string to double",
+			fromType:  parquet.String().Type(),
+			fromValue: parquet.ByteArrayValue([]byte(`0.5`)),
+			toType:    parquet.DoubleType,
+			toValue:   parquet.DoubleValue(0.5),
+		},
+
+		{
+			scenario:  "string to byte array",
+			fromType:  parquet.String().Type(),
+			fromValue: parquet.ByteArrayValue([]byte(`ABC`)),
+			toType:    parquet.ByteArrayType,
+			toValue:   parquet.ByteArrayValue([]byte(`ABC`)),
+		},
+
+		{
+			scenario:  "string to fixed length byte array",
+			fromType:  parquet.String().Type(),
+			fromValue: parquet.ByteArrayValue([]byte(`99B816772522447EBF76821A7C5ADF65`)),
+			toType:    parquet.FixedLenByteArrayType(16),
+			toValue: parquet.FixedLenByteArrayValue([]byte{
+				0x99, 0xb8, 0x16, 0x77, 0x25, 0x22, 0x44, 0x7e,
+				0xbf, 0x76, 0x82, 0x1a, 0x7c, 0x5a, 0xdf, 0x65,
+			}),
+		},
+
+		{
+			scenario:  "string to string",
+			fromType:  parquet.String().Type(),
+			fromValue: parquet.ByteArrayValue([]byte(`Hello World!`)),
+			toType:    parquet.String().Type(),
+			toValue:   parquet.ByteArrayValue([]byte(`Hello World!`)),
+		},
+
 		{
 			scenario:  "micros to nanos",
 			fromType:  usType,
 			fromValue: usVal,
 			toType:    nsType,
-			expected:  ns,
+			toValue:   parquet.Int64Value(ns),
 		},
+
 		{
 			scenario:  "millis to nanos",
 			fromType:  msType,
 			fromValue: msVal,
 			toType:    nsType,
-			expected:  ns,
+			toValue:   parquet.Int64Value(ns),
 		},
+
 		{
 			scenario:  "nanos to micros",
 			fromType:  nsType,
 			fromValue: nsVal,
 			toType:    usType,
-			expected:  us,
+			toValue:   parquet.Int64Value(us),
 		},
+
 		{
 			scenario:  "nanos to nanos",
 			fromType:  nsType,
 			fromValue: nsVal,
 			toType:    nsType,
-			expected:  ns,
+			toValue:   parquet.Int64Value(ns),
 		},
+
 		{
 			scenario:  "int64 to nanos",
 			fromType:  parquet.Int64Type,
 			fromValue: nsVal,
 			toType:    nsType,
-			expected:  ns,
+			toValue:   parquet.Int64Value(ns),
 		},
+
 		{
 			scenario:  "int64 to int64",
 			fromType:  parquet.Int64Type,
 			fromValue: nsVal,
 			toType:    parquet.Int64Type,
-			expected:  ns,
+			toValue:   parquet.Int64Value(ns),
 		},
 	}
 
 	for _, test := range timestampConversionTests {
 		t.Run(test.scenario, func(t *testing.T) {
-			a, err := test.toType.ConvertValue(test.fromValue, test.fromType)
+			// Set levels to ensure that they are retained by the conversion.
+			from := test.fromValue.Level(1, 2, 3)
+			want := test.toValue.Level(1, 2, 3)
+
+			got, err := test.toType.ConvertValue(from, test.fromType)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if a.Int64() != test.expected {
-				t.Errorf("converted value mismatch:\nwant = %+v\ngot  = %+v", test.expected, a.Int64())
+
+			if !parquet.DeepEqual(want, got) {
+				t.Errorf("converted value mismatch:\nwant = %+v\ngot  = %+v", want, got)
 			}
 		})
 	}

@@ -1950,9 +1950,8 @@ func (t *timestampType) ConvertValue(val Value, typ Type) (Value, error) {
 
 	source := timeUnitDuration(sourceTs.Unit)
 	target := timeUnitDuration(t.Unit)
-	converted := val.int64() * source.Nanoseconds() / target.Nanoseconds()
-
-	return ValueOf(converted), nil
+	converted := (val.int64() * source.Nanoseconds()) / target.Nanoseconds()
+	return val.convertToInt64(converted), nil
 }
 
 func timeUnitDuration(unit format.TimeUnit) time.Duration {

@@ -687,7 +687,7 @@ func convertInt64ToFixedLenByteArray(v Value, size int) (Value, error) {
 	c := make([]byte, size)
 	binary.LittleEndian.PutUint64(b, v.uint64())
 	copy(c, b)
-	return v.convertToFixedLenByteArray(b), nil
+	return v.convertToFixedLenByteArray(c), nil
 }
 
 func convertInt64ToString(v Value) (Value, error) {
@@ -897,12 +897,10 @@ func convertStringToInt96(v Value) (Value, error) {
 		return v, errStringConversion(v, "INT96", strconv.ErrSyntax)
 	}
 	b := i.Bytes()
-	j := deprecated.BytesToInt96(b)
-	i96 := deprecated.Int96{}
-	if len(j) != 0 {
-		i96 = j[0]
-	}
-	return v.convertToInt96(i96), nil
+	c := make([]byte, 12)
+	copy(c, b)
+	i96 := deprecated.BytesToInt96(c)
+	return v.convertToInt96(i96[0]), nil
 }
 
 func convertStringToFloat(v Value) (Value, error) {
