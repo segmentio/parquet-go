@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/segmentio/parquet-go"
+	"github.com/segmentio/parquet-go/deprecated"
 )
 
 func ExampleReadFile() {
@@ -324,6 +325,55 @@ func TestIssue377(t *testing.T) {
 	}
 
 	assertRowsEqual(t, rows, ods)
+}
+
+func TestIssue415(t *testing.T) {
+	type AV struct {
+		B string `parquet:"b,optional"`
+		N string `parquet:"n,optional"`
+	}
+	type CDC struct {
+		TenantID                    string                          `parquet:"tenantid,optional"`
+		RowID                       string                          `parquet:"rowid,optional"`
+		TransactionID               string                          `parquet:"transactionid,optional"`
+		Begin                       int64                           `parquet:"begin,optional"`
+		End                         int64                           `parquet:"end,optional"`
+		RecordType                  uint8                           `parquet:"recordtype,optional"`
+		EventID                     string                          `parquet:"eventid,optional"`
+		EventSource                 string                          `parquet:"eventsource,optional"`
+		Operation                   uint8                           `parquet:"operation,optional"`
+		SequenceNumber              string                          `parquet:"sequencenumber,optional"`
+		ApproximateCreationDateTime deprecated.Int96                `parquet:"approximatecreationdatetime,optional"`
+		Keys                        deprecated.MapGroup[string, AV] `parquet:"keys,optional"`
+		Old                         deprecated.MapGroup[string, AV] `parquet:"old,optional"`
+		New                         deprecated.MapGroup[string, AV] `parquet:"new,optional"`
+	}
+
+	f, err := os.Open("testdata/issue415.parquet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	info, err := f.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := parquet.Read[CDC](f, info.Size())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, row := range rows {
+		if len(row.Keys) == 0 {
+			t.Fatal("expected more than 0 entries")
+		}
+
+		if len(row.New) == 0 {
+			t.Fatal("expected more than 0 entries")
+		}
+	}
 }
 
 func assertRowsEqual[T any](t *testing.T, rows1, rows2 []T) {

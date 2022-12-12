@@ -392,7 +392,13 @@ func listElementOf(node Node) Node {
 
 func mapKeyValueOf(node Node) Node {
 	if !node.Leaf() && (node.Required() || node.Optional()) {
-		if keyValue := childByName(node, "key_value"); keyValue != nil && !keyValue.Leaf() && keyValue.Repeated() {
+		var keyValue Node
+		if keyValue = childByName(node, "key_value"); keyValue == nil {
+			// Older writers may have written this group as "map"
+			keyValue = childByName(node, "map")
+		}
+
+		if keyValue != nil && !keyValue.Leaf() && keyValue.Repeated() {
 			k := childByName(keyValue, "key")
 			v := childByName(keyValue, "value")
 			if k != nil && v != nil && k.Required() {
