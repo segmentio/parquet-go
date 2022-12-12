@@ -465,13 +465,6 @@ func TestConvert(t *testing.T) {
 			}
 			row = rowbuf[0]
 
-			// row.Range(func(i int, v []parquet.Value) bool {
-			// 	t.Logf("%d. %+v\n", i, v)
-			// 	return true
-			// })
-
-			//t.Logf("%+v\n", row)
-
 			value := reflect.New(reflect.TypeOf(test.to))
 			if err := to.Reconstruct(value.Interface(), row); err != nil {
 				t.Fatal(err)
