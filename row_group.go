@@ -423,7 +423,6 @@ func (r *rowGroupRows) ReadRows(rows []Row) (int, error) {
 		return 0, io.EOF
 	}
 
-	//n, err := r.Schema().readRows(r, rows[:numRows], 0)
 	n, err := r.readRows(rows[:numRows])
 
 	for i := range r.columns {
@@ -477,7 +476,6 @@ func (r *rowGroupRows) readRows(rows []Row) (int, error) {
 				skip = 0
 			}
 		}
-		//fmt.Printf("> %+v\n", rows[i])
 	}
 	return len(rows), nil
 }
