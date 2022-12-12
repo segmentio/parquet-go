@@ -6,8 +6,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/fs"
-	"io/ioutil"
 	"log"
 	"os"
 	"reflect"
@@ -355,11 +353,6 @@ func TestIssue423(t *testing.T) {
 		t.Fatal("write error: ", err)
 	}
 	w.Close()
-
-	err = ioutil.WriteFile("/Users/mparsons/tmp/file.parquet", buf.Bytes(), fs.ModeExclusive)
-	if err != nil {
-		t.Fatal("File error:", err)
-	}
 
 	file := bytes.NewReader(buf.Bytes())
 	rows, err := parquet.Read[Outer](file, file.Size())
