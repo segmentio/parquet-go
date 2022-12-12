@@ -76,18 +76,6 @@ func (group columnMappingGroup) lookupClosest(path columnPath) leafColumn {
 	return leafColumn{columnIndex: -1}
 }
 
-func (group columnMappingGroup) lookupClosestParent(path columnPath) columnPath {
-	for i := 0; i < len(path); i++ {
-		g, ok := group[path[i]].(columnMappingGroup)
-		if ok {
-			group = g
-		} else {
-			return path[:i]
-		}
-	}
-	return nil
-}
-
 type columnMappingLeaf struct {
 	column leafColumn
 }
