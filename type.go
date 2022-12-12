@@ -1496,7 +1496,12 @@ func (t *enumType) AssignValue(dst reflect.Value, src Value) error {
 }
 
 func (t *enumType) ConvertValue(val Value, typ Type) (Value, error) {
-	return new(stringType).ConvertValue(val, typ)
+	switch typ.(type) {
+	case *byteArrayType, *stringType, *enumType:
+		return val, nil
+	default:
+		return val, invalidConversion(val, "ENUM", typ.String())
+	}
 }
 
 // JSON constructs a leaf node of JSON logical type.
@@ -1567,7 +1572,12 @@ func (t *jsonType) AssignValue(dst reflect.Value, src Value) error {
 }
 
 func (t *jsonType) ConvertValue(val Value, typ Type) (Value, error) {
-	return byteArrayType{}.ConvertValue(val, typ)
+	switch typ.(type) {
+	case *byteArrayType, *stringType, *jsonType:
+		return val, nil
+	default:
+		return val, invalidConversion(val, "JSON", typ.String())
+	}
 }
 
 // BSON constructs a leaf node of BSON logical type.
@@ -1638,7 +1648,12 @@ func (t *bsonType) AssignValue(dst reflect.Value, src Value) error {
 }
 
 func (t *bsonType) ConvertValue(val Value, typ Type) (Value, error) {
-	return byteArrayType{}.ConvertValue(val, typ)
+	switch typ.(type) {
+	case *byteArrayType, *bsonType:
+		return val, nil
+	default:
+		return val, invalidConversion(val, "BSON", typ.String())
+	}
 }
 
 // Date constructs a leaf node of DATE logical type.

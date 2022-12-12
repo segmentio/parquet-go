@@ -707,11 +707,11 @@ func convertInt96ToInt64(v Value) (Value, error) {
 }
 
 func convertInt96ToFloat(v Value) (Value, error) {
-	return v, errInvalidConversion(v, "INT96", "FLOAT")
+	return v, invalidConversion(v, "INT96", "FLOAT")
 }
 
 func convertInt96ToDouble(v Value) (Value, error) {
-	return v, errInvalidConversion(v, "INT96", "DOUBLE")
+	return v, invalidConversion(v, "INT96", "DOUBLE")
 }
 
 func convertInt96ToByteArray(v Value) (Value, error) {
@@ -747,7 +747,7 @@ func convertFloatToInt64(v Value) (Value, error) {
 }
 
 func convertFloatToInt96(v Value) (Value, error) {
-	return v, errInvalidConversion(v, "FLOAT", "INT96")
+	return v, invalidConversion(v, "FLOAT", "INT96")
 }
 
 func convertFloatToDouble(v Value) (Value, error) {
@@ -785,7 +785,7 @@ func convertDoubleToInt64(v Value) (Value, error) {
 }
 
 func convertDoubleToInt96(v Value) (Value, error) {
-	return v, errInvalidConversion(v, "FLOAT", "INT96")
+	return v, invalidConversion(v, "FLOAT", "INT96")
 }
 
 func convertDoubleToFloat(v Value) (Value, error) {
@@ -870,7 +870,7 @@ func convertFixedLenByteArrayToString(v Value) (Value, error) {
 func convertStringToBoolean(v Value) (Value, error) {
 	b, err := strconv.ParseBool(v.string())
 	if err != nil {
-		return v, errStringConversion(v, "BOOLEAN", err)
+		return v, conversionError(v, "STRING", "BOOLEAN", err)
 	}
 	return v.convertToBoolean(b), nil
 }
@@ -878,7 +878,7 @@ func convertStringToBoolean(v Value) (Value, error) {
 func convertStringToInt32(v Value) (Value, error) {
 	i, err := strconv.ParseInt(v.string(), 10, 32)
 	if err != nil {
-		return v, errStringConversion(v, "INT32", err)
+		return v, conversionError(v, "STRING", "INT32", err)
 	}
 	return v.convertToInt32(int32(i)), nil
 }
@@ -886,7 +886,7 @@ func convertStringToInt32(v Value) (Value, error) {
 func convertStringToInt64(v Value) (Value, error) {
 	i, err := strconv.ParseInt(v.string(), 10, 64)
 	if err != nil {
-		return v, errStringConversion(v, "INT64", err)
+		return v, conversionError(v, "STRING", "INT64", err)
 	}
 	return v.convertToInt64(i), nil
 }
@@ -894,7 +894,7 @@ func convertStringToInt64(v Value) (Value, error) {
 func convertStringToInt96(v Value) (Value, error) {
 	i, ok := new(big.Int).SetString(v.string(), 10)
 	if !ok {
-		return v, errStringConversion(v, "INT96", strconv.ErrSyntax)
+		return v, conversionError(v, "STRING", "INT96", strconv.ErrSyntax)
 	}
 	b := i.Bytes()
 	c := make([]byte, 12)
@@ -906,7 +906,7 @@ func convertStringToInt96(v Value) (Value, error) {
 func convertStringToFloat(v Value) (Value, error) {
 	f, err := strconv.ParseFloat(v.string(), 32)
 	if err != nil {
-		return v, errStringConversion(v, "FLOAT", err)
+		return v, conversionError(v, "STRING", "FLOAT", err)
 	}
 	return v.convertToFloat(float32(f)), nil
 }
@@ -914,7 +914,7 @@ func convertStringToFloat(v Value) (Value, error) {
 func convertStringToDouble(v Value) (Value, error) {
 	f, err := strconv.ParseFloat(v.string(), 64)
 	if err != nil {
-		return v, errStringConversion(v, "DOUBLE", err)
+		return v, conversionError(v, "STRING", "DOUBLE", err)
 	}
 	return v.convertToDouble(f), nil
 }
@@ -924,15 +924,15 @@ func convertStringToFixedLenByteArray(v Value, size int) (Value, error) {
 	c := make([]byte, size)
 	_, err := hex.Decode(c, b)
 	if err != nil {
-		return v, errStringConversion(v, "BYTE_ARRAY", err)
+		return v, conversionError(v, "STRING", "BYTE_ARRAY", err)
 	}
 	return v.convertToFixedLenByteArray(c), nil
 }
 
-func errInvalidConversion(value Value, from, to string) error {
+func invalidConversion(value Value, from, to string) error {
 	return fmt.Errorf("%s to %s: %s: %w", from, to, value, ErrInvalidConversion)
 }
 
-func errStringConversion(value Value, to string, err error) error {
-	return fmt.Errorf("STRING to %s: %q: %s: %w", to, value.string(), err, ErrInvalidConversion)
+func conversionError(value Value, from, to string, err error) error {
+	return fmt.Errorf("%s to %s: %q: %s: %w", from, to, value.string(), err, ErrInvalidConversion)
 }
