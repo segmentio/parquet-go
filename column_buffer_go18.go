@@ -3,6 +3,8 @@
 package parquet
 
 import (
+	"encoding/json"
+	"fmt"
 	"math/bits"
 	"reflect"
 	"time"
@@ -33,6 +35,10 @@ func writeRowsFuncOf(t reflect.Type, schema *Schema, path columnPath) writeRowsF
 		return writeRowsFuncOfRequired(t, schema, path)
 	case reflect.TypeOf(time.Time{}):
 		return writeRowsFuncOfTime(t, schema, path)
+	}
+
+	if leaf, exists := schema.Lookup(path...); exists && leaf.Node.Type().LogicalType() != nil && leaf.Node.Type().LogicalType().Json != nil {
+		return writeRowsFuncOfJSON(t, schema, path)
 	}
 
 	switch t.Kind() {
@@ -393,6 +399,36 @@ func writeRowsFuncOfMap(t reflect.Type, schema *Schema, path columnPath) writeRo
 			}
 		}
 
+		return nil
+	}
+}
+
+func writeRowsFuncOfJSON(t reflect.Type, schema *Schema, path columnPath) writeRowsFunc {
+	asStrT := reflect.TypeOf(string(""))
+	writeRows := writeRowsFuncOfRequired(asStrT, schema, path)
+
+	return func(columns []ColumnBuffer, rows sparse.Array, levels columnLevels) error {
+		if rows.Len() == 0 {
+			return writeRows(columns, rows, levels)
+		}
+		for i := 0; i < rows.Len(); i++ {
+			val := reflect.NewAt(t, rows.Index(i))
+			asI := val.Interface()
+			fmt.Printf("asI: %+v\n", asI)
+
+			b, err := json.Marshal(asI)
+			if err != nil {
+				return err
+			}
+
+			asStr := string(b)
+			fmt.Printf("asStr: %+v\n", asStr)
+			a := sparse.MakeStringArray([]string{asStr})
+			if err := writeRows(columns, a.UnsafeArray(), levels); err != nil {
+				return err
+			}
+
+		}
 		return nil
 	}
 }
