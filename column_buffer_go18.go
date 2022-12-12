@@ -4,7 +4,6 @@ package parquet
 
 import (
 	"encoding/json"
-	"fmt"
 	"math/bits"
 	"reflect"
 	"time"
@@ -414,7 +413,6 @@ func writeRowsFuncOfJSON(t reflect.Type, schema *Schema, path columnPath) writeR
 		for i := 0; i < rows.Len(); i++ {
 			val := reflect.NewAt(t, rows.Index(i))
 			asI := val.Interface()
-			fmt.Printf("asI: %+v\n", asI)
 
 			b, err := json.Marshal(asI)
 			if err != nil {
@@ -422,12 +420,10 @@ func writeRowsFuncOfJSON(t reflect.Type, schema *Schema, path columnPath) writeR
 			}
 
 			asStr := string(b)
-			fmt.Printf("asStr: %+v\n", asStr)
 			a := sparse.MakeStringArray([]string{asStr})
 			if err := writeRows(columns, a.UnsafeArray(), levels); err != nil {
 				return err
 			}
-
 		}
 		return nil
 	}
