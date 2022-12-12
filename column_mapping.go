@@ -52,6 +52,42 @@ func (group columnMappingGroup) lookup(path columnPath) leafColumn {
 	return leafColumn{columnIndex: -1}
 }
 
+func (group columnMappingGroup) lookupClosest(path columnPath) leafColumn {
+	for len(path) > 0 {
+		g, ok := group[path[0]].(columnMappingGroup)
+		if ok {
+			group, path = g, path[1:]
+		} else {
+			firstName := ""
+			firstLeaf := (*columnMappingLeaf)(nil)
+			for name, child := range group {
+				if leaf, ok := child.(*columnMappingLeaf); ok {
+					if firstLeaf == nil || name < firstName {
+						firstName, firstLeaf = name, leaf
+					}
+				}
+			}
+			if firstLeaf != nil {
+				return firstLeaf.column
+			}
+			break
+		}
+	}
+	return leafColumn{columnIndex: -1}
+}
+
+func (group columnMappingGroup) lookupClosestParent(path columnPath) columnPath {
+	for i := 0; i < len(path); i++ {
+		g, ok := group[path[i]].(columnMappingGroup)
+		if ok {
+			group = g
+		} else {
+			return path[:i]
+		}
+	}
+	return nil
+}
+
 type columnMappingLeaf struct {
 	column leafColumn
 }

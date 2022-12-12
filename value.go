@@ -214,6 +214,9 @@ func ValueOf(v interface{}) Value {
 	return makeValue(k, nil, reflect.ValueOf(v))
 }
 
+// ZeroValue constructs a zero value of the given kind.
+func ZeroValue(kind Kind) Value { return makeValueKind(kind) }
+
 // BooleanValue constructs a BOOLEAN parquet value from the bool passed as
 // argument.
 func BooleanValue(value bool) Value { return makeValueBoolean(value) }
@@ -331,6 +334,10 @@ func makeValue(k Kind, lt *format.LogicalType, v reflect.Value) Value {
 	}
 
 	panic("cannot create parquet value of type " + k.String() + " from go value of type " + v.Type().String())
+}
+
+func makeValueKind(kind Kind) Value {
+	return Value{kind: ^int8(kind)}
 }
 
 func makeValueBoolean(value bool) Value {
