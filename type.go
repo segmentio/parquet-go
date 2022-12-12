@@ -318,7 +318,6 @@ func (t booleanType) AssignValue(dst reflect.Value, src Value) error {
 	default:
 		dst.Set(reflect.ValueOf(v))
 	}
-
 	return nil
 }
 
@@ -402,7 +401,6 @@ func (t int32Type) AssignValue(dst reflect.Value, src Value) error {
 	default:
 		dst.Set(reflect.ValueOf(v))
 	}
-
 	return nil
 }
 
@@ -725,7 +723,6 @@ func (t doubleType) AssignValue(dst reflect.Value, src Value) error {
 	default:
 		dst.Set(reflect.ValueOf(v))
 	}
-
 	return nil
 }
 
@@ -1143,7 +1140,28 @@ func (t *intType) EstimateSize(n int) int { return (int(t.BitWidth) / 8) * n }
 
 func (t *intType) EstimateNumValues(n int) int { return n / (int(t.BitWidth) / 8) }
 
-func (t *intType) Compare(a, b Value) int { return t.baseType().Compare(a, b) }
+func (t *intType) Compare(a, b Value) int {
+	// This code is similar to t.baseType().Compare(a,b) but comparison methods
+	// tend to be invoked a lot (e.g. when sorting) so avoiding the interface
+	// indirection in this case yields much better throughput in some cases.
+	if t.BitWidth == 64 {
+		i1 := a.int64()
+		i2 := b.int64()
+		if t.IsSigned {
+			return compareInt64(i1, i2)
+		} else {
+			return compareUint64(uint64(i1), uint64(i2))
+		}
+	} else {
+		i1 := a.int32()
+		i2 := b.int32()
+		if t.IsSigned {
+			return compareInt32(i1, i2)
+		} else {
+			return compareUint32(uint32(i1), uint32(i2))
+		}
+	}
+}
 
 func (t *intType) ColumnOrder() *format.ColumnOrder { return t.baseType().ColumnOrder() }
 
@@ -1196,11 +1214,19 @@ func (t *intType) EstimateDecodeSize(numValues int, src []byte, enc encoding.Enc
 }
 
 func (t *intType) AssignValue(dst reflect.Value, src Value) error {
-	return t.baseType().AssignValue(dst, src)
+	if t.BitWidth == 64 {
+		return int64Type{}.AssignValue(dst, src)
+	} else {
+		return int32Type{}.AssignValue(dst, src)
+	}
 }
 
 func (t *intType) ConvertValue(val Value, typ Type) (Value, error) {
-	return t.baseType().ConvertValue(val, typ)
+	if t.BitWidth == 64 {
+		return int64Type{}.ConvertValue(val, typ)
+	} else {
+		return int32Type{}.ConvertValue(val, typ)
+	}
 }
 
 // Decimal constructs a leaf node of decimal logical type with the given
