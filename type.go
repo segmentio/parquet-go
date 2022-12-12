@@ -323,7 +323,24 @@ func (t booleanType) AssignValue(dst reflect.Value, src Value) error {
 }
 
 func (t booleanType) ConvertValue(val Value, typ Type) (Value, error) {
-	return val, checkTypeKindEqual(t, typ)
+	switch typ.Kind() {
+	case Boolean:
+		return val, nil
+	case Int32:
+		return convertInt32ToBoolean(val)
+	case Int64:
+		return convertInt64ToBoolean(val)
+	case Int96:
+		return convertInt96ToBoolean(val)
+	case Float:
+		return convertFloatToBoolean(val)
+	case Double:
+		return convertDoubleToBoolean(val)
+	case ByteArray, FixedLenByteArray:
+		return convertByteArrayToBoolean(val)
+	default:
+		return makeValueKind(Boolean), nil
+	}
 }
 
 type int32Type struct{}
@@ -386,7 +403,24 @@ func (t int32Type) AssignValue(dst reflect.Value, src Value) error {
 }
 
 func (t int32Type) ConvertValue(val Value, typ Type) (Value, error) {
-	return val, checkTypeKindEqual(t, typ)
+	switch typ.Kind() {
+	case Boolean:
+		return convertBooleanToInt32(val)
+	case Int32:
+		return val, nil
+	case Int64:
+		return convertInt64ToInt32(val)
+	case Int96:
+		return convertInt96ToInt32(val)
+	case Float:
+		return convertFloatToInt32(val)
+	case Double:
+		return convertDoubleToInt32(val)
+	case ByteArray, FixedLenByteArray:
+		return convertByteArrayToInt32(val)
+	default:
+		return makeValueKind(Int32), nil
+	}
 }
 
 type int64Type struct{}
@@ -448,7 +482,24 @@ func (t int64Type) AssignValue(dst reflect.Value, src Value) error {
 }
 
 func (t int64Type) ConvertValue(val Value, typ Type) (Value, error) {
-	return val, checkTypeKindEqual(t, typ)
+	switch typ.Kind() {
+	case Boolean:
+		return convertBooleanToInt64(val)
+	case Int32:
+		return convertInt32ToInt64(val)
+	case Int64:
+		return val, nil
+	case Int96:
+		return convertInt96ToInt64(val)
+	case Float:
+		return convertFloatToInt64(val)
+	case Double:
+		return convertDoubleToInt64(val)
+	case ByteArray, FixedLenByteArray:
+		return convertByteArrayToInt64(val)
+	default:
+		return makeValueKind(Int64), nil
+	}
 }
 
 type int96Type struct{}
@@ -504,7 +555,24 @@ func (t int96Type) AssignValue(dst reflect.Value, src Value) error {
 }
 
 func (t int96Type) ConvertValue(val Value, typ Type) (Value, error) {
-	return val, checkTypeKindEqual(t, typ)
+	switch typ.Kind() {
+	case Boolean:
+		return convertBooleanToInt96(val)
+	case Int32:
+		return convertInt32ToInt96(val)
+	case Int64:
+		return convertInt64ToInt96(val)
+	case Int96:
+		return val, nil
+	case Float:
+		return convertFloatToInt96(val)
+	case Double:
+		return convertDoubleToInt96(val)
+	case ByteArray, FixedLenByteArray:
+		return convertByteArrayToInt96(val)
+	default:
+		return makeValueKind(Int96), nil
+	}
 }
 
 type floatType struct{}
@@ -564,7 +632,24 @@ func (t floatType) AssignValue(dst reflect.Value, src Value) error {
 }
 
 func (t floatType) ConvertValue(val Value, typ Type) (Value, error) {
-	return val, checkTypeKindEqual(t, typ)
+	switch typ.Kind() {
+	case Boolean:
+		return convertBooleanToFloat(val)
+	case Int32:
+		return convertInt32ToFloat(val)
+	case Int64:
+		return convertInt64ToFloat(val)
+	case Int96:
+		return convertInt96ToFloat(val)
+	case Float:
+		return val, nil
+	case Double:
+		return convertDoubleToFloat(val)
+	case ByteArray, FixedLenByteArray:
+		return convertByteArrayToFloat(val)
+	default:
+		return makeValueKind(Float), nil
+	}
 }
 
 type doubleType struct{}
@@ -625,7 +710,24 @@ func (t doubleType) AssignValue(dst reflect.Value, src Value) error {
 }
 
 func (t doubleType) ConvertValue(val Value, typ Type) (Value, error) {
-	return val, checkTypeKindEqual(t, typ)
+	switch typ.Kind() {
+	case Boolean:
+		return convertBooleanToDouble(val)
+	case Int32:
+		return convertInt32ToDouble(val)
+	case Int64:
+		return convertInt64ToDouble(val)
+	case Int96:
+		return convertInt96ToDouble(val)
+	case Float:
+		return convertFloatToDouble(val)
+	case Double:
+		return val, nil
+	case ByteArray, FixedLenByteArray:
+		return convertByteArrayToDouble(val)
+	default:
+		return makeValueKind(Double), nil
+	}
 }
 
 type byteArrayType struct{}
@@ -684,12 +786,28 @@ func (t byteArrayType) AssignValue(dst reflect.Value, src Value) error {
 		val := reflect.ValueOf(string(v))
 		dst.Set(val)
 	}
-
 	return nil
 }
 
 func (t byteArrayType) ConvertValue(val Value, typ Type) (Value, error) {
-	return val, checkTypeKindEqual(t, typ)
+	switch typ.Kind() {
+	case Boolean:
+		return convertBooleanToByteArray(val)
+	case Int32:
+		return convertInt32ToByteArray(val)
+	case Int64:
+		return convertInt64ToByteArray(val)
+	case Int96:
+		return convertInt96ToByteArray(val)
+	case Float:
+		return convertFloatToByteArray(val)
+	case Double:
+		return convertDoubleToByteArray(val)
+	case ByteArray, FixedLenByteArray:
+		return val, nil
+	default:
+		return makeValueKind(ByteArray), nil
+	}
 }
 
 type fixedLenByteArrayType struct{ length int }
@@ -776,7 +894,24 @@ func (t fixedLenByteArrayType) AssignValue(dst reflect.Value, src Value) error {
 }
 
 func (t fixedLenByteArrayType) ConvertValue(val Value, typ Type) (Value, error) {
-	return val, checkTypeKindEqual(t, typ)
+	switch typ.Kind() {
+	case Boolean:
+		return convertBooleanToFixedLenByteArray(val, t.length)
+	case Int32:
+		return convertInt32ToFixedLenByteArray(val, t.length)
+	case Int64:
+		return convertInt64ToFixedLenByteArray(val, t.length)
+	case Int96:
+		return convertInt96ToFixedLenByteArray(val, t.length)
+	case Float:
+		return convertFloatToFixedLenByteArray(val, t.length)
+	case Double:
+		return convertDoubleToFixedLenByteArray(val, t.length)
+	case ByteArray, FixedLenByteArray:
+		return convertByteArrayToFixedLenByteArray(val, t.length)
+	default:
+		return makeValueBytes(FixedLenByteArray, make([]byte, t.length)), nil
+	}
 }
 
 // BE128 stands for "big-endian 128 bits". This type is used as a special case
