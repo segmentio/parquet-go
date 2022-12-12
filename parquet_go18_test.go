@@ -355,12 +355,23 @@ func TestIssue423(t *testing.T) {
 	w.Close()
 
 	file := bytes.NewReader(buf.Bytes())
-	rows, err := parquet.Read[Outer](file, file.Size())
+	readRows, err := parquet.Read[Outer](file, file.Size())
 	if err != nil {
 		t.Fatal("read error: ", err)
 	}
 
-	assertRowsEqual(t, writeRows, rows)
+	assertRowsEqual(t, writeRows, readRows)
+
+	err = parquet.WriteFile("testdata/issue423.parquet", writeRows, schema)
+	if err != nil {
+		t.Fatal("write error: ", err)
+	}
+
+	readRows, err = parquet.ReadFile[Outer]("testdata/issue423.parquet", schema)
+	if err != nil {
+		t.Fatal("read error: ", err)
+	}
+	assertRowsEqual(t, writeRows, readRows)
 }
 
 func assertRowsEqual[T any](t *testing.T, rows1, rows2 []T) {
