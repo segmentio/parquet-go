@@ -342,6 +342,12 @@ func TestIssue423(t *testing.T) {
 				Value: "this is a string",
 			},
 		},
+		{
+			Label: "foxes",
+			Inner: Inner{
+				Value: "the quick brown fox jumped over the yellow lazy dog.",
+			},
+		},
 	}
 
 	schema := parquet.SchemaOf(new(Outer))
