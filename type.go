@@ -1062,25 +1062,25 @@ func (t *intType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding)
 
 func (t *intType) EstimateDecodeSize(numValues int, src []byte, enc encoding.Encoding) int {
 	if t.BitWidth == 64 {
-		return Int64Type.EstimateDecodeSize(numValues, src, enc)
+		return int64Type{}.EstimateDecodeSize(numValues, src, enc)
 	} else {
-		return Int32Type.EstimateDecodeSize(numValues, src, enc)
+		return int32Type{}.EstimateDecodeSize(numValues, src, enc)
 	}
 }
 
 func (t *intType) AssignValue(dst reflect.Value, src Value) error {
 	if t.BitWidth == 64 {
-		return Int64Type.AssignValue(dst, src)
+		return int64Type{}.AssignValue(dst, src)
 	} else {
-		return Int32Type.AssignValue(dst, src)
+		return int32Type{}.AssignValue(dst, src)
 	}
 }
 
 func (t *intType) ConvertValue(val Value, typ Type) (Value, error) {
 	if t.BitWidth == 64 {
-		return Int64Type.ConvertValue(val, typ)
+		return int64Type{}.ConvertValue(val, typ)
 	} else {
-		return Int32Type.ConvertValue(val, typ)
+		return int32Type{}.ConvertValue(val, typ)
 	}
 }
 
@@ -1131,9 +1131,9 @@ func (t *stringType) Kind() Kind { return ByteArray }
 
 func (t *stringType) Length() int { return 0 }
 
-func (t *stringType) EstimateSize(n int) int { return ByteArrayType.EstimateSize(n) }
+func (t *stringType) EstimateSize(n int) int { return byteArrayType{}.EstimateSize(n) }
 
-func (t *stringType) EstimateNumValues(n int) int { return ByteArrayType.EstimateNumValues(n) }
+func (t *stringType) EstimateNumValues(n int) int { return byteArrayType{}.EstimateNumValues(n) }
 
 func (t *stringType) Compare(a, b Value) int {
 	return bytes.Compare(a.byteArray(), b.byteArray())
@@ -1184,15 +1184,15 @@ func (t *stringType) Decode(dst encoding.Values, src []byte, enc encoding.Encodi
 }
 
 func (t *stringType) EstimateDecodeSize(numValues int, src []byte, enc encoding.Encoding) int {
-	return ByteArrayType.EstimateDecodeSize(numValues, src, enc)
+	return byteArrayType{}.EstimateDecodeSize(numValues, src, enc)
 }
 
 func (t *stringType) AssignValue(dst reflect.Value, src Value) error {
-	return ByteArrayType.AssignValue(dst, src)
+	return byteArrayType{}.AssignValue(dst, src)
 }
 
 func (t *stringType) ConvertValue(val Value, typ Type) (Value, error) {
-	return ByteArrayType.ConvertValue(val, typ)
+	return byteArrayType{}.ConvertValue(val, typ)
 }
 
 // UUID constructs a leaf node of UUID logical type.
@@ -1277,9 +1277,9 @@ func (t *enumType) Kind() Kind { return ByteArray }
 
 func (t *enumType) Length() int { return 0 }
 
-func (t *enumType) EstimateSize(n int) int { return ByteArrayType.EstimateSize(n) }
+func (t *enumType) EstimateSize(n int) int { return byteArrayType{}.EstimateSize(n) }
 
-func (t *enumType) EstimateNumValues(n int) int { return ByteArrayType.EstimateNumValues(n) }
+func (t *enumType) EstimateNumValues(n int) int { return byteArrayType{}.EstimateNumValues(n) }
 
 func (t *enumType) Compare(a, b Value) int {
 	return bytes.Compare(a.byteArray(), b.byteArray())
@@ -1330,15 +1330,15 @@ func (t *enumType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding
 }
 
 func (t *enumType) EstimateDecodeSize(numValues int, src []byte, enc encoding.Encoding) int {
-	return ByteArrayType.EstimateDecodeSize(numValues, src, enc)
+	return byteArrayType{}.EstimateDecodeSize(numValues, src, enc)
 }
 
 func (t *enumType) AssignValue(dst reflect.Value, src Value) error {
-	return ByteArrayType.AssignValue(dst, src)
+	return byteArrayType{}.AssignValue(dst, src)
 }
 
 func (t *enumType) ConvertValue(val Value, typ Type) (Value, error) {
-	return ByteArrayType.ConvertValue(val, typ)
+	return byteArrayType{}.ConvertValue(val, typ)
 }
 
 // JSON constructs a leaf node of JSON logical type.
@@ -1354,9 +1354,9 @@ func (t *jsonType) Kind() Kind { return ByteArray }
 
 func (t *jsonType) Length() int { return 0 }
 
-func (t *jsonType) EstimateSize(n int) int { return ByteArrayType.EstimateSize(n) }
+func (t *jsonType) EstimateSize(n int) int { return byteArrayType{}.EstimateSize(n) }
 
-func (t *jsonType) EstimateNumValues(n int) int { return ByteArrayType.EstimateNumValues(n) }
+func (t *jsonType) EstimateNumValues(n int) int { return byteArrayType{}.EstimateNumValues(n) }
 
 func (t *jsonType) Compare(a, b Value) int {
 	return bytes.Compare(a.byteArray(), b.byteArray())
@@ -1407,15 +1407,15 @@ func (t *jsonType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding
 }
 
 func (t *jsonType) EstimateDecodeSize(numValues int, src []byte, enc encoding.Encoding) int {
-	return ByteArrayType.EstimateDecodeSize(numValues, src, enc)
+	return byteArrayType{}.EstimateDecodeSize(numValues, src, enc)
 }
 
 func (t *jsonType) AssignValue(dst reflect.Value, src Value) error {
-	return ByteArrayType.AssignValue(dst, src)
+	return byteArrayType{}.AssignValue(dst, src)
 }
 
 func (t *jsonType) ConvertValue(val Value, typ Type) (Value, error) {
-	return ByteArrayType.ConvertValue(val, typ)
+	return byteArrayType{}.ConvertValue(val, typ)
 }
 
 // BSON constructs a leaf node of BSON logical type.
@@ -1431,9 +1431,9 @@ func (t *bsonType) Kind() Kind { return ByteArray }
 
 func (t *bsonType) Length() int { return 0 }
 
-func (t *bsonType) EstimateSize(n int) int { return ByteArrayType.EstimateSize(n) }
+func (t *bsonType) EstimateSize(n int) int { return byteArrayType{}.EstimateSize(n) }
 
-func (t *bsonType) EstimateNumValues(n int) int { return ByteArrayType.EstimateNumValues(n) }
+func (t *bsonType) EstimateNumValues(n int) int { return byteArrayType{}.EstimateNumValues(n) }
 
 func (t *bsonType) Compare(a, b Value) int {
 	return bytes.Compare(a.byteArray(), b.byteArray())
@@ -1484,15 +1484,15 @@ func (t *bsonType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding
 }
 
 func (t *bsonType) EstimateDecodeSize(numValues int, src []byte, enc encoding.Encoding) int {
-	return ByteArrayType.EstimateDecodeSize(numValues, src, enc)
+	return byteArrayType{}.EstimateDecodeSize(numValues, src, enc)
 }
 
 func (t *bsonType) AssignValue(dst reflect.Value, src Value) error {
-	return ByteArrayType.AssignValue(dst, src)
+	return byteArrayType{}.AssignValue(dst, src)
 }
 
 func (t *bsonType) ConvertValue(val Value, typ Type) (Value, error) {
-	return ByteArrayType.ConvertValue(val, typ)
+	return byteArrayType{}.ConvertValue(val, typ)
 }
 
 // Date constructs a leaf node of DATE logical type.
@@ -1508,9 +1508,9 @@ func (t *dateType) Kind() Kind { return Int32 }
 
 func (t *dateType) Length() int { return 32 }
 
-func (t *dateType) EstimateSize(n int) int { return Int32Type.EstimateSize(n) }
+func (t *dateType) EstimateSize(n int) int { return int32Type{}.EstimateSize(n) }
 
-func (t *dateType) EstimateNumValues(n int) int { return Int32Type.EstimateNumValues(n) }
+func (t *dateType) EstimateNumValues(n int) int { return int32Type{}.EstimateNumValues(n) }
 
 func (t *dateType) Compare(a, b Value) int { return compareInt32(a.int32(), b.int32()) }
 
@@ -1557,15 +1557,15 @@ func (t *dateType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding
 }
 
 func (t *dateType) EstimateDecodeSize(numValues int, src []byte, enc encoding.Encoding) int {
-	return Int32Type.EstimateDecodeSize(numValues, src, enc)
+	return int32Type{}.EstimateDecodeSize(numValues, src, enc)
 }
 
 func (t *dateType) AssignValue(dst reflect.Value, src Value) error {
-	return Int32Type.AssignValue(dst, src)
+	return int32Type{}.AssignValue(dst, src)
 }
 
 func (t *dateType) ConvertValue(val Value, typ Type) (Value, error) {
-	return Int32Type.ConvertValue(val, typ)
+	return int32Type{}.ConvertValue(val, typ)
 }
 
 // TimeUnit represents units of time in the parquet type system.
@@ -1643,17 +1643,17 @@ func (t *timeType) Length() int {
 
 func (t *timeType) EstimateSize(n int) int {
 	if t.useInt32() {
-		return Int32Type.EstimateSize(n)
+		return int32Type{}.EstimateSize(n)
 	} else {
-		return Int64Type.EstimateNumValues(n)
+		return int64Type{}.EstimateNumValues(n)
 	}
 }
 
 func (t *timeType) EstimateNumValues(n int) int {
 	if t.useInt32() {
-		return Int32Type.EstimateNumValues(n)
+		return int32Type{}.EstimateNumValues(n)
 	} else {
-		return Int64Type.EstimateNumValues(n)
+		return int64Type{}.EstimateNumValues(n)
 	}
 }
 
@@ -1750,25 +1750,25 @@ func (t *timeType) Decode(dst encoding.Values, src []byte, enc encoding.Encoding
 
 func (t *timeType) EstimateDecodeSize(numValues int, src []byte, enc encoding.Encoding) int {
 	if t.useInt32() {
-		return Int32Type.EstimateDecodeSize(numValues, src, enc)
+		return int32Type{}.EstimateDecodeSize(numValues, src, enc)
 	} else {
-		return Int64Type.EstimateDecodeSize(numValues, src, enc)
+		return int64Type{}.EstimateDecodeSize(numValues, src, enc)
 	}
 }
 
 func (t *timeType) AssignValue(dst reflect.Value, src Value) error {
 	if t.useInt32() {
-		return Int32Type.AssignValue(dst, src)
+		return int32Type{}.AssignValue(dst, src)
 	} else {
-		return Int64Type.AssignValue(dst, src)
+		return int64Type{}.AssignValue(dst, src)
 	}
 }
 
 func (t *timeType) ConvertValue(val Value, typ Type) (Value, error) {
 	if t.useInt32() {
-		return Int32Type.ConvertValue(val, typ)
+		return int32Type{}.ConvertValue(val, typ)
 	} else {
-		return Int64Type.ConvertValue(val, typ)
+		return int64Type{}.ConvertValue(val, typ)
 	}
 }
 
@@ -1787,9 +1787,9 @@ func (t *timestampType) Kind() Kind { return Int64 }
 
 func (t *timestampType) Length() int { return 64 }
 
-func (t *timestampType) EstimateSize(n int) int { return Int64Type.EstimateSize(n) }
+func (t *timestampType) EstimateSize(n int) int { return int64Type{}.EstimateSize(n) }
 
-func (t *timestampType) EstimateNumValues(n int) int { return Int64Type.EstimateNumValues(n) }
+func (t *timestampType) EstimateNumValues(n int) int { return int64Type{}.EstimateNumValues(n) }
 
 func (t *timestampType) Compare(a, b Value) int { return compareInt64(a.int64(), b.int64()) }
 
@@ -1841,7 +1841,7 @@ func (t *timestampType) Decode(dst encoding.Values, src []byte, enc encoding.Enc
 }
 
 func (t *timestampType) EstimateDecodeSize(numValues int, src []byte, enc encoding.Encoding) int {
-	return Int64Type.EstimateDecodeSize(numValues, src, enc)
+	return int64Type{}.EstimateDecodeSize(numValues, src, enc)
 }
 
 func (t *timestampType) AssignValue(dst reflect.Value, src Value) error {
@@ -1865,7 +1865,7 @@ func (t *timestampType) AssignValue(dst reflect.Value, src Value) error {
 		dst.Set(reflect.ValueOf(val))
 		return nil
 	default:
-		return Int64Type.AssignValue(dst, src)
+		return int64Type{}.AssignValue(dst, src)
 	}
 }
 
