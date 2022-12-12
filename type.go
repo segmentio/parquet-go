@@ -1337,6 +1337,17 @@ func (t *stringType) AssignValue(dst reflect.Value, src Value) error {
 }
 
 func (t *stringType) ConvertValue(val Value, typ Type) (Value, error) {
+	switch t2 := typ.(type) {
+	case *dateType:
+		return convertDateToString(val, time.UTC)
+	case *timeType:
+		tz := t2.tz()
+		if t2.Unit.Micros != nil {
+			return convertTimeMicrosToString(val, tz)
+		} else {
+			return convertTimeMillisToString(val, tz)
+		}
+	}
 	switch typ.Kind() {
 	case Boolean:
 		return convertBooleanToString(val)
@@ -1724,6 +1735,10 @@ func (t *dateType) AssignValue(dst reflect.Value, src Value) error {
 }
 
 func (t *dateType) ConvertValue(val Value, typ Type) (Value, error) {
+	switch typ.(type) {
+	case *stringType:
+		return convertStringToDate(val, time.UTC)
+	}
 	return int32Type{}.ConvertValue(val, typ)
 }
 
@@ -1771,6 +1786,14 @@ func Time(unit TimeUnit) Node {
 }
 
 type timeType format.TimeType
+
+func (t *timeType) tz() *time.Location {
+	if t.IsAdjustedToUTC {
+		return time.UTC
+	} else {
+		return time.Local
+	}
+}
 
 func (t *timeType) baseType() Type {
 	if t.useInt32() {
@@ -1852,6 +1875,15 @@ func (t *timeType) AssignValue(dst reflect.Value, src Value) error {
 }
 
 func (t *timeType) ConvertValue(val Value, typ Type) (Value, error) {
+	switch typ.(type) {
+	case *stringType:
+		tz := t.tz()
+		if t.Unit.Micros != nil {
+			return convertStringToTimeMicros(val, tz)
+		} else {
+			return convertStringToTimeMillis(val, tz)
+		}
+	}
 	return t.baseType().ConvertValue(val, typ)
 }
 

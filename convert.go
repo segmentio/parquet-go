@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
@@ -575,6 +576,7 @@ func (c *convertedRows) SeekToRow(rowIndex int64) error {
 var (
 	trueBytes  = []byte(`true`)
 	falseBytes = []byte(`false`)
+	unixEpoch  = time.Date(1970, time.January, 1, 0, 0, 0, 0, time.UTC)
 )
 
 func convertBooleanToInt32(v Value) (Value, error) {
@@ -927,6 +929,55 @@ func convertStringToFixedLenByteArray(v Value, size int) (Value, error) {
 		return v, conversionError(v, "STRING", "BYTE_ARRAY", err)
 	}
 	return v.convertToFixedLenByteArray(c), nil
+}
+
+func convertStringToDate(v Value, tz *time.Location) (Value, error) {
+	t, err := time.ParseInLocation("2006-01-02", v.string(), tz)
+	if err != nil {
+		return v, conversionError(v, "STRING", "DATE", err)
+	}
+	days := int64(t.Sub(unixEpoch).Hours()) / 24
+	return v.convertToInt32(int32(days)), nil
+}
+
+func convertStringToTimeMillis(v Value, tz *time.Location) (Value, error) {
+	t, err := time.ParseInLocation("15:04:05.999", v.string(), tz)
+	if err != nil {
+		return v, conversionError(v, "STRING", "TIME", err)
+	}
+	y, m, d := t.Date()
+	midnight := time.Date(y, m, d, 0, 0, 0, 0, tz)
+	milliseconds := t.Sub(midnight).Milliseconds()
+	return v.convertToInt32(int32(milliseconds)), nil
+}
+
+func convertStringToTimeMicros(v Value, tz *time.Location) (Value, error) {
+	t, err := time.ParseInLocation("15:04:05.999999", v.string(), tz)
+	if err != nil {
+		return v, conversionError(v, "STRING", "TIME", err)
+	}
+	y, m, d := t.Date()
+	midnight := time.Date(y, m, d, 0, 0, 0, 0, tz)
+	microseconds := t.Sub(midnight).Microseconds()
+	return v.convertToInt64(microseconds), nil
+}
+
+func convertDateToString(v Value, tz *time.Location) (Value, error) {
+	t := unixEpoch.In(tz).AddDate(0, 0, int(v.int32()))
+	b := t.AppendFormat(make([]byte, 0, 10), "2006-01-02")
+	return v.convertToByteArray(b), nil
+}
+
+func convertTimeMillisToString(v Value, tz *time.Location) (Value, error) {
+	t := time.UnixMilli(int64(v.int32())).In(tz)
+	b := t.AppendFormat(make([]byte, 0, 12), "15:04:05.999")
+	return v.convertToByteArray(b), nil
+}
+
+func convertTimeMicrosToString(v Value, tz *time.Location) (Value, error) {
+	t := time.UnixMicro(v.int64()).In(tz)
+	b := t.AppendFormat(make([]byte, 0, 15), "15:04:05.999999")
+	return v.convertToByteArray(b), nil
 }
 
 func invalidConversion(value Value, from, to string) error {

@@ -1013,6 +1013,54 @@ func TestConvertValue(t *testing.T) {
 		},
 
 		{
+			scenario:  "string to date",
+			fromType:  parquet.String().Type(),
+			fromValue: parquet.ByteArrayValue([]byte(`1970-01-03`)),
+			toType:    parquet.Date().Type(),
+			toValue:   parquet.Int32Value(2),
+		},
+
+		{
+			scenario:  "string to millisecond time",
+			fromType:  parquet.String().Type(),
+			fromValue: parquet.ByteArrayValue([]byte(`12:34:56.789`)),
+			toType:    parquet.Time(parquet.Millisecond).Type(),
+			toValue:   parquet.Int32Value(45296789),
+		},
+
+		{
+			scenario:  "string to microsecond time",
+			fromType:  parquet.String().Type(),
+			fromValue: parquet.ByteArrayValue([]byte(`12:34:56.789012`)),
+			toType:    parquet.Time(parquet.Microsecond).Type(),
+			toValue:   parquet.Int64Value(45296789012),
+		},
+
+		{
+			scenario:  "date to string",
+			fromType:  parquet.Date().Type(),
+			fromValue: parquet.Int32Value(18995),
+			toType:    parquet.String().Type(),
+			toValue:   parquet.ByteArrayValue([]byte(`2022-01-03`)),
+		},
+
+		{
+			scenario:  "millisecond time to string",
+			fromType:  parquet.Time(parquet.Millisecond).Type(),
+			fromValue: parquet.Int32Value(45296789),
+			toType:    parquet.String().Type(),
+			toValue:   parquet.ByteArrayValue([]byte(`12:34:56.789`)),
+		},
+
+		{
+			scenario:  "microsecond time to string",
+			fromType:  parquet.Time(parquet.Microsecond).Type(),
+			fromValue: parquet.Int64Value(45296789012),
+			toType:    parquet.String().Type(),
+			toValue:   parquet.ByteArrayValue([]byte(`12:34:56.789012`)),
+		},
+
+		{
 			scenario:  "micros to nanos",
 			fromType:  usType,
 			fromValue: usVal,
