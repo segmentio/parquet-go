@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"io/fs"
+	"io/ioutil"
 	"log"
 	"os"
 	"reflect"
@@ -324,6 +326,48 @@ func TestIssue377(t *testing.T) {
 	}
 
 	assertRowsEqual(t, rows, ods)
+}
+
+func TestIssue423(t *testing.T) {
+	type Inner struct {
+		Value string `parquet:","`
+	}
+	type Outer struct {
+		Label string `parquet:","`
+		Inner Inner  `parquet:",json"`
+	}
+
+	writeRows := []Outer{
+		{
+			Label: "welp",
+			Inner: Inner{
+				Value: "this is a string",
+			},
+		},
+	}
+
+	schema := parquet.SchemaOf(new(Outer))
+	fmt.Println(schema.String())
+	buf := new(bytes.Buffer)
+	w := parquet.NewGenericWriter[Outer](buf, schema)
+	_, err := w.Write(writeRows)
+	if err != nil {
+		t.Fatal("write error: ", err)
+	}
+	w.Close()
+
+	err = ioutil.WriteFile("/Users/mparsons/tmp/file.parquet", buf.Bytes(), fs.ModeExclusive)
+	if err != nil {
+		t.Fatal("File error:", err)
+	}
+
+	file := bytes.NewReader(buf.Bytes())
+	rows, err := parquet.Read[Outer](file, file.Size())
+	if err != nil {
+		t.Fatal("read error: ", err)
+	}
+
+	assertRowsEqual(t, writeRows, rows)
 }
 
 func assertRowsEqual[T any](t *testing.T, rows1, rows2 []T) {
