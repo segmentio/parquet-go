@@ -4,6 +4,7 @@ package parquet
 // values to columns.
 type RowBuilder struct {
 	columns [][]Value
+	kinds   []int8
 	levels  []columnLevel
 	groups  []*columnGroup
 }
@@ -14,13 +15,11 @@ type columnLevel struct {
 }
 
 type columnGroup struct {
-	members []columnGroupMember
+	baseColumn []Value
+	members    []int16
+	startIndex int16
+	endIndex   int16
 	columnLevel
-}
-
-type columnGroupMember struct {
-	columnKind  Kind
-	columnIndex int16
 }
 
 // NewRowBuilder constructs a RowBuilder which builds rows for the parquet
@@ -32,14 +31,16 @@ func NewRowBuilder(schema Node) *RowBuilder {
 	n := numLeafColumnsOf(schema)
 	b := &RowBuilder{
 		columns: make([][]Value, n),
+		kinds:   make([]int8, n),
 		levels:  make([]columnLevel, n),
 	}
 	buffers := make([]Value, len(b.columns))
 	for i := range b.columns {
 		b.columns[i] = buffers[i : i : i+1]
 	}
-	topGroup := new(columnGroup)
-	b.configureGroup(schema, 0, columnLevel{}, topGroup)
+	topGroup := &columnGroup{baseColumn: []Value{{}}}
+	endIndex := b.configureGroup(schema, 0, columnLevel{}, topGroup)
+	topGroup.endIndex = endIndex
 	b.groups = append(b.groups, topGroup)
 	return b
 }
@@ -56,18 +57,28 @@ func (b *RowBuilder) configure(node Node, columnIndex int16, level columnLevel, 
 }
 
 func (b *RowBuilder) configureOptional(node Node, columnIndex int16, level columnLevel, group *columnGroup) int16 {
-	group.definitionLevel++
 	level.definitionLevel++
-	return b.configureRequired(node, columnIndex, level, group)
+	endIndex := b.configureRequired(node, columnIndex, level, group)
+
+	for i := columnIndex; i < endIndex; i++ {
+		b.kinds[i] = 0 // null if not set
+	}
+
+	return endIndex
 }
 
 func (b *RowBuilder) configureRepeated(node Node, columnIndex int16, level columnLevel, group *columnGroup) int16 {
 	level.repetitionLevel++
 	level.definitionLevel++
 
-	group = &columnGroup{columnLevel: level}
+	group = &columnGroup{startIndex: columnIndex, columnLevel: level}
 	endIndex := b.configureRequired(node, columnIndex, level, group)
 
+	for i := columnIndex; i < endIndex; i++ {
+		b.kinds[i] = 0 // null if not set
+	}
+
+	group.endIndex = endIndex
 	b.groups = append(b.groups, group)
 	return endIndex
 }
@@ -90,10 +101,8 @@ func (b *RowBuilder) configureGroup(node Node, columnIndex int16, level columnLe
 }
 
 func (b *RowBuilder) configureLeaf(node Node, columnIndex int16, level columnLevel, group *columnGroup) int16 {
-	group.members = append(group.members, columnGroupMember{
-		columnKind:  node.Type().Kind(),
-		columnIndex: columnIndex,
-	})
+	group.members = append(group.members, columnIndex)
+	b.kinds[columnIndex] = ^int8(node.Type().Kind())
 	b.levels[columnIndex] = level
 	return columnIndex + 1
 }
@@ -103,9 +112,6 @@ func (b *RowBuilder) Add(columnIndex int, columnValue Value) {
 	level := b.levels[columnIndex]
 	columnValue.repetitionLevel = level.repetitionLevel
 	columnValue.definitionLevel = level.definitionLevel
-	if columnValue.kind == 0 && columnValue.definitionLevel != 0 {
-		columnValue.definitionLevel--
-	}
 	b.columns[columnIndex] = append(b.columns[columnIndex], columnValue)
 }
 
@@ -121,9 +127,6 @@ func (b *RowBuilder) Set(columnIndex int, columnValues ...Value) {
 		v := &column[i]
 		v.repetitionLevel = level.repetitionLevel
 		v.definitionLevel = level.definitionLevel
-		if v.kind == 0 && v.definitionLevel != 0 {
-			v.definitionLevel--
-		}
 		i++
 	}
 
@@ -151,34 +154,35 @@ func (b *RowBuilder) Row() Row {
 // AppendRow appends the current state of b to row and returns it.
 func (b *RowBuilder) AppendRow(row Row) Row {
 	for _, group := range b.groups {
-		maxColumn := []Value{{
-			repetitionLevel: group.repetitionLevel,
-			definitionLevel: group.definitionLevel,
-		}}
+		maxColumn := group.baseColumn
 
-		for _, member := range group.members {
-			if column := b.columns[member.columnIndex]; len(column) > len(maxColumn) {
+		for _, columnIndex := range group.members {
+			if column := b.columns[columnIndex]; len(column) > len(maxColumn) {
 				maxColumn = column
 			}
 		}
 
-		for _, member := range group.members {
-			if column := b.columns[member.columnIndex]; len(column) < len(maxColumn) {
-				n := len(column)
-				column = append(column, maxColumn[n:]...)
+		if len(maxColumn) != 0 {
+			columns := b.columns[group.startIndex:group.endIndex]
 
-				for n < len(column) {
-					v := &column[n]
-					v.kind = ^int8(member.columnKind)
-					v.ptr = nil
-					v.u64 = 0
-					if v.definitionLevel != 0 && v.definitionLevel == group.definitionLevel {
-						v.definitionLevel--
+			for i, column := range columns {
+				if len(column) < len(maxColumn) {
+					n := len(column)
+					column = append(column, maxColumn[n:]...)
+
+					kind := b.kinds[group.startIndex+int16(i)]
+					for n < len(column) {
+						v := &column[n]
+						v.kind = kind
+						v.ptr = nil
+						v.u64 = 0
+						v.repetitionLevel = group.repetitionLevel
+						v.definitionLevel = group.definitionLevel
+						n++
 					}
-					n++
-				}
 
-				b.columns[member.columnIndex] = column
+					columns[i] = column
+				}
 			}
 		}
 	}

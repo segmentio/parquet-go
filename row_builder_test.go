@@ -69,7 +69,7 @@ func TestRowBuilder(t *testing.T) {
 			},
 			want: parquet.Row{
 				parquet.Int64Value(1).Level(0, 0, 0),
-				parquet.ByteArrayValue(nil).Level(0, 0, 1),
+				parquet.NullValue().Level(0, 0, 1),
 			},
 			schema: parquet.Group{
 				"id":    parquet.Int(64),
@@ -84,7 +84,7 @@ func TestRowBuilder(t *testing.T) {
 			},
 			want: parquet.Row{
 				parquet.Int64Value(1).Level(0, 0, 0),
-				parquet.ByteArrayValue(nil).Level(0, 0, 1),
+				parquet.NullValue().Level(0, 0, 1),
 			},
 			schema: parquet.Group{
 				"id":   parquet.Int(64),
@@ -99,7 +99,7 @@ func TestRowBuilder(t *testing.T) {
 			},
 			want: parquet.Row{
 				parquet.Int64Value(1).Level(0, 0, 0),
-				parquet.Int32Value(0).Level(0, 0, 1),
+				parquet.NullValue().Level(0, 0, 1),
 				parquet.ByteArrayValue(nil).Level(0, 0, 2),
 				parquet.ByteArrayValue(nil).Level(0, 0, 3),
 			},
@@ -112,6 +112,7 @@ func TestRowBuilder(t *testing.T) {
 				},
 			},
 		},
+
 		{
 			scenario: "add missing repeated column group",
 			adds: []add{
@@ -130,8 +131,8 @@ func TestRowBuilder(t *testing.T) {
 				parquet.ByteArrayValue([]byte(`me`)).Level(0, 1, 2),
 				parquet.ByteArrayValue([]byte(`you`)).Level(1, 1, 2),
 
-				parquet.ByteArrayValue(nil).Level(0, 1, 3),
-				parquet.ByteArrayValue(nil).Level(1, 1, 3),
+				parquet.NullValue().Level(0, 1, 3),
+				parquet.NullValue().Level(1, 1, 3),
 			},
 			schema: parquet.Group{
 				"id": parquet.Int(64),
@@ -139,6 +140,23 @@ func TestRowBuilder(t *testing.T) {
 					"first_name": parquet.String(),
 					"last_name":  parquet.String(),
 					"birth_date": parquet.Optional(parquet.Date()),
+				}),
+			},
+		},
+
+		{
+			scenario: "empty map",
+			adds:     []add{},
+			want: parquet.Row{
+				parquet.Value{}.Level(0, 0, 0),
+				parquet.Value{}.Level(0, 0, 1),
+			},
+			schema: parquet.Group{
+				"map": parquet.Repeated(parquet.Group{
+					"key_value": parquet.Group{
+						"key":   parquet.String(),
+						"value": parquet.Optional(parquet.String()),
+					},
 				}),
 			},
 		},

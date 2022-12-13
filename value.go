@@ -214,6 +214,9 @@ func ValueOf(v interface{}) Value {
 	return makeValue(k, nil, reflect.ValueOf(v))
 }
 
+// NulLValue constructs a null value, which is the zero-value of the Value type.
+func NullValue() Value { return Value{} }
+
 // ZeroValue constructs a zero value of the given kind.
 func ZeroValue(kind Kind) Value { return makeValueKind(kind) }
 
