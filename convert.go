@@ -54,7 +54,7 @@ type conversion struct {
 	schema  *Schema
 	buffers sync.Pool
 	// This field is used to size the column buffers held in the sync.Pool since
-	// they are intended to the source rows being converted from.
+	// they are intended to store the source rows being converted from.
 	numberOfSourceColumns int
 }
 
