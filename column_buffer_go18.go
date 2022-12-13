@@ -29,15 +29,15 @@ type writeRowsFunc func(columns []ColumnBuffer, rows sparse.Array, levels column
 // parquet schema. The column path indicates the column that the function is
 // being generated for in the parquet schema.
 func writeRowsFuncOf(t reflect.Type, schema *Schema, path columnPath) writeRowsFunc {
+	if leaf, exists := schema.Lookup(path...); exists && leaf.Node.Type().LogicalType() != nil && leaf.Node.Type().LogicalType().Json != nil {
+		return writeRowsFuncOfJSON(t, schema, path)
+	}
+
 	switch t {
 	case reflect.TypeOf(deprecated.Int96{}):
 		return writeRowsFuncOfRequired(t, schema, path)
 	case reflect.TypeOf(time.Time{}):
 		return writeRowsFuncOfTime(t, schema, path)
-	}
-
-	if leaf, exists := schema.Lookup(path...); exists && leaf.Node.Type().LogicalType() != nil && leaf.Node.Type().LogicalType().Json != nil {
-		return writeRowsFuncOfJSON(t, schema, path)
 	}
 
 	switch t.Kind() {
