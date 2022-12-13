@@ -1,11 +1,19 @@
 package parquet
 
 import (
+	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"io"
+	"math"
+	"math/big"
+	"strconv"
 	"sync"
+	"time"
 
+	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
+	"github.com/segmentio/parquet-go/format"
 )
 
 // ConvertError is an error type returned by calls to Convert when the conversion
@@ -564,4 +572,476 @@ func (c *convertedRows) Schema() *Schema {
 
 func (c *convertedRows) SeekToRow(rowIndex int64) error {
 	return c.rows.SeekToRow(rowIndex)
+}
+
+var (
+	trueBytes  = []byte(`true`)
+	falseBytes = []byte(`false`)
+	unixEpoch  = time.Date(1970, time.January, 1, 0, 0, 0, 0, time.UTC)
+)
+
+func convertBooleanToInt32(v Value) (Value, error) {
+	return v.convertToInt32(int32(v.byte())), nil
+}
+
+func convertBooleanToInt64(v Value) (Value, error) {
+	return v.convertToInt64(int64(v.byte())), nil
+}
+
+func convertBooleanToInt96(v Value) (Value, error) {
+	return v.convertToInt96(deprecated.Int96{0: uint32(v.byte())}), nil
+}
+
+func convertBooleanToFloat(v Value) (Value, error) {
+	return v.convertToFloat(float32(v.byte())), nil
+}
+
+func convertBooleanToDouble(v Value) (Value, error) {
+	return v.convertToDouble(float64(v.byte())), nil
+}
+
+func convertBooleanToByteArray(v Value) (Value, error) {
+	return v.convertToByteArray([]byte{v.byte()}), nil
+}
+
+func convertBooleanToFixedLenByteArray(v Value, size int) (Value, error) {
+	b := []byte{v.byte()}
+	c := make([]byte, size)
+	copy(c, b)
+	return v.convertToFixedLenByteArray(c), nil
+}
+
+func convertBooleanToString(v Value) (Value, error) {
+	b := ([]byte)(nil)
+	if v.boolean() {
+		b = trueBytes
+	} else {
+		b = falseBytes
+	}
+	return v.convertToByteArray(b), nil
+}
+
+func convertInt32ToBoolean(v Value) (Value, error) {
+	return v.convertToBoolean(v.int32() != 0), nil
+}
+
+func convertInt32ToInt64(v Value) (Value, error) {
+	return v.convertToInt64(int64(v.int32())), nil
+}
+
+func convertInt32ToInt96(v Value) (Value, error) {
+	return v.convertToInt96(deprecated.Int32ToInt96(v.int32())), nil
+}
+
+func convertInt32ToFloat(v Value) (Value, error) {
+	return v.convertToFloat(float32(v.int32())), nil
+}
+
+func convertInt32ToDouble(v Value) (Value, error) {
+	return v.convertToDouble(float64(v.int32())), nil
+}
+
+func convertInt32ToByteArray(v Value) (Value, error) {
+	b := make([]byte, 4)
+	binary.LittleEndian.PutUint32(b, v.uint32())
+	return v.convertToByteArray(b), nil
+}
+
+func convertInt32ToFixedLenByteArray(v Value, size int) (Value, error) {
+	b := make([]byte, 4)
+	c := make([]byte, size)
+	binary.LittleEndian.PutUint32(b, v.uint32())
+	copy(c, b)
+	return v.convertToFixedLenByteArray(c), nil
+}
+
+func convertInt32ToString(v Value) (Value, error) {
+	return v.convertToByteArray(strconv.AppendInt(nil, int64(v.int32()), 10)), nil
+}
+
+func convertInt64ToBoolean(v Value) (Value, error) {
+	return v.convertToBoolean(v.int64() != 0), nil
+}
+
+func convertInt64ToInt32(v Value) (Value, error) {
+	return v.convertToInt32(int32(v.int64())), nil
+}
+
+func convertInt64ToInt96(v Value) (Value, error) {
+	return v.convertToInt96(deprecated.Int64ToInt96(v.int64())), nil
+}
+
+func convertInt64ToFloat(v Value) (Value, error) {
+	return v.convertToFloat(float32(v.int64())), nil
+}
+
+func convertInt64ToDouble(v Value) (Value, error) {
+	return v.convertToDouble(float64(v.int64())), nil
+}
+
+func convertInt64ToByteArray(v Value) (Value, error) {
+	b := make([]byte, 8)
+	binary.LittleEndian.PutUint64(b, v.uint64())
+	return v.convertToByteArray(b), nil
+}
+
+func convertInt64ToFixedLenByteArray(v Value, size int) (Value, error) {
+	b := make([]byte, 8)
+	c := make([]byte, size)
+	binary.LittleEndian.PutUint64(b, v.uint64())
+	copy(c, b)
+	return v.convertToFixedLenByteArray(c), nil
+}
+
+func convertInt64ToString(v Value) (Value, error) {
+	return v.convertToByteArray(strconv.AppendInt(nil, v.int64(), 10)), nil
+}
+
+func convertInt96ToBoolean(v Value) (Value, error) {
+	return v.convertToBoolean(!v.int96().IsZero()), nil
+}
+
+func convertInt96ToInt32(v Value) (Value, error) {
+	return v.convertToInt32(v.int96().Int32()), nil
+}
+
+func convertInt96ToInt64(v Value) (Value, error) {
+	return v.convertToInt64(v.int96().Int64()), nil
+}
+
+func convertInt96ToFloat(v Value) (Value, error) {
+	return v, invalidConversion(v, "INT96", "FLOAT")
+}
+
+func convertInt96ToDouble(v Value) (Value, error) {
+	return v, invalidConversion(v, "INT96", "DOUBLE")
+}
+
+func convertInt96ToByteArray(v Value) (Value, error) {
+	return v.convertToByteArray(v.byteArray()), nil
+}
+
+func convertInt96ToFixedLenByteArray(v Value, size int) (Value, error) {
+	b := v.byteArray()
+	if len(b) < size {
+		c := make([]byte, size)
+		copy(c, b)
+		b = c
+	} else {
+		b = b[:size]
+	}
+	return v.convertToFixedLenByteArray(b), nil
+}
+
+func convertInt96ToString(v Value) (Value, error) {
+	return v.convertToByteArray([]byte(v.String())), nil
+}
+
+func convertFloatToBoolean(v Value) (Value, error) {
+	return v.convertToBoolean(v.float() != 0), nil
+}
+
+func convertFloatToInt32(v Value) (Value, error) {
+	return v.convertToInt32(int32(v.float())), nil
+}
+
+func convertFloatToInt64(v Value) (Value, error) {
+	return v.convertToInt64(int64(v.float())), nil
+}
+
+func convertFloatToInt96(v Value) (Value, error) {
+	return v, invalidConversion(v, "FLOAT", "INT96")
+}
+
+func convertFloatToDouble(v Value) (Value, error) {
+	return v.convertToDouble(float64(v.float())), nil
+}
+
+func convertFloatToByteArray(v Value) (Value, error) {
+	b := make([]byte, 4)
+	binary.LittleEndian.PutUint32(b, v.uint32())
+	return v.convertToByteArray(b), nil
+}
+
+func convertFloatToFixedLenByteArray(v Value, size int) (Value, error) {
+	b := make([]byte, 4)
+	c := make([]byte, size)
+	binary.LittleEndian.PutUint32(b, v.uint32())
+	copy(c, b)
+	return v.convertToFixedLenByteArray(c), nil
+}
+
+func convertFloatToString(v Value) (Value, error) {
+	return v.convertToByteArray(strconv.AppendFloat(nil, float64(v.float()), 'g', -1, 32)), nil
+}
+
+func convertDoubleToBoolean(v Value) (Value, error) {
+	return v.convertToBoolean(v.double() != 0), nil
+}
+
+func convertDoubleToInt32(v Value) (Value, error) {
+	return v.convertToInt32(int32(v.double())), nil
+}
+
+func convertDoubleToInt64(v Value) (Value, error) {
+	return v.convertToInt64(int64(v.double())), nil
+}
+
+func convertDoubleToInt96(v Value) (Value, error) {
+	return v, invalidConversion(v, "FLOAT", "INT96")
+}
+
+func convertDoubleToFloat(v Value) (Value, error) {
+	return v.convertToFloat(float32(v.double())), nil
+}
+
+func convertDoubleToByteArray(v Value) (Value, error) {
+	b := make([]byte, 8)
+	binary.LittleEndian.PutUint64(b, v.uint64())
+	return v.convertToByteArray(b), nil
+}
+
+func convertDoubleToFixedLenByteArray(v Value, size int) (Value, error) {
+	b := make([]byte, 8)
+	c := make([]byte, size)
+	binary.LittleEndian.PutUint64(b, v.uint64())
+	copy(c, b)
+	return v.convertToFixedLenByteArray(c), nil
+}
+
+func convertDoubleToString(v Value) (Value, error) {
+	return v.convertToByteArray(strconv.AppendFloat(nil, v.double(), 'g', -1, 64)), nil
+}
+
+func convertByteArrayToBoolean(v Value) (Value, error) {
+	return v.convertToBoolean(!isZero(v.byteArray())), nil
+}
+
+func convertByteArrayToInt32(v Value) (Value, error) {
+	b := make([]byte, 4)
+	copy(b, v.byteArray())
+	return v.convertToInt32(int32(binary.LittleEndian.Uint32(b))), nil
+}
+
+func convertByteArrayToInt64(v Value) (Value, error) {
+	b := make([]byte, 8)
+	copy(b, v.byteArray())
+	return v.convertToInt64(int64(binary.LittleEndian.Uint64(b))), nil
+}
+
+func convertByteArrayToInt96(v Value) (Value, error) {
+	b := make([]byte, 12)
+	copy(b, v.byteArray())
+	return v.convertToInt96(deprecated.Int96{
+		0: binary.LittleEndian.Uint32(b[0:4]),
+		1: binary.LittleEndian.Uint32(b[4:8]),
+		2: binary.LittleEndian.Uint32(b[8:12]),
+	}), nil
+}
+
+func convertByteArrayToFloat(v Value) (Value, error) {
+	b := make([]byte, 4)
+	copy(b, v.byteArray())
+	return v.convertToFloat(math.Float32frombits(binary.LittleEndian.Uint32(b))), nil
+}
+
+func convertByteArrayToDouble(v Value) (Value, error) {
+	b := make([]byte, 8)
+	copy(b, v.byteArray())
+	return v.convertToDouble(math.Float64frombits(binary.LittleEndian.Uint64(b))), nil
+}
+
+func convertByteArrayToFixedLenByteArray(v Value, size int) (Value, error) {
+	b := v.byteArray()
+	if len(b) < size {
+		c := make([]byte, size)
+		copy(c, b)
+		b = c
+	} else {
+		b = b[:size]
+	}
+	return v.convertToFixedLenByteArray(b), nil
+}
+
+func convertFixedLenByteArrayToString(v Value) (Value, error) {
+	b := v.byteArray()
+	c := make([]byte, hex.EncodedLen(len(b)))
+	hex.Encode(c, b)
+	return v.convertToByteArray(c), nil
+}
+
+func convertStringToBoolean(v Value) (Value, error) {
+	b, err := strconv.ParseBool(v.string())
+	if err != nil {
+		return v, conversionError(v, "STRING", "BOOLEAN", err)
+	}
+	return v.convertToBoolean(b), nil
+}
+
+func convertStringToInt32(v Value) (Value, error) {
+	i, err := strconv.ParseInt(v.string(), 10, 32)
+	if err != nil {
+		return v, conversionError(v, "STRING", "INT32", err)
+	}
+	return v.convertToInt32(int32(i)), nil
+}
+
+func convertStringToInt64(v Value) (Value, error) {
+	i, err := strconv.ParseInt(v.string(), 10, 64)
+	if err != nil {
+		return v, conversionError(v, "STRING", "INT64", err)
+	}
+	return v.convertToInt64(i), nil
+}
+
+func convertStringToInt96(v Value) (Value, error) {
+	i, ok := new(big.Int).SetString(v.string(), 10)
+	if !ok {
+		return v, conversionError(v, "STRING", "INT96", strconv.ErrSyntax)
+	}
+	b := i.Bytes()
+	c := make([]byte, 12)
+	copy(c, b)
+	i96 := deprecated.BytesToInt96(c)
+	return v.convertToInt96(i96[0]), nil
+}
+
+func convertStringToFloat(v Value) (Value, error) {
+	f, err := strconv.ParseFloat(v.string(), 32)
+	if err != nil {
+		return v, conversionError(v, "STRING", "FLOAT", err)
+	}
+	return v.convertToFloat(float32(f)), nil
+}
+
+func convertStringToDouble(v Value) (Value, error) {
+	f, err := strconv.ParseFloat(v.string(), 64)
+	if err != nil {
+		return v, conversionError(v, "STRING", "DOUBLE", err)
+	}
+	return v.convertToDouble(f), nil
+}
+
+func convertStringToFixedLenByteArray(v Value, size int) (Value, error) {
+	b := v.byteArray()
+	c := make([]byte, size)
+	_, err := hex.Decode(c, b)
+	if err != nil {
+		return v, conversionError(v, "STRING", "BYTE_ARRAY", err)
+	}
+	return v.convertToFixedLenByteArray(c), nil
+}
+
+func convertStringToDate(v Value, tz *time.Location) (Value, error) {
+	t, err := time.ParseInLocation("2006-01-02", v.string(), tz)
+	if err != nil {
+		return v, conversionError(v, "STRING", "DATE", err)
+	}
+	d := daysSinceUnixEpoch(t)
+	return v.convertToInt32(int32(d)), nil
+}
+
+func convertStringToTimeMillis(v Value, tz *time.Location) (Value, error) {
+	t, err := time.ParseInLocation("15:04:05.999", v.string(), tz)
+	if err != nil {
+		return v, conversionError(v, "STRING", "TIME", err)
+	}
+	m := nearestMidnightLessThan(t)
+	milliseconds := t.Sub(m).Milliseconds()
+	return v.convertToInt32(int32(milliseconds)), nil
+}
+
+func convertStringToTimeMicros(v Value, tz *time.Location) (Value, error) {
+	t, err := time.ParseInLocation("15:04:05.999999", v.string(), tz)
+	if err != nil {
+		return v, conversionError(v, "STRING", "TIME", err)
+	}
+	m := nearestMidnightLessThan(t)
+	microseconds := t.Sub(m).Microseconds()
+	return v.convertToInt64(microseconds), nil
+}
+
+func convertDateToTimestamp(v Value, u format.TimeUnit, tz *time.Location) (Value, error) {
+	t := unixEpoch.AddDate(0, 0, int(v.int32()))
+	d := timeUnitDuration(u)
+	return v.convertToInt64(int64(t.In(tz).Sub(unixEpoch) / d)), nil
+}
+
+func convertDateToString(v Value) (Value, error) {
+	t := unixEpoch.AddDate(0, 0, int(v.int32()))
+	b := t.AppendFormat(make([]byte, 0, 10), "2006-01-02")
+	return v.convertToByteArray(b), nil
+}
+
+func convertTimeMillisToString(v Value, tz *time.Location) (Value, error) {
+	t := time.UnixMilli(int64(v.int32())).In(tz)
+	b := t.AppendFormat(make([]byte, 0, 12), "15:04:05.999")
+	return v.convertToByteArray(b), nil
+}
+
+func convertTimeMicrosToString(v Value, tz *time.Location) (Value, error) {
+	t := time.UnixMicro(v.int64()).In(tz)
+	b := t.AppendFormat(make([]byte, 0, 15), "15:04:05.999999")
+	return v.convertToByteArray(b), nil
+}
+
+func convertTimestampToDate(v Value, u format.TimeUnit, tz *time.Location) (Value, error) {
+	t := timestamp(v, u, tz)
+	d := daysSinceUnixEpoch(t)
+	return v.convertToInt32(int32(d)), nil
+}
+
+func convertTimestampToTimeMillis(v Value, u format.TimeUnit, sourceZone, targetZone *time.Location) (Value, error) {
+	t := timestamp(v, u, sourceZone)
+	m := nearestMidnightLessThan(t)
+	milliseconds := t.In(targetZone).Sub(m).Milliseconds()
+	return v.convertToInt32(int32(milliseconds)), nil
+}
+
+func convertTimestampToTimeMicros(v Value, u format.TimeUnit, sourceZone, targetZone *time.Location) (Value, error) {
+	t := timestamp(v, u, sourceZone)
+	m := nearestMidnightLessThan(t)
+	microseconds := t.In(targetZone).Sub(m).Microseconds()
+	return v.convertToInt64(int64(microseconds)), nil
+}
+
+func convertTimestampToTimestamp(v Value, sourceUnit, targetUnit format.TimeUnit) (Value, error) {
+	sourceScale := timeUnitDuration(sourceUnit).Nanoseconds()
+	targetScale := timeUnitDuration(targetUnit).Nanoseconds()
+	targetValue := (v.int64() * sourceScale) / targetScale
+	return v.convertToInt64(targetValue), nil
+}
+
+const nanosecondsPerDay = 24 * 60 * 60 * 1e9
+
+func daysSinceUnixEpoch(t time.Time) int {
+	return int(t.Sub(unixEpoch).Hours()) / 24
+}
+
+func nearestMidnightLessThan(t time.Time) time.Time {
+	y, m, d := t.Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, t.Location())
+}
+
+func timestamp(v Value, u format.TimeUnit, tz *time.Location) time.Time {
+	return unixEpoch.In(tz).Add(time.Duration(v.int64()) * timeUnitDuration(u))
+}
+
+func timeUnitDuration(unit format.TimeUnit) time.Duration {
+	switch {
+	case unit.Millis != nil:
+		return time.Millisecond
+	case unit.Micros != nil:
+		return time.Microsecond
+	default:
+		return time.Nanosecond
+	}
+}
+
+func invalidConversion(value Value, from, to string) error {
+	return fmt.Errorf("%s to %s: %s: %w", from, to, value, ErrInvalidConversion)
+}
+
+func conversionError(value Value, from, to string, err error) error {
+	return fmt.Errorf("%s to %s: %q: %s: %w", from, to, value.string(), err, ErrInvalidConversion)
 }
