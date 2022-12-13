@@ -403,12 +403,23 @@ func writeRowsFuncOfMap(t reflect.Type, schema *Schema, path columnPath) writeRo
 }
 
 func writeRowsFuncOfJSON(t reflect.Type, schema *Schema, path columnPath) writeRowsFunc {
+	// If this is a string or a byte array write directly.
+	switch t.Kind() {
+	case reflect.String:
+		return writeRowsFuncOfRequired(t, schema, path)
+	case reflect.Slice:
+		if t.Elem().Kind() == reflect.Uint8 {
+			return writeRowsFuncOfRequired(t, schema, path)
+		}
+	}
+
+	// Otherwise handle with a json.Marshal
 	asStrT := reflect.TypeOf(string(""))
-	writeRows := writeRowsFuncOfRequired(asStrT, schema, path)
+	writer := writeRowsFuncOfRequired(asStrT, schema, path)
 
 	return func(columns []ColumnBuffer, rows sparse.Array, levels columnLevels) error {
 		if rows.Len() == 0 {
-			return writeRows(columns, rows, levels)
+			return writer(columns, rows, levels)
 		}
 		for i := 0; i < rows.Len(); i++ {
 			val := reflect.NewAt(t, rows.Index(i))
@@ -421,7 +432,7 @@ func writeRowsFuncOfJSON(t reflect.Type, schema *Schema, path columnPath) writeR
 
 			asStr := string(b)
 			a := sparse.MakeStringArray([]string{asStr})
-			if err := writeRows(columns, a.UnsafeArray(), levels); err != nil {
+			if err := writer(columns, a.UnsafeArray(), levels); err != nil {
 				return err
 			}
 		}

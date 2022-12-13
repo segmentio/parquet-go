@@ -331,8 +331,16 @@ func TestIssue423(t *testing.T) {
 		Value string `parquet:","`
 	}
 	type Outer struct {
-		Label string `parquet:","`
-		Inner Inner  `parquet:",json"`
+		Label string  `parquet:","`
+		Inner Inner   `parquet:",json"`
+		Slice []Inner `parquet:",json"`
+		// This is the only tricky situation. Because we're delegating to json Marshaler/Unmarshaler
+		// We use the json tags for optionality.
+		Ptr *Inner `json:",omitempty" parquet:",json"`
+
+		// This tests BC behavior that slices of bytes and json strings still get written/read in a BC way.
+		String string `parquet:",json"`
+		Bytes  []byte `parquet:",json"`
 	}
 
 	writeRows := []Outer{
@@ -341,12 +349,30 @@ func TestIssue423(t *testing.T) {
 			Inner: Inner{
 				Value: "this is a string",
 			},
+			Slice: []Inner{
+				{
+					Value: "in a slice",
+				},
+			},
+			Ptr:    nil,
+			String: `{"hello":"world"}`,
+			Bytes:  []byte(`{"goodbye":"world"}`),
 		},
 		{
 			Label: "foxes",
 			Inner: Inner{
 				Value: "the quick brown fox jumped over the yellow lazy dog.",
 			},
+			Slice: []Inner{
+				{
+					Value: "in a slice",
+				},
+			},
+			Ptr: &Inner{
+				Value: "not nil",
+			},
+			String: `{"hello":"world"}`,
+			Bytes:  []byte(`{"goodbye":"world"}`),
 		},
 	}
 
