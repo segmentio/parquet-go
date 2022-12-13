@@ -214,6 +214,9 @@ func ValueOf(v interface{}) Value {
 	return makeValue(k, nil, reflect.ValueOf(v))
 }
 
+// ZeroValue constructs a zero value of the given kind.
+func ZeroValue(kind Kind) Value { return makeValueKind(kind) }
+
 // BooleanValue constructs a BOOLEAN parquet value from the bool passed as
 // argument.
 func BooleanValue(value bool) Value { return makeValueBoolean(value) }
@@ -331,6 +334,10 @@ func makeValue(k Kind, lt *format.LogicalType, v reflect.Value) Value {
 	}
 
 	panic("cannot create parquet value of type " + k.String() + " from go value of type " + v.Type().String())
+}
+
+func makeValueKind(kind Kind) Value {
+	return Value{kind: ^int8(kind)}
 }
 
 func makeValueBoolean(value bool) Value {
@@ -611,11 +618,42 @@ func (v Value) Format(w fmt.State, r rune) {
 		case w.Flag('+'):
 			fmt.Fprintf(w, "%+[1]c %+[1]d %+[1]r %+[1]s", v)
 		case w.Flag('#'):
-			fmt.Fprintf(w, "parquet.Value{%+[1]c, %+[1]d, %+[1]r, %+[1]s}", v)
+			v.formatGoString(w)
+			//fmt.Fprintf(w, "parquet.Value{%+[1]c, %+[1]d, %+[1]r, %+[1]s}", v)
 		default:
 			v.Format(w, 's')
 		}
 	}
+}
+
+func (v Value) formatGoString(w fmt.State) {
+	io.WriteString(w, "parquet.")
+	switch v.Kind() {
+	case Boolean:
+		fmt.Fprintf(w, "BooleanValue(%t)", v.boolean())
+	case Int32:
+		fmt.Fprintf(w, "Int32Value(%d)", v.int32())
+	case Int64:
+		fmt.Fprintf(w, "Int64Value(%d)", v.int64())
+	case Int96:
+		fmt.Fprintf(w, "Int96Value(%#v)", v.int96())
+	case Float:
+		fmt.Fprintf(w, "FloatValue(%g)", v.float())
+	case Double:
+		fmt.Fprintf(w, "DoubleValue(%g)", v.double())
+	case ByteArray:
+		fmt.Fprintf(w, "ByteArrayValue(%q)", v.byteArray())
+	case FixedLenByteArray:
+		fmt.Fprintf(w, "FixedLenByteArrayValue(%#v)", v.byteArray())
+	default:
+		io.WriteString(w, "Value{}")
+		return
+	}
+	fmt.Fprintf(w, ".Level(%d,%d,%d)",
+		v.RepetitionLevel(),
+		v.DefinitionLevel(),
+		v.Column(),
+	)
 }
 
 // String returns a string representation of v.
@@ -634,12 +672,7 @@ func (v Value) String() string {
 	case Double:
 		return strconv.FormatFloat(v.double(), 'g', -1, 32)
 	case ByteArray, FixedLenByteArray:
-		// As an optimizations for the common case of using String on UTF8
-		// columns we convert the byte array to a string without copying the
-		// underlying data to a new memory location. This is safe as long as the
-		// application respects the requirement to not mutate the byte slices
-		// returned when calling ByteArray.
-		return unsafecast.BytesToString(v.byteArray())
+		return string(v.byteArray())
 	default:
 		return "<null>"
 	}

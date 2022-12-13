@@ -2,6 +2,7 @@ package parquet
 
 import (
 	"errors"
+	"fmt"
 )
 
 var (
@@ -70,4 +71,8 @@ func (e errno) check() {
 	default:
 		panic("BUG: unknown error code")
 	}
+}
+
+func errRowIndexOutOfBounds(rowIndex, rowCount int64) error {
+	return fmt.Errorf("row index out of bounds: %d/%d", rowIndex, rowCount)
 }

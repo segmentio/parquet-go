@@ -8,6 +8,11 @@ import (
 	"github.com/segmentio/parquet-go"
 )
 
+type AddressBook1 struct {
+	Owner             string   `parquet:"owner,zstd"`
+	OwnerPhoneNumbers []string `parquet:"ownerPhoneNumbers,gzip"`
+}
+
 type AddressBook2 struct {
 	Owner             string    `parquet:"owner,zstd"`
 	OwnerPhoneNumbers []string  `parquet:"ownerPhoneNumbers,gzip"`
@@ -49,6 +54,10 @@ type SimpleAddressBook2 struct {
 	Name    string
 	Contact SimpleContact
 	Extra   string
+}
+
+type ListOfIDs struct {
+	IDs []uint64
 }
 
 var conversionTests = [...]struct {
@@ -141,6 +150,49 @@ var conversionTests = [...]struct {
 	},
 
 	{
+		scenario: "extra required column from repeated",
+		from: struct{ ListOfIDs ListOfIDs }{
+			ListOfIDs: ListOfIDs{IDs: []uint64{0, 1, 2}},
+		},
+		to: struct {
+			MainID    uint64
+			ListOfIDs ListOfIDs
+		}{
+			ListOfIDs: ListOfIDs{IDs: []uint64{0, 1, 2}},
+		},
+	},
+
+	{
+		scenario: "extra fields in repeated group",
+		from: struct{ Books []AddressBook1 }{
+			Books: []AddressBook1{
+				{
+					Owner:             "me",
+					OwnerPhoneNumbers: []string{"123-456-7890", "321-654-0987"},
+				},
+				{
+					Owner:             "you",
+					OwnerPhoneNumbers: []string{"000-000-0000"},
+				},
+			},
+		},
+		to: struct{ Books []AddressBook2 }{
+			Books: []AddressBook2{
+				{
+					Owner:             "me",
+					OwnerPhoneNumbers: []string{"123-456-7890", "321-654-0987"},
+					Contacts:          []Contact{},
+				},
+				{
+					Owner:             "you",
+					OwnerPhoneNumbers: []string{"000-000-0000"},
+					Contacts:          []Contact{},
+				},
+			},
+		},
+	},
+
+	{
 		scenario: "extra column on complex struct",
 		from: AddressBook{
 			Owner:             "Julien Le Dem",
@@ -168,6 +220,126 @@ var conversionTests = [...]struct {
 				},
 			},
 		},
+	},
+
+	{
+		scenario: "required to optional leaf",
+		from:     struct{ Name string }{Name: "Luke"},
+		to:       struct{ Name *string }{Name: newString("Luke")},
+	},
+
+	{
+		scenario: "required to repeated leaf",
+		from:     struct{ Name string }{Name: "Luke"},
+		to:       struct{ Name []string }{Name: []string{"Luke"}},
+	},
+
+	{
+		scenario: "optional to required leaf",
+		from:     struct{ Name *string }{Name: newString("Luke")},
+		to:       struct{ Name string }{Name: "Luke"},
+	},
+
+	{
+		scenario: "optional to repeated leaf",
+		from:     struct{ Name *string }{Name: newString("Luke")},
+		to:       struct{ Name []string }{Name: []string{"Luke"}},
+	},
+
+	{
+		scenario: "optional to repeated leaf (null)",
+		from:     struct{ Name *string }{Name: nil},
+		to:       struct{ Name []string }{Name: []string{}},
+	},
+
+	{
+		scenario: "repeated to required leaf",
+		from:     struct{ Name []string }{Name: []string{"Luke", "Han", "Leia"}},
+		to:       struct{ Name string }{Name: "Luke"},
+	},
+
+	{
+		scenario: "repeated to optional leaf",
+		from:     struct{ Name []string }{Name: []string{"Luke", "Han", "Leia"}},
+		to:       struct{ Name *string }{Name: newString("Luke")},
+	},
+
+	{
+		scenario: "required to optional group",
+		from: struct{ Book AddressBook }{
+			Book: AddressBook{
+				Owner: "Julien Le Dem",
+				OwnerPhoneNumbers: []string{
+					"555 123 4567",
+					"555 666 1337",
+				},
+				Contacts: []Contact{
+					{
+						Name:        "Dmitriy Ryaboy",
+						PhoneNumber: "555 987 6543",
+					},
+					{
+						Name: "Chris Aniszczyk",
+					},
+				},
+			},
+		},
+		to: struct{ Book *AddressBook }{
+			Book: &AddressBook{
+				Owner: "Julien Le Dem",
+				OwnerPhoneNumbers: []string{
+					"555 123 4567",
+					"555 666 1337",
+				},
+				Contacts: []Contact{
+					{
+						Name:        "Dmitriy Ryaboy",
+						PhoneNumber: "555 987 6543",
+					},
+					{
+						Name: "Chris Aniszczyk",
+					},
+				},
+			},
+		},
+	},
+
+	{
+		scenario: "required to optional group (empty)",
+		from: struct{ Book AddressBook }{
+			Book: AddressBook{},
+		},
+		to: struct{ Book *AddressBook }{
+			Book: &AddressBook{
+				OwnerPhoneNumbers: []string{},
+				Contacts:          []Contact{},
+			},
+		},
+	},
+
+	{
+		scenario: "optional to required group (null)",
+		from: struct{ Book *AddressBook }{
+			Book: nil,
+		},
+		to: struct{ Book AddressBook }{
+			Book: AddressBook{
+				OwnerPhoneNumbers: []string{},
+				Contacts:          []Contact{},
+			},
+		},
+	},
+
+	{
+		scenario: "optional to repeated group (null)",
+		from:     struct{ Book *AddressBook }{Book: nil},
+		to:       struct{ Book []AddressBook }{Book: []AddressBook{}},
+	},
+
+	{
+		scenario: "optional to repeated optional group (null)",
+		from:     struct{ Book *AddressBook }{Book: nil},
+		to:       struct{ Book []*AddressBook }{Book: []*AddressBook{}},
 	},
 
 	{
@@ -282,18 +454,16 @@ func TestConvert(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			oldRow := from.Deconstruct(nil, test.from)
-			row, err := conv.Convert(nil, oldRow)
+			row := from.Deconstruct(nil, test.from)
+			rowbuf := []parquet.Row{row}
+			n, err := conv.Convert(rowbuf)
 			if err != nil {
 				t.Fatal(err)
 			}
-
-			// Helpful debugging info
-			// newRow := to.Deconstruct(nil, test.to)
-			// fmt.Printf("conv: %+v\n", conv)
-			// fmt.Printf("old row: %+v\n", oldRow)
-			// fmt.Printf("new row (desired state): %+v\n", newRow)
-			// fmt.Printf("new row (converted from old): %+v\n", row)
+			if n != 1 {
+				t.Errorf("wrong number of rows got converted: want=1 got=%d", n)
+			}
+			row = rowbuf[0]
 
 			value := reflect.New(reflect.TypeOf(test.to))
 			if err := to.Reconstruct(value.Interface(), row); err != nil {
@@ -302,7 +472,7 @@ func TestConvert(t *testing.T) {
 
 			value = value.Elem()
 			if !reflect.DeepEqual(value.Interface(), test.to) {
-				t.Errorf("converted value mismatch:\nwant = %+v\ngot  = %+v", test.to, value.Interface())
+				t.Errorf("converted value mismatch:\nwant = %#v\ngot  = %#v", test.to, value.Interface())
 			}
 		})
 	}

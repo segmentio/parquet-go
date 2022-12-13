@@ -125,7 +125,7 @@ func TestDeconstructionReconstruction(t *testing.T) {
 				Name string
 			}{Name: "Luke"},
 			values: [][]parquet.Value{
-				0: {parquet.ValueOf("Luke")},
+				0: {parquet.ValueOf("Luke").Level(0, 0, 0)},
 			},
 		},
 
@@ -138,10 +138,10 @@ func TestDeconstructionReconstruction(t *testing.T) {
 				Weight:    81.5,
 			},
 			values: [][]parquet.Value{
-				0: {parquet.ValueOf("Han")},
-				1: {parquet.ValueOf("Solo")},
-				2: {parquet.ValueOf(42).Level(0, 1, 0)},
-				3: {parquet.ValueOf(81.5).Level(0, 1, 0)},
+				0: {parquet.ValueOf("Han").Level(0, 0, 0)},
+				1: {parquet.ValueOf("Solo").Level(0, 0, 1)},
+				2: {parquet.ValueOf(42).Level(0, 1, 2)},
+				3: {parquet.ValueOf(81.5).Level(0, 1, 3)},
 			},
 		},
 
@@ -521,7 +521,7 @@ func TestDeconstructionReconstruction(t *testing.T) {
 			row := schema.Deconstruct(nil, test.input)
 			values := columnsOf(row)
 
-			t.Logf("\n%s\n", schema)
+			t.Logf("\n%s", schema)
 
 			for columnIndex, expect := range test.values {
 				assertEqualValues(t, columnIndex, expect, values[columnIndex])
@@ -548,17 +548,11 @@ func TestDeconstructionReconstruction(t *testing.T) {
 }
 
 func columnsOf(row parquet.Row) [][]parquet.Value {
-	maxColumnIndex := 0
-	for _, value := range row {
-		if columnIndex := int(value.Column()); columnIndex > maxColumnIndex {
-			maxColumnIndex = columnIndex
-		}
-	}
-	columns := make([][]parquet.Value, maxColumnIndex+1)
-	for _, value := range row {
-		columnIndex := value.Column()
-		columns[columnIndex] = append(columns[columnIndex], value)
-	}
+	columns := make([][]parquet.Value, 0)
+	row.Range(func(_ int, c []parquet.Value) bool {
+		columns = append(columns, c)
+		return true
+	})
 	return columns
 }
 

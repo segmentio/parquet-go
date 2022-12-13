@@ -41,7 +41,7 @@ func (e *ConvertError) Error() string {
 type Conversion interface {
 	// Applies the conversion logic on the src row, returning the result
 	// appended to dst.
-	Convert(dst, src Row) (Row, error)
+	Convert(rows []Row) (int, error)
 	// Converts the given column index in the target schema to the original
 	// column index in the source schema of the conversion.
 	Column(int) int
@@ -50,171 +50,167 @@ type Conversion interface {
 }
 
 type conversion struct {
-	targetColumnTypes   []Type
-	targetToSourceIndex []int16
-	sourceToTargetIndex []int16
-	convertFunc         convertFunc
-	schema              *Schema
-	buffers             sync.Pool
+	columns []conversionColumn
+	schema  *Schema
+	buffers sync.Pool
+	// This field is used to size the column buffers held in the sync.Pool since
+	// they are intended to store the source rows being converted from.
+	numberOfSourceColumns int
 }
 
 type conversionBuffer struct {
-	types   []Type
 	columns [][]Value
+}
+
+type conversionColumn struct {
+	sourceIndex   int
+	convertValues conversionFunc
+}
+
+type conversionFunc func([]Value) error
+
+func convertToSelf(column []Value) error { return nil }
+
+//go:noinline
+func convertToType(targetType, sourceType Type) conversionFunc {
+	return func(column []Value) error {
+		for i, v := range column {
+			v, err := sourceType.ConvertValue(v, targetType)
+			if err != nil {
+				return err
+			}
+			column[i].ptr = v.ptr
+			column[i].u64 = v.u64
+			column[i].kind = v.kind
+		}
+		return nil
+	}
+}
+
+//go:noinline
+func convertToValue(value Value) conversionFunc {
+	return func(column []Value) error {
+		for i := range column {
+			column[i] = value
+		}
+		return nil
+	}
+}
+
+//go:noinline
+func convertToZero(kind Kind) conversionFunc {
+	return func(column []Value) error {
+		for i := range column {
+			column[i].ptr = nil
+			column[i].u64 = 0
+			column[i].kind = ^int8(kind)
+		}
+		return nil
+	}
+}
+
+//go:noinline
+func convertToLevels(repetitionLevels, definitionLevels []byte) conversionFunc {
+	return func(column []Value) error {
+		for i := range column {
+			r := column[i].repetitionLevel
+			d := column[i].definitionLevel
+			column[i].repetitionLevel = repetitionLevels[r]
+			column[i].definitionLevel = definitionLevels[d]
+		}
+		return nil
+	}
+}
+
+//go:noinline
+func multiConversionFunc(conversions []conversionFunc) conversionFunc {
+	switch len(conversions) {
+	case 0:
+		return convertToSelf
+	case 1:
+		return conversions[0]
+	default:
+		return func(column []Value) error {
+			for _, conv := range conversions {
+				if err := conv(column); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}
 }
 
 func (c *conversion) getBuffer() *conversionBuffer {
 	b, _ := c.buffers.Get().(*conversionBuffer)
 	if b == nil {
-		n := len(c.targetColumnTypes)
-		columns, values, types := make([][]Value, n), make([]Value, n), make([]Type, n)
-		for i := range columns {
-			columns[i] = values[i : i : i+1]
+		b = &conversionBuffer{
+			columns: make([][]Value, c.numberOfSourceColumns),
 		}
-		b = &conversionBuffer{types: types, columns: columns}
+		values := make([]Value, c.numberOfSourceColumns)
+		for i := range b.columns {
+			b.columns[i] = values[i : i : i+1]
+		}
 	}
 	return b
 }
 
 func (c *conversion) putBuffer(b *conversionBuffer) {
-	for i, values := range b.columns {
-		clearValues(values)
-		b.columns[i] = values[:0]
-	}
 	c.buffers.Put(b)
 }
 
-// convertFunc takes a target and source row, then copies data
-// from the source to the target according to the heuristics determined
-// by the target schema given in makeConvertFunc
-type convertFunc func(Row, levels, *conversionBuffer) (Row, error)
+// Convert here satisfies the Conversion interface, and does the actual work
+// to convert between the source and target Rows.
+func (c *conversion) Convert(rows []Row) (int, error) {
+	source := c.getBuffer()
+	defer c.putBuffer(source)
 
-func (c *conversion) makeConvertFunc(node Node) (convert convertFunc) {
-	if !node.Leaf() {
-		_, convert = c.convertFuncOf(0, node)
-	}
-	return convert
-}
-
-func (c *conversion) convertFuncOf(tgtIdx int16, node Node) (int16, convertFunc) {
-	switch {
-	case node.Repeated():
-		return c.convertFuncOfRepeated(tgtIdx, node)
-	default:
-		return c.convertFuncOfRequired(tgtIdx, node)
-	}
-}
-
-func (c *conversion) convertFuncOfRequired(tgtIdx int16, node Node) (int16, convertFunc) {
-	switch {
-	case node.Leaf():
-		return c.convertFuncOfLeaf(tgtIdx, node)
-	default:
-		return c.convertFuncOfGroup(tgtIdx, node)
-	}
-}
-
-// convertFuncOfLeaf is the base case to our schema-tree traversal, doing the
-// actual copy of the value from the old Row (via conversionBuffer) to the new Row
-func (c *conversion) convertFuncOfLeaf(tgtIdx int16, node Node) (int16, convertFunc) {
-	return tgtIdx + 1, func(tgt Row, _ levels, src *conversionBuffer) (Row, error) {
-		value := Value{}
-		if tgtIdx >= 0 && len(src.columns[tgtIdx]) > 0 {
-			// Pop the top value and remove from the buffer.
-			value = src.columns[tgtIdx][0]
-			src.columns[tgtIdx] = src.columns[tgtIdx][1:]
+	for n, row := range rows {
+		for i, values := range source.columns {
+			source.columns[i] = values[:0]
 		}
-		value.kind = ^int8(c.targetColumnTypes[tgtIdx].Kind())
-		value.columnIndex = ^tgtIdx
+		row.Range(func(columnIndex int, columnValues []Value) bool {
+			source.columns[columnIndex] = append(source.columns[columnIndex], columnValues...)
+			return true
+		})
+		row = row[:0]
 
-		var err error
-		srcType := src.types[tgtIdx]
-		if srcType != nil {
-			value, err = node.Type().ConvertValue(value, srcType)
-			if err != nil {
-				return nil, err
+		for columnIndex, conv := range c.columns {
+			columnOffset := len(row)
+			if conv.sourceIndex < 0 {
+				// When there is no source column, we put a single value as
+				// placeholder in the column. This is a condition where the
+				// target contained a column which did not exist at had not
+				// other columns existing at that same level.
+				row = append(row, Value{})
+			} else {
+				// We must copy to the output row first and not mutate the
+				// source columns because multiple target columns may map to
+				// the same source column.
+				row = append(row, source.columns[conv.sourceIndex]...)
+			}
+			columnValues := row[columnOffset:]
+
+			if err := conv.convertValues(columnValues); err != nil {
+				return n, err
+			}
+
+			// Since the column index may have changed between the source and
+			// taget columns we ensure that the right value is always written
+			// to the output row.
+			for i := range columnValues {
+				columnValues[i].columnIndex = ^int16(columnIndex)
 			}
 		}
 
-		tgt = append(tgt, value)
-		return tgt, nil
-	}
-}
-
-func (c *conversion) convertFuncOfGroup(tgtIdx int16, node Node) (int16, convertFunc) {
-	fields := node.Fields()
-	funcs := make([]convertFunc, len(fields))
-
-	for i, field := range fields {
-		tgtIdx, funcs[i] = c.convertFuncOf(tgtIdx, field)
+		rows[n] = row
 	}
 
-	return tgtIdx, func(tgt Row, levels levels, src *conversionBuffer) (Row, error) {
-		var err error
-		for i, convFunc := range funcs {
-			if tgt, err = convFunc(tgt, levels, src); err != nil {
-				err = fmt.Errorf("%s → %w", fields[i].Name(), err)
-				break
-			}
-		}
-		return tgt, err
-	}
-}
-
-func (c *conversion) convertFuncOfRepeated(tgtIdx int16, node Node) (int16, convertFunc) {
-	nextIdx, convFunc := c.convertFuncOf(tgtIdx, Required(node))
-	return nextIdx, func(tgt Row, levels levels, src *conversionBuffer) (Row, error) {
-		var err error
-
-		levels.repetitionDepth++
-
-		for _, elem := range src.columns[tgtIdx] {
-			if elem.repetitionLevel != levels.repetitionLevel {
-				break
-			}
-			tgt, err = convFunc(tgt, levels, src)
-			levels.repetitionLevel = levels.repetitionDepth
-		}
-
-		return tgt, err
-	}
-}
-
-// Convert here satisfies the Conversion interface, and does the actual work to
-// convert between the source and target Rows.
-func (c *conversion) Convert(target, source Row) (Row, error) {
-	buf := c.getBuffer()
-	defer c.putBuffer(buf)
-
-	// Build conversion buffer
-	for _, value := range source {
-		sourceIndex := value.Column()
-		targetIndex := c.sourceToTargetIndex[sourceIndex]
-		if targetIndex >= 0 {
-			typ := c.targetColumnTypes[targetIndex]
-			value.kind = ^int8(typ.Kind())
-			value.columnIndex = ^targetIndex
-			buf.types[targetIndex] = typ
-			buf.columns[targetIndex] = append(buf.columns[targetIndex], value)
-		}
-	}
-
-	// Fill empty columns
-	for i, values := range buf.columns {
-		if len(values) == 0 {
-			buf.columns[i] = append(buf.columns[i], Value{
-				kind:        ^int8(c.targetColumnTypes[i].Kind()),
-				columnIndex: ^int16(i),
-			})
-		}
-	}
-
-	// Construct row from buffer
-	return c.convertFunc(target, levels{}, buf)
+	return len(rows), nil
 }
 
 func (c *conversion) Column(i int) int {
-	return int(c.targetToSourceIndex[i])
+	return c.columns[i].sourceIndex
 }
 
 func (c *conversion) Schema() *Schema {
@@ -223,9 +219,9 @@ func (c *conversion) Schema() *Schema {
 
 type identity struct{ schema *Schema }
 
-func (id identity) Convert(dst, src Row) (Row, error) { return append(dst, src...), nil }
-func (id identity) Column(i int) int                  { return i }
-func (id identity) Schema() *Schema                   { return id.schema }
+func (id identity) Convert(rows []Row) (int, error) { return len(rows), nil }
+func (id identity) Column(i int) int                { return i }
+func (id identity) Schema() *Schema                 { return id.schema }
 
 // Convert constructs a conversion function from one parquet schema to another.
 //
@@ -248,48 +244,95 @@ func Convert(to, from Node) (conv Conversion, err error) {
 
 	targetMapping, targetColumns := columnMappingOf(to)
 	sourceMapping, sourceColumns := columnMappingOf(from)
-
-	columnIndexBuffer := make([]int16, len(targetColumns)+len(sourceColumns))
-	targetColumnTypes := make([]Type, len(targetColumns))
-	targetToSourceIndex := columnIndexBuffer[:len(targetColumns)]
-	sourceToTargetIndex := columnIndexBuffer[len(targetColumns):]
+	columns := make([]conversionColumn, len(targetColumns))
 
 	for i, path := range targetColumns {
-		sourceColumn := sourceMapping.lookup(path)
 		targetColumn := targetMapping.lookup(path)
-		targetToSourceIndex[i] = sourceColumn.columnIndex
-		targetColumnTypes[i] = targetColumn.node.Type()
-	}
-
-	for i, path := range sourceColumns {
 		sourceColumn := sourceMapping.lookup(path)
-		targetColumn := targetMapping.lookup(path)
 
-		if targetColumn.node != nil {
-			sourceType := sourceColumn.node.Type()
+		conversions := []conversionFunc{}
+		if sourceColumn.node != nil {
 			targetType := targetColumn.node.Type()
-			if sourceType.Kind() != targetType.Kind() {
-				return nil, &ConvertError{Path: path, From: sourceColumn.node, To: targetColumn.node}
+			sourceType := sourceColumn.node.Type()
+			if !typesAreEqual(targetType, sourceType) {
+				conversions = append(conversions,
+					convertToType(targetType, sourceType),
+				)
 			}
 
-			sourceRepetition := fieldRepetitionTypeOf(sourceColumn.node)
-			targetRepetition := fieldRepetitionTypeOf(targetColumn.node)
-			if sourceRepetition != targetRepetition {
-				return nil, &ConvertError{Path: path, From: sourceColumn.node, To: targetColumn.node}
+			repetitionLevels := make([]byte, len(path)+1)
+			definitionLevels := make([]byte, len(path)+1)
+			targetRepetitionLevel := byte(0)
+			targetDefinitionLevel := byte(0)
+			sourceRepetitionLevel := byte(0)
+			sourceDefinitionLevel := byte(0)
+			targetNode := to
+			sourceNode := from
+
+			for j := 0; j < len(path); j++ {
+				targetNode = fieldByName(targetNode, path[j])
+				sourceNode = fieldByName(sourceNode, path[j])
+
+				targetRepetitionLevel, targetDefinitionLevel = applyFieldRepetitionType(
+					fieldRepetitionTypeOf(targetNode),
+					targetRepetitionLevel,
+					targetDefinitionLevel,
+				)
+				sourceRepetitionLevel, sourceDefinitionLevel = applyFieldRepetitionType(
+					fieldRepetitionTypeOf(sourceNode),
+					sourceRepetitionLevel,
+					sourceDefinitionLevel,
+				)
+
+				repetitionLevels[sourceRepetitionLevel] = targetRepetitionLevel
+				definitionLevels[sourceDefinitionLevel] = targetDefinitionLevel
+			}
+
+			repetitionLevels = repetitionLevels[:sourceRepetitionLevel+1]
+			definitionLevels = definitionLevels[:sourceDefinitionLevel+1]
+
+			if !isDirectLevelMapping(repetitionLevels) || !isDirectLevelMapping(definitionLevels) {
+				conversions = append(conversions,
+					convertToLevels(repetitionLevels, definitionLevels),
+				)
+			}
+
+		} else {
+			targetType := targetColumn.node.Type()
+			targetKind := targetType.Kind()
+			sourceColumn = sourceMapping.lookupClosest(path)
+			if sourceColumn.node != nil {
+				conversions = append(conversions,
+					convertToZero(targetKind),
+				)
+			} else {
+				conversions = append(conversions,
+					convertToValue(ZeroValue(targetKind)),
+				)
 			}
 		}
 
-		sourceToTargetIndex[i] = targetColumn.columnIndex
+		columns[i] = conversionColumn{
+			sourceIndex:   int(sourceColumn.columnIndex),
+			convertValues: multiConversionFunc(conversions),
+		}
 	}
 
 	c := &conversion{
-		targetColumnTypes:   targetColumnTypes,
-		targetToSourceIndex: targetToSourceIndex,
-		sourceToTargetIndex: sourceToTargetIndex,
-		schema:              schema,
+		columns:               columns,
+		schema:                schema,
+		numberOfSourceColumns: len(sourceColumns),
 	}
-	c.convertFunc = c.makeConvertFunc(schema)
 	return c, nil
+}
+
+func isDirectLevelMapping(levels []byte) bool {
+	for i, level := range levels {
+		if level != byte(i) {
+			return false
+		}
+	}
+	return true
 }
 
 // ConvertRowGroup constructs a wrapper of the given row group which applies
@@ -500,30 +543,18 @@ func ConvertRowReader(rows RowReader, conv Conversion) RowReaderWithSchema {
 type convertedRows struct {
 	io.Closer
 	rows RowReadSeeker
-	buf  Row
 	conv Conversion
 }
 
 func (c *convertedRows) ReadRows(rows []Row) (int, error) {
-	maxRowLen := 0
-	defer func() {
-		clearValues(c.buf[:maxRowLen])
-	}()
-
 	n, err := c.rows.ReadRows(rows)
-
-	for i, row := range rows[:n] {
-		var err error
-		c.buf, err = c.conv.Convert(c.buf[:0], row)
-		if len(c.buf) > maxRowLen {
-			maxRowLen = len(c.buf)
+	if n > 0 {
+		var convErr error
+		n, convErr = c.conv.Convert(rows[:n])
+		if convErr != nil {
+			err = convErr
 		}
-		if err != nil {
-			return i, err
-		}
-		rows[i] = append(row[:0], c.buf...)
 	}
-
 	return n, err
 }
 

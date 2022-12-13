@@ -486,7 +486,7 @@ func TestRepeatedPageTrailingNulls(t *testing.T) {
 	defer reader.Close()
 
 	n, err := reader.ReadRows(rows)
-	if err != io.EOF {
+	if err != nil && err != io.EOF {
 		t.Fatal("reading rows:", err)
 	}
 
