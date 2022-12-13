@@ -136,7 +136,7 @@ func ExampleSearch() {
 		{FirstName: "R2", LastName: "D2"},
 	}
 	// The tiny page buffer size ensures we get multiple pages out of the example above.
-	w := parquet.NewGenericWriter[Row](buf, parquet.PageBufferSize(20), parquet.WriteBufferSize(0))
+	w := parquet.NewGenericWriter[Row](buf, parquet.PageBufferSize(12), parquet.WriteBufferSize(0))
 	// Need to write 1 row at a time here as writing many at once disregards PageBufferSize option.
 	for _, row := range rows {
 		_, err := w.Write([]Row{row})

@@ -111,6 +111,8 @@ func printColumns(t *testing.T, col *parquet.Column, indent string) {
 			t.Errorf("page of column %d declared %d nulls but %d were read", col.Index(), p.NumNulls(), nullCount)
 			return
 		}
+
+		parquet.Release(p)
 	}
 
 	for _, child := range col.Columns() {

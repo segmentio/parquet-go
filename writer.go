@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
-	"math"
 	"math/bits"
 	"sort"
 
@@ -245,11 +244,10 @@ type writer struct {
 	createdBy string
 	metadata  []format.KeyValue
 
-	columns       []*writerColumn
-	columnChunk   []format.ColumnChunk
-	columnIndex   []format.ColumnIndex
-	offsetIndex   []format.OffsetIndex
-	encodingStats [][]format.PageEncodingStats
+	columns     []*writerColumn
+	columnChunk []format.ColumnChunk
+	columnIndex []format.ColumnIndex
+	offsetIndex []format.OffsetIndex
 
 	columnOrders   []format.ColumnOrder
 	schemaElements []format.SchemaElement
@@ -361,7 +359,7 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 			maxRepetitionLevel: leaf.maxRepetitionLevel,
 			maxDefinitionLevel: leaf.maxDefinitionLevel,
 			bufferIndex:        int32(leaf.columnIndex),
-			bufferSize:         int32(config.PageBufferSize),
+			bufferSize:         int32(float64(config.PageBufferSize) * 0.98),
 			writePageStats:     config.DataPageStatistics,
 			encodings:          make([]format.Encoding, 0, 3),
 			// Data pages in version 2 can omit compression when dictionary
@@ -666,6 +664,18 @@ func (w *writer) writeRowGroup(rowGroupSchema *Schema, rowGroupSortingColumns []
 	offsetIndex := make([]format.OffsetIndex, len(w.offsetIndex))
 	copy(offsetIndex, w.offsetIndex)
 
+	for i := range columns {
+		c := &columns[i]
+		c.MetaData.EncodingStats = make([]format.PageEncodingStats, len(c.MetaData.EncodingStats))
+		copy(c.MetaData.EncodingStats, w.columnChunk[i].MetaData.EncodingStats)
+	}
+
+	for i := range offsetIndex {
+		c := &offsetIndex[i]
+		c.PageLocations = make([]format.PageLocation, len(c.PageLocations))
+		copy(c.PageLocations, w.offsetIndex[i].PageLocations)
+	}
+
 	w.rowGroups = append(w.rowGroups, format.RowGroup{
 		Columns:             columns,
 		TotalByteSize:       totalByteSize,
@@ -695,10 +705,10 @@ func (w *writer) WriteRows(rows []Row) (int, error) {
 		// using the writer after getting an error, but maybe we could ensure that
 		// we are preventing further use as well?
 		for _, row := range rows[start:end] {
-			for _, value := range row {
-				columnIndex := value.Column()
-				w.values[columnIndex] = append(w.values[columnIndex], value)
-			}
+			row.Range(func(columnIndex int, columnValues []Value) bool {
+				w.values[columnIndex] = append(w.values[columnIndex], columnValues...)
+				return true
+			})
 		}
 
 		for i, values := range w.values {
@@ -730,6 +740,19 @@ func (w *writer) writeRows(numRows int, write func(i, j int) (int, error)) (int,
 
 		if remain < int64(length) {
 			length = int(remain)
+		}
+
+		// Since the writer cannot flush pages across row boundaries, calls to
+		// WriteRows with very large slices can result in greatly exceeding the
+		// target page size. To set a limit to the impact of these large writes
+		// we chunk the input in slices of 64 rows.
+		//
+		// Note that this mechanism isn't perfect; for example, values may hold
+		// large byte slices which could still cause the column buffers to grow
+		// beyond the target page size.
+		const maxRowsPerWrite = 64
+		if length > maxRowsPerWrite {
+			length = maxRowsPerWrite
 		}
 
 		n, err := write(written, written+length)
@@ -845,7 +868,7 @@ func (wb *writerBuffers) swapPageAndScratchBuffers() {
 }
 
 type writerColumn struct {
-	pool  PageBufferPool
+	pool  BufferPool
 	pages []io.ReadWriteSeeker
 
 	columnPath   columnPath
@@ -870,8 +893,6 @@ type writerColumn struct {
 
 	filter         []byte
 	numRows        int64
-	maxValues      int32
-	numValues      int32
 	bufferIndex    int32
 	bufferSize     int32
 	writePageStats bool
@@ -893,7 +914,7 @@ func (c *writerColumn) reset() {
 		c.dictionary.Reset()
 	}
 	for _, page := range c.pages {
-		c.pool.PutPageBuffer(page)
+		c.pool.PutBuffer(page)
 	}
 	for i := range c.pages {
 		c.pages[i] = nil
@@ -903,7 +924,6 @@ func (c *writerColumn) reset() {
 	// buffer to avoid reallocating large memory blocks.
 	c.filter = c.filter[:0]
 	c.numRows = 0
-	c.numValues = 0
 	// Reset the fields of column chunks that change between row groups,
 	// but keep the ones that remain unchanged.
 	c.columnChunk.MetaData.NumValues = 0
@@ -912,12 +932,9 @@ func (c *writerColumn) reset() {
 	c.columnChunk.MetaData.DataPageOffset = 0
 	c.columnChunk.MetaData.DictionaryPageOffset = 0
 	c.columnChunk.MetaData.Statistics = format.Statistics{}
-	c.columnChunk.MetaData.EncodingStats = make([]format.PageEncodingStats, 0, cap(c.columnChunk.MetaData.EncodingStats))
+	c.columnChunk.MetaData.EncodingStats = c.columnChunk.MetaData.EncodingStats[:0]
 	c.columnChunk.MetaData.BloomFilterOffset = 0
-	// Retain the previous capacity in the new page locations array, assuming
-	// the number of pages should be roughly the same between row groups written
-	// by the writer.
-	c.offsetIndex.PageLocations = make([]format.PageLocation, 0, cap(c.offsetIndex.PageLocations))
+	c.offsetIndex.PageLocations = c.offsetIndex.PageLocations[:0]
 }
 
 func (c *writerColumn) totalRowCount() int64 {
@@ -929,8 +946,7 @@ func (c *writerColumn) totalRowCount() int64 {
 }
 
 func (c *writerColumn) flush() (err error) {
-	if c.numValues != 0 {
-		c.numValues = 0
+	if c.columnBuffer.Len() > 0 {
 		defer c.columnBuffer.Reset()
 		_, err = c.writeDataPage(c.columnBuffer.Page())
 	}
@@ -986,7 +1002,7 @@ func (c *writerColumn) flushFilterPages() error {
 	defer func() {
 		putBufioReader(rbuf, pool)
 		if pbuf != nil {
-			buffers.put(pbuf)
+			pbuf.unref()
 		}
 	}()
 
@@ -1001,7 +1017,7 @@ func (c *writerColumn) flushFilterPages() error {
 		}
 
 		if pbuf != nil {
-			buffers.put(pbuf)
+			pbuf.unref()
 		}
 		pbuf = buffers.get(int(header.CompressedPageSize))
 		if _, err := io.ReadFull(rbuf, pbuf.data); err != nil {
@@ -1033,8 +1049,7 @@ func (c *writerColumn) flushFilterPages() error {
 }
 
 func (c *writerColumn) resizeBloomFilter(numValues int64) {
-	const bitsPerValue = 10 // TODO: make this configurable
-	filterSize := c.columnFilter.Size(numValues, bitsPerValue)
+	filterSize := c.columnFilter.Size(numValues)
 	if cap(c.filter) < filterSize {
 		c.filter = make([]byte, filterSize)
 	} else {
@@ -1046,10 +1061,7 @@ func (c *writerColumn) resizeBloomFilter(numValues int64) {
 }
 
 func (c *writerColumn) newColumnBuffer() ColumnBuffer {
-	columnBufferCapacity := sort.Search(math.MaxInt32, func(i int) bool {
-		return c.columnType.EstimateSize(i) >= int64(c.bufferSize)
-	})
-	column := c.columnType.NewColumnBuffer(int(c.bufferIndex), columnBufferCapacity)
+	column := c.columnType.NewColumnBuffer(int(c.bufferIndex), c.columnType.EstimateNumValues(int(c.bufferSize)))
 	switch {
 	case c.maxRepetitionLevel > 0:
 		column = newRepeatedColumnBuffer(column, c.maxRepetitionLevel, c.maxDefinitionLevel, nullsGoLast)
@@ -1064,30 +1076,21 @@ func (c *writerColumn) writeRows(rows []Value) error {
 		// Lazily create the row group column so we don't need to allocate it if
 		// rows are not written individually to the column.
 		c.columnBuffer = c.newColumnBuffer()
-		c.maxValues = int32(c.columnBuffer.Cap())
 	}
-
-	if c.numValues > 0 && c.numValues > (c.maxValues-int32(len(rows))) {
-		if err := c.flush(); err != nil {
-			return err
-		}
-	}
-
 	if _, err := c.columnBuffer.WriteValues(rows); err != nil {
 		return err
 	}
-	c.numValues += int32(len(rows))
+	if c.columnBuffer.Size() >= int64(c.bufferSize) {
+		return c.flush()
+	}
 	return nil
 }
 
 func (c *writerColumn) WriteValues(values []Value) (numValues int, err error) {
 	if c.columnBuffer == nil {
 		c.columnBuffer = c.newColumnBuffer()
-		c.maxValues = int32(c.columnBuffer.Cap())
 	}
-	numValues, err = c.columnBuffer.WriteValues(values)
-	c.numValues += int32(numValues)
-	return numValues, err
+	return c.columnBuffer.WriteValues(values)
 }
 
 func (c *writerColumn) writeBloomFilter(w io.Writer) error {
@@ -1261,10 +1264,10 @@ func (w *writerColumn) writePageToFilter(page Page) (err error) {
 }
 
 func (c *writerColumn) writePageTo(size int64, writeTo func(io.Writer) (int64, error)) error {
-	buffer := c.pool.GetPageBuffer()
+	buffer := c.pool.GetBuffer()
 	defer func() {
 		if buffer != nil {
-			c.pool.PutPageBuffer(buffer)
+			c.pool.PutBuffer(buffer)
 		}
 	}()
 	written, err := writeTo(buffer)

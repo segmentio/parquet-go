@@ -364,6 +364,7 @@ func testFilePage(t *testing.T, schema *parquet.Schema, test pageTest) {
 	if err != nil {
 		t.Fatal("reading parquet page:", err)
 	}
+	defer parquet.Release(p)
 
 	values := p.Values()
 	r, err := test.read(values)
@@ -485,7 +486,7 @@ func TestRepeatedPageTrailingNulls(t *testing.T) {
 	defer reader.Close()
 
 	n, err := reader.ReadRows(rows)
-	if err != io.EOF {
+	if err != nil && err != io.EOF {
 		t.Fatal("reading rows:", err)
 	}
 

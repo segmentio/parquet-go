@@ -432,9 +432,13 @@ func testByteArrayEncoding(t *testing.T, e encoding.Encoding) {
 			var err error
 			buffer, err = e.EncodeByteArray(buffer, input, offsets)
 			assertNoError(t, err)
+			estimatedOutputSize := e.EstimateDecodeByteArraySize(buffer)
 			values, _, err = e.DecodeByteArray(values, buffer, offsets)
 			assertNoError(t, err)
 			assertEqualBytes(t, input, values)
+			if len(values) > estimatedOutputSize {
+				t.Errorf("the decode output was larger than the estimate: %d>%d", len(values), estimatedOutputSize)
+			}
 		})
 	}
 }

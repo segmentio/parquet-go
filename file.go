@@ -91,7 +91,12 @@ func OpenFile(r io.ReaderAt, size int64, options ...FileOption) (*File, error) {
 		return nil, fmt.Errorf("opening columns of parquet file: %w", err)
 	}
 
-	schema := NewSchema(f.root.Name(), f.root)
+	var schema *Schema
+	if c.Schema != nil {
+		schema = c.Schema
+	} else {
+		schema = NewSchema(f.root.Name(), f.root)
+	}
 	columns := make([]*Column, 0, numLeafColumnsOf(f.root))
 	f.schema = schema
 	f.root.forEachLeaf(func(c *Column) { columns = append(columns, c) })
@@ -563,13 +568,14 @@ func (f *filePages) ReadPage() (Page, error) {
 		// TODO: what about pages that don't embed the number of rows?
 		// (data page v1 with no offset index in the column chunk).
 		numRows := page.NumRows()
-		if numRows > f.skip {
-			seek := f.skip
+
+		if numRows <= f.skip {
+			Release(page)
+		} else {
+			tail := page.Slice(f.skip, numRows)
+			Release(page)
 			f.skip = 0
-			if seek > 0 {
-				page = page.Slice(seek, numRows)
-			}
-			return page, nil
+			return tail, nil
 		}
 
 		f.skip -= numRows

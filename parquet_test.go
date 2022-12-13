@@ -278,6 +278,11 @@ func forEachLeafColumn(col *parquet.Column, do func(*parquet.Column) error) erro
 }
 
 func forEachPage(pages parquet.PageReader, do func(parquet.Page) error) error {
+	doAndReleasePage := func(page parquet.Page) error {
+		defer parquet.Release(page)
+		return do(page)
+	}
+
 	for {
 		p, err := pages.ReadPage()
 		if err != nil {
@@ -286,7 +291,7 @@ func forEachPage(pages parquet.PageReader, do func(parquet.Page) error) error {
 			}
 			return err
 		}
-		if err := do(p); err != nil {
+		if err := doAndReleasePage(p); err != nil {
 			return err
 		}
 	}
