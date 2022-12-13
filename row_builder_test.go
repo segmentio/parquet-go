@@ -7,20 +7,27 @@ import (
 )
 
 func TestRowBuilder(t *testing.T) {
-	type add struct {
-		columnIndex int
-		columnValue parquet.Value
+	type (
+		operation  = func(*parquet.RowBuilder)
+		operations = []operation
+	)
+
+	add := func(columnIndex int, columnValue parquet.Value) operation {
+		return func(b *parquet.RowBuilder) { b.Add(columnIndex, columnValue) }
+	}
+
+	next := func(columnIndex int) operation {
+		return func(b *parquet.RowBuilder) { b.Next(columnIndex) }
 	}
 
 	tests := []struct {
-		scenario string
-		adds     []add
-		want     parquet.Row
-		schema   parquet.Node
+		scenario   string
+		operations operations
+		want       parquet.Row
+		schema     parquet.Node
 	}{
 		{
 			scenario: "add missing required column value",
-			adds:     nil,
 			want: parquet.Row{
 				parquet.Int64Value(0).Level(0, 0, 0),
 			},
@@ -31,8 +38,8 @@ func TestRowBuilder(t *testing.T) {
 
 		{
 			scenario: "set required column value",
-			adds: []add{
-				{columnIndex: 0, columnValue: parquet.Int64Value(1)},
+			operations: operations{
+				add(0, parquet.Int64Value(1)),
 			},
 			want: parquet.Row{
 				parquet.Int64Value(1).Level(0, 0, 0),
@@ -44,11 +51,11 @@ func TestRowBuilder(t *testing.T) {
 
 		{
 			scenario: "set repeated column values",
-			adds: []add{
-				{columnIndex: 0, columnValue: parquet.Int64Value(1)},
-				{columnIndex: 1, columnValue: parquet.ByteArrayValue([]byte(`1`))},
-				{columnIndex: 1, columnValue: parquet.ByteArrayValue([]byte(`2`))},
-				{columnIndex: 1, columnValue: parquet.ByteArrayValue([]byte(`3`))},
+			operations: operations{
+				add(0, parquet.Int64Value(1)),
+				add(1, parquet.ByteArrayValue([]byte(`1`))),
+				add(1, parquet.ByteArrayValue([]byte(`2`))),
+				add(1, parquet.ByteArrayValue([]byte(`3`))),
 			},
 			want: parquet.Row{
 				parquet.Int64Value(1).Level(0, 0, 0),
@@ -64,8 +71,8 @@ func TestRowBuilder(t *testing.T) {
 
 		{
 			scenario: "add missing repeated column value",
-			adds: []add{
-				{columnIndex: 0, columnValue: parquet.Int64Value(1)},
+			operations: operations{
+				add(0, parquet.Int64Value(1)),
 			},
 			want: parquet.Row{
 				parquet.Int64Value(1).Level(0, 0, 0),
@@ -79,8 +86,8 @@ func TestRowBuilder(t *testing.T) {
 
 		{
 			scenario: "add missing optional column value",
-			adds: []add{
-				{columnIndex: 0, columnValue: parquet.Int64Value(1)},
+			operations: operations{
+				add(0, parquet.Int64Value(1)),
 			},
 			want: parquet.Row{
 				parquet.Int64Value(1).Level(0, 0, 0),
@@ -94,8 +101,8 @@ func TestRowBuilder(t *testing.T) {
 
 		{
 			scenario: "add missing nested column values",
-			adds: []add{
-				{columnIndex: 0, columnValue: parquet.Int64Value(1)},
+			operations: operations{
+				add(0, parquet.Int64Value(1)),
 			},
 			want: parquet.Row{
 				parquet.Int64Value(1).Level(0, 0, 0),
@@ -115,12 +122,12 @@ func TestRowBuilder(t *testing.T) {
 
 		{
 			scenario: "add missing repeated column group",
-			adds: []add{
-				{columnIndex: 0, columnValue: parquet.Int64Value(1)},
-				{columnIndex: 2, columnValue: parquet.ByteArrayValue([]byte(`me`))},
-				{columnIndex: 1, columnValue: parquet.Int32Value(0)},
-				{columnIndex: 1, columnValue: parquet.Int32Value(123456)},
-				{columnIndex: 2, columnValue: parquet.ByteArrayValue([]byte(`you`))},
+			operations: operations{
+				add(0, parquet.Int64Value(1)),
+				add(2, parquet.ByteArrayValue([]byte(`me`))),
+				add(1, parquet.Int32Value(0)),
+				add(1, parquet.Int32Value(123456)),
+				add(2, parquet.ByteArrayValue([]byte(`you`))),
 			},
 			want: parquet.Row{
 				parquet.Int64Value(1).Level(0, 0, 0),
@@ -146,7 +153,6 @@ func TestRowBuilder(t *testing.T) {
 
 		{
 			scenario: "empty map",
-			adds:     []add{},
 			want: parquet.Row{
 				parquet.Value{}.Level(0, 0, 0),
 				parquet.Value{}.Level(0, 0, 1),
@@ -160,6 +166,67 @@ func TestRowBuilder(t *testing.T) {
 				}),
 			},
 		},
+
+		{
+			scenario: "one nested maps",
+			operations: operations{
+				add(0, parquet.ByteArrayValue([]byte(`A`))),
+				add(1, parquet.ByteArrayValue([]byte(`1`))),
+				add(0, parquet.ByteArrayValue([]byte(`B`))),
+				add(1, parquet.ByteArrayValue([]byte(`2`))),
+			},
+			want: parquet.Row{
+				// objects.attributes.key_value.key
+				parquet.ByteArrayValue([]byte(`A`)).Level(0, 2, 0),
+				parquet.ByteArrayValue([]byte(`B`)).Level(2, 2, 0),
+				// objects.attributes.key_value.value
+				parquet.ByteArrayValue([]byte(`1`)).Level(0, 3, 1),
+				parquet.ByteArrayValue([]byte(`2`)).Level(2, 3, 1),
+			},
+			schema: parquet.Group{
+				"objects": parquet.Repeated(parquet.Group{
+					"attributes": parquet.Repeated(parquet.Group{
+						"key_value": parquet.Group{
+							"key":   parquet.String(),
+							"value": parquet.Optional(parquet.String()),
+						},
+					}),
+				}),
+			},
+		},
+
+		{
+			scenario: "multiple nested maps",
+			operations: operations{
+				add(0, parquet.ByteArrayValue([]byte(`A`))),
+				add(1, parquet.ByteArrayValue([]byte(`1`))),
+				add(0, parquet.ByteArrayValue([]byte(`B`))),
+				add(1, parquet.ByteArrayValue([]byte(`2`))),
+				next(1), // same as next(0) because the columns are in the same group
+				add(0, parquet.ByteArrayValue([]byte(`C`))),
+				add(1, parquet.ByteArrayValue([]byte(`3`))),
+			},
+			want: parquet.Row{
+				// objects.attributes.key_value.key
+				parquet.ByteArrayValue([]byte(`A`)).Level(0, 2, 0),
+				parquet.ByteArrayValue([]byte(`B`)).Level(2, 2, 0),
+				parquet.ByteArrayValue([]byte(`C`)).Level(1, 2, 0),
+				// objects.attributes.key_value.value
+				parquet.ByteArrayValue([]byte(`1`)).Level(0, 3, 1),
+				parquet.ByteArrayValue([]byte(`2`)).Level(2, 3, 1),
+				parquet.ByteArrayValue([]byte(`3`)).Level(1, 3, 1),
+			},
+			schema: parquet.Group{
+				"objects": parquet.Repeated(parquet.Group{
+					"attributes": parquet.Repeated(parquet.Group{
+						"key_value": parquet.Group{
+							"key":   parquet.String(),
+							"value": parquet.Optional(parquet.String()),
+						},
+					}),
+				}),
+			},
+		},
 	}
 
 	for _, test := range tests {
@@ -167,8 +234,8 @@ func TestRowBuilder(t *testing.T) {
 			b := parquet.NewRowBuilder(test.schema)
 
 			for i := 0; i < 2; i++ {
-				for _, add := range test.adds {
-					b.Add(add.columnIndex, add.columnValue)
+				for _, op := range test.operations {
+					op(b)
 				}
 
 				if got := b.Row(); !got.Equal(test.want) {

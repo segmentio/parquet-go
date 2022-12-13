@@ -10,16 +10,18 @@ type RowBuilder struct {
 }
 
 type columnLevel struct {
+	repetitionDepth byte
 	repetitionLevel byte
 	definitionLevel byte
 }
 
 type columnGroup struct {
-	baseColumn []Value
-	members    []int16
-	startIndex int16
-	endIndex   int16
-	columnLevel
+	baseColumn      []Value
+	members         []int16
+	startIndex      int16
+	endIndex        int16
+	repetitionLevel byte
+	definitionLevel byte
 }
 
 // NewRowBuilder constructs a RowBuilder which builds rows for the parquet
@@ -39,98 +41,85 @@ func NewRowBuilder(schema Node) *RowBuilder {
 		b.columns[i] = buffers[i : i : i+1]
 	}
 	topGroup := &columnGroup{baseColumn: []Value{{}}}
-	endIndex := b.configureGroup(schema, 0, columnLevel{}, topGroup)
+	endIndex := b.configure(schema, 0, columnLevel{}, topGroup)
 	topGroup.endIndex = endIndex
 	b.groups = append(b.groups, topGroup)
 	return b
 }
 
-func (b *RowBuilder) configure(node Node, columnIndex int16, level columnLevel, group *columnGroup) int16 {
+func (b *RowBuilder) configure(node Node, columnIndex int16, level columnLevel, group *columnGroup) (endIndex int16) {
 	switch {
 	case node.Optional():
-		return b.configureOptional(node, columnIndex, level, group)
+		level.definitionLevel++
+		endIndex = b.configure(Required(node), columnIndex, level, group)
+
+		for i := columnIndex; i < endIndex; i++ {
+			b.kinds[i] = 0 // null if not set
+		}
+
 	case node.Repeated():
-		return b.configureRepeated(node, columnIndex, level, group)
-	default:
-		return b.configureRequired(node, columnIndex, level, group)
-	}
-}
+		level.definitionLevel++
 
-func (b *RowBuilder) configureOptional(node Node, columnIndex int16, level columnLevel, group *columnGroup) int16 {
-	level.definitionLevel++
-	endIndex := b.configureRequired(node, columnIndex, level, group)
+		group = &columnGroup{
+			startIndex:      columnIndex,
+			repetitionLevel: level.repetitionDepth,
+			definitionLevel: level.definitionLevel,
+		}
 
-	for i := columnIndex; i < endIndex; i++ {
-		b.kinds[i] = 0 // null if not set
-	}
+		level.repetitionDepth++
+		endIndex = b.configure(Required(node), columnIndex, level, group)
 
-	return endIndex
-}
+		for i := columnIndex; i < endIndex; i++ {
+			b.kinds[i] = 0 // null if not set
+		}
 
-func (b *RowBuilder) configureRepeated(node Node, columnIndex int16, level columnLevel, group *columnGroup) int16 {
-	level.repetitionLevel++
-	level.definitionLevel++
+		group.endIndex = endIndex
+		b.groups = append(b.groups, group)
 
-	group = &columnGroup{startIndex: columnIndex, columnLevel: level}
-	endIndex := b.configureRequired(node, columnIndex, level, group)
-
-	for i := columnIndex; i < endIndex; i++ {
-		b.kinds[i] = 0 // null if not set
-	}
-
-	group.endIndex = endIndex
-	b.groups = append(b.groups, group)
-	return endIndex
-}
-
-func (b *RowBuilder) configureRequired(node Node, columnIndex int16, level columnLevel, group *columnGroup) int16 {
-	switch {
 	case node.Leaf():
-		return b.configureLeaf(node, columnIndex, level, group)
-	default:
-		return b.configureGroup(node, columnIndex, level, group)
-	}
-}
+		group.members = append(group.members, columnIndex)
+		b.kinds[columnIndex] = ^int8(node.Type().Kind())
+		b.levels[columnIndex] = level
+		endIndex = columnIndex + 1
 
-func (b *RowBuilder) configureGroup(node Node, columnIndex int16, level columnLevel, group *columnGroup) int16 {
-	endIndex := columnIndex
-	for _, field := range node.Fields() {
-		endIndex = b.configure(field, endIndex, level, group)
+	default:
+		endIndex = columnIndex
+
+		for _, field := range node.Fields() {
+			endIndex = b.configure(field, endIndex, level, group)
+		}
 	}
 	return endIndex
-}
-
-func (b *RowBuilder) configureLeaf(node Node, columnIndex int16, level columnLevel, group *columnGroup) int16 {
-	group.members = append(group.members, columnIndex)
-	b.kinds[columnIndex] = ^int8(node.Type().Kind())
-	b.levels[columnIndex] = level
-	return columnIndex + 1
 }
 
 // Add adds columnValue to the column at columnIndex.
 func (b *RowBuilder) Add(columnIndex int, columnValue Value) {
-	level := b.levels[columnIndex]
+	level := &b.levels[columnIndex]
 	columnValue.repetitionLevel = level.repetitionLevel
 	columnValue.definitionLevel = level.definitionLevel
+	columnValue.columnIndex = ^int16(columnIndex)
+	level.repetitionLevel = level.repetitionDepth
 	b.columns[columnIndex] = append(b.columns[columnIndex], columnValue)
 }
 
-// Set sets the values at columnIndex to a copy of columnValues.
-func (b *RowBuilder) Set(columnIndex int, columnValues ...Value) {
-	column := b.columns[columnIndex][:0]
-
-	i := len(column)
-	column = append(column, columnValues...)
-
-	level := b.levels[columnIndex]
-	for i < len(column) {
-		v := &column[i]
-		v.repetitionLevel = level.repetitionLevel
-		v.definitionLevel = level.definitionLevel
-		i++
+// Next must be called to indicate the start of a new repeated record for the
+// column at the given index.
+//
+// If the column index is part of a repeated group, the builder automatically
+// starts a new record for all adjacent columns, the application does not need
+// to call this method for each column of the repeated group.
+//
+// Next must be called after adding a sequence of records.
+func (b *RowBuilder) Next(columnIndex int) {
+	for _, group := range b.groups {
+		if group.startIndex <= int16(columnIndex) && int16(columnIndex) < group.endIndex {
+			for i := group.startIndex; i < group.endIndex; i++ {
+				level := &b.levels[i]
+				level.repetitionLevel = group.repetitionLevel
+			}
+			break
+		}
 	}
-
-	b.columns[columnIndex] = column
 }
 
 // Reset clears the internal state of b, making it possible to reuse while
@@ -139,6 +128,9 @@ func (b *RowBuilder) Reset() {
 	for i, column := range b.columns {
 		clearValues(column)
 		b.columns[i] = column[:0]
+	}
+	for i := range b.levels {
+		b.levels[i].repetitionLevel = 0
 	}
 }
 
@@ -170,14 +162,16 @@ func (b *RowBuilder) AppendRow(row Row) Row {
 					n := len(column)
 					column = append(column, maxColumn[n:]...)
 
-					kind := b.kinds[group.startIndex+int16(i)]
+					columnIndex := group.startIndex + int16(i)
+					kind := b.kinds[columnIndex]
+
 					for n < len(column) {
 						v := &column[n]
 						v.kind = kind
 						v.ptr = nil
 						v.u64 = 0
-						v.repetitionLevel = group.repetitionLevel
 						v.definitionLevel = group.definitionLevel
+						v.columnIndex = ^columnIndex
 						n++
 					}
 
@@ -187,17 +181,5 @@ func (b *RowBuilder) AppendRow(row Row) Row {
 		}
 	}
 
-	for i, column := range b.columns {
-		columnIndex := ^int16(i)
-		column[0].repetitionLevel = 0
-		column[0].columnIndex = columnIndex
-
-		for j := 1; j < len(column); j++ {
-			column[j].columnIndex = columnIndex
-		}
-
-		row = append(row, column...)
-	}
-
-	return row
+	return appendRow(row, b.columns)
 }
