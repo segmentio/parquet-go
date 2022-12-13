@@ -13,6 +13,7 @@ import (
 
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/encoding"
+	"github.com/segmentio/parquet-go/format"
 )
 
 // ConvertError is an error type returned by calls to Convert when the conversion
@@ -936,8 +937,8 @@ func convertStringToDate(v Value, tz *time.Location) (Value, error) {
 	if err != nil {
 		return v, conversionError(v, "STRING", "DATE", err)
 	}
-	days := int64(t.Sub(unixEpoch).Hours()) / 24
-	return v.convertToInt32(int32(days)), nil
+	d := days(t)
+	return v.convertToInt32(int32(d)), nil
 }
 
 func convertStringToTimeMillis(v Value, tz *time.Location) (Value, error) {
@@ -945,9 +946,8 @@ func convertStringToTimeMillis(v Value, tz *time.Location) (Value, error) {
 	if err != nil {
 		return v, conversionError(v, "STRING", "TIME", err)
 	}
-	y, m, d := t.Date()
-	midnight := time.Date(y, m, d, 0, 0, 0, 0, tz)
-	milliseconds := t.Sub(midnight).Milliseconds()
+	m := midnight(t)
+	milliseconds := t.Sub(m).Milliseconds()
 	return v.convertToInt32(int32(milliseconds)), nil
 }
 
@@ -956,14 +956,19 @@ func convertStringToTimeMicros(v Value, tz *time.Location) (Value, error) {
 	if err != nil {
 		return v, conversionError(v, "STRING", "TIME", err)
 	}
-	y, m, d := t.Date()
-	midnight := time.Date(y, m, d, 0, 0, 0, 0, tz)
-	microseconds := t.Sub(midnight).Microseconds()
+	m := midnight(t)
+	microseconds := t.Sub(m).Microseconds()
 	return v.convertToInt64(microseconds), nil
 }
 
-func convertDateToString(v Value, tz *time.Location) (Value, error) {
-	t := unixEpoch.In(tz).AddDate(0, 0, int(v.int32()))
+func convertDateToTimestamp(v Value, u format.TimeUnit, tz *time.Location) (Value, error) {
+	t := unixEpoch.AddDate(0, 0, int(v.int32()))
+	d := timeUnitDuration(u)
+	return v.convertToInt64(int64(t.In(tz).Sub(unixEpoch) / d)), nil
+}
+
+func convertDateToString(v Value) (Value, error) {
+	t := unixEpoch.AddDate(0, 0, int(v.int32()))
 	b := t.AppendFormat(make([]byte, 0, 10), "2006-01-02")
 	return v.convertToByteArray(b), nil
 }
@@ -978,6 +983,59 @@ func convertTimeMicrosToString(v Value, tz *time.Location) (Value, error) {
 	t := time.UnixMicro(v.int64()).In(tz)
 	b := t.AppendFormat(make([]byte, 0, 15), "15:04:05.999999")
 	return v.convertToByteArray(b), nil
+}
+
+func convertTimestampToDate(v Value, u format.TimeUnit, tz *time.Location) (Value, error) {
+	t := timestamp(v, u, tz)
+	d := days(t)
+	return v.convertToInt32(int32(d)), nil
+}
+
+func convertTimestampToTimeMillis(v Value, u format.TimeUnit, sourceZone, targetZone *time.Location) (Value, error) {
+	t := timestamp(v, u, sourceZone)
+	m := midnight(t)
+	milliseconds := t.In(targetZone).Sub(m).Milliseconds()
+	return v.convertToInt32(int32(milliseconds)), nil
+}
+
+func convertTimestampToTimeMicros(v Value, u format.TimeUnit, sourceZone, targetZone *time.Location) (Value, error) {
+	t := timestamp(v, u, sourceZone)
+	m := midnight(t)
+	microseconds := t.In(targetZone).Sub(m).Microseconds()
+	return v.convertToInt64(int64(microseconds)), nil
+}
+
+func convertTimestampToTimestamp(v Value, sourceUnit, targetUnit format.TimeUnit) (Value, error) {
+	sourceScale := timeUnitDuration(sourceUnit).Nanoseconds()
+	targetScale := timeUnitDuration(targetUnit).Nanoseconds()
+	targetValue := (v.int64() * sourceScale) / targetScale
+	return v.convertToInt64(targetValue), nil
+}
+
+const nanosecondsPerDay = 24 * 60 * 60 * 1e9
+
+func days(t time.Time) int {
+	return int(t.Sub(unixEpoch).Hours()) / 24
+}
+
+func midnight(t time.Time) time.Time {
+	y, m, d := t.Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, t.Location())
+}
+
+func timestamp(v Value, u format.TimeUnit, tz *time.Location) time.Time {
+	return unixEpoch.In(tz).Add(time.Duration(v.int64()) * timeUnitDuration(u))
+}
+
+func timeUnitDuration(unit format.TimeUnit) time.Duration {
+	switch {
+	case unit.Millis != nil:
+		return time.Millisecond
+	case unit.Micros != nil:
+		return time.Microsecond
+	default:
+		return time.Nanosecond
+	}
 }
 
 func invalidConversion(value Value, from, to string) error {

@@ -1037,6 +1037,22 @@ func TestConvertValue(t *testing.T) {
 		},
 
 		{
+			scenario:  "date to millisecond timestamp",
+			fromType:  parquet.Date().Type(),
+			fromValue: parquet.Int32Value(19338),
+			toType:    parquet.Timestamp(parquet.Millisecond).Type(),
+			toValue:   parquet.Int64Value(1670803200000),
+		},
+
+		{
+			scenario:  "date to microsecond timestamp",
+			fromType:  parquet.Date().Type(),
+			fromValue: parquet.Int32Value(19338),
+			toType:    parquet.Timestamp(parquet.Microsecond).Type(),
+			toValue:   parquet.Int64Value(1670803200000000),
+		},
+
+		{
 			scenario:  "date to string",
 			fromType:  parquet.Date().Type(),
 			fromValue: parquet.Int32Value(18995),
@@ -1058,6 +1074,54 @@ func TestConvertValue(t *testing.T) {
 			fromValue: parquet.Int64Value(45296789012),
 			toType:    parquet.String().Type(),
 			toValue:   parquet.ByteArrayValue([]byte(`12:34:56.789012`)),
+		},
+
+		{
+			scenario:  "millisecond timestamp to date",
+			fromType:  parquet.Timestamp(parquet.Millisecond).Type(),
+			fromValue: parquet.Int64Value(1670888613000),
+			toType:    parquet.Date().Type(),
+			toValue:   parquet.Int32Value(19338),
+		},
+
+		{
+			scenario:  "microsecond timestamp to date",
+			fromType:  parquet.Timestamp(parquet.Microsecond).Type(),
+			fromValue: parquet.Int64Value(1670888613000123),
+			toType:    parquet.Date().Type(),
+			toValue:   parquet.Int32Value(19338),
+		},
+
+		{
+			scenario:  "millisecond timestamp to millisecond time",
+			fromType:  parquet.Timestamp(parquet.Millisecond).Type(),
+			fromValue: parquet.Int64Value(1670888613123),
+			toType:    parquet.Time(parquet.Millisecond).Type(),
+			toValue:   parquet.Int32Value(85413123),
+		},
+
+		{
+			scenario:  "millisecond timestamp to micronsecond time",
+			fromType:  parquet.Timestamp(parquet.Millisecond).Type(),
+			fromValue: parquet.Int64Value(1670888613123),
+			toType:    parquet.Time(parquet.Microsecond).Type(),
+			toValue:   parquet.Int64Value(85413123000),
+		},
+
+		{
+			scenario:  "microsecond timestamp to millisecond time",
+			fromType:  parquet.Timestamp(parquet.Microsecond).Type(),
+			fromValue: parquet.Int64Value(1670888613123456),
+			toType:    parquet.Time(parquet.Millisecond).Type(),
+			toValue:   parquet.Int32Value(85413123),
+		},
+
+		{
+			scenario:  "microsecond timestamp to micronsecond time",
+			fromType:  parquet.Timestamp(parquet.Microsecond).Type(),
+			fromValue: parquet.Int64Value(1670888613123456),
+			toType:    parquet.Time(parquet.Microsecond).Type(),
+			toValue:   parquet.Int64Value(85413123456),
 		},
 
 		{

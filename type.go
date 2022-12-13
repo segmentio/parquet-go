@@ -1339,7 +1339,7 @@ func (t *stringType) AssignValue(dst reflect.Value, src Value) error {
 func (t *stringType) ConvertValue(val Value, typ Type) (Value, error) {
 	switch t2 := typ.(type) {
 	case *dateType:
-		return convertDateToString(val, time.UTC)
+		return convertDateToString(val)
 	case *timeType:
 		tz := t2.tz()
 		if t2.Unit.Micros != nil {
@@ -1735,9 +1735,11 @@ func (t *dateType) AssignValue(dst reflect.Value, src Value) error {
 }
 
 func (t *dateType) ConvertValue(val Value, typ Type) (Value, error) {
-	switch typ.(type) {
+	switch src := typ.(type) {
 	case *stringType:
 		return convertStringToDate(val, time.UTC)
+	case *timestampType:
+		return convertTimestampToDate(val, src.Unit, src.tz())
 	}
 	return int32Type{}.ConvertValue(val, typ)
 }
@@ -1875,13 +1877,20 @@ func (t *timeType) AssignValue(dst reflect.Value, src Value) error {
 }
 
 func (t *timeType) ConvertValue(val Value, typ Type) (Value, error) {
-	switch typ.(type) {
+	switch src := typ.(type) {
 	case *stringType:
 		tz := t.tz()
 		if t.Unit.Micros != nil {
 			return convertStringToTimeMicros(val, tz)
 		} else {
 			return convertStringToTimeMillis(val, tz)
+		}
+	case *timestampType:
+		tz := t.tz()
+		if t.Unit.Micros != nil {
+			return convertTimestampToTimeMicros(val, src.Unit, src.tz(), tz)
+		} else {
+			return convertTimestampToTimeMillis(val, src.Unit, src.tz(), tz)
 		}
 	}
 	return t.baseType().ConvertValue(val, typ)
@@ -1895,6 +1904,14 @@ func Timestamp(unit TimeUnit) Node {
 }
 
 type timestampType format.TimestampType
+
+func (t *timestampType) tz() *time.Location {
+	if t.IsAdjustedToUTC {
+		return time.UTC
+	} else {
+		return time.Local
+	}
+}
 
 func (t *timestampType) String() string { return (*format.TimestampType)(t).String() }
 
@@ -1985,31 +2002,13 @@ func (t *timestampType) AssignValue(dst reflect.Value, src Value) error {
 }
 
 func (t *timestampType) ConvertValue(val Value, typ Type) (Value, error) {
-	var sourceTs *format.TimestampType
-	if typ.LogicalType() != nil {
-		sourceTs = typ.LogicalType().Timestamp
+	switch src := typ.(type) {
+	case *timestampType:
+		return convertTimestampToTimestamp(val, src.Unit, t.Unit)
+	case *dateType:
+		return convertDateToTimestamp(val, t.Unit, t.tz())
 	}
-
-	// Ignore when source is not a timestamp (i.e., Integer)
-	if sourceTs == nil {
-		return val, nil
-	}
-
-	source := timeUnitDuration(sourceTs.Unit)
-	target := timeUnitDuration(t.Unit)
-	converted := (val.int64() * source.Nanoseconds()) / target.Nanoseconds()
-	return val.convertToInt64(converted), nil
-}
-
-func timeUnitDuration(unit format.TimeUnit) time.Duration {
-	switch {
-	case unit.Millis != nil:
-		return time.Millisecond
-	case unit.Micros != nil:
-		return time.Microsecond
-	default:
-		return time.Nanosecond
-	}
+	return int64Type{}.ConvertValue(val, typ)
 }
 
 // List constructs a node of LIST logical type.
