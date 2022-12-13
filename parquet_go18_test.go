@@ -367,17 +367,6 @@ func TestIssue423(t *testing.T) {
 	}
 
 	assertRowsEqual(t, writeRows, readRows)
-
-	err = parquet.WriteFile("testdata/issue423.parquet", writeRows, schema)
-	if err != nil {
-		t.Fatal("write error: ", err)
-	}
-
-	readRows, err = parquet.ReadFile[Outer]("testdata/issue423.parquet", schema)
-	if err != nil {
-		t.Fatal("read error: ", err)
-	}
-	assertRowsEqual(t, writeRows, readRows)
 }
 
 func assertRowsEqual[T any](t *testing.T, rows1, rows2 []T) {
