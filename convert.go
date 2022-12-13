@@ -937,7 +937,7 @@ func convertStringToDate(v Value, tz *time.Location) (Value, error) {
 	if err != nil {
 		return v, conversionError(v, "STRING", "DATE", err)
 	}
-	d := days(t)
+	d := daysSinceUnixEpoch(t)
 	return v.convertToInt32(int32(d)), nil
 }
 
@@ -946,7 +946,7 @@ func convertStringToTimeMillis(v Value, tz *time.Location) (Value, error) {
 	if err != nil {
 		return v, conversionError(v, "STRING", "TIME", err)
 	}
-	m := midnight(t)
+	m := nearestMidnightLessThan(t)
 	milliseconds := t.Sub(m).Milliseconds()
 	return v.convertToInt32(int32(milliseconds)), nil
 }
@@ -956,7 +956,7 @@ func convertStringToTimeMicros(v Value, tz *time.Location) (Value, error) {
 	if err != nil {
 		return v, conversionError(v, "STRING", "TIME", err)
 	}
-	m := midnight(t)
+	m := nearestMidnightLessThan(t)
 	microseconds := t.Sub(m).Microseconds()
 	return v.convertToInt64(microseconds), nil
 }
@@ -987,20 +987,20 @@ func convertTimeMicrosToString(v Value, tz *time.Location) (Value, error) {
 
 func convertTimestampToDate(v Value, u format.TimeUnit, tz *time.Location) (Value, error) {
 	t := timestamp(v, u, tz)
-	d := days(t)
+	d := daysSinceUnixEpoch(t)
 	return v.convertToInt32(int32(d)), nil
 }
 
 func convertTimestampToTimeMillis(v Value, u format.TimeUnit, sourceZone, targetZone *time.Location) (Value, error) {
 	t := timestamp(v, u, sourceZone)
-	m := midnight(t)
+	m := nearestMidnightLessThan(t)
 	milliseconds := t.In(targetZone).Sub(m).Milliseconds()
 	return v.convertToInt32(int32(milliseconds)), nil
 }
 
 func convertTimestampToTimeMicros(v Value, u format.TimeUnit, sourceZone, targetZone *time.Location) (Value, error) {
 	t := timestamp(v, u, sourceZone)
-	m := midnight(t)
+	m := nearestMidnightLessThan(t)
 	microseconds := t.In(targetZone).Sub(m).Microseconds()
 	return v.convertToInt64(int64(microseconds)), nil
 }
@@ -1014,11 +1014,11 @@ func convertTimestampToTimestamp(v Value, sourceUnit, targetUnit format.TimeUnit
 
 const nanosecondsPerDay = 24 * 60 * 60 * 1e9
 
-func days(t time.Time) int {
+func daysSinceUnixEpoch(t time.Time) int {
 	return int(t.Sub(unixEpoch).Hours()) / 24
 }
 
-func midnight(t time.Time) time.Time {
+func nearestMidnightLessThan(t time.Time) time.Time {
 	y, m, d := t.Date()
 	return time.Date(y, m, d, 0, 0, 0, 0, t.Location())
 }
