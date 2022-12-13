@@ -4,7 +4,7 @@ package parquet
 // to each row rad from reader.
 //
 // The transformation function appends the transformed src row to dst, returning
-// dst and any error that occured during the transformation. If dst is returned
+// dst and any error that occurred during the transformation. If dst is returned
 // unchanged, the row is skipped.
 func TransformRowReader(reader RowReader, transform func(dst, src Row) (Row, error)) RowReader {
 	return &transformRowReader{reader: reader, transform: transform}
@@ -93,7 +93,7 @@ func (b *transformRowBuffer) len() int {
 // to each row writter to writer.
 //
 // The transformation function appends the transformed src row to dst, returning
-// dst and any error that occured during the transformation. If dst is returned
+// dst and any error that occurred during the transformation. If dst is returned
 // unchanged, the row is skipped.
 func TransformRowWriter(writer RowWriter, transform func(dst, src Row) (Row, error)) RowWriter {
 	return &transformRowWriter{writer: writer, transform: transform}
