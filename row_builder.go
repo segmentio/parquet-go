@@ -130,8 +130,9 @@ func (b *RowBuilder) Next(columnIndex int) {
 	for _, group := range b.groups {
 		if group.startIndex <= int16(columnIndex) && int16(columnIndex) < group.endIndex {
 			for i := group.startIndex; i < group.endIndex; i++ {
-				level := &b.levels[i]
-				level.repetitionLevel = group.repetitionLevel
+				if level := &b.levels[i]; level.repetitionLevel != 0 {
+					level.repetitionLevel = group.repetitionLevel
+				}
 			}
 			break
 		}
