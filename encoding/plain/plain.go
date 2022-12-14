@@ -282,7 +282,7 @@ func NextByteArray(b []byte) (v, r []byte, err error) {
 }
 
 func ErrTooShort(length int) error {
-	return fmt.Errorf("input of length %d is too short to contain a PLAIN encoded byte array value: %w", length, io.ErrUnexpectedEOF)
+	return fmt.Errorf("input of length %d is too short to contain a PLAIN encoded value: %w", length, io.ErrUnexpectedEOF)
 }
 
 func ErrTooLarge(length int) error {
