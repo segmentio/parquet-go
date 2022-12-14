@@ -272,7 +272,7 @@ func newWriter(output io.Writer, config *WriterConfig) *writer {
 	for k, v := range config.KeyValueMetadata {
 		w.metadata = append(w.metadata, format.KeyValue{Key: k, Value: v})
 	}
-	sortKeyValueMetadata(w.metadata)
+	format.SortKeyValueMetadata(w.metadata)
 	w.sortingColumns = make([]format.SortingColumn, len(config.Sorting.SortingColumns))
 
 	config.Schema.forEachNode(func(name string, node Node) {
@@ -481,7 +481,7 @@ func (w *writer) flush() error {
 }
 
 func (w *writer) writeFileHeader() error {
-	if w.writer.writer == nil {
+	if w.writer.Writer() == nil {
 		return io.ErrClosedPipe
 	}
 	if w.writer.Offset() == 0 {

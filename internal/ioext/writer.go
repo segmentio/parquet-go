@@ -9,6 +9,10 @@ type OffsetTrackingWriter struct {
 	offset int64
 }
 
+func (w *OffsetTrackingWriter) Writer() io.Writer {
+	return w.writer
+}
+
 func (w *OffsetTrackingWriter) Offset() int64 {
 	return w.offset
 }

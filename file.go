@@ -149,7 +149,7 @@ func OpenFile(r io.ReaderAt, size int64, options ...FileOption) (*File, error) {
 		}
 	}
 
-	sortKeyValueMetadata(f.metadata.KeyValueMetadata)
+	format.SortKeyValueMetadata(f.metadata.KeyValueMetadata)
 	return f, nil
 }
 
@@ -332,7 +332,14 @@ func (f *File) OffsetIndexes() []format.OffsetIndex { return f.offsetIndexes }
 //
 // The ok boolean will be true if the key was found, false otherwise.
 func (f *File) Lookup(key string) (value string, ok bool) {
-	return lookupKeyValueMetadata(f.metadata.KeyValueMetadata, key)
+	m := f.metadata.KeyValueMetadata
+	i := sort.Search(len(m), func(i int) bool {
+		return m[i].Key >= key
+	})
+	if i == len(m) || m[i].Key != key {
+		return "", false
+	}
+	return m[i].Value, true
 }
 
 func (f *File) hasIndexes() bool {
@@ -340,29 +347,6 @@ func (f *File) hasIndexes() bool {
 }
 
 var _ io.ReaderAt = (*File)(nil)
-
-func sortKeyValueMetadata(keyValueMetadata []format.KeyValue) {
-	sort.Slice(keyValueMetadata, func(i, j int) bool {
-		switch {
-		case keyValueMetadata[i].Key < keyValueMetadata[j].Key:
-			return true
-		case keyValueMetadata[i].Key > keyValueMetadata[j].Key:
-			return false
-		default:
-			return keyValueMetadata[i].Value < keyValueMetadata[j].Value
-		}
-	})
-}
-
-func lookupKeyValueMetadata(keyValueMetadata []format.KeyValue, key string) (value string, ok bool) {
-	i := sort.Search(len(keyValueMetadata), func(i int) bool {
-		return keyValueMetadata[i].Key >= key
-	})
-	if i == len(keyValueMetadata) || keyValueMetadata[i].Key != key {
-		return "", false
-	}
-	return keyValueMetadata[i].Value, true
-}
 
 type fileRowGroup struct {
 	schema   *Schema
