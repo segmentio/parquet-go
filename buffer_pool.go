@@ -162,28 +162,3 @@ var (
 	_ io.WriterTo   = (*errorBuffer)(nil)
 	_ io.WriterTo   = (*memoryBuffer)(nil)
 )
-
-type readerAt struct {
-	reader io.ReadSeeker
-	offset int64
-}
-
-func (r *readerAt) ReadAt(b []byte, off int64) (int, error) {
-	if r.offset < 0 || off != r.offset {
-		off, err := r.reader.Seek(off, io.SeekStart)
-		if err != nil {
-			return 0, err
-		}
-		r.offset = off
-	}
-	n, err := r.reader.Read(b)
-	r.offset += int64(n)
-	return n, err
-}
-
-func newReaderAt(r io.ReadSeeker) io.ReaderAt {
-	if rr, ok := r.(io.ReaderAt); ok {
-		return rr
-	}
-	return &readerAt{reader: r, offset: -1}
-}

@@ -15,6 +15,7 @@ import (
 	"github.com/segmentio/parquet-go/encoding"
 	"github.com/segmentio/parquet-go/encoding/plain"
 	"github.com/segmentio/parquet-go/format"
+	"github.com/segmentio/parquet-go/internal/ioext"
 )
 
 // Deprecated: A Writer uses a parquet schema and sequence of Go values to
@@ -236,7 +237,7 @@ func (w *Writer) SetKeyValueMetadata(key, value string) {
 
 type writer struct {
 	buffer  *bufio.Writer
-	writer  offsetTrackingWriter
+	writer  ioext.OffsetTrackingWriter
 	values  [][]Value
 	numRows int64
 	maxRows int64
@@ -483,7 +484,7 @@ func (w *writer) writeFileHeader() error {
 	if w.writer.writer == nil {
 		return io.ErrClosedPipe
 	}
-	if w.writer.offset == 0 {
+	if w.writer.Offset() == 0 {
 		_, err := w.writer.WriteString("PAR1")
 		return err
 	}
@@ -518,11 +519,11 @@ func (w *writer) writeFileFooter() error {
 		rowGroup := &w.rowGroups[i]
 		for j := range columnIndexes {
 			column := &rowGroup.Columns[j]
-			column.ColumnIndexOffset = w.writer.offset
+			column.ColumnIndexOffset = w.writer.Offset()
 			if err := encoder.Encode(&columnIndexes[j]); err != nil {
 				return err
 			}
-			column.ColumnIndexLength = int32(w.writer.offset - column.ColumnIndexOffset)
+			column.ColumnIndexLength = int32(w.writer.Offset() - column.ColumnIndexOffset)
 		}
 	}
 
@@ -530,11 +531,11 @@ func (w *writer) writeFileFooter() error {
 		rowGroup := &w.rowGroups[i]
 		for j := range offsetIndexes {
 			column := &rowGroup.Columns[j]
-			column.OffsetIndexOffset = w.writer.offset
+			column.OffsetIndexOffset = w.writer.Offset()
 			if err := encoder.Encode(&offsetIndexes[j]); err != nil {
 				return err
 			}
-			column.OffsetIndexLength = int32(w.writer.offset - column.OffsetIndexOffset)
+			column.OffsetIndexLength = int32(w.writer.Offset() - column.OffsetIndexOffset)
 		}
 	}
 
@@ -597,11 +598,11 @@ func (w *writer) writeRowGroup(rowGroupSchema *Schema, rowGroupSortingColumns []
 	if err := w.writeFileHeader(); err != nil {
 		return 0, err
 	}
-	fileOffset := w.writer.offset
+	fileOffset := w.writer.Offset()
 
 	for _, c := range w.columns {
 		if len(c.filter) > 0 {
-			c.columnChunk.MetaData.BloomFilterOffset = w.writer.offset
+			c.columnChunk.MetaData.BloomFilterOffset = w.writer.Offset()
 			if err := c.writeBloomFilter(&w.writer); err != nil {
 				return 0, err
 			}
@@ -612,13 +613,13 @@ func (w *writer) writeRowGroup(rowGroupSchema *Schema, rowGroupSortingColumns []
 		w.columnIndex[i] = format.ColumnIndex(c.columnIndex.ColumnIndex())
 
 		if c.dictionary != nil {
-			c.columnChunk.MetaData.DictionaryPageOffset = w.writer.offset
+			c.columnChunk.MetaData.DictionaryPageOffset = w.writer.Offset()
 			if err := c.writeDictionaryPage(&w.writer, c.dictionary); err != nil {
 				return 0, fmt.Errorf("writing dictionary page of row group colum %d: %w", i, err)
 			}
 		}
 
-		dataPageOffset := w.writer.offset
+		dataPageOffset := w.writer.Offset()
 		c.columnChunk.MetaData.DataPageOffset = dataPageOffset
 		for j := range c.offsetIndex.PageLocations {
 			c.offsetIndex.PageLocations[j].Offset += dataPageOffset
@@ -1382,35 +1383,6 @@ func sortPageEncodingStats(stats []format.PageEncodingStats) {
 	})
 }
 
-type offsetTrackingWriter struct {
-	writer io.Writer
-	offset int64
-}
-
-func (w *offsetTrackingWriter) Reset(writer io.Writer) {
-	w.writer = writer
-	w.offset = 0
-}
-
-func (w *offsetTrackingWriter) Write(b []byte) (int, error) {
-	n, err := w.writer.Write(b)
-	w.offset += int64(n)
-	return n, err
-}
-
-func (w *offsetTrackingWriter) WriteString(s string) (int, error) {
-	n, err := io.WriteString(w.writer, s)
-	w.offset += int64(n)
-	return n, err
-}
-
-func (w *offsetTrackingWriter) ReadFrom(r io.Reader) (int64, error) {
-	// io.Copy will make use of io.ReaderFrom if w.writer implements it.
-	n, err := io.Copy(w.writer, r)
-	w.offset += n
-	return n, err
-}
-
 var (
 	_ RowWriterWithSchema = (*Writer)(nil)
 	_ RowReaderFrom       = (*Writer)(nil)
@@ -1420,7 +1392,4 @@ var (
 	_ ValueWriter = (*writer)(nil)
 
 	_ ValueWriter = (*writerColumn)(nil)
-
-	_ io.ReaderFrom   = (*offsetTrackingWriter)(nil)
-	_ io.StringWriter = (*offsetTrackingWriter)(nil)
 )

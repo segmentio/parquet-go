@@ -5,6 +5,8 @@ package parquet
 import (
 	"io"
 	"sort"
+
+	"github.com/segmentio/parquet-go/internal/ioext"
 )
 
 // SortingWriter is a type similar to GenericWriter but it ensures that rows
@@ -96,7 +98,7 @@ func (w *SortingWriter[T]) Flush() error {
 		return err
 	}
 
-	f, err := OpenFile(newReaderAt(w.buffer), size,
+	f, err := OpenFile(ioext.NewReaderAt(w.buffer), size,
 		&FileConfig{
 			SkipPageIndex:    true,
 			SkipBloomFilters: true,
