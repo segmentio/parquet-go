@@ -270,3 +270,17 @@ func TestRowBuilder(t *testing.T) {
 		})
 	}
 }
+
+func BenchmarkRowBuilderAdd(b *testing.B) {
+	builder := parquet.NewRowBuilder(parquet.Group{
+		"ids": parquet.Repeated(parquet.Int(64)),
+	})
+
+	for i := 0; i < b.N; i++ {
+		builder.Add(0, parquet.Int64Value(int64(i)))
+
+		if (i % 128) == 0 {
+			builder.Reset() // so don't run out of memory ;)
+		}
+	}
+}
