@@ -4,7 +4,7 @@ package parquet
 // values to columns.
 type RowBuilder struct {
 	columns [][]Value
-	kinds   []int8
+	models  []Value
 	levels  []columnLevel
 	groups  []*columnGroup
 }
@@ -33,7 +33,7 @@ func NewRowBuilder(schema Node) *RowBuilder {
 	n := numLeafColumnsOf(schema)
 	b := &RowBuilder{
 		columns: make([][]Value, n),
-		kinds:   make([]int8, n),
+		models:  make([]Value, n),
 		levels:  make([]columnLevel, n),
 	}
 	buffers := make([]Value, len(b.columns))
@@ -54,7 +54,9 @@ func (b *RowBuilder) configure(node Node, columnIndex int16, level columnLevel, 
 		endIndex = b.configure(Required(node), columnIndex, level, group)
 
 		for i := columnIndex; i < endIndex; i++ {
-			b.kinds[i] = 0 // null if not set
+			b.models[i].kind = 0 // null if not set
+			b.models[i].ptr = nil
+			b.models[i].u64 = 0
 		}
 
 	case node.Repeated():
@@ -70,15 +72,29 @@ func (b *RowBuilder) configure(node Node, columnIndex int16, level columnLevel, 
 		endIndex = b.configure(Required(node), columnIndex, level, group)
 
 		for i := columnIndex; i < endIndex; i++ {
-			b.kinds[i] = 0 // null if not set
+			b.models[i].kind = 0 // null if not set
+			b.models[i].ptr = nil
+			b.models[i].u64 = 0
 		}
 
 		group.endIndex = endIndex
 		b.groups = append(b.groups, group)
 
 	case node.Leaf():
+		typ := node.Type()
+		kind := typ.Kind()
+		model := makeValueKind(kind)
+		model.repetitionLevel = level.repetitionLevel
+		model.definitionLevel = level.definitionLevel
+		// FIXED_LEN_BYTE_ARRAY is the only type which needs to be given a
+		// non-nil zero-value if the field is required.
+		if kind == FixedLenByteArray {
+			zero := make([]byte, typ.Length())
+			model.ptr = &zero[0]
+			model.u64 = uint64(len(zero))
+		}
 		group.members = append(group.members, columnIndex)
-		b.kinds[columnIndex] = ^int8(node.Type().Kind())
+		b.models[columnIndex] = model
 		b.levels[columnIndex] = level
 		endIndex = columnIndex + 1
 
@@ -163,13 +179,13 @@ func (b *RowBuilder) AppendRow(row Row) Row {
 					column = append(column, maxColumn[n:]...)
 
 					columnIndex := group.startIndex + int16(i)
-					kind := b.kinds[columnIndex]
+					model := b.models[columnIndex]
 
 					for n < len(column) {
 						v := &column[n]
-						v.kind = kind
-						v.ptr = nil
-						v.u64 = 0
+						v.kind = model.kind
+						v.ptr = model.ptr
+						v.u64 = model.u64
 						v.definitionLevel = group.definitionLevel
 						v.columnIndex = ^columnIndex
 						n++
