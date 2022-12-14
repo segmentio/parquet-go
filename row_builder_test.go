@@ -1,10 +1,33 @@
 package parquet_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/segmentio/parquet-go"
 )
+
+func ExampleRowBuilder() {
+	builder := parquet.NewRowBuilder(parquet.Group{
+		"birth_date": parquet.Optional(parquet.Date()),
+		"first_name": parquet.String(),
+		"last_name":  parquet.String(),
+	})
+
+	builder.Add(1, parquet.ByteArrayValue([]byte("Luke")))
+	builder.Add(2, parquet.ByteArrayValue([]byte("Skywalker")))
+
+	row := builder.Row()
+	row.Range(func(columnIndex int, columnValues []parquet.Value) bool {
+		fmt.Printf("%+v\n", columnValues[0])
+		return true
+	})
+
+	// Output:
+	// C:0 D:0 R:0 V:<null>
+	// C:1 D:0 R:0 V:Luke
+	// C:2 D:0 R:0 V:Skywalker
+}
 
 func TestRowBuilder(t *testing.T) {
 	type (
