@@ -423,6 +423,67 @@ func TestMergeRowGroupsCursorsAreClosed(t *testing.T) {
 	}
 }
 
+func TestMergeRowGroupsSeekToRow(t *testing.T) {
+	type model struct {
+		A int
+	}
+
+	schema := parquet.SchemaOf(model{})
+	options := []parquet.RowGroupOption{
+		parquet.SortingRowGroupConfig(
+			parquet.SortingColumns(
+				parquet.Ascending(schema.Columns()[0]...),
+			),
+		),
+	}
+
+	rowGroups := make([]parquet.RowGroup, numRowGroups)
+
+	counter := 0
+	for i := range rowGroups {
+		rows := make([]interface{}, 0, rowsPerGroup)
+		for j := 0; j < rowsPerGroup; j++ {
+			rows = append(rows, model{A: counter})
+			counter++
+		}
+		rowGroups[i] = sortedRowGroup(options, rows...)
+	}
+
+	m, err := parquet.MergeRowGroups(rowGroups, options...)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	func() {
+		mergedRows := m.Rows()
+		defer mergedRows.Close()
+
+		rbuf := make([]parquet.Row, 1)
+		cursor := int64(0)
+		for {
+			if err := mergedRows.SeekToRow(cursor); err != nil {
+				t.Fatal(err)
+			}
+
+			if _, err := mergedRows.ReadRows(rbuf); err != nil {
+				if errors.Is(err, io.EOF) {
+					break
+				}
+				t.Fatal(err)
+			}
+			v := model{}
+			if err := schema.Reconstruct(&v, rbuf[0]); err != nil {
+				t.Fatal(err)
+			}
+			if v.A != int(cursor) {
+				t.Fatalf("expected value %d, got %d", cursor, v.A)
+			}
+
+			cursor++
+		}
+	}()
+}
+
 func BenchmarkMergeRowGroups(b *testing.B) {
 	for _, test := range readerTests {
 		b.Run(test.scenario, func(b *testing.B) {

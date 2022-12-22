@@ -106,6 +106,12 @@ type mergedRowGroupRows struct {
 	schema    *Schema
 }
 
+func (r *mergedRowGroupRows) readInternal(rows []Row) (int, error) {
+	n, err := r.merge.ReadRows(rows)
+	r.rowIndex += int64(n)
+	return n, err
+}
+
 func (r *mergedRowGroupRows) Close() (lastErr error) {
 	r.merge.close()
 	r.rowIndex = 0
@@ -126,14 +132,13 @@ func (r *mergedRowGroupRows) ReadRows(rows []Row) (int, error) {
 		if n > len(rows) {
 			n = len(rows)
 		}
-		n, err := r.merge.ReadRows(rows[:n])
+		n, err := r.readInternal(rows[:n])
 		if err != nil {
 			return 0, err
 		}
-		r.rowIndex += int64(n)
 	}
 
-	return r.merge.ReadRows(rows)
+	return r.readInternal(rows)
 }
 
 func (r *mergedRowGroupRows) SeekToRow(rowIndex int64) error {
