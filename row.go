@@ -544,6 +544,9 @@ func deconstructFuncOfLeaf(columnIndex int16, node Node) (int16, deconstructFunc
 	}
 }
 
+// "reconstructX" turns a Go value into a Go representation of a Parquet series
+// of values
+
 type reconstructFunc func(reflect.Value, levels, [][]Value) error
 
 func reconstructFuncOf(columnIndex int16, node Node) (int16, reconstructFunc) {
