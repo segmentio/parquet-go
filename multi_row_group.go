@@ -6,7 +6,11 @@ import (
 
 // MultiRowGroup wraps multiple row groups to appear as if it was a single
 // RowGroup. RowGroups must have the same schema or it will error.
-func MultiRowGroup(pageReadMode ReadMode, rowGroups ...RowGroup) RowGroup {
+func MultiRowGroup(rowGroups ...RowGroup) RowGroup {
+	return newMultiRowGroup(ReadModeSync, rowGroups...)
+}
+
+func newMultiRowGroup(pageReadMode ReadMode, rowGroups ...RowGroup) RowGroup {
 	if len(rowGroups) == 0 {
 		return &emptyRowGroup{}
 	}
