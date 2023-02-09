@@ -649,6 +649,49 @@ func TestOptionalDictWriteRowGroup(t *testing.T) {
 	}
 }
 
+func TestNullsSortFirst(t *testing.T) {
+	s := parquet.SchemaOf(&TestStruct{})
+
+	str1 := "test1"
+	str2 := "test2"
+	records := []*TestStruct{
+		{A: &str1},
+		{A: nil},
+		{A: &str2},
+	}
+	buf := parquet.NewBuffer(
+		s,
+		parquet.SortingRowGroupConfig(parquet.SortingColumns(parquet.NullsFirst(parquet.Ascending(s.Columns()[0][0])))),
+	)
+	for _, rec := range records {
+		row := s.Deconstruct(nil, rec)
+		_, err := buf.WriteRows([]parquet.Row{row})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	sort.Sort(buf)
+
+	rows := buf.Rows()
+	defer rows.Close()
+	rowBuf := make([]parquet.Row, len(records))
+	if _, err := rows.ReadRows(rowBuf); err != nil {
+		t.Fatal(err)
+	}
+
+	resultRecords := make([]TestStruct, len(records))
+	for i, r := range rowBuf {
+		if err := s.Reconstruct(&resultRecords[i], r); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if resultRecords[0].A != nil {
+		t.Fatal("expected null to sort first, but found", resultRecords)
+	}
+}
+
 func generateBenchmarkBufferRows(n int) (*parquet.Schema, []parquet.Row) {
 	model := new(benchmarkRowType)
 	schema := parquet.SchemaOf(model)
