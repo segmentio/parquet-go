@@ -133,9 +133,14 @@ func (w *SortingWriter[T]) Flush() error {
 }
 
 func (w *SortingWriter[T]) Reset(output io.Writer) {
+	w.ResetWithSortRowCount(output, w.maxRows)
+}
+
+func (w *SortingWriter[T]) ResetWithSortRowCount(output io.Writer, sortRowCount int64) {
 	w.output.Reset(output)
 	w.rowbuf.Reset()
 	w.resetSortingBuffer()
+	w.maxRows = sortRowCount
 }
 
 func (w *SortingWriter[T]) resetSortingBuffer() {
