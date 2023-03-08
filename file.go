@@ -776,5 +776,8 @@ func getPageHeader() *format.PageHeader {
 }
 
 func putPageHeader(h *format.PageHeader) {
-	pageHeaderPool.Put(h)
+	if h != nil {
+		h.CRC = 0
+		pageHeaderPool.Put(h)
+	}
 }
