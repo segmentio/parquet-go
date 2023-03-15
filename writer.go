@@ -1309,9 +1309,22 @@ func (c *writerColumn) recordPageStats(headerSize int32, header *format.PageHead
 	if page != nil {
 		numNulls := page.NumNulls()
 		numValues := page.NumValues()
-		minValue, maxValue, _ := page.Bounds()
+		minValue, maxValue, pageHasStatistics := page.Bounds()
 		c.columnIndex.IndexPage(numValues, numNulls, minValue, maxValue)
 		c.columnChunk.MetaData.NumValues += numValues
+
+		if pageHasStatistics {
+			existingMaxValue := c.columnType.Kind().Value(c.columnChunk.MetaData.Statistics.MaxValue)
+			existingMinValue := c.columnType.Kind().Value(c.columnChunk.MetaData.Statistics.Min)
+
+			if c.columnType.Compare(maxValue, existingMaxValue) > 0 {
+				c.columnChunk.MetaData.Statistics.MaxValue = maxValue.Bytes()
+			}
+
+			if c.columnType.Compare(minValue, existingMinValue) < 0 {
+				c.columnChunk.MetaData.Statistics.MinValue = minValue.Bytes()
+			}
+		}
 
 		c.offsetIndex.PageLocations = append(c.offsetIndex.PageLocations, format.PageLocation{
 			Offset:             c.columnChunk.MetaData.TotalCompressedSize,
