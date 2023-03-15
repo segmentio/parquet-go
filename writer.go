@@ -1309,11 +1309,11 @@ func (c *writerColumn) recordPageStats(headerSize int32, header *format.PageHead
 	if page != nil {
 		numNulls := page.NumNulls()
 		numValues := page.NumValues()
-		minValue, maxValue, pageHasStatistics := page.Bounds()
+		minValue, maxValue, pageHasBounds := page.Bounds()
 		c.columnIndex.IndexPage(numValues, numNulls, minValue, maxValue)
 		c.columnChunk.MetaData.NumValues += numValues
 
-		if pageHasStatistics {
+		if pageHasBounds {
 			existingMaxValue := c.columnType.Kind().Value(c.columnChunk.MetaData.Statistics.MaxValue)
 			existingMinValue := c.columnType.Kind().Value(c.columnChunk.MetaData.Statistics.Min)
 
