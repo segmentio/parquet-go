@@ -1314,14 +1314,18 @@ func (c *writerColumn) recordPageStats(headerSize int32, header *format.PageHead
 		c.columnChunk.MetaData.NumValues += numValues
 
 		if pageHasBounds {
-			existingMaxValue := c.columnType.Kind().Value(c.columnChunk.MetaData.Statistics.MaxValue)
-			existingMinValue := c.columnType.Kind().Value(c.columnChunk.MetaData.Statistics.Min)
+			var existingMaxValue, existingMinValue Value
 
-			if c.columnType.Compare(maxValue, existingMaxValue) > 0 {
+			if c.columnChunk.MetaData.Statistics.MaxValue != nil && c.columnChunk.MetaData.Statistics.MinValue != nil {
+				existingMaxValue = c.columnType.Kind().Value(c.columnChunk.MetaData.Statistics.MaxValue)
+				existingMinValue = c.columnType.Kind().Value(c.columnChunk.MetaData.Statistics.MinValue)
+			}
+
+			if existingMaxValue.isNull() || c.columnType.Compare(maxValue, existingMaxValue) > 0 {
 				c.columnChunk.MetaData.Statistics.MaxValue = maxValue.Bytes()
 			}
 
-			if c.columnType.Compare(minValue, existingMinValue) < 0 {
+			if existingMinValue.isNull() || c.columnType.Compare(minValue, existingMinValue) < 0 {
 				c.columnChunk.MetaData.Statistics.MinValue = minValue.Bytes()
 			}
 		}
