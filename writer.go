@@ -1312,6 +1312,7 @@ func (c *writerColumn) recordPageStats(headerSize int32, header *format.PageHead
 		minValue, maxValue, pageHasBounds := page.Bounds()
 		c.columnIndex.IndexPage(numValues, numNulls, minValue, maxValue)
 		c.columnChunk.MetaData.NumValues += numValues
+		c.columnChunk.MetaData.Statistics.NullCount += numNulls
 
 		if pageHasBounds {
 			var existingMaxValue, existingMinValue Value
