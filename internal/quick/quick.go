@@ -7,8 +7,6 @@ import (
 	"reflect"
 	"strings"
 	"time"
-
-	"github.com/segmentio/parquet-go"
 )
 
 var DefaultConfig = Config{
@@ -23,13 +21,7 @@ var DefaultConfig = Config{
 		1000, 1023, 1024, 1025,
 		2000, 2095, 2048, 2049,
 		4000, 4095, 4096, 4097,
-		parquet.DefaultColumnBufferCapacity + 1,
-		parquet.DefaultWriteBufferSize + 1,
-		parquet.DefaultWriteBufferSize + parquet.DefaultWriteBufferSize/3,
-		parquet.DefaultWriteBufferSize*3 + 1,
-		parquet.DefaultPageBufferSize,
-		parquet.DefaultPageBufferSize + parquet.DefaultPageBufferSize/3,
-		parquet.DefaultPageBufferSize*3 + 1,
+		16385,
 	},
 	Seed: 0,
 }
