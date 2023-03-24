@@ -47,11 +47,11 @@ func TestGenericBuffer(t *testing.T) {
 func testGenericBuffer[Row any](t *testing.T) {
 	var model Row
 	t.Run(reflect.TypeOf(model).Name(), func(t *testing.T) {
-		// defer func() {
-		// 	if err := recover(); err != nil {
-		// 		t.Error("panic:", err)
-		// 	}
-		// }()
+		defer func() {
+			if err := recover(); err != nil {
+				t.Error("panic:", err)
+			}
+		}()
 		err := quickCheck(func(rows []Row) bool {
 			if len(rows) == 0 {
 				return true // TODO: fix support for parquet files with zero rows
