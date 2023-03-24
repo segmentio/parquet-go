@@ -830,7 +830,7 @@ func (col *booleanColumnBuffer) writeValues(rows sparse.Array, _ columnLevels) {
 	if cap(col.bits) < numBytes {
 		col.bits = append(make([]byte, 0, 2*cap(col.bits)), col.bits...)
 	}
-	col.bits = col.bits[:numBytes]
+	col.bits = col.bits[:numBytes] // TODO: panic: runtime error: slice bounds out of range [:4097] with capacity 4096
 	i := 0
 	r := 8 - (int(col.numValues) % 8)
 	bytes := rows.Uint8Array()

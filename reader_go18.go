@@ -145,6 +145,33 @@ func (r *GenericReader[T]) readRows(rows []T) (int, error) {
 		}
 	}
 	return n, err
+
+	// nTotal := 0
+	// var errOut error
+	// reads := 0
+	// for {
+	// 	reads++
+	// 	n, err := r.base.ReadRows(r.base.rowbuf) // argument cannot safely retain across calls
+	// 	nTotal += n
+	// 	if n > 0 {
+	// 		schema := r.base.Schema()
+	//
+	// 		for i, row := range r.base.rowbuf[:n] {
+	// 			if err := schema.Reconstruct(&rows[i], row); err != nil {
+	// 				return i, err
+	// 			}
+	// 		}
+	// 	}
+	// 	if n == 0 || nTotal == len(rows) {
+	// 		errOut = err
+	// 		break
+	// 	}
+	// }
+	// // if errOut == io.EOF {
+	// // 	errOut = nil
+	// // }
+	// // fmt.Println("readRows ReadRows/pages called", reads)
+	// return nTotal, errOut
 }
 
 var (

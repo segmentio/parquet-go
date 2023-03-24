@@ -61,6 +61,7 @@ func (c *Config) Check(f interface{}) error {
 			ok := v.Call([]reflect.Value{in})
 			if !ok[0].Bool() {
 				return fmt.Errorf("test #%d: failed on input of size %d: %#v\n", i+1, n, in.Interface())
+				// return fmt.Errorf("test #%d: failed on input of size %d\n", i+1, n)
 			}
 		}
 	}

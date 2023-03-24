@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/segmentio/parquet-go"
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/internal/quick"
@@ -490,6 +491,14 @@ var quickCheckConfig = quick.Config{
 	Sizes: []int{
 		0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
 		10, 20, 30, 40, 50, 123,
+		4096 + 1,
+		// parquet.DefaultColumnBufferCapacity + 1,
+		// parquet.DefaultWriteBufferSize + 1,
+		// parquet.DefaultWriteBufferSize + parquet.DefaultWriteBufferSize/3,
+		// parquet.DefaultWriteBufferSize*3 + 1,
+		// parquet.DefaultPageBufferSize,
+		// parquet.DefaultPageBufferSize + parquet.DefaultPageBufferSize/3,
+		// parquet.DefaultPageBufferSize*3 + 1,
 	},
 }
 
