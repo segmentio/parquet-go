@@ -103,6 +103,13 @@ func (r *GenericReader[T]) Reset() {
 	r.base.Reset()
 }
 
+// Read reads the next rows from the reader into the given rows slice up to len(rows).
+//
+// The returned values are safe to reuse across Read calls and do not share
+// memory with the reader's underlying page buffers.
+//
+// The method returns the number of rows read and io.EOF when no more rows
+// can be read from the reader.
 func (r *GenericReader[T]) Read(rows []T) (int, error) {
 	return r.read(r, rows)
 }
@@ -127,6 +134,13 @@ func (r *GenericReader[T]) Close() error {
 	return r.base.Close()
 }
 
+// readRows reads the next rows from the reader into the given rows slice up to len(rows).
+//
+// The returned values are safe to reuse across readRows calls and do not share
+// memory with the reader's underlying page buffers.
+//
+// The method returns the number of rows read and io.EOF when no more rows
+// can be read from the reader.
 func (r *GenericReader[T]) readRows(rows []T) (int, error) {
 	if cap(r.base.rowbuf) < len(rows) {
 		r.base.rowbuf = make([]Row, len(rows))
