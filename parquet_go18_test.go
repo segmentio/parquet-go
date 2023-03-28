@@ -343,3 +343,25 @@ func logRows[T any](t *testing.T, rows []T) {
 		t.Logf(". %#v\n", row)
 	}
 }
+
+func TestIssue469(t *testing.T) {
+	f, err := os.Open("testdata/issue469.parquet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	info, err := f.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := parquet.Read[any](f, info.Size())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(rows) != 8000 {
+		t.Fatalf("only read %d rows of expected 8000", len(rows))
+	}
+}
