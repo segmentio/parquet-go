@@ -27,12 +27,19 @@ func Read[T any](r io.ReaderAt, size int64, options ...ReaderOption) (rows []T, 
 	}
 	rows = make([]T, file.NumRows())
 	reader := NewGenericReader[T](file, config)
-	n, err := reader.Read(rows)
-	if err == io.EOF {
-		err = nil
+	var i int
+	for {
+		c, err := reader.Read(rows[i:])
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return rows, err
+		}
+		i = c
 	}
-	reader.Close()
-	return rows[:n], err
+	
+	return rows, reader.Close()
 }
 
 // ReadFile reads rows of the parquet file at the given path.
