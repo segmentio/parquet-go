@@ -36,7 +36,7 @@ func Read[T any](r io.ReaderAt, size int64, options ...ReaderOption) (rows []T, 
 		if err != nil {
 			return rows, err
 		}
-		i = c
+		i += c
 	}
 	
 	return rows, reader.Close()
