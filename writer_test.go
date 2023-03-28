@@ -12,6 +12,7 @@ import (
 	"github.com/hexops/gotextdiff"
 	"github.com/hexops/gotextdiff/myers"
 	"github.com/hexops/gotextdiff/span"
+
 	"github.com/segmentio/parquet-go"
 	"github.com/segmentio/parquet-go/compress"
 )
@@ -50,7 +51,7 @@ func generateParquetFile(rows rows, options ...parquet.WriterOption) ([]byte, er
 	defer tmp.Close()
 	path := tmp.Name()
 	defer os.Remove(path)
-	//fmt.Println(path)
+	// fmt.Println(path)
 
 	writerOptions := []parquet.WriterOption{parquet.PageBufferSize(20)}
 	writerOptions = append(writerOptions, options...)
@@ -453,7 +454,7 @@ value 2: R:0 D:0 V:1.0
 
 func TestWriter(t *testing.T) {
 	if !hasParquetTools() {
-		t.Skip("parquet-tools are not installed")
+		t.Skip("Skipping TestWriter writerTests because parquet-tools are not installed in Github CI. FIXME.") // TODO
 	}
 
 	for _, test := range writerTests {

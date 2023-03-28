@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/segmentio/parquet-go"
 	"github.com/segmentio/parquet-go/deprecated"
 	"github.com/segmentio/parquet-go/internal/quick"
@@ -490,6 +491,7 @@ var quickCheckConfig = quick.Config{
 	Sizes: []int{
 		0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
 		10, 20, 30, 40, 50, 123,
+		4096 + 1,
 	},
 }
 
