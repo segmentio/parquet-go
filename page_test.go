@@ -29,13 +29,16 @@ func testPageBoolean(t *testing.T) {
 	t.Run("parquet", func(t *testing.T) {
 		testPage(t, schema, pageTest{
 			write: func(w parquet.ValueWriter) (interface{}, error) {
-				values := []bool{false, true}
+				values := make([]bool, 50_000)
+				for i := range values {
+					values[i] = i%2 == 0
+				}
 				n, err := w.(parquet.BooleanWriter).WriteBooleans(values)
 				return values[:n], err
 			},
 
 			read: func(r parquet.ValueReader) (interface{}, error) {
-				values := make([]bool, 2)
+				values := make([]bool, 50_000)
 				n, err := r.(parquet.BooleanReader).ReadBooleans(values)
 				return values[:n], err
 			},
