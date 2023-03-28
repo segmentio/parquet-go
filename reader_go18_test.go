@@ -118,7 +118,7 @@ func TestIssue400(t *testing.T) {
 	}
 
 	r := parquet.NewGenericReader[A](bytes.NewReader(b.Bytes()))
-	values := make([]A, 2)
+	values := make([]A, 1)
 	_, err = r.Read(values)
 	if err != nil {
 		t.Fatal(err)
