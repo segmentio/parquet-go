@@ -364,4 +364,8 @@ func TestIssue469(t *testing.T) {
 	if len(rows) != 8000 {
 		t.Fatalf("only read %d rows of expected 8000", len(rows))
 	}
+
+	if rows[len(rows)-1] == nil {
+		t.Fatal("all rows should contain data")
+	}
 }
