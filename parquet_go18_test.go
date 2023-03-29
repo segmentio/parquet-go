@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/segmentio/parquet-go"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 func ExampleReadFile() {
@@ -339,8 +340,10 @@ func TestIssue423(t *testing.T) {
 		Ptr *Inner `json:",omitempty" parquet:",json"`
 
 		// This tests BC behavior that slices of bytes and json strings still get written/read in a BC way.
-		String string `parquet:",json"`
-		Bytes  []byte `parquet:",json"`
+		String        string                     `parquet:",json"`
+		Bytes         []byte                     `parquet:",json"`
+		MapOfStructPb map[string]*structpb.Value `parquet:",json"`
+		StructPB      *structpb.Value            `parquet:",json"`
 	}
 
 	writeRows := []Outer{
@@ -357,6 +360,10 @@ func TestIssue423(t *testing.T) {
 			Ptr:    nil,
 			String: `{"hello":"world"}`,
 			Bytes:  []byte(`{"goodbye":"world"}`),
+			MapOfStructPb: map[string]*structpb.Value{
+				"answer": structpb.NewNumberValue(42.00),
+			},
+			StructPB: structpb.NewBoolValue(true),
 		},
 		{
 			Label: "foxes",
@@ -373,6 +380,10 @@ func TestIssue423(t *testing.T) {
 			},
 			String: `{"hello":"world"}`,
 			Bytes:  []byte(`{"goodbye":"world"}`),
+			MapOfStructPb: map[string]*structpb.Value{
+				"doubleAnswer": structpb.NewNumberValue(84.00),
+			},
+			StructPB: structpb.NewBoolValue(false),
 		},
 	}
 

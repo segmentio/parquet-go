@@ -699,7 +699,7 @@ func makeNodeOf(t reflect.Type, name string, tag []string) Node {
 	}
 
 	forEachTagOption(tag, func(option, args string) {
-		if t.Kind() == reflect.Map {
+		if t.Kind() == reflect.Map && option != "json" {
 			node = nodeOf(t, tag)
 			return
 		}

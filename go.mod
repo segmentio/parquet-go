@@ -11,6 +11,7 @@ require (
 	github.com/pierrec/lz4/v4 v4.1.9
 	github.com/segmentio/encoding v0.3.5
 	golang.org/x/sys v0.0.0-20211110154304-99a53858aa08
+	google.golang.org/protobuf v1.30.0
 )
 
 require github.com/mattn/go-runewidth v0.0.9 // indirect
