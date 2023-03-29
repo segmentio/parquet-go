@@ -6,6 +6,8 @@ import (
 	"io"
 	"math"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -188,7 +190,10 @@ func TestReader(t *testing.T) {
 					}
 
 					file.Reset(buf.Bytes())
-					r := parquet.NewReader(file, parquet.SchemaOf(test.model))
+					r, err := parquet.NewReaderOrError(file, parquet.SchemaOf(test.model))
+					if err != nil {
+						t.Fatal(err)
+					}
 
 					for i, v := range rows {
 						if err := r.Read(rowPtr.Interface()); err != nil {
@@ -232,7 +237,11 @@ func BenchmarkReaderReadType(b *testing.B) {
 			rowZero := reflect.Zero(rowType)
 			rowValue := rowPtr.Elem()
 
-			r := parquet.NewReader(f)
+			r, err := parquet.NewReaderOrError(f)
+			if err != nil {
+				b.Fatal(err)
+			}
+
 			p := rowPtr.Interface()
 
 			benchmarkRowsPerSecond(b, func() (n int) {
@@ -272,7 +281,11 @@ func BenchmarkReaderReadRow(b *testing.B) {
 				b.Fatal(err)
 			}
 
-			r := parquet.NewReader(f)
+			r, err := parquet.NewReaderOrError(f)
+			if err != nil {
+				b.Fatal(err)
+			}
+
 			rowbuf := make([]parquet.Row, benchmarkRowsPerStep)
 
 			benchmarkRowsPerSecond(b, func() int {
@@ -309,7 +322,13 @@ func TestReaderReadSubset(t *testing.T) {
 			t.Error(err)
 			return false
 		}
-		reader := parquet.NewReader(bytes.NewReader(buf.Bytes()))
+
+		reader, err := parquet.NewReaderOrError(bytes.NewReader(buf.Bytes()))
+		if err != nil {
+			t.Error(err)
+			return false
+		}
+
 		for i := 0; ; i++ {
 			row := Point2D{}
 			err := reader.Read(&row)
@@ -344,7 +363,11 @@ func TestReaderSeekToRow(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	reader := parquet.NewReader(bytes.NewReader(buf.Bytes()))
+	reader, err := parquet.NewReaderOrError(bytes.NewReader(buf.Bytes()))
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	for i := 0; i < 10; i++ {
 		if err := reader.SeekToRow(int64(i)); err != nil {
 			t.Fatalf("seek to row %d: %v", i, err)
@@ -381,15 +404,19 @@ func TestSeekToRowNoDict(t *testing.T) {
 	w.Close()
 
 	// create reader
-	r := parquet.NewReader(bytes.NewReader(buf.Bytes()))
+	r, err := parquet.NewReaderOrError(bytes.NewReader(buf.Bytes()))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// read second row
 	r.SeekToRow(1)
 	row := new(rowType)
-	err := r.Read(row)
+	err = r.Read(row)
 	if err != nil {
 		t.Fatalf("reading row: %v", err)
 	}
+
 	// fmt.Println(&sample, row)
 	if *row != sample {
 		t.Fatalf("read != write")
@@ -415,12 +442,16 @@ func TestSeekToRowReadAll(t *testing.T) {
 	w.Close()
 
 	// create reader
-	r := parquet.NewReader(bytes.NewReader(buf.Bytes()))
+	r, err := parquet.NewReaderOrError(bytes.NewReader(buf.Bytes()))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// read first row
 	r.SeekToRow(0)
 	row := new(rowType)
-	err := r.Read(row)
+
+	err = r.Read(row)
 	if err != nil {
 		t.Fatalf("reading row: %v", err)
 	}
@@ -456,12 +487,16 @@ func TestSeekToRowDictReadSecond(t *testing.T) {
 	w.Close()
 
 	// create reader
-	r := parquet.NewReader(bytes.NewReader(buf.Bytes()))
+	r, err := parquet.NewReaderOrError(bytes.NewReader(buf.Bytes()))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// read second row
 	r.SeekToRow(1)
 	row := new(rowType)
-	err := r.Read(row)
+
+	err = r.Read(row)
 	if err != nil {
 		t.Fatalf("reading row: %v", err)
 	}
@@ -495,16 +530,36 @@ func TestSeekToRowDictReadMultiplePages(t *testing.T) {
 	w.Close()
 
 	// create reader
-	r := parquet.NewReader(bytes.NewReader(buf.Bytes()))
+	r, err := parquet.NewReaderOrError(bytes.NewReader(buf.Bytes()))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// read 11th row
 	r.SeekToRow(10)
 	row := new(rowType)
-	err := r.Read(row)
+
+	err = r.Read(row)
 	if err != nil {
 		t.Fatalf("reading row: %v", err)
 	}
 	if *row != sample {
 		t.Fatalf("read != write")
+	}
+}
+
+func TestReaderFailure(t *testing.T) {
+	invalidFileName := filepath.Join("testdata", "invalid", "not_enough_columns.invalid.parquet")
+
+	file, err := os.Open(invalidFileName)
+	if err != nil {
+		t.Fatalf("failed to read %q: %s", invalidFileName, err.Error())
+	}
+
+	defer file.Close()
+
+	_, err = parquet.NewReaderOrError(file)
+	if err == nil {
+		t.Fatalf("expected an error when trying to open invalid file %q, but didn't get one", invalidFileName)
 	}
 }

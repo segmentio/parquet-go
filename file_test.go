@@ -15,6 +15,10 @@ var testdataFiles []string
 func init() {
 	entries, _ := os.ReadDir("testdata")
 	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+
 		testdataFiles = append(testdataFiles, filepath.Join("testdata", e.Name()))
 	}
 }

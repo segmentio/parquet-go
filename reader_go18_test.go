@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -73,7 +75,10 @@ func testGenericReaderRows[Row any](rows []Row) error {
 	if err := writer.Close(); err != nil {
 		return err
 	}
-	reader := parquet.NewGenericReader[Row](bytes.NewReader(buffer.Bytes()))
+	reader, err := parquet.NewGenericReaderOrError[Row](bytes.NewReader(buffer.Bytes()))
+	if err != nil {
+		return err
+	}
 	result := make([]Row, len(rows))
 	n, err := reader.Read(result)
 	if err != nil && !errors.Is(err, io.EOF) {
@@ -163,7 +168,11 @@ func benchmarkGenericReader[Row generator[Row]](b *testing.B) {
 		buffer.Write(rows)
 
 		b.Run("go1.17", func(b *testing.B) {
-			reader := parquet.NewRowGroupReader(buffer)
+			reader, err := parquet.NewRowGroupReaderOrError(buffer)
+			if err != nil {
+				b.Fatal(err)
+			}
+
 			benchmarkRowsPerSecond(b, func() int {
 				for i := range rowbuf {
 					if err := reader.Read(&rowbuf[i]); err != nil {
@@ -179,7 +188,11 @@ func benchmarkGenericReader[Row generator[Row]](b *testing.B) {
 		})
 
 		b.Run("go1.18", func(b *testing.B) {
-			reader := parquet.NewGenericRowGroupReader[Row](buffer)
+			reader, err := parquet.NewGenericRowGroupReaderOrError[Row](buffer)
+			if err != nil {
+				b.Fatal(err)
+			}
+
 			benchmarkRowsPerSecond(b, func() int {
 				n, err := reader.Read(rowbuf)
 				if err != nil {
@@ -193,4 +206,20 @@ func benchmarkGenericReader[Row generator[Row]](b *testing.B) {
 			})
 		})
 	})
+}
+
+func TestGenericReaderFailure(t *testing.T) {
+	invalidFileName := filepath.Join("testdata", "invalid", "not_enough_columns.invalid.parquet")
+
+	file, err := os.Open(invalidFileName)
+	if err != nil {
+		t.Fatalf("failed to read %q: %s", invalidFileName, err.Error())
+	}
+
+	defer file.Close()
+
+	_, err = parquet.NewGenericReaderOrError[map[string]any](file)
+	if err == nil {
+		t.Fatalf("expected an error when trying to open invalid file %q, but didn't get one", invalidFileName)
+	}
 }

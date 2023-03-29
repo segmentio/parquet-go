@@ -3,6 +3,7 @@
 package parquet
 
 import (
+	"fmt"
 	"io"
 	"reflect"
 )
@@ -26,15 +27,37 @@ type GenericReader[T any] struct {
 //
 // If the option list may explicitly declare a schema, it must be compatible
 // with the schema generated from T.
+//
+// On an error such as an invalid parquet input, NewGenericReader will panic. If
+// it would be preferable to inspect the error instead, use NewGenericReaderOrError
 func NewGenericReader[T any](input io.ReaderAt, options ...ReaderOption) *GenericReader[T] {
-	c, err := NewReaderConfig(options...)
+	r, err := NewGenericReaderOrError[T](input, options...)
 	if err != nil {
 		panic(err)
 	}
 
+	return r
+}
+
+// NewGenericReaderOrError is like NewReader but returns GenericReader[T] suited to write
+// rows of Go type T.
+//
+// The type parameter T should be a map, struct, or any. Any other types will
+// cause a panic at runtime. Type checking is a lot more effective when the
+// generic parameter is a struct type, using map and interface types is somewhat
+// similar to using a Writer.
+//
+// If the option list may explicitly declare a schema, it must be compatible
+// with the schema generated from T.
+func NewGenericReaderOrError[T any](input io.ReaderAt, options ...ReaderOption) (*GenericReader[T], error) {
+	c, err := NewReaderConfig(options...)
+	if err != nil {
+		return nil, err
+	}
+
 	f, err := openFile(input)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	rowGroup := fileRowGroupOf(f)
@@ -58,18 +81,42 @@ func NewGenericReader[T any](input io.ReaderAt, options ...ReaderOption) *Generi
 	}
 
 	if !nodesAreEqual(c.Schema, f.schema) {
-		r.base.file.rowGroup = convertRowGroupTo(r.base.file.rowGroup, c.Schema)
+		r.base.file.rowGroup, err = convertRowGroupTo(r.base.file.rowGroup, c.Schema)
+		if err != nil {
+			_ = r.Close()
+			return nil, err
+		}
 	}
 
 	r.base.read.init(r.base.file.schema, r.base.file.rowGroup)
-	r.read = readFuncOf[T](t, r.base.file.schema)
+
+	r.read, err = readFuncOf[T](t, r.base.file.schema)
+	if err != nil {
+		_ = r.Close()
+		return nil, err
+	}
+
+	return r, nil
+}
+
+// NewGenericRowGroupReader constructs a new GemericReader which reads rows from
+// the RowGroup passed as an argument. This function panics if it encounters any error;
+// use NewGenericRowGroupReaderOrError to be able to handle failures more gracefully
+func NewGenericRowGroupReader[T any](rowGroup RowGroup, options ...ReaderOption) *GenericReader[T] {
+	r, err := NewGenericRowGroupReaderOrError[T](rowGroup, options...)
+	if err != nil {
+		panic(err)
+	}
+
 	return r
 }
 
-func NewGenericRowGroupReader[T any](rowGroup RowGroup, options ...ReaderOption) *GenericReader[T] {
+// NewGenericRowGroupReaderOrError constructs a new GemericReader which reads rows
+// from the RowGrup passed as an argument.
+func NewGenericRowGroupReaderOrError[T any](rowGroup RowGroup, options ...ReaderOption) (*GenericReader[T], error) {
 	c, err := NewReaderConfig(options...)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	t := typeOf[T]()
@@ -91,12 +138,20 @@ func NewGenericRowGroupReader[T any](rowGroup RowGroup, options ...ReaderOption)
 	}
 
 	if !nodesAreEqual(c.Schema, rowGroup.Schema()) {
-		r.base.file.rowGroup = convertRowGroupTo(r.base.file.rowGroup, c.Schema)
+		r.base.file.rowGroup, err = convertRowGroupTo(r.base.file.rowGroup, c.Schema)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	r.base.read.init(r.base.file.schema, r.base.file.rowGroup)
-	r.read = readFuncOf[T](t, r.base.file.schema)
-	return r
+
+	r.read, err = readFuncOf[T](t, r.base.file.schema)
+	if err != nil {
+		return nil, err
+	}
+
+	return r, nil
 }
 
 func (r *GenericReader[T]) Reset() {
@@ -183,21 +238,23 @@ var (
 
 type readFunc[T any] func(*GenericReader[T], []T) (int, error)
 
-func readFuncOf[T any](t reflect.Type, schema *Schema) readFunc[T] {
+func readFuncOf[T any](t reflect.Type, schema *Schema) (readFunc[T], error) {
 	if t == nil {
-		return (*GenericReader[T]).readRows
+		return (*GenericReader[T]).readRows, nil
 	}
+
 	switch t.Kind() {
 	case reflect.Interface, reflect.Map:
-		return (*GenericReader[T]).readRows
+		return (*GenericReader[T]).readRows, nil
 
 	case reflect.Struct:
-		return (*GenericReader[T]).readRows
+		return (*GenericReader[T]).readRows, nil
 
 	case reflect.Pointer:
 		if e := t.Elem(); e.Kind() == reflect.Struct {
-			return (*GenericReader[T]).readRows
+			return (*GenericReader[T]).readRows, nil
 		}
 	}
-	panic("cannot create reader for values of type " + t.String())
+
+	return nil, fmt.Errorf("cannot create reader for values of type %s", t.String())
 }
