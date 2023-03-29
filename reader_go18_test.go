@@ -88,6 +88,46 @@ func testGenericReaderRows[Row any](rows []Row) error {
 	return nil
 }
 
+func TestIssue400(t *testing.T) {
+	type B struct {
+		Name string
+	}
+	type A struct {
+		B []B `parquet:",optional"`
+	}
+
+	b := new(bytes.Buffer)
+	w := parquet.NewGenericWriter[A](b)
+	expect := []A{
+		{
+			B: []B{
+				{
+					// 32 bytes random so we can see in the binary parquet if we
+					// actually wrote the value
+					Name: "9e7eb1f0-bbcc-43ec-bfad-a9fac1bb0feb",
+				},
+			},
+		},
+	}
+	_, err := w.Write(expect)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = w.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	r := parquet.NewGenericReader[A](bytes.NewReader(b.Bytes()))
+	values := make([]A, 1)
+	_, err = r.Read(values)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(expect[0], values[0]) {
+		t.Errorf("want %q got %q", values[0], expect[0])
+	}
+}
+
 func BenchmarkGenericReader(b *testing.B) {
 	benchmarkGenericReader[benchmarkRowType](b)
 	benchmarkGenericReader[booleanColumn](b)

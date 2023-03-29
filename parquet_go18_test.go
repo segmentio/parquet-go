@@ -406,6 +406,72 @@ func TestIssue423(t *testing.T) {
 	assertRowsEqual(t, writeRows, readRows)
 }
 
+func TestReadFileGenericMultipleRowGroupsMultiplePages(t *testing.T) {
+	type MyRow struct {
+		ID    [16]byte `parquet:"id,delta,uuid"`
+		File  string   `parquet:"file,dict,zstd"`
+		Index int64    `parquet:"index,delta,zstd"`
+	}
+
+	numRows := 20_000
+	maxPageBytes := 5000
+
+	tmp, err := os.CreateTemp("/tmp", "*.parquet")
+	if err != nil {
+		t.Fatal("os.CreateTemp: ", err)
+	}
+	path := tmp.Name()
+	defer os.Remove(path)
+	t.Log("TestReadFileMultiplePages:", path)
+
+	// The page buffer size ensures we get multiple pages out of this example.
+	w := parquet.NewGenericWriter[MyRow](tmp, parquet.PageBufferSize(maxPageBytes))
+	// Need to write 1 row at a time here as writing many at once disregards PageBufferSize option.
+	for i := 0; i < numRows; i++ {
+		row := MyRow{
+			ID:    [16]byte{15: byte(i)},
+			File:  "hi" + fmt.Sprint(i),
+			Index: int64(i),
+		}
+		_, err := w.Write([]MyRow{row})
+		if err != nil {
+			t.Fatal("w.Write: ", err)
+		}
+		// Flush writes rows as row group. 4 total (20k/5k) in this file.
+		if (i+1)%maxPageBytes == 0 {
+			err = w.Flush()
+			if err != nil {
+				t.Fatal("w.Flush: ", err)
+			}
+		}
+	}
+	err = w.Close()
+	if err != nil {
+		t.Fatal("w.Close: ", err)
+	}
+	err = tmp.Close()
+	if err != nil {
+		t.Fatal("tmp.Close: ", err)
+	}
+
+	rows, err := parquet.ReadFile[MyRow](path)
+	if err != nil {
+		t.Fatal("parquet.ReadFile: ", err)
+	}
+	if len(rows) != numRows {
+		t.Fatal("parquet.ReadFile returned", len(rows), "rows instead of", numRows)
+	}
+	for i, row := range rows {
+		id := [16]byte{15: byte(i)}
+		file := "hi" + fmt.Sprint(i)
+		index := int64(i)
+
+		if row.ID != id || row.File != file || row.Index != index {
+			t.Error("rows mismatch at ", i, "got ", row)
+		}
+	}
+}
+
 func assertRowsEqual[T any](t *testing.T, rows1, rows2 []T) {
 	if !reflect.DeepEqual(rows1, rows2) {
 		t.Error("rows mismatch")
