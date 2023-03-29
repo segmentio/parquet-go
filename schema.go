@@ -548,17 +548,22 @@ func nodeOf(t reflect.Type, tag []string) Node {
 			}
 		}
 
-		n = Map(
-			makeNodeOf(t.Key(), t.Name(), []string{keyTag}),
-			makeNodeOf(t.Elem(), t.Name(), []string{valueTag}),
-		)
+		asMap := func() Node {
+			return Map(
+				makeNodeOf(t.Key(), t.Name(), []string{keyTag}),
+				makeNodeOf(t.Elem(), t.Name(), []string{valueTag}),
+			)
+		}
 
 		forEachTagOption([]string{mapTag}, func(option, args string) {
 			switch option {
 			case "":
+				n = asMap()
 				return
 			case "optional":
-				n = Optional(n)
+				n = Optional(asMap())
+			case "json":
+				n = JSON()
 			default:
 				throwUnknownTag(t, "map", option)
 			}
@@ -699,7 +704,7 @@ func makeNodeOf(t reflect.Type, name string, tag []string) Node {
 	}
 
 	forEachTagOption(tag, func(option, args string) {
-		if t.Kind() == reflect.Map && option != "json" {
+		if t.Kind() == reflect.Map {
 			node = nodeOf(t, tag)
 			return
 		}
