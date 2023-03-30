@@ -83,7 +83,7 @@ func testGenericReaderRows[Row any](rows []Row) error {
 		return fmt.Errorf("not enough values were read: want=%d got=%d", len(rows), n)
 	}
 	if !reflect.DeepEqual(rows, result) {
-		return fmt.Errorf("rows mismatch:\nwant: %+v\ngot:  %+v", rows, result)
+		return fmt.Errorf("rows mismatch:\nwant: %+v\ngot: %+v", rows, result)
 	}
 	return nil
 }
