@@ -422,7 +422,7 @@ func TestReadFileGenericMultipleRowGroupsMultiplePages(t *testing.T) {
 	}
 	path := tmp.Name()
 	defer os.Remove(path)
-	t.Log("TestReadFileMultiplePages:", path)
+	t.Log("file:", path)
 
 	// The page buffer size ensures we get multiple pages out of this example.
 	w := parquet.NewGenericWriter[MyRow](tmp, parquet.PageBufferSize(maxPageBytes))
@@ -458,8 +458,9 @@ func TestReadFileGenericMultipleRowGroupsMultiplePages(t *testing.T) {
 	if err != nil {
 		t.Fatal("parquet.ReadFile: ", err)
 	}
+
 	if len(rows) != numRows {
-		t.Fatal("parquet.ReadFile returned", len(rows), "rows instead of", numRows)
+		t.Fatalf("not enough values were read: want=%d got=%d", len(rows), numRows)
 	}
 	for i, row := range rows {
 		id := [16]byte{15: byte(i)}
@@ -467,7 +468,7 @@ func TestReadFileGenericMultipleRowGroupsMultiplePages(t *testing.T) {
 		index := int64(i)
 
 		if row.ID != id || row.File != file || row.Index != index {
-			t.Error("rows mismatch at ", i, "got ", row)
+			t.Fatalf("rows mismatch at index: %d got: %+v", i, row)
 		}
 	}
 }

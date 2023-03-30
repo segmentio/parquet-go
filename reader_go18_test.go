@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"os"
 	"reflect"
 	"testing"
 
@@ -83,7 +84,7 @@ func testGenericReaderRows[Row any](rows []Row) error {
 		return fmt.Errorf("not enough values were read: want=%d got=%d", len(rows), n)
 	}
 	if !reflect.DeepEqual(rows, result) {
-		return fmt.Errorf("rows mismatch:\nwant: %+v\ngot:  %+v", rows, result)
+		return fmt.Errorf("rows mismatch:\nwant: %+v\ngot: %+v", rows, result)
 	}
 	return nil
 }
@@ -125,6 +126,101 @@ func TestIssue400(t *testing.T) {
 	}
 	if !reflect.DeepEqual(expect[0], values[0]) {
 		t.Errorf("want %q got %q", values[0], expect[0])
+	}
+}
+
+func TestReadMinPageSize(t *testing.T) {
+	// NOTE: min page size is 307 for MyRow schema
+	t.Run("test read less than min page size", func(t *testing.T) { testReadMinPageSize(128, t) })
+	t.Run("test read equal to min page size", func(t *testing.T) { testReadMinPageSize(307, t) })
+	t.Run("test read more than min page size", func(t *testing.T) { testReadMinPageSize(384, t) })
+	// NOTE: num rows is 20,000
+	t.Run("test read equal to num rows", func(t *testing.T) { testReadMinPageSize(20_000, t) })
+	t.Run("test read more than num rows", func(t *testing.T) { testReadMinPageSize(25_000, t) })
+}
+
+func testReadMinPageSize(readSize int, t *testing.T) {
+	type MyRow struct {
+		ID    [16]byte `parquet:"id,delta,uuid"`
+		File  string   `parquet:"file,dict,zstd"`
+		Index int64    `parquet:"index,delta,zstd"`
+	}
+
+	numRows := 20_000
+	maxPageBytes := 5000
+
+	tmp, err := os.CreateTemp("/tmp", "*.parquet")
+	if err != nil {
+		t.Fatal("os.CreateTemp: ", err)
+	}
+	path := tmp.Name()
+	defer os.Remove(path)
+	t.Log("file:", path)
+
+	// The page buffer size ensures we get multiple pages out of this example.
+	w := parquet.NewGenericWriter[MyRow](tmp, parquet.PageBufferSize(maxPageBytes))
+	// Need to write 1 row at a time here as writing many at once disregards PageBufferSize option.
+	for i := 0; i < numRows; i++ {
+		row := MyRow{
+			ID:    [16]byte{15: byte(i)},
+			File:  "hi" + fmt.Sprint(i),
+			Index: int64(i),
+		}
+		_, err := w.Write([]MyRow{row})
+		if err != nil {
+			t.Fatal("w.Write: ", err)
+		}
+		// Flush writes rows as row group. 4 total (20k/5k) in this file.
+		if (i+1)%maxPageBytes == 0 {
+			err = w.Flush()
+			if err != nil {
+				t.Fatal("w.Flush: ", err)
+			}
+		}
+	}
+	err = w.Close()
+	if err != nil {
+		t.Fatal("w.Close: ", err)
+	}
+	err = tmp.Close()
+	if err != nil {
+		t.Fatal("tmp.Close: ", err)
+	}
+
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatal("os.Open", err)
+	}
+	reader := parquet.NewGenericReader[MyRow](file)
+	read := int64(0)
+	nRows := reader.NumRows()
+	rows := make([]MyRow, 0, nRows)
+	buf := make([]MyRow, readSize) // NOTE: min page size is 307 for MyRow schema
+
+	for read < nRows {
+		num, err := reader.Read(buf)
+		read += int64(num)
+		if err != nil && !errors.Is(err, io.EOF) {
+			t.Fatal("Read:", err)
+		}
+		rows = append(rows, buf...)
+	}
+
+	if err := reader.Close(); err != nil {
+		t.Fatal("Close", err)
+	}
+
+	if len(rows) < numRows {
+		t.Fatalf("not enough values were read: want=%d got=%d", len(rows), numRows)
+	}
+	for i, row := range rows[:numRows] {
+		id := [16]byte{15: byte(i)}
+		file := "hi" + fmt.Sprint(i)
+		index := int64(i)
+
+		if row.ID != id || row.File != file || row.Index != index {
+			t.Fatalf("rows mismatch at index: %d got: %+v", i, row)
+		}
 	}
 }
 

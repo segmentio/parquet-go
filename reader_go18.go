@@ -142,27 +142,33 @@ func (r *GenericReader[T]) Close() error {
 // The method returns the number of rows read and io.EOF when no more rows
 // can be read from the reader.
 func (r *GenericReader[T]) readRows(rows []T) (int, error) {
-	if cap(r.base.rowbuf) < len(rows) {
-		r.base.rowbuf = make([]Row, len(rows))
+	nRequest := len(rows)
+	if cap(r.base.rowbuf) < nRequest {
+		r.base.rowbuf = make([]Row, nRequest)
 	} else {
-		r.base.rowbuf = r.base.rowbuf[:len(rows)]
+		r.base.rowbuf = r.base.rowbuf[:nRequest]
 	}
 
 	var n, nTotal int
 	var err error
 	for {
-		n, err = r.base.ReadRows(r.base.rowbuf)
+		// ReadRows reads the minimum remaining rows in a column page across all columns
+		// of the underlying reader, unless the length of the slice passed to it is smaller.
+		// In that case, ReadRows will read the number of rows equal to the length of the
+		// given slice argument. We limit that length to never be more than requested
+		// because sequential reads can cross page boundaries.
+		n, err = r.base.ReadRows(r.base.rowbuf[:nRequest-nTotal])
 		if n > 0 {
 			schema := r.base.Schema()
 
 			for i, row := range r.base.rowbuf[:n] {
-				if err := schema.Reconstruct(&rows[nTotal+i], row); err != nil {
-					return i, err
+				if err2 := schema.Reconstruct(&rows[nTotal+i], row); err2 != nil {
+					return nTotal + i, err2
 				}
 			}
 		}
 		nTotal += n
-		if n == 0 || nTotal == len(rows) {
+		if n == 0 || nTotal == nRequest || err != nil {
 			break
 		}
 	}
