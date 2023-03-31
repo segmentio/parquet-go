@@ -101,7 +101,7 @@ var writerTests = []struct {
 		},
 		dump: `row group 0
 --------------------------------------------------------------------------------
-first_name:  BINARY ZSTD DO:4 FPO:55 SZ:90/72/0.80 VC:3 ENC:PLAIN,RLE_DICTIONARY ST:[min: Han, max: Luke, num_nulls not defined]
+first_name:  BINARY ZSTD DO:4 FPO:55 SZ:90/72/0.80 VC:3 ENC:RLE_DICTIONARY,PLAIN ST:[min: Han, max: Luke, num_nulls not defined]
 last_name:   BINARY ZSTD DO:0 FPO:94 SZ:127/121/0.95 VC:3 ENC:DELTA_BYTE_ARRAY ST:[min: Skywalker, max: Solo, num_nulls not defined]
 
     first_name TV=3 RL=0 DL=0 DS: 3 DE:PLAIN
@@ -425,7 +425,7 @@ value 3: R:0 D:0 V:<null>
 		},
 		dump: `row group 0
 --------------------------------------------------------------------------------
-name:   BINARY UNCOMPRESSED DO:4 FPO:49 SZ:73/73/1.00 VC:2 ENC:PLAIN,RLE_DICTIONARY ST:[min: customer1, max: customer2, num_nulls not defined]
+name:   name:   BINARY UNCOMPRESSED DO:4 FPO:49 SZ:73/73/1.00 VC:2 ENC:RLE_DICTIONARY,PLAIN ST:[min: customer1, max: customer2, num_nulls not defined]
 value:  DOUBLE UNCOMPRESSED DO:0 FPO:77 SZ:39/39/1.00 VC:2 ENC:PLAIN ST:[min: 1.0, max: 42.0, num_nulls not defined]
 
     name TV=2 RL=0 DL=0 DS: 2 DE:PLAIN
