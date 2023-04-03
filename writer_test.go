@@ -425,7 +425,7 @@ value 3: R:0 D:0 V:<null>
 		},
 		dump: `row group 0
 --------------------------------------------------------------------------------
-name:   name:   BINARY UNCOMPRESSED DO:4 FPO:49 SZ:73/73/1.00 VC:2 ENC:RLE_DICTIONARY,PLAIN ST:[min: customer1, max: customer2, num_nulls not defined]
+name:   BINARY UNCOMPRESSED DO:4 FPO:49 SZ:73/73/1.00 VC:2 ENC:RLE_DICTIONARY,PLAIN ST:[min: customer1, max: customer2, num_nulls not defined]
 value:  DOUBLE UNCOMPRESSED DO:0 FPO:77 SZ:39/39/1.00 VC:2 ENC:PLAIN ST:[min: 1.0, max: 42.0, num_nulls not defined]
 
     name TV=2 RL=0 DL=0 DS: 2 DE:PLAIN
