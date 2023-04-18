@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/segmentio/parquet-go"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 func ExampleReadFile() {
@@ -324,6 +325,152 @@ func TestIssue377(t *testing.T) {
 	}
 
 	assertRowsEqual(t, rows, ods)
+}
+
+func TestIssue423(t *testing.T) {
+	type Inner struct {
+		Value string `parquet:","`
+	}
+	type Outer struct {
+		Label string  `parquet:","`
+		Inner Inner   `parquet:",json"`
+		Slice []Inner `parquet:",json"`
+		// This is the only tricky situation. Because we're delegating to json Marshaler/Unmarshaler
+		// We use the json tags for optionality.
+		Ptr *Inner `json:",omitempty" parquet:",json"`
+
+		// This tests BC behavior that slices of bytes and json strings still get written/read in a BC way.
+		String        string                     `parquet:",json"`
+		Bytes         []byte                     `parquet:",json"`
+		MapOfStructPb map[string]*structpb.Value `parquet:",json"`
+		StructPB      *structpb.Value            `parquet:",json"`
+	}
+
+	writeRows := []Outer{
+		{
+			Label: "welp",
+			Inner: Inner{
+				Value: "this is a string",
+			},
+			Slice: []Inner{
+				{
+					Value: "in a slice",
+				},
+			},
+			Ptr:    nil,
+			String: `{"hello":"world"}`,
+			Bytes:  []byte(`{"goodbye":"world"}`),
+			MapOfStructPb: map[string]*structpb.Value{
+				"answer": structpb.NewNumberValue(42.00),
+			},
+			StructPB: structpb.NewBoolValue(true),
+		},
+		{
+			Label: "foxes",
+			Inner: Inner{
+				Value: "the quick brown fox jumped over the yellow lazy dog.",
+			},
+			Slice: []Inner{
+				{
+					Value: "in a slice",
+				},
+			},
+			Ptr: &Inner{
+				Value: "not nil",
+			},
+			String: `{"hello":"world"}`,
+			Bytes:  []byte(`{"goodbye":"world"}`),
+			MapOfStructPb: map[string]*structpb.Value{
+				"doubleAnswer": structpb.NewNumberValue(84.00),
+			},
+			StructPB: structpb.NewBoolValue(false),
+		},
+	}
+
+	schema := parquet.SchemaOf(new(Outer))
+	fmt.Println(schema.String())
+	buf := new(bytes.Buffer)
+	w := parquet.NewGenericWriter[Outer](buf, schema)
+	_, err := w.Write(writeRows)
+	if err != nil {
+		t.Fatal("write error: ", err)
+	}
+	w.Close()
+
+	file := bytes.NewReader(buf.Bytes())
+	readRows, err := parquet.Read[Outer](file, file.Size())
+	if err != nil {
+		t.Fatal("read error: ", err)
+	}
+
+	assertRowsEqual(t, writeRows, readRows)
+}
+
+func TestReadFileGenericMultipleRowGroupsMultiplePages(t *testing.T) {
+	type MyRow struct {
+		ID    [16]byte `parquet:"id,delta,uuid"`
+		File  string   `parquet:"file,dict,zstd"`
+		Index int64    `parquet:"index,delta,zstd"`
+	}
+
+	numRows := 20_000
+	maxPageBytes := 5000
+
+	tmp, err := os.CreateTemp("/tmp", "*.parquet")
+	if err != nil {
+		t.Fatal("os.CreateTemp: ", err)
+	}
+	path := tmp.Name()
+	defer os.Remove(path)
+	t.Log("file:", path)
+
+	// The page buffer size ensures we get multiple pages out of this example.
+	w := parquet.NewGenericWriter[MyRow](tmp, parquet.PageBufferSize(maxPageBytes))
+	// Need to write 1 row at a time here as writing many at once disregards PageBufferSize option.
+	for i := 0; i < numRows; i++ {
+		row := MyRow{
+			ID:    [16]byte{15: byte(i)},
+			File:  "hi" + fmt.Sprint(i),
+			Index: int64(i),
+		}
+		_, err := w.Write([]MyRow{row})
+		if err != nil {
+			t.Fatal("w.Write: ", err)
+		}
+		// Flush writes rows as row group. 4 total (20k/5k) in this file.
+		if (i+1)%maxPageBytes == 0 {
+			err = w.Flush()
+			if err != nil {
+				t.Fatal("w.Flush: ", err)
+			}
+		}
+	}
+	err = w.Close()
+	if err != nil {
+		t.Fatal("w.Close: ", err)
+	}
+	err = tmp.Close()
+	if err != nil {
+		t.Fatal("tmp.Close: ", err)
+	}
+
+	rows, err := parquet.ReadFile[MyRow](path)
+	if err != nil {
+		t.Fatal("parquet.ReadFile: ", err)
+	}
+
+	if len(rows) != numRows {
+		t.Fatalf("not enough values were read: want=%d got=%d", len(rows), numRows)
+	}
+	for i, row := range rows {
+		id := [16]byte{15: byte(i)}
+		file := "hi" + fmt.Sprint(i)
+		index := int64(i)
+
+		if row.ID != id || row.File != file || row.Index != index {
+			t.Fatalf("rows mismatch at index: %d got: %+v", i, row)
+		}
+	}
 }
 
 func assertRowsEqual[T any](t *testing.T, rows1, rows2 []T) {

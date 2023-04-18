@@ -12,6 +12,7 @@ import (
 	"github.com/hexops/gotextdiff"
 	"github.com/hexops/gotextdiff/myers"
 	"github.com/hexops/gotextdiff/span"
+
 	"github.com/segmentio/parquet-go"
 	"github.com/segmentio/parquet-go/compress"
 )
@@ -50,7 +51,7 @@ func generateParquetFile(rows rows, options ...parquet.WriterOption) ([]byte, er
 	defer tmp.Close()
 	path := tmp.Name()
 	defer os.Remove(path)
-	//fmt.Println(path)
+	// fmt.Println(path)
 
 	writerOptions := []parquet.WriterOption{parquet.PageBufferSize(20)}
 	writerOptions = append(writerOptions, options...)
@@ -101,8 +102,8 @@ var writerTests = []struct {
 		},
 		dump: `row group 0
 --------------------------------------------------------------------------------
-first_name:  BINARY ZSTD DO:4 FPO:55 SZ:90/72/0.80 VC:3 ENC:PLAIN,RLE_DICTIONARY ST:[no stats for this column]
-last_name:   BINARY ZSTD DO:0 FPO:94 SZ:127/121/0.95 VC:3 ENC:DELTA_BYTE_ARRAY ST:[no stats for this column]
+first_name:  BINARY ZSTD DO:4 FPO:55 SZ:90/72/0.80 VC:3 ENC:RLE_DICTIONARY,PLAIN ST:[min: Han, max: Luke, num_nulls not defined]
+last_name:   BINARY ZSTD DO:0 FPO:94 SZ:127/121/0.95 VC:3 ENC:DELTA_BYTE_ARRAY ST:[min: Skywalker, max: Solo, num_nulls not defined]
 
     first_name TV=3 RL=0 DL=0 DS: 3 DE:PLAIN
     ----------------------------------------------------------------------------
@@ -139,8 +140,8 @@ value 3: R:0 D:0 V:Skywalker
 		},
 		dump: `row group 0
 --------------------------------------------------------------------------------
-first_name:  BINARY ZSTD DO:4 FPO:55 SZ:86/77/0.90 VC:3 ENC:RLE_DICTIONARY,PLAIN ST:[no stats for this column]
-last_name:   BINARY ZSTD DO:0 FPO:90 SZ:137/131/0.96 VC:3 ENC:DELTA_BYTE_ARRAY ST:[no stats for this column]
+first_name:  BINARY ZSTD DO:4 FPO:55 SZ:86/77/0.90 VC:3 ENC:PLAIN,RLE_DICTIONARY ST:[min: Han, max: Luke, num_nulls not defined]
+last_name:   BINARY ZSTD DO:0 FPO:90 SZ:137/131/0.96 VC:3 ENC:DELTA_BYTE_ARRAY ST:[min: Skywalker, max: Solo, num_nulls not defined]
 
     first_name TV=3 RL=0 DL=0 DS: 3 DE:PLAIN
     ----------------------------------------------------------------------------
@@ -185,9 +186,9 @@ value 3: R:0 D:0 V:Skywalker
 		},
 		dump: `row group 0
 --------------------------------------------------------------------------------
-name:       BINARY GZIP DO:4 FPO:70 SZ:126/101/0.80 VC:10 ENC:PLAIN,RLE_DICTIONARY ST:[no stats for this column]
-timestamp:  INT64 GZIP DO:0 FPO:130 SZ:299/550/1.84 VC:10 ENC:DELTA_BINARY_PACKED ST:[no stats for this column]
-value:      DOUBLE GZIP DO:0 FPO:429 SZ:292/192/0.66 VC:10 ENC:PLAIN ST:[no stats for this column]
+name:       BINARY GZIP DO:4 FPO:70 SZ:126/101/0.80 VC:10 ENC:PLAIN,RLE_DICTIONARY ST:[min: http_request_total, max: http_request_total, num_nulls not defined]
+timestamp:  INT64 GZIP DO:0 FPO:130 SZ:299/550/1.84 VC:10 ENC:DELTA_BINARY_PACKED ST:[min: 1639444033, max: 1639444144, num_nulls not defined]
+value:      DOUBLE GZIP DO:0 FPO:429 SZ:292/192/0.66 VC:10 ENC:PLAIN ST:[min: -0.0, max: 100.0, num_nulls not defined]
 
     name TV=10 RL=0 DL=0 DS: 1 DE:PLAIN
     ----------------------------------------------------------------------------
@@ -280,11 +281,11 @@ value 10: R:0 D:0 V:10.0
 
 		dump: `row group 0
 --------------------------------------------------------------------------------
-owner:              BINARY ZSTD DO:0 FPO:4 SZ:81/73/0.90 VC:2 ENC:DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column]
-ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:85 SZ:179/129/0.72 VC:3 ENC:RLE,DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column]
+owner:              BINARY ZSTD DO:0 FPO:4 SZ:81/73/0.90 VC:2 ENC:DELTA_LENGTH_BYTE_ARRAY ST:[min: A. Nonymous, max: Julien Le Dem, num_nulls not defined]
+ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:85 SZ:179/129/0.72 VC:3 ENC:RLE,DELTA_LENGTH_BYTE_ARRAY ST:[min: 555 123 4567, max: 555 666 1337, num_nulls: 1]
 contacts:
-.name:              BINARY UNCOMPRESSED DO:0 FPO:264 SZ:138/138/1.00 VC:3 ENC:RLE,DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column]
-.phoneNumber:       BINARY ZSTD DO:0 FPO:402 SZ:113/95/0.84 VC:3 ENC:RLE,DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column]
+.name:              BINARY UNCOMPRESSED DO:0 FPO:264 SZ:138/138/1.00 VC:3 ENC:RLE,DELTA_LENGTH_BYTE_ARRAY ST:[min: Chris Aniszczyk, max: Dmitriy Ryaboy, num_nulls: 1]
+.phoneNumber:       BINARY ZSTD DO:0 FPO:402 SZ:113/95/0.84 VC:3 ENC:RLE,DELTA_LENGTH_BYTE_ARRAY ST:[min: 555 987 6543, max: 555 987 6543, num_nulls: 2]
 
     owner TV=2 RL=0 DL=0
     ----------------------------------------------------------------------------
@@ -362,11 +363,11 @@ value 3: R:0 D:0 V:<null>
 
 		dump: `row group 0
 --------------------------------------------------------------------------------
-owner:              BINARY ZSTD DO:0 FPO:4 SZ:86/78/0.91 VC:2 ENC:DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column]
-ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:90 SZ:172/122/0.71 VC:3 ENC:RLE,DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column]
+owner:              BINARY ZSTD DO:0 FPO:4 SZ:86/78/0.91 VC:2 ENC:DELTA_LENGTH_BYTE_ARRAY ST:[min: A. Nonymous, max: Julien Le Dem, num_nulls not defined]
+ownerPhoneNumbers:  BINARY GZIP DO:0 FPO:90 SZ:172/122/0.71 VC:3 ENC:RLE,DELTA_LENGTH_BYTE_ARRAY ST:[min: 555 123 4567, max: 555 666 1337, num_nulls: 1]
 contacts:
-.name:              BINARY UNCOMPRESSED DO:0 FPO:262 SZ:132/132/1.00 VC:3 ENC:RLE,DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column]
-.phoneNumber:       BINARY ZSTD DO:0 FPO:394 SZ:108/90/0.83 VC:3 ENC:RLE,DELTA_LENGTH_BYTE_ARRAY ST:[no stats for this column]
+.name:              BINARY UNCOMPRESSED DO:0 FPO:262 SZ:132/132/1.00 VC:3 ENC:RLE,DELTA_LENGTH_BYTE_ARRAY ST:[min: Chris Aniszczyk, max: Dmitriy Ryaboy, num_nulls: 1]
+.phoneNumber:       BINARY ZSTD DO:0 FPO:394 SZ:108/90/0.83 VC:3 ENC:RLE,DELTA_LENGTH_BYTE_ARRAY ST:[min: 555 987 6543, max: 555 987 6543, num_nulls: 2]
 
     owner TV=2 RL=0 DL=0
     ----------------------------------------------------------------------------
@@ -425,8 +426,8 @@ value 3: R:0 D:0 V:<null>
 		},
 		dump: `row group 0
 --------------------------------------------------------------------------------
-name:   BINARY UNCOMPRESSED DO:4 FPO:49 SZ:73/73/1.00 VC:2 ENC:PLAIN,RLE_DICTIONARY ST:[no stats for this column]
-value:  DOUBLE UNCOMPRESSED DO:0 FPO:77 SZ:39/39/1.00 VC:2 ENC:PLAIN ST:[no stats for this column]
+name:   BINARY UNCOMPRESSED DO:4 FPO:49 SZ:73/73/1.00 VC:2 ENC:RLE_DICTIONARY,PLAIN ST:[min: customer1, max: customer2, num_nulls not defined]
+value:  DOUBLE UNCOMPRESSED DO:0 FPO:77 SZ:39/39/1.00 VC:2 ENC:PLAIN ST:[min: 1.0, max: 42.0, num_nulls not defined]
 
     name TV=2 RL=0 DL=0 DS: 2 DE:PLAIN
     ----------------------------------------------------------------------------
@@ -453,7 +454,7 @@ value 2: R:0 D:0 V:1.0
 
 func TestWriter(t *testing.T) {
 	if !hasParquetTools() {
-		t.Skip("parquet-tools are not installed")
+		t.Skip("Skipping TestWriter writerTests because parquet-tools are not installed in Github CI. FIXME.") // TODO
 	}
 
 	for _, test := range writerTests {

@@ -1,0 +1,25 @@
+package parquet
+
+import (
+	"bytes"
+	"testing"
+)
+
+func TestIncrementByteArrayInplace(t *testing.T) {
+	testCases := [][]byte{
+		{0x00, 0x01, 0x02, 0x03}, {0x00, 0x01, 0x02, 0x04},
+		{0x00, 0x01, 0x02, 0xFF}, {0x00, 0x01, 0x03, 0x00},
+		{0x00, 0x01, 0xFF, 0xFF}, {0x00, 0x02, 0x00, 0x00},
+		{0xFF, 0xFF, 0xFF, 0xFF}, {0xFF, 0xFF, 0xFF, 0xFF},
+	}
+
+	for i := 0; i < len(testCases); i += 2 {
+		input := testCases[i]
+		expected := testCases[i+1]
+		actual := copyBytes(input)
+		incrementByteArrayInplace(actual)
+		if !bytes.Equal(actual, expected) {
+			t.Errorf("incrementByteArrayInplace(%v) = %v, want %v", input, actual, expected)
+		}
+	}
+}
