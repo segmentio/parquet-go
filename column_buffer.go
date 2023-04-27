@@ -848,7 +848,7 @@ func (col *booleanColumnBuffer) writeValues(rows sparse.Array, _ columnLevels) {
 			}
 			x := uint(col.numValues) / 8
 			y := uint(col.numValues) % 8
-			col.bits[x] |= (b << y) | (col.bits[x] & ^(0xFF << y))
+			col.bits[x] = (b << y) | (col.bits[x] & ^(0xFF << y))
 			col.numValues += int32(i)
 		}
 
