@@ -40,6 +40,11 @@ var readerTests = []struct {
 	},
 
 	{
+		scenario: "INT16",
+		model:    int16Column{},
+	},
+
+	{
 		scenario: "INT32",
 		model:    int32Column{},
 	},
