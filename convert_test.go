@@ -442,6 +442,24 @@ var conversionTests = [...]struct {
 			Extra: "",
 		},
 	},
+
+	{
+		scenario: "nils",
+		from: struct {
+			Size  *int64
+			Count *string
+		}{Size: nil, Count: nil},
+		to: struct {
+			Size  *string
+			Count *int32
+		}{Size: nil, Count: nil},
+	},
+
+	{
+		scenario: "string to int",
+		from:     struct{ Size string }{Size: "1234"},
+		to:       struct{ Size uint32 }{Size: 1234},
+	},
 }
 
 func TestConvert(t *testing.T) {
@@ -505,6 +523,17 @@ func TestConvertValue(t *testing.T) {
 	if nsVal.Int64() != ns {
 		t.Errorf("converted value mismatch:\nwant = %+v\ngot  = %+v", ns, nsVal.Int64())
 	}
+
+	int96Bytes := []byte{0x80, 0x9A, 0x4F, 0x34, 0x6C, 0x36, 0x00, 0x00, 0x12, 0x89, 0x25, 0x00}
+	timeStringLayout := "2006-01-02T15:04:05.000Z"
+	int96TimeString := "2022-12-08T16:37:18.362Z"
+	int96Time, err := time.Parse(timeStringLayout, int96TimeString)
+	if err != nil {
+		t.Error(err)
+	}
+	msValInt96 := parquet.ValueOf(int96Time.UnixMilli())
+	usValInt96 := parquet.ValueOf(int96Time.UnixMicro())
+	nsValInt96 := parquet.ValueOf(int96Time.UnixNano())
 
 	var timestampConversionTests = [...]struct {
 		scenario  string
@@ -1170,6 +1199,30 @@ func TestConvertValue(t *testing.T) {
 			fromValue: nsVal,
 			toType:    parquet.Int64Type,
 			toValue:   parquet.Int64Value(ns),
+		},
+
+		{
+			scenario:  "int96 to microsecond timestamp",
+			fromType:  parquet.Int96Type,
+			fromValue: parquet.Int96.Value(int96Bytes),
+			toType:    usType,
+			toValue:   parquet.Int64Value(usValInt96.Int64()),
+		},
+
+		{
+			scenario:  "int96 to millisecond timestamp",
+			fromType:  parquet.Int96Type,
+			fromValue: parquet.Int96.Value(int96Bytes),
+			toType:    msType,
+			toValue:   parquet.Int64Value(msValInt96.Int64()),
+		},
+
+		{
+			scenario:  "int96 to nanosecond timestamp",
+			fromType:  parquet.Int96Type,
+			fromValue: parquet.Int96.Value(int96Bytes),
+			toType:    nsType,
+			toValue:   parquet.Int64Value(nsValInt96.Int64()),
 		},
 	}
 

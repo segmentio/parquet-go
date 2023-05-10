@@ -323,6 +323,9 @@ func (t booleanType) AssignValue(dst reflect.Value, src Value) error {
 }
 
 func (t booleanType) ConvertValue(val Value, typ Type) (Value, error) {
+	if val.IsNull() {
+		return val, nil
+	}
 	switch typ.(type) {
 	case *stringType:
 		return convertStringToBoolean(val)
@@ -406,6 +409,9 @@ func (t int32Type) AssignValue(dst reflect.Value, src Value) error {
 }
 
 func (t int32Type) ConvertValue(val Value, typ Type) (Value, error) {
+	if val.IsNull() {
+		return val, nil
+	}
 	switch typ.(type) {
 	case *stringType:
 		return convertStringToInt32(val)
@@ -489,6 +495,9 @@ func (t int64Type) AssignValue(dst reflect.Value, src Value) error {
 }
 
 func (t int64Type) ConvertValue(val Value, typ Type) (Value, error) {
+	if val.IsNull() {
+		return val, nil
+	}
 	switch typ.(type) {
 	case *stringType:
 		return convertStringToInt64(val)
@@ -566,6 +575,9 @@ func (t int96Type) AssignValue(dst reflect.Value, src Value) error {
 }
 
 func (t int96Type) ConvertValue(val Value, typ Type) (Value, error) {
+	if val.IsNull() {
+		return val, nil
+	}
 	switch typ.(type) {
 	case *stringType:
 		return convertStringToInt96(val)
@@ -647,6 +659,9 @@ func (t floatType) AssignValue(dst reflect.Value, src Value) error {
 }
 
 func (t floatType) ConvertValue(val Value, typ Type) (Value, error) {
+	if val.IsNull() {
+		return val, nil
+	}
 	switch typ.(type) {
 	case *stringType:
 		return convertStringToFloat(val)
@@ -728,6 +743,9 @@ func (t doubleType) AssignValue(dst reflect.Value, src Value) error {
 }
 
 func (t doubleType) ConvertValue(val Value, typ Type) (Value, error) {
+	if val.IsNull() {
+		return val, nil
+	}
 	switch typ.(type) {
 	case *stringType:
 		return convertStringToDouble(val)
@@ -812,6 +830,9 @@ func (t byteArrayType) AssignValue(dst reflect.Value, src Value) error {
 }
 
 func (t byteArrayType) ConvertValue(val Value, typ Type) (Value, error) {
+	if val.IsNull() {
+		return val, nil
+	}
 	switch typ.Kind() {
 	case Boolean:
 		return convertBooleanToByteArray(val)
@@ -916,6 +937,9 @@ func (t fixedLenByteArrayType) AssignValue(dst reflect.Value, src Value) error {
 }
 
 func (t fixedLenByteArrayType) ConvertValue(val Value, typ Type) (Value, error) {
+	if val.IsNull() {
+		return val, nil
+	}
 	switch typ.(type) {
 	case *stringType:
 		return convertStringToFixedLenByteArray(val, t.length)
@@ -1054,6 +1078,9 @@ func (t be128Type) AssignValue(dst reflect.Value, src Value) error {
 }
 
 func (t be128Type) ConvertValue(val Value, typ Type) (Value, error) {
+	if val.IsNull() {
+		return val, nil
+	}
 	return fixedLenByteArrayType{length: 16}.ConvertValue(val, typ)
 }
 
@@ -1223,6 +1250,9 @@ func (t *intType) AssignValue(dst reflect.Value, src Value) error {
 }
 
 func (t *intType) ConvertValue(val Value, typ Type) (Value, error) {
+	if val.IsNull() {
+		return val, nil
+	}
 	if t.BitWidth == 64 {
 		return int64Type{}.ConvertValue(val, typ)
 	} else {
@@ -1338,6 +1368,9 @@ func (t *stringType) AssignValue(dst reflect.Value, src Value) error {
 }
 
 func (t *stringType) ConvertValue(val Value, typ Type) (Value, error) {
+	if val.IsNull() {
+		return val, nil
+	}
 	switch t2 := typ.(type) {
 	case *dateType:
 		return convertDateToString(val)
@@ -1754,6 +1787,9 @@ func (t *dateType) AssignValue(dst reflect.Value, src Value) error {
 }
 
 func (t *dateType) ConvertValue(val Value, typ Type) (Value, error) {
+	if val.IsNull() {
+		return val, nil
+	}
 	switch src := typ.(type) {
 	case *stringType:
 		return convertStringToDate(val, time.UTC)
@@ -1896,6 +1932,9 @@ func (t *timeType) AssignValue(dst reflect.Value, src Value) error {
 }
 
 func (t *timeType) ConvertValue(val Value, typ Type) (Value, error) {
+	if val.IsNull() {
+		return val, nil
+	}
 	switch src := typ.(type) {
 	case *stringType:
 		tz := t.tz()
@@ -2021,11 +2060,16 @@ func (t *timestampType) AssignValue(dst reflect.Value, src Value) error {
 }
 
 func (t *timestampType) ConvertValue(val Value, typ Type) (Value, error) {
+	if val.IsNull() {
+		return val, nil
+	}
 	switch src := typ.(type) {
 	case *timestampType:
 		return convertTimestampToTimestamp(val, src.Unit, t.Unit)
 	case *dateType:
 		return convertDateToTimestamp(val, t.Unit, t.tz())
+	case int96Type:
+		return convertInt96ToTimestamp(val, t.Unit, t.tz())
 	}
 	return int64Type{}.ConvertValue(val, typ)
 }
