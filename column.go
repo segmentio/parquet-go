@@ -437,7 +437,34 @@ func schemaElementTypeOf(s *format.SchemaElement) Type {
 		case deprecated.Enum:
 			return &enumType{}
 		case deprecated.Decimal:
-			// TODO
+			if s.Scale != nil && s.Precision != nil {
+				// A parquet decimal can be one of several different physical types.
+				if t := s.Type; t != nil {
+					var typ Type
+					switch kind := Kind(*s.Type); kind {
+					case Int32:
+						typ = Int32Type
+					case Int64:
+						typ = Int64Type
+					case FixedLenByteArray:
+						if s.TypeLength == nil {
+							panic("DECIMAL using FIXED_LEN_BYTE_ARRAY must specify a length")
+						}
+						typ = FixedLenByteArrayType(int(*s.TypeLength))
+					case ByteArray:
+						typ = ByteArrayType
+					default:
+						panic("DECIMAL must be of type INT32, INT64, BYTE_ARRAY or FIXED_LEN_BYTE_ARRAY but got " + kind.String())
+					}
+					return &decimalType{
+						decimal: format.DecimalType{
+							Scale:     *s.Scale,
+							Precision: *s.Precision,
+						},
+						Type: typ,
+					}
+				}
+			}
 		case deprecated.Date:
 			return &dateType{}
 		case deprecated.TimeMillis:
