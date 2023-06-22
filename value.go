@@ -579,7 +579,26 @@ func (v Value) Column() int { return v.column() }
 // Bytes returns the binary representation of v.
 //
 // If v is the null value, an nil byte slice is returned.
-func (v Value) Bytes() []byte { return v.AppendBytes(nil) }
+func (v Value) Bytes() []byte {
+	switch v.Kind() {
+	case Boolean:
+		buf := [8]byte{}
+		binary.LittleEndian.PutUint32(buf[:4], v.uint32())
+		return buf[0:1]
+	case Int32, Float:
+		buf := [8]byte{}
+		binary.LittleEndian.PutUint32(buf[:4], v.uint32())
+		return buf[:4]
+	case Int64, Double:
+		buf := [8]byte{}
+		binary.LittleEndian.PutUint64(buf[:8], v.uint64())
+		return buf[:8]
+	case ByteArray, FixedLenByteArray, Int96:
+		return v.byteArray()
+	default:
+		return nil
+	}
+}
 
 // AppendBytes appends the binary representation of v to b.
 //
