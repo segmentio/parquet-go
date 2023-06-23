@@ -244,6 +244,10 @@ func (s *Schema) deconstructValueToColumns(columns [][]Value, value reflect.Valu
 // The method panics if the structure of the go value and parquet row do not
 // match.
 func (s *Schema) Reconstruct(value interface{}, row Row) error {
+	return s.reconstructWithColumns(value, row, make([][]Value, len(s.columns)))
+}
+
+func (s *Schema) reconstructWithColumns(value interface{}, row Row, columns [][]Value) error {
 	v := reflect.ValueOf(value)
 	if !v.IsValid() {
 		panic("cannot reconstruct row into go value of type <nil>")
@@ -261,7 +265,6 @@ func (s *Schema) Reconstruct(value interface{}, row Row) error {
 		v = v.Elem()
 	}
 
-	columns := make([][]Value, len(s.columns))
 	row.Range(func(columnIndex int, columnValues []Value) bool {
 		if columnIndex < len(columns) {
 			columns[columnIndex] = columnValues

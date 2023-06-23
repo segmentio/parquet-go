@@ -149,6 +149,9 @@ func (r *GenericReader[T]) readRows(rows []T) (int, error) {
 		r.base.rowbuf = r.base.rowbuf[:nRequest]
 	}
 
+	schema := r.base.Schema()
+	columns := make([][]Value, len(schema.columns))
+
 	var n, nTotal int
 	var err error
 	for {
@@ -159,10 +162,9 @@ func (r *GenericReader[T]) readRows(rows []T) (int, error) {
 		// because sequential reads can cross page boundaries.
 		n, err = r.base.ReadRows(r.base.rowbuf[:nRequest-nTotal])
 		if n > 0 {
-			schema := r.base.Schema()
 
 			for i, row := range r.base.rowbuf[:n] {
-				if err2 := schema.Reconstruct(&rows[nTotal+i], row); err2 != nil {
+				if err2 := schema.reconstructWithColumns(&rows[nTotal+i], row, columns); err2 != nil {
 					return nTotal + i, err2
 				}
 			}
