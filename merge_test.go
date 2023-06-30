@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"os"
 	"sort"
+	"strconv"
 	"testing"
 
 	"github.com/segmentio/parquet-go"
@@ -482,6 +484,89 @@ func TestMergeRowGroupsSeekToRow(t *testing.T) {
 			cursor++
 		}
 	}()
+}
+
+func makeByteArray(len int) []byte {
+	buf := make([]byte, len)
+	for i := range buf {
+		buf[i] = byte(i)
+	}
+	return buf
+}
+
+type RowWithByteArray struct {
+	Length string
+	Data   []byte
+}
+
+func TestMergeRowGroupsDataIntegrity(t *testing.T) {
+	numRows := 300
+	byteArrayRows := make([]interface{}, numRows)
+	for i := 0; i < numRows; i++ {
+		byteArrayRows[i] = RowWithByteArray{
+			Length: fmt.Sprintf("%d", i),
+			Data:   makeByteArray(i),
+		}
+	}
+
+	var (
+		schema         = parquet.SchemaOf(RowWithByteArray{})
+		sortingColumns = parquet.SortingColumns(parquet.Ascending("Length"))
+		options        = []parquet.RowGroupOption{
+			schema,
+			parquet.SortingRowGroupConfig(sortingColumns),
+		}
+		buffer = parquet.NewBuffer(options...)
+	)
+
+	rowGroup := sortedRowGroup(options, byteArrayRows...)
+	_, err := buffer.WriteRowGroup(rowGroup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.CreateTemp(t.TempDir(), "test.parquet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	writer := parquet.NewGenericWriter[any](f,
+		schema,
+		parquet.SortingWriterConfig(sortingColumns),
+		parquet.WriteBufferSize(256),
+		parquet.PageBufferSize(256),
+	)
+	_, err = copyRowsAndClose(writer, buffer.Rows())
+	if err != nil {
+		t.Fatal(err)
+	}
+	writer.Close()
+
+	reader := parquet.NewGenericReader[any](f)
+	defer reader.Close()
+
+	stats, err := f.Stat()
+	if err != nil {
+		t.Fatal(err)
+	}
+	pqFile, err := parquet.OpenFile(f, stats.Size())
+	if err != nil {
+		t.Fatal(err)
+	}
+	mergeRows, err := parquet.MergeRowGroups(
+		pqFile.RowGroups(),
+		parquet.SortingRowGroupConfig(sortingColumns),
+		schema,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	readRows := make([]parquet.Row, numRows)
+	mergeRows.Rows().ReadRows(readRows)
+	for _, row := range readRows {
+		expectedLen, _ := strconv.Atoi(row[0].String())
+		if len(row[1].Bytes()) != expectedLen {
+			t.Fatalf("expected length %d, got %d", expectedLen, len(row[1].Bytes()))
+		}
+	}
 }
 
 func BenchmarkMergeRowGroups(b *testing.B) {
