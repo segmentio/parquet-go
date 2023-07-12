@@ -2,8 +2,8 @@
 package lz4
 
 import (
+	"github.com/parquet-go/parquet-go/format"
 	"github.com/pierrec/lz4/v4"
-	"github.com/segmentio/parquet-go/format"
 )
 
 type Level = lz4.CompressionLevel

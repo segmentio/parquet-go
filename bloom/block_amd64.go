@@ -11,7 +11,7 @@ import "golang.org/x/sys/cpu"
 //
 // goos: darwin
 // goarch: amd64
-// pkg: github.com/segmentio/parquet-go/bloom
+// pkg: github.com/parquet-go/parquet-go/bloom
 // cpu: Intel(R) Core(TM) i9-8950HK CPU @ 2.90GHz
 //
 // name         old time/op    new time/op     delta

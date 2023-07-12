@@ -1,4 +1,4 @@
-# segmentio/parquet-go [![build status](https://github.com/segmentio/parquet-go/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/segmentio/parquet-go/actions) [![Go Report Card](https://goreportcard.com/badge/github.com/segmentio/parquet-go)](https://goreportcard.com/report/github.com/segmentio/parquet-go) [![Go Reference](https://pkg.go.dev/badge/github.com/segmentio/parquet-go.svg)](https://pkg.go.dev/github.com/segmentio/parquet-go)
+# parquet-go/parquet-go [![build status](https://github.com/segmentio/parquet-go/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/segmentio/parquet-go/actions) [![Go Report Card](https://goreportcard.com/badge/github.com/segmentio/parquet-go)](https://goreportcard.com/report/github.com/segmentio/parquet-go) [![Go Reference](https://pkg.go.dev/badge/github.com/segmentio/parquet-go.svg)](https://pkg.go.dev/github.com/segmentio/parquet-go)
 
 High-performance Go library to manipulate parquet files.
 
@@ -15,7 +15,7 @@ The creation and evolution of large scale data management systems, combined with
 realtime expectations come with challenging maintenance and performance
 requirements, that existing solutions to use parquet with Go were not addressing.
 
-The `segmentio/parquet-go` package was designed and developed to respond to those
+The `parquet-go/parquet-go` package was designed and developed to respond to those
 challenges, offering high level APIs to read and write parquet files, while
 keeping a low compute and memory footprint in order to be used in environments
 where data volumes and cost constraints require software to achieve high levels
@@ -32,7 +32,7 @@ The package is distributed as a standard Go module that programs can take a
 dependency on and install with the following command:
 
 ```
-go get github.com/segmentio/parquet-go
+go get github.com/parquet-go/parquet-go
 ```
 
 Go 1.18 or later is required to use the package. As a backward-compatibility
@@ -54,7 +54,7 @@ The following sections describe how to use APIs exposed by the library,
 highlighting the use cases with code examples to demonstrate how they are used
 in practice.
 
-### Writing Parquet Files: [parquet.GenericWriter[T]](https://pkg.go.dev/github.com/segmentio/parquet-go#GenericWriter)
+### Writing Parquet Files: [parquet.GenericWriter[T]](https://pkg.go.dev/github.com/parquet-go/parquet-go#GenericWriter)
 
 A parquet file is a collection of rows sharing the same schema, arranged in
 columns to support faster scan operations on subsets of the data set.
@@ -109,7 +109,7 @@ writer := parquet.NewGenericWriter[any](output, schema)
 ...
 ```
 
-### Reading Parquet Files: [parquet.GenericReader[T]](https://pkg.go.dev/github.com/segmentio/parquet-go#GenericReader)
+### Reading Parquet Files: [parquet.GenericReader[T]](https://pkg.go.dev/github.com/parquet-go/parquet-go#GenericReader)
 
 For simple use cases where the data set fits in memory and the program will
 read most rows of the file, the `parquet.ReadFile[T]` function returns a slice
@@ -144,7 +144,7 @@ reader := parquet.NewReader(file, schema)
 ...
 ```
 
-### Inspecting Parquet Files: [parquet.File](https://pkg.go.dev/github.com/segmentio/parquet-go#File)
+### Inspecting Parquet Files: [parquet.File](https://pkg.go.dev/github.com/parquet-go/parquet-go#File)
 
 Sometimes, lower-level APIs can be useful to leverage the columnar layout of
 parquet files. The `parquet.File` type is intended to provide such features to
@@ -164,7 +164,7 @@ for _, rowGroup := range f.RowGroups() {
 }
 ```
 
-### Evolving Parquet Schemas: [parquet.Convert](https://pkg.go.dev/github.com/segmentio/parquet-go#Convert)
+### Evolving Parquet Schemas: [parquet.Convert](https://pkg.go.dev/github.com/parquet-go/parquet-go#Convert)
 
 Parquet files embed all the metadata necessary to interpret their content,
 including a description of the schema of the tables represented by the rows and
@@ -180,7 +180,7 @@ to operate on parquet files with heterogenous schemas: algorithms that expect
 new columns to exist may have issues dealing with rows that come from files with
 mismatching schema versions.
 
-To help build applications that can handle evolving schemas, `segmentio/parquet-go`
+To help build applications that can handle evolving schemas, `parquet-go/parquet-go`
 implements conversion rules that create views of row groups to translate between
 schema versions.
 
@@ -215,7 +215,7 @@ At this time, conversion rules only supports adding or removing columns from
 the schemas, there are no type conversions performed, nor ways to rename
 columns, etc... More advanced conversion rules may be added in the future.
 
-### Sorting Row Groups: [parquet.GenericBuffer[T]](https://pkg.go.dev/github.com/segmentio/parquet-go#Buffer)
+### Sorting Row Groups: [parquet.GenericBuffer[T]](https://pkg.go.dev/github.com/parquet-go/parquet-go#Buffer)
 
 The `parquet.GenericWriter[T]` type is optimized for minimal memory usage,
 keeping the order of rows unchanged and flushing pages as soon as they are filled.
@@ -224,7 +224,7 @@ Parquet supports expressing columns by which rows are sorted through the
 declaration of _sorting columns_ on row groups. Sorting row groups requires
 buffering all rows before ordering and writing them to a parquet file.
 
-To help with those use cases, the `segmentio/parquet-go` package exposes the
+To help with those use cases, the `parquet-go/parquet-go` package exposes the
 `parquet.GenericBuffer[T]` type which acts as a buffer of rows and implements
 `sort.Interface` to allow applications to sort rows prior to writing them
 to a file.
@@ -272,7 +272,7 @@ if err := writer.Close(); err != nil {
 }
 ```
 
-### Merging Row Groups: [parquet.MergeRowGroups](https://pkg.go.dev/github.com/segmentio/parquet-go#MergeRowGroups)
+### Merging Row Groups: [parquet.MergeRowGroups](https://pkg.go.dev/github.com/parquet-go/parquet-go#MergeRowGroups)
 
 Parquet files are often used as part of the underlying engine for data
 processing or storage layers, in which cases merging multiple row groups
@@ -281,7 +281,7 @@ performance; for example, bloom filters in parquet files are stored for each
 row group, the larger the row group, the fewer filters need to be stored and
 the more effective they become.
 
-The `segmentio/parquet-go` package supports creating merged views of row groups,
+The `parquet-go/parquet-go` package supports creating merged views of row groups,
 where the view contains all the rows of the merged groups, maintaining the order
 defined by the sorting columns of the groups.
 
@@ -314,7 +314,7 @@ if err := writer.Close(); err != nil {
 }
 ```
 
-### Using Bloom Filters: [parquet.BloomFilter](https://pkg.go.dev/github.com/segmentio/parquet-go#BloomFilter)
+### Using Bloom Filters: [parquet.BloomFilter](https://pkg.go.dev/github.com/parquet-go/parquet-go#BloomFilter)
 
 Parquet files can embed bloom filters to help improve the performance of point
 lookups in the files. The format of parquet bloom filters is documented in
@@ -510,7 +510,7 @@ This model can be preferable when the underlying storage or in-memory
 representation of the data needs to be optimized further than what can be
 achieved by using an intermediary buffering layer with `parquet.GenericBuffer[T]`.
 
-See [parquet.RowGroup](https://pkg.go.dev/github.com/segmentio/parquet-go#RowGroup)
+See [parquet.RowGroup](https://pkg.go.dev/github.com/parquet-go/parquet-go#RowGroup)
 for the full interface documentation.
 
 #### C. Using on-disk page buffers
@@ -525,7 +525,7 @@ a scratch buffer when generating files, by configuring a different page buffer
 pool using the `parquet.ColumnPageBuffers` option and `parquet.PageBufferPool`
 interface.
 
-The `segmentio/parquet-go` package provides an implementation of the interface
+The `parquet-go/parquet-go` package provides an implementation of the interface
 which uses temporary files to store pages while a file is generated, allowing
 programs to use local storage as swap space to hold pages and keep memory
 utilization to a minimum. The following example demonstrates how to configure
@@ -548,7 +548,7 @@ of the file). The resulting write amplification can often be optimized away by
 the kernel if the file system supports copy-on-write of disk pages since copies
 between `os.File` instances are optimized using `copy_file_range(2)` (on linux).
 
-See [parquet.PageBufferPool](https://pkg.go.dev/github.com/segmentio/parquet-go#PageBufferPool)
+See [parquet.PageBufferPool](https://pkg.go.dev/github.com/parquet-go/parquet-go#PageBufferPool)
 for the full interface documentation.
 
 ## Maintenance
@@ -560,7 +560,7 @@ before submitting contributions.
 
 ### Continuous Integration
 
-The project uses [Github Actions](https://github.com/segmentio/parquet-go/actions) for CI.
+The project uses [Github Actions](https://github.com/parquet-go/parquet-go/actions) for CI.
 
 ### Debugging
 

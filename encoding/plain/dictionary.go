@@ -1,8 +1,8 @@
 package plain
 
 import (
-	"github.com/segmentio/parquet-go/encoding"
-	"github.com/segmentio/parquet-go/format"
+	"github.com/parquet-go/parquet-go/encoding"
+	"github.com/parquet-go/parquet-go/format"
 )
 
 type DictionaryEncoding struct {

@@ -13,8 +13,8 @@ import (
 	"github.com/hexops/gotextdiff/myers"
 	"github.com/hexops/gotextdiff/span"
 
-	"github.com/segmentio/parquet-go"
-	"github.com/segmentio/parquet-go/compress"
+	"github.com/parquet-go/parquet-go"
+	"github.com/parquet-go/parquet-go/compress"
 )
 
 const (

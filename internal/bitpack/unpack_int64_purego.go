@@ -2,7 +2,7 @@
 
 package bitpack
 
-import "github.com/segmentio/parquet-go/internal/unsafecast"
+import "github.com/parquet-go/parquet-go/internal/unsafecast"
 
 func unpackInt64(dst []int64, src []byte, bitWidth uint) {
 	bits := unsafecast.BytesToUint32(src)

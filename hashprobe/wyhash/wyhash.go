@@ -6,7 +6,7 @@ import (
 	"encoding/binary"
 	"math/bits"
 
-	"github.com/segmentio/parquet-go/sparse"
+	"github.com/parquet-go/parquet-go/sparse"
 )
 
 const (

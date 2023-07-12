@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/segmentio/parquet-go"
+	"github.com/parquet-go/parquet-go"
 )
 
 func TestPrintSchema(t *testing.T) {

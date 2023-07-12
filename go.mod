@@ -1,4 +1,4 @@
-module github.com/segmentio/parquet-go
+module github.com/parquet-go/parquet-go
 
 go 1.19
 

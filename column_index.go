@@ -1,10 +1,10 @@
 package parquet
 
 import (
-	"github.com/segmentio/parquet-go/deprecated"
-	"github.com/segmentio/parquet-go/encoding/plain"
-	"github.com/segmentio/parquet-go/format"
-	"github.com/segmentio/parquet-go/internal/unsafecast"
+	"github.com/parquet-go/parquet-go/deprecated"
+	"github.com/parquet-go/parquet-go/encoding/plain"
+	"github.com/parquet-go/parquet-go/format"
+	"github.com/parquet-go/parquet-go/internal/unsafecast"
 )
 
 type ColumnIndex interface {

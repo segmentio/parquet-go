@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/segmentio/parquet-go/compress"
-	"github.com/segmentio/parquet-go/deprecated"
-	"github.com/segmentio/parquet-go/encoding"
+	"github.com/parquet-go/parquet-go/compress"
+	"github.com/parquet-go/parquet-go/deprecated"
+	"github.com/parquet-go/parquet-go/encoding"
 )
 
 // Schema represents a parquet schema created from a Go value.

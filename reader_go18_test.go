@@ -12,7 +12,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/segmentio/parquet-go"
+	"github.com/parquet-go/parquet-go"
 )
 
 func TestGenericReader(t *testing.T) {

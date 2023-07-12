@@ -7,7 +7,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/segmentio/parquet-go"
+	"github.com/parquet-go/parquet-go"
 )
 
 func Example() {

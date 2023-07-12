@@ -11,7 +11,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/segmentio/parquet-go"
+	"github.com/parquet-go/parquet-go"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 

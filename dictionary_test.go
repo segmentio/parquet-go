@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/segmentio/parquet-go"
+	"github.com/parquet-go/parquet-go"
 )
 
 var dictionaryTypes = [...]parquet.Type{

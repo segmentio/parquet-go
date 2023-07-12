@@ -6,11 +6,11 @@ import (
 	"io"
 	"reflect"
 
-	"github.com/segmentio/parquet-go/compress"
-	"github.com/segmentio/parquet-go/deprecated"
-	"github.com/segmentio/parquet-go/encoding"
-	"github.com/segmentio/parquet-go/format"
-	"github.com/segmentio/parquet-go/internal/unsafecast"
+	"github.com/parquet-go/parquet-go/compress"
+	"github.com/parquet-go/parquet-go/deprecated"
+	"github.com/parquet-go/parquet-go/encoding"
+	"github.com/parquet-go/parquet-go/format"
+	"github.com/parquet-go/parquet-go/internal/unsafecast"
 )
 
 // Column represents a column in a parquet file.

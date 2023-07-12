@@ -3,7 +3,7 @@ package parquet
 import (
 	"encoding/binary"
 
-	"github.com/segmentio/parquet-go/deprecated"
+	"github.com/parquet-go/parquet-go/deprecated"
 )
 
 // CompareDescending constructs a comparison function which inverses the order

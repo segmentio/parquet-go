@@ -9,9 +9,9 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/segmentio/parquet-go/deprecated"
-	"github.com/segmentio/parquet-go/internal/unsafecast"
-	"github.com/segmentio/parquet-go/sparse"
+	"github.com/parquet-go/parquet-go/deprecated"
+	"github.com/parquet-go/parquet-go/internal/unsafecast"
+	"github.com/parquet-go/parquet-go/sparse"
 )
 
 // writeRowsFunc is the type of functions that apply rows to a set of column

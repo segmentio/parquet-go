@@ -3,7 +3,7 @@
 package bitpack
 
 import (
-	"github.com/segmentio/parquet-go/internal/unsafecast"
+	"github.com/parquet-go/parquet-go/internal/unsafecast"
 	"golang.org/x/sys/cpu"
 )
 

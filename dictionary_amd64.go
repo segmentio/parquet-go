@@ -5,8 +5,8 @@ package parquet
 import (
 	"unsafe"
 
-	"github.com/segmentio/parquet-go/internal/unsafecast"
-	"github.com/segmentio/parquet-go/sparse"
+	"github.com/parquet-go/parquet-go/internal/unsafecast"
+	"github.com/parquet-go/parquet-go/sparse"
 )
 
 //go:noescape

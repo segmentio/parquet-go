@@ -6,8 +6,8 @@ import (
 	"io"
 	"sort"
 
-	"github.com/segmentio/parquet-go/deprecated"
-	"github.com/segmentio/parquet-go/encoding"
+	"github.com/parquet-go/parquet-go/deprecated"
+	"github.com/parquet-go/parquet-go/encoding"
 )
 
 // RowBuffer is an implementation of the RowGroup interface which stores parquet
