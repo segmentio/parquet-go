@@ -1,6 +1,7 @@
 # parquet-go/parquet-go [![build status](https://github.com/segmentio/parquet-go/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/segmentio/parquet-go/actions) [![Go Report Card](https://goreportcard.com/badge/github.com/segmentio/parquet-go)](https://goreportcard.com/report/github.com/segmentio/parquet-go) [![Go Reference](https://pkg.go.dev/badge/github.com/segmentio/parquet-go.svg)](https://pkg.go.dev/github.com/segmentio/parquet-go)
 
-High-performance Go library to manipulate parquet files.
+High-performance Go library to manipulate parquet files, initially developed at
+[Twilio Segment](https://segment.com/engineering).
 
 ## Motivation
 
@@ -574,4 +575,3 @@ The following debug flag are currently supported:
   reference counters are set to zero when buffers are reclaimed by the garbage
   collector. When the package detects that a buffer was leaked, it logs an error
   message along with the stack trace captured when the buffer was last used.
-
