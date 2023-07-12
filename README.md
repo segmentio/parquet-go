@@ -3,7 +3,8 @@
 High-performance Go library to manipulate parquet files, initially developed at
 [Twilio Segment](https://segment.com/engineering).
 
-![parquet-go-logo](https://github.com/parquet-go/parquet-go/assets/96151026/348376e9-930c-48fa-ae4b-da3b581d2b1d)
+![parquet-go-logo](https://github.com/parquet-go/parquet-go/assets/96151026/5b1f043b-2cee-4a64-a3c3-40d3353fecc0)
+
 
 ## Motivation
 
