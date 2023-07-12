@@ -20,7 +20,7 @@ jobs:
         - ''
         - purego
         label:
-        - [self-hosted, linux, arm64, segment]
+        - [linux, arm64, segment]
         - ubuntu-latest
 
     runs-on: ${{ matrix.label }}
