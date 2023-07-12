@@ -3,6 +3,8 @@
 High-performance Go library to manipulate parquet files, initially developed at
 [Twilio Segment](https://segment.com/engineering).
 
+![parquet-go-logo](https://github.com/parquet-go/parquet-go/assets/96151026/348376e9-930c-48fa-ae4b-da3b581d2b1d)
+
 ## Motivation
 
 Parquet has been established as a powerful solution to represent columnar data
