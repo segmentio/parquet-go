@@ -20,7 +20,8 @@ jobs:
         - ''
         - purego
         label:
-        - [linux, arm64, segment]
+        # TODO: add back ARM64 runners
+        - [linux, segment]
         - ubuntu-latest
 
     runs-on: ${{ matrix.label }}
