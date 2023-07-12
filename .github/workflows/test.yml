@@ -21,7 +21,7 @@ jobs:
         - purego
         label:
         # TODO: add back ARM64 runners
-        - [linux, segment]
+        # https://github.com/parquet-go/parquet-go/issues/6
         - ubuntu-latest
 
     runs-on: ${{ matrix.label }}
