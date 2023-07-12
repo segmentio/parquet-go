@@ -3,6 +3,7 @@ package deprecated
 import (
 	"math/big"
 	"math/bits"
+	"time"
 	"unsafe"
 )
 
@@ -79,6 +80,22 @@ func (i Int96) Int32() int32 {
 // Int64 converts i to a int64, potentially truncating the value.
 func (i Int96) Int64() int64 {
 	return int64(i[1])<<32 | int64(i[0])
+}
+
+const (
+	EPOCH_AS_JULIAN_DAY        = 2440588
+	NANOS_PER_DAY       uint64 = 86400 * 1000 * 1000 * 1000
+)
+
+// Time converts i to a Time
+// More information on the use of Int96 to store timestamps can be found here:
+// https://github.com/apache/parquet-format/pull/49
+func (i Int96) Time() time.Time {
+	nanos := uint64(i[1])<<32 | uint64(i[0])
+	days := i[2]
+
+	totalNanos := uint64(days-EPOCH_AS_JULIAN_DAY)*NANOS_PER_DAY + nanos
+	return time.Unix(0, int64(totalNanos)).UTC()
 }
 
 // String returns a string representation of i.

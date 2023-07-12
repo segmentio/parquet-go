@@ -83,7 +83,7 @@ func convertToSelf(column []Value) error { return nil }
 func convertToType(targetType, sourceType Type) conversionFunc {
 	return func(column []Value) error {
 		for i, v := range column {
-			v, err := sourceType.ConvertValue(v, targetType)
+			v, err := targetType.ConvertValue(v, sourceType)
 			if err != nil {
 				return err
 			}
@@ -719,6 +719,12 @@ func convertInt96ToDouble(v Value) (Value, error) {
 
 func convertInt96ToByteArray(v Value) (Value, error) {
 	return v.convertToByteArray(v.byteArray()), nil
+}
+
+func convertInt96ToTimestamp(v Value, u format.TimeUnit, tz *time.Location) (Value, error) {
+	t := v.int96().Time()
+	d := timeUnitDuration(u)
+	return v.convertToInt64(int64(t.In(tz).Sub(unixEpoch) / d)), nil
 }
 
 func convertInt96ToFixedLenByteArray(v Value, size int) (Value, error) {
