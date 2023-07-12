@@ -3,6 +3,7 @@ package parquet
 import (
 	"bufio"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"hash/crc32"
 	"io"
@@ -71,7 +72,7 @@ func OpenFile(r io.ReaderAt, size int64, options ...FileOption) (*File, error) {
 	if cast, ok := f.reader.(interface{ SetFooterSection(offset, length int64) }); ok {
 		cast.SetFooterSection(size-(footerSize+8), footerSize)
 	}
-	if _, err := f.reader.ReadAt(footerData, size-(footerSize+8)); err != nil {
+	if _, err := f.reader.ReadAt(footerData, size-(footerSize+8)); err != nil && !errors.Is(err, io.EOF) {
 		return nil, fmt.Errorf("reading footer of parquet file: %w", err)
 	}
 	if err := thrift.Unmarshal(&f.protocol, footerData, &f.metadata); err != nil {
@@ -225,7 +226,7 @@ func (f *File) ReadPageIndex() ([]format.ColumnIndex, []format.OffsetIndex, erro
 		if cast, ok := f.reader.(interface{ SetColumnIndexSection(offset, length int64) }); ok {
 			cast.SetColumnIndexSection(columnIndexOffset, columnIndexLength)
 		}
-		if _, err := f.reader.ReadAt(columnIndexData, columnIndexOffset); err != nil {
+		if _, err := f.reader.ReadAt(columnIndexData, columnIndexOffset); err != nil && !errors.Is(err, io.EOF) {
 			return nil, nil, fmt.Errorf("reading %d bytes column index at offset %d: %w", columnIndexLength, columnIndexOffset, err)
 		}
 
@@ -255,7 +256,7 @@ func (f *File) ReadPageIndex() ([]format.ColumnIndex, []format.OffsetIndex, erro
 		if cast, ok := f.reader.(interface{ SetOffsetIndexSection(offset, length int64) }); ok {
 			cast.SetOffsetIndexSection(offsetIndexOffset, offsetIndexLength)
 		}
-		if _, err := f.reader.ReadAt(offsetIndexData, offsetIndexOffset); err != nil {
+		if _, err := f.reader.ReadAt(offsetIndexData, offsetIndexOffset); err != nil && !errors.Is(err, io.EOF) {
 			return nil, nil, fmt.Errorf("reading %d bytes offset index at offset %d: %w", offsetIndexLength, offsetIndexOffset, err)
 		}
 
