@@ -1,6 +1,7 @@
 package parquet_test
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/parquet-go/parquet-go"
@@ -191,5 +192,54 @@ func TestSchemaOf(t *testing.T) {
 				t.Errorf("\nexpected:\n\n%s\n\nfound:\n\n%s\n", test.print, s)
 			}
 		})
+	}
+}
+
+func TestNestedPointer(t *testing.T) {
+	type InnerStruct struct {
+		InnerField string
+	}
+
+	type SliceElement struct {
+		Inner *InnerStruct
+	}
+
+	type Outer struct {
+		Slice []*SliceElement
+	}
+	value := "inner-string"
+	in := &Outer{
+		Slice: []*SliceElement{
+			{
+				Inner: &InnerStruct{
+					InnerField: value,
+				},
+			},
+		},
+	}
+
+	var f bytes.Buffer
+
+	pw := parquet.NewGenericWriter[*Outer](&f)
+	_, err := pw.Write([]*Outer{in})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = pw.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pr := parquet.NewGenericReader[*Outer](bytes.NewReader(f.Bytes()))
+
+	out := make([]*Outer, 1)
+	_, err = pr.Read(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pr.Close()
+	if want, got := value, out[0].Slice[0].Inner.InnerField; want != got {
+		t.Error("failed to set inner field pointer")
 	}
 }

@@ -410,7 +410,8 @@ func fieldByIndex(v reflect.Value, index []int) reflect.Value {
 	for _, i := range index {
 		if v = v.Field(i); v.Kind() == reflect.Ptr || v.Kind() == reflect.Interface {
 			if v.IsNil() {
-				v = reflect.Value{}
+				v.Set(reflect.New(v.Type().Elem()))
+				v = v.Elem()
 				break
 			} else {
 				v = v.Elem()
