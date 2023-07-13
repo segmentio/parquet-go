@@ -263,8 +263,6 @@ func TestIssue362ParquetReadFile(t *testing.T) {
 }
 
 func TestIssue368(t *testing.T) {
-	// https://github.com/parquet-go/parquet-go/issues/4
-	t.Skip("Not good to skip; test is failing for unknown reasons")
 	f, err := os.Open("testdata/issue368.parquet")
 	if err != nil {
 		t.Fatal(err)
