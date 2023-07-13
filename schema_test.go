@@ -181,6 +181,17 @@ func TestSchemaOf(t *testing.T) {
 	}
 }`,
 		},
+
+		{
+			value: new(struct {
+				Ushort uint16 `parquet:"ushort"`
+				Short  int16  `parquet:"short"`
+			}),
+			print: `message {
+	required int32 ushort (INT(16,false));
+	required int32 short (INT(16,true));
+}`,
+		},
 	}
 
 	for _, test := range tests {

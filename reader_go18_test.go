@@ -17,6 +17,7 @@ import (
 
 func TestGenericReader(t *testing.T) {
 	testGenericReader[booleanColumn](t)
+	testGenericReader[int16Column](t)
 	testGenericReader[int32Column](t)
 	testGenericReader[int64Column](t)
 	testGenericReader[int96Column](t)
@@ -227,6 +228,7 @@ func testReadMinPageSize(readSize int, t *testing.T) {
 func BenchmarkGenericReader(b *testing.B) {
 	benchmarkGenericReader[benchmarkRowType](b)
 	benchmarkGenericReader[booleanColumn](b)
+	benchmarkGenericReader[int16Column](b)
 	benchmarkGenericReader[int32Column](b)
 	benchmarkGenericReader[int64Column](b)
 	benchmarkGenericReader[floatColumn](b)

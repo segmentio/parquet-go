@@ -52,6 +52,9 @@ func writeRowsFuncOf(t reflect.Type, schema *Schema, path columnPath) writeRowsF
 		reflect.Float64,
 		reflect.String:
 		return writeRowsFuncOfRequired(t, schema, path)
+	case reflect.Int16,
+		reflect.Uint16:
+		return writeRowsFuncOfInt16(t, schema, path)
 
 	case reflect.Slice:
 		if t.Elem().Kind() == reflect.Uint8 {
@@ -436,6 +439,32 @@ func writeRowsFuncOfJSON(t reflect.Type, schema *Schema, path columnPath) writeR
 				return err
 			}
 		}
+		return nil
+	}
+}
+
+func writeRowsFuncOfInt16(_ reflect.Type, schema *Schema, path columnPath) writeRowsFunc {
+	t := reflect.TypeOf(int32(0))
+	elemSize := uintptr(t.Size())
+	writeRows := writeRowsFuncOf(t, schema, path)
+
+	return func(columns []ColumnBuffer, rows sparse.Array, levels columnLevels) error {
+		if rows.Len() == 0 {
+			return writeRows(columns, rows, levels)
+		}
+
+		vals := rows.Int16Array()
+		for i := 0; i < vals.Len(); i++ {
+			t := vals.Index(i)
+			var val int32
+			val = int32(t)
+
+			a := makeArray(unsafecast.PointerOfValue(reflect.ValueOf(val)), 1, elemSize)
+			if err := writeRows(columns, a, levels); err != nil {
+				return err
+			}
+		}
+
 		return nil
 	}
 }

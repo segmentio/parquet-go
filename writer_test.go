@@ -85,6 +85,10 @@ type event struct {
 	Category string  `parquet:"-"`
 }
 
+type usesShort struct {
+	Size int16 `parquet:"size"`
+}
+
 var writerTests = []struct {
 	scenario string
 	version  int
@@ -448,6 +452,31 @@ DOUBLE value
 *** row group 1 of 1, values 1 to 2 ***
 value 1: R:0 D:0 V:42.0
 value 2: R:0 D:0 V:1.0
+`,
+	},
+
+	{
+		scenario: "int16",
+		version:  v2,
+		rows: []interface{}{
+			usesShort{Size: 0},
+			usesShort{Size: 32767},
+			usesShort{Size: -32768},
+		},
+		dump: `row group 0
+--------------------------------------------------------------------------------
+size:  INT32 UNCOMPRESSED DO:0 FPO:4 SZ:40/40/1.00 VC:3 ENC:PLAIN ST:[min: -32768, max: 32767, num_nulls not defined]
+
+    size TV=3 RL=0 DL=0
+    ----------------------------------------------------------------------------
+    page 0:  DLE:RLE RLE:RLE VLE:PLAIN ST:[no stats for this column] SZ:12 VC:3
+
+INT32 size
+--------------------------------------------------------------------------------
+*** row group 1 of 1, values 1 to 3 ***
+value 1: R:0 D:0 V:0
+value 2: R:0 D:0 V:32767
+value 3: R:0 D:0 V:-32768
 `,
 	},
 }

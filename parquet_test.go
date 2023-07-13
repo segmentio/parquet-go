@@ -58,6 +58,14 @@ func (row int32Column) generate(prng *rand.Rand) int32Column {
 	return int32Column{Value: prng.Int31n(100)}
 }
 
+type int16Column struct {
+	Value int16 `parquet:",delta"`
+}
+
+func (row int16Column) generate(prng *rand.Rand) int16Column {
+	return int16Column{Value: int16(prng.Intn(100))}
+}
+
 type int64Column struct {
 	Value int64 `parquet:",delta"`
 }

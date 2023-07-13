@@ -15,6 +15,7 @@ import (
 func BenchmarkGenericWriter(b *testing.B) {
 	benchmarkGenericWriter[benchmarkRowType](b)
 	benchmarkGenericWriter[booleanColumn](b)
+	benchmarkGenericWriter[int16Column](b)
 	benchmarkGenericWriter[int32Column](b)
 	benchmarkGenericWriter[int64Column](b)
 	benchmarkGenericWriter[floatColumn](b)
