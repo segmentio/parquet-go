@@ -766,7 +766,7 @@ func getBufioReaderPool(size int) *sync.Pool {
 }
 
 var pageHeaderPool = &sync.Pool{
-	New: func() any {
+	New: func() interface{} {
 		return new(format.PageHeader)
 	},
 }
