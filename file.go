@@ -765,19 +765,17 @@ func getBufioReaderPool(size int) *sync.Pool {
 	return pool
 }
 
-var pageHeaderPool = &sync.Pool{}
+var pageHeaderPool = &sync.Pool{
+	New: func() interface{} {
+		return new(format.PageHeader)
+	},
+}
 
 func getPageHeader() *format.PageHeader {
-	h, _ := pageHeaderPool.Get().(*format.PageHeader)
-	if h != nil {
-		return h
-	}
-	return new(format.PageHeader)
+	return pageHeaderPool.Get().(*format.PageHeader)
 }
 
 func putPageHeader(h *format.PageHeader) {
-	if h != nil {
-		h.CRC = 0
-		pageHeaderPool.Put(h)
-	}
+	*h = format.PageHeader{}
+	pageHeaderPool.Put(h)
 }
