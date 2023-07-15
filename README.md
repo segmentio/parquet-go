@@ -39,9 +39,7 @@ dependency on and install with the following command:
 go get github.com/parquet-go/parquet-go
 ```
 
-Go 1.18 or later is required to use the package. As a backward-compatibility
-mechanism, the package can also be built with Go 1.17, in which case the APIs
-based on Generics are disabled.
+Go 1.18 or later is required to use the package.
 
 ### Compatibility Guarantees
 
