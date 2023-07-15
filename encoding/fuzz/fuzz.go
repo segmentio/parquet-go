@@ -1,6 +1,3 @@
-//go:build go1.18
-// +build go1.18
-
 // Package fuzz contains functions to help fuzz test parquet encodings.
 package fuzz
 
