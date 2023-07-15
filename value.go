@@ -429,7 +429,7 @@ func makeValueFixedLenByteArray(v reflect.Value) Value {
 		u.Elem().Set(v)
 		v = u
 	}
-	return makeValueByteArray(FixedLenByteArray, (*byte)(unsafePointer(v)), t.Len())
+	return makeValueByteArray(FixedLenByteArray, (*byte)(v.UnsafePointer()), t.Len())
 }
 
 func makeValueByteArray(kind Kind, data *byte, size int) Value {
