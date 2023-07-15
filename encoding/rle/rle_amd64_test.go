@@ -1,5 +1,5 @@
-//go:build go1.18 && !purego && amd64
-// +build go1.18,!purego,amd64
+//go:build !purego && amd64
+// +build !purego,amd64
 
 package rle
 
