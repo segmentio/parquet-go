@@ -261,15 +261,51 @@ func (s *Schema) Reconstruct(value interface{}, row Row) error {
 		v = v.Elem()
 	}
 
-	columns := make([][]Value, len(s.columns))
+	b := valuesSliceBufferPool.Get().(*valuesSliceBuffer)
+
+	columns := b.reserve(len(s.columns))
 	row.Range(func(columnIndex int, columnValues []Value) bool {
 		if columnIndex < len(columns) {
 			columns[columnIndex] = columnValues
 		}
 		return true
 	})
+	// we avoid the defer penalty by releasing b manually
+	err := s.reconstruct(v, levels{}, columns)
+	b.release()
+	return err
+}
 
-	return s.reconstruct(v, levels{}, columns)
+type valuesSliceBuffer struct {
+	values [][]Value
+}
+
+func (v *valuesSliceBuffer) reserve(n int) [][]Value {
+	if n <= cap(v.values) {
+		return v.values[:n]
+	}
+	// we can try to keep growing by the power of two, but we care more about the
+	// memory footprint so  this should suffice.
+	//
+	// The nature of reads tends to be from similar number of columns.The less work
+	// we do here the better performance we can get.
+	v.values = make([][]Value, n)
+	return v.values
+}
+
+func (v *valuesSliceBuffer) release() {
+	v.values = v.values[:0]
+	valuesSliceBufferPool.Put(v)
+}
+
+var valuesSliceBufferPool = &sync.Pool{
+	New: func() interface{} {
+		return &valuesSliceBuffer{
+			// use 64 as a cache friendly base estimate of max column numbers we will be
+			// reading.
+			values: make([][]Value, 0, 64),
+		}
+	},
 }
 
 // Lookup returns the leaf column at the given path.
