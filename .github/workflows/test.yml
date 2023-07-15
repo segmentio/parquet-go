@@ -5,24 +5,23 @@ on:
       - main
   pull_request:
     branches:
-      - '*'
+      - "*"
 
 jobs:
   test:
     strategy:
       matrix:
         go:
-        - '1.17.x'
-        - '1.18.x'
-        - '1.19.x'
-        - '1.20.x'
+          - "1.18.x"
+          - "1.19.x"
+          - "1.20.x"
         tags:
-        - ''
-        - purego
+          - ""
+          - purego
         label:
-        # TODO: add back ARM64 runners
-        # https://github.com/parquet-go/parquet-go/issues/6
-        - ubuntu-latest
+          # TODO: add back ARM64 runners
+          # https://github.com/parquet-go/parquet-go/issues/6
+          - ubuntu-latest
 
     runs-on: ${{ matrix.label }}
 
@@ -30,35 +29,35 @@ jobs:
       PARQUETGODEBUG: tracebuf=1
 
     steps:
-    - uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-    - name: Setup Go ${{ matrix.go }}
-      uses: actions/setup-go@v3
-      with:
-        go-version: ${{ matrix.go }}
+      - name: Setup Go ${{ matrix.go }}
+        uses: actions/setup-go@v3
+        with:
+          go-version: ${{ matrix.go }}
 
-    - name: Download Dependencies
-      run: go mod download
+      - name: Download Dependencies
+        run: go mod download
 
-    - name: Run Tests
-      run: go test -trimpath -race -tags=${{ matrix.tags }} ./...
+      - name: Run Tests
+        run: go test -trimpath -race -tags=${{ matrix.tags }} ./...
 
-    - name: Run Benchmarks
-      run: go test -trimpath -short -tags=${{ matrix.tags }} -run '^$' -bench . -benchtime 1x ./...
+      - name: Run Benchmarks
+        run: go test -trimpath -short -tags=${{ matrix.tags }} -run '^$' -bench . -benchtime 1x ./...
 
   format:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-    - name: Setup Go ${{ matrix.go }}
-      uses: actions/setup-go@v3
-      with:
-        go-version: 1.19.x
+      - name: Setup Go ${{ matrix.go }}
+        uses: actions/setup-go@v3
+        with:
+          go-version: 1.19.x
 
-    - name: Validate formatting
-      run: make format
+      - name: Validate formatting
+        run: make format
 
   # https://github.com/golangci/golangci-lint/issues/2649
   # lint:
