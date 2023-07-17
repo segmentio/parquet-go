@@ -48,7 +48,7 @@ func OpenFile(r io.ReaderAt, size int64, options ...FileOption) (*File, error) {
 	}
 	f := &File{reader: r, size: size, config: c}
 
-	if _, err := r.ReadAt(b[:4], 0); err != nil {
+	if _, err := readAt(r, b[:4], 0); err != nil {
 		return nil, fmt.Errorf("reading magic header of parquet file: %w", err)
 	}
 	if string(b[:4]) != "PAR1" {
@@ -71,7 +71,7 @@ func OpenFile(r io.ReaderAt, size int64, options ...FileOption) (*File, error) {
 	if cast, ok := f.reader.(interface{ SetFooterSection(offset, length int64) }); ok {
 		cast.SetFooterSection(size-(footerSize+8), footerSize)
 	}
-	if _, err := f.reader.ReadAt(footerData, size-(footerSize+8)); err != nil {
+	if _, err := f.readAt(footerData, size-(footerSize+8)); err != nil {
 		return nil, fmt.Errorf("reading footer of parquet file: %w", err)
 	}
 	if err := thrift.Unmarshal(&f.protocol, footerData, &f.metadata); err != nil {
@@ -225,7 +225,7 @@ func (f *File) ReadPageIndex() ([]format.ColumnIndex, []format.OffsetIndex, erro
 		if cast, ok := f.reader.(interface{ SetColumnIndexSection(offset, length int64) }); ok {
 			cast.SetColumnIndexSection(columnIndexOffset, columnIndexLength)
 		}
-		if _, err := f.reader.ReadAt(columnIndexData, columnIndexOffset); err != nil {
+		if _, err := f.readAt(columnIndexData, columnIndexOffset); err != nil {
 			return nil, nil, fmt.Errorf("reading %d bytes column index at offset %d: %w", columnIndexLength, columnIndexOffset, err)
 		}
 
@@ -255,7 +255,7 @@ func (f *File) ReadPageIndex() ([]format.ColumnIndex, []format.OffsetIndex, erro
 		if cast, ok := f.reader.(interface{ SetOffsetIndexSection(offset, length int64) }); ok {
 			cast.SetOffsetIndexSection(offsetIndexOffset, offsetIndexLength)
 		}
-		if _, err := f.reader.ReadAt(offsetIndexData, offsetIndexOffset); err != nil {
+		if _, err := f.readAt(offsetIndexData, offsetIndexOffset); err != nil {
 			return nil, nil, fmt.Errorf("reading %d bytes offset index at offset %d: %w", offsetIndexLength, offsetIndexOffset, err)
 		}
 
@@ -305,14 +305,14 @@ func (f *File) ReadAt(b []byte, off int64) (int, error) {
 	}
 
 	if limit := f.size - off; limit < int64(len(b)) {
-		n, err := f.reader.ReadAt(b[:limit], off)
+		n, err := f.readAt(b[:limit], off)
 		if err == nil {
 			err = io.EOF
 		}
 		return n, err
 	}
 
-	return f.reader.ReadAt(b, off)
+	return f.readAt(b, off)
 }
 
 // ColumnIndexes returns the page index of the parquet file f.
@@ -778,4 +778,19 @@ func getPageHeader() *format.PageHeader {
 func putPageHeader(h *format.PageHeader) {
 	*h = format.PageHeader{}
 	pageHeaderPool.Put(h)
+}
+
+func (f *File) readAt(p []byte, off int64) (int, error) {
+	return readAt(f.reader, p, off)
+}
+
+func readAt(r io.ReaderAt, p []byte, off int64) (n int, err error) {
+	n, err = r.ReadAt(p, off)
+	if n == len(p) {
+		err = nil
+		// p was fully read.There is no further need to check for errors. This
+		// operation is a success in principle.
+		return
+	}
+	return
 }
