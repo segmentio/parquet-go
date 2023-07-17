@@ -1,5 +1,3 @@
-//go:build go1.18
-
 // Package unsafecast exposes functions to bypass the Go type system and perform
 // conversions between types that would otherwise not be possible.
 //

@@ -1,6 +1,3 @@
-//go:build go1.18
-// +build go1.18
-
 package delta_test
 
 import (
