@@ -2,8 +2,10 @@ package parquet
 
 import (
 	"container/heap"
+	"errors"
 	"fmt"
 	"io"
+	"sync"
 )
 
 // MergeRowGroups constructs a row group which is a merged view of rowGroups. If
@@ -104,6 +106,15 @@ type mergedRowGroupRows struct {
 	seekToRow int64
 	rows      []Rows
 	schema    *Schema
+}
+
+func (r *mergedRowGroupRows) WriteRowsTo(w RowWriter) (n int64, err error) {
+	b := newMergeBuffer()
+	b.setup(r.rows, r.merge.compare)
+	n, err = b.WriteRowsTo(w)
+	r.rowIndex += int64(n)
+	b.release()
+	return
 }
 
 func (r *mergedRowGroupRows) readInternal(rows []Row) (int, error) {
@@ -310,6 +321,161 @@ func (r *bufferedRowReader) close() {
 	r.end = 0
 }
 
+type mergeBuffer struct {
+	compare func(Row, Row) int
+	rows    []Rows
+	buffer  [][]Row
+	head    []int
+	len     int
+	copy    [mergeBufferSize]Row
+}
+
+const mergeBufferSize = 1 << 10
+
+func newMergeBuffer() *mergeBuffer {
+	return mergeBufferPool.Get().(*mergeBuffer)
+}
+
+var mergeBufferPool = &sync.Pool{
+	New: func() any {
+		return new(mergeBuffer)
+	},
+}
+
+func (m *mergeBuffer) setup(rows []Rows, compare func(Row, Row) int) {
+	m.compare = compare
+	m.rows = append(m.rows, rows...)
+	size := len(rows)
+	if len(m.buffer) < size {
+		extra := size - len(m.buffer)
+		b := make([][]Row, extra)
+		for i := range b {
+			b[i] = make([]Row, mergeBufferSize)
+		}
+		m.buffer = append(m.buffer, b...)
+		m.head = append(m.head, make([]int, extra)...)
+	}
+	m.len = size
+}
+
+func (m *mergeBuffer) reset() {
+	for i := range m.rows {
+		m.buffer[i] = m.buffer[i][:0]
+		m.head[i] = 0
+	}
+	m.rows = m.rows[:0]
+	m.compare = nil
+	for i := range m.copy {
+		m.copy[i] = nil
+	}
+	m.len = 0
+}
+
+func (m *mergeBuffer) release() {
+	m.reset()
+	mergeBufferPool.Put(m)
+}
+
+func (m *mergeBuffer) fill() error {
+	m.len = len(m.rows)
+	for i := range m.rows {
+		m.head[i] = 0
+		m.buffer[i] = m.buffer[i][:mergeBufferSize]
+		n, err := m.rows[i].ReadRows(m.buffer[i])
+		if err != nil {
+			if !errors.Is(err, io.EOF) {
+				return err
+			}
+		}
+		m.buffer[i] = m.buffer[i][:n]
+	}
+	heap.Init(m)
+	return nil
+}
+
+func (m *mergeBuffer) Less(i, j int) bool {
+	x := m.buffer[i]
+	if len(x) == 0 {
+		return false
+	}
+	y := m.buffer[j]
+	if len(y) == 0 {
+		return true
+	}
+	return m.compare(x[m.head[i]], y[m.head[j]]) == -1
+}
+
+func (m *mergeBuffer) Pop() interface{} {
+	m.len--
+	// We don't use the popped value.
+	return nil
+}
+
+func (m *mergeBuffer) Len() int {
+	return m.len
+}
+
+func (m *mergeBuffer) Swap(i, j int) {
+	m.buffer[i], m.buffer[j] = m.buffer[j], m.buffer[i]
+	m.head[i], m.head[j] = m.head[j], m.head[i]
+}
+
+func (m *mergeBuffer) Push(x interface{}) {
+	panic("NOT IMPLEMENTED")
+}
+
+func (m *mergeBuffer) WriteRowsTo(w RowWriter) (n int64, err error) {
+	err = m.fill()
+	if err != nil {
+		return 0, err
+	}
+	var count int
+	for m.left() {
+		size := m.read()
+		if size == 0 {
+			break
+		}
+		count, err = w.WriteRows(m.copy[:size])
+		if err != nil {
+			return
+		}
+		n += int64(count)
+		err = m.fill()
+		if err != nil {
+			return
+		}
+	}
+	return
+}
+
+func (m *mergeBuffer) left() bool {
+	for i := 0; i < m.len; i++ {
+		if m.head[i] < len(m.buffer[i]) {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *mergeBuffer) read() (n int64) {
+	for n < int64(len(m.copy)) && m.Len() != 0 {
+		r := m.buffer[:m.len][0]
+		m.copy[n] = append(m.copy[n][:0], r[m.head[0]]...)
+		m.head[0]++
+		n++
+		if m.head[0] < len(r) {
+			// There is still rows in this row group. Adjust  the heap
+			heap.Fix(m, 0)
+		} else {
+			heap.Pop(m)
+		}
+	}
+	return
+}
+
 var (
 	_ RowReaderWithSchema = (*mergedRowGroupRows)(nil)
+	_ RowWriterTo         = (*mergedRowGroupRows)(nil)
+	_ heap.Interface      = (*mergeBuffer)(nil)
+	_ RowWriterTo         = (*mergeBuffer)(nil)
 )
