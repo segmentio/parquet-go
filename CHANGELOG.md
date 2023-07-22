@@ -1,4 +1,4 @@
- # v0.17.0 / preview
+ # v0.17.0
 
  ## Breaking Changes
 
