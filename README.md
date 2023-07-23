@@ -555,7 +555,7 @@ for the full interface documentation.
 
 ## Maintenance
 
-The project is hosted and maintained by Twilio; we welcome external contributors
+The project is hosted and maintained by the  open source community; we welcome external contributors
 to participate in the form of discussions or code changes. Please review to the
 [Contribution](./CONTRIBUTING.md) guidelines as well as the [Code of Condution](./CODE_OF_CONDUCT.md)
 before submitting contributions.
